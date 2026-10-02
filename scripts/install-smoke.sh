@@ -84,9 +84,17 @@ say "uninstall --yes (keeps data, keys, config.yaml, backup)"
 sh "$installer" --uninstall --yes --dir "$dir" </dev/null
 left=$(ls -A "$dir" | tr '\n' ' ')
 [ "$left" = "backup config.yaml data keys " ] || [ "$left" = "config.yaml data keys " ] || fail "left after uninstall: $left"
-mkdir -p "$dir/app/scripts"
-printf '#!/bin/sh\nexit 0\n' >"$dir/app/scripts/tow"
-chmod 755 "$dir/app/scripts/tow"
+key_before=$(sha "$dir/keys/master.key")
+
+say "install again around the kept data (same key, same settings)"
+TOW_INSTALL_SOURCE="$archive" TOW_INSTALL_SUMS="$sums" sh "$installer" --dir "$dir" --port "$port" </dev/null
+[ "$(sha "$dir/keys/master.key")" = "$key_before" ] || fail "the reinstall replaced keys/master.key"
+"$dir/app/scripts/tow" status --json | grep -q '"running": true' || fail "tow status after the reinstall: not running"
+"$stop_file"
+sh "$installer" --uninstall --yes --dir "$dir" </dev/null
+
+say "--purge of what an uninstall kept (no app left)"
+[ ! -e "$dir/app" ] || fail "app/ is still there"
 sh "$installer" --uninstall --yes --purge --dir "$dir" </dev/null
 [ ! -e "$dir" ] || fail "--purge left $dir"
 

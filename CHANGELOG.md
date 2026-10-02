@@ -3,6 +3,19 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.1] — 2026-10-02
+
+### Fixed
+
+- Installers: after a removal that kept the data, `-Uninstall -Purge` / `--uninstall --purge` now deletes what
+  stayed (it said "no TOW install"), and installing again into the same folder reuses the data, key and settings
+  instead of refusing. A failed install there removes only what it added.
+
+### Changed
+
+- Release page: every file has a label saying what it is for, and the notes start with what to download for each
+  system, in English and Russian.
+
 ## [1.22.0] — 2026-10-02
 
 ### Added

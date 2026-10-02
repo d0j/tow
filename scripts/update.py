@@ -569,7 +569,7 @@ def remove_tree(path: Path) -> None:
 
     if not path.exists():
         return
-    if sys.version_info >= (3, 12):  # noqa: UP036 - update.py runs on Python 3.11 too
+    if sys.version_info >= (3, 12):
         shutil.rmtree(path, onexc=writable)
     else:  # pragma: no cover - Python 3.11 has no onexc
         shutil.rmtree(path, onerror=writable)

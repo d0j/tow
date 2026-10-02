@@ -137,7 +137,12 @@ desktop_file() {
 # --- uninstall ---------------------------------------------------------------------------------
 
 if [ "$uninstall" = yes ]; then
-    [ -x "$dir/app/scripts/tow" ] || die "no TOW install in $dir (give its folder with --dir)"
+    has_launcher=no
+    [ -x "$dir/app/scripts/tow" ] && has_launcher=yes
+    if [ "$has_launcher" = no ] && [ ! -e "$dir/data" ] && [ ! -e "$dir/keys" ] && [ ! -e "$dir/config.yaml" ] &&
+        [ ! -e "$dir/backup" ]; then
+        die "no TOW install in $dir (give its folder with --dir)"
+    fi
     say "this removes TOW from $dir"
     [ ! -f "$dir/keys/master.key" ] || say "your master key is $dir/keys/master.key: keep a copy if you may restore a backup or a .towx file later"
     if [ "$yes" != yes ] && [ "$(ask "Remove TOW from $dir? [y/N]" n)" != y ]; then
@@ -149,8 +154,10 @@ if [ "$uninstall" = yes ]; then
     elif [ "$yes" != yes ]; then
         keep=$(ask "Keep your data, keys, settings and backups (data/, keys/, config.yaml, backup/) in $dir? [Y/n]" y)
     fi
-    "$dir/app/scripts/tow" autostart off >/dev/null 2>&1 || true
-    "$dir/app/scripts/tow" stop || true
+    if [ "$has_launcher" = yes ]; then
+        "$dir/app/scripts/tow" autostart off >/dev/null 2>&1 || true
+        "$dir/app/scripts/tow" stop || true
+    fi
     entry=$(desktop_file)
     if [ -f "$entry" ] && grep -F "$dir/start-tow" "$entry" >/dev/null 2>&1; then
         rm -f "$entry"
@@ -181,12 +188,21 @@ case $system in
     *) die "this installer is for Linux and macOS; on Windows use install.ps1 (see https://github.com/$REPO)" ;;
 esac
 
-if [ -e "$dir/app" ] || [ -e "$dir/config.yaml" ] || [ -e "$dir/data" ]; then
+if [ -e "$dir/app" ]; then
     die "TOW is already installed in $dir. To update it: $dir/app/scripts/tow update --ref latest (it prints the command)"
 fi
-if [ -e "$dir" ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then
-    die "$dir is not empty: choose another folder with --dir"
+# What an uninstall that kept the data leaves: TOW is installed again around it, nothing of it changes.
+kept=no
+if [ -d "$dir" ]; then
+    for item in "$dir"/* "$dir"/.[!.]*; do
+        [ -e "$item" ] || continue
+        case ${item##*/} in
+            data | keys | config.yaml | backup) kept=yes ;;
+            *) die "$dir is not empty: choose another folder with --dir" ;;
+        esac
+    done
 fi
+[ "$kept" = no ] || say "found the data of an earlier TOW in $dir: it is kept"
 command -v tar >/dev/null 2>&1 || die "tar is needed"
 
 arch=$(uname -m)
@@ -213,6 +229,7 @@ if [ "$os" = linux ]; then
 fi
 
 created=no
+config_created=no
 [ -e "$dir" ] || created=yes
 mkdir -p "$dir"
 work=$dir/.install
@@ -222,10 +239,19 @@ cleanup() { # a failed installation leaves the folder as it found it: absent or 
     if [ "$status" -ne 0 ]; then
         if [ "$created" = yes ]; then
             rm -rf "$dir"
+        elif [ "$kept" = yes ]; then
+            # Only what this installer put there: the earlier TOW's data stays as it was.
+            rm -rf "$dir/app" "$dir/runtime" "$dir/start-tow" "$dir/stop-tow" "$dir/update-tow" \
+                "$dir/Start TOW.command" "$dir/Stop TOW.command" "$dir/Update TOW.command"
+            [ "$config_created" = no ] || rm -f "$dir/config.yaml"
         else
             rm -rf "$dir"/* "$dir"/.[!.]*
         fi
-        printf '%s\n' "TOW: the installation failed; nothing is left in $dir" >&2
+        if [ "$kept" = yes ]; then
+            printf '%s\n' "TOW: the installation failed; the earlier data in $dir is as it was" >&2
+        else
+            printf '%s\n' "TOW: the installation failed; nothing is left in $dir" >&2
+        fi
     fi
 }
 trap cleanup EXIT
@@ -283,7 +309,10 @@ uv_binary=$(find "$work/uv" -type f -name uv | head -n 1)
 cp "$uv_binary" "$dir/runtime/bin/uv"
 chmod 755 "$dir/runtime/bin/uv"
 
-cp "$dir/app/config.example.yaml" "$dir/config.yaml"
+if [ ! -e "$dir/config.yaml" ]; then # the settings of an earlier TOW stay
+    cp "$dir/app/config.example.yaml" "$dir/config.yaml"
+    config_created=yes
+fi
 if [ -n "$port" ]; then
     sed "s/^port:.*/port: $port/" "$dir/config.yaml" >"$work/config.yaml"
     cp "$work/config.yaml" "$dir/config.yaml"

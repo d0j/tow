@@ -85,6 +85,16 @@ jobs:
           $health = Invoke-RestMethod -Uri http://127.0.0.1:18878/healthz -NoProxy
           if (-not $health.ok) { throw '/healthz does not answer' }
           & (Join-Path $dir 'app\scripts\tow.cmd') status
+          # Uninstall keeping the data, install again around it (same key), then purge what is left.
+          pwsh -NoProfile -File install/install.ps1 -Dir $dir -Uninstall -Yes
+          if (Test-Path -LiteralPath (Join-Path $dir 'app')) { throw 'the uninstall left app' }
+          $key = (Get-FileHash (Join-Path $dir 'keys\master.key')).Hash
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File install/install.ps1 -Dir $dir -Port 18878
+          if ($LASTEXITCODE) { throw "the reinstall exited with $LASTEXITCODE" }
+          if ((Get-FileHash (Join-Path $dir 'keys\master.key')).Hash -ne $key) { throw 'the reinstall replaced keys\master.key' }
+          $health = Invoke-RestMethod -Uri http://127.0.0.1:18878/healthz -NoProxy
+          if (-not $health.ok) { throw '/healthz does not answer after the reinstall' }
+          pwsh -NoProfile -File install/install.ps1 -Dir $dir -Uninstall -Yes
           pwsh -NoProfile -File install/install.ps1 -Dir $dir -Uninstall -Yes -Purge
           if (Test-Path -LiteralPath $dir) { throw "-Purge left $dir" }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -144,21 +154,17 @@ jobs:
         run: |
           version=${TAG#v}
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            # Notes: the tag's section of CHANGELOG.md, then how to install.
-            awk -v v="$version" '/^## \[/ { if (found) exit; if (index($0, "## [" v "]") == 1) { found = 1; next } } found { print }' CHANGELOG.md > notes.md
-            [ -s notes.md ] || echo "TOW $version" > notes.md
-            {
-              echo
-              echo "### Install"
-              echo
-              echo "- **Windows:** download **TOW-windows-x64.zip** below, extract it, double-click **Start TOW.cmd**."
-              echo "  Or in PowerShell: \`irm https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/install.ps1 | iex\`"
-              echo "- **Linux, macOS:** \`curl -LsSf https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/install.sh | sh\`"
-              echo "- Guide: [docs/install.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/docs/install.md)"
-            } >> notes.md
+            # Notes: what to download (EN, RU), then the tag's section of both changelogs.
+            python3 scripts/release-notes.py "$TAG" "$GITHUB_REPOSITORY" > notes.md
             prerelease=
             case $TAG in *-*) prerelease=--prerelease ;; esac
             gh release create "$TAG" --verify-tag --title "TOW $version" --notes-file notes.md $prerelease
           fi
-          gh release upload "$TAG" assets/* --clobber
+          # A label says what each file is for (shown instead of the file name; links keep the name).
+          gh release upload "$TAG" --clobber \
+            "assets/TOW-windows-x64.zip#Windows: TOW-windows-x64.zip - extract, double-click Start TOW.cmd" \
+            "assets/install.ps1#Windows installer: install.ps1 - run it with the PowerShell line in the notes" \
+            "assets/install.sh#Linux and macOS installer: install.sh - run it with the curl line in the notes" \
+            "assets/tow-source.tar.gz#Source archive: tow-source.tar.gz - used by install.sh and updates" \
+            "assets/SHA256SUMS#Checksums: SHA256SUMS - SHA-256 of the files above"
           gh release view "$TAG" --json assets --jq '.assets[].name'

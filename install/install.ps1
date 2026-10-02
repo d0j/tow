@@ -53,7 +53,9 @@ function Install-Tow {
     $launcher = Join-Path $Dir 'app\scripts\tow.cmd'
 
     if ($Uninstall) {
-        if (-not (Test-Path -LiteralPath $launcher)) { throw "TOW: no TOW install in $Dir (give its folder with -Dir)" }
+        $hasLauncher = Test-Path -LiteralPath $launcher
+        $remnants = @('data', 'keys', 'config.yaml', 'backup') | Where-Object { Test-Path -LiteralPath (Join-Path $Dir $_) }
+        if (-not $hasLauncher -and -not $remnants) { throw "TOW: no TOW install in $Dir (give its folder with -Dir)" }
         Say "this removes TOW from $Dir"
         if (Test-Path -LiteralPath (Join-Path $Dir 'keys\master.key')) {
             Say "your master key is $Dir\keys\master.key: keep a copy if you may restore a backup or a .towx file later"
@@ -65,8 +67,10 @@ function Install-Tow {
         }
         # Native programs' error output is not a PowerShell error here (Windows PowerShell 5.1).
         $ErrorActionPreference = 'Continue'
-        & $launcher autostart off *> $null
-        & $launcher stop
+        if ($hasLauncher) {
+            & $launcher autostart off *> $null
+            & $launcher stop
+        }
         $ErrorActionPreference = 'Stop'
         $kept = @('data', 'keys', 'config.yaml', 'backup')
         foreach ($item in @(Get-ChildItem -LiteralPath $Dir -Force)) {
@@ -81,12 +85,17 @@ function Install-Tow {
         return
     }
 
-    if ((Test-Path -LiteralPath (Join-Path $Dir 'app')) -or (Test-Path -LiteralPath (Join-Path $Dir 'config.yaml')) -or (Test-Path -LiteralPath (Join-Path $Dir 'data'))) {
+    if (Test-Path -LiteralPath (Join-Path $Dir 'app')) {
         throw "TOW: TOW is already installed in $Dir. To update it, double-click `"Update TOW.cmd`" there."
     }
-    if ((Test-Path -LiteralPath $Dir) -and @(Get-ChildItem -LiteralPath $Dir -Force).Count) {
+    # What an uninstall that kept the data leaves: TOW is installed again around it, nothing of it changes.
+    $keptNames = @('data', 'keys', 'config.yaml', 'backup')
+    $present = @(if (Test-Path -LiteralPath $Dir) { Get-ChildItem -LiteralPath $Dir -Force | ForEach-Object { $_.Name } })
+    $kept = @($present | Where-Object { $keptNames -contains $_ }).Count -gt 0
+    if (@($present | Where-Object { $keptNames -notcontains $_ }).Count) {
         throw "TOW: $Dir is not empty: choose another folder with -Dir"
     }
+    if ($kept) { Say "found the data of an earlier TOW in $Dir ($($present -join ', ')): it is kept" }
     if ($env:PROCESSOR_ARCHITECTURE -eq 'x86' -and -not $env:PROCESSOR_ARCHITEW6432) {
         throw 'TOW: TOW needs 64-bit Windows'
     }
@@ -94,6 +103,7 @@ function Install-Tow {
     $created = -not (Test-Path -LiteralPath $Dir)
     $work = Join-Path $Dir '.install'
     $installed = $false
+    $moved = New-Object System.Collections.Generic.List[string]
     try {
         New-Item -ItemType Directory -Force -Path $work | Out-Null
         if ($env:TOW_INSTALL_SOURCE) {
@@ -126,7 +136,10 @@ function Install-Tow {
         $top = Join-Path $unpacked 'TOW'
         if (-not (Test-Path -LiteralPath (Join-Path $top 'Start TOW.cmd'))) { throw "TOW: $asset holds no TOW\Start TOW.cmd" }
         foreach ($item in @(Get-ChildItem -LiteralPath $top -Force)) {
-            Move-Item -LiteralPath $item.FullName -Destination (Join-Path $Dir $item.Name)
+            $target = Join-Path $Dir $item.Name
+            if (Test-Path -LiteralPath $target) { continue }  # the settings of an earlier TOW stay
+            Move-Item -LiteralPath $item.FullName -Destination $target
+            $moved.Add($target)
         }
         Remove-Item -LiteralPath $work -Recurse -Force
         if ($Port) {
@@ -139,6 +152,10 @@ function Install-Tow {
     finally {
         if (-not $installed) {
             if ($created) { Remove-Item -LiteralPath $Dir -Recurse -Force -ErrorAction SilentlyContinue }
+            elseif ($kept) {
+                # Only what this installer put there: the earlier TOW's data stays as it was.
+                foreach ($path in @($moved) + @($work)) { Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue }
+            }
             else { Get-ChildItem -LiteralPath $Dir -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue }
         }
     }

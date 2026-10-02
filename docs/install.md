@@ -158,6 +158,9 @@ It asks before it removes anything, turns autostart off and stops TOW. Your `dat
 `backup` stay in the folder unless you say otherwise (or add `-Purge` / `--purge`). `-Dir` / `--dir` names another
 folder than the default. Or simply stop TOW, turn autostart off and delete the folder.
 
+What stays is picked up again: installing into the same folder later keeps your data, key and settings. To delete
+what stayed, run the remove command again with `-Purge` / `--purge`.
+
 ## If something goes wrong
 
 | What you see | What to do |

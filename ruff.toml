@@ -1,5 +1,10 @@
 line-length = 120
 
+# scripts/update.py runs on the install's base Python, which may be 3.11+ (deploy.ps1's fallback): it must
+# keep 3.11 syntax even when formatted (tests/test_update.py parses it as 3.11).
+[per-file-target-version]
+"scripts/update.py" = "py311"
+
 [lint]
 extend-select = ["E", "W", "I", "B", "UP", "SIM", "C4", "RUF", "PERF", "PT", "C90", "BLE"]
 ignore = [
