@@ -132,6 +132,8 @@ def test_named_preview_video_does_not_duplicate_the_real_episode():
     names = (
         "Show.S01E01.mkv",
         "Show.S01E01.sample.mkv",
+        "Show S01E01 Sample.mkv",
+        "Show.S01E01 [Preview].mkv",
         "Show.S01E01-trailer.mp4",
         "[Preview] Show.S01E01.mkv",
         "Show.S01E02.mkv",
@@ -139,6 +141,8 @@ def test_named_preview_video_does_not_duplicate_the_real_episode():
     resolved = resolve_episode_coverages(names)
     assert [[label.key for label in coverage] for coverage in resolved] == [
         ["episode:s01e01"],
+        [],
+        [],
         [],
         [],
         [],

@@ -3,6 +3,13 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.14] — 2026-10-03
+
+### Fixed
+
+- Preview clips marked with a separated or bracketed `Sample`, `Trailer`, or `Preview` suffix are excluded from
+  episode coverage, so an unfinished clip cannot block a completed episode's event.
+
 ## [1.22.13] — 2026-10-03
 
 ### Fixed

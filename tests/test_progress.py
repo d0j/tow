@@ -90,6 +90,8 @@ def test_unfinished_sample_clip_does_not_block_completed_episode(tmp_path: Path)
         def inspect_torrent(self, infohash):
             info = super().inspect_torrent(infohash)
             info["files"].append({"name": "Show/S01E01.sample.mkv", "size": 3, "progress": 0.0})
+            info["files"].append({"name": "Show/S01E01 Sample.mkv", "size": 3, "progress": 0.0})
+            info["files"].append({"name": "Show/S01E01 [Preview].mkv", "size": 3, "progress": 0.0})
             return info
 
     client = ClientWithSample()
