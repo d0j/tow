@@ -16,7 +16,15 @@ from tow.bundle import (
     ExportImportError,
     _atomic_write,
     _contains_secret_keys,
+    _json_bytes,
+    _parse_mapping,
+    _read_bundle,
+    _validate_config_schema,
+    _validate_history_schema,
     _validate_state_schema,
+    _validate_tree,
+    _validated_payload,
+    _zip_payload,
     export_bundle,
     import_bundle,
     rollback_import,
@@ -56,6 +64,68 @@ def test_cookie_name_metadata_is_not_treated_as_plaintext_secret():
     assert _contains_secret_keys({"telegram": {"token": "plaintext"}}) is True
 
 
+@pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
+def test_import_rejects_non_finite_json_history_values(constant):
+    raw = ('{"schema_version":1,"topics":{"topic-1":{"items":{"file":{"progress":' + constant + "}}}}}").encode()
+    history = _parse_mapping(raw, label="download_history.json")
+    with pytest.raises(ExportImportError, match="non-finite"):
+        _validate_history_schema(history)
+
+
+@pytest.mark.parametrize("constant", [".nan", ".inf", "-.inf"])
+def test_import_rejects_non_finite_yaml_config_values(constant):
+    config = _parse_mapping(f"extra: {constant}".encode(), label="config.yaml")
+    with pytest.raises(ExportImportError, match="non-finite"):
+        _validate_config_schema(config)
+
+
+@pytest.mark.parametrize(("label", "prefix"), [("state.json", b'{"nested":'), ("config.yaml", b"nested: ")])
+def test_import_rejects_extreme_nesting_without_recursion_escape(label, prefix):
+    raw = prefix + b"[" * 1500 + b"0" + b"]" * 1500 + (b"}" if label == "state.json" else b"")
+    with pytest.raises(ExportImportError, match=r"invalid|nested too deeply"):
+        _validate_tree(_parse_mapping(raw, label=label), label=label)
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_export_rejects_non_finite_numbers(value):
+    with pytest.raises(ExportImportError, match="not JSON serializable"):
+        _json_bytes({"nested": [value]})
+
+
+def test_import_rejects_deep_envelope_and_manifest(tmp_path):
+    deep = b"[" * 1500 + b"0" + b"]" * 1500
+    bundle = tmp_path / "malformed.towx"
+    bundle.write_bytes(b'{"nested":' + deep + b"}")
+    with pytest.raises(ExportImportError, match="export bundle envelope"):
+        _read_bundle(bundle, "passphrase")
+    with pytest.raises(ExportImportError, match=r"manifest\.json|invalid bundle manifest"):
+        _validated_payload(_zip_payload({"manifest.json": b'{"nested":' + deep + b"}"}))
+
+
+def test_import_rejects_non_finite_optional_events():
+    from tow import __version__
+    from tow.bundle import FORMAT, _sha256
+
+    members = {
+        "config.yaml": b"{}",
+        "state.json": b'{"topics":[],"mirrors":{}}',
+        "download_history.json": b'{"schema_version":1,"topics":{}}',
+        "secrets.json": b"{}",
+        "events.json": b'{"events":[{"event_id":Infinity}]}',
+    }
+    members["manifest.json"] = json.dumps(
+        {
+            "format": FORMAT,
+            "schema_version": 1,
+            "source_version": __version__,
+            "members": sorted(members),
+            "sha256": {name: _sha256(data) for name, data in members.items()},
+        }
+    ).encode()
+    with pytest.raises(ExportImportError, match=r"events\.json contains a non-finite number"):
+        _validated_payload(_zip_payload(members))
+
+
 @pytest.mark.parametrize(
     "metadata",
     [
@@ -84,7 +154,7 @@ def test_real_secret_fields_are_still_refused(leak):
     ],
 )
 def test_import_rejects_malformed_mirror_bucket(bucket):
-    with pytest.raises(ExportImportError, match="mirror"):
+    with pytest.raises(ExportImportError, match=r"mirror|non-finite"):
         _validate_state_schema({"topics": [], "mirrors": {"site": bucket}})
 
 
