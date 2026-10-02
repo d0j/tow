@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).parents[1]
 
 
@@ -133,3 +135,20 @@ def test_setup_takes_no_options_and_never_runs_under_a_running_tow():
     # the check comes before anything is moved or removed
     assert windows.index("import busy") < windows.index('move ".venv" ".venv-old"')
     assert posix.index("import busy") < posix.index("rm -rf .venv")
+
+
+@pytest.mark.allow_git
+def test_posix_launcher_and_hooks_are_executable_in_git():
+    # 02.10.2026: the first public commit lost the bits (built from an archive on Windows).
+    import shutil
+    import subprocess
+
+    root = Path(__file__).resolve().parents[1]
+    if shutil.which("git") is None or not (root / ".git").exists():
+        pytest.skip("not a git checkout")
+    wanted = ["scripts/tow", ".githooks/pre-commit", ".githooks/pre-push", ".githooks/post-commit"]
+    listing = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-s", "--", *wanted], capture_output=True, text=True, check=True
+    ).stdout.splitlines()
+    modes = {line.split("\t", 1)[1]: line.split()[0] for line in listing}
+    assert modes == dict.fromkeys(wanted, "100755")
