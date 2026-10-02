@@ -179,7 +179,8 @@ def test_a_refused_new_site_reopens_the_form_with_the_input_and_the_reason(clien
     assert "secret-pw" not in page  # the password is never kept
 
 
-def test_a_bad_advanced_field_unfolds_advanced(client):
+def test_a_bad_advanced_field_unfolds_advanced(client, monkeypatch):
+    monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: ["93.184.216.34"])
     response = client.post(
         "/sites/new",
         data={"name": "fresh", "url_regex": "x", "fetch_hosts": "https://a.example", "topic_path": "relative"},

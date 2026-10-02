@@ -131,16 +131,42 @@ def test_external_pulse_is_sent_every_pass_with_the_health(clock, up, expected_o
 
 
 def test_ping_goes_to_fail_endpoint_on_a_problem(monkeypatch):
-    import httpx
-
     from tow.watchdog import ping_heartbeat
 
     calls = []
-    monkeypatch.setattr(httpx, "get", lambda url, timeout: calls.append(url) or type("R", (), {"status_code": 200})())
+
+    class Response:
+        status_code = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def stream(self, _method, url):
+            calls.append(url)
+            return Response()
+
+    options = []
+
+    def client(**kwargs):
+        options.append(kwargs)
+        return Client()
+
+    monkeypatch.setattr("tow.http.client", client)
 
     assert ping_heartbeat("https://hc-ping.com/abc/", ok=True) is True
     assert ping_heartbeat("https://hc-ping.com/abc", ok=False) is True
     assert calls == ["https://hc-ping.com/abc", "https://hc-ping.com/abc/fail"]
+    assert options == [{"follow_redirects": False, "public_only": True}] * 2
 
 
 def test_heartbeat_url_must_be_https():

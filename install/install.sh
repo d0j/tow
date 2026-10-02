@@ -15,6 +15,7 @@
 #   --uninstall      remove TOW from DIR (asks first; keeps data/, keys/, config.yaml, backup/)
 #   --yes            do not ask (with --uninstall)
 #   --purge          with --uninstall: remove the data, keys and backups too
+#   --adopt-data     reuse or remove data left by an older installer without an install marker
 # For tests: TOW_INSTALL_SOURCE=<source .tar.gz> and TOW_INSTALL_SUMS=<SHA256SUMS> install from
 # local files instead of the release.
 #
@@ -42,6 +43,7 @@ desktop=no
 uninstall=no
 yes=no
 purge=no
+adopt_data=no
 while [ $# -gt 0 ]; do
     case $1 in
         --dir) [ $# -ge 2 ] || die "--dir needs a folder"; dir=$2; shift ;;
@@ -55,11 +57,12 @@ while [ $# -gt 0 ]; do
         --uninstall) uninstall=yes ;;
         --yes | -y) yes=yes ;;
         --purge) purge=yes ;;
+        --adopt-data) adopt_data=yes ;;
         -h | --help)
             if [ -f "$0" ]; then
                 sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
             else
-                printf '%s\n' "Options: --dir DIR, --version TAG, --port N, --autostart, --desktop, --uninstall [--yes] [--purge]" \
+                printf '%s\n' "Options: --dir DIR, --version TAG, --port N, --autostart, --desktop, --uninstall [--yes] [--purge], --adopt-data" \
                     "See https://github.com/$REPO/blob/main/docs/install.md"
             fi
             exit 0
@@ -77,6 +80,18 @@ case $dir in
     /*) ;;
     *) dir=$(pwd)/$dir ;;
 esac
+marker=$dir/.tow-install
+[ ! -L "$dir" ] && [ ! -L "$dir/app" ] && [ ! -L "$dir/app/scripts/tow" ] ||
+    die "$dir contains a symbolic link in its install path: give the real installation folder"
+marked=no
+if [ -f "$marker" ] && [ ! -L "$marker" ] && [ "$(cat "$marker")" = 'TOW portable install v1' ]; then
+    marked=yes
+fi
+legacy=no
+if [ -x "$dir/app/scripts/tow" ] && [ ! -d "$dir/app/.git" ] && [ -f "$dir/app/pyproject.toml" ] &&
+    grep -Fqx 'name = "tow"' "$dir/app/pyproject.toml"; then
+    legacy=yes
+fi
 
 # --- helpers -----------------------------------------------------------------------------------
 
@@ -137,11 +152,12 @@ desktop_file() {
 # --- uninstall ---------------------------------------------------------------------------------
 
 if [ "$uninstall" = yes ]; then
-    has_launcher=no
-    [ -x "$dir/app/scripts/tow" ] && has_launcher=yes
-    if [ "$has_launcher" = no ] && [ ! -e "$dir/data" ] && [ ! -e "$dir/keys" ] && [ ! -e "$dir/config.yaml" ] &&
-        [ ! -e "$dir/backup" ]; then
+    if [ "$marked" = no ] && [ "$legacy" = no ] && [ "$adopt_data" = no ]; then
         die "no TOW install in $dir (give its folder with --dir)"
+    fi
+    if [ "$marked" = no ] && [ "$legacy" = no ] && [ "$adopt_data" = yes ] &&
+        { [ ! -f "$dir/config.yaml" ] || [ ! -f "$dir/keys/master.key" ] || [ ! -d "$dir/data" ]; }; then
+        die "cannot adopt $dir: the old settings, master key and data folder are not all present"
     fi
     say "this removes TOW from $dir"
     [ ! -f "$dir/keys/master.key" ] || say "your master key is $dir/keys/master.key: keep a copy if you may restore a backup or a .towx file later"
@@ -154,7 +170,11 @@ if [ "$uninstall" = yes ]; then
     elif [ "$yes" != yes ]; then
         keep=$(ask "Keep your data, keys, settings and backups (data/, keys/, config.yaml, backup/) in $dir? [Y/n]" y)
     fi
-    if [ "$has_launcher" = yes ]; then
+    if [ "$keep" = y ] && [ "$marked" = no ]; then
+        printf '%s\n' 'TOW portable install v1' >"$marker"
+        chmod 600 "$marker"
+    fi
+    if [ "$legacy" = yes ]; then
         "$dir/app/scripts/tow" autostart off >/dev/null 2>&1 || true
         "$dir/app/scripts/tow" stop || true
     fi
@@ -167,7 +187,7 @@ if [ "$uninstall" = yes ]; then
         for item in "$dir"/* "$dir"/.[!.]*; do
             [ -e "$item" ] || continue
             case ${item##*/} in
-                data | keys | config.yaml | backup) ;;
+                data | keys | config.yaml | backup | .tow-install) ;;
                 *) rm -rf "$item" ;;
             esac
         done
@@ -197,11 +217,13 @@ if [ -d "$dir" ]; then
     for item in "$dir"/* "$dir"/.[!.]*; do
         [ -e "$item" ] || continue
         case ${item##*/} in
-            data | keys | config.yaml | backup) kept=yes ;;
+            data | keys | config.yaml | backup | .tow-install) kept=yes ;;
             *) die "$dir is not empty: choose another folder with --dir" ;;
         esac
     done
 fi
+[ "$kept" = no ] || [ "$marked" = yes ] || [ "$adopt_data" = yes ] ||
+    die "$dir has data without a TOW install marker: use --adopt-data only if it is your old TOW folder"
 [ "$kept" = no ] || say "found the data of an earlier TOW in $dir: it is kept"
 command -v tar >/dev/null 2>&1 || die "tar is needed"
 
@@ -230,11 +252,15 @@ fi
 
 created=no
 config_created=no
+config_saved=no
 [ -e "$dir" ] || created=yes
 mkdir -p "$dir"
 work=$dir/.install
 cleanup() { # a failed installation leaves the folder as it found it: absent or empty
     status=$?
+    if [ "$status" -ne 0 ] && [ "$config_saved" = yes ]; then
+        cp "$work/config.before" "$dir/config.yaml"
+    fi
     rm -rf "$work"
     if [ "$status" -ne 0 ]; then
         if [ "$created" = yes ]; then
@@ -257,6 +283,10 @@ cleanup() { # a failed installation leaves the folder as it found it: absent or 
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 mkdir -p "$work"
+if [ -f "$dir/config.yaml" ]; then
+    cp "$dir/config.yaml" "$work/config.before"
+    config_saved=yes
+fi
 
 # The release: its SHA256SUMS and its source archive.
 if [ -n "${TOW_INSTALL_SOURCE:-}" ]; then
@@ -338,8 +368,12 @@ printf '%s\n' '#!/bin/sh' '# TOW: stop it (a check that is running finishes firs
 printf '%s\n' '#!/bin/sh' '# TOW: update it to the latest release (or: update-tow v1.23.0); it goes back by itself on failure.' \
     'root=$(dirname "$0")' \
     'for python in "$root"/runtime/python/cpython-3*/bin/python3; do [ -x "$python" ] && break; done' \
-    'exec "$python" "$root/app/scripts/update.py" --ref "${1:-latest}"' >"$update_file"
+    'update="$root/app/scripts/update.py"' \
+    'if [ -f "$root/.update-switch.json" ] || [ ! -f "$update" ]; then update="$root/runtime/update.py"; fi' \
+    'exec "$python" "$update" --ref "${1:-latest}"' >"$update_file"
 chmod 755 "$start_file" "$stop_file" "$update_file"
+printf '%s\n' 'TOW portable install v1' >"$marker"
+chmod 600 "$marker"
 
 # Installed: from here on a failure is said, and the install stays.
 trap - EXIT

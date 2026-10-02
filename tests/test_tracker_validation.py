@@ -6,6 +6,11 @@ from tow.web import app
 from tow.web.site_form import valid_site_hosts, valid_site_name
 
 
+@pytest.fixture(autouse=True)
+def _public_test_hosts(monkeypatch):
+    monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: ["93.184.216.34"])
+
+
 def test_invalid_tracker_regex_is_rejected_before_config_write(monkeypatch):
     cfg = {"trackers": {"demo": {"url_regex": "^ok$", "fetch_hosts": ["https://demo"]}}, "allow_lan": False}
     writes = []

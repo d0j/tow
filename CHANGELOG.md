@@ -3,6 +3,17 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## Unreleased
+
+### Fixed
+
+- Archive updates require the release checksum, cap unpacked size, and recover the old code after a hard process
+  interruption. The release workflow runs the full gate on all three systems before publishing.
+- Installers refuse unmarked foreign folders on removal; failed reinstalls preserve the earlier config exactly.
+- Outbound tracker, notifier and heartbeat connections pin checked public DNS answers unless private hosts are
+  explicitly allowed. A night copy fails visibly if a previously backed-up core file disappears.
+- Settings shows how many notifications were discarded when a recipient's bounded queue overflowed.
+
 ## [1.22.2] — 2026-10-02
 
 1.22.1 was tagged but not published: its Linux and macOS release check failed in the test itself (after installing

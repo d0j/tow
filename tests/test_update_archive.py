@@ -55,10 +55,12 @@ class GitHub:
         self.routes: dict[str, tuple[int, bytes, dict[str, str]]] = {}
         self.asked: list[str] = []
 
-    def release(self, tag: str, archive: bytes, *, listed: bytes | None = None, copy: bytes | None = None) -> None:
+    def release(self, tag: str, archive: bytes, *, listed: bytes | None = b"auto", copy: bytes | None = None) -> None:
         """A release: GitHub's archive of the tag, the uploaded copy and SHA256SUMS."""
         self.routes[f"/{REPO}/archive/refs/tags/{tag}.tar.gz"] = (200, archive, {})
         self.routes[f"/{REPO}/releases/download/{tag}/tow-source.tar.gz"] = (200, copy or archive, {})
+        if listed == b"auto":
+            listed = sums(**{"tow-source.tar.gz": archive})
         if listed is not None:
             self.routes[f"/{REPO}/releases/download/{tag}/SHA256SUMS"] = (200, listed, {})
 
@@ -188,17 +190,19 @@ def test_an_archive_that_matches_no_checksum_changes_nothing(install, github):
     assert not (install["root"] / "update-state.json").exists()
 
 
-def test_a_release_without_sums_is_installed_unverified_and_says_so(install, github):
-    github.release("v1.23.0", tarball("1.23.0"))
-    code, lines = run(Machine(install["app"], github), "v1.23.0")
-    assert code == 0, lines
-    assert "the release has no checksum for the source archive: it was not verified" in lines
+def test_a_release_without_sums_changes_nothing(install, github):
+    github.release("v1.23.0", tarball("1.23.0"), listed=None)
+    machine = Machine(install["app"], github)
+    code, lines = run(machine, "v1.23.0")
+    assert code == 2
+    assert machine.calls == []
+    assert "the release has no checksum for the source archive; nothing was updated" in lines[-1]
 
 
 @pytest.mark.parametrize(
     ("ref", "release", "message"),
     [
-        ("v1.23.0", None, "v1.23.0 is not a release of TOW"),
+        ("v1.23.0", None, "the release has no checksum for the source archive"),
         ("v1.21.0", "1.21.0", "goes no further back than v1.22.0"),
         ("v1.23.0", "1.24.0", "the archive of v1.23.0 holds TOW 1.24.0"),
         ("main", None, "updates to a release tag (for example v1.22.0) or latest, not to main"),
@@ -242,6 +246,20 @@ def test_an_archive_that_leaves_its_folder_is_refused(install, github, entry):
     assert not (install["root"].parent / "escape").exists()
 
 
+@pytest.mark.parametrize("limit", ["MAX_ARCHIVE_FILES", "MAX_MEMBER_BYTES", "MAX_UNPACKED_BYTES"])
+def test_archive_expansion_limits_apply_before_switch(install, github, monkeypatch, limit):
+    github.release("v1.23.0", tarball("1.23.0"))
+    monkeypatch.setattr(updater, limit, 1)
+    machine = Machine(install["app"], github)
+
+    code, lines = run(machine, "v1.23.0")
+
+    assert code == 2
+    assert machine.calls == []
+    assert "source archive exceeds its unpacked size or file-count limit" in lines[-1]
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+
+
 def test_a_new_version_that_does_not_answer_puts_the_previous_code_back(install, github):
     github.release("v1.23.0", tarball("1.23.0"))
     machine = Machine(install["app"], github, silent_version="1.23.0")
@@ -251,7 +269,7 @@ def test_a_new_version_that_does_not_answer_puts_the_previous_code_back(install,
     assert code == 1
     record = state(install)
     assert record["status"] == "rolled_back"
-    assert [step["ok"] for step in record["rollback"]] == [True, True, True, True, True]
+    assert [step["ok"] for step in record["rollback"]] == [True, True, True, True, True, True]
     assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
     assert (install["app"] / ".venv" / "bin" / "python").read_text(encoding="utf-8") == "old venv"
     assert not (install["root"] / "app.prev").exists()  # emptied by the rollback
@@ -277,6 +295,101 @@ def test_a_switch_cut_off_halfway_is_undone_exactly(install, github, monkeypatch
     assert state(install)["status"] == "rolled_back"
     assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
     assert leftovers(install) == []
+
+
+@pytest.mark.parametrize("cut_after", [2, 4, 7])
+def test_a_hard_crash_in_the_archive_switch_is_recovered_on_next_run(install, github, monkeypatch, cut_after):
+    github.release("v1.23.0", tarball("1.23.0"))
+    machine = Machine(install["app"], github)
+    real = updater.os.replace
+    count = 0
+
+    class Crash(BaseException):
+        pass
+
+    def cut(source, destination):
+        nonlocal count
+        result = real(source, destination)
+        if Path(source).parent.name in {"app", "app.new"}:
+            count += 1
+            if count == cut_after:
+                raise Crash()
+        return result
+
+    monkeypatch.setattr(updater.os, "replace", cut)
+    with pytest.raises(Crash):
+        run(machine, "v1.23.0")
+    monkeypatch.setattr(updater.os, "replace", real)
+    assert (install["root"] / ".update-switch.json").exists()
+    assert (install["root"] / "runtime" / "update.py").is_file()
+
+    recovered = Machine(install["app"], github, supervisor=False)
+    code, _lines = run(recovered, "not-a-tag")
+
+    assert code == 2  # the requested tag is invalid, after the earlier switch was repaired
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+    assert not (install["root"] / ".update-switch.json").exists()
+    assert leftovers(install) == []
+    assert recovered.calls == ["spawn tow run 1.22.0"]
+
+
+def test_a_crash_after_new_code_changes_data_restores_the_snapshot_too(install, github, monkeypatch):
+    github.release("v1.23.0", tarball("1.23.0"))
+    original = updater.Update.start_and_check
+
+    class Crash(BaseException):
+        pass
+
+    def start_then_crash(work, version):
+        result = original(work, version)
+        if version == "1.23.0":
+            (install["root"] / "data" / "state.json").write_text('{"schema": 2}', encoding="utf-8")
+            (install["root"] / "config.yaml").write_text("port: 18999\nschema: 2\n", encoding="utf-8")
+            raise Crash()
+        return result
+
+    monkeypatch.setattr(updater.Update, "start_and_check", start_then_crash)
+    with pytest.raises(Crash):
+        run(Machine(install["app"], github), "v1.23.0")
+    monkeypatch.setattr(updater.Update, "start_and_check", original)
+    assert (install["root"] / ".update-switch.json").exists()
+
+    recovered = Machine(install["app"], github)
+    code, _lines = run(recovered, "not-a-tag")
+
+    assert code == 2
+    assert (install["root"] / "data" / "state.json").read_text(encoding="utf-8") == '{"topics": []}'
+    assert (install["root"] / "config.yaml").read_text(encoding="utf-8") == "port: 18999\nlanguage: en\n"
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+    assert state(install)["status"] == "recovered"
+    assert not (install["root"] / ".update-switch.json").exists()
+
+
+def test_a_damaged_update_snapshot_blocks_crash_recovery(install, github, monkeypatch):
+    github.release("v1.23.0", tarball("1.23.0"))
+    real = updater.os.replace
+
+    class Crash(BaseException):
+        pass
+
+    def cut(source, destination):
+        result = real(source, destination)
+        if Path(source).parent.name == "app" and Path(source).name == "pyproject.toml":
+            raise Crash()
+        return result
+
+    monkeypatch.setattr(updater.os, "replace", cut)
+    with pytest.raises(Crash):
+        run(Machine(install["app"], github), "v1.23.0")
+    monkeypatch.setattr(updater.os, "replace", real)
+    snapshot = next((install["root"] / "backup").glob("update-*-before-*"))
+    (snapshot / "data" / "state.json").write_text("damaged", encoding="utf-8")
+
+    code, lines = run(Machine(install["app"], github, supervisor=False), "not-a-tag")
+
+    assert code == 2
+    assert "snapshot is damaged: state.json" in lines[-1]
+    assert (install["root"] / ".update-switch.json").exists()
 
 
 def test_only_one_previous_version_is_kept(install, github):

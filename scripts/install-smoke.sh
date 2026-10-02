@@ -84,7 +84,8 @@ done
 say "uninstall --yes (keeps data, keys, config.yaml, backup)"
 sh "$installer" --uninstall --yes --dir "$dir" </dev/null
 left=$(ls -A "$dir" | tr '\n' ' ')
-[ "$left" = "backup config.yaml data keys " ] || [ "$left" = "config.yaml data keys " ] || fail "left after uninstall: $left"
+[ "$left" = ".tow-install backup config.yaml data keys " ] ||
+    [ "$left" = ".tow-install config.yaml data keys " ] || fail "left after uninstall: $left"
 key_before=$(sha "$dir/keys/master.key")
 
 say "install again around the kept data (same key, same settings)"

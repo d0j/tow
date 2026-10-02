@@ -131,7 +131,13 @@ def _title_from_page(url: str) -> str:
         return ""
     ua = cfg.get("user_agent")
     try:
-        with http_client(ua=ua, follow_redirects=False) as c:
+        from tow.config import as_bool
+
+        with http_client(
+            ua=ua,
+            follow_redirects=False,
+            public_only=not as_bool(cfg.get("allow_private_tracker_hosts")),
+        ) as c:
             r = get_limited(c, url.strip(), max_bytes=MAX_HTML_RESPONSE_BYTES)
     except Exception as exc:  # noqa: BLE001 - a title guess never fails the add: the link's own words are used
         logging.getLogger("tow.title").warning("topic page not read for its title: %s: %s", type(exc).__name__, exc)

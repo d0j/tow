@@ -41,7 +41,10 @@ def internal_host(hostname: str) -> bool:
         return not ipaddress.ip_address(name).is_global
     except ValueError:
         pass
-    for address in _resolve_addresses(name):
+    addresses = _resolve_addresses(name)
+    if not addresses:
+        return True  # an unresolved host must not become private after it was saved
+    for address in addresses:
         try:
             if not ipaddress.ip_address(address.split("%", 1)[0]).is_global:
                 return True

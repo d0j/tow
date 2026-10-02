@@ -160,7 +160,9 @@ def _cookies_for_host(
 _REDIRECT_STATUSES = (301, 302, 303, 307, 308)
 
 
-def _follow_redirects(c: Any, r: Any, *, ua: str | None, max_bytes: int, allowed_redirects: set[str]) -> Any:
+def _follow_redirects(
+    c: Any, r: Any, *, ua: str | None, max_bytes: int, allowed_redirects: set[str], public_only: bool = False
+) -> Any:
     """Follow at most five redirects: same-origin with the tracker client, allowlisted
     download hosts only in a fresh cookie-free client, anything else refused."""
     for _ in range(5):
@@ -181,7 +183,7 @@ def _follow_redirects(c: Any, r: Any, *, ua: str | None, max_bytes: int, allowed
             raise MirrorFetchError("mirrors.redirect_cross_origin", failure="redirect_policy")
         # Download hosts are explicitly allowlisted, but tracker cookies must never cross
         # that boundary. Follow the rest of this redirect chain in a fresh cookie-free client.
-        with thttp.client(ua=ua, follow_redirects=False) as clean:
+        with thttp.client(ua=ua, follow_redirects=False, public_only=public_only) as clean:
             r = thttp.get_limited(clean, nxt, max_bytes=max_bytes)
             for _redirect in range(4):
                 if r.status_code not in _REDIRECT_STATUSES:
@@ -247,6 +249,7 @@ def pick_and_get(
     persist: bool = True,
     max_bytes: int = thttp.MAX_HTML_RESPONSE_BYTES,
     allowed_redirect_origins: list[str] | None = None,
+    public_only: bool = False,
 ) -> tuple[httpx.Response, str]:
     if not hosts:
         raise MirrorFetchError("mirrors.no_hosts", failure="config", cls="error", tracker=tracker)
@@ -268,9 +271,13 @@ def pick_and_get(
         url = host + (path if path.startswith("/") else "/" + path)
         try:
             host_cookies = _cookies_for_host(cookies, host, hosts)
-            with thttp.client(ua=ua, cookies=host_cookies or None, follow_redirects=False) as c:
+            with thttp.client(
+                ua=ua, cookies=host_cookies or None, follow_redirects=False, public_only=public_only
+            ) as c:
                 r = thttp.get_limited(c, url, max_bytes=max_bytes)
-                r = _follow_redirects(c, r, ua=ua, max_bytes=max_bytes, allowed_redirects=allowed_redirects)
+                r = _follow_redirects(
+                    c, r, ua=ua, max_bytes=max_bytes, allowed_redirects=allowed_redirects, public_only=public_only
+                )
             _raise_for_status(r)
             if ok and not ok(r):
                 if is_download_limit(r.content):

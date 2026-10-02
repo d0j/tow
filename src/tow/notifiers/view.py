@@ -24,17 +24,20 @@ def _kind_status(secrets: dict[str, Any], state: dict[str, Any], kind: str) -> d
     failing = [row for row in rows if row.get("ok") is False]
     seen = [row for row in rows if "ok" in row]
     queued = 0
+    dropped = 0
     for key in keys:
         box = outbox.get(key)
         if isinstance(box, dict):
             queued += len(box.get("items") or [])
         elif isinstance(box, list):
             queued += len(box)
+        dropped += int((state.get("notify_dropped") or {}).get(key) or 0)
     return {
         "ok": (not failing) if seen else None,
         "error": _status_error(failing[0]) if failing else "",
         "at": max((int(row.get("at") or 0) for row in rows), default=0) or None,
         "queued": queued,
+        "dropped": dropped,
     }
 
 
@@ -84,7 +87,7 @@ def cards(secrets: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]
         status = (
             _kind_status(secrets, state, kind)
             if settings is not None
-            else {"ok": None, "error": "", "at": None, "queued": 0}
+            else {"ok": None, "error": "", "at": None, "queued": 0, "dropped": 0}
         )
         view.append(
             {

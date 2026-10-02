@@ -63,12 +63,22 @@ def client(
     ua: str | None = None,
     cookies: dict[str, str] | None = None,
     follow_redirects: bool = True,
+    *,
+    public_only: bool = False,
 ) -> httpx.Client:
+    if public_only:
+        from tow.net_guard import PublicOnlyTransport
+
+        transport = PublicOnlyTransport()
+    else:
+        transport = None
     return httpx.Client(
         headers={"User-Agent": ua or UA_DEFAULT},
         cookies=cookies or {},
         follow_redirects=follow_redirects,
         timeout=httpx.Timeout(20.0, connect=5.0),
+        transport=transport,
+        trust_env=not public_only,
     )
 
 

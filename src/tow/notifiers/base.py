@@ -130,7 +130,16 @@ def notifier_problems(module: object) -> list[str]:
 
 def http_client() -> httpx.Client:
     """One place to build the client (tests replace it with a fake transport)."""
-    return httpx.Client(timeout=10.0, follow_redirects=False)
+    from tow.config import as_bool, load_config
+    from tow.net_guard import PublicOnlyTransport
+
+    public_only = not as_bool(load_config().get("allow_private_notifier_hosts"))
+    return httpx.Client(
+        timeout=10.0,
+        follow_redirects=False,
+        transport=PublicOnlyTransport() if public_only else None,
+        trust_env=not public_only,
+    )
 
 
 def backoff_sleep(seconds: float) -> None:

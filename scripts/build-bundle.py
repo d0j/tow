@@ -87,7 +87,10 @@ for /d %%D in ("%~dp0runtime\python\cpython-3*") do if exist "%%~fD\python.exe" 
 if not defined TOW_PY echo TOW's Python is not in "%~dp0runtime\python": start TOW once with "Start TOW.cmd" first.
 if not defined TOW_PY pause
 if not defined TOW_PY exit /b 3
-"%TOW_PY%" "%~dp0app\scripts\update.py" --ref "%TOW_REF%"
+set "TOW_UPDATE=%~dp0app\scripts\update.py"
+if exist "%~dp0.update-switch.json" set "TOW_UPDATE=%~dp0runtime\update.py"
+if not exist "%TOW_UPDATE%" set "TOW_UPDATE=%~dp0runtime\update.py"
+"%TOW_PY%" "%TOW_UPDATE%" --ref "%TOW_REF%"
 set "TOW_CODE=%ERRORLEVEL%"
 pause
 exit /b %TOW_CODE%

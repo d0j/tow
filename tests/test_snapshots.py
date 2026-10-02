@@ -191,6 +191,31 @@ def test_missing_stores_are_reported_not_silently_skipped(backup):
     assert manifest["missing"] == made["missing"]  # signed with the rest
 
 
+@pytest.mark.parametrize("name", ["state.json", "download_history.json", "secrets.enc"])
+def test_a_store_present_in_an_earlier_copy_must_not_disappear_silently(backup, name):
+    from tow.paths import download_history_path
+    from tow.snapshots import status
+
+    if name == "download_history.json":
+        download_history_path().write_text("{}", encoding="utf-8")
+    first = Path(create_snapshot()["snapshot"])
+    first_ok_at = status()["last_ok_at"]
+    source = {
+        "state.json": data_dir() / "state.json",
+        "download_history.json": download_history_path(),
+        "secrets.enc": data_dir() / "secrets.enc",
+    }[name]
+    source.unlink()
+
+    with pytest.raises(SnapshotError, match=_says("backup.snapshot.source_missing", name=name)):
+        create_snapshot()
+
+    assert first.is_dir()
+    assert status()["last_ok_at"] == first_ok_at
+    assert name in status()["last_error"]
+    assert not list(backup.glob(".*.partial"))
+
+
 def test_backup_now_says_what_was_not_in_the_copy(backup):
 
     from fastapi.testclient import TestClient

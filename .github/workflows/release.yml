@@ -30,6 +30,30 @@ env:
   TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
+  gate:
+    name: gate (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      - name: Install Python from .python-version
+        run: uv python install
+      - name: Sync locked environment
+        run: uv sync --frozen
+      - name: Quality gate (with dependency audit)
+        shell: pwsh
+        run: ./scripts/gate.ps1 -Audit
+
   source:
     name: source archive
     runs-on: ubuntu-latest
@@ -51,7 +75,7 @@ jobs:
 
   windows:
     name: Windows bundle
-    needs: source
+    needs: [gate, source]
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -105,7 +129,7 @@ jobs:
 
   posix:
     name: install.sh (${{ matrix.os }})
-    needs: source
+    needs: [gate, source]
     strategy:
       fail-fast: false
       matrix:
@@ -125,7 +149,7 @@ jobs:
 
   publish:
     name: upload to the release
-    needs: [source, windows, posix]
+    needs: [gate, source, windows, posix]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

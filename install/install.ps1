@@ -26,11 +26,12 @@ param(
     [switch]$Autostart,
     [switch]$Uninstall,
     [switch]$Yes,
-    [switch]$Purge
+    [switch]$Purge,
+    [switch]$AdoptData
 )
 
 function Install-Tow {
-    param([string]$Dir, [string]$Version, [int]$Port, [bool]$Autostart, [bool]$Uninstall, [bool]$Yes, [bool]$Purge)
+    param([string]$Dir, [string]$Version, [int]$Port, [bool]$Autostart, [bool]$Uninstall, [bool]$Yes, [bool]$Purge, [bool]$AdoptData)
 
     # Everything stays inside this function: `irm | iex` runs in the caller's session, which
     # must keep its own settings (and an `exit` would close its window).
@@ -51,11 +52,30 @@ function Install-Tow {
 
     $Dir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Dir)
     $launcher = Join-Path $Dir 'app\scripts\tow.cmd'
+    $marker = Join-Path $Dir '.tow-install'
+    foreach ($path in @($Dir, (Join-Path $Dir 'app'), $launcher, $marker)) {
+        if (Test-Path -LiteralPath $path) {
+            if ((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                throw "TOW: $path is a link; give the real installation folder"
+            }
+        }
+    }
+    $marked = (Test-Path -LiteralPath $marker -PathType Leaf) -and
+        ([IO.File]::ReadAllText($marker).Trim() -eq 'TOW portable install v1')
+    $project = Join-Path $Dir 'app\pyproject.toml'
+    $legacy = (Test-Path -LiteralPath $launcher -PathType Leaf) -and
+        -not (Test-Path -LiteralPath (Join-Path $Dir 'app\.git')) -and
+        (Test-Path -LiteralPath $project -PathType Leaf) -and
+        ([IO.File]::ReadAllText($project) -match '(?m)^name = "tow"\s*$')
 
     if ($Uninstall) {
-        $hasLauncher = Test-Path -LiteralPath $launcher
-        $remnants = @('data', 'keys', 'config.yaml', 'backup') | Where-Object { Test-Path -LiteralPath (Join-Path $Dir $_) }
-        if (-not $hasLauncher -and -not $remnants) { throw "TOW: no TOW install in $Dir (give its folder with -Dir)" }
+        if (-not $marked -and -not $legacy -and -not $AdoptData) { throw "TOW: no TOW install in $Dir (give its folder with -Dir)" }
+        if (-not $marked -and -not $legacy -and $AdoptData -and
+            (-not (Test-Path -LiteralPath (Join-Path $Dir 'config.yaml') -PathType Leaf) -or
+             -not (Test-Path -LiteralPath (Join-Path $Dir 'keys\master.key') -PathType Leaf) -or
+             -not (Test-Path -LiteralPath (Join-Path $Dir 'data') -PathType Container))) {
+            throw "TOW: cannot adopt $Dir; old settings, master key and data folder are required"
+        }
         Say "this removes TOW from $Dir"
         if (Test-Path -LiteralPath (Join-Path $Dir 'keys\master.key')) {
             Say "your master key is $Dir\keys\master.key: keep a copy if you may restore a backup or a .towx file later"
@@ -65,14 +85,15 @@ function Install-Tow {
         if (-not $Purge -and -not $Yes) {
             $keep = Ask "Keep your data, keys, settings and backups (data, keys, config.yaml, backup) in ${Dir}? [Y/n]" $true
         }
+        if ($keep -and -not $marked) { [IO.File]::WriteAllText($marker, "TOW portable install v1`n") }
         # Native programs' error output is not a PowerShell error here (Windows PowerShell 5.1).
         $ErrorActionPreference = 'Continue'
-        if ($hasLauncher) {
+        if ($legacy) {
             & $launcher autostart off *> $null
             & $launcher stop
         }
         $ErrorActionPreference = 'Stop'
-        $kept = @('data', 'keys', 'config.yaml', 'backup')
+        $kept = @('data', 'keys', 'config.yaml', 'backup', '.tow-install')
         foreach ($item in @(Get-ChildItem -LiteralPath $Dir -Force)) {
             if ($keep -and $kept -contains $item.Name) { continue }
             Remove-Item -LiteralPath $item.FullName -Recurse -Force
@@ -89,11 +110,14 @@ function Install-Tow {
         throw "TOW: TOW is already installed in $Dir. To update it, double-click `"Update TOW.cmd`" there."
     }
     # What an uninstall that kept the data leaves: TOW is installed again around it, nothing of it changes.
-    $keptNames = @('data', 'keys', 'config.yaml', 'backup')
+    $keptNames = @('data', 'keys', 'config.yaml', 'backup', '.tow-install')
     $present = @(if (Test-Path -LiteralPath $Dir) { Get-ChildItem -LiteralPath $Dir -Force | ForEach-Object { $_.Name } })
     $kept = @($present | Where-Object { $keptNames -contains $_ }).Count -gt 0
     if (@($present | Where-Object { $keptNames -notcontains $_ }).Count) {
         throw "TOW: $Dir is not empty: choose another folder with -Dir"
+    }
+    if ($kept -and -not $marked -and -not $AdoptData) {
+        throw "TOW: $Dir has data without a TOW install marker; use -AdoptData only for your old TOW folder"
     }
     if ($kept) { Say "found the data of an earlier TOW in $Dir ($($present -join ', ')): it is kept" }
     if ($env:PROCESSOR_ARCHITECTURE -eq 'x86' -and -not $env:PROCESSOR_ARCHITEW6432) {
@@ -104,6 +128,9 @@ function Install-Tow {
     $work = Join-Path $Dir '.install'
     $installed = $false
     $moved = New-Object System.Collections.Generic.List[string]
+    $oldConfig = if (Test-Path -LiteralPath (Join-Path $Dir 'config.yaml') -PathType Leaf) {
+        [IO.File]::ReadAllBytes((Join-Path $Dir 'config.yaml'))
+    } else { $null }
     try {
         New-Item -ItemType Directory -Force -Path $work | Out-Null
         if ($env:TOW_INSTALL_SOURCE) {
@@ -147,10 +174,17 @@ function Install-Tow {
             $text = [IO.File]::ReadAllText($config) -replace '(?m)^port:.*$', "port: $Port"
             [IO.File]::WriteAllText($config, $text, (New-Object Text.UTF8Encoding $false))
         }
+        if (-not $marked) {
+            [IO.File]::WriteAllText($marker, "TOW portable install v1`n")
+            $moved.Add($marker)
+        }
         $installed = $true
     }
     finally {
         if (-not $installed) {
+            if ($null -ne $oldConfig -and (Test-Path -LiteralPath $Dir)) {
+                [IO.File]::WriteAllBytes((Join-Path $Dir 'config.yaml'), $oldConfig)
+            }
             if ($created) { Remove-Item -LiteralPath $Dir -Recurse -Force -ErrorAction SilentlyContinue }
             elseif ($kept) {
                 # Only what this installer put there: the earlier TOW's data stays as it was.
@@ -178,4 +212,4 @@ function Install-Tow {
     Write-Host "  Remove:    & ([scriptblock]::Create((irm https://github.com/$repo/releases/latest/download/install.ps1))) -Uninstall -Dir `"$Dir`""
 }
 
-Install-Tow -Dir $Dir -Version $Version -Port $Port -Autostart $Autostart.IsPresent -Uninstall $Uninstall.IsPresent -Yes $Yes.IsPresent -Purge $Purge.IsPresent
+Install-Tow -Dir $Dir -Version $Version -Port $Port -Autostart $Autostart.IsPresent -Uninstall $Uninstall.IsPresent -Yes $Yes.IsPresent -Purge $Purge.IsPresent -AdoptData $AdoptData.IsPresent

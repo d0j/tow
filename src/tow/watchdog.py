@@ -145,9 +145,12 @@ def ping_heartbeat(url: str, *, ok: bool) -> bool:
     """
     import httpx
 
+    from tow.http import client as http_client
+
     target = url.rstrip("/") + ("" if ok else "/fail")
     try:
-        return httpx.get(target, timeout=10).status_code < 400
+        with http_client(follow_redirects=False, public_only=True) as client, client.stream("GET", target) as response:
+            return response.status_code < 400
     except httpx.HTTPError:
         return False
 

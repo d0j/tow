@@ -313,22 +313,27 @@ same steps, with the code from the release instead of git.
 - `--ref` is a release tag or `latest` (resolved through GitHub's `/releases/latest`
   redirect); the target must be **v1.22.0 or newer** (an older `update.py` needs git, so it
   could not update this install again). `tow update --ref` says so for such an install.
-- Before TOW stops: the release's `SHA256SUMS` (optional: without it the archive is installed
-  "not verified", and the run says so), then GitHub's archive of the tag
+- Before TOW stops: the release's `SHA256SUMS` (required; without a matching source checksum
+  nothing is changed), then GitHub's archive of the tag
   (`archive/refs/tags/<tag>.tar.gz`); if its SHA-256 differs from the `tow-source.tar.gz` line,
   the copy uploaded with the release is taken and checked instead; neither matching is a
   refusal. Downloads go through the system's proxy settings, with the system's certificates plus
   certifi's from `app/.venv`; at most 200 MiB. The archive is unpacked into
-  `<TOW>/.update-download` (one top folder; absolute paths, `..` and links refused) and its
+  `<TOW>/.update-download` (one top folder; absolute paths, `..` and links refused; at most
+  10,000 entries, 256 MiB per entry and 1 GiB total unpacked) and its
   `pyproject.toml` must hold the tag's version; it becomes `<TOW>/app.new`. Any refusal here
   stops nothing and leaves nothing behind.
 - Step 4 is a move, not a checkout: the old `app.prev` is removed, every entry of `app/`
   (its `.venv` too) is moved into `app.prev/`, every entry of `app.new/` into `app/` - entry
   by entry, so a terminal whose current folder is `app` does not block it - then `uv sync`
-  builds a new `app/.venv` (online; the cache has the old wheels). A rollback moves back exactly
-  the entries that were moved (the failed code goes to `app.failed/` and is removed), so the old
+  builds a new `app/.venv` (online; the cache has the old wheels). A switch journal in
+  `<TOW>/.update-switch.json` lets the next update restore the old code after a hard process
+  interruption. The updater is copied to `<TOW>/runtime/update.py` before moving files so the
+  launchers can run it even if `app/scripts` is temporarily absent. A rollback moves back the
+  entries recorded on disk (the failed code goes to `app.failed/` and is removed), so the old
   `.venv` is in its place again and its absolute paths are right. One `app.prev` is kept after
-  a success.
+  a success. An install with an older root launcher can run the base Python with
+  `<TOW>/runtime/update.py --ref <tag>` to recover an interrupted switch.
 - `--source FILE` (and `--sums FILE`) take a local archive instead of a download.
 
 `<TOW>/update-state.json` records the run (`in_progress` → `ok` / `rolled_back` / `failed`, ref,

@@ -47,6 +47,7 @@ LAN_PASSWORD = "correct-horse-battery"
 def _test_master_key(monkeypatch):
     monkeypatch.setenv("TOW_MASTER_KEY", base64.urlsafe_b64encode(b"cov-web-routes-test-key-32-bytes").decode())
     monkeypatch.delenv("TOW_MASTER_KEY_FILE", raising=False)
+    monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: ["93.184.216.34"])
 
 
 @pytest.fixture

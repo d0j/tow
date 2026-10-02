@@ -51,7 +51,8 @@ def test_a_name_that_resolves_to_the_home_network_is_refused_too(monkeypatch):
     assert t("web.settings.notifier_private_host", "ru") in _flash(_save_ntfy("https://evil.example"))
 
 
-def test_a_public_ntfy_server_is_saved():
+def test_a_public_ntfy_server_is_saved(monkeypatch):
+    monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: ["93.184.216.34"])
     _save_ntfy("https://ntfy.example.org")
 
     assert load_secrets()["notifiers"]["ntfy"]["server"] == "https://ntfy.example.org"

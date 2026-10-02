@@ -288,6 +288,10 @@ def test_queue_is_bounded(http):
     assert len(box["items"]) == notifiers.OUTBOX_LIMIT
     assert box["items"][-1]["text"] == f"m{notifiers.OUTBOX_LIMIT + 4}"
     assert box["blocked"]  # a deleted webhook holds the queue instead of failing every time
+    assert load_state()["notify_dropped"]["discord"] == 5
+    assert next(card for card in notifiers.cards(DISCORD, load_state()) if card["kind"] == "discord")["dropped"] == 5
+    save_secrets(DISCORD)
+    assert "Очередь переполнилась: 5 старых сообщений удалено" in _client().get("/settings").text
 
 
 def test_one_broken_channel_does_not_stop_the_others(http, monkeypatch):

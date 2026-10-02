@@ -188,6 +188,24 @@ def _snapshots(root: Path) -> list[Path]:
     )
 
 
+def _previous_members(root: Path, key: bytes) -> set[str]:
+    """Stores a signed earlier copy proves existed; their later disappearance is not normal."""
+    present: set[str] = set()
+    for folder in _snapshots(root):
+        try:
+            manifest = json.loads((folder / "MANIFEST.json").read_text(encoding="utf-8"))
+        except OSError, UnicodeError, ValueError:
+            continue
+        if not isinstance(manifest, dict) or manifest.get("format") != FORMAT:
+            continue
+        signature = manifest.get("signature")
+        if isinstance(signature, str) and hmac.compare_digest(signature, _signature(manifest, key)):
+            files = manifest.get("files")
+            if isinstance(files, dict):
+                present.update(name for name in files if name in {"state.json", "download_history.json", "secrets.enc"})
+    return present
+
+
 def create_snapshot(*, keep: int | None = None, how: str = "auto") -> dict[str, Any]:
     try:
         result = _create_snapshot(keep=keep, how=how)
@@ -246,6 +264,7 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
     files: dict[str, dict[str, Any]] = {}
     missing: list[str] = []
     key = _signing_key()  # no key, no copy: an unsigned copy could never be restored
+    previous_members = _previous_members(root, key)
     try:
         partial.mkdir(parents=True, exist_ok=False)
         with persistence_lock():  # a consistent cut: no check or edit writes meanwhile
@@ -255,6 +274,8 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
                 except FileNotFoundError:
                     content = None
                 if content is None:
+                    if name == "config.yaml" or name in previous_members:
+                        raise SnapshotError(t("backup.snapshot.source_missing", owner_language(), name=name))
                     if name not in _OPTIONAL_MEMBERS:
                         missing.append(name)  # said in the result, the log and the MANIFEST
                     continue
@@ -272,6 +293,9 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
         manifest["signature"] = _signature(manifest, key)
         (partial / "MANIFEST.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         _rename_with_retry(partial, target)
+    except SnapshotError:
+        shutil.rmtree(partial, ignore_errors=True)
+        raise
     except OSError as exc:
         shutil.rmtree(partial, ignore_errors=True)
         raise SnapshotError(

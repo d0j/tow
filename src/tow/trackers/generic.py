@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 import httpx
 
 from tow import http as thttp
+from tow.config import as_bool, load_config
 from tow.errors import Msg, TowError
 from tow.jsonish import as_dict
 from tow.mirrors import MirrorFetchError, has_available_host, origin_key, pick_and_get
@@ -209,7 +210,11 @@ class GenericHttpTracker:
             if persist and not has_available_host(self.name, [host], ignore_cool=ignore_cool):
                 continue
             try:
-                with thttp.client(ua=ua, follow_redirects=False) as c:
+                with thttp.client(
+                    ua=ua,
+                    follow_redirects=False,
+                    public_only=not as_bool(load_config().get("allow_private_tracker_hosts")),
+                ) as c:
                     response = c.post(host.rstrip("/") + path, data=form)
                     if response.status_code >= 400 or login_form_came_back(response, pw_field):
                         # A login page shown again means the credentials were refused; its
@@ -227,8 +232,6 @@ class GenericHttpTracker:
                 continue
             scoped[origin] = got
         if persist and scoped:
-            from tow.config import load_config
-
             with persistence_lock():
                 if self.name not in (load_config().get("trackers") or {}):
                     return {**self._cookie_jar(secrets), **scoped}
@@ -282,6 +285,7 @@ class GenericHttpTracker:
             "persist": persist,
             "max_bytes": (thttp.MAX_TORRENT_RESPONSE_BYTES if torrent_only else thttp.MAX_HTML_RESPONSE_BYTES),
             "allowed_redirect_origins": (list(self.spec.get("download_redirect_hosts") or []) if torrent_only else []),
+            "public_only": not as_bool(load_config().get("allow_private_tracker_hosts")),
         }
         try:
             return pick_and_get(self.name, hosts, path, **kw)

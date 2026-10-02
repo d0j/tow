@@ -7,7 +7,7 @@ import httpx
 
 from tow import http as thttp
 from tow.clients import factory as client_factory
-from tow.config import load_config
+from tow.config import as_bool, load_config
 from tow.http import client as http_client
 from tow.http import is_cloudflare
 from tow.i18n import t
@@ -97,7 +97,11 @@ def doctor_report(*, probe: bool = True, names: list[str] | None = None) -> dict
             out["ok"] = False
     ua = cfg.get("user_agent")
     new_probes: list[dict[str, Any]] = []
-    with http_client(ua=ua, follow_redirects=False) as c:
+    with http_client(
+        ua=ua,
+        follow_redirects=False,
+        public_only=not as_bool(cfg.get("allow_private_tracker_hosts")),
+    ) as c:
         for name, spec in trackers.items():
             if want is not None and name not in want:
                 continue

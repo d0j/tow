@@ -165,6 +165,9 @@
             {% if n.queued %}
             <p class="action-hint">{{ t('settings.notify.queued', count=n.queued, name=n.title) }}</p>
             {% endif %}
+            {% if n.dropped %}
+            <p class="form-error" role="status">{{ t('settings.notify.dropped', count=n.dropped) }}</p>
+            {% endif %}
             <details class="technical-details notifier-steps" {% if not n.connected %}open{% endif %}>
               <summary>{{ t('settings.common.how_to_connect') }}</summary>
               <ol>

@@ -48,7 +48,7 @@ def site(monkeypatch):
     holder = Site({})
     transport = httpx.MockTransport(holder.handler)
 
-    def client(ua=None, cookies=None, follow_redirects=True):
+    def client(ua=None, cookies=None, follow_redirects=True, *, public_only=False):
         return httpx.Client(
             transport=transport,
             headers={"User-Agent": ua or thttp.UA_DEFAULT},

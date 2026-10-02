@@ -1,4 +1,4 @@
-"""The delivery queue: every message is written to disk first, then sent; nothing is lost or repeated.
+"""The bounded delivery queue: messages are stored first and delivered at least once.
 
 ``state["notify_outbox"][target]`` holds, per recipient (a Telegram chat, a Discord webhook…):
 
@@ -163,6 +163,8 @@ def enqueue(state: dict[str, Any], secrets: dict[str, Any], text: str) -> list[s
         if overflow > 0:
             box["items"] = box["items"][overflow:]
             box["dropped"] = int(box.get("dropped") or 0) + overflow
+            totals = state.setdefault("notify_dropped", {})
+            totals[key] = int(totals.get(key) or 0) + overflow
         keys.append(key)
     return keys
 

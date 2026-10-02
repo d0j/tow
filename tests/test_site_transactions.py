@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from tow.config import load_config, save_config
 from tow.store import load_secrets, load_state, save_secrets, save_state
 from tow.web import app
+
+
+@pytest.fixture(autouse=True)
+def _public_test_hosts(monkeypatch):
+    monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: ["93.184.216.34"])
 
 
 class _Stores:

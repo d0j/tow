@@ -109,6 +109,7 @@ def stub_install(tmp_path) -> Path:
     tow = scripts / "tow"
     tow.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >>"$(dirname "$0")/../../../calls.txt"\n', encoding="utf-8")
     tow.chmod(0o755)
+    (root / "app" / "pyproject.toml").write_text('[project]\nname = "tow"\n', encoding="utf-8")
     for folder in ("data", "keys", "backup", "runtime/bin"):
         (root / folder).mkdir(parents=True)
     (root / "keys" / "master.key").write_text("not a real key", encoding="utf-8")
@@ -144,7 +145,7 @@ def test_uninstall_keeps_the_data_and_removes_its_menu_entry(stub_install, tmp_p
     done = _uninstall(stub_install, home, "--yes")
 
     assert done.returncode == 0, done.stdout + done.stderr
-    assert sorted(os.listdir(stub_install)) == ["backup", "config.yaml", "data", "keys"]
+    assert sorted(os.listdir(stub_install)) == [".tow-install", "backup", "config.yaml", "data", "keys"]
     assert (stub_install / "keys" / "master.key").is_file()
     assert (tmp_path / "calls.txt").read_text(encoding="utf-8").split("\n")[:2] == ["autostart off", "stop"]
     assert not (menu / "tow.desktop").exists()
@@ -170,6 +171,36 @@ def test_uninstall_refuses_a_folder_that_is_not_tow(tmp_path):
     assert done.returncode == 1
     assert "no TOW install" in done.stderr
     assert (tmp_path / "other").exists()
+
+
+@pytest.mark.allow_system
+@pytest.mark.parametrize("purge", [(), ("--purge",)])
+def test_uninstall_never_touches_a_foreign_folder_with_generic_tow_names(tmp_path, purge):
+    foreign = tmp_path / "foreign"
+    (foreign / "data").mkdir(parents=True)
+    (foreign / "keys").mkdir()
+    (foreign / "config.yaml").write_text("other app", encoding="utf-8")
+    sentinel = foreign / "important.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    done = _uninstall(foreign, tmp_path / "home", "--yes", *purge)
+
+    assert done.returncode == 1
+    assert "no TOW install" in done.stderr
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.allow_system
+def test_uninstall_can_purge_data_kept_by_an_older_installer_only_when_adopted(tmp_path):
+    old = tmp_path / "old data"
+    (old / "data").mkdir(parents=True)
+    (old / "keys").mkdir()
+    (old / "config.yaml").write_text("settings", encoding="utf-8")
+    (old / "keys" / "master.key").write_text("key", encoding="utf-8")
+    assert _uninstall(old, tmp_path / "home", "--yes", "--purge").returncode == 1
+    done = _uninstall(old, tmp_path / "home", "--yes", "--purge", "--adopt-data")
+    assert done.returncode == 0, done.stderr
+    assert not old.exists()
 
 
 # --- install.ps1 -------------------------------------------------------------------------------
@@ -217,6 +248,27 @@ def test_install_ps1_parses(shell):
     assert done.returncode == 0, done.stdout + done.stderr
 
 
+@pytest.mark.allow_system
+def test_install_ps1_refuses_foreign_data_folder_even_with_purge(tmp_path):
+    shell = shutil.which("pwsh")
+    if shell is None:
+        pytest.skip("PowerShell is not installed")
+    foreign = tmp_path / "foreign data"
+    (foreign / "data").mkdir(parents=True)
+    (foreign / "config.yaml").write_text("other app", encoding="utf-8")
+    sentinel = foreign / "important.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+    done = subprocess.run(
+        [shell, "-NoProfile", "-File", str(PS1), "-Dir", str(foreign), "-Uninstall", "-Yes", "-Purge"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert done.returncode != 0
+    assert "no TOW install" in done.stderr
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
 # --- the release workflow ----------------------------------------------------------------------
 
 
@@ -237,7 +289,8 @@ def test_the_release_workflow_tests_everything_before_it_uploads():
     assert flow["permissions"] == {"contents": "read"}
     writers = [name for name, job in jobs.items() if job.get("permissions", {}).get("contents") == "write"]
     assert writers == ["publish"]
-    assert set(jobs["publish"]["needs"]) == {"source", "windows", "posix"}
+    assert set(jobs["publish"]["needs"]) == {"gate", "source", "windows", "posix"}
+    assert set(jobs["gate"]["strategy"]["matrix"]["os"]) == {"windows-latest", "ubuntu-latest", "macos-latest"}
     windows = "\n".join(step.get("run", "") for step in jobs["windows"]["steps"])
     assert "scripts/build-bundle.py --out dist --source tow-source.tar.gz" in windows
     assert "bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Offline" in windows

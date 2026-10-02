@@ -34,6 +34,11 @@ LOCAL = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"), url=SimpleName
 QBIT = {"qbittorrent": {"host": "127.0.0.1", "port": 8080, "username": "admin", "password": "pw"}}
 
 
+@pytest.fixture(autouse=True)
+def _public_test_hosts(monkeypatch):
+    monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: ["93.184.216.34"])
+
+
 class Crash(BaseException):
     """The process dies here."""
 

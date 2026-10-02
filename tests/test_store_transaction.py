@@ -174,6 +174,7 @@ _SITE_FORM = {
 
 @pytest.mark.parametrize("writes", [1, 2, 3, 4])
 def test_a_crash_in_the_middle_of_a_site_save_leaves_the_old_set(monkeypatch, writes):
+    monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: ["93.184.216.34"])
     _seed_site()
     before = _store_bytes()
     _crash_after(monkeypatch, writes)

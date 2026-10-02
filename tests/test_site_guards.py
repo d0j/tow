@@ -19,17 +19,26 @@ def test_internal_hosts_are_detected(host):
 
 
 @pytest.mark.parametrize("host", ["rutor.info", "kinozal.guru", "93.184.216.34"])
-def test_public_hosts_are_not_internal(host):
+def test_public_hosts_are_not_internal(host, monkeypatch):
+    monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: ["93.184.216.34"])
     assert not internal_host(host)
 
 
 def test_internal_tracker_hosts_are_refused_unless_enabled(monkeypatch):
+    monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: ["93.184.216.34"])
     monkeypatch.setattr("tow.web.services.load_config", dict)
     with pytest.raises(ValueError, match="домашней сети"):
         valid_site_hosts(["http://127.0.0.1:8080"])
     assert valid_site_hosts(["https://rutor.info/"]) == ["https://rutor.info"]
     monkeypatch.setattr("tow.web.services.load_config", lambda: {"allow_private_tracker_hosts": True})
     assert valid_site_hosts(["http://192.168.1.5:8080"]) == ["http://192.168.1.5:8080"]
+
+
+def test_unresolved_tracker_host_is_not_saved_as_public(monkeypatch):
+    monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: [])
+    monkeypatch.setattr("tow.web.services.load_config", dict)
+    with pytest.raises(ValueError, match="домашней сети"):
+        valid_site_hosts(["https://unresolved.example"])
 
 
 @pytest.mark.parametrize("pattern", ["(a+)+c", "(a*)*", "(a|aa)*c", "(?:x+){2,}", "((ab)*)+"])

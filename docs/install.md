@@ -160,6 +160,9 @@ folder than the default. Or simply stop TOW, turn autostart off and delete the f
 
 What stays is picked up again: installing into the same folder later keeps your data, key and settings. To delete
 what stayed, run the remove command again with `-Purge` / `--purge`.
+The installer marks a TOW folder so removal cannot mistake another program's `data` and `config.yaml` for TOW.
+For data kept by an older installer without this marker, use `-AdoptData` / `--adopt-data` only after checking
+that the folder is your former TOW install.
 
 ## If something goes wrong
 

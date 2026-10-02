@@ -16,7 +16,7 @@ Two kinds of install, told apart by ``app/.git``:
 - a git clone: the code is switched with ``git checkout`` (as before 1.22);
 - an archive install (the Windows bundle, install.ps1, install.sh: no git): the release's
   source archive is downloaded from GitHub over HTTPS (``--ref`` is a release tag or
-  ``latest``), checked against the release's SHA256SUMS when it lists it, and unpacked into
+  ``latest``), checked against the release's SHA256SUMS, and unpacked into
   ``app.new`` before TOW stops; the switch moves the code into ``app.prev`` and the new code into
   ``app`` (entry by entry, so a terminal open in ``app`` does not block it); a rollback moves it
   back. One ``app.prev`` is kept. Such an install updates to v1.22.0 or newer only (older
@@ -80,6 +80,9 @@ REPO = "d0j/tow"
 SOURCE_ASSET = "tow-source.tar.gz"
 SUMS_ASSET = "SHA256SUMS"
 MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024
+MAX_ARCHIVE_FILES = 10_000
+MAX_MEMBER_BYTES = 256 * 1024 * 1024
+MAX_UNPACKED_BYTES = 1024 * 1024 * 1024
 # The oldest release an install without git can go to: older update.py needs git.
 MINIMUM_ARCHIVE_TARGET = (1, 22, 0)
 # Never in an update snapshot: credentials, keys, browser profiles, sign-in sessions, locks,
@@ -128,7 +131,7 @@ TEXTS = {
     "downloading": "downloading {url}",
     "download_failed": "the download failed ({url}): {error}; nothing was updated",
     "no_release": "{ref} is not a release of TOW (nothing at {url}); nothing was updated",
-    "not_verified": "the release has no checksum for the source archive: it was not verified",
+    "not_verified": "the release has no checksum for the source archive; nothing was updated",
     "checksum": "the downloaded archive does not match the release's SHA256SUMS; nothing was updated",
     "bad_archive": "the downloaded archive cannot be unpacked ({error}); nothing was updated",
     "wrong_version": "the archive of {ref} holds TOW {version}; nothing was updated",
@@ -544,19 +547,34 @@ def unpack(archive: Path, into: Path) -> Path:
     """Unpack a source tarball (one top folder, as GitHub's and ``git archive --prefix`` make
     them) into ``into``; the top folder. Links and paths that leave it are refused."""
     with tarfile.open(archive, "r:gz") as tar:
-        members = tar.getmembers()
-        tops = {Path(member.name).parts[0] for member in members if Path(member.name).parts}
-        if len(tops) != 1:
-            raise UpdateError(f"{len(tops)} top folders, not one")
-        for member in members:
+        top = ""
+        files = 0
+        total = 0
+        for member in tar:
             parts = Path(member.name).parts
-            if member.name.startswith(("/", "\\")) or ".." in parts or member.issym() or member.islnk():
+            if (
+                not parts
+                or member.name.startswith(("/", "\\"))
+                or "\\" in member.name
+                or ".." in parts
+                or not (member.isfile() or member.isdir())
+            ):
                 raise UpdateError(f"refused entry {member.name}")
-        if hasattr(tarfile, "data_filter"):
-            tar.extractall(into, filter="data")
-        else:  # pragma: no cover - Python 3.11.0-3.11.3; the entries were checked above
-            tar.extractall(into)
-    return into / tops.pop()
+            if not top:
+                top = parts[0]
+            elif parts[0] != top:
+                raise UpdateError("more than one top folder")
+            files += 1
+            total += member.size
+            if files > MAX_ARCHIVE_FILES or member.size > MAX_MEMBER_BYTES or total > MAX_UNPACKED_BYTES:
+                raise UpdateError("source archive exceeds its unpacked size or file-count limit")
+            if hasattr(tarfile, "data_filter"):
+                tar.extract(member, into, filter="data")
+            else:  # pragma: no cover - Python 3.11.0-3.11.3; the entries were checked above
+                tar.extract(member, into)
+        if not top:
+            raise UpdateError("empty source archive")
+    return into / top
 
 
 def remove_tree(path: Path) -> None:
@@ -568,6 +586,9 @@ def remove_tree(path: Path) -> None:
             function(name)
 
     if not path.exists():
+        return
+    if not path.is_dir() or path.is_symlink():
+        path.unlink()
         return
     if sys.version_info >= (3, 12):
         shutil.rmtree(path, onexc=writable)
@@ -623,14 +644,76 @@ class ArchiveCode:
         self.prev = work.root / "app.prev"
         self.failed = work.root / "app.failed"
         self.downloads = work.root / ".update-download"
+        self.journal = work.root / ".update-switch.json"
         self.source = source
         self.sums = sums
         self.moved_out: list[str] = []
         self.moved_in: list[str] = []
 
     def check(self) -> None:
+        if self.journal.exists():
+            return  # a cut-off switch must be recovered before any staged files are removed
         for leftover in (self.new, self.failed, self.downloads):
             remove_tree(leftover)  # an earlier update that was cut off
+
+    def _journal(self) -> dict[str, Any]:
+        try:
+            record = json.loads(self.journal.read_text(encoding="utf-8"))
+        except (OSError, ValueError, UnicodeError) as exc:
+            raise UpdateError(f"cannot read the interrupted update record: {exc}") from exc
+        if not isinstance(record, dict) or record.get("format") != "tow-update-switch/v1":
+            raise UpdateError("invalid interrupted update record")
+        for key in ("old", "new"):
+            names = record.get(key)
+            if not isinstance(names, list) or any(
+                not isinstance(name, str) or name in ("", ".", "..") or "/" in name or "\\" in name for name in names
+            ):
+                raise UpdateError("invalid interrupted update record")
+        if record.get("phase") not in ("switching", "accepted"):
+            raise UpdateError("invalid interrupted update record")
+        return record
+
+    def _write_journal(self, record: dict[str, Any]) -> None:
+        temporary = self.journal.with_name(self.journal.name + ".tmp")
+        temporary.write_text(json.dumps(record), encoding="utf-8")
+        os.replace(temporary, self.journal)
+
+    def recover_pending(self, *, finalize: bool = True) -> str | None:
+        """Idempotently put back the old code after a hard interruption."""
+        if not self.journal.exists():
+            return None
+        record = self._journal()
+        if record["phase"] == "accepted":
+            self.journal.unlink()
+            remove_tree(self.new)
+            remove_tree(self.failed)
+            return "accepted"
+        self.failed.mkdir(exist_ok=True)
+        for name in record["new"]:
+            if name not in record["old"] and (self.app / name).exists():
+                remove_tree(self.failed / name)
+                os.replace(self.app / name, self.failed / name)
+        for name in record["old"]:
+            if not (self.prev / name).exists():
+                continue  # already in app, or not yet moved out when the process died
+            if (self.app / name).exists():
+                remove_tree(self.failed / name)
+                os.replace(self.app / name, self.failed / name)
+            os.replace(self.prev / name, self.app / name)
+        remove_tree(self.failed)
+        remove_tree(self.prev)
+        remove_tree(self.new)
+        if finalize:
+            self.journal.unlink()
+        return "restored"
+
+    def accept_switch(self) -> None:
+        if self.journal.exists():
+            record = self._journal()
+            record["phase"] = "accepted"
+            self._write_journal(record)
+            with contextlib.suppress(OSError):
+                self.journal.unlink()  # accepted is recoverable even if this delete is interrupted
 
     def current(self) -> str:
         return f"v{self.work.version()}"
@@ -650,22 +733,25 @@ class ArchiveCode:
             raise UpdateError(self.work.text("no_release", ref=self.work.ref, url=url))
         return found
 
-    def _expected(self, tag: str) -> str | None:
-        """The source archive's SHA-256 from the release's SHA256SUMS (None: not listed)."""
+    def _expected(self, tag: str) -> str:
+        """The required source archive SHA-256 from the release's SHA256SUMS."""
         path = self.sums
         if path is None:
             path = self.downloads / SUMS_ASSET
             if not self._fetch(
                 f"{self.sys.github}/{self.sys.repo}/releases/download/{tag}/{SUMS_ASSET}", path, required=False
             ):
-                return None
+                raise UpdateError(self.work.text("not_verified"))
         try:
-            return parse_sums(path.read_text(encoding="utf-8")).get(SOURCE_ASSET)
+            expected = parse_sums(path.read_text(encoding="utf-8")).get(SOURCE_ASSET)
         except (OSError, UnicodeError):
-            return None
+            expected = None
+        if expected is None:
+            raise UpdateError(self.work.text("not_verified"))
+        return expected
 
     def _download(self, tag: str) -> Path:
-        """The tag's source archive, checked against SHA256SUMS when the release lists it: GitHub's
+        """The tag's source archive, checked against SHA256SUMS: GitHub's
         archive of the tag, else the copy uploaded with the release."""
         if self.source is not None:  # a local archive (--source), checked when --sums is given
             expected = self._expected(tag) if self.sums is not None else None
@@ -681,9 +767,6 @@ class ArchiveCode:
             if not self._fetch(url, archive, required=False):
                 continue
             found = True
-            if expected is None:
-                self.work.say("not_verified")
-                return archive
             if _hash(archive) == expected:
                 return archive
         raise UpdateError(self.work.text("checksum" if found else "no_release", ref=tag, url=urls[0]))
@@ -719,10 +802,23 @@ class ArchiveCode:
     def switch(self, target: str) -> None:
         """app -> app.prev, app.new -> app, entry by entry (a window open in app keeps it)."""
         del target
+        stable = self.work.root / "runtime" / "update.py"
+        stable.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(Path(__file__), stable)  # callable even if app/scripts disappears mid-switch
         remove_tree(self.prev)  # one previous version is kept
         self.prev.mkdir()
         self.moved_out, self.moved_in = [], []
         try:
+            self._write_journal(
+                {
+                    "format": "tow-update-switch/v1",
+                    "phase": "switching",
+                    "old": sorted(os.listdir(self.app)),
+                    "new": sorted(os.listdir(self.new)),
+                    "previous_version": self.work.version(),
+                    "snapshot": self.work.snapshot.name if self.work.snapshot else None,
+                }
+            )
             for entry in sorted(os.listdir(self.app)):
                 os.replace(self.app / entry, self.prev / entry)
                 self.moved_out.append(entry)
@@ -734,17 +830,9 @@ class ArchiveCode:
         remove_tree(self.new)
 
     def switch_back(self, previous: str) -> None:
-        """Exactly what ``switch`` moved goes back; the failed code is removed."""
+        """The on-disk record also works when the process was cut off mid-switch."""
         del previous
-        self.failed.mkdir(exist_ok=True)
-        for entry in reversed(self.moved_in):
-            os.replace(self.app / entry, self.failed / entry)
-        self.moved_in = []
-        for entry in reversed(self.moved_out):
-            os.replace(self.prev / entry, self.app / entry)
-        self.moved_out = []
-        for leftover in (self.failed, self.prev, self.new):
-            remove_tree(leftover)
+        self.recover_pending(finalize=False)
 
     def discard(self) -> None:
         for leftover in (self.new, self.downloads):
@@ -862,12 +950,43 @@ class Update:
     def check_install(self) -> None:
         if not (self.root / "config.yaml").is_file() or not (self.root / "data").is_dir():
             raise UpdateError(self.text("not_runtime", app=self.app))
-        self.code.check()
         with contextlib.suppress(OSError, UnicodeError):
             config = (self.root / "config.yaml").read_text(encoding="utf-8")
             match = re.search(r"(?m)^port:\s*['\"]?(\d+)", config)
             if match:
                 self.port = int(match.group(1))
+        self.code.check()
+
+    def recover_archive(self) -> None:
+        if not isinstance(self.code, ArchiveCode) or not self.code.journal.exists():
+            return
+        record = self.code._journal()
+        if record["phase"] == "accepted":
+            self.code.recover_pending()
+            self.code.check()
+            return
+        previous_version = record.get("previous_version")
+        if not isinstance(previous_version, str) or not previous_version:
+            raise UpdateError("invalid interrupted update record")
+        snapshot_name = record.get("snapshot")
+        if not isinstance(snapshot_name, str) or not re.fullmatch(r"update-[A-Za-z0-9_.-]+", snapshot_name):
+            raise UpdateError("invalid interrupted update record")
+        snapshot = self.root / "backup" / snapshot_name
+        self.manifest = self._load_snapshot(snapshot)
+        self.snapshot = snapshot
+        self.stop()
+        try:
+            self.code.recover_pending(finalize=False)
+        except OSError as exc:
+            raise UpdateError(f"interrupted update could not be restored: {exc}") from exc
+        self.restore_snapshot()
+        if not self.start_and_check(previous_version):
+            raise UpdateError(
+                f"interrupted update restored the previous code, but TOW {previous_version} did not start"
+            )
+        self.code.journal.unlink()
+        self.write_state(status="recovered", previous_version=previous_version, finished_at=_now_iso())
+        self.code.check()
 
     def refuse_old_layout(self) -> None:
         """The five Windows tasks of 1.17 are switched to one process by 1.18-1.20, not here."""
@@ -966,6 +1085,7 @@ class Update:
             )
         except OSError as exc:
             raise UpdateError(self.text("snapshot_failed", error=exc)) from exc
+        self._load_snapshot(folder)  # read back every byte before switching the code
         self.snapshot = folder
         self.say("snapshot", path=folder)
         self.write_state(snapshot=str(folder))
@@ -976,10 +1096,48 @@ class Update:
             current["../config.yaml"] = _hash(self.root / "config.yaml")
         return current != self.manifest
 
+    def _load_snapshot(self, folder: Path) -> dict[str, str]:
+        """Read the updater's copy and verify it before it can replace live data."""
+        backup = (self.root / "backup").resolve()
+        if not folder.resolve().is_relative_to(backup):
+            raise UpdateError("the update snapshot is outside the backup folder")
+        try:
+            record = json.loads((folder / "SNAPSHOT.json").read_text(encoding="utf-8"))
+            files = record["files"]
+        except (OSError, ValueError, UnicodeError, TypeError, KeyError) as exc:
+            raise UpdateError(f"the update snapshot cannot be read: {exc}") from exc
+        if not isinstance(files, dict) or "../config.yaml" not in files:
+            raise UpdateError("the update snapshot has an invalid file list")
+        for relative, digest in files.items():
+            if (
+                not isinstance(relative, str)
+                or not isinstance(digest, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", digest)
+            ):
+                raise UpdateError("the update snapshot has an invalid file list")
+            if relative != "../config.yaml" and (
+                not relative
+                or relative.startswith("/")
+                or ":" in relative
+                or any(part in ("", ".", "..") for part in relative.split("/"))
+                or "\\" in relative
+            ):
+                raise UpdateError("the update snapshot has an unsafe file name")
+            source = folder / ("config.yaml" if relative == "../config.yaml" else f"data/{relative}")
+            try:
+                intact = source.is_file() and not source.is_symlink() and _hash(source) == digest
+            except OSError:
+                intact = False
+            if not intact:
+                raise UpdateError(f"the update snapshot is damaged: {relative}")
+        return files
+
     def restore_snapshot(self) -> bool:
         """Put data and config back exactly as they were (what the snapshot leaves out stays)."""
         if self.snapshot is None or not self.data_changed():
             return False
+        if self._load_snapshot(self.snapshot) != self.manifest:
+            raise UpdateError("the update snapshot changed after it was taken")
         data = self.root / "data"
         for relative in set(data_files(data)) - set(self.manifest):
             (data / relative).unlink(missing_ok=True)
@@ -1017,6 +1175,7 @@ class Update:
 
     def run(self) -> int:
         self.check_install()
+        self.recover_archive()
         self.refuse_old_layout()
         code = self.code
         previous = code.current()
@@ -1056,6 +1215,8 @@ class Update:
                 self.write_state(target_version=version)
                 if not self.start_and_check(version):
                     raise UpdateError(self.text("unhealthy", version=version, seconds=int(self.health_timeout)))
+                if isinstance(code, ArchiveCode):
+                    code.accept_switch()
                 result = "ok"
             except Exception as exc:  # noqa: BLE001 - a failed step after the switch is rolled back, whatever it was
                 error = str(exc)
@@ -1102,8 +1263,10 @@ class Update:
             self.say("data_restored")
         self.write_state(data_restored=bool(restored), rollback=steps)
         back = step("start the previous version", lambda: self.start_and_check(previous_version))
+        if back and all(item["ok"] for item in steps) and isinstance(self.code, ArchiveCode):
+            step("finish rollback", lambda: self.code.journal.unlink(missing_ok=True))
         self.write_state(rollback=steps)
-        if back:
+        if back and all(item["ok"] for item in steps):
             self.say("rolled_back")
             return "rolled_back"
         self.say("rollback_failed")
