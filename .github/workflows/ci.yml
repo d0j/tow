@@ -36,3 +36,23 @@ jobs:
       - name: Quality gate (with dependency audit)
         shell: pwsh
         run: ./scripts/gate.ps1 -Audit
+
+  # The install.sh check the release runs on a tag, here on every commit: a broken check is found
+  # before a tag, not by a release that cannot publish. The archive is git's own of this commit,
+  # one top folder like GitHub's tag archive.
+  install:
+    name: install.sh (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Source archive of this commit
+        run: git archive --format=tar.gz --prefix=tow/ -o "$RUNNER_TEMP/tow-source.tar.gz" HEAD
+      - name: Install, start with the start file, check, stop, reinstall, uninstall
+        run: sh scripts/install-smoke.sh "$RUNNER_TEMP/tow-source.tar.gz" 18877
