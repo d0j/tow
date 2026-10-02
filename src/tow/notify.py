@@ -8,6 +8,7 @@ from typing import Any
 from tow import errors as tow_errors
 from tow import i18n
 from tow.i18n import t
+from tow.log import scrub_text
 from tow.records import Topic
 
 _EPISODE_RANGE = re.compile(
@@ -57,7 +58,7 @@ def _joined(*errors: Any) -> Any:
 
 def error_text(error: Any, lang: str) -> str:
     """The errors of a notification in ``lang``."""
-    texts = (tow_errors.text_of(part, lang) for part in error_parts(error))
+    texts = (scrub_text(tow_errors.text_of(part, lang)) for part in error_parts(error))
     return "; ".join(dict.fromkeys(text for text in texts if text))
 
 
@@ -169,7 +170,7 @@ def ping(secrets: dict[str, Any]) -> bool:
 
 
 def short_series_title(title: str, lang: str | None = None) -> str:
-    value = " ".join((title or "").split()).strip()[:512]
+    value = " ".join((title or "")[:4096].split()).strip()[:512]
     value = re.split(r"\s*\[[^\]]*\]", value, maxsplit=1)[0].strip()
     value = re.split(r"\s+[|/]\s+", value, maxsplit=1)[0].strip()
     value = re.sub(r"\s+\(\d{4}(?:-\d{4})?\).*$", "", value).strip()
@@ -177,8 +178,8 @@ def short_series_title(title: str, lang: str | None = None) -> str:
 
 
 def _episode_text(title: str, lang: str) -> str:
-    value = title or ""
-    match = _EPISODE_RANGE.search(value) or _EPISODE_SE.search(value)
+    source = (title or "")[:4096]
+    match = _EPISODE_RANGE.search(source) or _EPISODE_SE.search(source)
     if not match:
         return ""
     season = int(match.group("season"))
@@ -186,7 +187,7 @@ def _episode_text(title: str, lang: str) -> str:
     end = match.group("end")
     prefix = f"S{season:02d}E{start:02d}"
     value = f"{prefix}–{int(end):02d}" if end and int(end) != start else prefix
-    total = _EPISODE_TOTAL.search(title)  # "of 10" / "из 10" in the site's title
+    total = _EPISODE_TOTAL.search(source)  # "of 10" / "из 10" in the site's title
     return t("notify.episode_of", lang, episodes=value, total=int(total.group("total"))) if total else value
 
 

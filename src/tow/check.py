@@ -244,7 +244,7 @@ def _current_tracker_title(
     try:
         return str(fetch_title(url, secrets, ua, ignore_cool=ignore_cool, persist=persist) or "").strip()
     except Exception as exc:  # noqa: BLE001 - the title is a nicety: without it the saved one stays
-        _LOG.warning("tracker title not read for %s: %s: %s", getattr(tracker, "name", "?"), type(exc).__name__, exc)
+        _LOG.warning("tracker title not read for %s: %s", getattr(tracker, "name", "?"), type(exc).__name__)
         return ""
 
 
@@ -803,7 +803,7 @@ def _confirm_matching_magnet(
             url, run.secrets, run.ua, ignore_cool=run.ignore_cool, persist=run.apply
         )
     except Exception as exc:  # noqa: BLE001 - no magnet: the .torrent's own error stands
-        _LOG.warning("magnet not read for %s: %s: %s", tr.name, type(exc).__name__, exc)
+        _LOG.warning("magnet not read for %s: %s", tr.name, type(exc).__name__)
         magnet_url = ""
     if not _magnet_matches_saved_hash(magnet_url, old, topic_client):
         return False

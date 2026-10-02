@@ -1171,7 +1171,7 @@ def _import_bundle(
         )
         result["log_recorded"] = True
     except Exception as exc:  # noqa: BLE001 - the import is committed; a lost audit line is reported, not fatal
-        logging.getLogger("tow.bundle").warning("import audit event not written: %s: %s", type(exc).__name__, exc)
+        logging.getLogger("tow.bundle").warning("import audit event not written: %s", type(exc).__name__)
         result["log_error"] = "audit event could not be persisted"
     try:
         _write_import_transaction(checkpoint, status="committed", log_recorded=result["log_recorded"])

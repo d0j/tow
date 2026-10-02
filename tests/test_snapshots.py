@@ -15,7 +15,14 @@ from helpers import flash_of
 from tow.config import load_config, save_config
 from tow.i18n import t
 from tow.paths import data_dir
-from tow.snapshots import SnapshotError, create_snapshot, restore_snapshot, verify_snapshot
+from tow.snapshots import (
+    SnapshotError,
+    create_snapshot,
+    list_snapshots,
+    restore_snapshot,
+    snapshot_path,
+    verify_snapshot,
+)
 from tow.store import load_secrets, load_state, save_secrets, save_state
 
 
@@ -39,6 +46,33 @@ def backup(tmp_path_factory, monkeypatch):
     (data_dir() / "browser-auth").mkdir()
     (data_dir() / "browser-auth" / "Cookies").write_text("cookie-db", encoding="utf-8")
     return root
+
+
+def test_snapshot_selection_refuses_a_link_to_another_directory(backup, tmp_path):
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    (target / "MANIFEST.json").write_text("{}", encoding="utf-8")
+    link = backup / "tow-linked"
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except OSError:
+        pytest.skip("creating directory symlinks requires permission on this system")
+
+    with pytest.raises(SnapshotError, match=_says("backup.snapshot.unknown")):
+        snapshot_path(link.name)
+    assert link.name not in {row["name"] for row in list_snapshots()}
+
+
+def test_snapshot_selection_refuses_a_junction(backup, monkeypatch):
+    candidate = backup / "tow-junction"
+    candidate.mkdir(parents=True)
+    (candidate / "MANIFEST.json").write_text("{}", encoding="utf-8")
+    real_is_junction = Path.is_junction
+    monkeypatch.setattr(Path, "is_junction", lambda path: path == candidate or real_is_junction(path))
+
+    with pytest.raises(SnapshotError, match=_says("backup.snapshot.unknown")):
+        snapshot_path(candidate.name)
+    assert candidate.name not in {row["name"] for row in list_snapshots()}
 
 
 def test_restore_drill_brings_everything_back(backup):

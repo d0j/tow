@@ -56,6 +56,18 @@ def test_format_event_scrubs_credential_bearing_urls():
     assert "secret" not in rendered["detail"]
 
 
+def test_event_log_scrubs_secret_assignments_and_auth_headers():
+    log_event(
+        "check_fail",
+        error="password=hunter2 token='abc123' Authorization: Bearer long-secret-value\nnext line",
+    )
+    row = read_events(limit=1)[0]
+    assert "hunter2" not in str(row)
+    assert "abc123" not in str(row)
+    assert "long-secret-value" not in str(row)
+    assert "next line" in str(row)
+
+
 def test_format_event_omits_malformed_hash():
     rendered = format_event({"kind": "downloaded", "hash": "a" * 40 + "SECRET"})
 

@@ -95,6 +95,13 @@ def cls_label(cls: str, lang: str | None = None) -> str:
 
 
 _URL_RE = re.compile(r"https?://[^\s'\"<>]+", re.IGNORECASE)
+_SECRET_HEADER_RE = re.compile(r"\b(?:authorization|cookie|set-cookie)\s*[:=][^\r\n]*", re.IGNORECASE)
+_SECRET_VALUE_RE = re.compile(
+    r"\b(password|passphrase|token|secret|api[_-]?key|access[_-]?key|client[_-]?secret)\s*[:=]\s*"
+    r"(?:\"[^\"\r\n]*\"|'[^'\r\n]*'|[^\s,;&]+)",
+    re.IGNORECASE,
+)
+_BEARER_RE = re.compile(r"\bbearer\s+[^\s,;]+", re.IGNORECASE)
 
 
 def scrub_text(value: str) -> str:
@@ -116,7 +123,10 @@ def scrub_text(value: str) -> str:
         except ValueError:
             return "[REDACTED_URL]" + suffix
 
-    return _URL_RE.sub(replace, value)
+    cleaned = _URL_RE.sub(replace, value)
+    cleaned = _SECRET_HEADER_RE.sub("[REDACTED_HEADER]", cleaned)
+    cleaned = _SECRET_VALUE_RE.sub(lambda match: f"{match.group(1)}=***", cleaned)
+    return _BEARER_RE.sub("Bearer ***", cleaned)
 
 
 # --- the status class of an error ---------------------------------------------------------------

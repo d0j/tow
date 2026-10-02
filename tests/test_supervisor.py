@@ -128,6 +128,20 @@ def test_the_web_server_is_started_and_watched(tmp_path):
     assert status["server"]["pid"] == server.pid
 
 
+def test_spawn_failure_does_not_expose_exception_text_in_status_or_log(tmp_path, caplog):
+    world, sup = make(tmp_path)
+
+    def fail_spawn(_argv, _output, _append):
+        raise OSError("password=super-secret")
+
+    sup.deps.spawn = fail_spawn
+    sup._start_server(world.clock.wall, world.clock.mono)
+
+    assert "super-secret" not in caplog.text
+    assert "super-secret" not in sup.server.last_exit
+    assert "OSError" in caplog.text
+
+
 def test_a_server_that_keeps_exiting_is_restarted_with_a_growing_pause(tmp_path):
     world, sup = make(tmp_path, crash_on_start=True)
     run_for(sup, world.clock, 1500)
@@ -290,6 +304,20 @@ def test_jobs_run_one_at_a_time_with_the_tasks_arguments(tmp_path):
     progress = world.jobs()[1]
     assert progress.argv == ["py", "-m", "tow", "check", "--apply", "--notify", "--progress-only", "--json"]
     assert sup.jobs_done["check"]["code"] == 0
+
+
+def test_job_and_background_failures_do_not_expose_exception_text(tmp_path, caplog):
+    world, sup = make(tmp_path)
+
+    def fail(*_args):
+        raise OSError("token=super-secret")
+
+    sup.deps.spawn = fail
+    sup._start_job("check", world.clock.wall, world.clock.mono)
+    sup._background(fail, "test-duty")
+
+    assert sup.jobs_done["check"]["error"] == "OSError"
+    assert "super-secret" not in caplog.text
 
 
 def test_a_job_that_runs_too_long_is_stopped(tmp_path, monkeypatch):

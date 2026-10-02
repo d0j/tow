@@ -152,7 +152,7 @@ def _read(code: str) -> tuple[dict[str, Any], dict[str, Any], bool]:
     try:
         tree = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, ValueError) as exc:
-        _LOG.warning("language file %s cannot be read, skipped: %s", path.name, exc)
+        _LOG.warning("language file %s cannot be read, skipped: %s", path.name, type(exc).__name__)
         return {}, {}, False
     if not isinstance(tree, dict):
         _LOG.warning("language file %s is not a JSON object, skipped", path.name)
@@ -473,7 +473,7 @@ def _configured_language_of(_stamp: tuple[str, int, int, int]) -> str:
     try:
         return str(load_config().get("language") or AUTO)
     except Exception as exc:  # noqa: BLE001 - a broken config must not take every text down: automatic
-        _LOG.warning("language setting not read (automatic is used): %s: %s", type(exc).__name__, exc)
+        _LOG.warning("language setting not read (automatic is used): %s", type(exc).__name__)
         return AUTO
 
 

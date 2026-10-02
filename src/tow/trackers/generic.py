@@ -60,7 +60,7 @@ def login_form_came_back(response: Any, pw_field: str) -> bool:
     try:
         body = thttp.html_text(response)[:200_000]
     except (LookupError, ValueError, TypeError) as exc:  # a page that cannot be decoded asks for nothing
-        _LOG.warning("login answer not readable: %s: %s", type(exc).__name__, exc)
+        _LOG.warning("login answer not readable: %s", type(exc).__name__)
         return False
     return bool(
         re.search(

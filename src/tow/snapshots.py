@@ -184,7 +184,13 @@ def _snapshots(root: Path) -> list[Path]:
     if not root.is_dir():
         return []
     return sorted(
-        p for p in root.iterdir() if p.is_dir() and p.name.startswith(_PREFIX) and (p / "MANIFEST.json").is_file()
+        p
+        for p in root.iterdir()
+        if p.is_dir()
+        and not p.is_symlink()
+        and not p.is_junction()
+        and p.name.startswith(_PREFIX)
+        and (p / "MANIFEST.json").is_file()
     )
 
 
@@ -248,7 +254,10 @@ def snapshot_path(name: str) -> Path:
     """A night copy by name, refusing anything that is not one (no paths, no ..)."""
     if not name.startswith(_PREFIX) or not all(ch.isalnum() or ch in "-_" for ch in name):
         raise SnapshotError(t("backup.snapshot.unknown", owner_language()))
-    path = backup_root() / name
+    root = backup_root()
+    path = root / name
+    if path.is_symlink() or path.is_junction() or path.resolve().parent != root.resolve():
+        raise SnapshotError(t("backup.snapshot.unknown", owner_language()))
     if not (path / "MANIFEST.json").is_file():
         raise SnapshotError(t("backup.snapshot.unknown", owner_language()))
     return path

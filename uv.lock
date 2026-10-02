@@ -974,7 +974,7 @@ wheels = [
 
 [[package]]
 name = "tow"
-version = "1.22.6"
+version = "1.22.7"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },

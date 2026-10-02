@@ -176,4 +176,4 @@ def test_the_report_shows_this_oses_autostart(monkeypatch):
         raise OSError("no scheduler")
 
     monkeypatch.setattr("tow.autostart.backend", broken)
-    assert doctor._autostart() == {"on": False, "error": "no scheduler"}
+    assert doctor._autostart() == {"on": False, "error": "не удалось узнать состояние автозапуска"}

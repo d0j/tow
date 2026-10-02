@@ -54,8 +54,30 @@ def test_a_broken_config_is_an_exit_code_not_a_traceback(capsys):
 
     assert cli.main(["doctor"]) == 3
     err = capsys.readouterr().err
-    assert "tow doctor: ConfigError: config.yaml: port" in err
+    assert "tow doctor: config.yaml: port" in err
     assert "Traceback" not in err
+
+
+def test_unexpected_cli_error_does_not_echo_secret(monkeypatch, capsys):
+    def broken(_args):
+        raise RuntimeError("password=must-not-be-displayed")
+
+    monkeypatch.setitem(cli._COMMANDS, "version", broken)
+    assert cli.main(["version", "--json"]) == cli.EXIT_CANNOT_RUN
+    out = capsys.readouterr().out
+    assert "must-not-be-displayed" not in out
+    assert "не удалось выполнить команду" in out
+
+
+def test_failed_check_does_not_echo_exception_secret(monkeypatch, capsys):
+    def broken(**_kwargs):
+        raise RuntimeError("token=must-not-be-displayed")
+
+    monkeypatch.setattr("tow.check.run_check", broken)
+    assert cli.main(["check", "--json"]) == cli.EXIT_CANNOT_RUN
+    out = capsys.readouterr().out
+    assert "must-not-be-displayed" not in out
+    assert "не удалось выполнить команду" in out
 
 
 def test_debug_env_shows_the_traceback(monkeypatch):

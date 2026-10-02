@@ -11,7 +11,7 @@ from typing import Any
 
 from tow import errors
 from tow.clients.spec import TorrentClientAdapter
-from tow.log import error_class
+from tow.log import error_class, scrub_text
 from tow.records import Topic
 
 
@@ -231,7 +231,7 @@ def mark_reconcile_failure(row: dict[str, Any], exc: Exception) -> None:
     The row's class is the reconcile failure's (the client or the folder needs the owner)."""
     tracker_failed = row.get("ok") is False and bool(row.get("error"))
     cls = error_class(exc)
-    cause: Any = exc if isinstance(exc, errors.TowError) else (str(exc) or type(exc).__name__)
+    cause: Any = exc if isinstance(exc, errors.TowError) else (scrub_text(str(exc)) or type(exc).__name__)
     reconcile = errors.TowError("check.reconcile_failed", cls=cls, error=cause)
     row["progress_error"] = str(reconcile)
     row["reconcile_error"] = cls

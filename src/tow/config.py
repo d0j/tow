@@ -115,9 +115,9 @@ def parse_backup_time(value: object) -> tuple[int, int]:
             hours_text, minutes_text = str(value).strip().split(":", 1)
             hours, minutes = int(hours_text), int(minutes_text)
         except ValueError:
-            raise ValueError(f'backup_time must look like "03:30", got {value!r}') from None
+            raise ValueError('backup_time must look like "03:30"') from None
     if not (0 <= hours <= 23 and 0 <= minutes <= 59):
-        raise ValueError(f'backup_time must look like "03:30", got {value!r}')
+        raise ValueError('backup_time must look like "03:30"')
     return hours, minutes
 
 
@@ -164,14 +164,14 @@ def _int_field(data: dict[str, Any], key: str, low: int, high: int) -> None:
     if isinstance(value, str) and value.strip().isdigit():
         value = int(value.strip())
     if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
-        raise ConfigError(f"config.yaml: {key} must be a whole number {low}..{high}, got {data.get(key)!r}")
+        raise ConfigError(f"config.yaml: {key} must be a whole number {low}..{high}")
     data[key] = value
 
 
 def _bool_field(data: dict[str, Any], key: str) -> None:
     value = data.get(key)
     if value is not None and as_bool(value, True) != as_bool(value, False):
-        raise ConfigError(f"config.yaml: {key} must be true or false, got {value!r}")
+        raise ConfigError(f"config.yaml: {key} must be true or false")
 
 
 def _text_list_field(data: dict[str, Any], key: str, what: str) -> None:

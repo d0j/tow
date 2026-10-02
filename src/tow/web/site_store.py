@@ -24,7 +24,7 @@ def secret_undo_cleanup_pending() -> bool:
     try:
         state = _context.state(quarantine=False)  # the request's snapshot
     except Exception as exc:  # noqa: BLE001 - a request is never failed by this pre-check; the next one retries
-        _LOG.warning("pending undo cleanup not checked: %s: %s", type(exc).__name__, exc)
+        _LOG.warning("pending undo cleanup not checked: %s", type(exc).__name__)
         return False
     return undo.cleanup_needed(state)
 

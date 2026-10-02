@@ -75,7 +75,9 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 async def _store_corruption(_request: Request, exc: StoreCorruptionError) -> Response:
-    return Response(f"TOW data store unavailable: {exc}", status_code=503)
+    # The stored error can contain a local path or a damaged value. The browser needs only a
+    # stable failure message; recovery details remain with the local diagnostic tools.
+    return Response(t("web.data_unavailable"), status_code=503)
 
 
 async def _http_error(request: Request, exc: StarletteHTTPException) -> Response:

@@ -66,8 +66,8 @@ def _autostart() -> dict[str, Any]:
 
     try:
         return backend().status()
-    except Exception as exc:  # noqa: BLE001 - a diagnostic: a failed read-back is the report's finding
-        return {"on": False, "error": str(exc)[:200]}
+    except Exception:  # noqa: BLE001 - a diagnostic: a failed read-back is the report's finding
+        return {"on": False, "error": t("settings.service.autostart_unread")}
 
 
 def _connected_messengers(secrets: dict[str, Any]) -> list[Any]:

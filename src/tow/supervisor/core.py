@@ -169,13 +169,13 @@ class Supervisor:
             try:
                 self._apply_config(self.deps.load_config())
             except Exception as exc:  # noqa: BLE001 - a config being edited: keep the last good one (logged)
-                LOG.warning("config not reloaded: %s", exc)
+                LOG.warning("config not reloaded: %s", type(exc).__name__)
         if mono - self._facts_at >= FACTS_EVERY_SEC:
             self._facts_at = mono
             try:
                 self._facts = self.deps.facts()
             except Exception as exc:  # noqa: BLE001 - the supervisor loop never dies on a state read (logged)
-                LOG.warning("state not read: %s", exc)
+                LOG.warning("state not read: %s", type(exc).__name__)
 
     # --- start / stop ------------------------------------------------------------------------
 
@@ -279,8 +279,8 @@ class Supervisor:
         try:
             self.server.child = self.deps.spawn(argv, self.home / "serve-stderr.log", True)
         except OSError as exc:
-            LOG.error("web server did not start: %s", exc)
-            self._schedule_restart(mono, f"spawn failed: {exc}")
+            LOG.error("web server did not start: %s", type(exc).__name__)
+            self._schedule_restart(mono, f"spawn failed: {type(exc).__name__}")
             return
         self.server.started_mono, self.server.started_wall = mono, wall
         self.server.healthy_since = None
@@ -395,7 +395,7 @@ class Supervisor:
         try:
             lang = i18n.message_language(self.deps.load_config())
         except Exception as exc:  # noqa: BLE001 - the restart alert goes out even with a broken config
-            LOG.warning("config not read for the restart alert: %s", exc)
+            LOG.warning("config not read for the restart alert: %s", type(exc).__name__)
             lang = i18n.DEFAULT
         lines = []
         if len(self.restarts) == 1:
@@ -464,8 +464,8 @@ class Supervisor:
         try:
             child = self.deps.spawn(argv, self.home / f"{name}-last.log", False)
         except OSError as exc:
-            LOG.error("%s did not start: %s", name, exc)
-            self.jobs_done[name] = {"at": _now_iso(wall), "ok": False, "error": str(exc)}
+            LOG.error("%s did not start: %s", name, type(exc).__name__)
+            self.jobs_done[name] = {"at": _now_iso(wall), "ok": False, "error": type(exc).__name__}
             return
         self.job = _Job(name, child, mono, wall)
         LOG.info("%s started (pid %s)", name, child.pid)
@@ -504,8 +504,8 @@ class Supervisor:
         def guarded() -> None:
             try:
                 target()
-            except Exception:
-                LOG.exception("%s failed", name)
+            except Exception as exc:  # noqa: BLE001 - a background duty must not end the supervisor
+                LOG.error("%s failed: %s", name, type(exc).__name__)
 
         if self.deps.in_thread is not None:
             return self.deps.in_thread(guarded, name)

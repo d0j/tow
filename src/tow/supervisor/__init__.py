@@ -113,7 +113,7 @@ def _expire_undo() -> None:
         if undo.cleanup_needed():
             undo.cleanup()
     except Exception as exc:  # noqa: BLE001 - the watchdog duty goes on; the next pass retries (logged)
-        LOG.warning("undo secrets not cleaned up: %s", exc)
+        LOG.warning("undo secrets not cleaned up: %s", type(exc).__name__)
 
 
 def _watchdog_pass(wake_ts: float | None) -> Any:

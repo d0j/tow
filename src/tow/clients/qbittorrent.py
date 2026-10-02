@@ -217,7 +217,7 @@ class QBittorrentClient:
         try:
             content = self._c.torrents_export(torrent_hash=infohash.lower())
         except Exception as exc:  # noqa: BLE001 - the client may not have the file written yet: asked again
-            _LOG.info("magnet export not ready: %s: %s", type(exc).__name__, exc)
+            _LOG.info("magnet export not ready: %s", type(exc).__name__)
             return None
         metadata = parse_torrent_metadata(bytes(content))
         if btih and metadata.hash_v1 not in btih:

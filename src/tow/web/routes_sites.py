@@ -17,7 +17,7 @@ from fastapi.responses import (
 from starlette.background import BackgroundTask
 
 from tow import store_transaction, undo
-from tow.guess import guess_from_url
+from tow.guess import GuessError, guess_from_url
 from tow.jsonish import as_dict
 from tow.log import error_class
 from tow.store_transaction import StoreTransaction
@@ -98,7 +98,7 @@ def topics_guess_title(url: str = Form("")) -> Response:
     try:
         title = guess_topic_title(url.strip())
     except Exception as exc:  # noqa: BLE001 - a title guess never fails the form: the owner types one
-        logging.getLogger("tow.web").warning("title not guessed: %s: %s", type(exc).__name__, exc)
+        logging.getLogger("tow.web").warning("title not guessed: %s", type(exc).__name__)
         title = ""
     return JSONResponse({"ok": bool(title), "title": title})
 
@@ -107,8 +107,8 @@ def topics_guess_title(url: str = Form("")) -> Response:
 def sites_guess(url: str = Form("")) -> Response:
     try:
         g = guess_from_url(url)
-    except ValueError as e:
-        return JSONResponse({"ok": False, "error": str(e)})
+    except GuessError as e:
+        return JSONResponse({"ok": False, "error": t(e.key)})
     cfg = services.load_config()
     g["ok"] = True
     g["exists"] = g["name"] in (cfg.get("trackers") or {})
@@ -187,8 +187,8 @@ def sites_new(
     if from_url.strip():
         try:
             guessed = guess_from_url(from_url)
-        except ValueError as e:
-            return refused(e, "from_url")
+        except GuessError as e:
+            return refused(t(e.key), "from_url")
     try:
         key = valid_site_name(name or str((guessed or {}).get("name") or ""))
     except ValueError as exc:

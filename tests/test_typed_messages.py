@@ -193,3 +193,10 @@ def test_a_reconcile_failure_keeps_both_errors_typed():
     assert row["error_record"]["code"] == "check.two_errors"
     english = errors.render(row["error_record"], "en")
     assert english.startswith("the site is paused; comparing with the torrent client failed: the client keeps")
+
+
+def test_a_reconcile_failure_does_not_persist_secret_from_client_error():
+    row = {"ok": True}
+    check_steps.mark_reconcile_failure(row, RuntimeError("password=hunter2 in client reply"))
+    assert "hunter2" not in str(row)
+    assert "password=***" in row["error"]

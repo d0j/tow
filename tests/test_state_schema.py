@@ -81,7 +81,10 @@ def test_tow_refuses_to_start_on_a_newer_state(monkeypatch, capsys):
         cli._cmd_run(argparse.Namespace())
     assert started == []
     assert cli.main(["check"]) == 3
-    assert "tow check: StateVersionError: " in capsys.readouterr().err  # a sentence, not a traceback
+    error = capsys.readouterr().err
+    assert "tow check: " in error
+    assert "state.json" in error
+    assert "Traceback" not in error
     assert state_path().is_file()
 
 

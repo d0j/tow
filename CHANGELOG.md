@@ -3,6 +3,16 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.7] — 2026-10-02
+
+### Fixed
+
+- Unexpected errors no longer expose raw URLs, credentials, or exception details through topic forms, service
+  status, command-line output, logs, bot notifications, or the supervisor's job status. Known state-version errors
+  still explain how to recover.
+- Night-copy selection refuses symlinks and Windows junctions that point outside the backup directory.
+- Long episode titles are bounded before notification pattern matching.
+
 ## [1.22.6] — 2026-10-02
 
 ### Fixed

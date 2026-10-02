@@ -989,12 +989,13 @@ def test_check_status_of_unknown_job(client):
 # --------------------------------------------------------------------------- site guesses
 
 
-def test_guess_title_never_fails_the_form(monkeypatch, client):
+def test_guess_title_never_fails_the_form(monkeypatch, client, caplog):
     def tracker_down(_url):
-        raise RuntimeError("tracker down")
+        raise RuntimeError("secret=must-not-be-logged")
 
     monkeypatch.setattr("tow.title.guess_topic_title", tracker_down)
     assert client.post("/topics/guess-title", data={"url": RUTOR_URL}).json() == {"ok": False, "title": ""}
+    assert "must-not-be-logged" not in caplog.text
 
     monkeypatch.setattr("tow.title.guess_topic_title", lambda url: f"title for {url}")
     assert client.post("/topics/guess-title", data={"url": f"  {RUTOR_URL} "}).json() == {
@@ -1013,6 +1014,17 @@ def test_site_guess_reports_errors_and_existing_sites(client):
 
     fresh = client.post("/sites/guess", data={"url": "https://fresh.example/viewtopic.php?t=5"}).json()
     assert (fresh["ok"], fresh["name"], fresh["exists"]) == (True, "fresh", False)
+
+
+def test_site_guess_never_exposes_internal_parser_errors(client, monkeypatch):
+    def broken(_parts):
+        raise ValueError("secret=must-not-be-displayed")
+
+    monkeypatch.setattr("tow.guess.presets.guess", broken)
+    response = client.post("/sites/guess", data={"url": "https://fresh.example/viewtopic.php?t=5"})
+    assert response.status_code == 200
+    assert response.json() == {"ok": False, "error": "не удалось прочитать ссылку на раздачу"}
+    assert "must-not-be-displayed" not in response.text
 
 
 # --------------------------------------------------------------------------- sites add

@@ -43,16 +43,19 @@ def test_autostart_goes_to_this_oses_backend(monkeypatch):
     assert calls == [("on", True), ("off",)]
 
 
-def test_a_broken_autostart_read_back_is_off_not_a_broken_page(monkeypatch):
+def test_a_broken_autostart_read_back_is_off_not_a_broken_page(monkeypatch, caplog):
     from tow import lifecycle
 
     def broken(*_a, **_k):
-        raise OSError("systemctl is missing")
+        raise OSError("secret=must-not-be-displayed")
 
+    lifecycle._forget_cached()
     monkeypatch.setattr("tow.autostart.backend", broken)
     status = lifecycle.service_status()
     assert status["autostart"] is False
-    assert status["autostart_detail"]["error"] == "systemctl is missing"
+    assert status["autostart_detail"]["error"] == "не удалось узнать состояние автозапуска"
+    assert "must-not-be-displayed" not in str(status)
+    assert "must-not-be-displayed" not in caplog.text
 
 
 def test_settings_renders_reuse_the_autostart_read_back_for_a_minute(monkeypatch):

@@ -431,7 +431,9 @@ def _cmd_check(args: argparse.Namespace) -> int:
     except Exception as exc:  # noqa: BLE001 - store, transaction, client library: recorded instead of a bare traceback
         if apply:
             record_check_failure(exc, how=how)
-        _print({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, args.json)
+        from tow.i18n import t
+
+        _print({"ok": False, "error": t("cli.command_failed")}, args.json)
         return EXIT_CANNOT_RUN
     _print(out, args.json)
     fails = [r for r in out["results"] if not r.get("ok")]
@@ -818,13 +820,22 @@ def _main(argv: list[str] | None) -> int:
         return EXIT_INTERRUPTED
     except Exception as exc:
         # One boundary for every command: a broken config, an unreadable secret store or a
-        # missing file is an exit code and a sentence, not a traceback. TOW_DEBUG=1 shows it.
+        # missing file is an exit code and a sentence, not a traceback. Unexpected exception
+        # messages may contain a URL, key, or password supplied by a library: never echo them.
+        # TOW_DEBUG=1 is the owner's explicit opt-in to the original traceback.
         if os.environ.get("TOW_DEBUG"):
             raise
+        from tow.config import ConfigError
+        from tow.i18n import t
+        from tow.store import SecretStoreError, StateVersionError
+
+        reason = (
+            str(exc) if isinstance(exc, (ConfigError, SecretStoreError, StateVersionError)) else t("cli.command_failed")
+        )
         if getattr(args, "json", False):  # a script asked for JSON: it gets JSON on failure too
-            print(json.dumps({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, ensure_ascii=False))
+            print(json.dumps({"ok": False, "error": reason}, ensure_ascii=False))
         else:
-            print(f"tow {args.cmd}: {type(exc).__name__}: {exc}", file=sys.stderr)
+            print(f"tow {args.cmd}: {reason}", file=sys.stderr)
         return EXIT_CANNOT_RUN
 
 

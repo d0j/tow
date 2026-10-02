@@ -1,6 +1,23 @@
 import pytest
 
-from tow.notify import NotificationBatch, event_text, ping, send
+from tow.notify import NotificationBatch, _episode_text, event_text, ping, send, short_series_title
+
+
+def test_notification_title_processing_ignores_unbounded_suffix():
+    huge = "Show [S01E02 из 10]" + " " * 100_000 + "S99E99 secret suffix"
+    assert short_series_title(huge) == "Show"
+    assert _episode_text(huge, "ru") == "S01E02 из 10"
+
+
+def test_notification_errors_do_not_send_secret_values():
+    message = event_text(
+        title="Show",
+        kind="error",
+        error="password=hunter2; request https://user:pass@example.test/?token=abc123",
+    )
+    assert "hunter2" not in message
+    assert "abc123" not in message
+    assert "user:pass" not in message
 
 
 def test_send_no_token_silent():

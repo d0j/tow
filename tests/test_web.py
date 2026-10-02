@@ -83,6 +83,7 @@ def test_pages_ok():
     assert c.get("/sites").status_code == 200
     assert c.get("/settings/help").status_code == 200
     assert c.get("/doctor").status_code == 200
+
     home = c.get("/").text
     assert 'id="page-title"' in home
     assert 'aria-labelledby="log-title"' in home
@@ -170,6 +171,22 @@ def test_pages_ok():
     assert c.get("/").headers.get("x-frame-options") == "DENY"
     bad = c.post("/undo", headers={"Origin": "https://evil.example"}, follow_redirects=False)
     assert bad.status_code == 403
+
+
+def test_store_error_response_does_not_expose_local_exception_details():
+    from tow.store import StoreCorruptionError
+    from tow.web.app import create_app
+
+    isolated = create_app()
+
+    @isolated.get("/test-store-error")
+    def fail():
+        raise StoreCorruptionError("secret=must-not-be-displayed")
+
+    response = TestClient(isolated).get("/test-store-error")
+    assert response.status_code == 503
+    assert "must-not-be-displayed" not in response.text
+    assert "данные TOW недоступны" in response.text
 
 
 def test_post_forms_use_fetch_transport_for_origin_compatibility():

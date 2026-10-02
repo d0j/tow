@@ -8,6 +8,7 @@ restart asked from Settings goes to the supervisor as a control request and is f
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import uuid
@@ -16,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from tow.config import load_config, port_of
+from tow.i18n import t
 from tow.paths import data_dir
 from tow.store import atomic_write_text
 
@@ -75,7 +77,8 @@ def _autostart_status() -> dict[str, Any]:
         chosen = backend()
         status = {**chosen.status(), "supports_without_login": chosen.supports_without_login}
     except Exception as exc:  # noqa: BLE001 - a broken read-back is off, never a broken Settings page
-        status = {"on": False, "error": str(exc)[:200], "supports_without_login": False}
+        logging.getLogger("tow.lifecycle").warning("autostart status unavailable: %s", type(exc).__name__)
+        status = {"on": False, "error": t("settings.service.autostart_unread"), "supports_without_login": False}
     _autostart_cache = (now, status)
     return status
 

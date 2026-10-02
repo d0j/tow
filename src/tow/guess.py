@@ -12,6 +12,14 @@ from tow.trackers import presets
 from tow.trackers.presets import UrlParts
 
 
+class GuessError(ValueError):
+    """A safe, localized reason why a pasted topic link cannot be used."""
+
+    def __init__(self, key: str) -> None:
+        self.key = key
+        super().__init__(t(key))
+
+
 def canon_watch_url(url: str) -> str:
     """A site's link that is not its topic page (a CDN download link) -> the topic page."""
     return presets.canonical_url((url or "").strip())
@@ -48,17 +56,17 @@ def _url_parts(url: str) -> UrlParts:
     """The pasted link split for the rules; a link TOW cannot watch is refused in plain words."""
     raw = (url or "").strip()
     if raw.lower().startswith("magnet:"):
-        raise ValueError(t("guess.magnet"))
+        raise GuessError("guess.magnet")
     if not raw.startswith(("http://", "https://")):
-        raise ValueError(t("guess.http_needed"))
+        raise GuessError("guess.http_needed")
     p = urlparse(raw)
     host = (p.hostname or "").lower()
     if not host:
-        raise ValueError(t("guess.no_host"))
+        raise GuessError("guess.no_host")
     try:
         port = p.port
     except ValueError as exc:
-        raise ValueError(t("guess.bad_port")) from exc
+        raise GuessError("guess.bad_port") from exc
     authority = f"{host}:{port}" if port is not None else host
     return UrlParts(
         host=host,
@@ -126,7 +134,7 @@ def _number_guess(parts: UrlParts) -> dict[str, Any]:
     elif query_numbers := list(re.finditer(r"\d{3,}", raw_query)):
         where, num = "query", query_numbers[-1].group(0)
     else:
-        raise ValueError(t("guess.no_topic_number"))
+        raise GuessError("guess.no_topic_number")
     if where == "path":
         templ, path_rx = _last_replaced(path, num)
         query_templ, query_rx = raw_query, re.escape(raw_query)
@@ -141,5 +149,12 @@ def _number_guess(parts: UrlParts) -> dict[str, Any]:
 
 def guess_from_url(url: str) -> dict[str, Any]:
     """Settings for a new site from one of its topic links (raises ValueError, in words)."""
-    parts = _url_parts(url)
-    return presets.guess(parts) or _forum_guess(parts) or _path_guess(parts) or _number_guess(parts)
+    try:
+        parts = _url_parts(url)
+        return presets.guess(parts) or _forum_guess(parts) or _path_guess(parts) or _number_guess(parts)
+    except GuessError:
+        raise
+    except ValueError as exc:
+        # urlparse or a preset may reject malformed input with internal details. The form only
+        # needs a safe reason, never the raw exception (which may include the pasted URL).
+        raise GuessError("guess.invalid_url") from exc

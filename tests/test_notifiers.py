@@ -891,4 +891,4 @@ def test_notification_title_limits_untrusted_text_before_regex_matching():
     from tow.notify import short_series_title
 
     title = "Series" + " " * 100_000 + "[" + "x" * 100_000
-    assert short_series_title(title) == "Series [" + "x" * 92
+    assert short_series_title(title) == "Series"
