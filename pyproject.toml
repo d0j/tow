@@ -41,7 +41,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "qbittorrent-api>=2024.1",
     "tzdata>=2026.3",
-    "uvicorn[standard]>=0.52.4",
+    "uvicorn[standard]>=0.54.0",
     "websockets>=15.0",
 ]
 
