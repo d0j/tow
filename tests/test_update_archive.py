@@ -228,7 +228,18 @@ def test_a_download_that_fails_says_where(install, github):
     assert "HTTP 500" in lines[-1]
 
 
-@pytest.mark.parametrize("entry", ["../escape", "/absolute"])
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "../escape",
+        "/absolute",
+        "C:/escape",
+        "file:stream",
+        "CON",
+        "trailing.",
+        "double//slash",
+    ],
+)
 def test_an_archive_that_leaves_its_folder_is_refused(install, github, entry):
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
@@ -244,6 +255,18 @@ def test_an_archive_that_leaves_its_folder_is_refused(install, github, entry):
     assert "cannot be unpacked" in lines[-1]
     assert machine.calls == []
     assert not (install["root"].parent / "escape").exists()
+
+
+def test_archive_unpack_preserves_executable_scripts(tmp_path):
+    archive = tmp_path / "source.tar.gz"
+    archive.write_bytes(tarball("1.23.0"))
+
+    top = updater.unpack(archive, tmp_path / "unpacked")
+
+    script = top / "scripts" / "tow"
+    assert script.read_bytes() == b"#!/bin/sh\n"
+    if os.name != "nt":
+        assert script.stat().st_mode & 0o111 == 0o111
 
 
 @pytest.mark.parametrize("limit", ["MAX_ARCHIVE_FILES", "MAX_MEMBER_BYTES", "MAX_UNPACKED_BYTES"])

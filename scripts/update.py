@@ -83,6 +83,7 @@ MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024
 MAX_ARCHIVE_FILES = 10_000
 MAX_MEMBER_BYTES = 256 * 1024 * 1024
 MAX_UNPACKED_BYTES = 1024 * 1024 * 1024
+WINDOWS_DEVICE_RE = re.compile(r"(?i)(?:CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9¹²³]|LPT[1-9¹²³])(?:\..*)?")
 # The oldest release an install without git can go to: older update.py needs git.
 MINIMUM_ARCHIVE_TARGET = (1, 22, 0)
 # Never in an update snapshot: credentials, keys, browser profiles, sign-in sessions, locks,
@@ -548,15 +549,21 @@ def unpack(archive: Path, into: Path) -> Path:
     them) into ``into``; the top folder. Links and paths that leave it are refused."""
     with tarfile.open(archive, "r:gz") as tar:
         top = ""
-        files = 0
         total = 0
-        for member in tar:
-            parts = Path(member.name).parts
+        for files, member in enumerate(tar, start=1):
+            name = member.name.rstrip("/") if member.isdir() else member.name
+            parts = name.split("/")
             if (
-                not parts
+                not name
                 or member.name.startswith(("/", "\\"))
                 or "\\" in member.name
-                or ".." in parts
+                or any(
+                    part in {"", ".", ".."}
+                    or ":" in part
+                    or part.endswith((" ", "."))
+                    or bool(WINDOWS_DEVICE_RE.fullmatch(part))
+                    for part in parts
+                )
                 or not (member.isfile() or member.isdir())
             ):
                 raise UpdateError(f"refused entry {member.name}")
@@ -564,14 +571,20 @@ def unpack(archive: Path, into: Path) -> Path:
                 top = parts[0]
             elif parts[0] != top:
                 raise UpdateError("more than one top folder")
-            files += 1
             total += member.size
             if files > MAX_ARCHIVE_FILES or member.size > MAX_MEMBER_BYTES or total > MAX_UNPACKED_BYTES:
                 raise UpdateError("source archive exceeds its unpacked size or file-count limit")
-            if hasattr(tarfile, "data_filter"):
-                tar.extract(member, into, filter="data")
-            else:  # pragma: no cover - Python 3.11.0-3.11.3; the entries were checked above
-                tar.extract(member, into)
+            target = into.joinpath(*parts)
+            if member.isdir():
+                target.mkdir(parents=True, exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                source = tar.extractfile(member)
+                if source is None:
+                    raise UpdateError(f"refused entry {member.name}")
+                with source, target.open("wb") as output:
+                    shutil.copyfileobj(source, output)
+                target.chmod(member.mode & 0o777)
         if not top:
             raise UpdateError("empty source archive")
     return into / top

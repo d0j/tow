@@ -3,6 +3,13 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.4] — 2026-10-02
+
+### Fixed
+
+- Archive updates extract only validated regular files and directories, rejecting Windows device names, drive
+  prefixes and alternate streams without relying on the host Python's tar extraction filter.
+
 ## [1.22.3] — 2026-10-02
 
 ### Fixed
