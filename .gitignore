@@ -35,3 +35,4 @@ master.key
 docs/changes/checkpoints/
 # Accidental Windows device-name file
 nul
+.tmp-tests/

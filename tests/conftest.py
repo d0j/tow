@@ -11,6 +11,24 @@ pytest_plugins = ["pytester"]
 
 _TEMPLATE_CONFIG = Path(__file__).parents[1] / "config.example.yaml"
 _session_home: Path | None = None
+
+
+def _temp_outside_the_user_profile() -> None:
+    """Windows' default temp folder is inside AppData, a folder TOW refuses for its own folders:
+    tests that save a folder in tmp_path would be refused for the wrong reason. Then the run uses
+    `.tmp-tests` in the checkout (gitignored) for tmp_path and everything else temporary."""
+    import re
+
+    if not re.search(r"[\\/]Users[\\/][^\\/]+[\\/]AppData[\\/]", tempfile.gettempdir() + os.sep, re.IGNORECASE):
+        return
+    folder = Path(__file__).resolve().parents[1] / ".tmp-tests"
+    folder.mkdir(exist_ok=True)
+    for name in ("TMP", "TEMP", "TMPDIR", "PYTEST_DEBUG_TEMPROOT"):
+        os.environ[name] = str(folder)
+    tempfile.tempdir = str(folder)
+
+
+_temp_outside_the_user_profile()
 # The system temp folder as the run started: tests may write there (tmp_path lives in it). TOW
 # itself moves `tempfile` into its data folder at start (tow.paths.use_private_temp).
 _SYSTEM_TEMP = tempfile.gettempdir()

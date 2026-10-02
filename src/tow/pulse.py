@@ -33,7 +33,9 @@ _UPDATE_MARKERS = ("trustedinstaller", "mousocoreworker", "usoclient", "wuauclt"
 
 def clock(ts: float, lang: str | None = None) -> str:
     """A short local time the way the language writes it (``_meta.datetime_short``)."""
-    return i18n.format_datetime(datetime.fromtimestamp(ts, UTC).astimezone(), lang, short=True)
+    from tow.clock import local_zone
+
+    return i18n.format_datetime(datetime.fromtimestamp(ts, UTC).astimezone(local_zone()), lang, short=True)
 
 
 def duration(seconds: float, lang: str | None = None) -> str:

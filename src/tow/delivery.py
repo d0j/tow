@@ -26,6 +26,7 @@ from datetime import datetime, timedelta
 from typing import Any, Protocol
 
 from tow import i18n
+from tow.clock import local_zone
 from tow.i18n import t
 from tow.log import cls_label, error_class, history_events
 from tow.notify import PendingNotification, error_parts, event_text, short_series_title
@@ -49,7 +50,7 @@ def quiet_now(cfg: dict[str, Any], now: datetime | None = None) -> bool:
     if not match:
         return False
     start, end = int(match.group(1)) % 24, int(match.group(2)) % 24
-    hour = (now or datetime.now().astimezone()).hour
+    hour = (now or datetime.now().astimezone(local_zone())).hour
     if start == end:
         return False
     return start <= hour < end if start < end else (hour >= start or hour < end)
@@ -181,7 +182,7 @@ def _moment(value: str) -> datetime | None:
         moment = datetime.fromisoformat(value)
     except TypeError, ValueError:
         return None
-    return moment if moment.tzinfo else moment.astimezone()
+    return moment if moment.tzinfo else moment.astimezone(local_zone())
 
 
 def maybe_digest(*, cfg: dict[str, Any], send: Send, now: datetime | None = None) -> bool:
@@ -189,7 +190,7 @@ def maybe_digest(*, cfg: dict[str, Any], send: Send, now: datetime | None = None
     hour = cfg.get("daily_digest_hour")
     if not isinstance(hour, int) or isinstance(hour, bool):
         return False
-    now = now or datetime.now().astimezone()
+    now = now or datetime.now().astimezone(local_zone())
     if now.hour < hour or quiet_now(cfg, now):
         return False
     today = now.date().isoformat()

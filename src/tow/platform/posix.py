@@ -109,10 +109,10 @@ def _reap(pid: int) -> bool:
 def _set_parent_death_signal(sig: int) -> bool:
     """Linux prctl(PR_SET_PDEATHSIG): the kernel sends ``sig`` when the parent ends."""
     import ctypes
-    import ctypes.util
 
     try:
-        libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6", use_errno=True)
+        # The process's own symbols include libc: no ldconfig run (find_library starts one).
+        libc = ctypes.CDLL(None, use_errno=True)
         return int(libc.prctl(1, int(sig), 0, 0, 0)) == 0  # PR_SET_PDEATHSIG = 1
     except AttributeError, OSError, TypeError, ValueError:
         return False
