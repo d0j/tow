@@ -617,6 +617,8 @@ def _cmd_update(args: argparse.Namespace) -> int:
     python = getattr(sys, "_base_executable", None) or sys.executable  # the venv's base interpreter
     print(t("cli.update.how"))
     print(f'  "{python}" "{script}" --ref {args.ref}')
+    if not (repo_root() / ".git").exists():  # the Windows bundle, install.ps1, install.sh
+        print(t("cli.update.archive"))
     if platform.is_windows():
         print(t("cli.update.or_windows"))
         print(f'  pwsh -File "{repo_root() / "scripts" / "deploy.ps1"}" -Ref {args.ref}')

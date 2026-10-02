@@ -601,12 +601,20 @@ def test_task_xml_is_read_for_command_and_state():
     assert updater.task_info("<oops") is None
 
 
-def test_tow_update_prints_how_to_run_it(capsys):
-    from tow import cli
+def test_tow_update_prints_how_to_run_it(capsys, tmp_path, monkeypatch):
+    from tow import cli, paths
 
     assert cli.main(["update", "--ref", "v1.18.0"]) == 0
     out = capsys.readouterr().out
     assert "update.py" in out
     assert "--ref v1.18.0" in out
+    assert "v1.22.0" not in out  # a git clone: any tag from v1.18.0
     if os.name == "nt":
         assert "deploy.ps1" in out
+    # An install without git (the Windows bundle, the installers) is told what it can update to.
+    monkeypatch.setattr(paths, "repo_root", lambda: tmp_path / "TOW" / "app")
+    assert cli.main(["update", "--ref", "latest"]) == 0
+    out = capsys.readouterr().out
+    assert "--ref latest" in out
+    assert "v1.22.0" in out
+    assert "latest" in out

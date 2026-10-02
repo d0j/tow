@@ -1,6 +1,7 @@
 """Update this TOW install to a release tag (or commit) and start it again; roll back on failure.
 
     <python> <TOW>/app/scripts/update.py --ref v1.18.0
+    <python> <TOW>/app/scripts/update.py --ref latest      (an install without git)
 
 Run it with the install's base Python, not the one in app/.venv: ``uv sync`` replaces the
 venv's files, which Windows cannot do while they run. ``tow update --ref <tag>`` prints the
@@ -10,18 +11,30 @@ Python 3.11 syntax (deploy.ps1 may fall back to any Python 3.11+): no ``except A
 uv, Python and uv's cache come from the install, exactly as the launchers (scripts/tow,
 scripts/tow-env.cmd) give them: ``launcher_env``.
 
+Two kinds of install, told apart by ``app/.git``:
+
+- a git clone: the code is switched with ``git checkout`` (as before 1.22);
+- an archive install (the Windows bundle, install.ps1, install.sh: no git): the release's
+  source archive is downloaded from GitHub over HTTPS (``--ref`` is a release tag or
+  ``latest``), checked against the release's SHA256SUMS when it lists it, and unpacked into
+  ``app.new`` before TOW stops; the switch moves the code into ``app.prev`` and the new code into
+  ``app`` (entry by entry, so a terminal open in ``app`` does not block it); a rollback moves it
+  back. One ``app.prev`` is kept. Such an install updates to v1.22.0 or newer only (older
+  versions cannot update it again).
+
 Steps (each one checked; nothing is reported as done without its read-back):
 
 1. one update at a time (``<TOW>/.update.lock``); refuse local edits of the code and an install
-   that still runs the five Windows tasks of 1.17 (it switches with v1.20.0 first); fetch;
-   refuse a target older than v1.18.0 (no ``tow run`` to start);
+   that still runs the five Windows tasks of 1.17 (it switches with v1.20.0 first); fetch (or
+   download and unpack the archive); refuse a target older than v1.18.0 (no ``tow run`` to
+   start; v1.22.0 for an archive install);
 2. stop TOW: ``tow run`` gets the stop request (it lets a running check finish); only if it does
    not stop in time is it stopped forcibly, with its web server and job (status.json). With
    autostart on Linux or macOS the OS manager stops it too (``systemctl --user stop``,
    ``launchctl bootout``), so it does not start TOW again in the middle of the update;
 3. snapshot ``data/`` and ``config.yaml`` into ``<TOW>/backup/update-<time>-before-<tag>``
    (no keys, LAN token, browser profiles, sign-in sessions or logs);
-4. check out the target, ``uv sync --frozen --no-dev``;
+4. check out the target (or move the unpacked code into ``app``), ``uv sync --frozen --no-dev``;
 5. start TOW (its autostart if it is on - ``systemctl --user start``, ``launchctl bootstrap``,
    the task "TOW" - else ``tow run`` in the background);
 6. ``/healthz`` must report the target version and ``/health.json`` must read the state;
@@ -46,17 +59,29 @@ import re
 import shutil
 import signal
 import socket
+import ssl
+import stat
 import subprocess
 import sys
+import tarfile
 import time
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.request import ProxyHandler, build_opener
+from urllib.error import HTTPError, URLError
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener
 
 APP = Path(__file__).resolve().parents[1]
+# Where an install without git gets its releases (the source archive and SHA256SUMS of a tag).
+GITHUB = "https://github.com"
+REPO = "d0j/tow"
+SOURCE_ASSET = "tow-source.tar.gz"
+SUMS_ASSET = "SHA256SUMS"
+MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024
+# The oldest release an install without git can go to: older update.py needs git.
+MINIMUM_ARCHIVE_TARGET = (1, 22, 0)
 # Never in an update snapshot: credentials, keys, browser profiles, sign-in sessions, locks,
 # the supervisor's run files, temporary files and the logs. A rollback leaves what the snapshot
 # leaves out as it is: the failed version's logs are what tells why it failed.
@@ -100,6 +125,19 @@ TEXTS = {
     "data_restored": "data and config were put back from the snapshot (the new version had changed them)",
     "ok": "TOW {version} is running and answers on 127.0.0.1:{port}",
     "aborted": "update aborted: {error}",
+    "downloading": "downloading {url}",
+    "download_failed": "the download failed ({url}): {error}; nothing was updated",
+    "no_release": "{ref} is not a release of TOW (nothing at {url}); nothing was updated",
+    "not_verified": "the release has no checksum for the source archive: it was not verified",
+    "checksum": "the downloaded archive does not match the release's SHA256SUMS; nothing was updated",
+    "bad_archive": "the downloaded archive cannot be unpacked ({error}); nothing was updated",
+    "wrong_version": "the archive of {ref} holds TOW {version}; nothing was updated",
+    "archive_too_old": (
+        "{ref} is TOW {version}: an install without git goes no further back than v1.22.0 (older versions"
+        " cannot update it again); nothing was updated"
+    ),
+    "archive_ref": "an install without git updates to a release tag (for example v1.22.0) or latest, not to {ref}",
+    "switch_failed": "the code could not be switched ({error}): close programs and windows that use files in {app}",
 }
 
 
@@ -218,12 +256,14 @@ class System:
 
     windows = os.name == "nt"
 
-    def __init__(self, app: Path, uv: str | None = None):
+    def __init__(self, app: Path, uv: str | None = None, *, github: str = GITHUB, repo: str = REPO):
         self.app = app
         self.root = app.parent
         self.uv, self.env = launcher_env(app, uv=uv)
         self.home = Path.home()
         self.uid = os.getuid() if hasattr(os, "getuid") else 0
+        self.github = github.rstrip("/")
+        self.repo = repo
 
     # --- processes and time ------------------------------------------------------------------
 
@@ -276,6 +316,66 @@ class System:
                 return True
         except OSError:
             return False
+
+    # --- releases on GitHub (an install without git) ------------------------------------------
+
+    def _tls(self) -> ssl.SSLContext:
+        """The system's certificates, plus certifi's from the install's environment when it has
+        them (a Python built elsewhere may not find this system's store)."""
+        context = ssl.create_default_context()
+        venv = self.app / ".venv"
+        for pem in [
+            *venv.glob("Lib/site-packages/certifi/cacert.pem"),
+            *venv.glob("lib/python*/site-packages/certifi/cacert.pem"),
+        ]:
+            with contextlib.suppress(OSError, ssl.SSLError):
+                context.load_verify_locations(cafile=str(pem))
+        return context
+
+    def _opener(self, *handlers: Any):
+        return build_opener(HTTPSHandler(context=self._tls()), *handlers)
+
+    def download(self, url: str, destination: Path) -> bool:
+        """``url`` into ``destination``; False when there is nothing there (404)."""
+        request = Request(url, headers={"User-Agent": "tow-update"})
+        try:
+            with self._opener().open(request, timeout=60) as response, destination.open("wb") as handle:
+                size = 0
+                for chunk in iter(lambda: response.read(1 << 20), b""):
+                    size += len(chunk)
+                    if size > MAX_DOWNLOAD_BYTES:
+                        raise UpdateError(f"more than {MAX_DOWNLOAD_BYTES} bytes")
+                    handle.write(chunk)
+        except HTTPError as exc:
+            if exc.code == 404:
+                return False
+            raise UpdateError(f"HTTP {exc.code}") from exc
+        except (URLError, OSError, ValueError) as exc:
+            raise UpdateError(str(getattr(exc, "reason", exc))) from exc
+        return True
+
+    def latest_tag(self) -> str:
+        """The tag of the latest release (GitHub answers /releases/latest with a redirect to it)."""
+        url = f"{self.github}/{self.repo}/releases/latest"
+
+        class Stay(HTTPRedirectHandler):
+            def redirect_request(self, *_args: Any, **_kwargs: Any) -> None:
+                return None  # the Location header is the answer
+
+        location = ""
+        try:
+            with self._opener(Stay()).open(Request(url, headers={"User-Agent": "tow-update"}), timeout=60) as response:
+                location = response.geturl()
+        except HTTPError as exc:
+            location = exc.headers.get("Location", "") if exc.code in (301, 302, 303, 307, 308) else ""
+            if not location:
+                raise UpdateError(f"HTTP {exc.code} ({url})") from exc
+        except (URLError, OSError, ValueError) as exc:
+            raise UpdateError(f"{getattr(exc, 'reason', exc)} ({url})") from exc
+        match = re.search(r"/releases/tag/([^/?#]+)$", location)
+        if not match:
+            raise UpdateError(f"no release found at {url}")
+        return match.group(1)
 
     def kill_tree(self, pid: int) -> bool:
         if self.windows:
@@ -430,6 +530,235 @@ class System:
         return output if code == 0 else None
 
 
+def parse_sums(text: str) -> dict[str, str]:
+    """``sha256sum`` lines (``<hex>  <name>``, ``*<name>`` for binary mode) by file name."""
+    sums = {}
+    for line in text.splitlines():
+        match = re.match(r"^([0-9a-fA-F]{64})\s+\*?(\S.*?)\s*$", line)
+        if match:
+            sums[match.group(2)] = match.group(1).lower()
+    return sums
+
+
+def unpack(archive: Path, into: Path) -> Path:
+    """Unpack a source tarball (one top folder, as GitHub's and ``git archive --prefix`` make
+    them) into ``into``; the top folder. Links and paths that leave it are refused."""
+    with tarfile.open(archive, "r:gz") as tar:
+        members = tar.getmembers()
+        tops = {Path(member.name).parts[0] for member in members if Path(member.name).parts}
+        if len(tops) != 1:
+            raise UpdateError(f"{len(tops)} top folders, not one")
+        for member in members:
+            parts = Path(member.name).parts
+            if member.name.startswith(("/", "\\")) or ".." in parts or member.issym() or member.islnk():
+                raise UpdateError(f"refused entry {member.name}")
+        if hasattr(tarfile, "data_filter"):
+            tar.extractall(into, filter="data")
+        else:  # pragma: no cover - Python 3.11.0-3.11.3; the entries were checked above
+            tar.extractall(into)
+    return into / tops.pop()
+
+
+def remove_tree(path: Path) -> None:
+    """Remove a folder; read-only files too (Windows)."""
+
+    def writable(function: Callable[..., Any], name: str, _error: Any) -> None:
+        with contextlib.suppress(OSError):
+            os.chmod(name, stat.S_IWRITE)
+            function(name)
+
+    if not path.exists():
+        return
+    if sys.version_info >= (3, 12):  # noqa: UP036 - update.py runs on Python 3.11 too
+        shutil.rmtree(path, onexc=writable)
+    else:  # pragma: no cover - Python 3.11 has no onexc
+        shutil.rmtree(path, onerror=writable)
+
+
+class GitCode:
+    """The code is a git clone: ``git checkout`` switches it (installs before 1.22 all are)."""
+
+    kind = "git"
+
+    def __init__(self, work: Update):
+        self.work = work
+        self.sys = work.sys
+
+    def check(self) -> None:
+        if self.sys.git("status", "--porcelain", "--untracked-files=no"):
+            raise UpdateError(self.work.text("local_edits", app=self.work.app))
+
+    def current(self) -> str:
+        return self.sys.git("rev-parse", "HEAD")
+
+    def prepare(self, ref: str) -> str:
+        self.sys.git("fetch", "--tags", "--prune", "origin")
+        target = self.sys.git("rev-parse", "--verify", f"{ref}^{{commit}}")
+        self.work.refuse_too_old(target)
+        return target
+
+    def short(self, value: str) -> str:
+        return value[:7]
+
+    def switch(self, target: str) -> None:
+        self.sys.git("checkout", "--quiet", "--detach", target)
+
+    def switch_back(self, previous: str) -> None:
+        self.sys.git("checkout", "--quiet", "--detach", previous)
+
+    def discard(self) -> None:
+        """Nothing was unpacked: a fetch leaves the checkout as it is."""
+
+
+class ArchiveCode:
+    """The code came from a release archive (no git): a release's source archive replaces it."""
+
+    kind = "archive"
+
+    def __init__(self, work: Update, *, source: Path | None = None, sums: Path | None = None):
+        self.work = work
+        self.sys = work.sys
+        self.app = work.app
+        self.new = work.root / "app.new"
+        self.prev = work.root / "app.prev"
+        self.failed = work.root / "app.failed"
+        self.downloads = work.root / ".update-download"
+        self.source = source
+        self.sums = sums
+        self.moved_out: list[str] = []
+        self.moved_in: list[str] = []
+
+    def check(self) -> None:
+        for leftover in (self.new, self.failed, self.downloads):
+            remove_tree(leftover)  # an earlier update that was cut off
+
+    def current(self) -> str:
+        return f"v{self.work.version()}"
+
+    def short(self, value: str) -> str:
+        return value
+
+    # -- the archive ---------------------------------------------------------------------------
+
+    def _fetch(self, url: str, destination: Path, *, required: bool) -> bool:
+        self.work.say("downloading", url=url)
+        try:
+            found = self.sys.download(url, destination)
+        except UpdateError as exc:
+            raise UpdateError(self.work.text("download_failed", url=url, error=exc)) from exc
+        if not found and required:
+            raise UpdateError(self.work.text("no_release", ref=self.work.ref, url=url))
+        return found
+
+    def _expected(self, tag: str) -> str | None:
+        """The source archive's SHA-256 from the release's SHA256SUMS (None: not listed)."""
+        path = self.sums
+        if path is None:
+            path = self.downloads / SUMS_ASSET
+            if not self._fetch(
+                f"{self.sys.github}/{self.sys.repo}/releases/download/{tag}/{SUMS_ASSET}", path, required=False
+            ):
+                return None
+        try:
+            return parse_sums(path.read_text(encoding="utf-8")).get(SOURCE_ASSET)
+        except (OSError, UnicodeError):
+            return None
+
+    def _download(self, tag: str) -> Path:
+        """The tag's source archive, checked against SHA256SUMS when the release lists it: GitHub's
+        archive of the tag, else the copy uploaded with the release."""
+        if self.source is not None:  # a local archive (--source), checked when --sums is given
+            expected = self._expected(tag) if self.sums is not None else None
+            if expected is not None and _hash(self.source) != expected:
+                raise UpdateError(self.work.text("checksum"))
+            return self.source
+        expected = self._expected(tag)
+        base = f"{self.sys.github}/{self.sys.repo}"
+        archive = self.downloads / SOURCE_ASSET
+        urls = [f"{base}/archive/refs/tags/{tag}.tar.gz", f"{base}/releases/download/{tag}/{SOURCE_ASSET}"]
+        found = False
+        for url in urls:
+            if not self._fetch(url, archive, required=False):
+                continue
+            found = True
+            if expected is None:
+                self.work.say("not_verified")
+                return archive
+            if _hash(archive) == expected:
+                return archive
+        raise UpdateError(self.work.text("checksum" if found else "no_release", ref=tag, url=urls[0]))
+
+    def prepare(self, ref: str) -> str:
+        if ref == "latest":
+            try:
+                ref = self.sys.latest_tag()
+            except UpdateError as exc:
+                raise UpdateError(
+                    self.work.text("download_failed", url=f"{self.sys.github}/{self.sys.repo}", error=exc)
+                ) from exc
+        if version_tuple(ref) is None:
+            raise UpdateError(self.work.text("archive_ref", ref=ref))
+        self.downloads.mkdir(parents=True, exist_ok=True)
+        archive = self._download(ref)
+        try:
+            top = unpack(archive, self.downloads / "unpacked")
+        except (OSError, tarfile.TarError, UpdateError) as exc:
+            raise UpdateError(self.work.text("bad_archive", error=exc)) from exc
+        version = _project_version(top / "pyproject.toml")
+        if version_tuple(version) != version_tuple(ref):
+            raise UpdateError(self.work.text("wrong_version", ref=ref, version=version or "?"))
+        parsed = version_tuple(version)
+        if parsed is not None and parsed < MINIMUM_ARCHIVE_TARGET:
+            raise UpdateError(self.work.text("archive_too_old", ref=ref, version=version))
+        os.replace(top, self.new)
+        remove_tree(self.downloads)
+        return ref
+
+    # -- the switch ----------------------------------------------------------------------------
+
+    def switch(self, target: str) -> None:
+        """app -> app.prev, app.new -> app, entry by entry (a window open in app keeps it)."""
+        del target
+        remove_tree(self.prev)  # one previous version is kept
+        self.prev.mkdir()
+        self.moved_out, self.moved_in = [], []
+        try:
+            for entry in sorted(os.listdir(self.app)):
+                os.replace(self.app / entry, self.prev / entry)
+                self.moved_out.append(entry)
+            for entry in sorted(os.listdir(self.new)):
+                os.replace(self.new / entry, self.app / entry)
+                self.moved_in.append(entry)
+        except OSError as exc:
+            raise UpdateError(self.work.text("switch_failed", error=exc, app=self.app)) from exc
+        remove_tree(self.new)
+
+    def switch_back(self, previous: str) -> None:
+        """Exactly what ``switch`` moved goes back; the failed code is removed."""
+        del previous
+        self.failed.mkdir(exist_ok=True)
+        for entry in reversed(self.moved_in):
+            os.replace(self.app / entry, self.failed / entry)
+        self.moved_in = []
+        for entry in reversed(self.moved_out):
+            os.replace(self.prev / entry, self.app / entry)
+        self.moved_out = []
+        for leftover in (self.failed, self.prev, self.new):
+            remove_tree(leftover)
+
+    def discard(self) -> None:
+        for leftover in (self.new, self.downloads):
+            remove_tree(leftover)
+
+
+def _project_version(pyproject: Path) -> str:
+    with contextlib.suppress(OSError, UnicodeError):
+        match = re.search(r'(?m)^version\s*=\s*"([^"]+)"', pyproject.read_text(encoding="utf-8"))
+        if match:
+            return match.group(1)
+    return ""
+
+
 def _try_lock(handle) -> bool:
     handle.seek(0, os.SEEK_END)
     if handle.tell() == 0:
@@ -477,6 +806,8 @@ class Update:
         wait_minutes: float = 15.0,
         keep: int = 5,
         say: Callable[[str], None] = print,
+        source: Path | None = None,
+        sums: Path | None = None,
     ):
         self.sys = system
         self.app = system.app
@@ -487,6 +818,10 @@ class Update:
         self.keep = keep
         self.texts = _messages(self.app, self.root)
         self._say = say
+        # A git clone, or an install from a release archive (the Windows bundle, the installers).
+        self.code: GitCode | ArchiveCode = (
+            GitCode(self) if (self.app / ".git").exists() else ArchiveCode(self, source=source, sums=sums)
+        )
         self.state: dict[str, Any] = {}
         self.port = 8787
         self.autostart: str | None = None  # how this install starts with the computer, if it does
@@ -520,21 +855,14 @@ class Update:
         return condition()
 
     def version(self) -> str:
-        with contextlib.suppress(OSError, UnicodeError):
-            match = re.search(
-                r'(?m)^version\s*=\s*"([^"]+)"', (self.app / "pyproject.toml").read_text(encoding="utf-8")
-            )
-            if match:
-                return match.group(1)
-        return ""
+        return _project_version(self.app / "pyproject.toml")
 
     # --- preconditions -----------------------------------------------------------------------
 
     def check_install(self) -> None:
         if not (self.root / "config.yaml").is_file() or not (self.root / "data").is_dir():
             raise UpdateError(self.text("not_runtime", app=self.app))
-        if self.sys.git("status", "--porcelain", "--untracked-files=no"):
-            raise UpdateError(self.text("local_edits", app=self.app))
+        self.code.check()
         with contextlib.suppress(OSError, UnicodeError):
             config = (self.root / "config.yaml").read_text(encoding="utf-8")
             match = re.search(r"(?m)^port:\s*['\"]?(\d+)", config)
@@ -690,12 +1018,15 @@ class Update:
     def run(self) -> int:
         self.check_install()
         self.refuse_old_layout()
-        previous = self.sys.git("rev-parse", "HEAD")
+        code = self.code
+        previous = code.current()
         previous_version = self.version()
-        self.sys.git("fetch", "--tags", "--prune", "origin")
-        target = self.sys.git("rev-parse", "--verify", f"{self.ref}^{{commit}}")
-        self.refuse_too_old(target)
-        self.say("start", previous=previous[:7], target=target[:7], ref=self.ref, root=self.root)
+        try:
+            target = code.prepare(self.ref)  # fetch, or download and unpack: TOW still runs
+        except BaseException:
+            code.discard()
+            raise
+        self.say("start", previous=code.short(previous), target=code.short(target), ref=self.ref, root=self.root)
         self.write_state(
             status="in_progress",
             ref=self.ref,
@@ -709,10 +1040,14 @@ class Update:
         )
         result, error = "failed", None
         try:
-            self.stop()
-            self.take_snapshot(target)
             try:
-                self.sys.git("checkout", "--quiet", "--detach", target)
+                self.stop()
+                self.take_snapshot(target)
+            except BaseException:
+                code.discard()  # the code was not switched: an unpacked archive goes
+                raise
+            try:
+                code.switch(target)
                 try:
                     self.sys.uv_sync()
                 except UpdateError as exc:
@@ -724,7 +1059,7 @@ class Update:
                 result = "ok"
             except Exception as exc:  # noqa: BLE001 - a failed step after the switch is rolled back, whatever it was
                 error = str(exc)
-                self.say("failed", error=error, previous=previous[:7])
+                self.say("failed", error=error, previous=code.short(previous))
                 result = self.roll_back(previous, previous_version)
         except Exception as exc:  # noqa: BLE001 - the update boundary: any failure is reported and recorded in update-state.json
             error = str(exc)
@@ -759,7 +1094,7 @@ class Update:
             return True
 
         step("stop the new version", stop_new)
-        step("check out the previous code", lambda: self.sys.git("checkout", "--quiet", "--detach", previous))
+        step("check out the previous code", lambda: self.code.switch_back(previous))
         step("uv sync", self.sys.uv_sync)
         # True: put back; None: the new version had changed nothing (both fine).
         restored = step("put back data and config", lambda: self.restore_snapshot() or None)
@@ -808,12 +1143,20 @@ def main(argv: list[str] | None = None) -> int:
     if sys.version_info < (3, 11):  # noqa: UP036 - deploy.ps1 may fall back to any Python 3
         print(f"update.py needs Python 3.11 or newer (this is {sys.version.split()[0]})")
         return 2
-    parser = argparse.ArgumentParser(description="Update this TOW install to a git tag or commit.")
-    parser.add_argument("--ref", required=True, help="release tag (or commit) to install, e.g. v1.18.0")
+    parser = argparse.ArgumentParser(
+        description="Update this TOW install to a release tag (or a commit of a git clone)."
+    )
+    parser.add_argument(
+        "--ref", required=True, help="release tag (or commit) to install, e.g. v1.22.0; `latest` without git"
+    )
     parser.add_argument("--health-timeout", type=float, default=90.0, help="seconds for the new version to answer")
     parser.add_argument("--wait-minutes", type=float, default=15.0, help="how long a running check may finish")
     parser.add_argument("--keep", type=int, default=5, help="update snapshots to keep")
     parser.add_argument("--uv", default=None, help="the uv program (default: <TOW>/runtime/bin/uv, else uv on PATH)")
+    parser.add_argument(
+        "--source", type=Path, default=None, help="without git: this source archive (.tar.gz) instead of a download"
+    )
+    parser.add_argument("--sums", type=Path, default=None, help="without git: the SHA256SUMS to check --source with")
     args = parser.parse_args(argv)
     return update(
         args.ref,
@@ -821,6 +1164,8 @@ def main(argv: list[str] | None = None) -> int:
         health_timeout=args.health_timeout,
         wait_minutes=args.wait_minutes,
         keep=args.keep,
+        source=args.source.resolve() if args.source else None,
+        sums=args.sums.resolve() if args.sums else None,
     )
 
 

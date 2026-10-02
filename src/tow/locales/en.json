@@ -208,7 +208,8 @@
     },
     "update": {
       "how": "TOW updates itself with the install's base Python (the update replaces this environment). Run:",
-      "or_windows": "or, on Windows:"
+      "or_windows": "or, on Windows:",
+      "archive": "This install has no git: the update downloads the release from GitHub (a release tag from v1.22.0, or latest)."
     },
     "keys": {
       "generated": "A new master key was created: {path}. Keep a copy of it away from this computer: without the key the saved passwords and tokens cannot be read.",
@@ -1454,7 +1455,17 @@
     "rollback_failed": "the previous version did not come back: start TOW by hand (tow run) and look at data/logs",
     "data_restored": "data and config were put back from the snapshot (the new version had changed them)",
     "ok": "TOW {version} is running and answers on 127.0.0.1:{port}",
-    "aborted": "update aborted: {error}"
+    "aborted": "update aborted: {error}",
+    "downloading": "downloading {url}",
+    "download_failed": "the download failed ({url}): {error}; nothing was updated",
+    "no_release": "{ref} is not a release of TOW (nothing at {url}); nothing was updated",
+    "not_verified": "the release has no checksum for the source archive: it was not verified",
+    "checksum": "the downloaded archive does not match the release's SHA256SUMS; nothing was updated",
+    "bad_archive": "the downloaded archive cannot be unpacked ({error}); nothing was updated",
+    "wrong_version": "the archive of {ref} holds TOW {version}; nothing was updated",
+    "archive_too_old": "{ref} is TOW {version}: an install without git goes no further back than v1.22.0 (older versions cannot update it again); nothing was updated",
+    "archive_ref": "an install without git updates to a release tag (for example v1.22.0) or latest, not to {ref}",
+    "switch_failed": "the code could not be switched ({error}): close programs and windows that use files in {app}"
   },
   "watchdog": {
     "cause": {
