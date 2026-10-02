@@ -3,7 +3,11 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
-## [1.22.1] — 2026-10-02
+## [1.22.2] — 2026-10-02
+
+1.22.1 was tagged but not published: its Linux and macOS release check failed in the test itself (after installing
+again it expected TOW to run without starting it, then called an undefined stop file). 1.22.2 has the same changes
+and the fixed check, which CI now runs on every commit.
 
 ### Fixed
 
