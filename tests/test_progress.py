@@ -4,8 +4,8 @@ from typing import ClassVar
 import pytest
 from helpers import raises_code
 
-from tow.episodes import summarize_completion
-from tow.progress import reconcile_topic
+from tow.episodes import item_identity, summarize_completion
+from tow.progress import _preferred_season, reconcile_topic
 
 
 def test_summary_deduplicates_episode_revisions():
@@ -307,6 +307,79 @@ def test_season_relative_files_complete_absolute_title_window(tmp_path: Path):
     assert result["summary"]["expected"] == 12
     assert result["summary"]["is_complete"] is True
     assert history["topics"]["cour"]["expected"]["numbering"] == "season-relative"
+
+
+def test_unknown_tracker_total_keeps_original_season_and_repairs_old_event(tmp_path: Path):
+    class GrowingSeasonClient(FakeClient):
+        def inspect_torrent(self, infohash):
+            return {
+                "hash": infohash,
+                "files": [
+                    {"name": f"Show 3/Show 3 - {episode:02d}.mkv", "size": 1, "progress": 1.0, "priority": 1}
+                    for episode in range(1, 15)
+                ],
+            }
+
+    folder = tmp_path / "Show 3"
+    folder.mkdir()
+    old_at = "2026-09-28T10:01:13+03:00"
+    items = {}
+    for episode in range(1, 15):
+        rel = f"Show 3/Show 3 - {episode:02d}.mkv"
+        (folder / f"Show 3 - {episode:02d}.mkv").write_bytes(b"x")
+        identity = item_identity(rel, None, 1)
+        items[identity] = {
+            "identity": identity,
+            "kind": "episode",
+            "label": f"Серия {episode}",
+            "episode_key": f"episode:e{episode:02d}",
+            "episode_keys": [f"episode:e{episode:02d}"],
+            "relative_path": rel,
+            "source_hash": "ABC",
+            "size": 1,
+            "status": "completed",
+            "completed_observed_at": old_at if episode == 14 else "2026-09-27T10:01:13+03:00",
+        }
+    topic = {
+        "id": "growing",
+        "title": "Show 3: Example [12 из 14]",
+        "tracker_title": "Show III: Example [14 из ?]",
+        "hash": "ABC",
+        "save_path": str(tmp_path),
+        "selected_episode_keys": [f"episode:e{episode:02d}" for episode in range(1, 15)],
+    }
+    history = {
+        "topics": {
+            "growing": {
+                "baseline_at": "2026-09-24T09:15:29+03:00",
+                "items": items,
+                "last_event": {"kind": "episode_completed", "label": "Эпизод 14", "at": old_at},
+            }
+        }
+    }
+
+    result = reconcile_topic(topic, GrowingSeasonClient(), history, "2026-10-02T23:04:50+03:00")
+
+    record = history["topics"]["growing"]
+    assert result["events"] == []
+    assert result["summary"]["completed"] == 14
+    assert result["summary"]["expected"] == 14
+    assert record["expected"]["keys"] == [f"episode:s03e{episode:02d}" for episode in range(1, 15)]
+    assert record["last_event"]["label"] == "S03E14"
+    assert record["last_event"]["at"] == old_at
+
+
+@pytest.mark.parametrize(
+    ("tracker_title", "season"),
+    [
+        ("Show III: Example [14 из ?]", 3),
+        ("Show S01-S02 [14 из ?]", None),
+        ("Show S04 [14 из ?]", 4),
+    ],
+)
+def test_tracker_season_takes_priority_but_ambiguity_does_not_fall_back(tracker_title, season):
+    topic = {"title": "Show 3: Example [12 из 14]", "tracker_title": tracker_title}
+    assert _preferred_season(topic, ["episode:e14"]) == season
 
 
 def test_season_number_in_files_resolves_title_window_without_title_season(tmp_path: Path):

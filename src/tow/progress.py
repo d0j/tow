@@ -200,6 +200,22 @@ def _repair_last_event_semantics(record: HistoryRecord) -> None:
     if event.get("kind") in {"client_added", "torrent_completed"}:
         _set_label(event, _latest_item_label(record, prefer_completed=event.get("kind") != "client_added"))
         return
+    if event.get("kind") == "episode_completed":
+        # Season hints can become available after an earlier completion was recorded. Reword
+        # the same event from the current items completed in that pass; do not emit a new one.
+        keys = {
+            str(key)
+            for item in (record.get("items") or {}).values()
+            if isinstance(item, dict)
+            and not item.get("superseded")
+            and item.get("kind") == "episode"
+            and item.get("status") == "completed"
+            and item.get("completed_observed_at") == event.get("at")
+            for key in item.get("episode_keys") or ([str(item["episode_key"])] if item.get("episode_key") else [])
+        }
+        if keys:
+            _set_label(event, _episode_keys_label_msg(keys))
+        return
     if event.get("kind") != "file_completed":
         return
     items = record.get("items") or {}
@@ -357,7 +373,16 @@ def _preferred_season(topic: Topic, selected_episode_keys: list[str]) -> int | N
     }
     if len(selected_seasons) == 1 and not any(re.fullmatch(r"episode:e\d+", key) for key in selected_episode_keys):
         return next(iter(selected_seasons))
-    return parse_season_hint(str(topic.get("tracker_title") or topic.get("title") or ""))
+    tracker_title = str(topic.get("tracker_title") or "")
+    tracker_season = parse_season_hint(tracker_title)
+    if tracker_season is not None:
+        return tracker_season
+    # A fresh tracker heading may change "14 из 14" to "14 из ?", losing the corroboration
+    # that made "Show 3: ..." a safe season hint. Keep the original explicit hint unless the
+    # tracker heading itself names one or more seasons ambiguously.
+    if re.search(r"(?i)(?<!\w)s\d{1,2}(?!\d)|\b(?:season|сезон)\w*\b|\[\s*\d{1,2}[xх]\d", tracker_title):
+        return None
+    return parse_season_hint(str(topic.get("title") or ""))
 
 
 def _client_files(
@@ -426,6 +451,12 @@ def _expected_from_observed(
         (partial_selection and not selected_episode_keys)
         or expected is None
         or (not partial_selection and int(expected.get("total") or 0) < len(observed_episode_keys))
+        or (
+            not partial_selection
+            and expected.get("source") == "files"
+            and len(observed_episode_keys) >= int(expected.get("total") or 0)
+            and set(expected.get("keys") or []) != set(observed_episode_keys)
+        )
     ):
         return {
             "kind": "episodes",

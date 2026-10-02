@@ -3,6 +3,14 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.9] — 2026-10-02
+
+### Fixed
+
+- Growing torrents keep an explicit season from the original topic title when a newer tracker title has an
+  unknown episode total. Current episode keys, the expected file count, and the existing last-event label are
+  reconciled without inventing another completion event; ambiguous multi-season titles are not guessed.
+
 ## [1.22.8] — 2026-10-02
 
 ### Fixed
