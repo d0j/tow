@@ -27,7 +27,7 @@ jobs:
     steps:
       # Pinned by major tag; Dependabot (.github/dependabot.yml) proposes updates. Pin to full
       # commit SHAs once they are verified against the actions' release pages.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@v6
