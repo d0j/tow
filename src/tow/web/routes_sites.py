@@ -50,6 +50,24 @@ def sites(request: Request) -> Response:
         and row.get("host") in (trackers[row["tracker"]].get("fetch_hosts") or [])
     ]
     frozen = {k: bool(v.get("frozen")) for k, v in (state.get("mirrors") or {}).items() if isinstance(v, dict)}
+    active = {
+        k: (v or {}).get("active")
+        if (v or {}).get("active") in (trackers.get(k, {}).get("fetch_hosts") or [])
+        else None
+        for k, v in (state.get("mirrors") or {}).items()
+        if isinstance(v, dict)
+    }
+    open_hosts: dict[str, str] = {}
+    for name, spec in trackers.items():
+        hosts = spec.get("fetch_hosts") or []
+        preferred = active.get(name)
+        status = {row["host"]: bool(row.get("ok")) for row in probes if row["tracker"] == name}
+        if preferred and status.get(preferred) is not False:
+            open_hosts[name] = preferred
+        else:
+            open_hosts[name] = next(
+                (host for host in hosts if status.get(host) is True), preferred or (hosts[0] if hosts else "")
+            )
     return TEMPLATES.TemplateResponse(
         request,
         "sites.html",
@@ -58,13 +76,8 @@ def sites(request: Request) -> Response:
             "trackers": trackers,
             "frozen": frozen,
             "probes": probes,
-            "active": {
-                k: (v or {}).get("active")
-                if (v or {}).get("active") in (trackers.get(k, {}).get("fetch_hosts") or [])
-                else None
-                for k, v in (state.get("mirrors") or {}).items()
-                if isinstance(v, dict)
-            },
+            "active": active,
+            "open_hosts": open_hosts,
             "logins": {
                 k: {
                     "user": (v or {}).get("username") or "",

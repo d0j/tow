@@ -55,6 +55,30 @@ def test_safe_patterns_pass(pattern):
     assert not regex_redos_risk(pattern)
 
 
+def test_a_bounded_ambiguous_pattern_cannot_stall_topic_matching(monkeypatch):
+    from tow.trackers import generic
+
+    pattern = r"^(a|aa){30}x$"
+    assert not regex_redos_risk(pattern)  # the heuristic alone cannot prove a pattern is safe
+    site = generic.GenericHttpTracker("custom", {"url_regex": pattern})
+    monkeypatch.setattr(generic, "MAX_URL_REGEX_SECONDS", 0.01)
+
+    with raises_code("tracker.regex_timeout", ValueError):
+        site.parse_id("a" * 60 + "y")
+
+
+def test_a_bounded_ambiguous_pattern_cannot_stall_page_search(monkeypatch):
+    from tow.trackers import generic
+
+    site = generic.GenericHttpTracker(
+        "custom", {"url_regex": r"^topic/(\d+)$", "download_href_regex": r"^(a|aa){30}x$"}
+    )
+    monkeypatch.setattr(generic, "MAX_PAGE_REGEX_SECONDS", 0.01)
+
+    with raises_code("tracker.regex_timeout", ValueError):
+        site._page_download_id("a" * 60 + "y")
+
+
 def _example_site() -> dict:
     """The commented site of your own in config.example.yaml, as the loader would read it."""
     text = (Path(__file__).parents[1] / "config.example.yaml").read_text(encoding="utf-8")

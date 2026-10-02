@@ -9,7 +9,7 @@ import threading
 import time
 from collections.abc import Mapping
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from fastapi import Request
 from fastapi.responses import RedirectResponse
@@ -114,6 +114,14 @@ def flash_redirect(url: str, message: Any, kind: str = "ok", /, **params: Any) -
     """A 303 to ``url`` that shows ``message`` once, as ``kind``: ``ok`` (done; it fades),
     ``warn`` (done in part, or wait and retry; it stays) or ``err`` (nothing done; an alert that
     stays). The kind comes from the route, never from the words."""
+    decoded = unquote(url)
+    if (
+        not decoded.startswith("/")
+        or decoded.startswith("//")
+        or "\\" in decoded
+        or any(ord(ch) < 32 for ch in decoded)
+    ):
+        url = "/"
     return RedirectResponse(flash_location(url, message, kind, **params), status_code=303)
 
 

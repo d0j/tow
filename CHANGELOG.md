@@ -3,6 +3,15 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.5] — 2026-10-02
+
+### Fixed
+
+- Custom tracker URL and download-link patterns now have match time limits, including bounded repetitions that the
+  input validator cannot reliably classify. Oversized notification titles are limited before pattern matching.
+- A site's Open button uses a responding mirror when the active mirror was explicitly probed as down. Flash
+  redirects refuse external destinations.
+
 ## [1.22.4] — 2026-10-02
 
 ### Fixed

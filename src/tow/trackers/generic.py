@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
+import regex as timed_regex
 
 from tow import http as thttp
 from tow.config import as_bool, load_config
@@ -24,6 +25,8 @@ _LOG = logging.getLogger("tow.trackers")
 MAX_TRACKER_REGEX_CHARS = 512
 MAX_TRACKER_URL_CHARS = 4096
 MAX_DOWNLOAD_PAGE_CHARS = thttp.MAX_HTML_RESPONSE_BYTES
+MAX_URL_REGEX_SECONDS = 0.5
+MAX_PAGE_REGEX_SECONDS = 2.0
 _COOKIE_NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
 _SECRET_METADATA_KEYS = {"username", "password", "cookies_by_origin", "browser_user_agent"}
 
@@ -116,7 +119,7 @@ class TrackerSettingError(TowError, ValueError):
     """A site's settings (a pattern, a path) or a link cannot be used."""
 
 
-def validate_tracker_regex(value: str, *, label: str = "url", flags: int = 0) -> re.Pattern[str]:
+def validate_tracker_regex(value: str, *, label: str = "url", flags: int = 0) -> timed_regex.Pattern[str]:
     """``label``: which pattern it is, ``url`` (the topic link) or ``download`` (the download link)."""
     what = Msg("tracker.regex_label_download" if label == "download" else "tracker.regex_label_url")
     if not isinstance(value, str) or not value:
@@ -126,8 +129,8 @@ def validate_tracker_regex(value: str, *, label: str = "url", flags: int = 0) ->
     if regex_redos_risk(value):
         raise TrackerSettingError("tracker.regex_redos", what=what)
     try:
-        return re.compile(value, flags)
-    except re.error as exc:
+        return timed_regex.compile(value, flags)
+    except timed_regex.error as exc:
         raise TrackerSettingError("tracker.regex_invalid", what=what) from exc
 
 
@@ -148,7 +151,10 @@ class GenericHttpTracker:
         candidate = url.strip()
         if len(candidate) > MAX_TRACKER_URL_CHARS:
             return None
-        m = self._rx.match(candidate)
+        try:
+            m = self._rx.match(candidate, timeout=MAX_URL_REGEX_SECONDS)
+        except TimeoutError as exc:
+            raise TrackerSettingError("tracker.regex_timeout", what=Msg("tracker.regex_label_url")) from exc
         return m.group(1) if m else None
 
     def _cookie_jar(self, secrets: dict[str, Any]) -> dict[str, dict[str, str]]:
@@ -249,7 +255,10 @@ class GenericHttpTracker:
     def _page_download_id(self, html: str) -> str | None:
         rx = self.spec.get("download_href_regex") or r"(?:download|dl)\.php\?(?:id|t)=(\d+)"
         pattern = validate_tracker_regex(rx, label="download", flags=re.IGNORECASE)
-        m = pattern.search(html[:MAX_DOWNLOAD_PAGE_CHARS])
+        try:
+            m = pattern.search(html[:MAX_DOWNLOAD_PAGE_CHARS], timeout=MAX_PAGE_REGEX_SECONDS)
+        except TimeoutError as exc:
+            raise TrackerSettingError("tracker.regex_timeout", what=Msg("tracker.regex_label_download")) from exc
         return m.group(1) if m else None
 
     def _page_magnet(self, page: str) -> tuple[str, str] | None:

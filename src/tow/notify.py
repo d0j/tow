@@ -169,7 +169,7 @@ def ping(secrets: dict[str, Any]) -> bool:
 
 
 def short_series_title(title: str, lang: str | None = None) -> str:
-    value = " ".join((title or "").split()).strip()
+    value = " ".join((title or "").split()).strip()[:512]
     value = re.split(r"\s*\[[^\]]*\]", value, maxsplit=1)[0].strip()
     value = re.split(r"\s+[|/]\s+", value, maxsplit=1)[0].strip()
     value = re.sub(r"\s+\(\d{4}(?:-\d{4})?\).*$", "", value).strip()

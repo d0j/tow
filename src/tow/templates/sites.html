@@ -95,7 +95,7 @@
           {%- endfor %}
         </span>
         {% if spec.login_path %}{% if logins.get(name) and logins[name].set %}<span class="pill ok">{{ t('sites.login_set') }}</span>{% else %}<span class="pill mut">{{ t('sites.login_not_set') }}</span>{% endif %}{% else %}<span class="pill mut">{{ t('sites.login_not_needed') }}</span>{% endif %}
-        {% set href = active.get(name) or (spec.fetch_hosts[0] if spec.fetch_hosts else '') %}
+        {% set href = open_hosts.get(name) or '' %}
         <span class="row-ops-slot" aria-hidden="true"></span>
       </summary>
       <div class="edit-panel">
@@ -141,7 +141,7 @@
       </div>
     </details>
     <span class="row-ops">
-          <a class="row-ico {{ 'ok' if any_ok else ('warn' if mine else 'mut') }}" href="{{ href }}" target="_blank" rel="noopener" title="{{ t('sites.active_mirror') }}" aria-label="{{ t('sites.open_named', name=spec.title or name) }}">
+          <a class="row-ico {{ 'ok' if any_ok else ('warn' if mine else 'mut') }}" href="{{ href }}" target="_blank" rel="noopener" title="{{ t('sites.open_named', name=spec.title or name) }}" aria-label="{{ t('sites.open_named', name=spec.title or name) }}">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="8.2"/><path d="M3.5 12h17M12 3.8c2.4 2.6 2.4 13.8 0 16.4M12 3.8c-2.4 2.6-2.4 13.8 0 16.4"/></svg>
           </a>
           <form method="post" action="/sites/{{ name }}/freeze">

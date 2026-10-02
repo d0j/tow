@@ -36,14 +36,14 @@ def test_hidden_list_tools_are_really_hidden():
 # --- Status-colour contract: transport trouble is amber, "not checked yet" is grey ----------------
 
 
-def _seed_rutor(*, probes=None, health=None, topics=None):
+def _seed_rutor(*, probes=None, health=None, topics=None, active=None):
     from tow.store import save_state
 
     state = {
         "topics": topics
         if topics is not None
         else [{"id": "t1", "title": "Show", "url": "http://rutor.info/torrent/1/x", "save_path": "Z:\\a"}],
-        "mirrors": {},
+        "mirrors": {"rutor": {"active": active}} if active else {},
     }
     if probes is not None:
         state["doctor"] = {"probes": probes}
@@ -88,6 +88,19 @@ def test_sites_row_name_globe_and_mirror_dots_are_amber_for_a_refused_mirror(cli
     assert '<span class="dot warn" aria-hidden="true"></span>' in page
     assert 'class="dot bad"' not in page
     assert 'class="trk bad"' not in page
+
+
+def test_site_open_link_uses_a_responding_mirror_when_the_active_one_failed(client):
+    _seed_rutor(
+        active="http://d.rutor.info",
+        probes=[
+            {"tracker": "rutor", "host": "http://d.rutor.info", "ok": False},
+            {"tracker": "rutor", "host": "http://rutor.info", "ok": True},
+        ],
+    )
+    page = client.get("/sites").text
+    assert 'href="http://rutor.info"' in page
+    assert 'href="http://d.rutor.info"' not in page
 
 
 def test_a_site_probe_without_any_answer_is_a_warning(client, monkeypatch):
@@ -416,6 +429,22 @@ def test_a_message_is_shown_as_a_sentence(client):
 
     page = client.get(flash_location("/", "web.common.saved", "ok")).text
     assert "<span>Сохранено" in page
+
+
+@pytest.mark.parametrize(
+    "target", ["https://evil.example/", "//evil.example/", "/%2fevil.example/", "/\\evil.example/"]
+)
+def test_flash_redirect_refuses_an_external_target(target):
+    from tow.web.views import flash_redirect
+
+    location = flash_redirect(target, "", "ok").headers["location"]
+    assert location == "/"
+
+
+def test_flash_redirect_preserves_a_local_settings_target():
+    from tow.web.views import flash_redirect
+
+    assert flash_redirect("/settings?open=transfer", "", "ok").headers["location"] == "/settings?open=transfer"
 
 
 def test_a_log_line_starts_with_a_capital():

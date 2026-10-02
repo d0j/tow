@@ -885,3 +885,10 @@ def test_a_lease_written_by_an_older_tow_still_counts(http):
     lease = {"pid": -1, "until": 9_999_999_999}
     assert outbox._lease_held_by_other(lease, outbox._new_token(), 0.0) is True
     assert outbox._lease_held_by_other({**lease, "until": 1}, outbox._new_token(), 2.0) is False
+
+
+def test_notification_title_limits_untrusted_text_before_regex_matching():
+    from tow.notify import short_series_title
+
+    title = "Series" + " " * 100_000 + "[" + "x" * 100_000
+    assert short_series_title(title) == "Series [" + "x" * 92
