@@ -34,7 +34,8 @@ revision to your torrent client.
 - **History and undo.** Every file and revision is recorded; the last change can be undone.
 - **Backups.** Signed night copies, restore points, encrypted `.towx` transfer files.
 - **One folder.** Code, settings, data, key, backups and its own Python. Move it and it keeps working.
-- **Interface** in English and Russian; a new language is one JSON file. Import from Monitorrent.
+- **Interface** in English and Russian; a new language is one JSON file.
+- **Moving from Monitorrent?** `tow import-monitorrent` brings over its topics and site logins.
 
 ## Supported
 
@@ -97,7 +98,7 @@ Linux and macOS. `tow --help` lists all commands.
 | `tow autostart on\|off\|status` | start with the system |
 | `tow check --apply` | check every topic now |
 | `tow doctor` | ask the torrent client and the sites now |
-| `tow import-monitorrent --db FILE` | preview an import from Monitorrent; add `--apply` to import |
+| `tow import-monitorrent --db FILE` | for Monitorrent users: show what its database would bring over; `--apply` imports it |
 
 Exit codes: `0` done · `1` wrong command or option · `2` done in part · `3` cannot run · `130` interrupted.
 
