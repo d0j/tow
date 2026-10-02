@@ -70,7 +70,7 @@ flowchart TD
 
 ```text
 <install>/
-  app/                     the code: a git clone at a release tag
+  app/                     the code: a git clone at a release tag, or a release archive
   config.yaml              settings and sites (no secrets)
   data/
     state.json             topics, their status, undo record, pending notifications

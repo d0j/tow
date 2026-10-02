@@ -48,64 +48,30 @@
 
 ## Установка
 
-Нужны [git](https://git-scm.com/downloads) и [uv](https://docs.astral.sh/uv/) версии 0.12 или новее. `setup` ставит
-Python 3.14 и зависимости внутрь папки TOW; больше ничего не устанавливается.
-
-<details open>
-<summary><b>Windows</b> — PowerShell</summary>
+**Windows.** [Скачайте **TOW-windows-x64.zip**](https://github.com/d0j/tow/releases/latest/download/TOW-windows-x64.zip),
+распакуйте в любое место, дважды щёлкните **Start TOW.cmd**. Всё нужное лежит в папке; для первого запуска интернет не
+нужен. Или в PowerShell:
 
 ```powershell
-winget install --id Git.Git -e
-winget install --id astral-sh.uv -e
-# откройте новое окно терминала, затем:
-git clone https://github.com/d0j/tow "$HOME\TOW\app"
-cd "$HOME\TOW\app"
-Copy-Item config.example.yaml ..\config.yaml
-.\scripts\tow.cmd setup
-.\scripts\tow.cmd run
+irm https://github.com/d0j/tow/releases/latest/download/install.ps1 | iex
 ```
 
-Запуск вместе с Windows (одна задача, без окна консоли): `.\scripts\tow.cmd autostart on`.
-
-</details>
-
-<details>
-<summary><b>Linux</b></summary>
+**macOS.** В Терминале:
 
 ```sh
-sudo apt install git          # или: dnf install git / pacman -S git
-curl -LsSf https://astral.sh/uv/install.sh | sh
-git clone https://github.com/d0j/tow ~/TOW/app
-cd ~/TOW/app
-cp config.example.yaml ../config.yaml
-./scripts/tow setup
-./scripts/tow run
+curl -LsSf https://github.com/d0j/tow/releases/latest/download/install.sh | sh
 ```
 
-Запуск при входе (пользовательский юнит systemd): `./scripts/tow autostart on`. Запуск при загрузке, без входа:
-`./scripts/tow autostart on --without-login`, затем `sudo loginctl enable-linger $USER`.
+Затем дважды щёлкните **Start TOW.command** в `~/TOW` или выполните `~/TOW/app/scripts/tow run`.
 
-</details>
+**Linux.** Та же команда; затем `~/TOW/start-tow`. Добавьте `-s -- --autostart` после `sh`, чтобы TOW запускался
+вместе с компьютером, `--desktop` — чтобы он появился в меню приложений.
 
-<details>
-<summary><b>macOS</b></summary>
+**Вручную (git).** Для разработчиков и серверов: [docs/ru/install.md](docs/ru/install.md#ручная-установка-через-git).
 
-```sh
-brew install git uv           # или: xcode-select --install и установщик uv выше
-git clone https://github.com/d0j/tow ~/TOW/app
-cd ~/TOW/app
-cp config.example.yaml ../config.yaml
-./scripts/tow setup
-./scripts/tow run
-```
-
-Запуск при входе (LaunchAgent): `./scripts/tow autostart on`. Не кладите папку TOW и папки загрузок в
-`~/Documents`, `~/Desktop` и `~/Downloads`: macOS не даёт фоновым программам доступ к ним. На Mac с Intel для одной
-зависимости нужен Rust.
-
-</details>
-
-Откройте **<http://127.0.0.1:8787>**.
+По шагам и с тем, что вы увидите на экране: [docs/ru/install.md](docs/ru/install.md). Все файлы:
+[последний выпуск](https://github.com/d0j/tow/releases/latest). Страница открывается по адресу
+**<http://127.0.0.1:8787>**.
 
 > [!IMPORTANT]
 > При первом запуске появляется `TOW/keys/master.key`. Им зашифрованы все сохранённые пароли и токены, и ни в одну
@@ -128,6 +94,7 @@ cp config.example.yaml ../config.yaml
 | Команда | Что делает |
 |---|---|
 | `tow run` | веб-интерфейс, расписание, ночная копия, сторож — в одном процессе |
+| `tow start` | `tow run` в фоне, затем страница в браузере (это и делают файлы запуска) |
 | `tow status` | одной строкой: работает ли, клиент, сайты, раздачи, прошлая и следующая проверка (`--json`) |
 | `tow stop` · `tow restart` | остановить TOW · перезапустить его веб-сервер |
 | `tow autostart on\|off\|status` | запуск вместе с системой |
@@ -153,15 +120,17 @@ TOW слушает `127.0.0.1:8787`. На самом компьютере пар
 
 ## Обновление и копии
 
-| | Windows | Linux · macOS |
-|---|---|---|
-| Обновить до выпуска | `.\scripts\deploy.ps1 -Ref v1.21.1` | `tow update --ref v1.21.1` покажет команду |
-| Вернуться (не раньше v1.18.0) | `.\scripts\deploy.ps1 -Ref v1.21.0` | то же с прежним тегом |
-| Восстановить ночную копию | `tow restore-snapshot --path <копия> --apply` | так же |
-| После переноса папки | `tow stop`, `tow setup`, `tow autostart on` | так же |
+| | Архив для Windows или `install.ps1` | `install.sh` | клон git |
+|---|---|---|---|
+| Обновить до последнего выпуска | дважды щёлкните `Update TOW.cmd` | `~/TOW/update-tow` · macOS: `Update TOW.command` | `.\scripts\deploy.ps1 -Ref v1.22.0` · `tow update --ref v1.22.0` покажет команду |
+| Вернуться | `Update TOW.cmd v1.22.0` (не раньше v1.22.0) | `update-tow v1.22.0` (не раньше v1.22.0) | то же с прежним тегом (не раньше v1.18.0) |
+| После переноса папки | `Start TOW.cmd` всё подготовит заново; затем `tow autostart on`, если он нужен | файл запуска сделает то же; затем `tow autostart on` | `tow stop`, `tow setup`, `tow autostart on` |
+| Восстановить ночную копию | `tow restore-snapshot --path <копия> --apply` | так же | так же |
+| Удалить | [docs/ru/install.md](docs/ru/install.md#как-удалить-tow) | так же | так же |
 
 Обновление останавливает TOW, сохраняет снимок `data/` и `config.yaml`, переключает код, запускает TOW и проверяет
-версию. Если что-то не так, откат выполняется сам.
+версию. Если что-то не так, откат выполняется сам. Без git оно скачивает выпуск с GitHub и сверяет его с
+`SHA256SUMS` выпуска.
 
 | Копия | Где | Примечание |
 |---|---|---|
@@ -174,6 +143,7 @@ TOW слушает `127.0.0.1:8787`. На самом компьютере пар
 
 | | |
 |---|---|
+| [Установка](docs/ru/install.md) | по шагам для Windows, macOS и Linux; запуск, остановка, обновление, удаление; проблемы |
 | [Руководство](docs/ru/guide.md) | экраны, состояния, уведомления, копии, решение проблем |
 | [Установка и работа](docs/PORTABLE.md) (англ.) | устройство папки, `tow run`, автозапуск, обновления |
 | [Архитектура](docs/architecture.md) (англ.) | процессы, модули, данные, восстановление, безопасность |

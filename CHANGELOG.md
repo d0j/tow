@@ -3,6 +3,29 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [Unreleased]
+
+### Added
+
+- Windows bundle `TOW-windows-x64.zip`: extract it anywhere and double-click **Start TOW.cmd**. Python, uv and every
+  package are inside, so the first start needs no internet; `Stop TOW.cmd` and `Update TOW.cmd` sit next to it.
+- One-line installers: `irm …/releases/latest/download/install.ps1 | iex` on Windows and
+  `curl -LsSf …/releases/latest/download/install.sh | sh` on Linux and macOS. Downloads are checked against the
+  release's `SHA256SUMS`; an existing install is never overwritten; `--autostart`, `--port`, `--uninstall`, and on
+  Linux `--desktop` for a menu entry. On macOS the installer creates `Start TOW.command`, on Linux `start-tow`.
+- `tow start`: starts TOW in the background unless it runs, waits until it answers and opens its page.
+- Updates without git: installs from the bundle or the installers download the release from GitHub (`--ref latest`
+  or a tag from v1.22.0), check it against `SHA256SUMS`, keep the previous code in `app.prev` and roll back by
+  themselves.
+- A release workflow builds and tests the bundle and both installers on Windows, Linux and macOS before it uploads
+  them to the release.
+- Step-by-step install guide for beginners: [docs/install.md](docs/install.md).
+
+### Changed
+
+- README: install from the release first; the git install moved to the install guide.
+- On Linux without a desktop TOW never opens a browser in the terminal; it prints the address.
+
 ## [1.21.0] — 2026-10-02
 
 First public release (MIT). Versions 1.0–1.20 were developed and used privately; this repository starts from a

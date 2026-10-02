@@ -8,7 +8,9 @@ is described in [architecture.md](architecture.md#code-api-paths-and-platform).
 
 ```
 <TOW>/                      the install root (movable, any drive, any OS)
-  app/                      the code: a git clone at a release tag (or an unpacked release)
+  app/                      the code: a git clone at a release tag, or a release's source archive
+  app.prev/                 an archive install's previous code, after an update (one is kept)
+  Start TOW.cmd, ...        the start files of the bundle and the installers (§1a)
   config.yaml               live configuration
   data/                     state, history, secrets.enc, tmp/, browser profiles
   data/logs/                run.log, serve.log, serve-stderr.log, <job>-last.log, launchd.log
@@ -18,6 +20,7 @@ is described in [architecture.md](architecture.md#code-api-paths-and-platform).
   backup/                   night copies (default backup/night), pre-update snapshots, key copies
   runtime/python/           the uv-managed Python (UV_PYTHON_INSTALL_DIR)
   runtime/cache/            uv cache (UV_CACHE_DIR)
+  runtime/bin/uv(.exe)      uv itself, when the bundle or an installer brought it
 ```
 Development checkout: the repo root plays `<TOW>` (data/, keys/, config.yaml gitignored).
 
@@ -73,8 +76,12 @@ runtime install `UV_PYTHON_INSTALL_DIR=<root>/runtime/python`,
 preferred over uv on PATH. A development checkout keeps the developer's uv setup unchanged.
 `.venv` holds absolute paths: after moving the folder `tow setup` rebuilds it.
 
-Prerequisites (1.21):
-- every system: `git` (the install is a clone; `tow update`), `uv` ≥ 0.12 (`[tool.uv]
+Prerequisites (1.22):
+- the Windows bundle: nothing (uv, Python and every wheel are inside; the first start is
+  offline). `install.ps1` / `install.sh`: the network once (GitHub; on Linux and macOS also
+  Python's and the wheels' downloads by uv), `curl` or `wget`, `tar` and a SHA-256 tool on
+  Linux and macOS.
+- a git install: `git` (`tow update` switches tags), `uv` ≥ 0.12 (`[tool.uv]
   required-version`; on PATH or `<TOW>/runtime/bin/uv`), the network once for `tow setup`
   (Python 3.14 and the locked wheels).
 - browser sign-in: Edge, Google Chrome or Chromium - on Linux **not the snap** (a snap Chromium
@@ -85,6 +92,44 @@ Prerequisites (1.21):
 - macOS: Apple Silicon. **Intel Macs** have no `cryptography` wheel in `uv.lock` (50.0.2 ships
   macOS arm64 only), so `uv sync` builds it from source: that needs a Rust toolchain (rustup) and
   the Xcode command line tools; without them Intel Macs are unsupported.
+
+## 1a. Three kinds of install (1.22)
+
+The owner's guide is [install.md](install.md); the README links the stable release assets
+(`releases/latest/download/<name>`), built and tested by `.github/workflows/release.yml` (§7).
+
+| kind | how it comes | `app/` | start files in `<TOW>` | update |
+|---|---|---|---|---|
+| Windows bundle | `TOW-windows-x64.zip` (`scripts/build-bundle.py`) | source archive, no tests | `Start TOW.cmd`, `Stop TOW.cmd`, `Update TOW.cmd`, `README.txt` | `Update TOW.cmd [tag]` → `update.py --ref latest` |
+| `install.ps1` | downloads the bundle, checks `SHA256SUMS`, unpacks, runs `Start TOW.cmd` | the same | the same | the same |
+| `install.sh` | uv for the platform (its release's `.sha256`) into `runtime/bin`, the tag's source archive (`SHA256SUMS`) into `app/`, `tow setup` | source archive | macOS `Start/Stop/Update TOW.command`, Linux `start-tow`, `stop-tow`, `update-tow` | `update-tow [tag]` → `update.py --ref latest` |
+| git | `git clone` (install.md, "Manual install with git") | a clone at a tag | none (`scripts/tow`, `tow.cmd`) | `deploy.ps1 -Ref <tag>` / `update.py --ref <tag>` |
+
+- **The bundle** (`TOW\`): the code, `config.yaml` from the template, the pinned `uv.exe`,
+  the CPython of `.python-version` in `runtime\python` and uv's cache with every runtime wheel
+  of `uv.lock` in `runtime\cache` (proved at build time by an offline `uv sync` into a second
+  environment; entries keyed by the build machine's paths and uv's absolute minor-version link
+  are dropped). No `.venv`: it holds absolute paths. ~50 MiB zipped, ~130 MiB unpacked,
+  ~170 MiB after the first start.
+- **Start files** only call `app/scripts`, so they follow the code through updates:
+  `Start TOW.cmd` → `scripts/tow-start.cmd`, `Start TOW.command` / `start-tow` →
+  `scripts/tow-start`. These check that `app/.venv` runs and is this folder's own (`tow` and
+  the base Python both inside `<TOW>`); otherwise they run `tow setup` - on Windows first with
+  `UV_OFFLINE=1` (the bundle's cache), then online, after removing the "Mark of the Web" from
+  the folder's files (`Unblock-File`; Windows would ask about each start file again). Then
+  `tow start` (§6). The first start waits for a key so the master-key note is read.
+- **Installers** refuse a folder that holds an install (they name the update file) or anything
+  else; a failed install leaves the folder as it found it (absent or empty). `--port` /
+  `-Port` (or `TOW_INSTALL_PORT`) sets `port:`. `--uninstall` / `-Uninstall` asks (`--yes`),
+  turns autostart off, stops TOW, removes the Linux menu entry that names this folder and
+  keeps `data/`, `keys/`, `config.yaml`, `backup/` unless `--purge`. `install.sh` reads
+  answers from `/dev/tty` (its stdin is the script under `curl | sh`); `install.ps1` runs in
+  Windows PowerShell 5.1 and 7, keeps its settings inside a function and never `exit`s (under
+  `irm | iex` that would close the owner's window); it is ASCII (irm decodes a release asset in
+  any code page). `TOW_INSTALL_SOURCE` / `TOW_INSTALL_SUMS` install from local files (tests).
+- `install.sh` takes uv `-unknown-linux-gnu` on glibc, `-musl` elsewhere, `-apple-darwin` on
+  macOS; `--desktop` (Linux) writes `$XDG_DATA_HOME/applications/tow.desktop` (the only write
+  outside the folder besides autostart, both on request).
 
 ## 2. One process: `tow run` (supervisor)
 
@@ -262,6 +307,30 @@ before the update does the same).
 8. On success: prune old update snapshots — the newest 5 of `update-*-before-*` and deploy.ps1's
    `data-*-before-*`; night copies, key copies and anything `pre-runtime` are never touched.
 
+**An install without git** (the bundle and both installers; `app/.git` absent, 1.22): the
+same steps, with the code from the release instead of git.
+
+- `--ref` is a release tag or `latest` (resolved through GitHub's `/releases/latest`
+  redirect); the target must be **v1.22.0 or newer** (an older `update.py` needs git, so it
+  could not update this install again). `tow update --ref` says so for such an install.
+- Before TOW stops: the release's `SHA256SUMS` (optional: without it the archive is installed
+  "not verified", and the run says so), then GitHub's archive of the tag
+  (`archive/refs/tags/<tag>.tar.gz`); if its SHA-256 differs from the `tow-source.tar.gz` line,
+  the copy uploaded with the release is taken and checked instead; neither matching is a
+  refusal. Downloads go through the system's proxy settings, with the system's certificates plus
+  certifi's from `app/.venv`; at most 200 MiB. The archive is unpacked into
+  `<TOW>/.update-download` (one top folder; absolute paths, `..` and links refused) and its
+  `pyproject.toml` must hold the tag's version; it becomes `<TOW>/app.new`. Any refusal here
+  stops nothing and leaves nothing behind.
+- Step 4 is a move, not a checkout: the old `app.prev` is removed, every entry of `app/`
+  (its `.venv` too) is moved into `app.prev/`, every entry of `app.new/` into `app/` - entry
+  by entry, so a terminal whose current folder is `app` does not block it - then `uv sync`
+  builds a new `app/.venv` (online; the cache has the old wheels). A rollback moves back exactly
+  the entries that were moved (the failed code goes to `app.failed/` and is removed), so the old
+  `.venv` is in its place again and its absolute paths are right. One `app.prev` is kept after
+  a success.
+- `--source FILE` (and `--sums FILE`) take a local archive instead of a download.
+
 `<TOW>/update-state.json` records the run (`in_progress` → `ok` / `rolled_back` / `failed`, ref,
 commits and versions, snapshot, rollback steps, `data_restored`, `service_running`). The watchdog
 holds back for 30 minutes while it says `in_progress`. Texts come from the catalogs (section
@@ -273,6 +342,7 @@ holds back for 30 minutes while it says `in_progress`. Texts come from the catal
 | what | Windows | Linux / macOS |
 |---|---|---|
 | update | `<TOW>\app\scripts\deploy.ps1 -Ref v1.21.0` | `<python> <TOW>/app/scripts/update.py --ref v1.21.0` |
+| update an install without git | `<TOW>\Update TOW.cmd` (`latest`, or a tag) | `<TOW>/update-tow` · `Update TOW.command` |
 | go back to an earlier version (≥ v1.18.0) | `deploy.ps1 -Ref v1.20.0` | `<python> <TOW>/app/scripts/update.py --ref v1.20.0` |
 | restore a night copy | `tow.cmd restore-snapshot --path <copy>` (check), then `--apply` | `./tow restore-snapshot --path <copy>`, then `--apply` |
 | put back an update snapshot by hand | `tow.cmd stop`; copy `<snapshot>\data\*` over `<TOW>\data\` and `<snapshot>\config.yaml` over `<TOW>\config.yaml` | `./tow stop`; `cp -a <snapshot>/data/. <TOW>/data/` and `cp <snapshot>/config.yaml <TOW>/` |
@@ -379,6 +449,16 @@ launchers' environment and Python 3.11 syntax.
   `uv sync --frozen --no-dev`. In a checkout: `uv sync --frozen`.
 - `scripts/tow` (POSIX sh, mode 100755): the same for Linux and macOS (`./tow setup` without
   `--no-registry`), follows a symlink to itself (e.g. `~/bin/tow`).
+- `tow start` (1.22, `tow.supervisor.starter`): when this install's `tow run` runs, only the
+  page opens; otherwise `python -m tow run` (`pythonw.exe` on Windows) starts detached and
+  hidden (`platform.spawn_detached`: it outlives the window or terminal; its early output goes
+  to `data/logs/run-stderr.log`), and the page opens once `/healthz` answers (`--wait`, 120 s).
+  A `tow run` that ends before it answers (another program on the port, a broken config) is
+  reported at once with the log - unless another `tow run` took over meanwhile.
+  `--no-browser` or `TOW_NO_BROWSER=1` opens no browser; on Linux without `DISPLAY` /
+  `WAYLAND_DISPLAY` none is opened either (webbrowser would run a text browser in the
+  terminal) and the address is printed. `scripts/tow-start.cmd` and `scripts/tow-start` prepare
+  the environment first (§1a).
 - Verified by hand: cmd.exe on scratch layouts (a path with a space; legacy and adopted keys;
   development checkout; uv missing) and `sh` from Git Bash for `scripts/tow`.
 - 1.21: the per-task launchers (`tow-serve.cmd`, `-check`, `-progress`, `-backup`, `-watchdog`),
@@ -408,6 +488,23 @@ Built so far (this workstream):
 - mypy is clean with `--platform linux` and `--platform darwin` too.
 - CI (`.github/workflows/ci.yml`): the full gate runs on Windows, Ubuntu and macOS for every push
   and pull request, and all three must pass (green since 1.21.0).
+- Releases (`.github/workflows/release.yml`, 1.22): a `v*` tag (or a dispatch with a tag) takes
+  GitHub's source archive of the tag (its version must be the tag's); Windows builds the bundle
+  from it and runs `scripts/bundle-smoke.ps1 -Offline` (unpacked into a path with a space and
+  Cyrillic letters, `Start TOW.cmd` with every proxy pointing at a closed port, `/healthz`,
+  `tow status`, a second start, `Stop TOW.cmd`, uv's and Python's places outside the folder
+  unchanged) and `install.ps1` on Windows PowerShell 5.1 with uninstall and purge; Ubuntu and
+  macOS run `scripts/install-smoke.sh` (install.sh from the archive, the start and stop files,
+  uninstall, purge, nothing outside). Only then the `publish` job (the only one with
+  `contents: write`) creates the release if it is missing (notes from CHANGELOG.md; existing
+  notes are never changed) and uploads `TOW-windows-x64.zip`, `install.ps1`, `install.sh`,
+  `tow-source.tar.gz` and `SHA256SUMS` with `gh`.
+- `tests/test_starter.py` (`tow start` with a fake clock), `tests/test_update_archive.py`
+  (update.py without git against a local web server that plays GitHub: checksums, the
+  fallback to the release's copy, refusals, rollback of a cut-off switch, one `app.prev`),
+  `tests/test_bundle.py` (the start files, the zip check) and `tests/test_installers.py`
+  (POSIX sh, `sh -n`, the uninstall of install.sh on a stub, PowerShell parsing, the release
+  workflow's order and permissions).
 
 ## 8. Upgrading from the five-task layout (≤1.17)
 

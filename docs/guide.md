@@ -1,7 +1,7 @@
 # TOW user guide
 
 How TOW thinks, what each screen and colour means, and what to do about each message.
-Русская версия: [ru/guide.md](ru/guide.md). Installation: [README](../README.md).
+Русская версия: [ru/guide.md](ru/guide.md). Installation: [install.md](install.md).
 
 - [Concepts](#concepts)
 - [Screens](#screens)

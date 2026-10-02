@@ -1,7 +1,7 @@
 # Руководство TOW
 
 Как устроен TOW, что значат экраны и цвета и что делать с каждым сообщением.
-English version: [../guide.md](../guide.md). Установка — в [README](../../README.ru.md).
+English version: [../guide.md](../guide.md). Установка — в [install.md](install.md).
 
 - [Понятия](#понятия)
 - [Экраны](#экраны)

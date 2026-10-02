@@ -47,64 +47,29 @@ revision to your torrent client.
 
 ## Install
 
-You need [git](https://git-scm.com/downloads) and [uv](https://docs.astral.sh/uv/) 0.12 or newer. `setup` installs
-Python 3.14 and the dependencies inside the TOW folder; nothing else is installed.
-
-<details open>
-<summary><b>Windows</b> — PowerShell</summary>
+**Windows.** [Download **TOW-windows-x64.zip**](https://github.com/d0j/tow/releases/latest/download/TOW-windows-x64.zip),
+extract it anywhere, double-click **Start TOW.cmd**. Everything is inside the folder; the first start needs no
+internet. Or in PowerShell:
 
 ```powershell
-winget install --id Git.Git -e
-winget install --id astral-sh.uv -e
-# open a new terminal, then:
-git clone https://github.com/d0j/tow "$HOME\TOW\app"
-cd "$HOME\TOW\app"
-Copy-Item config.example.yaml ..\config.yaml
-.\scripts\tow.cmd setup
-.\scripts\tow.cmd run
+irm https://github.com/d0j/tow/releases/latest/download/install.ps1 | iex
 ```
 
-Start with Windows (one task, no console window): `.\scripts\tow.cmd autostart on`.
-
-</details>
-
-<details>
-<summary><b>Linux</b></summary>
+**macOS.** In Terminal:
 
 ```sh
-sudo apt install git          # or: dnf install git / pacman -S git
-curl -LsSf https://astral.sh/uv/install.sh | sh
-git clone https://github.com/d0j/tow ~/TOW/app
-cd ~/TOW/app
-cp config.example.yaml ../config.yaml
-./scripts/tow setup
-./scripts/tow run
+curl -LsSf https://github.com/d0j/tow/releases/latest/download/install.sh | sh
 ```
 
-Start at login (systemd user unit): `./scripts/tow autostart on`. Start at boot without a login:
-`./scripts/tow autostart on --without-login`, then `sudo loginctl enable-linger $USER`.
+Then double-click **Start TOW.command** in `~/TOW`, or run `~/TOW/app/scripts/tow run`.
 
-</details>
+**Linux.** The same command; then `~/TOW/start-tow`. Add `-s -- --autostart` after `sh` to start TOW with the
+computer, `--desktop` for an applications-menu entry.
 
-<details>
-<summary><b>macOS</b></summary>
+**Manual (git).** For developers and servers: [docs/install.md](docs/install.md#manual-install-with-git).
 
-```sh
-brew install git uv           # or: xcode-select --install, and the uv installer above
-git clone https://github.com/d0j/tow ~/TOW/app
-cd ~/TOW/app
-cp config.example.yaml ../config.yaml
-./scripts/tow setup
-./scripts/tow run
-```
-
-Start at login (LaunchAgent): `./scripts/tow autostart on`. Keep the TOW folder and download folders out of
-`~/Documents`, `~/Desktop` and `~/Downloads`: macOS blocks background access there. Intel Macs need a Rust toolchain
-for one dependency.
-
-</details>
-
-Open **<http://127.0.0.1:8787>**.
+Step by step, with what each screen shows: [docs/install.md](docs/install.md). All downloads:
+[latest release](https://github.com/d0j/tow/releases/latest). The page opens at **<http://127.0.0.1:8787>**.
 
 > [!IMPORTANT]
 > The first start creates `TOW/keys/master.key`. It encrypts every saved password and token and is not part of any
@@ -126,6 +91,7 @@ Linux and macOS. `tow --help` lists all commands.
 | Command | Does |
 |---|---|
 | `tow run` | web UI, schedule, night copy, watchdog — in one process |
+| `tow start` | `tow run` in the background, then the page in the browser (what the start files do) |
 | `tow status` | one line: running, client, sites, topics, last and next check (`--json`) |
 | `tow stop` · `tow restart` | stop TOW · restart its web server |
 | `tow autostart on\|off\|status` | start with the system |
@@ -150,15 +116,17 @@ closes network access.
 
 ## Update and backups
 
-| | Windows | Linux · macOS |
-|---|---|---|
-| Update to a release | `.\scripts\deploy.ps1 -Ref v1.21.1` | `tow update --ref v1.21.1` prints the command |
-| Go back (v1.18.0 or newer) | `.\scripts\deploy.ps1 -Ref v1.21.0` | the same with the older tag |
-| Restore a night copy | `tow restore-snapshot --path <copy> --apply` | the same |
-| After moving the folder | `tow stop`, `tow setup`, `tow autostart on` | the same |
+| | Windows zip or `install.ps1` | `install.sh` | git clone |
+|---|---|---|---|
+| Update to the latest release | double-click `Update TOW.cmd` | `~/TOW/update-tow` · macOS: `Update TOW.command` | `.\scripts\deploy.ps1 -Ref v1.22.0` · `tow update --ref v1.22.0` prints the command |
+| Go back | `Update TOW.cmd v1.22.0` (v1.22.0 or newer) | `update-tow v1.22.0` (v1.22.0 or newer) | the same with the older tag (v1.18.0 or newer) |
+| After moving the folder | `Start TOW.cmd` prepares it again; then `tow autostart on` if you use it | the start file does it too; then `tow autostart on` | `tow stop`, `tow setup`, `tow autostart on` |
+| Restore a night copy | `tow restore-snapshot --path <copy> --apply` | the same | the same |
+| Remove | [docs/install.md](docs/install.md#remove-tow) | the same | the same |
 
 An update stops TOW, snapshots `data/` and `config.yaml`, switches the code, starts TOW and checks the version. If
-anything fails it rolls back by itself.
+anything fails it rolls back by itself. Without git it downloads the release from GitHub and checks it against the
+release's `SHA256SUMS`.
 
 | Backup | Where | Notes |
 |---|---|---|
@@ -171,6 +139,7 @@ anything fails it rolls back by itself.
 
 | | |
 |---|---|
+| [Install](docs/install.md) | step by step for Windows, macOS and Linux; start, stop, update, remove; problems |
 | [User guide](docs/guide.md) | screens, statuses, notifications, backups, troubleshooting |
 | [Install and operations](docs/PORTABLE.md) | folder layout, `tow run`, autostart, updates |
 | [Architecture](docs/architecture.md) | processes, modules, data, recovery, security |

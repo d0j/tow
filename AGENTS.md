@@ -64,11 +64,12 @@ tracker degradation from a client or TOW failure before changing state.
 
 ## Development vs runtime install
 
-- A runtime install is one portable folder `<runtime>` with `app/` (the clone at a tag), `config.yaml`, `data/`,
-  `keys/master.key`, `backup/` and `runtime/` (its Python and uv cache); TOW writes only inside it
-  (`docs/PORTABLE.md`). Never edit files there: change the development checkout, commit, tag, then update the
-  install (`scripts/deploy.ps1 -Ref <tag>` on Windows, the command `tow update --ref <tag>` prints on any OS).
-  The oldest version an update goes back to is v1.18.0.
+- A runtime install is one portable folder `<runtime>` with `app/` (a clone at a tag, or a release archive),
+  `config.yaml`, `data/`, `keys/master.key`, `backup/` and `runtime/` (its Python and uv cache); TOW writes only
+  inside it (`docs/PORTABLE.md`). Never edit files there: change the development checkout, commit, tag, then update
+  the install (`scripts/deploy.ps1 -Ref <tag>` on Windows, the command `tow update --ref <tag>` prints on any OS).
+  The oldest version an update goes back to is v1.18.0 (v1.22.0 for an install without git). The Windows bundle
+  and the installers are built and tested by `.github/workflows/release.yml` (`docs/PORTABLE.md` §1a).
 - The runtime is one process, `tow run` (`tow.supervisor`): web server, schedule, night copy and watchdog. It is
   controlled through `data/run/control/{restart,stop}` (`tow restart`, `tow stop`, Settings), never by killing
   processes. Its web server never outlives it (`finally`, `tow serve --parent-pid`, a Windows job object, Linux
