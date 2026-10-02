@@ -3,6 +3,14 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.13] — 2026-10-03
+
+### Fixed
+
+- Sample, trailer, and preview clips explicitly marked in a filename are no longer treated as regular episodes.
+  An unfinished clip cannot block a completed episode or suppress its completion event; episode-only selection
+  does not select the clip. Generic file labels are not reinterpreted as episode labels for client events.
+
 ## [1.22.12] — 2026-10-03
 
 ### Fixed

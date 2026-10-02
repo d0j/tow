@@ -5,7 +5,17 @@ import pytest
 from helpers import raises_code
 
 from tow.episodes import item_identity, summarize_completion
-from tow.progress import _file_progress, _preferred_season, reconcile_topic, safe_relative_path
+from tow.progress import _file_progress, _latest_item_label, _preferred_season, reconcile_topic, safe_relative_path
+
+
+def test_completed_auxiliary_file_does_not_replace_latest_episode_label():
+    record = {
+        "items": {
+            "main": {"kind": "episode", "label": "S01E01", "episode_keys": ["episode:s01e01"], "status": "completed"},
+            "sample": {"kind": "file", "label": "S01E99.sample.mkv", "status": "completed"},
+        }
+    }
+    assert str(_latest_item_label(record)) == "S01E01"
 
 
 def test_client_absolute_paths_cannot_be_interpreted_as_relative_files(tmp_path: Path):
@@ -73,6 +83,29 @@ class FakeClient:
                 {"name": "Show/S01E01.mkv", "size": 10, "progress": self.progress},
             ],
         }
+
+
+def test_unfinished_sample_clip_does_not_block_completed_episode(tmp_path: Path):
+    class ClientWithSample(FakeClient):
+        def inspect_torrent(self, infohash):
+            info = super().inspect_torrent(infohash)
+            info["files"].append({"name": "Show/S01E01.sample.mkv", "size": 3, "progress": 0.0})
+            return info
+
+    client = ClientWithSample()
+    client.progress = 1.0
+    folder = tmp_path / "Show"
+    folder.mkdir()
+    (folder / "S01E01.mkv").write_bytes(b"0123456789")
+    topic = {"id": "sample", "title": "Show [1 из 1]", "hash": "ABC", "save_path": str(tmp_path)}
+    history = {"topics": {"sample": {"baseline_at": "2026-09-12T20:00:00+03:00", "items": {}}}}
+
+    result = reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
+
+    assert result["summary"]["completed"] == 1
+    assert result["events"] == ["new_file", "episode_completed"]
+    again = reconcile_topic(topic, client, history, "2026-09-12T21:01:00+03:00")
+    assert again["events"] == []
 
 
 def test_reconcile_records_first_completed_item_once(tmp_path: Path):

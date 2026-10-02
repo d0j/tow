@@ -508,6 +508,10 @@ def resolve_episode_coverages(names: Iterable[str]) -> tuple[tuple[EpisodeLabel,
 
 def _coverage_with_folder_season(name: str) -> tuple[EpisodeLabel, ...]:
     path = PurePosixPath(str(name or "").replace("\\", "/"))
+    if re.search(r"(?i)(?:[._-](?:sample|trailer|preview))$", path.stem) or re.match(
+        r"(?i)^\[(?:sample|trailer|preview)\]", path.stem
+    ):
+        return ()
     if any(
         re.fullmatch(
             r"(?i)(?:extras?|bonus|bonuses|specials?|ova|ona|sp|nc|ncop|nced|"

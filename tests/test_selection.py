@@ -166,6 +166,15 @@ def test_numeric_extra_does_not_join_episode_selection():
     assert plan.selected_indices == (0,)
 
 
+def test_sample_clip_does_not_join_episode_selection():
+    files = (
+        TorrentFile(0, "Show.S01E01.mkv", 100),
+        TorrentFile(1, "Show.S01E01.sample.mkv", 10),
+    )
+    plan = resolve_selection(files, normalize_policy("episodes", "S01E01"))
+    assert plan.selected_indices == (0,)
+
+
 @pytest.mark.parametrize("value", ["1-10", "S01E01-S01E10", "S1E1-10"])
 def test_episode_ranges_reaching_past_released_episodes_select_what_exists(value):
     plan = resolve_selection(FILES, normalize_policy("episodes", value))

@@ -144,7 +144,9 @@ def _latest_item_label(record: HistoryRecord, *, prefer_completed: bool = True) 
         return Msg("progress.file")
 
     episode_candidates = [
-        item for item in candidates if parse_episode_label(str(item.get("label") or item.get("identity") or ""))
+        item
+        for item in candidates
+        if item.get("kind") != "file" and parse_episode_label(str(item.get("label") or item.get("identity") or ""))
     ]
     if episode_candidates:
 
@@ -299,7 +301,7 @@ def _completed_episode_keys(items: dict[str, HistoryItem]) -> set[str]:
         if item.get("superseded"):
             continue
         keys = item.get("episode_keys") or ([str(item.get("episode_key"))] if item.get("episode_key") else [])
-        if not keys:
+        if not keys and item.get("kind") != "file":
             label = parse_episode_label(str(item.get("label") or item.get("identity") or ""))
             keys = [label.key] if label else []
         for key in keys:

@@ -128,6 +128,24 @@ def test_bare_numeric_extras_years_and_resolutions_are_not_episodes():
     assert [label.key for label in parse_episode_coverage("13.mkv")] == ["episode:e13"]
 
 
+def test_named_preview_video_does_not_duplicate_the_real_episode():
+    names = (
+        "Show.S01E01.mkv",
+        "Show.S01E01.sample.mkv",
+        "Show.S01E01-trailer.mp4",
+        "[Preview] Show.S01E01.mkv",
+        "Show.S01E02.mkv",
+    )
+    resolved = resolve_episode_coverages(names)
+    assert [[label.key for label in coverage] for coverage in resolved] == [
+        ["episode:s01e01"],
+        [],
+        [],
+        [],
+        ["episode:s01e02"],
+    ]
+
+
 def test_postposed_and_bracketed_numbers_reject_zero_years_and_resolutions():
     for name in ("0 серия.mkv", "2026 серия.mkv", "[0].mkv", "[2026].mkv", "[1080].mkv"):
         assert parse_episode_coverage(name) == (), name
