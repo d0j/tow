@@ -1,6 +1,6 @@
-# Rules for AI contributors
+# Rules for contributors
 
-Instructions for coding agents (and a summary for humans) working on TOW. Read `docs/ROADMAP.md` for the current
+The rules every change to TOW keeps. Read `docs/ROADMAP.md` for the current
 state and `docs/architecture.md` for the structure, then the relevant source, tests and `git log` of the files
 before editing. `CONTRIBUTING.md` has the development setup.
 
@@ -59,6 +59,11 @@ tracker degradation from a client or TOW failure before changing state.
 - When asked to undo changes or go back to a previous version: stop new work, `git revert` the commits in question
   (or redeploy the previous tag to the runtime install), rerun the gate and report. Never rewrite pushed history.
 - If the checkout has a `backup` remote, the post-commit hook mirrors commits whose content passed the full gate.
+- **One author.** The owner is the only author of TOW. No `Co-Authored-By` trailer, no "Generated with …" line,
+  no name of a model, assistant or code generator, no signature, and no word that any of them wrote or developed
+  TOW: not in commits, tags, pull requests, issues, release notes, code, comments, docs or this file, and no such
+  account among the GitHub contributors. Tool folders (worktrees, scratch, settings) stay outside the repository
+  or in `.git/info/exclude`, never in tracked files.
 - Runtime state and credentials are never committed. `data/secrets.*`, `master.key`, tokens, cookies, real topic
   links, personal paths and IP addresses never appear in code, tests, logs, commits or chat. Test data is synthetic.
 

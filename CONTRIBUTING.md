@@ -1,7 +1,7 @@
 # Contributing
 
 Thanks for helping. Bug reports, site presets, clients, messengers, translations and fixes are welcome. Read
-[AGENTS.md](AGENTS.md) for the product rules every change keeps (they apply to people too) and
+[AGENTS.md](AGENTS.md) for the product rules every change keeps and
 [docs/architecture.md](docs/architecture.md) for the structure.
 
 ## Setup

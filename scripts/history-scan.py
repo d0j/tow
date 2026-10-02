@@ -21,7 +21,7 @@ PATTERNS = {
     "private IP": re.compile(rb"\b(?:192\.168|10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b"),
     "user profile path": re.compile(rb"(?i)C:\\\\?Users\\\\?[A-Za-z0-9._-]+"),
     "email": re.compile(
-        rb"[A-Za-z0-9._%+-]+@(?!users\.noreply\.github\.com|anthropic\.com|example\.)[A-Za-z0-9.-]+\.[a-z]{2,}"
+        rb"[A-Za-z0-9._%+-]+@(?!users\.noreply\.github\.com|example\.)[A-Za-z0-9.-]+\.[a-z]{2,}"
     ),
 }
 
