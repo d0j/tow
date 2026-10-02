@@ -146,7 +146,7 @@ def test_posix_launcher_and_hooks_are_executable_in_git():
     root = Path(__file__).resolve().parents[1]
     if shutil.which("git") is None or not (root / ".git").exists():
         pytest.skip("not a git checkout")
-    wanted = ["scripts/tow", ".githooks/pre-commit", ".githooks/pre-push", ".githooks/post-commit"]
+    wanted = ["scripts/tow", "scripts/tow-start", ".githooks/pre-commit", ".githooks/pre-push", ".githooks/post-commit"]
     listing = subprocess.run(
         ["git", "-C", str(root), "ls-files", "-s", "--", *wanted], capture_output=True, text=True, check=True
     ).stdout.splitlines()

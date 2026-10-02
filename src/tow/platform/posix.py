@@ -442,6 +442,10 @@ class PosixBackend:
         del pid  # the window manager shows a new browser window itself
 
     def open_url(self, url: str) -> bool:
+        # Linux without a desktop (SSH, a server): webbrowser would run a text browser in the
+        # terminal and hold it. The caller shows the address instead.
+        if self.name == "linux" and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+            return False
         return _common.open_url(url)
 
     # --- browsers and folders -------------------------------------------------------------------

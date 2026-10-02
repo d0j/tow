@@ -796,7 +796,21 @@ def test_open_url_uses_the_default_browser(monkeypatch):
         raise _common.webbrowser.Error("no browser")
 
     monkeypatch.setattr(_common.webbrowser, "open", broken)
+    monkeypatch.setenv("DISPLAY", ":0")
     assert PosixBackend("linux").open_url("http://127.0.0.1:8787") is False
+
+
+def test_linux_without_a_desktop_opens_no_text_browser(monkeypatch):
+    # `tow start` over SSH: webbrowser would run lynx or w3m in the terminal and hold it.
+    opened: list[str] = []
+    monkeypatch.setattr(_common.webbrowser, "open", lambda url: opened.append(url) or True)
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    assert PosixBackend("linux").open_url("http://127.0.0.1:8787") is False
+    assert opened == []
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    assert PosixBackend("linux").open_url("http://127.0.0.1:8787") is True
+    assert PosixBackend("macos").open_url("http://127.0.0.1:8787") is True  # macOS always has `open`
 
 
 # --- children end with their parent (1.21) -----------------------------------------------------

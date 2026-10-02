@@ -1,0 +1,211 @@
+"""`tow start`: TOW in the background and its page in the browser (the start files of every
+install run it), and the start scripts that prepare the environment first."""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from tow import cli
+from tow.supervisor import layout, starter
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture(autouse=True)
+def run_env(monkeypatch):
+    # tow start exports the layout to its own environment: restored after each test.
+    monkeypatch.setenv("TOW_ROOT", os.environ.get("TOW_ROOT", str(Path.cwd())))
+    monkeypatch.setenv("PYTHONIOENCODING", "utf-8")
+    monkeypatch.delenv("TOW_NO_BROWSER", raising=False)
+
+
+class Machine:
+    """tow run, its web server and the browser, on a fake clock."""
+
+    def __init__(self, *, running: bool = False, answers_after: float | None = 2.0, dies_after: float | None = None):
+        self.t = 0.0
+        self.is_running = running
+        self.answers_after = answers_after
+        self.dies_after = dies_after
+        self.spawned: list[int] = []
+        self.opened: list[str] = []
+        self.browser_works = True
+
+    def deps(self) -> starter.Deps:
+        return starter.Deps(
+            running=lambda: {"pid": 7} if self.is_running else None,
+            spawn=self.spawn,
+            alive=lambda pid: self.dies_after is None or self.t < self.dies_after,
+            healthy=lambda port: self.answers_after is not None and self.t >= self.answers_after,
+            open_url=self.open_url,
+            sleep=self.sleep,
+            monotonic=lambda: self.t,
+        )
+
+    def spawn(self) -> int:
+        self.spawned.append(4242)
+        return 4242
+
+    def open_url(self, url: str) -> bool:
+        self.opened.append(url)
+        return self.browser_works
+
+    def sleep(self, seconds: float) -> None:
+        self.t += seconds
+
+
+def test_a_stopped_tow_is_started_and_its_page_opened_once_it_answers():
+    machine = Machine(answers_after=3.0)
+    result = starter.start(18990, deps=machine.deps())
+    assert result == {"ok": True, "state": "started", "url": "http://127.0.0.1:18990/", "pid": 4242, "browser": True}
+    assert machine.spawned == [4242]
+    assert machine.opened == ["http://127.0.0.1:18990/"]
+    assert machine.t >= 3.0  # not before /healthz answered
+
+
+def test_a_running_tow_only_gets_its_page_opened():
+    machine = Machine(running=True, answers_after=0.0)
+    result = starter.start(18990, deps=machine.deps())
+    assert (result["state"], result["pid"]) == ("running", None)
+    assert machine.spawned == []
+    assert machine.opened == ["http://127.0.0.1:18990/"]
+
+
+def test_no_browser_is_opened_when_asked_not_to():
+    machine = Machine()
+    result = starter.start(18990, browser=False, deps=machine.deps())
+    assert result["ok"] is True
+    assert result["browser"] is False
+    assert machine.opened == []
+
+
+def test_a_tow_run_that_ends_before_it_answers_is_reported_at_once():
+    machine = Machine(answers_after=None, dies_after=1.0)
+    result = starter.start(18990, wait=120, deps=machine.deps())
+    assert result["state"] == "exited"
+    assert result["ok"] is False
+    assert machine.t < 5  # not after the whole wait
+    assert machine.opened == []
+
+
+def test_another_tow_run_that_took_over_is_waited_for():
+    # The new tow run found one already running (started in between) and ended: not a failure.
+    machine = Machine(answers_after=4.0, dies_after=1.0)
+    deps = machine.deps()
+    deps.running = lambda: {"pid": 9} if machine.t > 0 else None
+    result = starter.start(18990, deps=deps)
+    assert result["state"] == "started"
+    assert result["ok"] is True
+
+
+def test_a_page_that_never_answers_times_out():
+    machine = Machine(answers_after=None)
+    result = starter.start(18990, wait=10, deps=machine.deps())
+    assert result["state"] == "timeout"
+    assert 10 <= machine.t <= 11
+
+
+def test_tow_run_starts_windowless_from_this_environment(tmp_path, monkeypatch):
+    scripts = tmp_path / "venv" / "Scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "python.exe").write_bytes(b"")
+    monkeypatch.setattr(sys, "executable", str(scripts / "python.exe"))
+    assert starter.run_argv()[1:] == ["-m", "tow", "run"]
+    assert starter.run_argv()[0] == str(scripts / "python.exe")  # no pythonw.exe next to it
+    (scripts / "pythonw.exe").write_bytes(b"")
+    assert starter.run_argv()[0] == str(scripts / "pythonw.exe")  # no console window
+    monkeypatch.setattr(sys, "executable", "/opt/tow/app/.venv/bin/python")
+    assert starter.run_argv()[0] == "/opt/tow/app/.venv/bin/python"
+
+
+def test_the_spawn_is_detached_hidden_and_logs_inside_the_install(monkeypatch):
+    seen: dict[str, Any] = {}
+
+    class Backend:
+        def spawn_detached(self, argv, **options):
+            seen.update(argv=argv, **options)
+            return 31
+
+    monkeypatch.setattr("tow.platform.current", lambda: Backend())
+    assert starter._spawn() == 31
+    assert seen["hidden"] is True
+    assert seen["argv"][-3:] == ["-m", "tow", "run"]
+    assert seen["log_path"] == layout.logs_dir() / "run-stderr.log"
+    assert seen["cwd"] == layout.install_root()
+    assert seen["env"]["TOW_ROOT"] == str(layout.install_root())
+
+
+def _fake_start(monkeypatch, result: dict[str, Any], seen: dict[str, Any]) -> None:
+    def fake(port, *, wait, browser):
+        seen.update(port=port, wait=wait, browser=browser)
+        return {"url": f"http://127.0.0.1:{port}/", "pid": 1, **result}
+
+    monkeypatch.setattr(starter, "start", fake)
+
+
+def test_the_cli_starts_and_says_where(monkeypatch, capsys):
+    seen: dict[str, Any] = {}
+    _fake_start(monkeypatch, {"ok": True, "state": "started", "browser": True}, seen)
+    assert cli.main(["start"]) == 0
+    out = capsys.readouterr().out
+    assert "TOW" in out
+    assert "http://127.0.0.1:8787/" in out
+    assert seen == {"port": 8787, "wait": 120.0, "browser": True}
+
+
+def test_tow_no_browser_keeps_the_browser_closed(monkeypatch, capsys):
+    seen: dict[str, Any] = {}
+    _fake_start(monkeypatch, {"ok": True, "state": "started", "browser": False}, seen)
+    monkeypatch.setenv("TOW_NO_BROWSER", "1")
+    assert cli.main(["start", "--wait", "5"]) == 0
+    assert seen["browser"] is False
+    assert seen["wait"] == 5.0
+    assert cli.main(["start", "--no-browser"]) == 0
+    assert seen["browser"] is False
+
+
+def test_a_browser_that_did_not_open_gets_the_address_to_open_by_hand(monkeypatch, capsys):
+    seen: dict[str, Any] = {}
+    _fake_start(monkeypatch, {"ok": True, "state": "running", "browser": False}, seen)
+    assert cli.main(["start"]) == 0
+    out = capsys.readouterr().out
+    assert out.count("http://127.0.0.1:8787/") == 2  # running at ..., open ... by hand
+
+
+@pytest.mark.parametrize("state", ["exited", "timeout"])
+def test_a_failed_start_names_the_log(monkeypatch, capsys, state):
+    seen: dict[str, Any] = {}
+    _fake_start(monkeypatch, {"ok": False, "state": state, "browser": False}, seen)
+    assert cli.main(["start"]) == 3
+    assert "run.log" in capsys.readouterr().out
+
+
+# --- the start scripts ---------------------------------------------------------------------------
+
+
+def test_the_windows_start_script_prepares_offline_first_then_online():
+    text = (ROOT / "scripts" / "tow-start.cmd").read_text(encoding="utf-8")
+    assert text.isascii()
+    assert not any(line.startswith(":") for line in text.splitlines())  # no labels in an LF file
+    assert 'call "%~dp0tow-env.cmd"' in text
+    offline = text.index('set "UV_OFFLINE=1"')
+    first = text.index('call "%~dp0tow-setup.cmd"', offline)
+    cleared = text.index('set "UV_OFFLINE="', first)
+    second = text.index('call "%~dp0tow-setup.cmd"', cleared)
+    assert offline < first < cleared < second < text.index('"%TOW_EXE%" start %*')
+    assert "Unblock-File" in text
+    assert "$env:TOW_HERE" in text  # the path never inside the command
+    assert text.rstrip().splitlines()[-1] == "exit /b 0"
+
+
+def test_the_posix_start_script_sets_up_then_starts():
+    text = (ROOT / "scripts" / "tow-start").read_text(encoding="utf-8")
+    assert text.startswith("#!/bin/sh\n")
+    assert "\r" not in text
+    assert text.index('"$scripts/tow" setup') < text.index('exec "$scripts/tow" start "$@"')
+    assert 'os.environ["TOW_HERE"]' in text  # the path never inside the Python code

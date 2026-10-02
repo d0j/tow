@@ -1,0 +1,33 @@
+#!/bin/sh
+# Start TOW and open its page: what "Start TOW.command" (macOS) and "start-tow" (Linux) run
+# (docs/install.md). The first time, or after the folder moved, it prepares Python and TOW's
+# environment inside the install (`tow setup`, from the internet); then `tow start`: TOW in the
+# background, its page in the browser (TOW_NO_BROWSER=1: no browser).
+set -eu
+
+self=$0
+while [ -L "$self" ]; do  # started through a link: find the real script
+    link=$(readlink -- "$self")
+    case $link in
+        /*) self=$link ;;
+        *) self=$(dirname -- "$self")/$link ;;
+    esac
+done
+scripts=$(CDPATH='' cd -- "$(dirname -- "$self")" && pwd -P)
+app=$(dirname -- "$scripts")
+root=$(dirname -- "$app")
+
+# Ready: the environment runs, and it is this folder's own (not the one of a moved or copied folder).
+ready=no
+check='import os, sys, tow; here = os.path.realpath(os.environ["TOW_HERE"]) + os.sep; sys.exit(0 if all(os.path.realpath(p).startswith(here) for p in (tow.__file__, sys.base_prefix)) else 1)'
+if [ -x "$app/.venv/bin/python" ] && TOW_HERE=$root "$app/.venv/bin/python" -c "$check" >/dev/null 2>&1; then
+    ready=yes
+fi
+if [ "$ready" = no ]; then
+    echo "Preparing TOW in $root - the first time takes a few minutes..."
+    if ! "$scripts/tow" setup; then
+        echo "TOW could not be prepared: the reason is above." >&2
+        exit 3
+    fi
+fi
+exec "$scripts/tow" start "$@"

@@ -192,6 +192,9 @@ def _build_parser() -> argparse.ArgumentParser:
     watchdog.add_argument("--json", action="store_true", help=as_json)
     sub.add_parser("password", help=t("cli.help.password"))
     sub.add_parser("run", help=t("cli.help.run"))
+    start = sub.add_parser("start", help=t("cli.help.start"), description=t("cli.help.start"))
+    start.add_argument("--no-browser", action="store_true", help=t("cli.help.start_no_browser"))
+    start.add_argument("--wait", type=float, default=120.0, help=t("cli.help.start_wait"))
     stop = sub.add_parser("stop", help=t("cli.help.stop"))
     stop.add_argument("--wait", type=float, default=60.0, help=t("cli.help.stop_wait"))
     sub.add_parser("restart", help=t("cli.help.restart"))
@@ -527,6 +530,31 @@ def _cmd_run(_args: argparse.Namespace) -> int:
     return run_supervisor()
 
 
+def _cmd_start(args: argparse.Namespace) -> int:
+    """`tow run` in the background (unless it runs) and its page in the browser: the start files
+    of every install run this. TOW_NO_BROWSER=1 (tests, a server) never opens a browser."""
+    from tow.config import load_config, port_of
+    from tow.i18n import t
+    from tow.supervisor import layout, starter
+
+    port = port_of(load_config())
+    browser = not args.no_browser and os.environ.get("TOW_NO_BROWSER", "").strip().lower() not in ("1", "true", "yes")
+    if layout.running() is None:
+        print(t("cli.start.starting"), flush=True)
+    result = starter.start(port, wait=args.wait, browser=browser)
+    logs = layout.logs_dir()
+    if result["state"] == "exited":
+        print(t("cli.start.exited", log=logs / "run.log", stderr=starter.stderr_log()))
+        return EXIT_CANNOT_RUN
+    if result["state"] == "timeout":
+        print(t("cli.start.timeout", seconds=int(args.wait), log=logs / "run.log"))
+        return EXIT_CANNOT_RUN
+    print(t("cli.start.ready", url=result["url"]))
+    if browser and not result["browser"]:
+        print(t("cli.start.open_by_hand", url=result["url"]))
+    return EXIT_OK
+
+
 def _cmd_stop(args: argparse.Namespace) -> int:
     from tow.i18n import t
     from tow.supervisor import request_stop, wait_stopped
@@ -723,6 +751,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "autostart": _cmd_autostart,
     "update": _cmd_update,
     "run": _cmd_run,
+    "start": _cmd_start,
     "stop": _cmd_stop,
     "restart": _cmd_restart,
     "version": _cmd_version,
@@ -743,7 +772,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
 
 
 # Commands that run without tow.cmd/tow-env.cmd (autostart, an update, the owner in a terminal).
-_LAYOUT_COMMANDS = frozenset({"run", "stop", "restart", "autostart"})
+_LAYOUT_COMMANDS = frozenset({"run", "start", "stop", "restart", "autostart"})
 
 
 def _use_message_language() -> None:

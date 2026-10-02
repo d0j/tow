@@ -199,6 +199,13 @@
       "still_stopping": "TOW is still stopping (it lets a running check finish first).",
       "restart_requested": "TOW restarts its web server; the page is back in a few seconds."
     },
+    "start": {
+      "starting": "Starting TOW...",
+      "ready": "TOW is running: {url}",
+      "open_by_hand": "Open {url} in your browser.",
+      "exited": "TOW stopped right after it started. The reason is in {log} (or {stderr}).",
+      "timeout": "TOW did not answer within {seconds} s. Look at {log}; `tow status` shows whether it runs."
+    },
     "update": {
       "how": "TOW updates itself with the install's base Python (the update replaces this environment). Run:",
       "or_windows": "or, on Windows:"
@@ -270,6 +277,9 @@
       "watchdog": "is TOW up and are the checks running? (a diagnostic; it changes nothing)",
       "password": "set a new TOW password and reminder (the old one is not needed)",
       "run": "run TOW: the web page, the schedule, night copies and the watchdog in one process",
+      "start": "start TOW in the background (unless it runs) and open its page in the browser",
+      "start_no_browser": "do not open the browser (also TOW_NO_BROWSER=1)",
+      "start_wait": "seconds to wait for the page to answer",
       "stop": "stop the running `tow run` (it lets a running check finish)",
       "stop_wait": "seconds to wait for it to stop (0: do not wait)",
       "restart": "restart the web server of the running `tow run`",
