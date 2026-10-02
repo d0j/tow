@@ -3,6 +3,14 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.15] — 2026-10-03
+
+### Fixed
+
+- Portable imports now reject non-finite numbers and excessively nested JSON or YAML before changing destination
+  data, including the envelope, manifest, and optional events. Export also refuses non-finite values. Invalid imported
+  history can no longer reach the download-history JSON endpoint or escape as a parser error.
+
 ## [1.22.14] — 2026-10-03
 
 ### Fixed

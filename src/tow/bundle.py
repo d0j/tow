@@ -80,8 +80,8 @@ class ExportImportError(RuntimeError):
 
 def _json_bytes(data: Any) -> bytes:
     try:
-        return (json.dumps(data, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
-    except (TypeError, ValueError, UnicodeError) as exc:
+        return (json.dumps(data, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False) + "\n").encode("utf-8")
+    except (TypeError, ValueError, UnicodeError, RecursionError) as exc:
         raise ExportImportError("portable TOW data is not JSON serializable") from exc
 
 
@@ -163,7 +163,7 @@ def _events_are_redacted(value: Any) -> bool:
 def _parse_mapping(data: bytes, *, label: str) -> dict[str, Any]:
     try:
         value = yaml.safe_load(data) if label == "config.yaml" else json.loads(data.decode("utf-8"))
-    except (UnicodeError, ValueError, yaml.YAMLError) as exc:
+    except (UnicodeError, ValueError, RecursionError, yaml.YAMLError) as exc:
         raise ExportImportError(f"invalid {label}") from exc
     if not isinstance(value, dict):
         raise ExportImportError(f"{label} must be an object")
@@ -173,6 +173,8 @@ def _parse_mapping(data: bytes, *, label: str) -> dict[str, Any]:
 def _validate_tree(value: Any, *, label: str, depth: int = 0) -> None:
     if depth > 32:
         raise ExportImportError(f"{label} is nested too deeply")
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ExportImportError(f"{label} contains a non-finite number")
     if value is None or isinstance(value, (str, int, float, bool)):
         return
     if isinstance(value, list):
@@ -465,8 +467,9 @@ def _validated_payload(payload: bytes) -> dict[str, Any]:
         raise ExportImportError("bundle manifest is missing")
     try:
         manifest = json.loads(members["manifest.json"].decode("utf-8"))
-    except (UnicodeError, json.JSONDecodeError) as exc:
+    except (UnicodeError, ValueError, RecursionError) as exc:
         raise ExportImportError("invalid bundle manifest") from exc
+    _validate_tree(manifest, label="manifest.json")
     if not isinstance(manifest, dict) or manifest.get("format") != FORMAT or manifest.get("schema_version") != 1:
         raise ExportImportError("unsupported bundle manifest")
     source_version = manifest.get("source_version")
@@ -518,6 +521,7 @@ def _validated_payload(payload: bytes) -> dict[str, Any]:
     events = None
     if "events.json" in actual:
         events = _parse_mapping(members["events.json"], label="events.json")
+        _validate_tree(events, label="events.json")
         if not isinstance(events.get("events"), list) or not _events_are_redacted(events):
             raise ExportImportError("events member is not redacted")
     return {
@@ -1010,8 +1014,9 @@ def _read_bundle(path: Path, passphrase: str) -> dict[str, Any]:
     try:
         raw = _read_limited(Path(path), label="export bundle")
         outer = json.loads(raw.decode("utf-8"))
-    except (UnicodeError, json.JSONDecodeError) as exc:
+    except (UnicodeError, ValueError, RecursionError) as exc:
         raise ExportImportError("invalid export bundle envelope") from exc
+    _validate_tree(outer, label="export bundle envelope")
     return _validated_payload(_decrypt_outer(outer, passphrase))
 
 
