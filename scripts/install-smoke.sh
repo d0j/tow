@@ -1,13 +1,14 @@
 #!/bin/sh
-# Smoke test of install/install.sh on Linux or macOS (the release workflow runs it):
+# Smoke test of install/install.sh on Linux or macOS (CI on every commit, the release workflow on a tag):
 #
 #   sh scripts/install-smoke.sh tow-source.tar.gz [port]
 #
 # Installs from the local source archive (checked against a SHA256SUMS made for it) into a
 # folder with a space, starts TOW with its start file (TOW_NO_BROWSER=1), checks /healthz and
 # `tow status`, starts again (it only finds TOW running), stops it with the stop file, removes it
-# with --uninstall --yes (data, keys and config stay), then --purge (nothing stays). uv's and
-# Python's places outside the folder are compared before and after. Never port 8787.
+# with --uninstall --yes (data, keys and config stay), installs again around them (same key),
+# starts, checks and stops it again, uninstalls, then --purge (nothing stays). uv's and Python's
+# places outside the folder are compared before and after. Never port 8787.
 set -eu
 
 archive=$1
@@ -89,8 +90,16 @@ key_before=$(sha "$dir/keys/master.key")
 say "install again around the kept data (same key, same settings)"
 TOW_INSTALL_SOURCE="$archive" TOW_INSTALL_SUMS="$sums" sh "$installer" --dir "$dir" --port "$port" </dev/null
 [ "$(sha "$dir/keys/master.key")" = "$key_before" ] || fail "the reinstall replaced keys/master.key"
+TOW_NO_BROWSER=1 "$start" </dev/null || fail "the start file after the reinstall exited with $?"
+healthy || fail "/healthz does not answer after the reinstall"
 "$dir/app/scripts/tow" status --json | grep -q '"running": true' || fail "tow status after the reinstall: not running"
-"$stop_file"
+"$stop" </dev/null || fail "the stop file after the reinstall exited with $?"
+tries=0
+while healthy; do
+    tries=$((tries + 1))
+    [ "$tries" -lt 60 ] || fail "TOW still answers after the stop file (reinstall)"
+    sleep 1
+done
 sh "$installer" --uninstall --yes --dir "$dir" </dev/null
 
 say "--purge of what an uninstall kept (no app left)"
