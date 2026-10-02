@@ -55,7 +55,7 @@ Changelog = "https://github.com/d0j/tow/blob/main/CHANGELOG.md"
 tow = "tow.cli:main"
 
 [build-system]
-requires = ["uv_build>=0.12.1,<0.13.0"]
+requires = ["uv_build>=0.12.20,<0.13.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
