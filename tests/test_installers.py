@@ -215,3 +215,45 @@ def test_install_ps1_parses(shell):
         [program, "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True, check=False
     )
     assert done.returncode == 0, done.stdout + done.stderr
+
+
+# --- the release workflow ----------------------------------------------------------------------
+
+
+def test_the_release_workflow_tests_everything_before_it_uploads():
+    import yaml
+
+    workflows = ROOT / ".github" / "workflows"
+    text = (workflows / "release.yml").read_text(encoding="utf-8")
+    flow = yaml.safe_load(text)
+    jobs = flow["jobs"]
+    # Every action pinned to a commit; checkout and setup-uv to the very ones CI uses.
+    uses = re.findall(r"uses: (\S+)", text)
+    assert uses
+    assert all(re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", use) for use in uses), uses
+    ci_pins = set(re.findall(r"uses: (\S+@[0-9a-f]{40})", (workflows / "ci.yml").read_text(encoding="utf-8")))
+    assert {use for use in uses if use.startswith(("actions/checkout@", "astral-sh/setup-uv@"))} <= ci_pins
+    # Write access only where the release is touched, and only after every test passed.
+    assert flow["permissions"] == {"contents": "read"}
+    writers = [name for name, job in jobs.items() if job.get("permissions", {}).get("contents") == "write"]
+    assert writers == ["publish"]
+    assert set(jobs["publish"]["needs"]) == {"source", "windows", "posix"}
+    windows = "\n".join(step.get("run", "") for step in jobs["windows"]["steps"])
+    assert "scripts/build-bundle.py --out dist --source tow-source.tar.gz" in windows
+    assert "bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Offline" in windows
+    assert "powershell.exe -NoProfile -ExecutionPolicy Bypass -File install/install.ps1" in windows  # 5.1
+    assert "-Uninstall -Yes -Purge" in windows
+    assert jobs["posix"]["strategy"]["matrix"]["os"] == ["ubuntu-latest", "macos-latest"]
+    assert "scripts/install-smoke.sh" in jobs["posix"]["steps"][-1]["run"]
+    publish = "\n".join(step.get("run", "") for step in jobs["publish"]["steps"])
+    assert "sha256sum TOW-windows-x64.zip install.ps1 install.sh tow-source.tar.gz > SHA256SUMS" in publish
+    assert "gh release view" in publish  # created only when missing: existing notes stay
+    assert "gh release upload" in publish
+    assert "edit" not in publish.split()
+
+
+def test_the_smoke_scripts_never_use_the_live_port():
+    for name in ("bundle-smoke.ps1", "install-smoke.sh"):
+        text = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+        assert "never on 8787" in text
+        assert "TOW_NO_BROWSER" in text

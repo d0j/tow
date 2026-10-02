@@ -67,9 +67,9 @@ $cyrillic = -join [char[]](0x0422, 0x0435, 0x0441, 0x0442)  # "Test" in Russian:
 $folder = Join-Path $Base ("tow smoke $cyrillic " + [guid]::NewGuid().ToString('N').Substring(0, 6))
 $root = Join-Path $folder 'TOW'
 $saved = @{ TOW_NO_BROWSER = $env:TOW_NO_BROWSER; HTTP_PROXY = $env:HTTP_PROXY; HTTPS_PROXY = $env:HTTPS_PROXY; ALL_PROXY = $env:ALL_PROXY; NO_PROXY = $env:NO_PROXY }
-# The bundle runs as on a new computer: no TOW variables of this machine (a developer's machine
-# may name its own install's master key in TOW_MASTER_KEY_FILE).
-foreach ($name in @(Get-ChildItem env: | Where-Object Name -like 'TOW_*' | ForEach-Object Name)) {
+# The bundle runs as on a new computer: no TOW or uv variables of this machine (a developer's
+# machine may name its own install's master key in TOW_MASTER_KEY_FILE; setup-uv sets UV_*).
+foreach ($name in @(Get-ChildItem env: | Where-Object { $_.Name -like 'TOW_*' -or $_.Name -like 'UV_*' } | ForEach-Object Name)) {
     $saved[$name] = (Get-Item "env:$name").Value
     Remove-Item "env:$name"
 }

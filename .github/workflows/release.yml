@@ -1,0 +1,164 @@
+name: release
+
+# A release tag (vX.Y.Z) builds and tests what the README links to, then uploads it to the
+# GitHub release of that tag (created from CHANGELOG.md when it does not exist yet; existing
+# notes are never changed):
+#   TOW-windows-x64.zip   the Windows bundle (scripts/build-bundle.py)
+#   install.ps1           irm .../releases/latest/download/install.ps1 | iex
+#   install.sh            curl -LsSf .../releases/latest/download/install.sh | sh
+#   tow-source.tar.gz     GitHub's source archive of the tag (what install.sh and updates use)
+#   SHA256SUMS            the SHA-256 of every file above
+# Nothing is uploaded unless the bundle and both installers passed on the runners.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build, test and upload (e.g. v1.22.0)"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  source:
+    name: source archive
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download GitHub's source archive of the tag
+        run: |
+          curl -fsSL --retry 3 -o tow-source.tar.gz "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG}.tar.gz"
+          top=$(tar -tzf tow-source.tar.gz | head -n 1 | cut -d / -f 1)
+          version=$(tar -xzOf tow-source.tar.gz "$top/pyproject.toml" | sed -n 's/^version = "\(.*\)"/\1/p' | head -n 1)
+          echo "top folder $top, version $version"
+          [ "v$version" = "$TAG" ] || { echo "the tag $TAG holds version $version" >&2; exit 1; }
+          sha256sum tow-source.tar.gz
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: source
+          path: tow-source.tar.gz
+          if-no-files-found: error
+
+  windows:
+    name: Windows bundle
+    needs: source
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      # Pinned to full commit SHAs (the tag in the comment); Dependabot proposes updates.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: source
+      - name: Build the bundle
+        shell: pwsh
+        run: uv run --no-project python scripts/build-bundle.py --out dist --source tow-source.tar.gz
+      - name: Unpack into a path with spaces and Cyrillic letters, start offline, check, stop
+        shell: pwsh
+        run: ./scripts/bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Offline
+      - name: install.ps1 on Windows PowerShell 5.1, then uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = (Resolve-Path dist/TOW-windows-x64.zip).Path
+          $sums = Join-Path $env:RUNNER_TEMP 'SHA256SUMS'
+          "$((Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant())  TOW-windows-x64.zip" | Set-Content -Encoding ascii $sums
+          Get-ChildItem env: | Where-Object { $_.Name -like 'UV_*' } | ForEach-Object { Remove-Item "env:$($_.Name)" }
+          $env:TOW_INSTALL_SOURCE = $zip; $env:TOW_INSTALL_SUMS = $sums; $env:TOW_NO_BROWSER = '1'
+          $dir = Join-Path $env:RUNNER_TEMP 'TOW install test'
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File install/install.ps1 -Dir $dir -Port 18878
+          if ($LASTEXITCODE) { throw "install.ps1 exited with $LASTEXITCODE" }
+          $health = Invoke-RestMethod -Uri http://127.0.0.1:18878/healthz -NoProxy
+          if (-not $health.ok) { throw '/healthz does not answer' }
+          & (Join-Path $dir 'app\scripts\tow.cmd') status
+          pwsh -NoProfile -File install/install.ps1 -Dir $dir -Uninstall -Yes -Purge
+          if (Test-Path -LiteralPath $dir) { throw "-Purge left $dir" }
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows
+          path: dist/TOW-windows-x64.zip
+          if-no-files-found: error
+
+  posix:
+    name: install.sh (${{ matrix.os }})
+    needs: source
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: source
+      - name: Install, start with the start file, check, stop, uninstall
+        run: sh scripts/install-smoke.sh "$PWD/tow-source.tar.gz" 18877
+
+  publish:
+    name: upload to the release
+    needs: [source, windows, posix]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Assets and SHA256SUMS
+        run: |
+          mkdir assets
+          cp artifacts/TOW-windows-x64.zip artifacts/tow-source.tar.gz install/install.ps1 install/install.sh assets/
+          cd assets
+          sha256sum TOW-windows-x64.zip install.ps1 install.sh tow-source.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+          ls -l
+      - name: Create the release if it does not exist, upload the assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version=${TAG#v}
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            # Notes: the tag's section of CHANGELOG.md, then how to install.
+            awk -v v="$version" '/^## \[/ { if (found) exit; if (index($0, "## [" v "]") == 1) { found = 1; next } } found { print }' CHANGELOG.md > notes.md
+            [ -s notes.md ] || echo "TOW $version" > notes.md
+            {
+              echo
+              echo "### Install"
+              echo
+              echo "- **Windows:** download **TOW-windows-x64.zip** below, extract it, double-click **Start TOW.cmd**."
+              echo "  Or in PowerShell: \`irm https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/install.ps1 | iex\`"
+              echo "- **Linux, macOS:** \`curl -LsSf https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/install.sh | sh\`"
+              echo "- Guide: [docs/install.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/docs/install.md)"
+            } >> notes.md
+            prerelease=
+            case $TAG in *-*) prerelease=--prerelease ;; esac
+            gh release create "$TAG" --verify-tag --title "TOW $version" --notes-file notes.md $prerelease
+          fi
+          gh release upload "$TAG" assets/* --clobber
+          gh release view "$TAG" --json assets --jq '.assets[].name'
