@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="{{ lang() }}">
+<head>
+{% include "_head.html" %}
+</head>
+<body>
+<a class="skip" href="#main">{{ t('base.skip') }}</a>
+<header class="app">
+  <nav aria-label="{{ t('base.nav.label') }}">
+    <a href="/" class="ico{% if request.url.path == '/' %} on{% endif %}" {% if request.url.path == '/' %}aria-current="page"{% endif %} title="{{ t('base.nav.home') }}" aria-label="{{ t('base.nav.home') }}">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.2 12 4l8 7.2"/><path d="M6.5 10.5V20h4.2v-5.2h2.6V20H17.5v-9.5"/></svg>
+    </a>
+    <a href="/sites" class="ico{% if request.url.path.startswith('/sites') %} on{% endif %}" {% if request.url.path.startswith('/sites') %}aria-current="page"{% endif %} title="{{ t('base.nav.sites') }}" aria-label="{{ t('base.nav.sites') }}">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+        <rect x="8.5" y="7.5" width="11" height="11" rx="2.2"/>
+        <rect x="4.5" y="4.5" width="11" height="11" rx="2.2"/>
+      </svg>
+    </a>
+    <details class="hdr-search">
+      <summary title="{{ t('base.search.open') }}" aria-label="{{ t('base.search.open') }}">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="M15.2 15.2 20 20"/></svg>
+      </summary>
+      <label class="sr-only" for="q">{{ t('base.search.label') }}</label>
+      <input id="q" type="search" placeholder="{{ t('base.search.placeholder') }}" autocomplete="off">
+      <span id="search-status" class="sr-only" aria-live="polite"></span>
+    </details>
+    <button type="button" class="ico" id="log-open" title="{{ t('base.log.open') }}" aria-label="{{ t('base.log.open') }}" aria-haspopup="dialog">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+        <path d="M6 5.5h12v13H6z"/>
+        <path d="M9 9h6M9 12.5h6M9 16h4"/>
+      </svg>
+    </button>
+    {% if request.url.path == '/' %}
+    <a href="#new" class="ico plus" title="{{ t('base.new_topic') }}" aria-label="{{ t('base.new_topic') }}">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    </a>
+    {% elif request.url.path.startswith('/sites') %}
+    <a href="#new" class="ico plus" title="{{ t('base.new_site') }}" aria-label="{{ t('base.new_site') }}">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    </a>
+    {% endif %}
+  </nav>
+  {% set h = header_health() %}
+  <div class="hdr-sites" aria-label="{{ t('base.header.sites') }}">
+    {% for name, st in h.sites.items() %}
+    <span class="trk {{ st }}" title="{{ name }}">{{ name }}</span>
+    {% endfor %}
+  </div>
+  <div class="hdr-right">
+    <div class="hdr-svc" aria-label="{{ t('base.header.services') }}">
+      <span class="trk {{ h.qbit_tone }}" title="{{ h.qbit }}">{{ h.client_label }}</span>
+      {% set bell = 'mut' if h.bot_ok is none else ('ok' if h.bot_ok else 'bad') %}
+      <a class="trk trk-ico {{ bell }}" href="/settings?open=bots" title="{{ h.bot }}" aria-label="{{ h.bot }}">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      </a>
+    </div>
+    <span class="hdr-clock{% if not h.check_ok %} bad{% endif %}" id="next-check" data-last="{{ h.next_from_ts }}" data-interval="{{ h.interval_sec }}" data-check-ok="{{ '1' if h.check_ok else '0' }}" data-error="{{ h.check_error }}" title="{{ h.at }}"><span class="clock-k" data-clock-label>{{ t('js.clock.label_next') }}</span> <span class="clock-v" data-clock-value>—</span></span>
+    {#- The undo of the action whose message is shown sits in that message (9); the header
+        keeps it only for a later page while it lasts. -#}
+    {% set undo_in_flash = flash and undo_just_made() and can_undo() %}
+    {% if can_undo() and not undo_in_flash %}
+    <form method="post" action="/undo" id="undo-form" data-ttl="{{ undo_left_sec() }}">
+      <button class="ghost sm undo-btn" type="submit" data-keep title="{{ t('base.undo.title', what=undo_label()) }}"><svg class="undo-ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg><span class="undo-text">{{ t('base.undo.button') }}</span></button>
+    </form>
+    {% endif %}
+    {% if request.url.path.startswith('/sites') %}
+    <form method="post" action="/doctor/run" class="ico-form">
+      <button class="ico quiet" type="submit" title="{{ t('base.doctor') }}" aria-label="{{ t('base.doctor') }}">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 12a8 8 0 1 1-2.2-5.5"/>
+          <path d="M20 4v6h-6"/>
+        </svg>
+      </button>
+    </form>
+    {% elif request.url.path == '/' %}
+    <form method="post" action="/check" class="ico-form">
+      <input type="hidden" name="mode" value="apply">
+      <button class="ico quiet" type="submit" title="{{ t('base.check_all.title') }}" aria-label="{{ t('base.check_all.title') }}" data-confirm="{{ t('base.check_all.confirm') }}">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 12a8 8 0 1 1-2.2-5.5"/>
+          <path d="M20 4v6h-6"/>
+        </svg>
+      </button>
+    </form>
+    {% endif %}
+    {% set path = request.url.path %}
+    <a href="/doctor" class="ico hdr-doctor{% if path == '/doctor' %} on{% endif %}" {% if path == '/doctor' %}aria-current="page"{% endif %} title="{{ t('base.nav.doctor') }}" aria-label="{{ t('base.nav.doctor') }}">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2.2-5.5 4.2 11 2.4-5.5H21"/></svg>
+    </a>
+    <a href="/settings/help" class="ico hdr-help{% if path == '/settings/help' %} on{% endif %}" {% if path == '/settings/help' %}aria-current="page"{% endif %} title="{{ t('base.nav.help') }}" aria-label="{{ t('base.nav.help') }}">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.6"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6"/><path d="M12 16.9h.01"/></svg>
+    </a>
+    {% set in_settings = path.startswith('/settings') and path != '/settings/help' %}
+    <a href="/settings" class="ico{% if in_settings %} on{% endif %}" {% if in_settings %}aria-current="page"{% endif %} title="{{ t('base.nav.settings') }}" aria-label="{{ t('base.nav.settings') }}">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3.1"/>
+        <path d="M12 3.6v2.3M12 18.1v2.3M4.8 6.2l1.7 1.7M17.5 16.1l1.7 1.7M3.6 12h2.3M18.1 12h2.3M4.8 17.8l1.7-1.7M17.5 7.9l1.7-1.7"/>
+      </svg>
+    </a>
+  </div>
+</header>
+<main id="main" aria-labelledby="page-title">
+  {#- A message an action left (typed flash): its kind comes from the route - ok fades, warn stays, err is an alert that stays. -#}
+  {% if flash %}<div class="flash{% if flash.kind == 'err' %} error{% elif flash.kind == 'warn' %} warn{% endif %}" id="flash" role="{{ 'alert' if flash.kind == 'err' else 'status' }}"{% if flash.kind == 'ok' %} data-ttl="{{ undo_left_sec() if undo_in_flash else flash_ttl_sec() }}"{% endif %}><span>{{ flash.text|sentence }}</span>
+  {%- if undo_in_flash %}<form method="post" action="/undo" class="flash-undo" id="undo-form" data-ttl="{{ undo_left_sec() }}"><button class="ghost sm" type="submit" data-keep title="{{ t('base.undo.title', what=undo_label()) }}">{{ t('base.undo.button') }} <span class="undo-left" data-undo-left aria-hidden="true"></span></button></form>{% endif -%}
+  <button type="button" class="flash-x" aria-label="{{ t('base.close') }}">×</button></div>{% endif %}
+  {% block body %}{% endblock %}
+</main>
+<dialog id="log-pop" class="log-pop" aria-labelledby="log-title">
+  <div class="log-pop-head">
+    <span id="log-title">{{ t('base.log.title') }}</span>
+    <a href="/history" class="log-history-link">{{ t('base.log.history') }}</a>
+    <button type="button" class="flash-x" id="log-close" aria-label="{{ t('base.close') }}">×</button>
+  </div>
+  <div class="log-box" id="log-body"><div class="mut">…</div></div>
+</dialog>
+<script type="application/json" id="tow-i18n">{{ js_texts()|tojson }}</script>
+<script src="/static/app.js?v={{ static_version }}" defer></script>
+</body>
+</html>

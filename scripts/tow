@@ -1,0 +1,84 @@
+#!/bin/sh
+# TOW with this install's environment on Linux and macOS, e.g. `./tow doctor`, `./tow keys adopt`.
+# `./tow setup` installs Python and TOW's environment inside the install (after a move, a fresh
+# clone or a new Python version); it needs uv (runtime/bin/uv or on PATH). See docs/PORTABLE.md.
+#
+#   TOW_APP   the code: the folder above this script
+#   TOW_ROOT  the install: app/, config.yaml, data/, keys/, backup/, runtime/ (in a development
+#             checkout the checkout itself)
+set -eu
+
+self=$0
+while [ -L "$self" ]; do  # started through a link (e.g. ~/bin/tow): find the real script
+    link=$(readlink -- "$self")
+    case $link in
+        /*) self=$link ;;
+        *) self=$(dirname -- "$self")/$link ;;
+    esac
+done
+TOW_APP=$(CDPATH='' cd -- "$(dirname -- "$self")/.." && pwd -P)
+
+if [ -z "${TOW_ROOT:-}" ]; then
+    TOW_ROOT=$TOW_APP
+    parent=$(dirname -- "$TOW_APP")
+    if [ "$(basename -- "$TOW_APP")" = app ] && { [ -f "$parent/config.yaml" ] || [ -d "$parent/data" ]; }; then
+        TOW_ROOT=$parent
+    fi
+fi
+export TOW_ROOT
+export PYTHONIOENCODING=utf-8
+
+# uv, Python and uv's cache inside the install (a development checkout keeps the user's uv setup).
+uv=uv
+if [ -x "$TOW_ROOT/runtime/bin/uv" ]; then
+    uv=$TOW_ROOT/runtime/bin/uv
+fi
+if [ "$TOW_ROOT" != "$TOW_APP" ]; then
+    export UV_PYTHON_INSTALL_DIR="$TOW_ROOT/runtime/python"
+    export UV_PYTHON_BIN_DIR="$TOW_ROOT/runtime/bin"
+    export UV_CACHE_DIR="$TOW_ROOT/runtime/cache"
+    export UV_PROJECT_ENVIRONMENT="$TOW_APP/.venv"
+    export UV_MANAGED_PYTHON=1
+fi
+
+if [ "${1:-}" = setup ]; then
+    shift
+    if [ $# -gt 0 ]; then
+        echo "Usage: ./tow setup (no options): Python and TOW's environment inside the install; run it with TOW stopped." >&2
+        exit 2
+    fi
+    if ! command -v "$uv" >/dev/null 2>&1; then
+        echo "TOW setup: uv was not found. Put it into $TOW_ROOT/runtime/bin/uv or on PATH." >&2
+        exit 3
+    fi
+    cd -- "$TOW_APP"
+    if [ "$TOW_ROOT" = "$TOW_APP" ]; then
+        exec "$uv" sync --frozen
+    fi
+    # Never under a running TOW: its environment would be replaced while it runs.
+    if [ -x .venv/bin/python ]; then
+        status=0
+        .venv/bin/python -c 'import sys; from tow.supervisor.layout import busy; sys.exit(4 if busy() else 0)' >/dev/null 2>&1 || status=$?
+        if [ "$status" -eq 4 ]; then
+            echo "TOW setup: TOW is running. Stop it first (./tow stop), then run setup again." >&2
+            exit 3
+        fi
+    fi
+    # .venv holds absolute paths: built again when its Python no longer runs (a moved folder) or
+    # is not the one inside the install (an install from before 1.18).
+    inside='import os, sys; sys.exit(not os.path.realpath(sys.base_prefix).startswith(os.path.realpath(os.environ["UV_PYTHON_INSTALL_DIR"])))'
+    if [ -e .venv/bin/python ] && ! .venv/bin/python -c "$inside" >/dev/null 2>&1; then
+        rm -rf .venv
+    fi
+    # The Python of .python-version, into runtime/python; no copies on PATH.
+    "$uv" python install --no-bin
+    "$uv" sync --frozen --no-dev
+    # First start: TOW creates its master key (keys/master.key) and says to keep a copy of it.
+    exec "$TOW_APP/.venv/bin/tow" keys ensure
+fi
+
+if [ -x "$TOW_APP/.venv/bin/tow" ]; then
+    exec "$TOW_APP/.venv/bin/tow" "$@"
+fi
+# Not set up yet: uv runs TOW from the locked environment.
+exec "$uv" run --frozen --no-dev --project "$TOW_APP" tow "$@"

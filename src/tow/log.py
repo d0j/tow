@@ -1,0 +1,515 @@
+from __future__ import annotations
+
+import functools
+import json
+import os
+import re
+import sys
+import threading
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager, suppress
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
+
+from tow import errors, i18n
+from tow.clock import format_ui_timestamp, iso_now
+from tow.events import new_event_id
+from tow.i18n import t
+from tow.net_errors import humanize
+from tow.paths import data_dir
+from tow.platform import locks
+from tow.records import ErrorFields
+from tow.store import init_lock_file
+
+# 5 MiB x (1 + 4 rotated) keeps months of history (1 MiB x 3 kept about ten days).
+MAX_BYTES = 5 * 1024 * 1024
+BACKUPS = 4
+_TAIL_BYTES = 120_000
+_LOG_THREAD_LOCK = threading.RLock()
+EXPORT_EVENT_KEYS = {
+    "ts",
+    "created_at",
+    "event_id",
+    "kind",
+    "operation_id",
+    "topic_id",
+    "topic",
+    "status",
+    "cls",
+    "how",
+    "client_id",
+    "client_kind",
+    "integration_id",
+    "tracker",
+    "hash",
+    "apply",
+    "ok",
+    "n",
+}
+
+
+def owner_language() -> str:
+    """The language of this page or task; outside both (a bare call), the owner's message language."""
+    return i18n.current()
+
+
+class Labels(Mapping[str, str]):
+    """Labels from the language catalog, read as a plain mapping in the current language
+    (``CLS_RU.get(cls, ...)`` keeps working); ``label(name, lang)`` picks another language."""
+
+    def __init__(self, keys: dict[str, str]) -> None:
+        self._keys = keys
+
+    def __getitem__(self, name: str) -> str:
+        return t(self._keys[name], owner_language())
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._keys)
+
+    def __len__(self) -> int:
+        return len(self._keys)
+
+    def label(self, name: str, lang: str, default: str = "") -> str:
+        key = self._keys.get(name)
+        return t(key, lang) if key else default
+
+
+def kind_label(kind: str, lang: str | None = None) -> str:
+    """The owner's word for an event kind: ``log.kind.<kind>`` from the language files (a new
+    kind needs only a line there). A kind without one - say, from an older TOW's log - reads
+    as words, never as an identifier."""
+    key = f"log.kind.{kind}"
+    if i18n.has(key):
+        return t(key, lang or owner_language())
+    return kind.replace("_", " ").strip()
+
+
+_CLASSES = errors.STATUS_CLASSES
+CLS_RU = Labels({cls: f"log.cls.{cls}" for cls in _CLASSES})
+
+
+def cls_label(cls: str, lang: str | None = None) -> str:
+    """The owner's word for an error class (``lang`` for a message, else this page's language)."""
+    return CLS_RU.label(cls, lang or owner_language(), cls)
+
+
+_URL_RE = re.compile(r"https?://[^\s'\"<>]+", re.IGNORECASE)
+
+
+def scrub_text(value: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        raw = match.group(0)
+        suffix = ""
+        while raw and raw[-1] in ".,;:)]}":
+            suffix = raw[-1] + suffix
+            raw = raw[:-1]
+        try:
+            parsed = urlsplit(raw)
+            hostname = parsed.hostname
+            if not parsed.scheme or not hostname:
+                return "[REDACTED_URL]" + suffix
+            if ":" in hostname and not hostname.startswith("["):
+                hostname = f"[{hostname}]"
+            port = f":{parsed.port}" if parsed.port else ""
+            return f"{parsed.scheme.lower()}://{hostname}{port}" + suffix
+        except ValueError:
+            return "[REDACTED_URL]" + suffix
+
+    return _URL_RE.sub(replace, value)
+
+
+# --- the status class of an error ---------------------------------------------------------------
+# A typed error (tow.errors) carries its class: it never depends on the wording or the language.
+# Text is matched only for what has no code - an error stored by TOW 1.17 or older (English or
+# Russian, as those versions wrote it) and a foreign exception's message. The wording below is
+# frozen: it describes what old versions wrote, so editing a language file never changes it.
+
+# Messages whose tail is owner content (a file name, a topic title): the start fixes the class,
+# so "Frozen.Planet…" or "Безлимитный…" in the tail cannot recolour them.
+_LEGACY_STARTS = (
+    ("previous torrent revision is still active", "qbit"),
+    ("selected torrent client cannot", "qbit"),
+    ("torrent hash is already claimed", "error"),
+    ("клиент недоступен", "qbit"),
+    ("client unreachable", "qbit"),
+    ("раздача удалена из клиента", "qbit"),
+    ("the torrent was removed from the client", "qbit"),
+    ("мало места на диске", "disk"),
+    ("not enough disk space", "disk"),
+)
+_LEGACY_MARKERS = {
+    # The site's daily download limit only: a bare "лимит"/"quota" also matched
+    # "Лимитированная серия" and "disk quota exceeded".
+    "quota": ("лимит скачиваний", "daily download limit reached"),
+    "tracker_auth": (
+        "no download link on page",
+        "tracker auth",
+        "tracker_auth",
+        "tracker authentication",
+        "нужен вход",
+        "log in to",
+        "not a torrent (sign-in needed",
+    ),
+    "tracker": (
+        "all hosts failed",
+        "все зеркала",
+        "cross-origin redirect",
+        "запрещён cross-origin",
+        "запрещено перенаправление на другой адрес или порт",
+        "all mirrors are paused",
+    ),
+    "no_tracker": ("no tracker", "неизвестн", "unknown site"),
+    "no_path": ("save_path", "папк", "no folder", "the client saved the torrent to a different folder"),
+    "qbit": ("qbit", "торрент-клиент", "torrent client"),
+}
+# File names and paths inside other messages ("Room.401.mkv", "C:\\Media\\…").
+_FILE_DETAIL_RE = re.compile(r"\S*[\\/]\S*|\S+\.[^\s.]{2,5}(?=[\s,;)]|$)")
+
+
+@functools.cache
+def _client_prefixes(_version: int) -> tuple[str, ...]:
+    """``<client>:`` for every client module (its kind, title and header label): a client
+    adapter writes its name in front of its messages. A new client module is found by itself."""
+    from tow.clients.spec import discover
+
+    names = {name for spec in discover().values() for name in (spec.kind, spec.title, spec.short) if name}
+    return tuple(sorted(f"{name.casefold()}:" for name in names))
+
+
+def _has(m: str, cls: str) -> bool:
+    return any(marker in m for marker in _LEGACY_MARKERS[cls])
+
+
+def _legacy_class(msg: str) -> str:
+    """The class of an error known only by its text (see above)."""
+    m = (msg or "").lower()
+    head = m.removeprefix("reconcile: ")
+    for prefix, cls in _LEGACY_STARTS:
+        if head.startswith(prefix):
+            return cls
+    m = _FILE_DETAIL_RE.sub(" ", m)
+    if _has(m, "quota"):
+        return "quota"
+    if _has(m, "tracker_auth"):
+        return "tracker_auth"
+    if "cloudflare" in m or "just a moment" in m:
+        return "cloudflare"
+    if re.search(r"\bhttp 4(?:04|10)\b", m) and "all hosts failed" in m:
+        return "gone"  # every mirror says the topic does not exist (404) or is gone for good (410)
+    if _has(m, "tracker"):
+        return "tracker"
+    if "frozen" in m:
+        return "frozen"
+    if _has(m, "no_tracker"):
+        return "no_tracker"
+    if _has(m, "no_path"):
+        return "no_path"
+    # Torrent-client failures: qBittorrent's own messages, TOW's neutral wording and the
+    # other adapters, which prefix every message with the client's name.
+    if _has(m, "qbit") or m.startswith(_client_prefixes(i18n.version())):
+        return "qbit"
+    if "not a torrent" in m or "не торрент-файл" in m or "не torrent" in m:
+        return "not_torrent"
+    if re.search(r"\b40[13]\b", m) or "login" in m:
+        return "auth"
+    return "error"
+
+
+def error_class(error: Any, code: str | None = None) -> str:
+    """The status class of an error: a typed error's (or a stored record's) own class, then the
+    class of ``code``; text is matched only as the fallback for errors without a code."""
+    if isinstance(error, BaseException):
+        record = errors.record_of(error)
+        return str(record["cls"]) if record else _legacy_class(str(error))
+    if isinstance(error, Mapping):
+        cls = error.get("cls")
+        if isinstance(cls, str) and cls in _CLASSES:
+            return cls
+        code = code or (error.get("code") if isinstance(error.get("code"), str) else None)
+        error = error.get("text") or ""
+    if code and (cls := errors.class_of(code)):
+        return cls
+    return _legacy_class(str(error or ""))
+
+
+def is_daily_limit(error: Any) -> bool:
+    """The site said "download limit for today"."""
+    return error_class(error) == "quota"
+
+
+def error_fields(error: BaseException | str) -> ErrorFields:
+    """The fields a log event keeps about an error: its text (in the language of the moment, for
+    older readers), its code and values (rendered again in the reader's language) and its class."""
+    record = errors.record_of(error) if isinstance(error, BaseException) else None
+    fields = ErrorFields(error=str(error), cls=error_class(error))
+    if record:
+        fields["error_code"] = record["code"]
+        fields["error_params"] = record["params"]
+    return fields
+
+
+def _redact(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            lk = str(k).lower()
+            if any(s in lk for s in ("pass", "token", "secret", "cookie", "uid")):
+                out[k] = "***"
+            else:
+                out[k] = _redact(v)
+        return out
+    if isinstance(obj, str):
+        return scrub_text(obj)
+    if isinstance(obj, list):
+        return [_redact(x) for x in obj]
+    return obj
+
+
+def export_event_projection(record: dict[str, Any]) -> dict[str, Any]:
+    """Return the bounded, non-secret diagnostic schema used by .towx exports."""
+    if not isinstance(record, dict):
+        return {}
+    out: dict[str, Any] = {}
+    for key in EXPORT_EVENT_KEYS:
+        value = record.get(key)
+        if value is None or isinstance(value, (bool, int, float)):
+            out[key] = value
+        elif isinstance(value, str):
+            if key == "hash" and value and (len(value) != 40 or not re.fullmatch(r"[0-9a-fA-F]{40}", value)):
+                continue
+            out[key] = value[:128]
+    return out
+
+
+def log_path() -> Path:
+    return data_dir() / "tow.jsonl"
+
+
+@contextmanager
+def _log_file_lock() -> Iterator[None]:
+    """Serialize log reads, rotation and append across threads and processes."""
+    lock_path = data_dir() / ".tow-log.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with _LOG_THREAD_LOCK, lock_path.open("a+b") as handle:
+        init_lock_file(handle)
+        locks.lock(handle, poll=0.01)
+        try:
+            yield
+        finally:
+            locks.unlock(handle)
+
+
+def _rotate_if_needed(path: Path) -> None:
+    try:
+        if not path.is_file() or path.stat().st_size < MAX_BYTES:
+            return
+    except OSError:
+        return
+    oldest = path.with_name(f"{path.name}.{BACKUPS}")
+    if oldest.exists():
+        oldest.unlink()
+    for i in range(BACKUPS - 1, 0, -1):
+        src = path.with_name(f"{path.name}.{i}")
+        dst = path.with_name(f"{path.name}.{i + 1}")
+        if src.exists():
+            src.replace(dst)
+    path.replace(path.with_name(f"{path.name}.1"))
+
+
+def log_event(kind: str, **fields: Any) -> None:
+    ts = iso_now()
+    rec = {
+        "ts": ts,
+        "created_at": ts,
+        "event_id": new_event_id(),
+        "kind": kind,
+        **_redact(fields),
+    }
+    # The audit log is best-effort: a full disk or a file held open by a reader
+    # must never abort the operation being logged (e.g. after a confirmed client add).
+    try:
+        path = log_path()
+        with _log_file_lock():
+            try:
+                _rotate_if_needed(path)
+            except OSError as exc:
+                print(f"TOW log rotation skipped: {type(exc).__name__}", file=sys.stderr)
+            with path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        print(f"TOW log write failed ({kind}): {type(exc).__name__}", file=sys.stderr)
+
+
+def read_events(*, limit: int = 80) -> list[dict[str, Any]]:
+    path = log_path()
+    with _log_file_lock():
+        if not path.is_file():
+            return []
+        # Only the tail is shown: read just that, not the whole (multi-MiB) file.
+        with path.open("rb") as handle:
+            size = handle.seek(0, os.SEEK_END)
+            handle.seek(max(0, size - _TAIL_BYTES))
+            raw = handle.read()
+    text = raw.decode("utf-8", "replace")
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    out: list[dict[str, Any]] = []
+    for ln in lines[-limit:]:
+        try:
+            rec = json.loads(ln)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(rec, dict):
+            out.append(rec)
+    out.reverse()
+    return out[:limit]
+
+
+# G7: the history page shows what happened to the downloads, not every bookkeeping event.
+HISTORY_GROUPS = {
+    "downloads": frozenset(
+        {
+            "client_added",
+            "client_updated",
+            "new_file",
+            "revision_updated",
+            "file_completed",
+            "episode_completed",
+            "client_removed",
+            "client_restored",
+            "client_stopped",
+        }
+    ),
+    "errors": frozenset(
+        {
+            "check_fail",
+            "client_add_failed",
+            "reconcile_failed",
+            "check_blocked",
+            "client_unreachable",
+            "browser_auth_failed",
+            "watchdog_alert",
+            "client_stop_failed",
+        }
+    ),
+    "changes": frozenset(
+        {
+            "topic_add",
+            "topic_delete",
+            "topic_edit",
+            "topic_pause",
+            "undo",
+            "site_add",
+            "site_edit",
+            "site_delete",
+            "settings_interval",
+            "backup_created",
+            "backup_restored",
+            "settings_restore_point_applied",
+            "settings_portable_restore",
+        }
+    ),
+    "notifications": frozenset({"bot_delivery_succeeded", "bot_delivery_failed"}),
+}
+
+
+_KIND_RE = re.compile(r'"kind":\s*"([A-Za-z0-9_]+)"')
+
+
+def history_events(*, group: str = "", text: str = "", limit: int = 300) -> list[dict[str, Any]]:
+    """Newest first, across the current log and its rotated files (G7)."""
+    kinds = HISTORY_GROUPS.get(group) or frozenset().union(*HISTORY_GROUPS.values())
+    needle = text.strip().casefold()
+    path = log_path()
+    files = [path, *(path.with_name(f"{path.name}.{index}") for index in range(1, BACKUPS + 1))]
+    out: list[dict[str, Any]] = []
+    for index, candidate in enumerate(files):
+        # Only the live file is being written: rotated files are read without the log lock,
+        # so a running check is not held up by the history page.
+        try:
+            if index == 0:
+                with _log_file_lock():
+                    text = candidate.read_text(encoding="utf-8", errors="replace") if candidate.is_file() else ""
+            else:
+                text = candidate.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for line in reversed(text.splitlines()):
+            kind = _KIND_RE.search(line)
+            if kind is None or kind.group(1) not in kinds:
+                continue  # most lines are other events: no JSON parsing for them
+            if needle and needle not in line.casefold() and "\\u" not in line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(record, dict) or record.get("kind") not in kinds:
+                continue
+            if needle and needle not in json.dumps(record, ensure_ascii=False).casefold():
+                continue
+            out.append(record)
+            if len(out) >= limit:
+                return out
+    return out
+
+
+ERR_RU = Labels(
+    {
+        "frozen": "log.err.frozen",
+        "nnmclub: no download link on page": "log.err.no_download_link",
+        "no tracker": "log.err.no_tracker",
+        "no save_path": "log.err.no_save_path",
+        "qbit down": "log.err.qbit_down",
+    }
+)
+
+
+def format_event(rec: Mapping[str, Any]) -> dict[str, str]:
+    ts = str(rec.get("created_at") or rec.get("ts") or "")
+    at = ts
+    with suppress(TypeError, ValueError):
+        at = format_ui_timestamp(ts)
+    kind = str(rec.get("kind") or "")
+    lang = owner_language()
+    label = kind_label(kind, lang)
+    label = label[:1].upper() + label[1:]  # a line of the log starts like a sentence
+    title = str(rec.get("title") or "").strip()[:100]
+    bits: list[str] = []
+    how = rec.get("how")
+    if how == "manual":
+        bits.append(t("log.how.manual", lang))
+    elif how == "auto":
+        bits.append(t("log.how.auto", lang))
+    cls = str(rec.get("cls") or "")
+    if cls:
+        bits.append(CLS_RU.label(cls, lang, cls))
+    if title:
+        bits.append(title)
+    raw = ""
+    if rec.get("error") or rec.get("error_code"):
+        err = scrub_text(str(rec.get("error") or "")).strip()
+        shown = errors.render_stored(rec.get("error_code"), rec.get("error_params"), "", lang)
+        text = scrub_text(shown) if shown else ERR_RU.label(err, lang, err)
+        # A socket or HTTP-library error in words; its raw text goes under "Details".
+        human = humanize(text, lang)
+        raw = text[:600] if human != text else ""
+        if cls and human.casefold().startswith(CLS_RU.label(cls, lang, cls).casefold()):
+            bits.remove(CLS_RU.label(cls, lang, cls))  # "torrent client · torrent client: refused" says it twice
+        bits.append(human[:220])
+    elif kind == "check" and rec.get("n") is not None:
+        bits.append(t("log.check_result", lang, ok=rec.get("ok"), n=rec.get("n")))
+        if rec.get("apply") is False:
+            bits.append(t("log.check_preview", lang))
+    if rec.get("tracker"):
+        bits.append(str(rec["tracker"]))
+    h = str(rec.get("hash") or "")
+    if len(h) == 40 and re.fullmatch(r"[0-9a-fA-F]{40}", h):
+        bits.append(h[:8])
+    if rec.get("path"):
+        bits.append(str(rec["path"])[:80])
+    u = scrub_text(str(rec.get("url") or "")).strip()
+    if u and not u.startswith(("***",)):
+        bits.append(u[:90])
+    detail = " · ".join(dict.fromkeys(bits))
+    return {"at": at, "label": label, "detail": detail, "kind": kind, "raw": raw}

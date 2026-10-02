@@ -1,0 +1,86 @@
+# TOW configuration template. Copy to config.yaml (dev checkout) or <runtime>\config.yaml
+# (runtime install, see README). The live config.yaml is written by the UI and is not versioned.
+# Every key below is optional: a key left out takes the default shown.
+
+# --- web interface -----------------------------------------------------------------------
+# Address and port of the web interface. 127.0.0.1 = this PC only; another address
+# (0.0.0.0, a LAN address) also needs allow_lan: true and a password (Settings).
+bind: 127.0.0.1
+allow_lan: false
+port: 8787
+# How long a message after an action ("Saved") stays on the page, seconds (15..3600).
+flash_ttl_sec: 60
+# Language of the pages and messages: auto (the browser's) or a code such as en, ru.
+# language: auto
+
+# --- checks ------------------------------------------------------------------------------
+# How often every topic is checked, seconds (15 min .. 24 h). 3600 = once an hour.
+interval_sec: 3600
+# The User-Agent TOW sends to the sites; leave it out for TOW's own current browser string.
+# user_agent: Mozilla/5.0 (...)
+
+# --- download folders --------------------------------------------------------------------
+# Folders a device on the network may choose for downloads, besides those already in use
+# (on this PC any folder may be chosen).
+# allowed_save_roots: ['D:\Media', /srv/media]
+# Allow network folders (\\server\share) as download folders: the torrent client then
+# connects to that server with its own account.
+# allow_unc_save_paths: false
+
+# --- safety switches ---------------------------------------------------------------------
+# Allow sites and messenger servers on this PC or the home network (a self-hosted tracker,
+# your own ntfy server). Off by default: a typed address cannot probe the home network.
+# allow_private_tracker_hosts: false
+# allow_private_notifier_hosts: false
+
+# --- backups and restore points ----------------------------------------------------------
+# Nightly copy of the data (made by `tow run` at backup_time, local time); restore with
+# `tow restore-snapshot --path <copy> --apply`. A relative folder is inside the install (moves with it), an
+# absolute one may be another drive. The master key is never copied - keep it offline yourself.
+# backup_dir: backup/night
+# backup_keep: 14
+# backup_time: "03:30"
+# Where restore points (Settings -> Backups) are kept; default data/restore-points.
+# restore_points_dir: D:\TOW-restore-points
+
+# --- download history --------------------------------------------------------------------
+# Files of older revisions and topics no longer watched are kept this many days, at most this
+# many files per topic (0 = no limit).
+# history_keep_days: 730
+# history_max_items: 5000
+
+# --- notifications -----------------------------------------------------------------------
+# Hold messages during these hours (local time) and send them together afterwards; a daily
+# summary after daily_digest_hour.
+# quiet_hours: "23-8"
+# daily_digest_hour: 9
+# External pulse: the watchdog pings this every 10 min (URL/fail on a problem); the service
+# (e.g. a free healthchecks.io check, period 10 min, grace 30 min) alerts you when the pings
+# stop - PC off, hung or offline, which TOW itself cannot report.
+# heartbeat_url: https://hc-ping.com/<your-check-uuid>
+
+# --- torrent clients ---------------------------------------------------------------------
+# Without this section TOW uses one qBittorrent; Settings -> Torrent clients writes the list.
+# Optional per client: category (created in qBittorrent if missing) and extra tags for the
+# torrents TOW adds (the "tow" tag is always set). Passwords live encrypted, never here.
+# clients:
+#   - id: main
+#     kind: qbittorrent
+#     default: true
+#     category: tow
+#     tags: [serials]
+#   - id: nas
+#     kind: transmission
+
+# --- sites -------------------------------------------------------------------------------
+# Without this section TOW knows every site it has settings for (src/tow/trackers/presets).
+# Settings -> Sites writes the section; from then on it lists every site TOW uses.
+# A site of your own (Settings -> Sites -> Add fills this in from a topic link):
+# trackers:
+#   mysite:
+#     title: My site
+#     url_regex: ^https?://(?:www\.)?tracker\.example/viewtopic\.php\?t=(\d+)
+#     fetch_hosts: [https://tracker.example]
+#     login_hosts: [https://tracker.example]
+#     login_path: /login.php
+#     download_path: /dl.php?t={id}

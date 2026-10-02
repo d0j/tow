@@ -1,0 +1,199 @@
+"""The web UI must stay responsive while another worker holds the persistence lock.
+
+A scheduled `tow check --apply` holds the cross-process persistence lock for its
+whole network-bound run; the web process must not wait for it on plain reads.
+"""
+
+import threading
+
+from fastapi.testclient import TestClient
+from helpers import shown
+
+from tow.store import load_state, persistence_lock, save_state
+from tow.web import app
+
+
+def _hold_persistence_lock(release: threading.Event, held: threading.Event) -> threading.Thread:
+    """Hold the lock like a running check: until ``release`` (or a 10 s safety cap)."""
+
+    def hold() -> None:
+        with persistence_lock():
+            held.set()
+            release.wait(10)
+            held.clear()
+
+    thread = threading.Thread(target=hold, daemon=True)
+    thread.start()
+    assert held.wait(5)
+    return thread
+
+
+def test_reads_do_not_wait_for_a_running_check():
+    # No timing threshold (it was slow and could flake): a read that waited for the lock
+    # could only finish after the holder let go, so each must finish while it still holds.
+    client = TestClient(app)
+    client.get("/healthz")  # warm up app startup
+    release, held = threading.Event(), threading.Event()
+    holder = _hold_persistence_lock(release, held)
+    try:
+        for path in ("/healthz", "/health.json", "/log.json", "/"):
+            response = client.get(path, headers={"Accept": "text/html"})
+            assert response.status_code == 200, path
+            assert held.is_set(), f"{path} only answered after the persistence lock was released"
+    finally:
+        release.set()
+        holder.join()
+
+
+def _hold_check_lock(release: threading.Event, held: threading.Event) -> threading.Thread:
+    """Another applying check is running (scheduled, or "check all"): it holds the check lock."""
+    from tow.store import check_run_lock
+
+    def hold() -> None:
+        with check_run_lock():
+            held.set()
+            release.wait(10)
+            held.clear()
+
+    thread = threading.Thread(target=hold, daemon=True)
+    thread.start()
+    assert held.wait(5)
+    return thread
+
+
+def test_a_manual_check_does_not_wait_for_a_running_check():
+    """M3: the request waited for the check lock while holding the HTTP lock - every page froze."""
+
+    save_state({"topics": [{"id": "t", "title": "Show", "url": "http://rutor.info/torrent/1", "save_path": "M:\\s"}]})
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    release, held = threading.Event(), threading.Event()
+    holder = _hold_check_lock(release, held)
+    try:
+        response = client.post("/topics/t/check", follow_redirects=False)
+        assert held.is_set(), "the request only answered after the other check ended"
+        assert response.status_code == 303
+        assert "сейчас идёт другая проверка" in shown(response.headers["location"])
+        added = client.post(
+            "/topics/add",
+            data={"url": "http://rutor.info/torrent/2/x", "title": "Другой сериал", "save_path": "M:\\s"},
+            follow_redirects=False,
+        )
+        assert held.is_set()
+        assert "наблюдение TOW сохранено; сейчас идёт другая проверка" in shown(added.headers["location"])
+        assert len(load_state()["topics"]) == 2  # the new watch is saved all the same
+    finally:
+        release.set()
+        holder.join()
+
+
+def test_check_lock_without_waiting_refuses_a_held_lock_across_handles():
+    import pytest
+
+    from tow.paths import data_dir
+    from tow.platform import locks
+    from tow.store import _CHECK_RUN_LOCK_NAME, CheckBusyError, check_run_lock, init_lock_file
+
+    with check_run_lock(wait=False):  # free: taken at once
+        # this process (another thread or the same) holds it
+        with pytest.raises(CheckBusyError), check_run_lock(wait=False):
+            pass
+        # Another process holds the file lock: a second handle on the same file cannot take it.
+        with (data_dir() / _CHECK_RUN_LOCK_NAME).open("a+b") as other:
+            init_lock_file(other)
+            assert locks.lock(other, wait=False) is False
+    with check_run_lock(wait=False):  # released again
+        pass
+
+
+def test_pending_secret_undo_cleanup_still_runs():
+    state = load_state()
+    state["secret_undo_cleanup_pending"] = {"reference": "settings-v1", "attempts": 0}
+    save_state(state)
+
+    assert TestClient(app).get("/healthz").status_code == 200
+
+    assert "secret_undo_cleanup_pending" not in load_state()
+
+
+def test_a_slow_write_does_not_hold_up_pages(monkeypatch):
+    """1.19: every request used to queue for the site lock - a site probe of half a minute froze
+    Home. Reads no longer take it; writes still go one at a time."""
+    import asyncio
+
+    monkeypatch.setattr("tow.web.middleware._SITE_HTTP_LOCK", asyncio.Lock())  # bound to this test's loop
+    entered, release = threading.Event(), threading.Event()
+
+    def slow_probe(**_kwargs):
+        entered.set()
+        release.wait(10)
+        return {"ok": True, "probes": []}
+
+    monkeypatch.setattr("tow.web.services.doctor_report", slow_probe)
+    save_state({"topics": [{"id": "t", "title": "Show", "url": "http://rutor.info/torrent/1", "save_path": "M:\\s"}]})
+    with TestClient(app, headers={"Origin": "http://127.0.0.1"}) as client:
+        probe = threading.Thread(target=lambda: client.post("/doctor/run", follow_redirects=False), daemon=True)
+        probe.start()
+        done = threading.Event()
+        pause = threading.Thread(
+            target=lambda: (client.post("/topics/t/pause", follow_redirects=False), done.set()), daemon=True
+        )
+        try:
+            assert entered.wait(5)
+            for path in ("/", "/settings", "/history", "/sites", "/health.json"):
+                assert client.get(path, headers={"Accept": "text/html"}).status_code == 200, path
+                assert probe.is_alive(), f"{path} only answered after the probe ended"
+            pause.start()
+            assert not done.wait(0.3), "a second write did not wait for the first"
+        finally:
+            release.set()
+            probe.join(10)
+        pause.join(10)
+        assert done.is_set()
+    assert load_state()["topics"][0]["paused"] is True
+
+
+def test_the_middleware_reads_no_file_on_the_event_loop(monkeypatch):
+    """Config, secrets, sessions, recovery and the remembered language are read in worker
+    threads: one slow disk read must not stall every other request."""
+    import asyncio
+
+    import tow.auth
+    import tow.i18n
+    import tow.web
+    from tow.auth import issue_session, lan_password_record, lan_password_session_key
+    from tow.config import load_config, save_config
+    from tow.store import save_secrets
+    from tow.web import services
+
+    record = lan_password_record("a-long-password")
+    save_secrets({"lan_auth": record})
+    cfg = load_config()
+    cfg.update(allow_lan=True, bind="0.0.0.0", language="auto")
+    save_config(cfg)
+    cookie = issue_session(lan_password_session_key(record))
+    on_loop: list[str] = []
+
+    def watch(name: str, original):
+        def wrapper(*args, **kwargs):
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                pass  # a worker thread: fine
+            else:
+                on_loop.append(name)
+            return original(*args, **kwargs)
+
+        return wrapper
+
+    for name in ("load_config", "load_secrets", "load_state"):
+        monkeypatch.setattr(services, name, watch(name, getattr(services, name)))
+    monkeypatch.setattr(services, "recover_store_transaction", watch("recovery", services.recover_store_transaction))
+    monkeypatch.setattr(tow.auth, "session_is_valid", watch("session", tow.auth.session_is_valid))
+    monkeypatch.setattr(tow.i18n, "remember_browser_language", watch("language", tow.i18n.remember_browser_language))
+    client = TestClient(app, client=("192.168.1.9", 50000), base_url="http://192.168.1.2:8787")
+    client.cookies.set("tow_session", cookie)
+
+    response = client.get("/", headers={"Accept": "text/html", "Accept-Language": "ru"})
+
+    assert response.status_code == 200
+    assert on_loop == []

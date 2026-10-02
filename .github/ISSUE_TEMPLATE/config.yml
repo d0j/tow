@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/d0j/tow/security/advisories/new
+    about: Privately, through GitHub private vulnerability reporting. Please do not open a public issue.
+  - name: User guide
+    url: https://github.com/d0j/tow/blob/main/docs/guide.md
+    about: Concepts, statuses and a troubleshooting table keyed by the messages TOW shows.

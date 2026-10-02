@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="{{ lang() }}">
+<head>
+{% with title = t('setup.page_title') %}{% include "_head.html" %}{% endwith %}
+</head>
+<body class="auth-page">
+  <main class="auth-shell">
+    <section class="card auth-card auth-card-wide" aria-labelledby="setup-title">
+      <h1 id="setup-title">{{ t('setup.heading') }}</h1>
+      {#- What TOW is and what comes next, before the one question of this page (6). -#}
+      <p>{{ t('setup.what') }}</p>
+      <h2 class="add-title">{{ t('setup.next_title') }}</h2>
+      <ol class="steps">
+        <li>{{ t('setup.step_client') }}</li>
+        <li>{{ t('setup.step_notify') }}</li>
+        <li>{{ t('setup.step_topic') }}</li>
+      </ol>
+      <p class="sub">{{ t('setup.after_hint') }}</p>
+      <h2 class="add-title">{{ t('setup.access_title') }}</h2>
+      <p>{{ t('setup.intro') }}</p>
+      {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+      <form method="post" action="/setup" class="settings-form">
+        <div class="field">
+          <label for="lan-password">{{ t('settings.access.password') }}</label>
+          <input id="lan-password" name="lan_password" type="password" autocomplete="new-password" minlength="8" required aria-describedby="lan-password-hint">
+          <p class="field-hint" id="lan-password-hint">{{ t('settings.access.password_hint') }}</p>
+        </div>
+        <div class="field">
+          <label for="lan-password2">{{ t('settings.access.repeat_password') }}</label>
+          <input id="lan-password2" name="lan_password2" type="password" autocomplete="new-password" minlength="8" required>
+        </div>
+        <div class="field">
+          <label for="lan-hint">{{ t('settings.access.hint_label') }}</label>
+          <input id="lan-hint" name="hint" type="text" maxlength="{{ hint_max }}" autocomplete="off" aria-describedby="lan-hint-help">
+          <p class="field-hint" id="lan-hint-help">{{ t('settings.access.hint_help') }}</p>
+        </div>
+        <div class="check-field">
+          <input id="allow-lan" name="allow_lan" value="1" type="checkbox" aria-describedby="allow-lan-hint">
+          <label for="allow-lan">{{ t('settings.access.allow') }}</label>
+          <p id="allow-lan-hint">{{ t('settings.access.allow_hint') }}</p>
+        </div>
+        <p class="action-hint">{{ t('setup.reset_note') }}</p>
+        <div class="settings-actions">
+          <button type="submit" name="action" value="save">{{ t('setup.save') }}</button>
+          <button type="submit" name="action" value="skip" class="ghost" formnovalidate>{{ t('setup.skip') }}</button>
+        </div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

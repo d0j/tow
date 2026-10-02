@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 id="page-title" class="sr-only">{{ t('home.title') }}</h1>
+{% if attention %}
+<section class="attention card" role="status" aria-label="{{ t('home.attention') }}">
+  <strong>{{ t('home.attention') }}</strong>
+  <ul>{% for item in attention %}<li>{{ item }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+{# The draft comes only from the server's own record of a refused add (?add=<token>), never
+   from values in the link. #}
+{% set draft = add_draft or {} %}
+{% set bad_field = ({'no_site': 'topic-url', 'folder': 'topic-save-path', 'client': 'topic-client', 'selection': 'topic-selection-value'}.get(draft.get('kind'), 'topic-url')) if draft.get('error') else '' %}
+<details class="add card" id="new"{% if draft.get('error') %} open{% endif %}>
+  <summary>+</summary>
+  <form class="row new-topic-form" method="post" action="/topics/add" aria-labelledby="add-topic-title">
+    <h2 id="add-topic-title" class="add-title">{{ t('home.add.title') }}</h2>
+    {% if draft.get('error') %}
+    <div class="form-error add-error" id="add-error" role="alert" tabindex="-1" data-focus-field="{{ bad_field }}">
+      <p>{{ t('home.add.not_added', error=draft.get('error')) }}</p>
+      {% if draft.get('kind') == 'no_site' %}<p class="sub"><a href="/sites#new">{{ t('home.add.add_site') }}</a></p>{% endif %}
+    </div>
+    {% endif %}
+    {% macro invalid(field, bad) %}{% if bad == field %} aria-invalid="true" aria-describedby="add-error"{% endif %}{% endmacro %}
+    <label for="topic-url">{{ t('home.add.url') }}</label>
+    <input id="topic-url" name="url" required placeholder="https://…" value="{{ draft.get('url', '') }}" inputmode="url"{{ invalid('topic-url', bad_field) }}>
+    <div class="row row-two">
+      <div><label for="topic-title">{{ t('home.add.name') }}</label><input id="topic-title" name="title" placeholder="{{ t('home.add.name_placeholder') }}" value="{{ draft.get('title', '') }}"><span id="guess-msg" class="field-hint" aria-live="polite"></span></div>
+      <div><label for="topic-save-path">{{ t('home.add.folder') }}</label><input id="topic-save-path" name="save_path" list="save-roots" value="{{ draft.get('save_path') or (save_roots[0] if save_roots else '') }}" placeholder="{{ os_example_folder() }}" autocomplete="off"{{ invalid('topic-save-path', bad_field) }}></div>
+    </div>
+    <label for="topic-client">{{ t('home.add.client') }}</label>
+    <select id="topic-client" name="client_id" required{{ invalid('topic-client', bad_field) }}>
+      {% for client in client_options %}
+      <option value="{{ client.id }}"{% if client.id == (draft.get('client_id') or default_client_id) %} selected{% endif %}>{{ client_name(client) }}</option>
+      {% endfor %}
+    </select>
+    <div class="row row-two">
+      <div>
+        <label for="topic-selection-mode">{{ t('home.add.what') }}</label>
+        <select id="topic-selection-mode" name="selection_mode">
+          {% set mode = draft.get('selection_mode', 'all') %}
+          <option value="all"{% if mode == 'all' %} selected{% endif %}>{{ t('home.add.mode_all') }}</option>
+          <option value="episodes"{% if mode == 'episodes' %} selected{% endif %}>{{ t('home.add.mode_episodes') }}</option>
+          <option value="files"{% if mode == 'files' %} selected{% endif %}>{{ t('home.add.mode_files') }}</option>
+        </select>
+      </div>
+      <div>
+        <label for="topic-tracking-mode">{{ t('home.add.follow') }}</label>
+        <select id="topic-tracking-mode" name="tracking_mode">
+          <option value="watch"{% if draft.get('tracking_mode') != 'once' %} selected{% endif %}>{{ t('home.add.watch') }}</option>
+          <option value="once"{% if draft.get('tracking_mode') == 'once' %} selected{% endif %}>{{ t('home.add.once') }}</option>
+        </select>
+      </div>
+    </div>
+    <label for="topic-selection-value">{{ t('home.add.selection') }}</label>
+    <textarea id="topic-selection-value" name="selection_value" rows="2" placeholder="{{ t('home.add.selection_placeholder') }}"{{ invalid('topic-selection-value', bad_field) }}>{{ draft.get('selection_value', '') }}</textarea>
+    <p class="sub">{{ t('home.add.selection_hint') }}</p>
+    <p class="sub">{{ t('home.add.check_hint') }}</p>
+    <p class="field-hint busy-note" data-busy-note role="status" hidden>{{ t('home.add.checking_note') }}</p>
+    <div class="actions">
+      <button type="submit" data-busy-label="{{ t('home.add.checking') }}">{{ t('home.add.submit') }}</button>
+      <button type="button" class="ghost" data-close-details formnovalidate>{{ t('home.cancel') }}</button>
+    </div>
+  </form>
+</details>
+{% if credential_prompt %}
+<dialog class="credential-prompt" open aria-labelledby="tracker-credentials-title-{{ credential_prompt.id }}">
+  <h2 id="tracker-credentials-title-{{ credential_prompt.id }}">{{ t('home.auth.title') }}</h2>
+  <p class="sub">{{ credential_prompt.title or credential_prompt.url or credential_prompt.id }}</p>
+  {% if credential_prompt.browser_auth %}
+  <form method="post" action="/topics/{{ credential_prompt.id }}/tracker-browser-auth" data-browser-auth-start>
+    <div class="actions">
+      <button type="submit">{{ t('home.auth.start') }}</button>
+      <a class="btn ghost" href="/">{{ t('home.cancel') }}</a>
+    </div>
+  </form>
+  {% if credential_prompt.browser_auth_status.operation_id %}
+  <p class="sub" role="status" data-browser-auth-status data-topic-id="{{ credential_prompt.id }}" data-operation-id="{{ credential_prompt.browser_auth_status.operation_id }}">{{ credential_prompt.browser_auth_status.message }}</p>
+  {% endif %}
+  {% else %}
+  <form method="post" action="/topics/{{ credential_prompt.id }}/tracker-login">
+    <p>{{ t('home.auth.enter') }}</p>
+    <label for="tracker-username-{{ credential_prompt.id }}">{{ t('home.auth.username') }}</label>
+    <input id="tracker-username-{{ credential_prompt.id }}" name="username" value="{{ credential_prompt.username }}" autocomplete="username" required>
+    <label for="tracker-password-{{ credential_prompt.id }}">{{ t('home.auth.password') }}</label>
+    <input id="tracker-password-{{ credential_prompt.id }}" name="password" type="password" autocomplete="current-password" required>
+    <p class="sub">{{ t('home.auth.password_note') }}</p>
+    <div class="actions">
+      <button type="submit">{{ t('home.auth.save_retry') }}</button>
+      <a class="btn ghost" href="/">{{ t('home.cancel') }}</a>
+    </div>
+  </form>
+  {% endif %}
+</dialog>
+{% endif %}
+<datalist id="save-roots">
+  {% for p in save_roots %}
+  <option value="{{ p }}"></option>
+  {% endfor %}
+</datalist>
+
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-globe" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8.2"/><path d="M3.5 12h17M12 3.8c2.4 2.6 2.4 13.8 0 16.4M12 3.8c-2.4 2.6-2.4 13.8 0 16.4"/></g></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><g fill="currentColor"><rect x="7" y="5" width="3.2" height="14" rx=".4"/><rect x="13.8" y="5" width="3.2" height="14" rx=".4"/></g></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5.5v13l11-6.5z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2-5.1"/><path d="M19.5 5v5h-5"/></g></symbol>
+</svg>
+<div class="list-tools" id="list-tools" hidden>
+  <span class="chips" role="group" aria-label="{{ t('home.tools.show') }}">
+    <button type="button" class="chip on" data-filter="" aria-pressed="true">{{ t('home.tools.all') }}</button>
+    <button type="button" class="chip" data-filter="problem" aria-pressed="false">{{ t('home.tools.problem') }}</button>
+    <button type="button" class="chip" data-filter="new" aria-pressed="false">{{ t('home.tools.new') }}</button>
+    <button type="button" class="chip" data-filter="paused" aria-pressed="false">{{ t('home.tools.paused') }}</button>
+  </span>
+  <span class="chips" role="group" aria-label="{{ t('home.tools.site') }}" data-tracker-chips></span>
+  <label class="sr-only" for="list-sort">{{ t('home.tools.order') }}</label>
+  <select id="list-sort">
+    <option value="">{{ t('home.sort.added') }}</option>
+    <option value="name">{{ t('home.sort.name') }}</option>
+    <option value="event">{{ t('home.sort.event') }}</option>
+    <option value="status">{{ t('home.sort.status') }}</option>
+  </select>
+</div>
+<div class="card list" id="topics">
+  {% if topics %}
+  <div class="list-head">
+    <span></span><span>{{ t('home.head.torrent') }}</span><span>{{ t('home.head.site') }}</span><span>{{ t('home.head.folder') }}</span><span>{{ t('home.head.event') }}</span><span>{{ t('home.head.progress') }}</span><span></span>
+  </div>
+  {% endif %}
+  {#- Rows stay light (M2): no edit form inside (fetched when a row opens), icons from one
+      sprite, no blank lines from the computed values. -#}
+  {%- for topic in topics %}
+  {%- set legacy_error = (topic.last_error|default('', true))|lower %}
+  {%- set legacy_tracker_issue = 'no download link on page' in legacy_error or 'all hosts failed' in legacy_error or 'все зеркала' in legacy_error or 'cross-origin redirect' in legacy_error or 'запрещён cross-origin' in legacy_error or 'cloudflare' in legacy_error or 'frozen' in legacy_error %}
+  {%- set legacy_action_recorded = topic.last_event_label|default('', true) %}
+  {%- set torrent_tone = topic.torrent_tone|default('', true) %}
+  {%- if not torrent_tone %}{% set torrent_tone = 'ok' if legacy_action_recorded else 'warn' if topic.last_error_class in ('tracker', 'tracker_auth', 'frozen') or legacy_tracker_issue else 'bad' if topic.last_error else 'new' if topic.last_changed else 'ok' if topic.last_ok else 'mut' %}{% endif %}
+  {%- set torrent_label = topic.torrent_label|default('', true) %}
+  {%- if not torrent_label %}{% set torrent_label = t('home.status.action_confirmed') if legacy_action_recorded else t('home.status.action_unknown') %}{% endif %}
+  {%- set tracker_tone = topic.tracker_tone|default('', true) %}
+  {%- if not tracker_tone %}{% set tracker_tone = 'ok' if topic.last_ok else 'warn' if topic.last_error_class in ('tracker', 'tracker_auth', 'frozen') or legacy_tracker_issue else 'bad' if topic.last_error else 'mut' %}{% endif %}
+  {%- set tracker_label = topic.tracker_label|default('', true) %}
+  {%- if not tracker_label %}{% set tracker_label = t('home.status.tracker_failed') if tracker_tone == 'warn' else t('home.status.tracker_ok') if tracker_tone == 'ok' else t('home.status.tracker_error') if tracker_tone == 'bad' else t('home.status.not_checked') %}{% endif %}
+  {%- set ds = topic.download_summary or {} %}
+  {%- set pause_label = t('home.topic.resume') if topic.paused else t('home.topic.pause') %}
+  <div class="row-wrap{% if topic.paused %} is-paused{% endif %}" data-tracker="{{ topic.tracker }}" data-name="{{ topic.series|lower }}" data-event="{{ topic.last_event_iso or '' }}" data-q="{{ [topic.title, topic.tracker_title, topic.tracker, topic.url, topic.save_path] | select | map('lower') | unique | join(' ') }}">
+  <details class="row-edit{% if topic.last_changed %} is-new{% endif %}{% if topic.paused %} is-paused{% endif %}">
+    <summary>
+      <span class="dot lg {{ torrent_tone }}" title="{{ torrent_label }}"></span><span class="sr-only">{{ torrent_label }}</span>
+      <span class="clip" title="{{ topic.tracker_title or topic.title }}" data-hl>{{ topic.series }}</span>
+      <span class="topic-tracker" data-label="{{ t('home.row.site') }}">{{ topic.tracker }}</span>
+      <span class="mono topic-path" data-label="{{ t('home.row.folder') }}"><span class="clip-start" title="{{ topic.save_path or '' }}"><bdi>{{ topic.save_path or "—" }}</bdi></span></span>
+      <span class="clip addition topic-event" data-label="{{ t('home.row.event') }}" title="{{ topic.last_event_at or t('home.topic.no_events') }}">
+        {%- if topic.error_line %}<span class="row-error {{ 'bad' if torrent_tone == 'bad' else 'warn' }}" title="{{ topic.last_error_human or topic.last_error }}">{{ topic.error_line }}<span class="sr-only"> {{ t('home.row.full_error') }}</span></span>{% elif topic.last_event_label %}<b>{{ topic.last_event_label }}</b><small class="mut"> · {{ topic.last_event_at }}</small>{% else %}<span class="mut">—</span>{% endif -%}
+      </span>
+      <span class="progress-cell topic-progress" data-label="{{ t('home.row.progress') }}">
+        {%- if ds.expected %}<a class="download-details progress-link{% if ds.is_complete %} complete{% endif %}" href="/topics/{{ topic.id }}/downloads.json" data-topic-id="{{ topic.id }}" title="{{ t('home.topic.episodes_history') }}">{% if ds.is_complete %}✓ {% endif %}{{ ds.completed }}/{{ ds.expected }}</a>
+        {%- elif ds.completed %}<a class="download-details progress-link" href="/topics/{{ topic.id }}/downloads.json" data-topic-id="{{ topic.id }}" title="{{ t('home.topic.files_history') }}">{{ t('home.topic.files_count', n=ds.completed) }}</a>
+        {%- else %}<span class="mut">—</span>{% endif -%}
+      </span>
+      <span class="row-ops-slot" aria-hidden="true"></span>
+    </summary>
+    <div class="edit-panel" data-edit-src="/topics/{{ topic.id }}/edit-panel"><p class="sub"><a href="/topics/{{ topic.id }}/edit">{{ t('home.edit.open') }}</a></p></div>
+  </details>
+  <span class="row-ops">
+    <a class="row-ico {{ tracker_tone }}" href="{{ topic.url }}" target="_blank" rel="noopener" title="{{ tracker_label }}" aria-label="{{ t('home.topic.site_aria_named', name=topic.series, label=tracker_label) }}"><svg width="16" height="16" aria-hidden="true"><use href="#i-globe"/></svg></a>
+    <form method="post" action="/topics/{{ topic.id }}/pause"><button class="row-ico{% if topic.paused %} on{% endif %}" type="submit" title="{{ pause_label }}" aria-label="{{ t('home.topic.resume_named' if topic.paused else 'home.topic.pause_named', name=topic.series) }}"><svg width="16" height="16" aria-hidden="true"><use href="#{{ 'i-play' if topic.paused else 'i-pause' }}"/></svg></button></form>
+    <form method="post" action="/topics/{{ topic.id }}/check"><button class="row-ico" type="submit" title="{{ t('home.topic.check_title') }}" aria-label="{{ t('home.topic.check_named', name=topic.series) }}"><svg width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg></button></form>
+  </span>
+  </div>
+  {% else %}
+  {#- First start (6): three steps, each with where it is done and how far it is. -#}
+  {% set steps = first_steps or {} %}
+  <section class="empty-state first-steps" aria-labelledby="first-steps-title">
+    <h2 id="first-steps-title" class="add-title">{{ t('home.start.title') }}</h2>
+    <p class="sub">{{ t('home.start.lead') }}</p>
+    <ol class="steps">
+      <li>
+        <span class="step-head"><a href="/settings?open=clients">{{ t('home.start.client') }}</a>
+        {%- if steps.client == 'ok' %} <span class="pill ok">{{ t('home.start.client_ok') }}</span>
+        {%- elif steps.client == 'saved' %} <span class="pill mut">{{ t('home.start.client_saved') }}</span>
+        {%- else %} <span class="pill warn">{{ t('home.start.todo') }}</span>{% endif %}</span>
+        <span class="field-hint">{{ t('home.start.client_hint') }}</span>
+      </li>
+      <li>
+        <span class="step-head"><a href="/settings?open=bots">{{ t('home.start.messenger') }}</a>
+        {%- if steps.messenger %} <span class="pill ok">{{ t('home.start.messenger_ok') }}</span>{% else %} <span class="pill mut">{{ t('home.start.optional') }}</span>{% endif %}</span>
+        <span class="field-hint">{{ t('home.start.messenger_hint') }}</span>
+      </li>
+      <li>
+        <span class="step-head"><a href="#new" data-open-new>{{ t('home.start.topic') }}</a></span>
+        <span class="field-hint">{{ tm('home.start.topic_hint', sites='/sites') }}</span>
+      </li>
+    </ol>
+  </section>
+  {% endfor %}
+</div>
+
+<dialog class="log-pop" id="download-pop" aria-labelledby="download-title">
+  <div class="log-pop-head"><span id="download-title">{{ t('home.downloads.title') }}</span><button class="ghost sm" type="button" id="download-close">{{ t('home.downloads.close') }}</button></div>
+  <div class="log-box" id="download-body"><div class="mut">{{ t('home.downloads.loading') }}</div></div>
+</dialog>
+{% endblock %}

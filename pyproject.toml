@@ -1,0 +1,110 @@
+[project]
+name = "tow"
+version = "1.21.0"
+description = "Torrent topic watcher: follows forum tracker topics that replace their torrent in place and hands each new revision to your torrent client."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "d0j" }]
+keywords = [
+    "torrent",
+    "tracker",
+    "qbittorrent",
+    "transmission",
+    "deluge",
+    "monitorrent",
+    "self-hosted",
+    "notifications",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: FastAPI",
+    "Intended Audience :: End Users/Desktop",
+    "Natural Language :: English",
+    "Natural Language :: Russian",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Communications :: File Sharing",
+]
+requires-python = ">=3.14"
+dependencies = [
+    "beautifulsoup4>=4.15.0",
+    "cryptography>=50.0.1",
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "jinja2>=3.1.6",
+    "python-multipart>=0.0.32",
+    "pyyaml>=6.0.3",
+    "qbittorrent-api>=2024.1",
+    "tzdata>=2026.3",
+    "uvicorn[standard]>=0.52.4",
+    "websockets>=15.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/d0j/tow"
+Repository = "https://github.com/d0j/tow"
+Issues = "https://github.com/d0j/tow/issues"
+Changelog = "https://github.com/d0j/tow/blob/main/CHANGELOG.md"
+
+[project.scripts]
+tow = "tow.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.12.0",
+    "mypy>=1.18",
+    "pytest>=9.1.1",
+    "ruff>=0.16.6",
+]
+
+[tool.uv]
+required-version = ">=0.12"
+
+[tool.mypy]
+python_version = "3.14"
+files = ["src"]
+warn_unused_ignores = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_any_generics = true
+warn_return_any = true
+no_implicit_reexport = true
+strict_equality = true
+warn_redundant_casts = true
+warn_unreachable = false
+
+# Third-party libraries without type information (PyYAML ships no stubs; types-PyYAML is not locked).
+[[tool.mypy.overrides]]
+module = ["yaml", "yaml.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "allow_system: the test may touch the real machine (processes, network)",
+    "allow_git: the test may run git (only git) on a throwaway repository in the temp folder",
+]
+pythonpath = ["src"]
+filterwarnings = [
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]
+
+# Branch coverage of the full gate (pytest-cov comes in with `uv run --with`, see scripts/gate.ps1).
+[tool.coverage.run]
+branch = true
+source = ["tow"]
+
+[tool.coverage.report]
+# The measured total, rounded down: raise it as coverage grows, never lower it to pass.
+fail_under = 89
+skip_covered = true
