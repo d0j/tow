@@ -3,6 +3,14 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.10] — 2026-10-02
+
+### Fixed
+
+- A partial episode selection saved with an older seasonless key (for example `E14`) now counts a completed
+  season-labelled file (`S03E14`) when the selected files identify exactly one matching season. Conflicting or
+  ambiguous seasons remain uncounted, and reconciliation does not generate a duplicate completion event.
+
 ## [1.22.9] — 2026-10-02
 
 ### Fixed

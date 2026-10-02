@@ -589,6 +589,110 @@ def test_client_episode_files_supply_count_when_topic_has_no_saved_keys(tmp_path
     assert history["topics"]["missing-keys"]["expected"]["source"] == "files"
 
 
+def test_partial_selection_matches_legacy_seasonless_key_to_explicit_file_season(tmp_path: Path):
+    class Client:
+        client_id = "fake-main"
+        client_kind = "fake"
+        capabilities: ClassVar[dict[str, bool]] = {"inspect": True}
+
+        def inspect_torrent(self, infohash):
+            return {
+                "hash": infohash,
+                "files": [{"name": "Show/S03E14.mkv", "size": 10, "progress": 1.0, "priority": 1}],
+            }
+
+    folder = tmp_path / "Show"
+    folder.mkdir()
+    (folder / "S03E14.mkv").write_bytes(b"0123456789")
+    topic = {
+        "id": "legacy-partial-season",
+        "title": "Show S03 [14 из 14]",
+        "hash": "ABC123",
+        "save_path": str(tmp_path),
+        "selection": {"mode": "episodes", "value": "14"},
+        "selected_episode_keys": ["episode:e14"],
+    }
+    history = {"topics": {}}
+
+    result = reconcile_topic(topic, Client(), history, now="2026-09-24T17:00:00+03:00")
+
+    assert result["summary"]["expected"] == 1
+    assert result["summary"]["completed"] == 1
+    assert history["topics"]["legacy-partial-season"]["expected"]["keys"] == ["episode:s03e14"]
+    assert result["events"] == []
+    repeat = reconcile_topic(topic, Client(), history, now="2026-09-24T17:01:00+03:00")
+    assert repeat["summary"]["completed"] == 1
+    assert repeat["events"] == []
+
+
+@pytest.mark.parametrize(
+    ("title", "episodes", "selected_keys", "completed", "expected_keys"),
+    [
+        (
+            "Show S03 [14 из 14]",
+            ("S03E14", "S04E14"),
+            ("episode:e14",),
+            0,
+            ["episode:e14"],
+        ),
+        (
+            "Show S04 [14 из 14]",
+            ("S03E14",),
+            ("episode:e14",),
+            0,
+            ["episode:e14"],
+        ),
+        (
+            "Show S03 [14 из 15]",
+            ("S03E14",),
+            ("episode:e14", "episode:e15"),
+            1,
+            ["episode:s03e14", "episode:e15"],
+        ),
+    ],
+)
+def test_partial_legacy_key_alignment_requires_matching_unambiguous_selected_files(
+    tmp_path: Path,
+    title: str,
+    episodes: tuple[str, ...],
+    selected_keys: tuple[str, ...],
+    completed: int,
+    expected_keys: list[str],
+):
+    class Client:
+        client_id = "fake-main"
+        client_kind = "fake"
+        capabilities: ClassVar[dict[str, bool]] = {"inspect": True}
+
+        def inspect_torrent(self, infohash):
+            return {
+                "hash": infohash,
+                "files": [
+                    {"name": f"Show/{episode}.mkv", "size": 10, "progress": 1.0, "priority": 1} for episode in episodes
+                ],
+            }
+
+    folder = tmp_path / "Show"
+    folder.mkdir()
+    for episode in episodes:
+        (folder / f"{episode}.mkv").write_bytes(b"0123456789")
+    topic = {
+        "id": "partial-ambiguous",
+        "title": title,
+        "hash": "ABC123",
+        "save_path": str(tmp_path),
+        "selection": {"mode": "episodes", "value": "14"},
+        "selected_episode_keys": list(selected_keys),
+    }
+    history = {"topics": {}}
+
+    result = reconcile_topic(topic, Client(), history, now="2026-09-24T17:00:00+03:00")
+
+    assert result["summary"]["expected"] == len(selected_keys)
+    assert result["summary"]["completed"] == completed
+    assert history["topics"]["partial-ambiguous"]["expected"]["keys"] == expected_keys
+
+
 def test_initial_reconcile_is_baseline_not_a_new_completion(tmp_path: Path):
     client = FakeClient()
     client.progress = 1.0

@@ -468,6 +468,34 @@ def _expected_from_observed(
     return None
 
 
+def _seasoned_selection_expected(
+    expected: dict[str, Any] | None, observed_episode_keys: list[str], preferred_season: int | None
+) -> dict[str, Any] | None:
+    """Match old seasonless selection keys to one unambiguous selected file season.
+
+    The persisted selection is left untouched: a later torrent revision can replace
+    the files, and a season mismatch must never count an unrelated episode.
+    """
+    if not expected or expected.get("source") != "selection":
+        return None
+    observed_seasons = {
+        int(match.group(1)) for key in observed_episode_keys if (match := re.fullmatch(r"episode:s(\d+)e\d+", key))
+    }
+    if len(observed_seasons) != 1:
+        return None
+    season = next(iter(observed_seasons))
+    if preferred_season is not None and preferred_season != season:
+        return None
+    observed = set(observed_episode_keys)
+    keys = list(expected.get("keys") or [])
+    aligned: list[str] = []
+    for key in keys:
+        match = re.fullmatch(r"episode:e(\d+)", key)
+        seasoned = f"episode:s{season:02d}e{int(match.group(1)):02d}" if match else ""
+        aligned.append(seasoned if key not in observed and seasoned in observed else key)
+    return {**expected, "keys": aligned} if aligned != keys else None
+
+
 def _path_key(item: HistoryItem) -> str:
     return str(item.get("relative_path") or "").casefold()
 
@@ -698,6 +726,9 @@ def _selected_files(
     season_relative = _season_relative_expected(expected, observed_episode_keys, preferred_season)
     if season_relative is not None:
         expected = record["expected"] = season_relative
+    seasoned_selection = _seasoned_selection_expected(expected, observed_episode_keys, preferred_season)
+    if seasoned_selection is not None:
+        expected = record["expected"] = seasoned_selection
     selected_episode_keys = [str(value) for value in topic.get("selected_episode_keys") or []]
     observed = _expected_from_observed(topic, expected, observed_episode_keys, selected_episode_keys)
     if observed is not None:
