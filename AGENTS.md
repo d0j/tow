@@ -55,6 +55,9 @@ tracker degradation from a client or TOW failure before changing state.
   branch and HEAD.
 - One logical change per commit, with a message that says what changed and why; the gate passes before every
   commit. User-visible changes also get a line in `CHANGELOG.md`.
+- How everything on GitHub looks — README header and sections, languages and terms, commits, tags, CHANGELOG,
+  release assets and notes, CI, data hygiene — follows [docs/ru/STYLE.md](docs/ru/STYLE.md). Change that file first
+  when a rule has to change.
 - Releases are annotated tags (`vX.Y.Z`) with the version bumped in `pyproject.toml`.
 - When asked to undo changes or go back to a previous version: stop new work, `git revert` the commits in question
   (or redeploy the previous tag to the runtime install), rerun the gate and report. Never rewrite pushed history.
