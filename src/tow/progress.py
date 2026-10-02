@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 import stat
 import time
@@ -41,6 +42,8 @@ CONFIRMATION_REUSE_SEC = 24 * 3600
 def safe_relative_path(save_path: str, client_file_name: str, *, base: Path | None = None) -> str | None:
     """``base`` is ``Path(save_path).resolve()`` when the caller already has it."""
     raw = str(client_file_name or "").replace("\\", "/")
+    if raw.startswith("/"):
+        return None
     parts = [part for part in raw.split("/") if part not in ("", ".")]
     if not parts or any(part == ".." for part in parts) or ":" in parts[0]:
         return None
@@ -589,7 +592,8 @@ def _file_progress(row: Any, info: Any) -> float:
     """Per-file progress (0..1), falling back to the torrent's progress."""
     progress = _get(row, "progress", _get(info, "progress", 0.0))
     try:
-        return max(0.0, min(1.0, float(progress)))
+        value = float(progress)
+        return max(0.0, min(1.0, value)) if math.isfinite(value) else 0.0
     except TypeError, ValueError:
         return 0.0
 

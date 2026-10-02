@@ -128,6 +128,13 @@ def test_bare_numeric_extras_years_and_resolutions_are_not_episodes():
     assert [label.key for label in parse_episode_coverage("13.mkv")] == ["episode:e13"]
 
 
+def test_postposed_and_bracketed_numbers_reject_zero_years_and_resolutions():
+    for name in ("0 серия.mkv", "2026 серия.mkv", "[0].mkv", "[2026].mkv", "[1080].mkv"):
+        assert parse_episode_coverage(name) == (), name
+    assert [label.key for label in parse_episode_coverage("5 серия.mkv")] == ["episode:e05"]
+    assert [label.key for label in parse_episode_coverage("[05].mkv")] == ["episode:e05"]
+
+
 def test_expected_count_rejects_part_season_and_volume_totals():
     assert parse_expected_count("Show [13 из 14]")["total"] == 14
     assert parse_expected_count("Show Part 2 of 3") is None

@@ -5,7 +5,33 @@ import pytest
 from helpers import raises_code
 
 from tow.episodes import item_identity, summarize_completion
-from tow.progress import _preferred_season, reconcile_topic
+from tow.progress import _file_progress, _preferred_season, reconcile_topic, safe_relative_path
+
+
+def test_client_absolute_paths_cannot_be_interpreted_as_relative_files(tmp_path: Path):
+    for name in ("/Show/S01E01.mkv", r"\Show\S01E01.mkv", r"\\server\share\S01E01.mkv", r"C:\Show\S01E01.mkv"):
+        assert safe_relative_path(str(tmp_path), name) is None
+    assert safe_relative_path(str(tmp_path), "Show/S01E01.mkv") == "Show/S01E01.mkv"
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), "nan", "inf"])
+def test_non_finite_client_progress_cannot_confirm_a_file(value):
+    assert _file_progress({"progress": value}, {}) == 0.0
+
+
+def test_non_finite_progress_does_not_emit_a_false_completion(tmp_path: Path):
+    client = FakeClient()
+    client.progress = float("nan")
+    folder = tmp_path / "Show"
+    folder.mkdir()
+    (folder / "S01E01.mkv").write_bytes(b"0123456789")
+    topic = {"id": "invalid-progress", "title": "Show [1 из 1]", "hash": "ABC", "save_path": str(tmp_path)}
+    history = {"topics": {"invalid-progress": {"baseline_at": "2026-09-12T20:00:00+03:00", "items": {}}}}
+
+    result = reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
+
+    assert result["summary"]["completed"] == 0
+    assert "episode_completed" not in result["events"]
 
 
 def test_summary_deduplicates_episode_revisions():

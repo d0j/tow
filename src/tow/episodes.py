@@ -314,7 +314,8 @@ def _number_then_episode_word(text: str, path: PurePosixPath) -> tuple[EpisodeLa
     """``5 серия`` / ``5 episode``."""
     match = re.search(r"(?i)\b(\d{1,4})\s*(?:серия|эпизод|episode)\b", text)
     if match:
-        return (EpisodeLabel(episode=int(match.group(1))),)
+        value = int(match.group(1))
+        return (EpisodeLabel(episode=value),) if value > 0 and not 1900 <= value <= 2099 else ()
     return None
 
 
@@ -432,6 +433,8 @@ def _bracketed_stem(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, ...] 
     bracketed = re.fullmatch(r"\[(\d{1,4})\]", stem)
     if bracketed:
         value = int(bracketed.group(1))
+        if value in {720, 1080, 2160, 4320} or 1900 <= value <= 2099:
+            return ()
         return (EpisodeLabel(episode=value),) if value > 0 else ()
     return None
 

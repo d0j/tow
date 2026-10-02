@@ -3,6 +3,15 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.12] — 2026-10-03
+
+### Fixed
+
+- Numeric filenames in brackets and postposed episode labels no longer treat zero, release years, or common video
+  resolutions as episodes.
+- Non-finite file progress reported by a torrent client no longer becomes a false 100% completion or episode event.
+- Absolute file paths reported by a client are no longer reinterpreted as relative paths during disk verification.
+
 ## [1.22.11] — 2026-10-03
 
 ### Fixed
