@@ -26,6 +26,13 @@ def service_view() -> dict[str, Any]:
     service["watchdog_problem"] = (
         {"at": clock(float(problem.get("at") or 0)), "lines": str(problem["text"]).splitlines()} if problem else None
     )
+    supervisor = service.get("supervisor")
+    server = supervisor.get("server") if isinstance(supervisor, dict) else None
+    up_since = server.get("up_since") if isinstance(server, dict) else None
+    try:
+        service["running_since"] = format_ui_timestamp(str(up_since)) if up_since else None
+    except TypeError, ValueError:
+        service["running_since"] = None
     restart = service.get("restart")
     if not isinstance(restart, dict):
         service["restart_view"] = None

@@ -185,6 +185,7 @@ def test_settings_translates_restart_marker_to_human_status(monkeypatch):
             "pid": 4321,
             "autostart": True,
             "task": {"status": "Ready", "last_run_result": "0"},
+            "supervisor": {"server": {"up_since": "2026-10-02T19:59:53+00:00"}},
             "restart": {
                 "status": "ready",
                 "operation_id": "restart-test",
@@ -197,10 +198,12 @@ def test_settings_translates_restart_marker_to_human_status(monkeypatch):
     page = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text
     service = page.split('id="acc-service"', 1)[1].split('id="acc-transfer"', 1)[0]
 
-    assert "Последний перезапуск:" in service
+    assert "Веб-страница работает с:" in service
+    assert "02.10" in service
+    assert "Последний перезапуск по запросу:" in service
     assert "из настроек" in service
     assert "выполнен" in service
-    assert "Последний перезапуск: <b>ready</b>" not in service
+    assert "Последний перезапуск по запросу: <b>ready</b>" not in service
 
 
 @pytest.mark.parametrize(

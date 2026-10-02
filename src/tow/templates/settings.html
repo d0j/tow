@@ -359,6 +359,9 @@
           {% endif %}
         </div>
         <p class="action-hint"><a href="/doctor">{{ t('settings.service.doctor_link') }}</a> {{ t('settings.service.doctor_note') }}</p>
+        {% if service.running_since %}
+        <p class="restart-result">{{ t('settings.service.running_since') }} <b>{{ service.running_since }}</b>.</p>
+        {% endif %}
         {% if service.restart_view %}
         <p class="restart-result{% if service.restart_view.failed %} error{% endif %}" role="status">{{ t('settings.service.last_restart') }} <b>{{ service.restart_view.at }}</b> · {{ service.restart_view.reason }} · {{ service.restart_view.state }}.</p>
         {% else %}

@@ -3,6 +3,13 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.8] — 2026-10-02
+
+### Fixed
+
+- Service Settings now shows when the current web server actually started, and labels the older saved restart
+  record as a requested restart. Updating TOW no longer leaves an old request looking like the latest start.
+
 ## [1.22.7] — 2026-10-02
 
 ### Fixed
