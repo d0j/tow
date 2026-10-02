@@ -879,6 +879,99 @@ def test_reconcile_repairs_legacy_bare_episode_file_event(tmp_path: Path):
     assert event["label"] == "S01E10"
 
 
+def test_ona_history_gains_episode_progress_without_repeating_completion(tmp_path: Path):
+    class Client:
+        client_id = "fake-main"
+        client_kind = "fake"
+        capabilities: ClassVar[dict[str, bool]] = {"inspect": True}
+
+        def inspect_torrent(self, infohash):
+            return {
+                "hash": infohash,
+                "files": [{"name": "Show/Show.ONA.S01E02.mkv", "size": 10, "progress": 1.0, "priority": 1}],
+            }
+
+    folder = tmp_path / "Show"
+    folder.mkdir()
+    (folder / "Show.ONA.S01E02.mkv").write_bytes(b"0123456789")
+    rel = "Show/Show.ONA.S01E02.mkv"
+    identity = item_identity(rel, None, 10)
+    old_at = "2026-09-14T22:01:11+03:00"
+    history = {
+        "topics": {
+            "ona": {
+                "baseline_at": "2026-09-14T21:00:00+03:00",
+                "items": {
+                    identity: {
+                        "identity": identity,
+                        "kind": "file",
+                        "label": "Show.ONA.S01E02.mkv",
+                        "relative_path": rel,
+                        "source_hash": "ABC",
+                        "size": 10,
+                        "status": "completed",
+                        "completed_observed_at": old_at,
+                    }
+                },
+                "last_event": {
+                    "kind": "file_completed",
+                    "label": "Show.ONA.S01E02.mkv",
+                    "item": identity,
+                    "relative_path": rel,
+                    "at": old_at,
+                },
+            }
+        }
+    }
+    topic = {"id": "ona", "title": "Show [2 из 2]", "hash": "ABC", "save_path": str(tmp_path)}
+
+    result = reconcile_topic(topic, Client(), history, "2026-10-03T01:00:00+03:00")
+
+    record = history["topics"]["ona"]
+    assert result["events"] == []
+    assert result["summary"]["completed"] == 1
+    assert result["summary"]["expected"] == 2
+    assert record["items"][identity]["episode_key"] == "episode:s01e02"
+    assert record["items"][identity]["completed_observed_at"] == old_at
+    assert record["last_event"]["kind"] == "episode_completed"
+    assert record["last_event"]["label"] == "S01E02"
+    assert record["last_event"]["at"] == old_at
+
+
+def test_multiseason_ona_release_uses_known_future_total(tmp_path: Path):
+    class Client:
+        client_id = "fake-main"
+        client_kind = "fake"
+        capabilities: ClassVar[dict[str, bool]] = {"inspect": True}
+
+        def inspect_torrent(self, infohash):
+            return {
+                "hash": infohash,
+                "files": [
+                    {"name": f"Show/Show.ONA.{season}.mkv", "size": 10, "progress": 1.0, "priority": 1}
+                    for season in ("S01E01", "S02E01")
+                ],
+            }
+
+    folder = tmp_path / "Show"
+    folder.mkdir()
+    for season in ("S01E01", "S02E01"):
+        (folder / f"Show.ONA.{season}.mkv").write_bytes(b"0123456789")
+    topic = {
+        "id": "ona-multiseason",
+        "title": "Show (1-2 сезоны: 1-2 серии из 4)",
+        "hash": "ABC",
+        "save_path": str(tmp_path),
+    }
+
+    result = reconcile_topic(topic, Client(), {"topics": {}}, "2026-10-03T01:00:00+03:00")
+
+    assert result["summary"]["completed"] == 2
+    assert result["summary"]["expected"] == 4
+    assert result["summary"]["completion_known"] is True
+    assert result["summary"]["is_complete"] is False
+
+
 def test_reconcile_applies_corroborated_season_hint_to_bare_anime_episodes(
     tmp_path: Path,
 ):

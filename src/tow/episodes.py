@@ -27,6 +27,7 @@ def parse_expected_count(title: str) -> dict[str, Any] | None:
     previous_count_end = 0
     for match in re.finditer(
         r"(?i)(?P<current>\d{1,4}(?:[xх]\d{1,4})?(?:\s*[-–—]\s*\d{1,4})?)"
+        r"\s*(?P<episode_word>сери(?:я|и|й)|эпизод(?:ы|а|ов)?|episodes?|eps?)?"
         r"\s*(?:\bиз\b|\bof\b)\s*(?P<total>\d{1,4})\b",
         text,
     ):
@@ -35,7 +36,8 @@ def parse_expected_count(title: str) -> dict[str, Any] | None:
         clause = f"{clause}{match.group('current')}"
         following = re.split(r"[\[\](),;/|]", text[match.end() :])[0]
         explicit_episode = bool(
-            re.search(r"(?i)\b(?:сери(?:я|и|й)|эпизод(?:ы|а|ов)?|episodes?|eps?)\b", clause)
+            match.group("episode_word")
+            or re.search(r"(?i)\b(?:сери(?:я|и|й)|эпизод(?:ы|а|ов)?|episodes?|eps?)\b", clause)
             or re.search(r"(?i)s\d{1,2}e\d{1,4}", clause)
             or (
                 re.search(
@@ -73,6 +75,11 @@ def parse_expected_count(title: str) -> dict[str, Any] | None:
             continue
         current = match.group("current")
         range_start = numbers[0] if re.match(r"\d{1,4}\s*[-–—]", current) else 1
+        # "73-176 серии из 176" can describe a mixed-season subset whose files
+        # restart numbering each season. Without the cumulative-to-season map,
+        # applying 73..176 to SxxEyy would invent a false completion target.
+        if match.group("episode_word") and range_start > 1:
+            continue
         candidates.append((total, explicit_episode, range_start))
     preferred = {(total, start) for total, explicit, start in candidates if explicit}
     totals = preferred or {(total, start) for total, _explicit, start in candidates}
@@ -509,12 +516,18 @@ def _coverage_with_folder_season(name: str) -> tuple[EpisodeLabel, ...]:
     ):
         return ()
     if re.search(
-        r"(?i)(?:^|[ ._\-\[(])(?:ova|oad|ona|special|спец(?:выпуск)?|"
+        r"(?i)(?:^|[ ._\-\[(])(?:ova|oad|special|спец(?:выпуск)?|"
         r"ncop|nced|omake)(?:\b|\d)",
         path.stem,
     ):
         return ()
     coverage = parse_episode_coverage(str(path))
+    # ONA can name a regular episodic web release, unlike an OVA bonus. Keep
+    # unnumbered/seasonless ONA files conservative, but honour explicit SxxExx.
+    if re.search(r"(?i)(?:^|[ ._\-\[(])ona(?:\b|\d)", path.stem) and (
+        not coverage or any(label.season is None or label.season == 0 for label in coverage)
+    ):
+        return ()
     if not coverage or all(label.season is not None for label in coverage):
         return coverage
     seasons = {

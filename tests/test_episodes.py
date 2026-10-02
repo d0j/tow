@@ -324,6 +324,40 @@ def test_crc_audio_and_inline_ova_do_not_invent_regular_episodes():
     assert resolve_episode_coverages(["Show OVA - 01.mkv"]) == ((),)
 
 
+def test_inline_ona_with_explicit_season_episodes_is_not_a_special():
+    names = (
+        "Show/Show.ONA.S01E01.mkv",
+        "Show/Show.ONA.S01E02.mkv",
+    )
+    assert [[label.key for label in row] for row in resolve_episode_coverages(names)] == [
+        ["episode:s01e01"],
+        ["episode:s01e02"],
+    ]
+    assert resolve_episode_coverages(["Show ONA - 01.mkv"]) == ((),)
+    assert resolve_episode_coverages(["Show.ONA.S00E01.mkv"]) == ((),)
+    assert resolve_episode_coverages(["Show OVA S01E01.mkv"]) == ((),)
+    assert resolve_episode_coverages(["Specials/Show.ONA.S01E01.mkv"]) == ((),)
+    dual = resolve_episode_coverages(
+        [f"Show/Show.ONA.S03E{episode:02d}-E{episode + 72:03d}.mkv" for episode in range(2, 6)]
+    )
+    assert [[label.key for label in row] for row in dual] == [
+        ["episode:s03e02"],
+        ["episode:s03e03"],
+        ["episode:s03e04"],
+        ["episode:s03e05"],
+    ]
+
+
+def test_postposed_episode_word_gives_a_safe_growing_total():
+    expected = parse_expected_count("Show (1-2 сезоны: 1-31 серии из 52)")
+    assert expected is not None
+    assert expected["total"] == 52
+    assert expected["episode_min"] == 1
+    # A later-starting mixed-season pack needs the global-to-season mapping
+    # before its title range can be used as an exact completion target.
+    assert parse_expected_count("Show (73-176 серии из 176)") is None
+
+
 def test_russian_plural_episode_range_and_extended_season_folders():
     assert [label.episode for label in parse_episode_coverage("Show 1-5 серии.mkv")] == [1, 2, 3, 4, 5]
     coverages = resolve_episode_coverages(("Season 02 (2020)/01.mkv", "2 сезон/02.mkv"))

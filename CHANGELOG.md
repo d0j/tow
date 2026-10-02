@@ -3,6 +3,16 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.11] — 2026-10-03
+
+### Fixed
+
+- Files explicitly numbered `SxxExx` in an ONA release are now tracked as episodes rather than generic files;
+  OVA bonuses, special folders, and unnumbered ONA files remain excluded. Existing completed files gain episode
+  progress and corrected last-event labels without duplicate notifications.
+- Growing multi-season titles such as `1-31 серии из 52` now retain the known final episode count. Later-starting
+  mixed-season packs remain conservatively counted from their files when cumulative numbering cannot be mapped.
+
 ## [1.22.10] — 2026-10-02
 
 ### Fixed
