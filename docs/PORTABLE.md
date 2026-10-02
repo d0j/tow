@@ -406,9 +406,8 @@ Built so far (this workstream):
   folder, `HOME` a folder inside it and the `XDG_*_HOME` variables are unset, so autostart files
   never reach the runner's home.
 - mypy is clean with `--platform linux` and `--platform darwin` too.
-- CI (`.github/workflows/ci.yml`): the matrix runs the gate on windows/ubuntu/macos; Linux and
-  macOS stay `continue-on-error` until the first green run there (no Linux/macOS machine was
-  available; the suite was made OS-neutral by analysis and by injected backends).
+- CI (`.github/workflows/ci.yml`): the full gate runs on Windows, Ubuntu and macOS for every push
+  and pull request, and all three must pass (green since 1.21.0).
 
 ## 8. Upgrading from the five-task layout (≤1.17)
 

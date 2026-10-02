@@ -182,7 +182,7 @@ cannot be restored. `tow keys status` shows which key file is in use (never the 
   → Password, or `tow password`. Other devices then sign in again.
 - **Sign out everywhere** (Settings → Network access) ends every network session; the password stays.
 - The reminder you set is visible to anyone who opens the sign-in page — never write the password into it.
-- Requests from public internet addresses are always refused. See [Headless server](../README.md#headless-server)
+- Requests from public internet addresses are always refused. See [Headless server](../README.md#remote-access)
   for SSH tunnels and the reverse-proxy caveat.
 
 ## Troubleshooting
