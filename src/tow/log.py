@@ -6,7 +6,7 @@ import os
 import re
 import sys
 import threading
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any
@@ -416,7 +416,9 @@ HISTORY_GROUPS = {
 _KIND_RE = re.compile(r'"kind":\s*"([A-Za-z0-9_]+)"')
 
 
-def history_events(*, group: str = "", text: str = "", limit: int = 300) -> list[dict[str, Any]]:
+def history_events(
+    *, group: str = "", text: str = "", limit: int = 300, title_index: Mapping[str, str] | None = None
+) -> list[dict[str, Any]]:
     """Newest first, across the current log and its rotated files (G7)."""
     kinds = HISTORY_GROUPS.get(group) or frozenset().union(*HISTORY_GROUPS.values())
     needle = text.strip().casefold()
@@ -438,7 +440,7 @@ def history_events(*, group: str = "", text: str = "", limit: int = 300) -> list
             kind = _KIND_RE.search(line)
             if kind is None or kind.group(1) not in kinds:
                 continue  # most lines are other events: no JSON parsing for them
-            if needle and needle not in line.casefold() and "\\u" not in line:
+            if needle and not title_index and needle not in line.casefold() and "\\u" not in line:
                 continue
             try:
                 record = json.loads(line)
@@ -446,7 +448,11 @@ def history_events(*, group: str = "", text: str = "", limit: int = 300) -> list
                 continue
             if not isinstance(record, dict) or record.get("kind") not in kinds:
                 continue
-            if needle and needle not in json.dumps(record, ensure_ascii=False).casefold():
+            if (
+                needle
+                and needle not in json.dumps(record, ensure_ascii=False).casefold()
+                and needle not in event_title(record, title_index).casefold()
+            ):
                 continue
             out.append(record)
             if len(out) >= limit:
@@ -465,7 +471,47 @@ ERR_RU = Labels(
 )
 
 
-def format_event(rec: Mapping[str, Any]) -> dict[str, str]:
+def index_event_titles(topics: Iterable[Mapping[str, Any]]) -> dict[str, str]:
+    """Current names for historical events that recorded only a topic ID or torrent hash.
+
+    A shared hash cannot identify a unique topic; leave those events as hashes rather than
+    guessing. This index changes only how the log is displayed, never the stored records.
+    """
+    names: dict[str, str] = {}
+    conflicts: set[str] = set()
+    for topic in topics:
+        title = str(topic.get("title") or topic.get("tracker_title") or "").strip()
+        if not title:
+            continue
+        keys = [f"id:{topic['id']}"] if topic.get("id") else []
+        for value in [topic.get("hash"), *(topic.get("previous_hashes") or [])]:
+            h = str(value or "")
+            if re.fullmatch(r"[0-9a-fA-F]{40}", h):
+                keys.append(f"hash:{h.upper()}")
+        for key in keys:
+            if key in names and names[key] != title:
+                conflicts.add(key)
+            else:
+                names[key] = title
+    for key in conflicts:
+        names.pop(key, None)
+    return names
+
+
+def event_title(rec: Mapping[str, Any], title_index: Mapping[str, str] | None = None) -> str:
+    title = str(rec.get("title") or "").strip()
+    if title or not title_index:
+        return title
+    topic_id = str(rec.get("topic_id") or rec.get("topic") or "")
+    if topic_id and (title := title_index.get(f"id:{topic_id}", "")):
+        return title
+    h = str(rec.get("hash") or "")
+    if re.fullmatch(r"[0-9a-fA-F]{40}", h):
+        return title_index.get(f"hash:{h.upper()}", "")
+    return ""
+
+
+def format_event(rec: Mapping[str, Any], *, title_index: Mapping[str, str] | None = None) -> dict[str, str]:
     ts = str(rec.get("created_at") or rec.get("ts") or "")
     at = ts
     with suppress(TypeError, ValueError):
@@ -474,7 +520,7 @@ def format_event(rec: Mapping[str, Any]) -> dict[str, str]:
     lang = owner_language()
     label = kind_label(kind, lang)
     label = label[:1].upper() + label[1:]  # a line of the log starts like a sentence
-    title = str(rec.get("title") or "").strip()[:100]
+    title = event_title(rec, title_index)[:100]
     bits: list[str] = []
     how = rec.get("how")
     if how == "manual":

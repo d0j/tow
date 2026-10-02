@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from helpers import flash_of, open_network, shown, wait_for_check_job
 
 from tow.clock import iso_now
-from tow.log import read_events
+from tow.log import log_event, read_events
 from tow.store import (
     load_download_history,
     load_state,
@@ -2545,6 +2545,22 @@ def test_history_reads_rotated_logs_and_filters_by_group_and_text():
     assert "Новый сериал" not in downloads
     assert "Новый сериал" in searched
     assert "Старый сериал" not in searched
+
+
+def test_history_and_log_window_name_events_recorded_with_only_topic_identity():
+    save_state(
+        {
+            "topics": [{"id": "topic-a", "title": "Понятный сериал", "hash": "A" * 40}],
+            "mirrors": {},
+        }
+    )
+    log_event("file_completed", topic="topic-a", hash="A" * 40)
+    client = TestClient(app)
+
+    assert "Понятный сериал" in client.get("/history?group=downloads").text
+    assert "Понятный сериал" in client.get("/history?q=понятный").text
+    assert "Понятный сериал" in client.get("/log.json").json()["rows"][0]["detail"]
+    assert "Понятный сериал" in client.get("/settings").text
 
 
 def test_log_window_links_to_the_full_history():

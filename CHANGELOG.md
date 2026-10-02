@@ -3,6 +3,13 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.6] — 2026-10-02
+
+### Fixed
+
+- History, the log window and Settings show the current topic name for older file and episode events that recorded
+  only a topic ID or torrent hash. Search finds those events by name; ambiguous hashes remain unlabelled.
+
 ## [1.22.5] — 2026-10-02
 
 ### Fixed

@@ -35,7 +35,7 @@ def settings_page(request: Request) -> Response:
     from tow.clients.factory import client_configurations, client_secret_block, default_client_id
     from tow.clients.factory import ready as ready_clients
     from tow.clients.spec import get as client_get
-    from tow.log import format_event, read_events
+    from tow.log import format_event, index_event_titles, read_events
 
     cfg = _context.config()  # read-only snapshots of this request (tow.web._context)
     secrets = _context.secrets_or_none()
@@ -46,6 +46,7 @@ def settings_page(request: Request) -> Response:
     configurations = client_configurations(cfg)
     default_id = default_client_id(cfg)
     topics = state.get("topics") or []
+    title_index = index_event_titles(topics)
     for index, configuration in enumerate(configurations):
         spec = client_get(str(configuration.get("kind") or "").lower())
         if spec is None or not spec.ready:
@@ -106,7 +107,7 @@ def settings_page(request: Request) -> Response:
             "restore_points_error": restore_points_error,
             "backups": backup_view(cfg, request),
             "language_setting": _language_setting(cfg),
-            "log_rows": [format_event(e) for e in read_events(limit=200)],
+            "log_rows": [format_event(e, title_index=title_index) for e in read_events(limit=200)],
         },
     )
 

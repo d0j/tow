@@ -11,6 +11,7 @@ from tow.log import (
     error_class,
     export_event_projection,
     format_event,
+    index_event_titles,
     log_event,
     log_path,
     read_events,
@@ -60,6 +61,42 @@ def test_format_event_omits_malformed_hash():
 
     assert "aaaaaaaa" not in rendered["detail"]
     assert "SECRET" not in rendered["detail"]
+
+
+def test_event_titles_resolve_from_topic_or_revision_without_rewriting_log():
+    current_hash = "A" * 40
+    old_hash = "B" * 40
+    index = index_event_titles(
+        [{"id": "topic-1", "title": "Series One", "hash": current_hash, "previous_hashes": [old_hash]}]
+    )
+    assert "Series One" in format_event({"kind": "file_completed", "topic": "topic-1"}, title_index=index)["detail"]
+    assert "Series One" in format_event({"kind": "file_completed", "hash": old_hash}, title_index=index)["detail"]
+    assert (
+        "Original"
+        in format_event({"kind": "file_completed", "topic": "topic-1", "title": "Original"}, title_index=index)[
+            "detail"
+        ]
+    )
+    assert (
+        "Series One"
+        not in format_event({"kind": "file_completed", "topic": "deleted", "hash": "C" * 40}, title_index=index)[
+            "detail"
+        ]
+    )
+
+
+def test_event_titles_do_not_guess_when_hash_or_id_is_shared():
+    shared = "D" * 40
+    index = index_event_titles(
+        [
+            {"id": "same", "title": "First", "hash": shared},
+            {"id": "same", "title": "Second", "hash": shared},
+        ]
+    )
+    detail = format_event({"kind": "file_completed", "hash": shared, "topic": "same"}, title_index=index)["detail"]
+    assert "First" not in detail
+    assert "Second" not in detail
+    assert shared[:8] in detail
 
 
 def test_format_error_human():
