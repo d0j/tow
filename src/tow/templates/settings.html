@@ -1,0 +1,490 @@
+{% extends "base.html" %}
+{% block body %}
+{% set hh = header_health() %}
+<div class="settings-page settings-page-compact">
+  <header class="settings-title">
+    <h1 id="page-title">{{ t('settings.page.title') }}</h1>
+  </header>
+
+  {% if secret_store_error %}
+  <div class="flash" role="alert">
+    <span>{{ tm('settings.page.secret_store', help='/settings/help') }}</span>
+  </div>
+  {% endif %}
+
+  <div class="settings-content" id="settings-acc">
+    <details class="settings-section settings-accordion acc" id="acc-language" data-q="{{ language_setting.search }}">
+      <summary>
+        <span class="settings-summary-title">{{ t('settings.language.title') }}{% if lang() != 'en' %} · Language{% endif %}</span>
+        <span class="pill mut">{% if language_setting.auto %}{{ t('settings.language.pill_auto', name=language_setting.current_name) }}{% else %}{{ language_setting.current_name }}{% endif %}</span>
+      </summary>
+      <div class="settings-panel">
+        <form method="post" action="/settings/language" class="settings-form compact-form" data-return-target="acc-language">
+          <div class="field">
+            <label for="language-choice">{{ t('settings.language.choose') }}</label>
+            <select id="language-choice" name="language" aria-describedby="language-auto-hint">
+              <option value="auto"{% if language_setting.auto %} selected{% endif %}>{{ t('settings.language.auto', name=language_setting.current_name) }}</option>
+              {% for l in languages() %}<option value="{{ l.code }}"{% if not language_setting.auto and language_setting.chosen == l.code %} selected{% endif %}>{{ l.native }}{% if l.native != l.name %} — {{ l.name }}{% endif %}</option>{% endfor %}
+            </select>
+            <p id="language-auto-hint" class="action-hint">{{ t('settings.language.auto_hint') }}</p>
+          </div>
+          <p class="action-hint">{% if language_setting.auto %}{{ t('settings.language.messages_note_auto') }}{% else %}{{ t('settings.language.messages_note') }}{% endif %}</p>
+          <div class="settings-actions"><button type="submit">{{ t('common.save') }}</button></div>
+        </form>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-clients" data-q="{{ search_words.clients }}">
+      <summary>
+        <span id="settings-clients-title" class="settings-summary-title">{{ t('settings.clients.title') }}</span>
+        {#- What is set up, not how many cards there are: "1 client" read as working when it was not. -#}
+        {% set ready = clients | selectattr('host') | list %}
+        <span class="pill {{ 'warn' if not ready else ('ok' if hh.qbit_tone == 'ok' else 'mut') }}">{% if not ready %}{{ t('settings.clients.not_configured') }}{% elif ready|length == 1 %}{{ ready[0].title }}{% else %}{{ t('settings.clients.count', n=ready|length) }}{% endif %}</span>
+      </summary>
+      <div class="settings-panel">
+        <div class="integration-list">
+          {% for c in clients %}
+          <article class="integration-card" id="client-{{ c.id }}">
+            <div class="integration-head">
+              <h2>{{ c.title }}</h2>
+              <span class="integration-pills">
+                {% if c.multi and c.default %}<span class="pill ok">{{ t('settings.clients.main') }}</span>{% endif %}
+                <span class="pill {{ 'mut' if c.host else 'warn' }}">{{ t('settings.clients.configured') if c.host else t('settings.clients.not_configured') }}</span>
+              </span>
+            </div>
+            {% if c.steps %}
+            <details class="technical-details notifier-steps" {% if not c.host %}open{% endif %}>
+              <summary>{{ t('settings.common.how_to_connect') }}</summary>
+              <ol>
+                {% for step in c.steps %}<li>{{ step }}</li>{% endfor %}
+              </ol>
+              {% if c.note %}<p class="action-hint">{{ c.note }}</p>{% endif %}
+            </details>
+            {% endif %}
+            <form id="client-form-{{ c.form_id }}" method="post" action="/settings/client" class="settings-form" data-return-target="acc-clients">
+              <input type="hidden" name="client_id" value="{{ c.id }}">
+              <input type="hidden" name="kind" value="{{ c.kind }}">
+              <fieldset>
+                <legend class="sr-only">{{ t('settings.common.connection_legend', name=c.title) }}</legend>
+                <div class="field">
+                  <label for="q_host-{{ c.form_id }}">{{ c.labels.host }}</label>
+                  <input id="q_host-{{ c.form_id }}" name="host" value="{{ c.host }}" autocomplete="off" placeholder="127.0.0.1">
+                </div>
+                <div class="field-grid">
+                  <div class="field">
+                    <label for="q_port-{{ c.form_id }}">{{ c.labels.port }}</label>
+                    <input id="q_port-{{ c.form_id }}" name="port" value="{{ c.port }}" type="number" min="1" max="65535" inputmode="numeric">
+                  </div>
+                  {% if 'username' in c.fields %}
+                  <div class="field">
+                    <label for="q_user-{{ c.form_id }}">{{ c.labels.username }}</label>
+                    <input id="q_user-{{ c.form_id }}" name="username" value="{{ c.user }}" autocomplete="off">
+                  </div>
+                  {% endif %}
+                </div>
+                <div class="field">
+                  <label for="q_pass-{{ c.form_id }}">{{ c.labels.password }} {% if c.pass_set %}<span class="pill ok">{{ t('settings.common.saved_pill') }}</span>{% endif %}</label>
+                  <input id="q_pass-{{ c.form_id }}" name="password" type="password" placeholder="{{ t('settings.common.keep_empty') }}" autocomplete="new-password">
+                </div>
+              </fieldset>
+              <div class="settings-actions">
+                <button type="submit">{{ t('settings.common.save') }}</button>
+                <button class="ghost" type="submit" form="ping-{{ c.form_id }}" data-keep data-check-saved{% if not c.host %} data-needs-address disabled title="{{ t('js.settings.save_address_first') }}"{% endif %}>{{ t('settings.common.check') }}</button>
+                {% if c.multi and not c.default %}
+                <button class="ghost" type="submit" form="default-{{ c.form_id }}">{{ t('settings.clients.make_main') }}</button>
+                <button class="ghost danger" type="submit" form="remove-{{ c.form_id }}">{{ t('settings.common.remove') }}</button>
+                {% endif %}
+              </div>
+              <p class="action-hint">{{ t('settings.clients.checks_saved') }}{% if c.multi and c.default %} {{ t('settings.clients.main_note') }}{% endif %}</p>
+              {% if c.used_by %}<p class="action-hint">{{ t('settings.clients.used_by', topics=c.used_by) }}</p>{% endif %}
+              <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved_save_first') }}</p>
+            </form>
+            <form id="ping-{{ c.form_id }}" method="post" action="/settings/client/ping" data-return-target="acc-clients">
+              <input type="hidden" name="client_id" value="{{ c.id }}">
+            </form>
+            {% if c.multi and not c.default %}
+            <form id="default-{{ c.form_id }}" method="post" action="/settings/client/default" data-return-target="acc-clients">
+              <input type="hidden" name="client_id" value="{{ c.id }}">
+            </form>
+            <form id="remove-{{ c.form_id }}" method="post" action="/settings/client/remove" data-return-target="acc-clients" data-confirm="{{ t('settings.clients.remove_confirm', title=c.title) }}">
+              <input type="hidden" name="client_id" value="{{ c.id }}">
+            </form>
+            {% endif %}
+            <details class="technical-details">
+              <summary>{{ t('settings.common.technical') }}</summary>
+              <dl>
+                <div><dt>{{ t('settings.common.type') }}</dt><dd><code>{{ c.kind }}</code></dd></div>
+                <div><dt>ID</dt><dd><code>{{ c.id }}</code></dd></div>
+              </dl>
+            </details>
+          </article>
+          {% else %}
+          <div class="settings-empty">{{ t('settings.clients.empty') }}</div>
+          {% endfor %}
+        </div>
+        <form method="post" action="/settings/client/add" class="settings-form client-add" data-return-target="acc-clients">
+          <div class="field">
+            <label for="client-add-kind">{{ t('settings.clients.add_label') }}</label>
+            <div class="client-add-row">
+              <select id="client-add-kind" name="kind">
+                {% for t in client_types %}<option value="{{ t.kind }}">{{ t.title }}</option>{% endfor %}
+              </select>
+              <button type="submit">{{ t('settings.clients.add') }}</button>
+            </div>
+          </div>
+          <p class="support-note">{{ t('settings.clients.supported', names=client_types|map(attribute='title')|join(', ')) }}</p>
+        </form>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-bots" data-q="{{ search_words.notify }}">
+      <summary>
+        <span id="settings-bots-title" class="settings-summary-title">{{ t('settings.notify.title') }}</span>
+        <span class="pill {{ 'ok' if hh.bot_ok else ('mut' if hh.bot_ok is none else 'bad') }}">{{ t('settings.notify.pill_ok') if hh.bot_ok else (t('settings.notify.pill_none') if hh.bot_ok is none else t('settings.notify.pill_down')) }}</span>
+      </summary>
+      <div class="settings-panel">
+        <p class="support-note">{{ t('settings.notify.intro') }}</p>
+        <div class="integration-list">
+          {% for n in notifiers %}
+          <details class="integration-card notifier-card" id="notifier-{{ n.kind }}"{% if n.connected or open_card == n.kind %} open{% endif %}>
+            <summary class="integration-head">
+              <h2>{{ n.title }}</h2>
+              {% if not n.connected %}
+              <span class="pill mut">{{ t('settings.notify.not_connected') }}</span>
+              {% elif n.ok is sameas false %}
+              <span class="pill bad">{{ t('settings.notify.error') }}</span>
+              {% elif n.ok %}
+              <span class="pill ok">{{ t('settings.notify.works') }}</span>
+              {% else %}
+              <span class="pill warn">{{ t('settings.notify.unchecked') }}</span>
+              {% endif %}
+            </summary>
+            {% if n.connected and n.error %}
+            <p class="form-error" role="status">{{ n.error }}</p>
+            {% endif %}
+            {% if n.queued %}
+            <p class="action-hint">{{ t('settings.notify.queued', count=n.queued, name=n.title) }}</p>
+            {% endif %}
+            <details class="technical-details notifier-steps" {% if not n.connected %}open{% endif %}>
+              <summary>{{ t('settings.common.how_to_connect') }}</summary>
+              <ol>
+                {% for step in n.steps %}<li>{{ step }}</li>{% endfor %}
+              </ol>
+              {% if n.note %}<p class="action-hint">{{ n.note }}</p>{% endif %}
+            </details>
+            <form id="notifier-form-{{ n.kind }}" method="post" action="/settings/notifier/{{ n.kind }}" class="settings-form" data-return-target="acc-bots">
+              <fieldset>
+                <legend class="sr-only">{{ t('settings.common.connection_legend', name=n.title) }}</legend>
+                {% for f in n.fields %}
+                <div class="field">
+                  <label for="nf-{{ n.kind }}-{{ f.name }}">{{ f.label }}{% if not f.required %} {{ t('settings.common.optional') }}{% endif %} {% if f.kind == 'secret' and f.saved %}<span class="pill ok">{{ t('settings.common.saved_pill') }}</span>{% endif %}</label>
+                  {% if f.kind == 'secret' %}
+                  <input id="nf-{{ n.kind }}-{{ f.name }}" name="{{ f.name }}" type="password" value="{{ f.suggestion }}" placeholder="{{ t('settings.common.keep_empty') if f.saved else f.placeholder }}" autocomplete="new-password" spellcheck="false">
+                  {% else %}
+                  <input id="nf-{{ n.kind }}-{{ f.name }}" name="{{ f.name }}" value="{{ f.value or f.suggestion }}" placeholder="{{ f.placeholder }}" autocomplete="off" spellcheck="false">
+                  {% endif %}
+                </div>
+                {% endfor %}
+              </fieldset>
+              <div class="settings-actions">
+                <button type="submit">{{ t('settings.common.save') }}</button>
+                {% if n.connected %}
+                <button class="ghost" type="submit" form="notifier-test-{{ n.kind }}" data-keep data-check-saved>{{ t('settings.common.check') }}</button>
+                <button class="ghost danger" type="submit" form="notifier-remove-{{ n.kind }}">{{ t('settings.notify.disconnect') }}</button>
+                {% endif %}
+              </div>
+              <p class="action-hint">{% if n.connected %}{{ t('settings.notify.check_hint_connected') }}{% else %}{{ t('settings.notify.check_hint_new') }}{% endif %}</p>
+              <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved_save_first') }}</p>
+            </form>
+            {% if n.connected %}
+            <form id="notifier-test-{{ n.kind }}" method="post" action="/settings/notifier/{{ n.kind }}/test" data-return-target="acc-bots"></form>
+            <form id="notifier-remove-{{ n.kind }}" method="post" action="/settings/notifier/{{ n.kind }}/remove" data-return-target="acc-bots" data-confirm="{{ t('settings.notify.remove_confirm', name=n.title) }}"></form>
+            {% endif %}
+          </details>
+          {% endfor %}
+        </div>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-intervals" data-q="{{ t('settings.intervals.q') }}">
+      <summary>
+        <span id="settings-intervals-title" class="settings-summary-title">{{ t('settings.intervals.title') }}</span>
+        <span class="pill mut">{{ interval_label }}</span>
+      </summary>
+      <div class="settings-panel">
+        <form method="post" action="/settings/interval" class="settings-form compact-form" data-return-target="acc-intervals">
+          {#- Two different things, one under the other, each with what it does (the undo time sat
+              beside the check interval as if it were part of it). -#}
+          <div class="field">
+            <label for="interval_min">{{ t('settings.intervals.check_topics') }}</label>
+            <div class="input-unit field-short"><input id="interval_min" name="interval_min" value="{{ interval_min }}" type="number" min="1" step="1" inputmode="numeric" aria-describedby="interval-hint"><span>{{ t('settings.common.min') }}</span></div>
+            <p class="field-hint" id="interval-hint">{{ t('settings.intervals.check_hint', interval=interval_label) }}</p>
+          </div>
+          <div class="field">
+            <label for="flash_ttl_min">{{ t('settings.intervals.show_undo') }}</label>
+            <div class="input-unit field-short"><input id="flash_ttl_min" name="flash_ttl_min" value="{{ flash_ttl_min }}" type="number" min="1" step="1" inputmode="numeric" aria-describedby="undo-hint"><span>{{ t('settings.common.min') }}</span></div>
+            <p class="field-hint" id="undo-hint">{{ t('settings.intervals.undo_hint') }}</p>
+          </div>
+          <div class="settings-actions"><button type="submit">{{ t('settings.common.save') }}</button></div>
+          <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved') }}</p>
+        </form>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-access" data-q="{{ t('settings.access.q') }}">
+      <summary>
+        <span id="settings-access-title" class="settings-summary-title">{{ t('settings.access.title') }}</span>
+        <span class="pill {{ 'mut' if not allow_lan else ('ok' if lan_password_set else 'warn') }}">{% if not allow_lan %}{{ t('settings.access.pill_local') }}{% elif lan_password_set %}{{ t('settings.access.pill_password') }}{% else %}{{ t('settings.access.pill_no_password') }}{% endif %}</span>
+      </summary>
+      <div class="settings-panel">
+        <p class="action-hint">{{ t('settings.access.intro') }}</p>
+        {% if allow_lan and not lan_password_set %}
+        <p class="notice neutral" role="status">{{ tm('settings.access.no_password') }}</p>
+        {% endif %}
+        <div class="integration-list">
+          {% if access_local or lan_password_set %}
+          <article class="integration-card access-card" id="password-card">
+            <div class="integration-head">
+              <h2>{{ t('settings.access.password_title') }}</h2>
+              <span class="integration-pills"><span class="pill {{ 'ok' if lan_password_set else ('warn' if allow_lan else 'mut') }}">{{ t('settings.access.password_set') if lan_password_set else t('settings.access.password_unset') }}</span></span>
+            </div>
+            <form method="post" action="/settings/password" class="settings-form compact-form" data-return-target="acc-access">
+              <fieldset>
+                <legend class="sr-only">{{ t('settings.access.password_title') }}</legend>
+                {% if not access_local %}
+                <div class="field">
+                  <label for="current-password">{{ t('settings.access.current_password') }}</label>
+                  <input id="current-password" name="current_password" type="password" autocomplete="current-password" required>
+                </div>
+                {% endif %}
+                <div class="field">
+                  <label for="lan-password">{{ t('settings.access.new_password') if lan_password_set else t('settings.access.password') }}</label>
+                  <input id="lan-password" name="lan_password" type="password" autocomplete="new-password" minlength="8" placeholder="{{ t('settings.access.keep_password') if lan_password_set else t('settings.access.min8') }}" aria-describedby="lan-password-hint">
+                  <p class="field-hint" id="lan-password-hint">{{ t('settings.access.password_hint') }}</p>
+                </div>
+                <div class="field">
+                  <label for="lan-password2">{{ t('settings.access.repeat_password') }}</label>
+                  <input id="lan-password2" name="lan_password2" type="password" autocomplete="new-password" minlength="8">
+                </div>
+                <div class="field">
+                  <label for="lan-hint">{{ t('settings.access.hint_label') }}</label>
+                  <input id="lan-hint" name="hint" type="text" maxlength="{{ hint_max }}" value="{{ lan_hint }}" autocomplete="off" aria-describedby="lan-hint-help">
+                  <p class="field-hint" id="lan-hint-help">{{ t('settings.access.hint_help') }}</p>
+                </div>
+              </fieldset>
+              <p class="action-hint">{{ t('settings.access.reset_here') if access_local else t('settings.access.reset_elsewhere') }}</p>
+              <div class="settings-actions"><button type="submit">{{ t('settings.access.save_password') }}</button></div>
+              <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved') }}</p>
+            </form>
+            {% if lan_password_set %}
+            <form method="post" action="/settings/sessions/sign-out" class="settings-form compact-form" data-return-target="acc-access">
+              <p class="action-hint">{{ t('settings.access.sign_out_hint') }}</p>
+              <div class="settings-actions"><button type="submit">{{ t('settings.access.sign_out_all') }}</button></div>
+            </form>
+            {% endif %}
+          </article>
+          {% endif %}
+          <article class="integration-card access-card" id="network-card">
+            <div class="integration-head">
+              <h2>{{ t('settings.access.legend') }}</h2>
+              <span class="integration-pills"><span class="pill {{ 'ok' if allow_lan and lan_password_set else 'mut' }}">{{ t('settings.access.network_on') if allow_lan else t('settings.access.network_off') }}</span></span>
+            </div>
+            {% if access_local %}
+            <form method="post" action="/settings/access" class="settings-form compact-form" data-return-target="acc-access">
+              <fieldset>
+                <legend class="sr-only">{{ t('settings.access.legend') }}</legend>
+                {# L7: without a password the network cannot be opened (the server refuses it too). #}
+                {% set lan_locked = not lan_password_set and not allow_lan %}
+                <div class="check-field">
+                  <input id="allow-lan" name="allow_lan" value="1" type="checkbox"{% if allow_lan %} checked{% endif %}{% if lan_locked %} disabled{% endif %} aria-describedby="allow-lan-hint{% if lan_locked %} allow-lan-locked{% endif %}">
+                  <label for="allow-lan">{{ t('settings.access.allow') }}</label>
+                  <p id="allow-lan-hint">{{ t('settings.access.allow_hint') }}</p>
+                  {% if lan_locked %}<p id="allow-lan-locked" class="locked-hint">{{ t('settings.access.need_password_first') }}</p>{% endif %}
+                </div>
+              </fieldset>
+              <div class="settings-actions"><button type="submit"{% if lan_locked %} disabled{% endif %}>{{ t('settings.common.save') }}</button></div>
+              <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved') }}</p>
+            </form>
+            {% else %}
+            <p class="notice neutral">{{ t('settings.access.local_only') }}</p>
+            {% endif %}
+          </article>
+        </div>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-service" data-q="{{ t('settings.service.q') }}">
+      <summary>
+        <span id="settings-service-title" class="settings-summary-title">{{ t('settings.service.title') }}</span>
+        <span class="pill {{ 'ok' if service.autostart else 'mut' }}">{{ t('settings.service.autostart_on') if service.autostart else t('settings.service.autostart_off') }}</span>
+      </summary>
+      <div class="settings-panel">
+        <p class="action-hint">{{ t('settings.service.mode_supervisor') }}</p>
+        <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
+          <input type="hidden" name="enabled" value="0">
+          <input type="hidden" name="without_login" value="{{ '1' if service.without_login else '0' }}">
+          <div class="check-field">
+            <input id="service-autostart" name="enabled" value="1" type="checkbox"{% if service.autostart %} checked{% endif %} aria-describedby="service-autostart-hint" data-auto-submit-control>
+            <label for="service-autostart">{{ t('settings.service.autostart') }}</label>
+            <p id="service-autostart-hint" data-auto-submit-status>{{ t('settings.service.autostart_hint_any') }}</p>
+          </div>
+          <noscript><button type="submit">{{ t('settings.service.apply') }}</button></noscript>
+        </form>
+        {% if service.supports_without_login and service.autostart %}
+        <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
+          <input type="hidden" name="enabled" value="1">
+          <input type="hidden" name="without_login" value="0">
+          <div class="check-field">
+            <input id="service-without-login" name="without_login" value="1" type="checkbox"{% if service.without_login %} checked{% endif %} aria-describedby="service-without-login-hint" data-auto-submit-control>
+            <label for="service-without-login">{{ t('settings.service.without_login') }}</label>
+            <p id="service-without-login-hint" data-auto-submit-status>{{ t('settings.service.without_login_hint') }}</p>
+          </div>
+          <noscript><button type="submit">{{ t('settings.service.apply') }}</button></noscript>
+        </form>
+        {% endif %}
+        <div class="service-restart">
+          <form method="post" action="/settings/service/restart" data-return-target="acc-service" data-confirm="{{ t('settings.service.restart_confirm') }}">
+            <button type="submit">{{ t('settings.service.restart') }}</button>
+          </form>
+          <p>{{ t('settings.service.restart_note') }}</p>
+        </div>
+        <div class="watchdog-note">
+          <p class="action-hint">{{ t('settings.service.watchdog') }}</p>
+          {% if service.watchdog_problem %}
+          <p class="action-hint">{{ t('settings.service.watchdog_last') }} <b>{{ service.watchdog_problem.at }}</b>:</p>
+          <ul class="watchdog-lines">{% for line in service.watchdog_problem.lines %}<li>{{ line }}</li>{% endfor %}</ul>
+          {% endif %}
+        </div>
+        <p class="action-hint"><a href="/doctor">{{ t('settings.service.doctor_link') }}</a> {{ t('settings.service.doctor_note') }}</p>
+        {% if service.restart_view %}
+        <p class="restart-result{% if service.restart_view.failed %} error{% endif %}" role="status">{{ t('settings.service.last_restart') }} <b>{{ service.restart_view.at }}</b> · {{ service.restart_view.reason }} · {{ service.restart_view.state }}.</p>
+        {% else %}
+        <p class="restart-result" role="status">{{ t('settings.service.no_restarts') }}</p>
+        {% endif %}
+        <details class="technical-details">
+          <summary>{{ t('settings.common.technical') }}</summary>
+          <dl>
+            <div><dt>PID</dt><dd><code>{{ service.pid }}</code></dd></div>
+            <div><dt>{{ t('settings.service.autostart_where') }}</dt><dd><code>{{ (service.autostart_detail or {}).get('where') or '—' }}</code></dd></div>
+            {% if service.supervisor %}<div><dt>{{ t('settings.service.web_server') }}</dt><dd><code>{{ service.supervisor.get('server', {}).get('state') or '—' }}</code></dd></div>{% endif %}
+            {% if service.restart %}<div><dt>{{ t('settings.service.operation_id') }}</dt><dd><code>{{ service.restart.get('operation_id') or '—' }}</code></dd></div>{% endif %}
+          </dl>
+        </details>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-transfer" data-q="{{ t('settings.backups.q') }}">
+      <summary>
+        <span id="settings-transfer-title" class="settings-summary-title">{{ t('settings.backups.title') }}</span>
+        <span class="pill {{ 'bad' if backups.failed else ('ok' if backups.last_ok else 'mut') }}">{% if backups.failed %}{{ t('settings.backups.pill_failed') }}{% elif backups.last_ok %}{{ t('settings.backups.pill_last', at=backups.last_ok) }}{% else %}{{ t('settings.backups.pill_none') }}{% endif %}</span>
+      </summary>
+      <div class="settings-panel">
+        {# L6: three ways to keep TOW safe, one card each: night copies, copies made by hand, a TOW file. #}
+        {% macro folder_form(f, hint) %}
+        <form method="post" action="/settings/backup/location" class="settings-form compact-form backup-folder" data-return-target="acc-transfer">
+          <input type="hidden" name="kind" value="{{ f.kind }}">
+          <div class="field">
+            <label for="backup-path-{{ f.kind }}">{{ t('settings.backups.folder', title=f.title) }} {% if f.is_default %}<span class="pill mut">{{ t('settings.backups.default_pill') }}</span>{% endif %}</label>
+            <input id="backup-path-{{ f.kind }}" name="path" value="{{ f.value }}" placeholder="{{ f.default_path }}" autocomplete="off" spellcheck="false">
+            {% set shown_path = f.value and f.path != f.value %}
+            {% if shown_path or f.free or hint %}<p class="field-hint">{% if shown_path %}{{ t('settings.backups.now', path=f.path) }}{% endif %}{% if shown_path and f.free %} · {% endif %}{% if f.free %}{{ t('settings.backups.free', free=f.free) }}{% endif %}{% if hint %}{% if shown_path or f.free %} · {% endif %}{{ hint }}{% endif %}</p>{% endif %}
+          </div>
+          <div class="settings-actions">
+            <button type="submit" name="action" value="save">{{ t('settings.common.save') }}</button>
+            <button class="ghost" type="submit" name="action" value="check">{{ t('settings.common.check') }}</button>
+            {% if not f.is_default %}<button class="ghost" type="submit" name="action" value="default">{{ t('settings.backups.use_default') }}</button>{% endif %}
+          </div>
+        </form>
+        {% endmacro %}
+        <div class="integration-list backup-list">
+          <article class="integration-card backup-card" id="backup-night" aria-labelledby="backup-night-title">
+            <div class="integration-head">
+              <div><h2 id="backup-night-title">{{ t('settings.backups.night_title') }}</h2><p>{{ t('settings.backups.night_hint') }}</p></div>
+            </div>
+            {% if backups.failed %}<p class="form-error" role="alert">{{ t('settings.backups.failed', at=backups.error_at, error=backups.error) }}</p>{% endif %}
+            <form method="post" action="/settings/backup/now" data-return-target="acc-transfer" class="settings-actions backup-make">
+              <button type="submit">{{ t('settings.backups.make_now') }}</button>
+            </form>
+            {% if backups.snapshots %}
+            <div class="restore-point-list" aria-label="{{ t('settings.backups.night_title') }}">
+              {% for snap in backups.snapshots %}
+              <div class="restore-point-row">
+                <div><b>{{ snap.at }}</b><span>{{ snap.size }}</span></div>
+                <form method="post" action="/settings/backup/night/{{ snap.name }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.night_restore_confirm', at=snap.at) }}">
+                  <button class="danger" type="submit">{{ t('settings.common.restore') }}</button>
+                </form>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+            {{ folder_form(backups.folders.night, t('settings.backups.folders_hint')) }}
+          </article>
+
+          <article class="integration-card backup-card" id="backup-manual" aria-labelledby="backup-manual-title">
+            <div class="integration-head">
+              <div><h2 id="backup-manual-title">{{ t('settings.backups.manual_title') }}</h2><p>{{ t('settings.backups.manual_note') }}</p></div>
+              <span class="pill {{ 'ok' if restore_points else 'mut' }}">{% if restore_points %}{{ t('settings.backups.saved_count', n=restore_points|length) }}{% else %}{{ t('settings.backups.manual_empty') }}{% endif %}</span>
+            </div>
+            <form method="post" action="/settings/restore-points" data-return-target="acc-transfer" class="settings-actions backup-make">
+              <button type="submit">{{ t('settings.backups.create') }}</button>
+            </form>
+            {% if restore_points_error %}
+            <p class="notice error" role="alert">{{ t('settings.backups.list_error') }}</p>
+            {% elif restore_points %}
+            <div class="restore-point-list" aria-label="{{ t('settings.backups.manual_list') }}">
+              {% for point in restore_points %}
+              <div class="restore-point-row">
+                <div><b>{{ point.created_label }}</b><span>{{ point.size_label }}</span></div>
+                <form method="post" action="/settings/restore-points/{{ point.id }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.manual_restore_confirm') }}">
+                  <button class="danger" type="submit">{{ t('settings.common.restore') }}</button>
+                </form>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+            {{ folder_form(backups.folders.manual, '') }}
+          </article>
+
+          <article class="integration-card backup-card portable-transfer" id="backup-file" aria-labelledby="backup-file-title">
+            <div class="integration-head">
+              <div><h2 id="backup-file-title">{{ t('settings.backups.file_title') }}</h2><p>{{ t('settings.backups.file_intro') }}</p></div>
+            </div>
+            <form method="post" action="/settings/portable/export" data-native-submit class="settings-actions backup-make">
+              <button type="submit">{{ t('settings.backups.file_save') }}</button>
+            </form>
+            <form method="post" action="/settings/portable/import" enctype="multipart/form-data" data-return-target="acc-transfer" class="portable-import-form">
+              <label for="portable-backup-file">{{ t('settings.backups.file_choose') }} <code>.towx</code></label>
+              <input id="portable-backup-file" name="backup_file" type="file" accept=".towx,application/octet-stream" required>
+              <div class="settings-actions">
+                <button class="ghost" type="submit" name="operation" value="check">{{ t('settings.common.check') }}</button>
+                <button class="danger" type="submit" name="operation" value="restore" data-confirm="{{ t('settings.backups.file_restore_confirm') }}">{{ t('settings.common.restore') }}</button>
+              </div>
+            </form>
+            <p class="section-note">{{ tm('settings.backups.file_note', more='/settings/help#export-import') }}</p>
+          </article>
+        </div>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc settings-log" id="acc-log" data-q="{{ t('settings.log.q') }}">
+      <summary>
+        <span id="settings-log-title" class="settings-summary-title">{{ t('settings.log.title') }}</span>
+        <span class="pill mut">{{ log_rows|length }}</span>
+      </summary>
+      <div class="settings-panel settings-log-body">
+        <div class="log-box" id="log-settings-body">
+          {% for e in log_rows %}
+          <div class="log-line"><span class="mut">{{ e.at }}</span> · <b>{{ e.label }}</b>{% if e.detail %} · {{ e.detail }}{% endif %}{% if e.raw %} <details class="raw-error"><summary>{{ t('common.details') }}</summary><code>{{ e.raw }}</code></details>{% endif %}</div>
+          {% else %}
+          <div class="mut">{{ t('settings.log.empty') }}</div>
+          {% endfor %}
+        </div>
+      </div>
+    </details>
+
+    <a class="settings-help-link" href="/settings/help" data-q="{{ t('settings.page.help_q') }}">
+      <span>{{ t('settings.page.help_link') }}</span><span aria-hidden="true">→</span>
+    </a>
+  </div>
+</div>
+{% endblock %}

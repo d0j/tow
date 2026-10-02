@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block body %}
+<p class="sub help-back"><a href="/settings">{{ t('help.back') }}</a></p>
+<article class="help-page">
+  <h1 id="page-title" class="help-title">{{ t('help.title') }}</h1>
+  <p>{{ tm('help.intro.text') }}</p>
+
+  <h2>{{ t('help.s1.title') }}</h2>
+  <ol>
+    <li>{{ tm('help.s1.home') }}</li>
+    <li>{{ tm('help.s1.sites') }}</li>
+    <li>{{ tm('help.s1.settings') }}</li>
+    <li>{{ tm('help.s1.log', n=log_files, size=log_size) }}</li>
+  </ol>
+
+  <h2>{{ t('help.s2.title') }}</h2>
+  <ol>
+    <li>{{ tm('help.s2.step1') }}</li>
+    <li>{{ t('help.s2.step2') }}</li>
+    <li>{{ t('help.s2.step3') }}</li>
+  </ol>
+  <p>{{ tm('help.s2.dot') }}<br>
+  {{ tm('help.s2.icon') }}</p>
+
+  <h2>{{ t('help.s3.title') }}</h2>
+  <ol>
+    <li>{{ t('help.s3.step1') }} <b>+</b>.</li>
+    <li>{{ t('help.s3.step2') }}</li>
+    <li>{{ t('help.s3.step3') }}</li>
+    <li>{{ t('help.s3.step4') }}</li>
+  </ol>
+  <p>{{ t('help.s3.note') }}</p>
+
+  <h2>{{ t('help.s4.title') }}</h2>
+  <p>{{ t('help.s4.text') }}</p>
+
+  <h2>{{ t('help.s5.title') }}</h2>
+  <p>{{ tm('help.s5.text', interval=interval_label) }}</p>
+
+  <h2 id="export-import">{{ t('help.s6.title') }}</h2>
+  <ul>
+    <li>{{ tm('help.s6.night') }}</li>
+    <li>{{ tm('help.s6.create') }}</li>
+    <li>{{ tm('help.s6.file') }}</li>
+  </ul>
+  <p>{{ t('help.s6.note') }}</p>
+
+  <h2>{{ t('help.s7.title') }}</h2>
+  <p>{{ t('help.s7.text') }}</p>
+
+  <h2>{{ t('help.s8.title') }}</h2>
+  <ul>
+    <li><code>config.yaml</code> {{ t('help.s8.config') }}</li>
+    <li><code>data{{ os_sep() }}secrets.enc</code> {{ t('help.s8.secrets') }}</li>
+    <li><code>data{{ os_sep() }}state.json</code> {{ t('help.s8.state') }}</li>
+    <li><code>data{{ os_sep() }}tow.jsonl</code> {{ t('help.s8.log') }}</li>
+  </ul>
+  <p>{{ t('help.s8.note') }}</p>
+</article>
+{% endblock %}

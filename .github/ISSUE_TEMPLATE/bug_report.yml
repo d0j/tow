@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in TOW does not work as described
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before you post:** remove personal data from everything you paste — passwords, tokens,
+        cookies, chat ids, phone numbers, IP addresses, folder paths with your user name, topic
+        links you would rather keep private. Never attach `master.key`, `secrets.enc`, a `.towx`
+        file or a night copy. Security problems go to a private report, not here (see SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: TOW version
+      description: "`tow version`, or http://127.0.0.1:8787/healthz"
+      placeholder: "1.21.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Linux
+        - macOS
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Torrent client and site (if relevant)
+      placeholder: "qBittorrent 5.1, rutor"
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Home → + → paste a topic link
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+      description: The exact message TOW showed. Lines from `data/logs/` help — remove personal data first.
+      render: text
+    validations:
+      required: true

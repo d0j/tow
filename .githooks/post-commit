@@ -1,0 +1,12 @@
+#!/bin/sh
+# Mirror every commit to the local `backup` remote when this checkout has one (see README).
+# The pre-push hook lets it through only when the full gate passed on this content; the mirror
+# never starts the gate itself (a commit must not hang for minutes).
+git remote get-url backup >/dev/null 2>&1 || exit 0
+branch=$(git rev-parse --abbrev-ref HEAD)
+if ! output=$(TOW_PUSH_CHECK_ONLY=1 git push -q backup "HEAD:refs/heads/$branch" 2>&1); then
+    echo "post-commit: not mirrored to backup:" >&2
+    printf '%s\n' "$output" | grep '^pre-push:' >&2
+    echo "post-commit: after the full gate passes: git push backup HEAD:refs/heads/$branch" >&2
+fi
+exit 0

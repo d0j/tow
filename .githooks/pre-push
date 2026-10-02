@@ -1,0 +1,31 @@
+#!/bin/sh
+# Nothing reaches a remote (the backup mirror included) unless the FULL gate, tests included,
+# passed on exactly the content being pushed. The full gate records each tree it passed on
+# (<git-common-dir>/tow-gate-passed), so pushing gated content costs nothing. Otherwise, when the
+# pushed commit is the clean checkout, the full gate runs now; anything else is refused.
+# TOW_PUSH_CHECK_ONLY=1 (the post-commit mirror) never starts the gate, it only checks the record.
+root=$(git rev-parse --show-toplevel)
+passed="$(git rev-parse --git-common-dir)/tow-gate-passed"
+
+gated() {
+    [ -f "$passed" ] && tr -d '\r' < "$passed" | grep -qx "$1"  # written by pwsh: CRLF on Windows
+}
+
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+    case "$local_sha" in
+        *[!0]*) ;;
+        *) continue ;;  # a branch delete pushes no content
+    esac
+    tree=$(git rev-parse "$local_sha^{tree}") || { status=1; continue; }
+    gated "$tree" && continue
+    if [ -z "$TOW_PUSH_CHECK_ONLY" ] && [ "$local_sha" = "$(git rev-parse HEAD)" ] \
+        && [ -z "$(git -C "$root" status --porcelain)" ]; then
+        echo "pre-push: the full gate has not passed on $local_ref yet; running it now" >&2
+        pwsh -NoProfile -File "$root/scripts/gate.ps1" </dev/null >&2 && gated "$tree" && continue
+    fi
+    echo "pre-push: refused $local_ref -> $remote_ref: the full gate has not passed on this content." >&2
+    echo "pre-push: check out that commit with a clean tree and run: pwsh scripts/gate.ps1" >&2
+    status=1
+done
+exit $status

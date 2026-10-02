@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 id="page-title">{{ t('history.title') }}</h1>
+<div class="history-filter">
+  <div class="chips" role="group" aria-label="{{ t('history.filter') }}">
+    {% for value, label in [('', t('history.group.all')), ('downloads', t('history.group.downloads')), ('errors', t('history.group.errors')), ('changes', t('history.group.changes')), ('notifications', t('history.group.notifications'))] %}
+    {% set params = {} %}{% if value %}{% set _ = params.update(group=value) %}{% endif %}{% if q %}{% set _ = params.update(q=q) %}{% endif %}
+    <a class="btn chip{% if group == value %} on{% endif %}" href="/history{% if params %}?{{ params|urlencode }}{% endif %}"{% if group == value %} aria-current="true"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </div>
+  <form method="get" action="/history" role="search">
+    {% if group %}<input type="hidden" name="group" value="{{ group }}">{% endif %}
+    <label class="sr-only" for="history-q">{{ t('history.search_label') }}</label>
+    <input id="history-q" name="q" type="search" value="{{ q }}" placeholder="{{ t('history.search_placeholder') }}">
+  </form>
+</div>
+<div class="card log-box history-box">
+  {% for e in rows %}
+  <div class="log-line"><span class="mut">{{ e.at }}</span> · <b>{{ e.label }}</b>{% if e.detail %} · {{ e.detail }}{% endif %}{% if e.raw %} <details class="raw-error"><summary>{{ t('common.details') }}</summary><code>{{ e.raw }}</code></details>{% endif %}</div>
+  {% else %}
+  {#- "Nothing found" only when a search or a group narrowed it; an empty log says so. -#}
+  <div class="mut">{{ t('history.empty') if (q or group) else t('history.no_events') }}</div>
+  {% endfor %}
+</div>
+<p class="sub">{{ t('history.note') }}</p>
+{% endblock %}

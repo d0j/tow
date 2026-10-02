@@ -1,0 +1,21 @@
+line-length = 120
+
+[lint]
+extend-select = ["E", "W", "I", "B", "UP", "SIM", "C4", "RUF", "PERF", "PT", "C90", "BLE"]
+ignore = [
+    # Ruff's default rule set (0.16) already has S102, S110 and S112, although "S" is not selected
+    # above. A blind `except Exception` (BLE001) is narrowed, or kept at a boundary that must never
+    # crash with `# noqa: BLE001 - <why>` and the error logged.
+    "S112",  # except ...: continue
+    "RUF001",  # Cyrillic UI strings are intentional
+    "RUF002",
+    "RUF003",
+]
+
+[lint.mccabe]
+# No function may exceed this. The few that still do carry `# noqa: C901 - <reason>` and are
+# listed in tests/test_complexity_budget.py, whose list may only shrink.
+max-complexity = 20
+
+[format]
+quote-style = "double"

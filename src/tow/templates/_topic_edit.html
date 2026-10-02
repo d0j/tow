@@ -1,0 +1,36 @@
+{# One topic's edit panel (M2): fetched by app.js when a Home row opens, or shown on
+   /topics/<id>/edit without scripts. `standalone` is set on that page. #}
+<div class="edit-panel" data-edit-loaded>
+  {% if topic.last_ok_at %}<p class="sub">{{ t('home.topic.last_ok', at=topic.last_ok_at) }}</p>{% endif %}
+  {% set error_words = topic.last_error_human or topic.last_error %}
+  {% if topic.last_error %}<p class="form-error{% if topic.torrent_tone == 'warn' %} warn{% endif %}" role="note">{% if topic.last_check %}{{ t('home.topic.last_error_at', at=topic.last_check, error=error_words) }}{% else %}{{ t('home.topic.last_error', error=error_words) }}{% endif %}</p>
+  {%- if error_words != topic.last_error %}<details class="technical-details raw-error"><summary>{{ t('common.details') }}</summary><code>{{ topic.last_error }}</code></details>{% endif %}{% endif %}
+  {% if topic.replaces_revision %}
+  <form method="post" action="/topics/{{ topic.id }}/replace-revision" data-confirm="{{ t('home.topic.replace_confirm') }}">
+    <button type="submit">{{ t('home.topic.replace') }}</button>
+  </form>
+  {% endif %}
+  {% if topic.selection_dirty %}{% set sel_text = t('home.topic.sel_dirty') %}{% elif topic.selection_verified is sameas false %}{% set sel_text = t('home.topic.sel_unverified') %}{% elif topic.selected_file_count is defined %}{% set sel_text = t('home.topic.sel_count', selected=topic.selected_file_count, total=topic.torrent_file_count or '?') %}{% elif topic.selection and topic.selection.mode != 'all' %}{% set sel_text = t('home.topic.sel_pending') %}{% else %}{% set sel_text = t('home.topic.sel_all') %}{% endif %}
+  <p class="sub">{{ t('home.topic.summary', selection=sel_text, mode=t('home.topic.mode_once') if topic.tracking_mode == 'once' else t('home.topic.mode_watch'), done=('; ' ~ t('home.topic.once_done')) if topic.once_done else '') }}</p>
+  <form id="ed-{{ topic.id }}" method="post" action="/topics/{{ topic.id }}/edit" class="row row-three">
+    <div><label for="edit-title-{{ topic.id }}">{{ t('home.edit.name') }}</label><input id="edit-title-{{ topic.id }}" name="title" value="{{ topic.title }}"></div>
+    <div><label for="edit-url-{{ topic.id }}">{{ t('home.edit.url') }}</label><input id="edit-url-{{ topic.id }}" name="url" value="{{ topic.url }}"></div>
+    <div><label for="edit-path-{{ topic.id }}">{{ t('home.add.folder') }}</label><input id="edit-path-{{ topic.id }}" name="save_path" list="save-roots" value="{{ topic.save_path or '' }}" autocomplete="off"></div>
+    <div><label for="edit-client-{{ topic.id }}">{{ t('home.add.client') }}</label><select id="edit-client-{{ topic.id }}" name="client_id">{% for client in client_options %}<option value="{{ client.id }}"{% if client.id == (topic.client_id or default_client_id) %} selected{% endif %}>{{ client_name(client) }}</option>{% endfor %}</select></div>
+    <div><label for="edit-selection-mode-{{ topic.id }}">{{ t('home.add.what') }}</label><select id="edit-selection-mode-{{ topic.id }}" name="selection_mode"><option value="all"{% if not topic.selection or topic.selection.mode == 'all' %} selected{% endif %}>{{ t('home.edit.mode_all') }}</option><option value="episodes"{% if topic.selection and topic.selection.mode == 'episodes' %} selected{% endif %}>{{ t('home.add.mode_episodes') }}</option><option value="files"{% if topic.selection and topic.selection.mode == 'files' %} selected{% endif %}>{{ t('home.add.mode_files') }}</option></select></div>
+    <div><label for="edit-tracking-mode-{{ topic.id }}">{{ t('home.add.follow') }}</label><select id="edit-tracking-mode-{{ topic.id }}" name="tracking_mode"><option value="watch"{% if (topic.tracking_mode or 'watch') == 'watch' %} selected{% endif %}>{{ t('home.edit.watch') }}</option><option value="once"{% if topic.tracking_mode == 'once' %} selected{% endif %}>{{ t('home.edit.once') }}</option></select></div>
+    <div><label for="edit-selection-value-{{ topic.id }}">{{ t('home.edit.selection') }}</label><textarea id="edit-selection-value-{{ topic.id }}" name="selection_value" rows="2">{{ topic.selection.value if topic.selection else '' }}</textarea></div>
+  </form>
+  {% if topic.search_href %}<p class="sub"><a href="{{ topic.search_href }}" target="_blank" rel="noopener">{{ t('home.topic.search_on', site=topic.tracker) }}</a>{% if topic.next_season_href %} · <a href="{{ topic.next_season_href }}" target="_blank" rel="noopener">{{ t('home.topic.next_season') }}</a>{% endif %}</p>{% endif %}
+  <p class="sub path-note">{{ t('home.topic.path_note') }}</p>
+  {% if (topic.download_summary or {}).is_complete and not topic.paused %}
+  <form id="stop-{{ topic.id }}" method="post" action="/topics/{{ topic.id }}/pause" hidden></form>
+  <p class="sub">{{ t('home.topic.season_done', done=topic.download_summary.completed, total=topic.download_summary.expected) }} <button class="ghost sm" type="submit" form="stop-{{ topic.id }}">{{ t('home.topic.stop_watching') }}</button></p>
+  {% endif %}
+  <form id="del-{{ topic.id }}" method="post" action="/topics/{{ topic.id }}/delete" data-confirm="{{ t('home.topic.delete_confirm') }}" hidden></form>
+  <div class="edit-actions">
+    <button type="submit" form="ed-{{ topic.id }}">{{ t('home.topic.save') }}</button>
+    {% if standalone %}<a class="btn ghost" href="/">{{ t('home.cancel') }}</a>{% else %}<button class="ghost" type="button" data-close-details formnovalidate>{{ t('home.cancel') }}</button>{% endif %}
+    <button class="danger" type="submit" form="del-{{ topic.id }}" title="{{ t('home.topic.delete_title') }}">{{ t('home.topic.delete') }}</button>
+  </div>
+</div>

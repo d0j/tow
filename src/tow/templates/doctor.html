@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 id="page-title">{{ t('doctor.title') }}</h1>
+<p class="lead">{{ t('doctor.lead') }}</p>
+{% if report %}
+<div class="grid stats">
+  <div class="card stat"><div class="k">{{ t('doctor.python') }}</div><div class="v">{{ report.python }}</div></div>
+  <div class="card stat"><div class="k">{{ t('doctor.client_address') }}</div><div class="v">{{ t('doctor.set') if report.qbit_host_set else t('doctor.no') }}</div></div>
+  <div class="card stat"><div class="k">{{ t('doctor.topics') }}</div><div class="v">{{ report.topics }}</div></div>
+  <div class="card stat"><div class="k">{{ t('doctor.notifications') }}</div><div class="v">{{ t('doctor.connected') if report.notify_set else t('doctor.no') }}</div></div>
+</div>
+{% if report.qbit is not none %}
+<div class="card"><div class="k">{{ t('doctor.client') }}</div><div><span class="pill {{ 'ok' if report.qbit_ok else 'bad' }} pill-wrap" title="{{ report.qbit }}">{{ report.qbit_text }}</span></div></div>
+{% endif %}
+<div class="card">
+  <h2 class="section-title">{{ t('doctor.sites_title') }}</h2>
+  <p class="mut">{{ t('doctor.sites_note') }}</p>
+  {% if report.probes %}
+  <div class="table-wrap"><table class="table table-stack">
+    <thead><tr><th></th><th>{{ t('doctor.th_site') }}</th><th>{{ t('doctor.th_mirror') }}</th><th>{{ t('doctor.th_status') }}</th></tr></thead>
+    <tbody>
+    {% for p in report.probes %}
+      <tr>
+        <td class="cell-dot"><span class="dot {{ 'ok' if p.ok else 'warn' }}" aria-hidden="true"></span></td>
+        <td data-label="{{ t('doctor.th_site') }}">{{ p.tracker }}</td>
+        <td class="mono" data-label="{{ t('doctor.th_mirror') }}">{{ p.host }}</td>
+        <td data-label="{{ t('doctor.th_status') }}"><span class="pill {{ 'ok' if p.ok else 'warn' }} pill-wrap"{% if not p.ok and p.error %} title="{{ p.error }}"{% endif %}>{{ p.text }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="mut">{{ t('doctor.no_probes') }}</p>{% endif %}
+</div>
+{% set autostart = report.autostart or {} %}
+<div class="card">
+  <h2 class="section-title">{{ t('doctor.autostart') }}</h2>
+  <p><span class="pill {{ 'ok' if autostart.on else 'mut' }}">{{ t('doctor.autostart_on') if autostart.on else t('doctor.autostart_off') }}</span>{% if autostart.where %} <code>{{ autostart.where }}</code>{% endif %}</p>
+  {% if autostart.error %}<p class="mut">{{ t('doctor.autostart_unread') }}</p>{% endif %}
+</div>
+{% else %}
+<div class="card mut">{{ t('doctor.unavailable') }}</div>
+{% endif %}
+<form method="post" action="/doctor/run" class="actions">
+  <button type="submit">{{ t('doctor.run') }}</button>
+</form>
+{% endblock %}

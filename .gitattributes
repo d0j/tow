@@ -1,0 +1,9 @@
+# Keep LF everywhere (the repo is LF-only; stops core.autocrlf CRLF conversion)
+* text=auto eol=lf
+*.svg text eol=lf
+*.png binary
+*.ico binary
+*.zip binary
+*.whl binary
+# Markdown ends a line with two spaces for a hard line break: not a whitespace error there
+*.md whitespace=-trailing-space

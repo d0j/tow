@@ -1,0 +1,5 @@
+#!/bin/sh
+# Fast gate before every commit (lock, format, lint, types, compile, whitespace) on exactly what
+# is being committed: the staged files, not the working tree. The full suite runs before a push.
+# Enabled by: git config core.hooksPath .githooks
+exec pwsh -NoProfile -File "$(git rev-parse --show-toplevel)/scripts/gate.ps1" -Staged

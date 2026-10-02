@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="{{ lang() }}">
+<head>
+{% with title = t('login.page_title') %}{% include "_head.html" %}{% endwith %}
+</head>
+<body class="auth-page">
+  <main class="auth-shell">
+    <section class="card auth-card" aria-labelledby="login-title">
+      <h1 id="login-title">{{ t('login.heading') }}</h1>
+      {% if not enabled %}
+      <p>{{ t('login.disabled') }}</p>
+      {% elif configured %}
+      <p>{% if credential_kind == "password" %}{{ t('login.enter_password') }}{% else %}{{ t('login.enter_key') }}{% endif %}</p>
+      {% else %}
+      <p role="alert">{{ problem or t('login.not_set') }}</p>
+      {% endif %}
+      {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+      {% if not enabled %}
+      {#- Sign-in is off: only this computer reaches TOW, and it needs no password - no form, the way in. -#}
+      <p><a class="btn" href="/">{{ t('login.open_tow') }}</a></p>
+      {% else %}
+      <form method="post" action="/login" class="auth-form">
+        <label for="lan-password">{% if credential_kind == "password" %}{{ t('login.password') }}{% else %}{{ t('login.key') }}{% endif %}</label>
+        <input id="lan-password" name="password" type="password" autocomplete="current-password" required {% if not configured %}disabled{% endif %}>
+        <div class="settings-actions"><button type="submit" {% if not configured %}disabled{% endif %}>{{ t('login.submit') }}</button></div>
+      </form>
+      {% endif %}
+      {% if enabled and configured and credential_kind == "password" %}{% set help = login_help() %}
+      <details class="technical-details" id="forgot-password"{% if error %} open{% endif %}>
+        <summary>{{ t('login.forgot') }}</summary>
+        {% if help.hint %}<p>{{ t('login.hint') }} <b>{{ help.hint }}</b></p>{% else %}<p>{{ t('login.no_hint') }}</p>{% endif %}
+        <p>{{ t('login.reset_how', machine=help.machine, url=help.url) }}</p>
+        <p class="action-hint">{{ t('login.reset_cli') }} <code>{{ os_launcher() }} password</code></p>
+      </details>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block body %}
+{#- A page TOW does not have (an old bookmark, a mistyped address): said in words, with the way back. -#}
+<section class="card empty-state not-found" aria-labelledby="page-title">
+  <h1 id="page-title">{{ t('not_found.heading') }}</h1>
+  <p>{{ t('not_found.text') }}</p>
+  <p><a class="btn" href="/">{{ t('not_found.home') }}</a> <a class="btn ghost" href="/settings/help">{{ t('base.nav.help') }}</a></p>
+</section>
+{% endblock %}

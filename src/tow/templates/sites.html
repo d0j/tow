@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 id="page-title" class="sr-only">{{ t('sites.title') }}</h1>
+{#- A refused add comes back with the form open: the draft is the server's own record of it
+    (?add=<token>, never values from the link) and never holds the password. -#}
+{% set draft = add_draft or {} %}
+{% set bad_field = {'name': 'site-name', 'url_regex': 'site-regex', 'fetch_hosts': 'site-hosts', 'download_path': 'site-dl', 'login_path': 'site-login-path', 'topic_path': 'site-topic-path', 'download_href_regex': 'site-href-rx', 'from_url': 'from-url'}.get(draft.get('kind'), 'site-name') if draft.get('error') else '' %}
+{% macro invalid(field) %}{% if bad_field == field %} aria-invalid="true" aria-describedby="add-error"{% endif %}{% endmacro %}
+<details class="add card" id="new"{% if draft.get('error') %} open{% endif %}>
+  <summary>+</summary>
+  <form class="new-site-form" method="post" action="/sites/new" aria-labelledby="add-site-title">
+    <div class="lbl-row add-head">
+      <h2 id="add-site-title" class="add-title">{{ t('sites.add_title') }}</h2>
+      <details class="help">
+        <summary title="{{ t('sites.how_to_fill') }}" aria-label="{{ t('sites.how_to_fill') }}">?</summary>
+        <div class="help-pop">
+          <p>{{ tm('sites.help.p1') }}</p>
+          <p>{{ t('sites.help.p6') }}</p>
+          <p>{{ tm('sites.help.p2', field=t('sites.name')) }}</p>
+          <p>{{ tm('sites.help.p3', field=t('sites.mirrors')) }}</p>
+          <p>{{ tm('sites.help.p4', field=t('sites.url_regex'), number='(\\d+)', dot='\\.') }}</p>
+          <ul>
+            <li>{{ tm('sites.help.like_rutor', pattern='^https?://rutor\\.info/torrent/(\\d+)') }}</li>
+            <li>{{ t('sites.help.like_kinozal') }} <code>…/details.php?id=3456789</code> → <code>details\.php\?id=(\d+)$</code></li>
+            <li>{{ t('sites.help.forum_examples') }} <code>…/viewtopic.php?t=123</code> → <code>viewtopic\.php\?t=(\d+)</code></li>
+          </ul>
+          <p>{{ tm('sites.help.p5', field=t('sites.download_path'), id='{id}') }}</p>
+          <ul>
+            <li>rutor: <code>/download/{id}</code></li>
+            <li>kinozal: <code>/.dl./download.php?id={id}</code></li>
+            <li>{{ tm('sites.help.forum', first='/forum/dl.php?t={id}', second='/download.php?id={id}') }}</li>
+          </ul>
+        </div>
+      </details>
+    </div>
+    {% if draft.get('error') %}
+    <div class="form-error add-error" id="add-error" role="alert" tabindex="-1" data-focus-field="{{ bad_field }}"><p>{{ t('sites.not_added', error=draft.get('error')) }}</p></div>
+    {% endif %}
+    {#- The easy way first (M7): a link to any topic of the site fills in the rest. -#}
+    <label for="from-url">{{ t('sites.from_url') }}</label>
+    <input id="from-url" name="from_url" placeholder="{{ t('sites.from_url_placeholder') }}" autocomplete="off" inputmode="url" value="{{ draft.get('from_url', '') }}" aria-describedby="guess-msg"{{ invalid('from-url') }}>
+    <p class="field-hint" id="guess-msg" aria-live="polite"></p>
+    <label for="site-name">{{ t('sites.name') }}</label>
+    <input id="site-name" class="field-narrow" name="name" pattern="[a-z0-9_]+" placeholder="rutor" autocomplete="off" value="{{ draft.get('name', '') }}"{{ invalid('site-name') }}>
+    <label for="site-hosts">{{ t('sites.mirrors') }}</label>
+    <textarea id="site-hosts" name="fetch_hosts" rows="3" placeholder="https://rutor.info"{{ invalid('site-hosts') }}>{{ draft.get('fetch_hosts', '') }}</textarea>
+    <div class="row row-two">
+      <div><label for="site-user">{{ t('sites.login') }}</label><input id="site-user" name="username" autocomplete="username" value="{{ draft.get('username', '') }}"></div>
+      <div><label for="site-pass">{{ t('sites.password') }}</label><input id="site-pass" name="password" type="password" autocomplete="current-password"></div>
+    </div>
+    {#- What a pasted link fills in by itself: folded away, opened for a field that was refused. -#}
+    <details class="advanced"{% if bad_field in ('site-regex', 'site-dl', 'site-login-path', 'site-topic-path', 'site-href-rx') %} open{% endif %}>
+      <summary>{{ t('sites.advanced') }}</summary>
+      <label for="site-regex">{{ t('sites.url_regex') }}</label>
+      <input id="site-regex" name="url_regex" placeholder="^https?://rutor\.info/torrent/(\d+)" value="{{ draft.get('url_regex', '') }}"{{ invalid('site-regex') }}>
+      <label for="site-dl">{{ t('sites.download_path') }}</label>
+      <input id="site-dl" name="download_path" value="{{ draft.get('download_path') or '/download/{id}' }}"{{ invalid('site-dl') }}>
+      <label for="site-login-path">{{ t('sites.login_path') }}</label>
+      <input id="site-login-path" name="login_path" value="{{ draft.get('login_path', '') }}" placeholder="/login.php"{{ invalid('site-login-path') }}>
+      <label for="site-topic-path">{{ t('sites.topic_path') }}</label>
+      <input id="site-topic-path" name="topic_path" value="{{ draft.get('topic_path', '') }}" placeholder="/forum/viewtopic.php?t={id}"{{ invalid('site-topic-path') }}>
+      <label class="check-label" for="site-page-dl"><input id="site-page-dl" name="page_download" value="1" type="checkbox"{% if draft.get('page_download') %} checked{% endif %}> {{ t('sites.page_download') }}</label>
+      <label for="site-href-rx">{{ t('sites.href_regex') }}</label>
+      <input id="site-href-rx" name="download_href_regex" value="{{ draft.get('download_href_regex', '') }}" placeholder="download\\.php\\?id=(\\d+)"{{ invalid('site-href-rx') }}>
+    </details>
+    <div class="actions">
+      <button type="submit">{{ t('sites.add') }}</button>
+      <button type="button" class="ghost" data-close-details formnovalidate>{{ t('sites.cancel') }}</button>
+    </div>
+  </form>
+</details>
+
+<div class="card list">
+  {% if trackers %}
+  <div class="list-head sites">
+    <span>{{ t('sites.col_site') }}</span><span>{{ t('sites.mirrors') }}</span><span>{{ t('sites.col_login') }}</span><span></span>
+  </div>
+  {% endif %}
+  {% for name, spec in trackers.items() %}
+    {% set mine = probes | selectattr('tracker', 'equalto', name) | list %}
+    <div class="row-wrap{% if frozen.get(name) %} is-paused{% endif %}" data-q="{{ (name ~ ' ' ~ (spec.title or '') ~ ' ' ~ ((spec.fetch_hosts or []) | join(' '))) | lower }}">
+    <details class="row-edit sites{% if frozen.get(name) %} is-paused{% endif %}">
+      <summary>
+        {% set any_ok = mine | selectattr('ok') | list %}
+        {% if frozen.get(name) %}<span class="trk mut" title="{{ t('sites.paused') }}">{{ spec.title or name }}</span><span class="sr-only">{{ t('sites.paused') }}</span>
+        {% elif not mine %}<span class="trk mut">{{ spec.title or name }}</span><span class="sr-only">{{ t('sites.not_checked') }}</span>
+        {% elif any_ok %}<span class="trk ok">{{ spec.title or name }}</span><span class="sr-only">{{ t('sites.home_ok') }}</span>
+        {% else %}<span class="trk warn">{{ spec.title or name }}</span><span class="sr-only">{{ t('sites.no_connection') }}</span>{% endif %}
+        {# M6: the mirrors are text here (no buttons inside <summary>); the choice is in the panel. #}
+        <span class="mirror-list">
+          {%- for h in spec.fetch_hosts or [] %}
+            {%- set matches = mine | selectattr('host', 'equalto', h) | list %}
+            {%- set p = matches[0] if matches else none %}
+            <span class="mirror">{% if p %}<span class="dot {{ 'ok' if p.ok else 'warn' }}" aria-hidden="true"></span><span class="sr-only">{{ t('sites.responds') if p.ok else t('sites.not_responding') }}</span>{% endif %}{{ h.replace('https://','').replace('http://','') }}{% if (active.get(name) or '').rstrip('/') == h.rstrip('/') %} <span class="pill ok">{{ t('sites.main') }}</span>{% endif %}</span>
+          {%- endfor %}
+        </span>
+        {% if spec.login_path %}{% if logins.get(name) and logins[name].set %}<span class="pill ok">{{ t('sites.login_set') }}</span>{% else %}<span class="pill mut">{{ t('sites.login_not_set') }}</span>{% endif %}{% else %}<span class="pill mut">{{ t('sites.login_not_needed') }}</span>{% endif %}
+        {% set href = active.get(name) or (spec.fetch_hosts[0] if spec.fetch_hosts else '') %}
+        <span class="row-ops-slot" aria-hidden="true"></span>
+      </summary>
+      <div class="edit-panel">
+        {% if (spec.fetch_hosts or [])|length > 1 %}
+        <div class="mirror-choice" role="group" aria-labelledby="mirror-choice-{{ name }}">
+          <p class="sub" id="mirror-choice-{{ name }}">{{ t('sites.choose_main') }}</p>
+          {% for h in spec.fetch_hosts %}
+          {% set matches = mine | selectattr('host', 'equalto', h) | list %}
+          {% set p = matches[0] if matches else none %}
+          {% set is_main = (active.get(name) or '').rstrip('/') == h.rstrip('/') %}
+          <form method="post" action="/sites/{{ name }}/prefer" class="mirror-pick">
+            <input type="hidden" name="host" value="{{ h }}">
+            <button type="submit" class="ghost sm" title="{{ t('sites.make_main') }}" aria-pressed="{{ 'true' if is_main else 'false' }}">{% if p %}<span class="dot {{ 'ok' if p.ok else 'warn' }}" aria-hidden="true"></span><span class="sr-only">{{ t('sites.responds') if p.ok else t('sites.not_responding') }}</span>{% endif %}{{ h.replace('https://','').replace('http://','') }}{% if is_main %} <span class="pill ok">{{ t('sites.main') }}</span>{% endif %}</button>
+          </form>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <form id="ed-site-{{ name }}" method="post" action="/sites/{{ name }}" class="row row-two">
+          <div><label for="site-new-name-{{ name }}">{{ t('sites.name') }}</label><input id="site-new-name-{{ name }}" name="new_name" value="{{ name }}" pattern="[a-z0-9_]+" required></div>
+          <div><label for="site-url-rx-{{ name }}">{{ t('sites.url_regex') }}</label><input id="site-url-rx-{{ name }}" name="url_regex" value="{{ spec.url_regex }}"></div>
+          <div class="full-width"><label for="site-hosts-{{ name }}">{{ t('sites.mirrors') }}</label><textarea id="site-hosts-{{ name }}" name="fetch_hosts" rows="3">{{ (spec.fetch_hosts or []) | join('\n') }}</textarea></div>
+          <input type="hidden" name="login_hosts_present" value="1">
+          <div class="full-width"><label for="site-login-hosts-{{ name }}">{{ t('sites.login_hosts') }}</label><textarea id="site-login-hosts-{{ name }}" name="login_hosts" rows="2">{{ (spec.login_hosts or []) | join('\n') }}</textarea><p class="field-hint">{{ t('sites.login_hosts_hint') }}</p></div>
+          <div><label for="site-download-path-{{ name }}">{{ t('sites.download_path') }}</label><input id="site-download-path-{{ name }}" name="download_path" value="{{ spec.download_path }}"></div>
+          <div><label for="site-login-path-{{ name }}">{{ t('sites.login_path') }}</label><input id="site-login-path-{{ name }}" name="login_path" value="{{ spec.login_path or '' }}" placeholder="/forum/login.php"></div>
+          <div><label for="site-user-{{ name }}">{{ t('sites.login') }}</label><input id="site-user-{{ name }}" name="username" value="{{ (logins.get(name) or {}).user }}" autocomplete="username"></div>
+          <div><label for="site-pass-{{ name }}">{{ t('sites.password') }}</label><input id="site-pass-{{ name }}" name="password" type="password" placeholder="{{ t('sites.keep_password') }}" autocomplete="current-password"></div>
+          <details class="advanced full-width">
+            <summary>{{ t('sites.advanced') }}</summary>
+            <label for="site-topic-path-{{ name }}">{{ t('sites.topic_path') }}</label>
+            <input id="site-topic-path-{{ name }}" name="topic_path" value="{{ spec.topic_path or '' }}" placeholder="/forum/viewtopic.php?t={id}">
+            <label class="check-label" for="site-page-dl-{{ name }}"><input id="site-page-dl-{{ name }}" name="page_download" value="1" type="checkbox"{% if spec.page_download %} checked{% endif %}> {{ t('sites.page_download') }}</label>
+            <label for="site-href-rx-{{ name }}">{{ t('sites.href_regex') }}</label>
+            <input id="site-href-rx-{{ name }}" name="download_href_regex" value="{{ spec.download_href_regex or '' }}" placeholder="download\\.php\\?id=(\\d+)">
+          </details>
+        </form>
+        <form id="del-site-{{ name }}" method="post" action="/sites/{{ name }}/delete" data-confirm="{{ t('sites.delete_confirm') }}" hidden></form>
+        <div class="edit-actions">
+          <button type="submit" form="ed-site-{{ name }}">{{ t('sites.save') }}</button>
+          <button class="ghost" type="button" data-close-details formnovalidate>{{ t('sites.cancel') }}</button>
+          <button class="danger" type="submit" form="del-site-{{ name }}">{{ t('sites.delete') }}</button>
+        </div>
+      </div>
+    </details>
+    <span class="row-ops">
+          <a class="row-ico {{ 'ok' if any_ok else ('warn' if mine else 'mut') }}" href="{{ href }}" target="_blank" rel="noopener" title="{{ t('sites.active_mirror') }}" aria-label="{{ t('sites.open_named', name=spec.title or name) }}">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="8.2"/><path d="M3.5 12h17M12 3.8c2.4 2.6 2.4 13.8 0 16.4M12 3.8c-2.4 2.6-2.4 13.8 0 16.4"/></svg>
+          </a>
+          <form method="post" action="/sites/{{ name }}/freeze">
+            <button class="row-ico{% if frozen.get(name) %} on{% endif %}" type="submit" title="{% if frozen.get(name) %}{{ t('sites.unpause') }}{% else %}{{ t('sites.pause') }}{% endif %}" aria-label="{{ t('sites.unpause_named' if frozen.get(name) else 'sites.pause_named', name=spec.title or name) }}">
+              {% if frozen.get(name) %}
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"></path></svg>
+              {% else %}
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="7" y="5" width="3.2" height="14" rx=".4"/><rect x="13.8" y="5" width="3.2" height="14" rx=".4"/></svg>
+              {% endif %}
+            </button>
+          </form>
+          <form method="post" action="/sites/{{ name }}/probe">
+            <button class="row-ico" type="submit" title="{{ t('sites.probe') }}" aria-label="{{ t('sites.probe_named', name=spec.title or name) }}">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2-5.1"/><path d="M19.5 5v5h-5"/></svg>
+            </button>
+          </form>
+        </span>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>{{ t('sites.empty') }}</p>
+    <p><a class="btn" href="#new" data-open-new>{{ t('sites.add_title') }}</a></p>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

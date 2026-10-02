@@ -1,0 +1,37 @@
+# Python and tooling
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+.coverage.*
+.DS_Store
+.env
+.claude/
+
+# Install state: in a development checkout the checkout itself is the install root, so its
+# config, data, keys, backups and runtime are local scratch state (docs/PORTABLE.md).
+/config.yaml
+data/
+keys/
+master.key
+/backup/
+/runtime/
+/update-state.json
+/deploy-state.json
+/.update.lock
+*.jsonl
+*.towx
+/tow-local.cmd
+
+# Local rollback snapshots of old checkouts (may contain runtime data)
+docs/changes/checkpoints/
+# Accidental Windows device-name file
+nul

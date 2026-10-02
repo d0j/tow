@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest a site, a torrent client, a messenger or a change
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        TOW watches topics and hands torrents to your client. It does not download media, search
+        trackers or bypass site protection — requests in that direction will be closed.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do, and what stops you today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
