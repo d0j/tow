@@ -3,7 +3,7 @@
 Все заметные изменения TOW. Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии — по
 [семантическому версионированию](https://semver.org/lang/ru/). English: [CHANGELOG.md](CHANGELOG.md).
 
-## [Не выпущено]
+## [1.22.0] — 2026-10-02
 
 ### Добавлено
 
