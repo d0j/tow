@@ -283,20 +283,26 @@ def test_the_release_workflow_tests_everything_before_it_uploads():
     uses = re.findall(r"uses: (\S+)", text)
     assert uses
     assert all(re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", use) for use in uses), uses
-    ci_pins = set(re.findall(r"uses: (\S+@[0-9a-f]{40})", (workflows / "ci.yml").read_text(encoding="utf-8")))
+    ci_text = (workflows / "ci.yml").read_text(encoding="utf-8")
+    ci_pins = set(re.findall(r"uses: (\S+@[0-9a-f]{40})", ci_text))
     assert {use for use in uses if use.startswith(("actions/checkout@", "astral-sh/setup-uv@"))} <= ci_pins
     # Write access only where the release is touched, and only after every test passed.
     assert flow["permissions"] == {"contents": "read"}
     writers = [name for name, job in jobs.items() if job.get("permissions", {}).get("contents") == "write"]
     assert writers == ["publish"]
     assert set(jobs["publish"]["needs"]) == {"gate", "source", "windows", "posix"}
-    assert set(jobs["gate"]["strategy"]["matrix"]["os"]) == {"windows-latest", "ubuntu-latest", "macos-latest"}
+    ci_jobs = yaml.safe_load(ci_text)["jobs"]
+    gate_runners = {"windows-latest", "ubuntu-latest", "ubuntu-26.04", "macos-latest"}
+    assert set(jobs["gate"]["strategy"]["matrix"]["os"]) == gate_runners
+    assert set(ci_jobs["gate"]["strategy"]["matrix"]["os"]) == gate_runners
     windows = "\n".join(step.get("run", "") for step in jobs["windows"]["steps"])
     assert "scripts/build-bundle.py --out dist --source tow-source.tar.gz" in windows
     assert "bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Offline" in windows
     assert "powershell.exe -NoProfile -ExecutionPolicy Bypass -File install/install.ps1" in windows  # 5.1
     assert "-Uninstall -Yes -Purge" in windows
-    assert jobs["posix"]["strategy"]["matrix"]["os"] == ["ubuntu-latest", "macos-latest"]
+    posix_runners = ["ubuntu-latest", "ubuntu-26.04", "macos-latest"]
+    assert jobs["posix"]["strategy"]["matrix"]["os"] == posix_runners
+    assert ci_jobs["install"]["strategy"]["matrix"]["os"] == posix_runners
     assert "scripts/install-smoke.sh" in jobs["posix"]["steps"][-1]["run"]
     publish = "\n".join(step.get("run", "") for step in jobs["publish"]["steps"])
     assert "sha256sum TOW-windows-x64.zip install.ps1 install.sh tow-source.tar.gz > SHA256SUMS" in publish
