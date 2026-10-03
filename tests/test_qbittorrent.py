@@ -109,6 +109,70 @@ class _SelectionAPI:
         self.calls.append("clear-pending")
 
 
+@pytest.mark.parametrize("operation", ["selection", "move", "release"])
+def test_foreign_torrent_mutations_are_refused(monkeypatch, operation):
+    api = _SelectionAPI()
+    api.present = True
+    api.tags = "manual"
+    api.torrents_set_location = lambda **_kwargs: api.calls.append("move")
+    monkeypatch.setattr(qbittorrent, "Client", lambda **_kwargs: api)
+    client = qbittorrent.QBittorrentClient("http://qbit", 8080, "user", "password")
+    infohash = parse_torrent_metadata(TORRENT).client_hash
+    with raises_code("client.managed.not_owned", RuntimeError):
+        if operation == "selection":
+            client.configure_torrent_selection(TORRENT, infohash, [0])
+        elif operation == "move":
+            client.set_location(infohash, "E:/moved")
+        else:
+            client._clear_pending_tag(infohash)
+    assert api.calls == []
+
+
+def test_partial_readback_cannot_confirm_skipped_files(monkeypatch):
+    api = _SelectionAPI()
+    api.present = True
+    real_files = api.torrents_files
+
+    def files(*, torrent_hash):
+        rows = real_files(torrent_hash=torrent_hash)
+        if any(isinstance(call, tuple) and call[0] == "priority" for call in api.calls):
+            return rows[:1]
+        return rows
+
+    monkeypatch.setattr(api, "torrents_files", files)
+    monkeypatch.setattr(qbittorrent, "Client", lambda **_kwargs: api)
+    client = qbittorrent.QBittorrentClient("http://qbit", 8080, "user", "password")
+    meta = parse_torrent_metadata(TORRENT)
+    with raises_code("client.managed.wrong_selection", RuntimeError):
+        client._set_priorities_exact(meta.client_hash, meta.files, {0}, meta.name)
+
+
+@pytest.mark.parametrize("adding", [False, True])
+def test_ownership_loss_during_selection_does_not_trigger_cleanup_mutations(monkeypatch, adding):
+    api = _SelectionAPI()
+    api.present = not adding
+    api.state = "downloading" if not adding else "stoppedDL"
+    monkeypatch.setattr(qbittorrent, "Client", lambda **_kwargs: api)
+    monkeypatch.setattr(qbittorrent.time, "sleep", lambda _seconds: None)
+
+    def priority(**_kwargs):
+        api.calls.append("priority failed")
+        api.tags = "manual"
+        raise ConnectionError("priority connection failed")
+
+    monkeypatch.setattr(api, "torrents_file_priority", priority)
+    client = qbittorrent.QBittorrentClient("http://qbit", 8080, "user", "password")
+    infohash = parse_torrent_metadata(TORRENT).client_hash
+    operation = (
+        (lambda: client.add_torrent_selected(TORRENT, r"M:\TV", infohash, [0]))
+        if adding
+        else lambda: client.configure_torrent_selection(TORRENT, infohash, [0])
+    )
+    with pytest.raises(ConnectionError, match="priority connection failed"):
+        operation()
+    assert api.calls[-1] == "priority failed"
+
+
 def test_selected_add_is_stopped_configured_verified_then_started(monkeypatch):
     api = _SelectionAPI()
     monkeypatch.setattr(qbittorrent, "Client", lambda **kwargs: api)

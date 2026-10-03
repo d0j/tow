@@ -327,6 +327,13 @@ class QBittorrentClient:
             time.sleep(0.1)
         raise _fail("client.managed.no_files")
 
+    def _require_owned(self, infohash: str) -> dict[str, Any]:
+        info = self.inspect_torrent(infohash)
+        tags = {str(tag).strip().casefold() for tag in (info or {}).get("tags") or []}
+        if "tow" not in tags:
+            raise _fail("client.managed.not_owned")
+        return info or {}
+
     def _stop(self, infohash: str) -> None:
         method = getattr(self._c, "torrents_stop", None) or getattr(self._c, "torrents_pause", None)
         if not callable(method):
@@ -382,6 +389,7 @@ class QBittorrentClient:
         raise _fail("client.managed.start_unconfirmed")
 
     def _clear_pending_tag(self, infohash: str) -> dict[str, Any]:
+        self._require_owned(infohash)
         remove = getattr(self._c, "torrents_remove_tags", None)
         if not callable(remove):
             raise _fail("client.qbittorrent.no_tag_removal")
@@ -403,24 +411,34 @@ class QBittorrentClient:
         root_name: str,
     ) -> dict[str, Any]:
         inspected = self._inspect_with_files(infohash)
+        rows = list(inspected.get("files") or [])
+        files.priorities(rows, fail=lambda: _fail("client.managed.wrong_selection"))
         valid_source = {row.index for row in source_files if not row.is_pad}
         if selected_indices == valid_source:
             if any(row.is_pad or self._padding_like_name(row.path) for row in source_files):
                 mapping = self._map_files(source_files, list(inspected.get("files") or []), root_name)
+                mapped_ids = set(mapping.values())
                 all_client_ids = sorted(
                     int(row["index"]) for row in inspected.get("files") or [] if isinstance(row.get("index"), int)
                 )
                 selected_ids = sorted(mapping.values())
+                self._require_owned(infohash)
                 self._c.torrents_file_priority(torrent_hash=infohash.lower(), file_ids=all_client_ids, priority=0)
+                self._require_owned(infohash)
                 self._c.torrents_file_priority(torrent_hash=infohash.lower(), file_ids=selected_ids, priority=1)
                 verified = self._inspect_with_files(infohash)
-                priorities = {
-                    int(row["index"]): int(row.get("priority") or 0)
-                    for row in verified.get("files") or []
-                    if isinstance(row.get("index"), int)
-                }
-                if any(priorities.get(index, 0) <= 0 for index in selected_ids):
-                    raise _fail("client.managed.wrong_selection")
+                files.verify_selection(
+                    rows,
+                    list(verified.get("files") or []),
+                    set(selected_ids),
+                    fail=lambda: _fail("client.managed.wrong_selection"),
+                    ignored={
+                        row["index"]
+                        for row in rows
+                        if row["index"] not in mapped_ids and self._padding_like_name(row.get("name"))
+                    },
+                )
+                self._require_owned(infohash)
                 return verified
             client_rows = [
                 row
@@ -430,15 +448,17 @@ class QBittorrentClient:
             if len(client_rows) != len(valid_source):
                 raise _fail("client.managed.wrong_selection")
             ids = sorted(int(row["index"]) for row in client_rows)
+            self._require_owned(infohash)
             self._c.torrents_file_priority(torrent_hash=infohash.lower(), file_ids=ids, priority=1)
             verified = self._inspect_with_files(infohash)
-            priorities = {
-                int(row["index"]): int(row.get("priority") or 0)
-                for row in verified.get("files") or []
-                if isinstance(row.get("index"), int)
-            }
-            if any(priorities.get(index, 0) <= 0 for index in ids):
-                raise _fail("client.managed.wrong_selection")
+            files.verify_selection(
+                rows,
+                list(verified.get("files") or []),
+                set(ids),
+                fail=lambda: _fail("client.managed.wrong_selection"),
+                ignored={row["index"] for row in rows if self._padding_like_name(row.get("name"))},
+            )
+            self._require_owned(infohash)
             return verified
         mapping = self._map_files(source_files, list(inspected.get("files") or []), root_name)
         all_ids = sorted(int(row["index"]) for row in inspected.get("files") or [] if isinstance(row.get("index"), int))
@@ -448,18 +468,18 @@ class QBittorrentClient:
         selected_ids = sorted(mapping[int(index)] for index in selected_indices)
         if not selected_ids:
             raise _fail("client.managed.bad_selection")
+        self._require_owned(infohash)
         self._c.torrents_file_priority(torrent_hash=infohash.lower(), file_ids=all_ids, priority=0)
+        self._require_owned(infohash)
         self._c.torrents_file_priority(torrent_hash=infohash.lower(), file_ids=selected_ids, priority=1)
         verified = self._inspect_with_files(infohash)
-        priorities = {
-            int(row["index"]): int(row.get("priority") or 0)
-            for row in verified.get("files") or []
-            if isinstance(row.get("index"), int)
-        }
-        expected_ids = set(selected_ids)
-        for client_index in all_ids:
-            if (priorities.get(client_index, 0) > 0) != (client_index in expected_ids):
-                raise _fail("client.managed.wrong_selection")
+        files.verify_selection(
+            rows,
+            list(verified.get("files") or []),
+            set(selected_ids),
+            fail=lambda: _fail("client.managed.wrong_selection"),
+        )
+        self._require_owned(infohash)
         return verified
 
     def add_torrent_selected(
@@ -515,9 +535,11 @@ class QBittorrentClient:
             )
             if not paths_equal(str(added.get("save_path") or ""), destination):
                 raise _fail("client.managed.wrong_folder")
+            self._require_owned(owned_hash)
             self._stop(owned_hash)
             self._wait_stopped(owned_hash)
             self._set_priorities_exact(owned_hash, metadata.files, selected, metadata.name)
+            self._require_owned(owned_hash)
             self._start(owned_hash)
             self._wait_started(owned_hash)
             release_requested = True
@@ -525,6 +547,7 @@ class QBittorrentClient:
         except Exception:
             if owned_hash is not None and not release_requested:
                 try:
+                    self._require_owned(owned_hash)
                     self._stop(owned_hash)
                 except Exception as cleanup_error:  # noqa: BLE001 - the original failure is re-raised; this must not hide it
                     _LOG.warning("cleanup after a failed client change did not finish: %s", cleanup_error)
@@ -545,15 +568,17 @@ class QBittorrentClient:
         if str(infohash).casefold() not in valid_hashes:
             raise _fail("client.managed.hash_changed_selection")
         before = self._inspect_with_files(infohash)
-        pending = any(str(tag).casefold() == "tow-pending" for tag in before.get("tags") or [])
-        previous = {
-            int(row["index"]): int(row.get("priority") or 0)
-            for row in before.get("files") or []
-            if isinstance(row.get("index"), int)
-        }
+        tags = {str(tag).strip().casefold() for tag in before.get("tags") or []}
+        if "tow" not in tags:
+            raise _fail("client.managed.not_owned")
+        pending = "tow-pending" in tags
+        previous = files.priorities(
+            list(before.get("files") or []), fail=lambda: _fail("client.managed.wrong_selection")
+        )
         was_stopped = str(before.get("state") or "").casefold().startswith(("stopped", "paused"))
         release_requested = False
         try:
+            self._require_owned(infohash)
             self._stop(infohash)
             self._wait_stopped(infohash)
             verified = self._set_priorities_exact(
@@ -563,6 +588,7 @@ class QBittorrentClient:
                 metadata.name,
             )
             if pending or not was_stopped or ensure_started:
+                self._require_owned(infohash)
                 self._start(infohash)
                 verified = self._wait_started(infohash)
             if pending:
@@ -573,20 +599,28 @@ class QBittorrentClient:
             if release_requested:
                 raise
             try:
+                self._require_owned(infohash)
                 self._stop(infohash)
                 for priority in sorted(set(previous.values())):
                     ids = sorted(index for index, value in previous.items() if value == priority)
                     if ids:
+                        self._require_owned(infohash)
                         self._c.torrents_file_priority(torrent_hash=infohash.lower(), file_ids=ids, priority=priority)
                 restored = self._inspect_with_files(infohash)
-                restored_priorities = {
-                    int(row["index"]): int(row.get("priority") or 0)
-                    for row in restored.get("files") or []
-                    if isinstance(row.get("index"), int)
-                }
+                restored_rows = list(restored.get("files") or [])
+                restored_priorities = files.priorities(
+                    restored_rows, fail=lambda: _fail("client.managed.wrong_selection")
+                )
+                files.verify_selection(
+                    list(before.get("files") or []),
+                    restored_rows,
+                    {i for i, p in previous.items() if p > 0},
+                    fail=lambda: _fail("client.managed.wrong_selection"),
+                )
                 if restored_priorities != previous:
                     raise _fail("client.managed.wrong_selection")
                 if not was_stopped:
+                    self._require_owned(infohash)
                     self._start(infohash)
                     self._wait_started(infohash)
             except Exception as cleanup_error:  # noqa: BLE001 - the original failure is re-raised; this must not hide it
@@ -633,6 +667,7 @@ class QBittorrentClient:
         dest = (save_path or "").strip()
         if not dest:
             raise _fail("client.managed.no_folder")
+        self._require_owned(infohash)
         self._c.torrents_set_location(location=dest, torrent_hashes=infohash.lower())
         return "ok"
 

@@ -238,8 +238,9 @@ def test_set_location_refuses_blank_path_and_sends_trimmed_location(qbit):
         client.set_location(HASH, "   ")
     assert api.calls == []
 
+    api.put(HASH, files=SHOW_FILES, tags="tow")
     assert client.set_location(HASH, r"  M:\new  ") == "ok"
-    assert api.calls == [("set_location", r"M:\new", HASH.lower())]
+    assert api.calls == ["files", ("set_location", r"M:\new", HASH.lower())]
 
 
 def test_from_secrets_requires_host_and_defaults_port(monkeypatch):
@@ -319,19 +320,20 @@ def test_add_listed_under_another_client_id_is_confirmed_by_the_full_listing(qbi
     assert api.torrents[client_id]["tags"] == "tow"
 
 
-def test_successful_partial_add_ignores_unindexed_rows_and_releases_ownership(qbit):
+def test_partial_add_refuses_unindexed_rows_and_stays_pending_and_stopped(qbit):
     client, api = qbit
     _registers(
         api, files=[{"index": None, "name": "Show/extra.nfo", "size": 1, "progress": 0, "priority": 1}, *SHOW_FILES]
     )
 
-    result = client.add_torrent_selected(TORRENT, SAVE, HASH, [1])
+    with raises_code("client.managed.wrong_selection", RuntimeError):
+        client.add_torrent_selected(TORRENT, SAVE, HASH, [1])
 
     assert api.added["is_stopped"] is True
     assert api.added["tags"] == "tow,tow-pending"
-    assert api.priorities() == {4: 0, 9: 1}
-    assert result["tags"] == ["tow"]
-    assert api.torrents[HASH]["state"] == "downloading"
+    assert api.priorities() == {4: 1, 9: 1}
+    assert api.torrents[HASH]["tags"] == "tow,tow-pending"
+    assert api.torrents[HASH]["state"] == "stoppedDL"
 
 
 def test_add_through_older_pause_resume_api(qbit):

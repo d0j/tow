@@ -3,6 +3,17 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.26] — 2026-10-04
+
+### Fixed
+
+- Recheck torrent ownership before client changes, relocation and failure cleanup. Selection changes in
+  qBittorrent refuse foreign torrents; lost ownership is never reclaimed by clearing the pending marker.
+- Confirm the complete file list, stable file identities and explicit priorities before starting a selection.
+  Missing or malformed flags are unknown, not implied download/skip choices; reordered lists remain supported.
+- Confirm restoration of the previous selection before resuming a failed change. Failed or unsafe rollback
+  stays stopped, preserves the original error and reports the cleanup failure.
+
 ## [1.22.25] — 2026-10-03
 
 ### Fixed

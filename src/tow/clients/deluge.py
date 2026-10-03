@@ -182,8 +182,8 @@ class DelugeClient(ManagedClient):
                     "index": index,
                     "name": str(item.get("path") or ""),
                     "size": int(item.get("size") or 0),
-                    "progress": float(done[index]) if index < len(done) else 0.0,
-                    "priority": int(priorities[index]) if index < len(priorities) else 0,
+                    "progress": float(done[index]) if 0 <= index < len(done) else 0.0,
+                    "priority": int(priorities[index]) if 0 <= index < len(priorities) else None,
                 }
             )
         label = str(row.get("label") or "").strip()
