@@ -3,6 +3,17 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.28] — 2026-10-04
+
+### Fixed
+
+- Keep zero-season folders and zero-numbered specials out of ordinary episode selection and completion.
+  They remain downloadable and observable as files; existing misclassified history is corrected on reconciliation.
+- Validate episode-rule and file-pattern syntax when saving a topic, before recording changes or checking the client.
+  A zero-numbered range cannot silently select only its ordinary episodes.
+- Invalid per-file progress, including booleans, out-of-range fractions and overflowing numbers, cannot confirm
+  a completed episode or emit completion events merely because a full-sized file is present.
+
 ## [1.22.27] — 2026-10-04
 
 ### Fixed

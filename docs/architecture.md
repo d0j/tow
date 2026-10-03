@@ -79,8 +79,9 @@ flowchart TD
     secrets.enc            passwords, tokens, cookies, password record — Fernet, master key
     secrets-undo.enc       the secrets before the last undoable change
     sessions.json          revoked network sessions
+    tow.jsonl              structured events — rotated
     restore-points/        restore points (.towx)
-    logs/                  tow.jsonl (events), run.log, serve.log, job logs — rotated
+    logs/                  process and job output (including serve.log) — rotated
     run/                   supervisor lock, pid, status, schedule, control/
     tmp/                   private temp folder (cleaned after a day)
     browser-auth/          temporary browser profiles for site sign-in

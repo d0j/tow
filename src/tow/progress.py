@@ -593,10 +593,12 @@ def _adopt_previous_item(
 def _file_progress(row: Any, info: Any) -> float:
     """Per-file progress (0..1), falling back to the torrent's progress."""
     progress = _get(row, "progress", _get(info, "progress", 0.0))
+    if isinstance(progress, bool) or not isinstance(progress, (int, float, str)):
+        return 0.0
     try:
         value = float(progress)
-        return max(0.0, min(1.0, value)) if math.isfinite(value) else 0.0
-    except TypeError, ValueError:
+        return value if math.isfinite(value) and 0.0 <= value <= 1.0 else 0.0
+    except TypeError, ValueError, OverflowError:
         return 0.0
 
 

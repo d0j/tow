@@ -97,6 +97,27 @@ def test_special_video_folder_is_not_selected_as_regular_episode():
     assert plan.selected_indices == (0,)
 
 
+@pytest.mark.parametrize(
+    "special", ["Season 00/01.mkv", "S00/Show.S01E01.mkv", "Show.S00E01&E02.mkv", "Show S0-Ep01.mkv"]
+)
+def test_special_is_downloadable_as_file_but_not_as_regular_episode(special):
+    files = (TorrentFile(0, "Show.S01E01.mkv", 100), TorrentFile(1, special, 10))
+    episode_plan = resolve_selection(files, normalize_policy("episodes", "1"), preferred_season=1)
+    assert episode_plan.selected_indices == (0,)
+    all_plan = resolve_selection(files, normalize_policy("all"), preferred_season=1)
+    assert all_plan.selected_indices == (0, 1)
+    assert all_plan.selected_episode_keys == ("episode:s01e01",)
+    file_plan = resolve_selection(files, normalize_policy("files", special), preferred_season=1)
+    assert file_plan.selected_indices == (1,)
+    assert file_plan.selected_episode_keys == ()
+
+
+@pytest.mark.parametrize("expression", ["S01E00-E01", "1x00-01", "S00E01,S01E01", "0x01,1x01"])
+def test_zero_numbered_rule_cannot_silently_select_only_its_regular_part(expression):
+    with raises_code("selection.bad_range", ValueError):
+        resolve_selection(FILES, normalize_policy("episodes", expression))
+
+
 def test_seasonless_video_does_not_inherit_other_video_season():
     files = (
         TorrentFile(0, "Show - 01 [1080p].mkv", 100),

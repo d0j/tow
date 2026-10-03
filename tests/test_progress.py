@@ -29,6 +29,12 @@ def test_non_finite_client_progress_cannot_confirm_a_file(value):
     assert _file_progress({"progress": value}, {}) == 0.0
 
 
+@pytest.mark.parametrize("value", [0, 0.5, 1.0, "0", "0.5", "1.0"])
+def test_valid_file_fraction_is_preserved(value):
+    assert _file_progress({"progress": value}, {}) == float(value)
+    assert _file_progress({}, {"progress": value}) == float(value)
+
+
 def test_non_finite_progress_does_not_emit_a_false_completion(tmp_path: Path):
     client = FakeClient()
     client.progress = float("nan")
@@ -42,6 +48,74 @@ def test_non_finite_progress_does_not_emit_a_false_completion(tmp_path: Path):
 
     assert result["summary"]["completed"] == 0
     assert "episode_completed" not in result["events"]
+
+
+@pytest.mark.parametrize("value", [True, False, -1, 1.1, "1.1", "bad", None, [], {}, 10**1000])
+def test_invalid_file_fraction_cannot_confirm_completion(tmp_path: Path, value):
+    assert _file_progress({"progress": value}, {"progress": 1.0}) == 0.0
+    client = FakeClient()
+    client.progress = value
+    folder = tmp_path / "Show"
+    folder.mkdir()
+    (folder / "S01E01.mkv").write_bytes(b"0123456789")
+    topic = {"id": "invalid-fraction", "title": "Show [1 из 1]", "hash": "ABC", "save_path": str(tmp_path)}
+    history = {"topics": {topic["id"]: {"baseline_at": "2026-09-12T20:00:00+03:00", "items": {}}}}
+    result = reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
+    assert result["summary"]["completed"] == 0
+    assert "episode_completed" not in result["events"]
+
+
+@pytest.mark.parametrize("legacy", [False, True, "completed"])
+def test_special_does_not_block_episode_completion_and_reconciliation_is_idempotent(tmp_path: Path, legacy):
+    class ClientWithSpecial(FakeClient):
+        def inspect_torrent(self, infohash):
+            info = super().inspect_torrent(infohash)
+            info["files"].append(
+                {"name": "Show/Season 00/01.mkv", "size": 3, "progress": getattr(self, "special_progress", 0.0)}
+            )
+            return info
+
+    client = ClientWithSpecial()
+    client.progress = 1.0
+    folder = tmp_path / "Show"
+    folder.mkdir()
+    (folder / "S01E01.mkv").write_bytes(b"0123456789")
+    topic = {"id": "special", "title": "Show S01 [1 из 1]", "hash": "ABC", "save_path": str(tmp_path)}
+    record = {"baseline_at": "2026-09-12T20:00:00+03:00", "items": {}}
+    if legacy:
+        identity = item_identity("Show/Season 00/01.mkv", None, 3)
+        record["items"][identity] = {
+            "identity": identity,
+            "kind": "episode",
+            "episode_key": "episode:s01e01",
+            "episode_keys": ["episode:s01e01"],
+            "relative_path": "Show/Season 00/01.mkv",
+            "source_hash": "ABC",
+            "size": 3,
+            "status": "completed" if legacy == "completed" else "downloading",
+            "first_seen_at": record["baseline_at"],
+        }
+        if legacy == "completed":
+            record["items"][identity]["completed_observed_at"] = "2026-09-12T20:30:00+03:00"
+    history = {"topics": {topic["id"]: record}}
+    result = reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
+    assert result["summary"]["completed"] == 1
+    assert result["summary"]["is_complete"] is True
+    assert result["events"].count("episode_completed") == 1
+    special = next(item for item in record["items"].values() if "Season 00" in item["relative_path"])
+    assert special["kind"] == "file"
+    assert special["episode_keys"] == []
+    assert reconcile_topic(topic, client, history, "2026-09-12T21:01:00+03:00")["events"] == []
+    special_folder = folder / "Season 00"
+    special_folder.mkdir()
+    (special_folder / "01.mkv").write_bytes(b"012")
+    client.special_progress = 1.0
+    completed = reconcile_topic(topic, client, history, "2026-09-12T21:02:00+03:00")
+    assert completed["summary"]["completed"] == 1
+    assert completed["events"] == ([] if legacy == "completed" else ["file_completed"])
+    if legacy == "completed":
+        assert special["completed_observed_at"] == "2026-09-12T20:30:00+03:00"
+    assert reconcile_topic(topic, client, history, "2026-09-12T21:03:00+03:00")["events"] == []
 
 
 def test_summary_deduplicates_episode_revisions():

@@ -224,9 +224,11 @@ def _repeated_episodes(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, ..
     if repeated:
         tail = repeated.group(3)
         episodes = [int(repeated.group(2)), *[int(value) for value in re.findall(r"(?i)e(\d{1,4})", tail)]]
+        season = int(repeated.group(1))
+        if season == 0 or 0 in episodes:
+            return ()
         separators = re.findall(r"[-&+,/]", tail)
         if len(episodes) >= 3 or any(separator != "-" for separator in separators):
-            season = int(repeated.group(1))
             return tuple(EpisodeLabel(episode=value, season=season) for value in dict.fromkeys(episodes))
     return None
 
@@ -270,6 +272,8 @@ def _season_dash_episode(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, 
     )
     if match:
         season, episode = int(match.group(1)), int(match.group(2))
+        if season == 0 or episode == 0:
+            return ()
         if season > 0 and 0 < episode <= 1000:
             return (EpisodeLabel(episode=episode, season=season),)
     return None
@@ -284,6 +288,8 @@ def _season_word_episode_word(text: str, path: PurePosixPath) -> tuple[EpisodeLa
     )
     if match:
         season, episode = int(match.group(1)), int(match.group(2))
+        if season == 0 or episode == 0:
+            return ()
         if season > 0 and 0 < episode <= 1000:
             return (EpisodeLabel(episode=episode, season=season),)
     return None
@@ -506,6 +512,25 @@ def resolve_episode_coverages(names: Iterable[str]) -> tuple[tuple[EpisodeLabel,
     return coverages
 
 
+def _folder_seasons(path: PurePosixPath) -> set[int]:
+    seasons = {
+        int(match.group(1))
+        for part in path.parts[:-1]
+        if (
+            match := re.fullmatch(
+                r"(?i)(?:season|сезон|s)[ ._-]*0*(\d{1,2})(?:\s*\(\d{4}\))?",
+                part,
+            )
+        )
+    }
+    seasons.update(
+        int(match.group(1))
+        for part in path.parts[:-1]
+        if (match := re.fullmatch(r"(?i)0*(\d{1,2})[ ._-]*(?:season|сезон)", part))
+    )
+    return seasons
+
+
 def _coverage_with_folder_season(name: str) -> tuple[EpisodeLabel, ...]:
     path = PurePosixPath(str(name or "").replace("\\", "/"))
     if re.search(
@@ -528,6 +553,9 @@ def _coverage_with_folder_season(name: str) -> tuple[EpisodeLabel, ...]:
         path.stem,
     ):
         return ()
+    seasons = _folder_seasons(path)
+    if 0 in seasons:
+        return ()
     coverage = parse_episode_coverage(str(path))
     # ONA can name a regular episodic web release, unlike an OVA bonus. Keep
     # unnumbered/seasonless ONA files conservative, but honour explicit SxxExx.
@@ -537,22 +565,7 @@ def _coverage_with_folder_season(name: str) -> tuple[EpisodeLabel, ...]:
         return ()
     if not coverage or all(label.season is not None for label in coverage):
         return coverage
-    seasons = {
-        int(match.group(1))
-        for part in path.parts[:-1]
-        if (
-            match := re.fullmatch(
-                r"(?i)(?:season|сезон|s)[ ._-]*0*(\d{1,2})(?:\s*\(\d{4}\))?",
-                part,
-            )
-        )
-    }
-    seasons.update(
-        int(match.group(1))
-        for part in path.parts[:-1]
-        if (match := re.fullmatch(r"(?i)0*(\d{1,2})[ ._-]*(?:season|сезон)", part))
-    )
-    if len(seasons) != 1 or 0 in seasons:
+    if len(seasons) != 1:
         return coverage
     season = seasons.pop()
     return tuple(EpisodeLabel(label.episode, season) if label.season is None else label for label in coverage)
