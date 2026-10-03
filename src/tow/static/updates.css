@@ -11,6 +11,7 @@
 }
 .app-version > a { color: var(--mut); text-decoration: none; }
 .app-version > a:hover, .app-version > a:focus-visible { text-decoration: underline; }
+.app-version .hdr-clock { position: static; margin-inline-start: auto; }
 .app-version .release-badge {
   color: var(--nav-fg-hi);
   background: var(--panel2);
@@ -24,3 +25,6 @@
 .release-panel code { white-space: normal; overflow-wrap: anywhere; }
 .release-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18rem; overflow-y: auto; }
 .release-panel [hidden], [data-release-badge][hidden] { display: none !important; }
+@media (max-width: 480px) {
+  .hdr-sites { padding-right: 0; }
+}
