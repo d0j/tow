@@ -645,6 +645,24 @@ def test_export_refuses_missing_or_oversized_config(tmp_path, monkeypatch):
     assert not output.exists()
 
 
+def test_read_limited_rechecks_size_during_read(tmp_path, monkeypatch):
+    path = tmp_path / "growing.towx"
+    path.write_bytes(b"12345")
+    original_stat = Path.stat
+
+    def stale_stat(self, *args, **kwargs):
+        result = original_stat(self, *args, **kwargs)
+        if self == path:
+            return type("StaleStat", (), {"st_size": 4})()
+        return result
+
+    with monkeypatch.context() as patch:
+        patch.setattr(tow_bundle, "MAX_BUNDLE_BYTES", 4)
+        patch.setattr(Path, "stat", stale_stat)
+        with pytest.raises(ExportImportError, match=r"growing\.towx is too large"):
+            tow_bundle._read_limited(path, label=path.name)
+
+
 def test_export_settings_undo_must_point_at_a_readable_encrypted_snapshot(tmp_path):
     _seed_source()
     output = tmp_path / "tow.towx"

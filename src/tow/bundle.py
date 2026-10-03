@@ -94,7 +94,11 @@ def _read_limited(path: Path, *, label: str) -> bytes:
         size = path.stat().st_size
         if size > MAX_BUNDLE_BYTES:
             raise ExportImportError(f"{label} is too large")
-        return path.read_bytes()
+        with path.open("rb") as handle:
+            content = handle.read(MAX_BUNDLE_BYTES + 1)
+        if len(content) > MAX_BUNDLE_BYTES:
+            raise ExportImportError(f"{label} is too large")
+        return content
     except ExportImportError:
         raise
     except OSError as exc:

@@ -272,7 +272,7 @@ def test_backup_dir_defaults_next_to_config_and_must_be_outside_the_data(tmp_pat
     cfg = load_config()
     cfg["backup_dir"] = str(data_dir() / "inside")
     save_config(cfg)
-    with pytest.raises(SnapshotError, match=re.escape(t("backup.snapshot.inside_data"))):
+    with pytest.raises(SnapshotError, match=re.escape(t("locations.night_outside_data"))):
         create_snapshot()
 
 

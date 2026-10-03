@@ -32,6 +32,10 @@ class MissingMasterKeyError(TowError, SecretStoreError):
     """No master key at all: said in the owner's words, with the command that fixes it."""
 
 
+class InvalidMasterKeyPathError(TowError, SecretStoreError):
+    """A relative master-key path must not leave the data folder."""
+
+
 class StoreCorruptionError(RuntimeError):
     """Raised when a persisted JSON store is corrupt and was quarantined."""
 
@@ -346,7 +350,18 @@ def _explicit_key_file() -> Path | None:
     if not value:
         return None
     path = Path(value)
-    return path if path.is_absolute() else data_dir() / path
+    if path.is_absolute():
+        return path
+    if path.anchor:
+        raise InvalidMasterKeyPathError("store.key_path_outside_data")
+    try:
+        base = data_dir().resolve()
+        resolved = (base / path).resolve()
+    except (OSError, RuntimeError) as exc:
+        raise InvalidMasterKeyPathError("store.key_path_outside_data") from exc
+    if not resolved.is_relative_to(base):
+        raise InvalidMasterKeyPathError("store.key_path_outside_data")
+    return resolved
 
 
 def _install_key_file() -> Path | None:
