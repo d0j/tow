@@ -10,6 +10,15 @@ from tow.store import load_download_history, save_download_history
 def _checkpoint(name: str, status: str | None) -> None:
     path = data_dir() / "import-checkpoints" / name
     path.mkdir(parents=True)
+    (path / "files").mkdir()
+    manifest = {
+        "format": tow_bundle.CHECKPOINT_FORMAT,
+        "targets": [
+            {"member": member, "target": str(target), "exists": False, "sha256": None}
+            for member, target in tow_bundle._checkpoint_targets()
+        ],
+    }
+    (path / "MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
     if status is not None:
         tow_bundle._write_import_transaction(path, status=status)
 

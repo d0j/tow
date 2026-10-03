@@ -417,19 +417,28 @@ def test_crashed_import_is_rolled_back_before_any_other_writer(tmp_path, monkeyp
         assert json.loads(state_path().read_text(encoding="utf-8")) == original_state
 
 
-def test_unreadable_old_import_journal_does_not_block_other_writers(tmp_path, monkeypatch):
+def test_unreadable_import_journal_refuses_other_writes_until_repaired(tmp_path, monkeypatch):
     from tow import bundle as tow_bundle
 
     dest = tmp_path / "destination"
     _seed_source(monkeypatch, dest)
     checkpoint = tow_bundle._create_import_checkpoint()
-    (checkpoint / "TRANSACTION.json").write_text("{broken", encoding="utf-8")
+    transaction = checkpoint / "TRANSACTION.json"
+    original = transaction.read_bytes()
+    transaction.write_text("{broken", encoding="utf-8")
+    before = state_path().read_bytes()
 
-    save_state({"topics": [{"id": "still-writable"}], "mirrors": {}})
+    with pytest.raises(ExportImportError):
+        save_state({"topics": [{"id": "must-not-overwrite"}], "mirrors": {}})
 
-    assert load_state()["topics"] == [{"id": "still-writable"}]
+    assert state_path().read_bytes() == before
+    assert transaction.read_text(encoding="utf-8") == "{broken"
     with pytest.raises(ExportImportError):
         tow_bundle.recover_import_transactions()
+    transaction.write_bytes(original)
+    tow_bundle.recover_import_transactions()
+    save_state({"topics": [{"id": "writable-after-recovery"}], "mirrors": {}})
+    assert load_state()["topics"] == [{"id": "writable-after-recovery"}]
 
 
 def test_import_rollback_preview_rejects_missing_backup(tmp_path, monkeypatch):

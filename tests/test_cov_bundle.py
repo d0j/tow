@@ -897,7 +897,14 @@ def test_failed_import_with_failed_rollback_stays_pending_and_is_recovered_later
     def fail_save(_data):
         raise SecretStoreError("fixture write failure")
 
-    def fail_checkpoint(_checkpoint):
+    read_checkpoint = tow_bundle._read_checkpoint
+    reads = 0
+
+    def fail_checkpoint(checkpoint):
+        nonlocal reads
+        reads += 1
+        if reads == 1:
+            return read_checkpoint(checkpoint)  # preparing the checkpoint is verified too
         raise ExportImportError("fixture: checkpoint unavailable")
 
     with monkeypatch.context() as patch:
@@ -1129,6 +1136,15 @@ def test_interrupted_import_whose_checkpoint_is_corrupt_fails_closed(applied):
 def _fake_checkpoint(name: str, status: str | None) -> Path:
     checkpoint = _checkpoints_root() / name
     checkpoint.mkdir(parents=True)
+    (checkpoint / "files").mkdir()
+    manifest = {
+        "format": tow_bundle.CHECKPOINT_FORMAT,
+        "targets": [
+            {"member": member, "target": str(target), "exists": False, "sha256": None}
+            for member, target in tow_bundle._checkpoint_targets()
+        ],
+    }
+    (checkpoint / "MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
     if status is None:
         (checkpoint / "TRANSACTION.json").write_text("{", encoding="utf-8")
     else:

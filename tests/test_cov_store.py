@@ -615,10 +615,11 @@ def test_save_secrets_rejects_non_objects_and_unserializable_values(key):
 def test_save_secrets_rejects_payload_that_does_not_read_back_identically(key):
     legacy = _write_legacy({"telegram": {"token": "legacy"}})
 
-    with pytest.raises(SecretStoreError, match="read-back mismatch"):
+    with pytest.raises(SecretStoreError, match="not serializable"):
         save_secrets({"ids": (1, 2)})  # a tuple comes back as a list
 
     assert legacy.exists()  # plaintext is only removed after a verified write
+    assert not encrypted_secrets_path().exists()  # invalid input never replaces either store
 
 
 def test_secret_write_failure_keeps_previous_secrets_and_no_temp_file(monkeypatch, key):
@@ -728,8 +729,10 @@ def test_secret_undo_rejects_unknown_references_and_bad_payloads(key):
             call("settings-v0")
     with pytest.raises(SecretStoreError, match="must be an object"):
         save_secret_undo("not a dict")
-    with pytest.raises(SecretStoreError, match="undo read-back mismatch"):
+    before = secret_undo_path().read_bytes()
+    with pytest.raises(SecretStoreError, match="not serializable"):
         save_secret_undo({"ids": (1,)})
+    assert secret_undo_path().read_bytes() == before
     assert ref == "settings-v1"
 
 

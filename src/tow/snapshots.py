@@ -20,6 +20,7 @@ import hmac
 import json
 import re
 import shutil
+import stat
 import time
 import uuid
 from datetime import UTC, datetime
@@ -36,6 +37,7 @@ from tow.paths import config_path, data_dir, download_history_path, state_path
 from tow.store import (
     SecretStoreError,
     atomic_write_bytes,
+    decode_json_bytes,
     decrypt_secrets_bytes,
     derive_local_secret,
     encrypt_secrets_bytes,
@@ -538,16 +540,18 @@ def _begin_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str)
     try:
         safety.mkdir(parents=True, exist_ok=False)
         for name, target, _content in plan:
-            if target.is_file():
+            if _ordinary_file(target, missing=True):
                 saved = target.read_bytes()
                 atomic_write_bytes(safety / name, saved)
                 entries.append({"name": name, "existed": True, "sha256": hashlib.sha256(saved).hexdigest()})
             else:
                 entries.append({"name": name, "existed": False})
         _write_journal(safety, {"format": _JOURNAL_FORMAT, "snapshot": snapshot, "entries": entries}, "prepared")
+        _rollback_plan(safety)  # verify every just-written copy before publishing the marker
         atomic_write_bytes(data_dir() / _MARKER, json.dumps({"safety": safety.name}).encode("utf-8"))
-    except OSError as exc:
-        shutil.rmtree(safety, ignore_errors=True)
+    except (OSError, ValueError, TypeError, RecursionError, yaml.YAMLError) as exc:
+        # A failed exclusive mkdir may belong to another writer. Retain partial
+        # copies too: a marker published just before an I/O error still needs them.
         raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=_reason(exc))) from exc
     return safety
 
@@ -558,15 +562,119 @@ def _write_journal(safety: Path, journal: dict[str, Any], status: str) -> None:
 
 
 def _read_journal(safety: Path) -> dict[str, Any]:
-    journal = json.loads((safety / _JOURNAL).read_text(encoding="utf-8"))
+    _ordinary_directory(safety)
+    _ordinary_file(safety / _JOURNAL)
+    journal = decode_json_bytes((safety / _JOURNAL).read_bytes())
     if (
         not isinstance(journal, dict)
         or journal.get("format") != _JOURNAL_FORMAT
-        or journal.get("status") not in {"prepared", "committed", "rolled_back"}
+        or not isinstance(journal.get("status"), str)
+        or journal["status"] not in {"prepared", "committed", "rolled_back"}
         or not isinstance(journal.get("entries"), list)
     ):
         raise ValueError("not a night-copy restore journal")
+    names: set[str] = set()
+    fixed = dict(_fixed_members())
+    for entry in journal["entries"]:
+        if not isinstance(entry, dict):
+            raise TypeError("malformed night-copy restore entry")
+        name = entry.get("name")
+        if not isinstance(name, str) or (name not in fixed and _POINT_MEMBER.fullmatch(name) is None):
+            raise ValueError("unexpected night-copy restore member")
+        if name in names or not isinstance(entry.get("existed"), bool):
+            raise ValueError("malformed night-copy restore entry")
+        names.add(name)
+        checksum = entry.get("sha256")
+        if entry["existed"]:
+            if not isinstance(checksum, str) or re.fullmatch(r"[0-9a-f]{64}", checksum) is None:
+                raise ValueError("malformed night-copy restore checksum")
+        elif checksum is not None:
+            raise ValueError("unexpected night-copy restore checksum")
     return journal
+
+
+def _ordinary_directory(path: Path, *, missing: bool = False) -> bool:
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        if missing:
+            return False
+        raise
+    if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        raise ValueError("night-copy restore directory is unsafe")
+    return True
+
+
+def _ordinary_file(path: Path, *, missing: bool = False) -> bool:
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        if missing:
+            return False
+        raise
+    if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        raise ValueError("night-copy restore file is unsafe")
+    return True
+
+
+def _rollback_target(name: str, config_bytes: bytes | None) -> Path:
+    fixed = dict(_fixed_members())
+    if name in fixed or config_bytes is None:
+        return _member_target(name)
+    # Point targets belong to the saved config, not to a partially restored one.
+    # Resolve them without temporarily replacing the live config during preflight.
+    from tow.locations import MANUAL, resolve_checked
+
+    config = yaml.safe_load(config_bytes)
+    if not isinstance(config, dict):
+        raise TypeError("night-copy restore config is malformed")
+    match = _POINT_MEMBER.fullmatch(name)
+    if match is None or re.fullmatch(r"[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}", match["id"]) is None:
+        raise ValueError("night-copy restore point is malformed")
+    root = resolve_checked(str(config.get("restore_points_dir") or ""), MANUAL).resolve()
+    return root / f"{match['id']}.towx"
+
+
+def _rollback_plan(safety: Path) -> list[tuple[str, Path, bytes | None]]:
+    journal = _read_journal(safety)
+    saved: dict[str, bytes | None] = {}
+    for entry in journal["entries"]:
+        name = entry["name"]
+        backup = safety / name
+        if backup.parent != safety:
+            _ordinary_directory(backup.parent, missing=not entry["existed"])
+        if entry["existed"]:
+            _ordinary_file(backup)
+            content = backup.read_bytes()
+            if hashlib.sha256(content).hexdigest() != entry["sha256"]:
+                raise SnapshotError(t("backup.snapshot.file_damaged", owner_language(), name=name))
+            saved[name] = content
+        else:
+            if _ordinary_file(backup, missing=True):
+                raise ValueError("unexpected night-copy restore backup")
+            saved[name] = None
+    plan = []
+    for name, content in saved.items():
+        target = _rollback_target(name, saved.get("config.yaml"))
+        _ordinary_file(target, missing=True)
+        if target.parent.exists():
+            _ordinary_directory(target.parent)
+        plan.append((name, target, content))
+    return sorted(plan, key=lambda step: step[0] != "config.yaml")
+
+
+def _owned_safety(safety: Path, journal: dict[str, Any]) -> bool:
+    """Never prune an unrecognized file or descend into a link/junction."""
+    expected = {_JOURNAL, *(entry["name"] for entry in journal["entries"] if entry["existed"])}
+    for path in safety.rglob("*"):
+        name = path.relative_to(safety).as_posix()
+        if name == "restore-points":
+            _ordinary_directory(path)
+        elif name in expected:
+            _ordinary_file(path)
+        else:
+            return False
+    return True
 
 
 def _finish(safety: Path, status: str) -> None:
@@ -579,12 +687,12 @@ def _finish(safety: Path, status: str) -> None:
 def _marked_safety() -> str | None:
     """The before-restore folder the marker names (a restore in progress or to recover), if any."""
     try:
-        name = json.loads((data_dir() / _MARKER).read_text(encoding="utf-8"))["safety"]
+        name = decode_json_bytes((data_dir() / _MARKER).read_bytes())["safety"]
     except FileNotFoundError:
         return None
-    except OSError, UnicodeError, ValueError, KeyError, TypeError:
+    except OSError, UnicodeError, ValueError, KeyError, TypeError, RecursionError:
         return ""  # unreadable: some folder may still be needed, so none is touched
-    return str(name)
+    return name if isinstance(name, str) and _SAFETY_NAME.fullmatch(name) else ""
 
 
 def _tidy_safety_copies(keep: int = SAFETY_KEEP) -> list[str]:
@@ -607,9 +715,12 @@ def _tidy_safety_copies(keep: int = SAFETY_KEEP) -> list[str]:
     for folder in folders:
         if folder.name == marked:
             continue
-        with contextlib.suppress(OSError, UnicodeError, ValueError, KeyError, TypeError):
-            if _read_journal(folder)["status"] == "prepared":
+        try:
+            journal = _read_journal(folder)
+            if journal["status"] == "prepared" or not _owned_safety(folder, journal):
                 continue
+        except OSError, UnicodeError, ValueError, KeyError, TypeError, RecursionError:
+            continue  # unreadable is not evidence that a restore has finished
         finished.append(folder)
         with contextlib.suppress(OSError):
             (folder / _UNDO_IN_SAFETY).unlink(missing_ok=True)
@@ -643,18 +754,17 @@ def _apply_restore(plan: list[tuple[str, Path, bytes | None]], safety: Path) -> 
 
 def _roll_back(safety: Path) -> None:
     """Put back every file the journal saved (config.yaml first: it says where restore points live)."""
-    journal = _read_journal(safety)
-    entries = sorted(journal["entries"], key=lambda entry: entry.get("name") != "config.yaml")
-    for entry in entries:
-        name = str(entry.get("name"))
-        target = _member_target(name)
-        if entry.get("existed"):
-            content = (safety / name).read_bytes()
-            if hashlib.sha256(content).hexdigest() != entry.get("sha256"):
-                raise SnapshotError(t("backup.snapshot.file_damaged", owner_language(), name=name))
-            atomic_write_bytes(target, content)
-        else:
+    try:
+        plan = _rollback_plan(safety)
+    except (OSError, ValueError, TypeError, RecursionError, yaml.YAMLError) as exc:
+        raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=_reason(exc))) from exc
+    for name, target, content in plan:
+        if content is None:
             target.unlink(missing_ok=True)
+        else:
+            atomic_write_bytes(target, content)
+            if target.read_bytes() != content:
+                raise SnapshotError(t("backup.snapshot.read_back_failed", owner_language(), name=name))
     _finish(safety, "rolled_back")
 
 
@@ -665,11 +775,12 @@ class _MarkerGone(Exception):
 def _marked_journal(marker: Path) -> tuple[Path, str]:
     """(before-restore folder, journal status) the marker points at."""
     try:
-        raw = marker.read_text(encoding="utf-8")
+        _ordinary_file(marker)
+        raw = marker.read_bytes()
     except FileNotFoundError as exc:
         raise _MarkerGone from exc
-    name = str(json.loads(raw)["safety"])
-    if _SAFETY_NAME.fullmatch(name) is None:
+    name = decode_json_bytes(raw)["safety"]
+    if not isinstance(name, str) or _SAFETY_NAME.fullmatch(name) is None:
         raise ValueError("unexpected before-restore folder name")
     safety = data_dir() / name
     return safety, str(_read_journal(safety)["status"])
@@ -710,7 +821,7 @@ def recover_interrupted_restore() -> None:
             if attempt == _RECOVERY_ATTEMPTS - 1:
                 raise _refuse_writes(exc, marker) from exc
             time.sleep(0.05 * 2**attempt)
-        except (UnicodeError, ValueError, KeyError, TypeError) as exc:
+        except (UnicodeError, ValueError, KeyError, TypeError, RecursionError) as exc:
             raise _refuse_writes(exc, marker) from exc
     if status != "prepared":
         marker.unlink(missing_ok=True)
