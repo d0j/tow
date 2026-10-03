@@ -346,6 +346,113 @@ def test_an_edited_manifest_is_refused(backup):
     assert load_state()["topics"] == [{"id": "current"}]
 
 
+@pytest.mark.parametrize("format_value", [[], {}, None, 2])
+def test_malformed_manifest_format_is_a_snapshot_error(backup, format_value):
+    snapshot = Path(create_snapshot()["snapshot"])
+    (snapshot / "MANIFEST.json").write_text(json.dumps({"format": format_value, "files": {}}), encoding="utf-8")
+    with pytest.raises(SnapshotError, match=_says("backup.snapshot.not_tow")):
+        verify_snapshot(snapshot)
+
+
+def test_foreign_or_damaged_copy_is_never_pruned(backup, monkeypatch):
+    _clock(monkeypatch, ["20261001-000000", "20261001-000001"])
+    original = Path(create_snapshot()["snapshot"])
+    foreign = backup / "tow-20250901-000000"
+    foreign.mkdir()
+    (foreign / "MANIFEST.json").write_text("{}", encoding="utf-8")
+    marker = foreign / "keep.txt"
+    marker.write_text("not a TOW copy", encoding="utf-8")
+    manifest_path = original / "MANIFEST.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["signature"] = "не подпись"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    newest = Path(create_snapshot(keep=1)["snapshot"])
+
+    assert newest.is_dir()
+    assert original.is_dir()
+    assert marker.read_text(encoding="utf-8") == "not a TOW copy"
+
+
+def test_unsigned_legacy_copy_is_kept_by_automatic_pruning(backup, monkeypatch):
+    _clock(monkeypatch, ["20261001-000000", "20261001-000001"])
+    legacy = Path(create_snapshot()["snapshot"])
+    manifest_path = legacy / "MANIFEST.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["format"] = "tow-snapshot-v1"
+    manifest.pop("signature")
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    create_snapshot(keep=1)
+    assert verify_snapshot(legacy)["signed"] is False
+
+
+def test_a_malformed_copy_returns_a_clear_web_error_without_touching_data(backup):
+    from fastapi.testclient import TestClient
+
+    from tow.web import app
+
+    snapshot = Path(create_snapshot()["snapshot"])
+    (snapshot / "MANIFEST.json").write_text('{"format":[],"files":{}}', encoding="utf-8")
+    response = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
+        f"/settings/backup/night/{snapshot.name}/restore", follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert t("backup.snapshot.not_tow", "ru") in flash_of(response.headers["location"])
+    assert load_state()["topics"] == [{"id": "before"}]
+
+
+def test_two_copies_in_the_same_second_and_an_old_partial_do_not_conflict(backup, monkeypatch):
+    _clock(monkeypatch, ["20261001-000000"] * 3)
+    first = Path(create_snapshot()["snapshot"])
+    second = Path(create_snapshot()["snapshot"])
+    partial = backup / ".tow-20261001-000000.partial"
+    partial.mkdir()
+    (partial / "keep.txt").write_text("interrupted copy", encoding="utf-8")
+    third = Path(create_snapshot()["snapshot"])
+
+    assert len({first, second, third}) == 3
+    for folder in (first, second, third):
+        assert verify_snapshot(snapshot_path(folder.name))["signed"] is True
+    assert (partial / "keep.txt").read_text(encoding="utf-8") == "interrupted copy"
+
+
+@pytest.mark.parametrize("size", [-1, True, "100", None, 1])
+def test_a_signed_manifest_with_an_invalid_file_size_is_refused(backup, size):
+    from tow.snapshots import _signature, _signing_key
+
+    snapshot = Path(create_snapshot()["snapshot"])
+    manifest_path = snapshot / "MANIFEST.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"]["state.json"]["size"] = size
+    manifest["signature"] = _signature(manifest, _signing_key())
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(SnapshotError, match=_says("backup.snapshot.file_damaged", name="state.json")):
+        verify_snapshot(snapshot)
+
+
+def test_snapshot_member_reads_are_bounded_by_the_verified_size(backup, monkeypatch):
+    import io
+
+    snapshot = Path(create_snapshot()["snapshot"])
+    member = snapshot / "state.json"
+    original = member.read_bytes()
+    real_open = Path.open
+
+    class GrowingFile(io.BytesIO):
+        def read(self, size=-1):
+            assert size == len(original) + 1
+            return super().read(size)
+
+    def open_file(path, *args, **kwargs):
+        if path == member and args == ("rb",):
+            return GrowingFile(original + b"changed after stat")
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", open_file)
+    with pytest.raises(SnapshotError, match=_says("backup.snapshot.file_damaged", name="state.json")):
+        verify_snapshot(snapshot)
+
+
 def test_a_copy_signed_with_another_master_key_is_refused(backup, monkeypatch):
     snapshot = Path(create_snapshot()["snapshot"])
     monkeypatch.setenv("TOW_MASTER_KEY", Fernet.generate_key().decode("ascii"))
