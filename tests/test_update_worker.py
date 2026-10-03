@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import test_update as fixture_module
@@ -115,3 +116,161 @@ def test_failure_after_health_check_is_not_reported_as_success(git_install, monk
     path.write_text(json.dumps({"id": job_id, "status": "queued", "target": "1.21.0"}))
     assert update_worker.run(git_install["app"], path, job_id, "1.21.0", updater) == 1
     assert json.loads(path.read_text())["status"] == "failed"
+
+
+def test_handoff_failure_is_terminal_and_does_not_replace_another_job(tmp_path):
+    path = tmp_path / "job.json"
+    path.write_text(json.dumps({"id": "owned", "status": "queued"}))
+    assert update_worker.refuse_handoff(path, "other") == 2
+    assert json.loads(path.read_text())["status"] == "queued"
+    assert update_worker.refuse_handoff(path, "owned") == 2
+    assert json.loads(path.read_text())["status"] == "failed"
+    assert json.loads(path.read_text())["error"] == "releases.launch_failed"
+
+
+def test_handoff_failure_does_not_overwrite_a_running_job(tmp_path):
+    path = tmp_path / "job.json"
+    path.write_text(json.dumps({"id": "owned", "status": "preparing"}))
+    update_worker.refuse_handoff(path, "owned")
+    assert json.loads(path.read_text())["status"] == "preparing"
+
+
+@pytest.mark.parametrize(("mode", "waited"), [("--handoff", True), ("--after-parent", True), ("--after-parent", False)])
+def test_main_handoff_waits_before_running_or_refuses(tmp_path, monkeypatch, mode, waited):
+    path = tmp_path / "job.json"
+    path.write_text(json.dumps({"id": "owned", "status": "queued"}))
+    calls = []
+    machine = SimpleNamespace(
+        spawn_handoff=lambda args, log: calls.append(("spawn", args, log)),
+        wait_process_exit=lambda pid, timeout: calls.append(("wait", pid, timeout)) or waited,
+        updater_independent=lambda: True,
+    )
+    module = SimpleNamespace(System=lambda app: machine)
+    loader = SimpleNamespace(exec_module=lambda _: None)
+    spec = SimpleNamespace(name="isolated_handoff", loader=loader)
+    monkeypatch.setattr(update_worker.importlib.util, "spec_from_file_location", lambda *args: spec)
+    monkeypatch.setattr(update_worker.importlib.util, "module_from_spec", lambda _: module)
+    monkeypatch.setattr(update_worker, "run", lambda *args: calls.append(("run",)) or 0)
+    arguments = [mode, *(["42"] if mode == "--after-parent" else []), str(tmp_path), str(path), "owned", "1.22.21"]
+    monkeypatch.setattr(update_worker.sys, "argv", ["worker.py", *arguments])
+    assert update_worker.main() == (0 if waited else 2)
+    if mode == "--handoff":
+        assert [entry[0] for entry in calls] == ["spawn"]
+        assert "--after-parent" in calls[0][1]
+    else:
+        assert calls[0] == ("wait", 42, 10.0)
+        assert [entry[0] for entry in calls] == (["wait", "run"] if waited else ["wait"])
+        assert json.loads(path.read_text())["status"] == ("queued" if waited else "failed")
+
+
+def test_main_launch_failure_preserves_a_terminal_result(tmp_path, monkeypatch):
+    path = tmp_path / "job.json"
+    path.write_text(json.dumps({"id": "owned", "status": "queued"}))
+
+    def fail(*_args):
+        raise OSError("synthetic launch failure")
+
+    module = SimpleNamespace(System=lambda _: SimpleNamespace(spawn_handoff=fail))
+    spec = SimpleNamespace(name="isolated_handoff_failure", loader=SimpleNamespace(exec_module=lambda _: None))
+    monkeypatch.setattr(update_worker.importlib.util, "spec_from_file_location", lambda *args: spec)
+    monkeypatch.setattr(update_worker.importlib.util, "module_from_spec", lambda _: module)
+    monkeypatch.setattr(
+        update_worker.sys, "argv", ["worker.py", "--handoff", str(tmp_path), str(path), "owned", "1.22.21"]
+    )
+    assert update_worker.main() == 2
+    assert json.loads(path.read_text())["error"] == "releases.launch_failed"
+
+
+@pytest.mark.parametrize(
+    ("handle", "error", "wait", "expected"), [(12, 0, 0, True), (12, 0, 258, False), (0, 87, 0, True), (0, 5, 0, False)]
+)
+def test_windows_parent_wait_checks_exit_and_closes_handle(monkeypatch, handle, error, wait, expected):
+    import ctypes
+
+    module = _load()
+    machine = object.__new__(module.System)
+    machine.windows = True
+    calls = []
+
+    def open_process(access, inherit, pid):
+        calls.append(("open", access, inherit, pid))
+        return handle
+
+    def await_exit(value, timeout):
+        calls.append(("wait", value, timeout))
+        return wait
+
+    def close(value):
+        calls.append(("close", value))
+
+    kernel = SimpleNamespace(OpenProcess=open_process, WaitForSingleObject=await_exit, CloseHandle=close)
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *_args, **_kwargs: kernel, raising=False)
+    monkeypatch.setattr(ctypes, "get_last_error", lambda: error, raising=False)
+    assert machine.wait_process_exit(42, 10) is expected
+    assert calls[0] == ("open", 0x00100000, False, 42)
+    assert calls[1:] == ([("wait", 12, 10000), ("close", 12)] if handle else [])
+
+
+def test_posix_parent_wait_never_signals_or_accepts_uncertain_access(monkeypatch):
+    module = _load()
+    machine = object.__new__(module.System)
+    machine.windows = False
+    calls = []
+
+    def missing(pid, sig):
+        calls.append((pid, sig))
+        raise ProcessLookupError
+
+    monkeypatch.setattr(module.os, "kill", missing)
+    assert machine.wait_process_exit(42, 1)
+    assert calls == [(42, 0)]
+
+    def denied(*_args):
+        raise PermissionError
+
+    monkeypatch.setattr(module.os, "kill", denied)
+    assert not machine.wait_process_exit(42, 1)
+    assert not machine.wait_process_exit(0, 1)
+
+
+@pytest.mark.parametrize("windows", [True, False])
+def test_handoff_spawn_is_hidden_logged_and_outside_replaceable_cwd(tmp_path, monkeypatch, windows):
+    module = _load()
+    machine = object.__new__(module.System)
+    machine.windows = windows
+    machine.root = tmp_path
+    calls = []
+    monkeypatch.setattr(module.subprocess, "Popen", lambda args, **options: calls.append((args, options)))
+    machine.spawn_handoff(["synthetic-python", "worker.py"], tmp_path / "update.log")
+    args, options = calls[0]
+    assert args == ["synthetic-python", "worker.py"]
+    assert options["cwd"] == str(tmp_path)
+    assert options["close_fds"] is True
+    assert options["start_new_session"] is (not windows)
+    assert options["creationflags"] == module.NO_WINDOW
+    assert options["stdout"] is options["stderr"]
+
+
+@pytest.mark.parametrize(
+    ("windows", "success", "in_job", "expected"),
+    [(False, 0, 1, True), (True, 1, 0, True), (True, 1, 1, False), (True, 0, 0, False)],
+)
+def test_outer_job_is_a_safe_refusal_before_stopping(monkeypatch, windows, success, in_job, expected):
+    import ctypes
+
+    module = _load()
+    machine = object.__new__(module.System)
+    machine.windows = windows
+
+    def current():
+        return 12
+
+    def member(process, job, output):
+        assert process == 12
+        assert job is None
+        ctypes.cast(output, ctypes.POINTER(ctypes.c_int)).contents.value = in_job
+        return success
+
+    kernel = SimpleNamespace(GetCurrentProcess=current, IsProcessInJob=member)
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *_args, **_kwargs: kernel, raising=False)
+    assert machine.updater_independent() is expected

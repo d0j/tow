@@ -53,6 +53,7 @@ def test_start_reserves_job_and_copies_worker_outside_replaceable_app(install):
     assert argv[1] == "-u"
     assert Path(argv[2]).is_relative_to(runtime / "runtime")
     assert Path(argv[2]).is_file()
+    assert argv[3] == "--handoff"
     assert options["require_breakaway"] is True
     assert options["hidden"] is True
     assert argv[-1] == "1.22.21"
@@ -75,6 +76,7 @@ def test_parallel_click_is_refused_without_a_second_archive(install, monkeypatch
         "latest",
         "abcdef",
         "1.22.19",
+        "1.22.20",
         "1.22.21-rc.1",
         "1.22.21;exit",
         "../x",
@@ -89,9 +91,10 @@ def test_only_supported_stable_versions_are_accepted(install, version):
     assert not install[1]
 
 
-def test_current_version_is_not_reinstalled(install):
+def test_current_version_is_not_reinstalled(install, monkeypatch):
+    monkeypatch.setattr(web_update, "__version__", "1.22.21")
     with pytest.raises(web_update.WebUpdateError, match=r"releases\.already_installed"):
-        web_update.start("1.22.20")
+        web_update.start("1.22.21")
 
 
 def test_backup_failure_never_launches_an_updater(install, monkeypatch):
