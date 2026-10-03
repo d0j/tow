@@ -12,6 +12,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Copies created in the same second no longer collide. Creation, verification and pruning are serialized;
   automatic pruning keeps unsigned, foreign or damaged-manifest folders instead of deleting them.
 - Restore point lists and night copies exclude directories, links and unrelated `.towx` filenames.
+- A failed reservation of a temporary copy folder never removes another writer's files.
 - The release publication helper confirms the configured local mirror's main and annotated tag before
   publishing to GitHub, so installations that fetch from the mirror can find the release.
 

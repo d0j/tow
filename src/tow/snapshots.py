@@ -303,8 +303,10 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
     missing: list[str] = []
     key = _signing_key()  # no key, no copy: an unsigned copy could never be restored
     previous_members = _previous_members(root, key)
+    partial_created = False
     try:
         partial.mkdir(parents=True, exist_ok=False)
+        partial_created = True
         with persistence_lock():  # a consistent cut: no check or edit writes meanwhile
             for name, source in _members():
                 try:
@@ -332,10 +334,12 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
         (partial / "MANIFEST.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         _rename_with_retry(partial, target)
     except SnapshotError:
-        shutil.rmtree(partial, ignore_errors=True)
+        if partial_created:
+            shutil.rmtree(partial, ignore_errors=True)
         raise
     except OSError as exc:
-        shutil.rmtree(partial, ignore_errors=True)
+        if partial_created:
+            shutil.rmtree(partial, ignore_errors=True)
         raise SnapshotError(
             t("backup.snapshot.cannot_write", owner_language(), reason=exc.strerror or type(exc).__name__)
         ) from exc

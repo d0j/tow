@@ -434,6 +434,23 @@ def test_two_copies_in_the_same_second_and_an_old_partial_do_not_conflict(backup
     assert (partial / "keep.txt").read_text(encoding="utf-8") == "interrupted copy"
 
 
+def test_a_failed_partial_reservation_never_removes_another_writers_files(backup, monkeypatch):
+    _clock(monkeypatch, ["20261001-000000"])
+    partial = backup / ".tow-20261001-000000.partial"
+    real_mkdir = Path.mkdir
+
+    def competing_writer(path, *args, **kwargs):
+        real_mkdir(path, *args, **kwargs)
+        if path == partial:
+            (path / "keep.txt").write_text("another install's copy", encoding="utf-8")
+            raise FileExistsError("reserved by another writer")
+
+    monkeypatch.setattr(Path, "mkdir", competing_writer)
+    with pytest.raises(SnapshotError):
+        create_snapshot()
+    assert (partial / "keep.txt").read_text(encoding="utf-8") == "another install's copy"
+
+
 @pytest.mark.parametrize("size", [-1, True, "100", None, 1])
 def test_a_signed_manifest_with_an_invalid_file_size_is_refused(backup, size):
     from tow.snapshots import _signature, _signing_key
