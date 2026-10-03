@@ -18,13 +18,12 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
-import json
 import stat
 from pathlib import Path
 from typing import Any
 
 from tow.paths import config_path, secrets_path, state_path
-from tow.store import atomic_write_bytes
+from tow.store import atomic_write_bytes, decode_json_bytes
 
 FORMAT = "tow-site-transaction/v1"
 DIR_NAME = ".tow-site-transaction"
@@ -113,7 +112,7 @@ def read_store(path: Path, key: str) -> bytes | None:
 
 def _load_manifest(root: Path) -> dict[str, Any]:
     try:
-        manifest = json.loads((root / "MANIFEST.json").read_text(encoding="utf-8"))
+        manifest = decode_json_bytes((root / "MANIFEST.json").read_bytes())
     except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         raise RuntimeError("site transaction journal is unreadable") from exc
     if not isinstance(manifest, dict) or manifest.get("format") != FORMAT:

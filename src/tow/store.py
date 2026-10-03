@@ -90,8 +90,28 @@ def _finite_json_float(value: str) -> float:
     return number
 
 
-def _decode_json(raw: bytes) -> Any:
-    return json.loads(raw.decode("utf-8"), parse_float=_finite_json_float, parse_constant=_finite_json_float)
+JSON_MAX_DEPTH = 128
+
+
+def _check_json_depth(value: Any) -> None:
+    # Native parser/encoder stack limits differ by OS. Keep the store contract
+    # explicit, and use an iterative walk so this check has no recursion limit.
+    stack = [(value, 0)]
+    while stack:
+        item, depth = stack.pop()
+        if depth > JSON_MAX_DEPTH:
+            raise ValueError("JSON nesting exceeds the store limit")
+        if isinstance(item, dict):
+            stack.extend((child, depth + 1) for child in item.values())
+        elif isinstance(item, (list, tuple)):
+            stack.extend((child, depth + 1) for child in item)
+
+
+def decode_json_bytes(raw: bytes) -> Any:
+    """Decode a store or recovery journal with finite numbers and bounded nesting."""
+    value = json.loads(raw.decode("utf-8"), parse_float=_finite_json_float, parse_constant=_finite_json_float)
+    _check_json_depth(value)
+    return value
 
 
 def load_json(path: Path, default: Any, *, quarantine: bool = True) -> Any:
@@ -109,7 +129,7 @@ def load_json(path: Path, default: Any, *, quarantine: bool = True) -> Any:
         # Transient (sharing violation, antivirus, permissions): not corruption.
         raise StoreReadError(f"persisted JSON cannot be read now: {path.name}") from exc
     try:
-        return _decode_json(raw)
+        return decode_json_bytes(raw)
     except (UnicodeError, ValueError, RecursionError) as exc:
         if quarantine:
             # A lock-free reader may have caught a moment a writer replaced the file: look
@@ -122,7 +142,7 @@ def load_json(path: Path, default: Any, *, quarantine: bool = True) -> Any:
                     # never quarantine a good replacement we could not read yet.
                     raise StoreReadError(f"persisted JSON cannot be read now: {path.name}") from read_exc
                 try:
-                    return _decode_json(reread)
+                    return decode_json_bytes(reread)
                 except UnicodeError, ValueError, RecursionError:
                     if path.is_file():
                         _quarantine(path)
@@ -338,6 +358,7 @@ def atomic_write_bytes(path: Path, content: bytes) -> None:
 
 def save_json(path: Path, data: Any, *, compact: bool = False) -> None:
     try:
+        _check_json_depth(data)
         if compact:
             content = (json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False) + "\n").encode(
                 "utf-8"

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from helpers import reaped
 
-from tow.store import StoreCorruptionError, StoreReadError, load_json, persistence_lock, save_json
+from tow.store import JSON_MAX_DEPTH, StoreCorruptionError, StoreReadError, load_json, persistence_lock, save_json
 
 
 def _lock_probe(home: str, started, acquired) -> None:
@@ -163,6 +163,22 @@ def test_excessive_json_encoding_depth_never_overwrites_the_store(tmp_path):
     with pytest.raises(StoreCorruptionError, match="not serializable"):
         save_json(path, value, compact=True)
     assert path.read_bytes() == before
+
+
+def test_store_nesting_limit_is_explicit_and_identical_for_reading_and_writing(tmp_path):
+    path = tmp_path / "state.json"
+    value = 1
+    for _ in range(JSON_MAX_DEPTH):
+        value = [value]
+    save_json(path, value, compact=True)
+    assert load_json(path, {}) == value
+    before = path.read_bytes()
+    with pytest.raises(StoreCorruptionError, match="not serializable"):
+        save_json(path, [value], compact=True)
+    assert path.read_bytes() == before
+    path.write_bytes(b"[" + before.strip() + b"]")
+    with pytest.raises(StoreCorruptionError, match="unreadable"):
+        load_json(path, {}, quarantine=False)
 
 
 def test_persistence_lock_is_exclusive_across_processes(tmp_path, monkeypatch):

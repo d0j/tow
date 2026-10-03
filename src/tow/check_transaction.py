@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from tow.paths import data_dir, download_history_path, state_path
-from tow.store import atomic_write_bytes, persistence_lock
+from tow.store import atomic_write_bytes, decode_json_bytes, persistence_lock
 
 _FORMAT = "tow-check-transaction/v1"
 _MARKER = "TRANSACTION.json"
@@ -130,7 +130,7 @@ def _validate_target(root: Path, name: str, spec: Any, status: str) -> None:
 
 def _load_manifest(root: Path) -> dict[str, Any]:
     try:
-        manifest = json.loads(_marker(root).read_text(encoding="utf-8"))
+        manifest = decode_json_bytes(_marker(root).read_bytes())
     except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         raise CheckTransactionError("check transaction marker is unreadable") from exc
     if not isinstance(manifest, dict) or manifest.get("format") != _FORMAT:
