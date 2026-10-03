@@ -8,7 +8,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 ### Fixed
 
 - Keep zero-season folders and zero-numbered specials out of ordinary episode selection and completion.
-  They remain downloadable and observable as files; existing misclassified history is corrected on reconciliation.
+  They remain downloadable and observable as files; existing misclassified history and its last-event wording
+  are corrected silently on reconciliation without changing completion dates.
 - Validate episode-rule and file-pattern syntax when saving a topic, before recording changes or checking the client.
   A zero-numbered range cannot silently select only its ordinary episodes.
 - Invalid per-file progress, including booleans, out-of-range fractions and overflowing numbers, cannot confirm

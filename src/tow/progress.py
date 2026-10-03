@@ -208,18 +208,28 @@ def _repair_last_event_semantics(record: HistoryRecord) -> None:
     if event.get("kind") == "episode_completed":
         # Season hints can become available after an earlier completion was recorded. Reword
         # the same event from the current items completed in that pass; do not emit a new one.
-        keys = {
-            str(key)
-            for item in (record.get("items") or {}).values()
+        completed = {
+            identity: item
+            for identity, item in (record.get("items") or {}).items()
             if isinstance(item, dict)
             and not item.get("superseded")
-            and item.get("kind") == "episode"
             and item.get("status") == "completed"
-            and item.get("completed_observed_at") == event.get("at")
+            and event.get("at")
+            and item.get("completed_observed_at") == event["at"]
+        }
+        keys = {
+            str(key)
+            for item in completed.values()
+            if item.get("kind") == "episode"
             for key in item.get("episode_keys") or ([str(item["episode_key"])] if item.get("episode_key") else [])
         }
         if keys:
             _set_label(event, _episode_keys_label_msg(keys))
+        elif completed and all(item.get("kind") == "file" for item in completed.values()):
+            # A formerly misclassified special now has file evidence for the original
+            # timestamp. Repair its wording silently, without inventing a new completion.
+            event["kind"] = "file_completed"
+            _set_label(event, _latest_item_label({"items": completed}))
         return
     if event.get("kind") != "file_completed":
         return

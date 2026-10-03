@@ -118,6 +118,94 @@ def test_special_does_not_block_episode_completion_and_reconciliation_is_idempot
     assert reconcile_topic(topic, client, history, "2026-09-12T21:03:00+03:00")["events"] == []
 
 
+def test_legacy_special_completion_event_is_repaired_without_reannouncing(tmp_path: Path):
+    class ClientWithSpecial(FakeClient):
+        def inspect_torrent(self, infohash):
+            info = super().inspect_torrent(infohash)
+            info["files"].append({"name": "Show/Season 00/01.mkv", "size": 3, "progress": 1.0})
+            return info
+
+    client = ClientWithSpecial()
+    client.progress = 1.0
+    folder = tmp_path / "Show"
+    (folder / "Season 00").mkdir(parents=True)
+    (folder / "S01E01.mkv").write_bytes(b"0123456789")
+    (folder / "Season 00" / "01.mkv").write_bytes(b"012")
+    topic = {"id": "legacy-special-event", "title": "Show S01 [1 из 1]", "hash": "ABC", "save_path": str(tmp_path)}
+    at = "2026-09-12T20:30:00+03:00"
+    record = {
+        "baseline_at": "2026-09-12T19:00:00+03:00",
+        "items": {},
+        "last_event": {"kind": "episode_completed", "at": at, "label": "S01E01"},
+    }
+    for path, size, completed_at in [
+        ("Show/S01E01.mkv", 10, "2026-09-12T20:00:00+03:00"),
+        ("Show/Season 00/01.mkv", 3, at),
+    ]:
+        identity = item_identity(path, None, size)
+        record["items"][identity] = {
+            "identity": identity,
+            "kind": "episode",
+            "episode_key": "episode:s01e01",
+            "episode_keys": ["episode:s01e01"],
+            "relative_path": path,
+            "source_hash": "ABC",
+            "size": size,
+            "status": "completed",
+            "completed_observed_at": completed_at,
+            "first_seen_at": record["baseline_at"],
+        }
+    history = {"topics": {topic["id"]: record}}
+    result = reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
+    assert result["events"] == []
+    assert result["summary"]["completed"] == 1
+    assert record["last_event"]["kind"] == "file_completed"
+    assert record["last_event"]["label"] == "01.mkv"
+    assert record["last_event"]["at"] == at
+    assert reconcile_topic(topic, client, history, "2026-09-12T21:01:00+03:00")["events"] == []
+
+
+@pytest.mark.parametrize(
+    ("event_at", "overrides"),
+    [
+        (None, {"completed_observed_at": None}),
+        ("old", {"superseded": True}),
+        ("old", {"completed_observed_at": "new"}),
+        ("old", {"status": "downloading"}),
+        ("old", {"kind": "unknown"}),
+    ],
+)
+def test_episode_event_is_not_reclassified_without_matching_file_evidence(event_at, overrides):
+    from tow.progress import _repair_last_event_semantics
+
+    event = {"kind": "episode_completed", "at": event_at, "label": "S01E01"}
+    item = {"kind": "file", "status": "completed", "completed_observed_at": event_at, "label": "bonus.mkv"}
+    item.update(overrides)
+    record = {"last_event": dict(event), "items": {"bonus": item}}
+    _repair_last_event_semantics(record)
+    assert record["last_event"] == event
+
+
+def test_episode_event_with_multiple_reclassified_files_has_a_file_aggregate_label():
+    from tow.progress import _repair_last_event_semantics
+
+    event = {"kind": "episode_completed", "at": "old", "label": "S01E01"}
+    record = {
+        "last_event": event,
+        "items": {
+            label: {"kind": "file", "status": "completed", "completed_observed_at": "old", "label": label}
+            for label in ["bonus.mkv", "extra.mkv"]
+        },
+    }
+    _repair_last_event_semantics(record)
+    assert event["kind"] == "file_completed"
+    assert event["label_code"] == "progress.files"
+    assert event["at"] == "old"
+    before = dict(event)
+    _repair_last_event_semantics(record)
+    assert event == before
+
+
 def test_summary_deduplicates_episode_revisions():
     items = {
         "episode:s04e01": {"identity": "episode:s04e01", "kind": "episode", "label": "S04E01", "status": "completed"},
