@@ -11,6 +11,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   the already verified bytes. Damaged copies cannot overwrite working stores before the error is detected.
 - Malformed recovery fields, parser limits, directories and Windows reparse points fail closed. A failed journal
   reservation never deletes another writer's files; backup writes are verified before a check can start.
+- Settings and undo recovery also reuse verified backup bytes and preflight every target. Cleanup only removes
+  recognized regular journal files; interrupted preparation or cleanup no longer leaves a permanently blocking journal.
 
 ## [1.22.17] — 2026-10-03
 

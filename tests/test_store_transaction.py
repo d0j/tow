@@ -7,6 +7,9 @@ this process); the next process to take the data lock must find every store as i
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from tow import site_journal, store_transaction
@@ -185,3 +188,181 @@ def test_a_crash_in_the_middle_of_a_site_save_leaves_the_old_set(monkeypatch, wr
     monkeypatch.setattr(store_transaction, "_after_write", None)
     _next_process_takes_the_lock()
     assert _store_bytes() == before
+
+
+def _unfinished_journal():
+    _seed_site()
+    original = _store_bytes()
+    with persistence_lock():
+        root = store_transaction.begin_unlocked()
+        config_path().write_bytes(b"changed: true\n")
+    return root, original
+
+
+def test_recovery_never_rereads_a_backup_after_it_has_been_verified(monkeypatch):
+    root, original = _unfinished_journal()
+    real_write = site_journal.atomic_write_bytes
+
+    def change_later_backup(path, content):
+        if path == config_path():
+            (root / "state.bin").write_bytes(b"changed after verification")
+        return real_write(path, content)
+
+    monkeypatch.setattr(site_journal, "atomic_write_bytes", change_later_backup)
+    _next_process_takes_the_lock()
+    assert _store_bytes() == original
+    assert not root.exists()
+
+
+def test_recovery_preflights_all_store_paths_before_the_first_write():
+    root, _ = _unfinished_journal()
+    before = config_path().read_bytes()
+    state_path().unlink()
+    state_path().mkdir()
+    with pytest.raises(RuntimeError, match="unsafe"):
+        _next_process_takes_the_lock()
+    assert config_path().read_bytes() == before
+    assert state_path().is_dir()
+    assert (root / "MANIFEST.json").exists()
+
+
+@pytest.mark.parametrize("status", ["prepared", "committed", None])
+def test_foreign_files_are_never_removed_with_a_journal(status):
+    root, _ = _unfinished_journal()
+    marker = root / "MANIFEST.json"
+    if status is None:
+        marker.unlink()
+    else:
+        manifest = json.loads(marker.read_bytes())
+        manifest["status"] = status
+        marker.write_text(json.dumps(manifest), encoding="utf-8")
+    (root / "foreign.txt").write_bytes(b"not ours")
+    before = _store_bytes()
+    with pytest.raises(RuntimeError, match="unexpected"):
+        _next_process_takes_the_lock()
+    assert (root / "foreign.txt").read_bytes() == b"not ours"
+    assert _store_bytes() == before
+
+
+def test_crash_before_the_marker_only_removes_owned_preparation_files():
+    _seed_site()
+    original = _store_bytes()
+    root = site_journal.journal_root()
+    root.mkdir()
+    (root / "config.bin").write_bytes(b"partial preparation")
+    (root / ".state.bin.fixture.tmp").write_bytes(b"partial write")
+    _next_process_takes_the_lock()
+    assert _store_bytes() == original
+    assert not root.exists()
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda m: m["targets"][0].update(key=[]),
+        lambda m: m["targets"][0].update(key={}),
+        lambda m: m["targets"][0].update(exists="false"),
+        lambda m: m["targets"][0].update(sha256=[]),
+        lambda m: m.update(targets=[None, *m["targets"][1:]]),
+    ],
+)
+def test_malformed_committed_journal_is_not_silently_deleted(mutate):
+    root, _ = _unfinished_journal()
+    marker = root / "MANIFEST.json"
+    manifest = json.loads(marker.read_bytes())
+    manifest["status"] = "committed"
+    mutate(manifest)
+    marker.write_text(json.dumps(manifest), encoding="utf-8")
+    before = _store_bytes()
+    with pytest.raises(RuntimeError):
+        _next_process_takes_the_lock()
+    assert _store_bytes() == before
+    assert marker.exists()
+
+
+@pytest.mark.parametrize("raw", [b"[" * 20000 + b"]" * 20000, b'{"n":' + b"1" * 5000 + b"}"], ids=["deep", "int"])
+def test_site_journal_parser_errors_fail_closed(raw):
+    root, _ = _unfinished_journal()
+    (root / "MANIFEST.json").write_bytes(raw)
+    before = _store_bytes()
+    with pytest.raises(RuntimeError, match="unreadable"):
+        _next_process_takes_the_lock()
+    assert _store_bytes() == before
+
+
+def test_interrupted_cleanup_does_not_restore_over_later_edits(monkeypatch):
+    root, original = _unfinished_journal()
+    real_unlink = Path.unlink
+
+    def fail_backup_unlink(path, *args, **kwargs):
+        if path.name == "state.bin":
+            raise PermissionError("locked")
+        return real_unlink(path, *args, **kwargs)
+
+    with monkeypatch.context() as patched:
+        patched.setattr(Path, "unlink", fail_backup_unlink)
+        with pytest.raises(RuntimeError):
+            _next_process_takes_the_lock()
+    assert _store_bytes() == original
+    assert not (root / "MANIFEST.json").exists()
+    config_path().write_bytes(b"newer: true\n")
+    _next_process_takes_the_lock()
+    assert config_path().read_bytes() == b"newer: true\n"
+    assert not root.exists()
+
+
+@pytest.mark.parametrize("name", [site_journal.DIR_NAME, "state.bin", "state.json"])
+def test_site_recovery_refuses_reparse_paths_before_any_write(monkeypatch, name):
+    import stat
+    from types import SimpleNamespace
+
+    root, _ = _unfinished_journal()
+    before = _store_bytes()
+    real_lstat = Path.lstat
+
+    def reparse(path, *args, **kwargs):
+        if path.name == name:
+            return SimpleNamespace(st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT)
+        return real_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "lstat", reparse)
+    with pytest.raises(RuntimeError, match=r"unsafe|unexpected"):
+        _next_process_takes_the_lock()
+    assert _store_bytes() == before
+    assert (root / "MANIFEST.json").exists()
+
+
+def test_site_backup_write_is_verified_before_a_transaction_can_start(monkeypatch):
+    _seed_site()
+    before = _store_bytes()
+    from tow import store
+
+    real_write = store.atomic_write_bytes
+
+    def bad_write(path, content):
+        return real_write(path, b"bad copy" if path.name == "state.bin" else content)
+
+    monkeypatch.setattr(store, "atomic_write_bytes", bad_write)
+    with pytest.raises(RuntimeError, match="backup read-back failed"), store_transaction.transaction():
+        pytest.fail("the transaction must not start")
+    assert _store_bytes() == before
+    assert not site_journal.journal_root().exists()
+
+
+def test_failed_site_restore_keeps_its_journal_and_can_be_retried(monkeypatch):
+    root, original = _unfinished_journal()
+    real_write = site_journal.atomic_write_bytes
+
+    def failing(path, content):
+        if path == state_path():
+            raise PermissionError("locked")
+        return real_write(path, content)
+
+    with monkeypatch.context() as patched:
+        patched.setattr(site_journal, "atomic_write_bytes", failing)
+        with pytest.raises(RuntimeError, match="recovery write failed"):
+            _next_process_takes_the_lock()
+    assert (root / "MANIFEST.json").exists()
+    _next_process_takes_the_lock()
+    assert _store_bytes() == original
+    assert not root.exists()

@@ -111,12 +111,12 @@ def begin_unlocked() -> Path:
     entries = []
     try:
         for key, target in targets.items():
-            if target.is_symlink() or (target.exists() and not target.is_file()):
-                raise RuntimeError(f"store transaction target is unsafe: {key}")
-            content = target.read_bytes() if target.is_file() else None
+            content = site_journal.read_store(target, key)
             backup_name = f"{key}.bin" if content is not None else None
             if content is not None:
                 store.atomic_write_bytes(root / f"{key}.bin", content)
+                if site_journal.read_store(root / f"{key}.bin", key) != content:
+                    raise RuntimeError(f"store transaction backup read-back failed: {key}")
             entries.append(
                 {
                     "key": key,
@@ -156,7 +156,7 @@ def recover() -> bool:
     A cheap unlocked look first: the web runs this before every request and must not wait for a
     scheduled check. A real restore holds the data lock, so it never interleaves with a writer.
     """
-    if not journal_root().exists():
+    if not journal_root().exists() and not site_journal.is_link(journal_root()):
         return False
     with store.persistence_lock(), _LOCK:
         return site_journal.recover_unlocked(journal_root(), journal_targets())
