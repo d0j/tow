@@ -3,6 +3,17 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.27] — 2026-10-04
+
+### Fixed
+
+- Confirm the stop before restoring file priorities after a failed change; do not restore or resume while
+  stopping remains unconfirmed. Shared clients also confirm the restart and report incomplete recovery.
+- Reject malformed or out-of-range progress as proof that a stopped torrent is complete. Preserve valid
+  completed torrents and active queued/checking states across qBittorrent 4/5, Transmission and Deluge.
+- Preserve client error states during ownership confirmation instead of reporting missing ownership.
+  qBittorrent refuses an unsafe result even if the pending marker was successfully removed.
+
 ## [1.22.26] — 2026-10-04
 
 ### Fixed

@@ -156,6 +156,96 @@ def _adapter(monkeypatch, api: QbitApi) -> qbittorrent.QBittorrentClient:
     return qbittorrent.QBittorrentClient("http://qbit", 8080, "user", "password")
 
 
+@pytest.mark.parametrize("api_version", ["4", "5"])
+@pytest.mark.parametrize(
+    "progress",
+    [
+        None,
+        True,
+        False,
+        -1,
+        0.9,
+        1.1,
+        float("inf"),
+        float("-inf"),
+        float("nan"),
+        "bad",
+        [],
+        {},
+        [1],
+        {"value": 1},
+        10**1000,
+    ],
+)
+def test_stopped_invalid_progress_never_confirms_start(monkeypatch, api_version, progress):
+    api = QbitApi(api=api_version, progress=progress)
+    adapter = _adapter(monkeypatch, api)
+    with raises_code("client.managed.start_unconfirmed"):
+        adapter._wait_started(H)
+
+
+@pytest.mark.parametrize("api_version", ["4", "5"])
+@pytest.mark.parametrize("progress", [1, 1.0, "1.0"])
+def test_completed_stopped_torrent_can_confirm_start(monkeypatch, api_version, progress):
+    api = QbitApi(api=api_version, progress=progress)
+    adapter = _adapter(monkeypatch, api)
+    assert adapter._wait_started(H)["progress"] == progress
+
+
+@pytest.mark.parametrize("state", ["error", "missingFiles", "unknown"])
+def test_pending_release_cannot_confirm_unsafe_torrent(monkeypatch, state):
+    api = QbitApi(state="downloading")
+    adapter = _adapter(monkeypatch, api)
+    real_remove = api.torrents_remove_tags
+
+    def remove(**kwargs):
+        real_remove(**kwargs)
+        api.torrent["state"] = state
+
+    monkeypatch.setattr(api, "torrents_remove_tags", remove)
+    with raises_code("client.managed.error_state") as error:
+        adapter._clear_pending_tag(H)
+    assert error.value.params["state"] == state.casefold()
+
+
+@pytest.mark.parametrize("state", ["error", "missingFiles", "unknown"])
+def test_ownership_wait_preserves_unsafe_state(monkeypatch, state):
+    api = QbitApi(state=state)
+    adapter = _adapter(monkeypatch, api)
+    with raises_code("client.managed.error_state") as error:
+        adapter._wait_for_ownership(
+            H, visibility_error="client.managed.not_visible", ownership_error="client.managed.no_owner_mark"
+        )
+    assert error.value.params["state"] == state.casefold()
+
+
+@pytest.mark.parametrize("api_version", ["4", "5"])
+def test_rollback_requires_confirmed_stop_before_restoring_files(monkeypatch, caplog, api_version):
+    api = QbitApi(api=api_version, state="downloading", tags="tow")
+    api.priorities = {0: 1, 1: 0}
+    adapter = _adapter(monkeypatch, api)
+    stops = 0
+
+    def stop(*, torrent_hashes):
+        nonlocal stops
+        stops += 1
+        api.calls.append(("stop", torrent_hashes))
+        if stops == 1:
+            api.torrent["state"] = api._state(True)
+
+    def priority(**kwargs):
+        api.calls.append(("priority ignored", tuple(kwargs["file_ids"]), kwargs["priority"]))
+        api.torrent["state"] = "downloading"
+
+    monkeypatch.setattr(api, "torrents_pause" if api_version == "4" else "torrents_stop", stop)
+    monkeypatch.setattr(api, "torrents_file_priority", priority)
+    with raises_code("client.managed.wrong_selection"):
+        adapter.configure_torrent_selection(TORRENT, H, [1])
+    final_stop = max(i for i, call in enumerate(api.calls) if call[0] == "stop")
+    assert api.calls[final_stop + 1 :] == []
+    assert str(qbittorrent._fail("client.managed.stop_unconfirmed")) in caplog.text
+
+
 def test_the_fakes_are_the_real_qbittorrentapi_types():
     api = QbitApi()
     row = api.torrents_info(torrent_hashes=H)[0]

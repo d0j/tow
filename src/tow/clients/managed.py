@@ -16,6 +16,7 @@ error), so the rest of TOW does not care which client it talks to.
 from __future__ import annotations
 
 import logging
+import math
 import time
 from collections.abc import Sequence
 from typing import Any, ClassVar
@@ -31,6 +32,17 @@ OWNER = "tow"
 PENDING = "tow-pending"
 STOPPED_PREFIXES = ("stopped", "paused")
 UNSAFE_STATES = frozenset({"error", "missingfiles", "unknown"})
+
+
+def completed_progress(value: object) -> bool:
+    """Only a valid, complete fraction can justify a stopped torrent after start."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return False
+    try:
+        progress = float(value)
+    except TypeError, ValueError, OverflowError:
+        return False
+    return math.isfinite(progress) and progress == 1.0
 
 
 class ClientError(TowError, RuntimeError):
@@ -161,7 +173,9 @@ class ManagedClient:
 
         try:
             return self._wait(infohash, owned, "client.managed.not_visible")
-        except ClientError:
+        except ClientError as error:
+            if error.code != "client.managed.not_visible":
+                raise
             if not seen:
                 raise self._fail("client.managed.not_visible") from None
             raise self._fail("client.managed.no_owner_mark") from None
@@ -173,7 +187,7 @@ class ManagedClient:
         def started(info: dict[str, Any]) -> bool:
             if not str(info.get("state") or ""):
                 return False
-            return not self._stopped(info) or float(info.get("progress") or 0) >= 1
+            return not self._stopped(info) or completed_progress(info.get("progress"))
 
         return self._wait(infohash, started, "client.managed.start_unconfirmed")
 
@@ -334,6 +348,7 @@ class ManagedClient:
             try:
                 self._require_owned(infohash)
                 self._stop(infohash)
+                self._wait_stopped(infohash)
                 self._require_owned(infohash)
                 self._set_wanted(infohash, {i for i, p in previous.items() if p > 0}, sorted(previous))
                 restored = self._inspect_with_files(infohash)
@@ -346,6 +361,7 @@ class ManagedClient:
                 if not was_stopped:
                     self._require_owned(infohash)
                     self._start(infohash)
+                    self._wait_started(infohash)
             except Exception as cleanup_error:  # noqa: BLE001 - the original failure is re-raised; this must not hide it
                 _LOG.warning("cleanup after a failed client change did not finish: %s", cleanup_error)
             raise
