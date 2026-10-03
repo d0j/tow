@@ -10,6 +10,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Configured backup and restore-point folders now receive the same path checks when used as they do when saved in
   Settings. A relative master-key filename cannot escape the data folder through `..` or a link; absolute paths for
   external keys remain supported.
+- Bundle reads enforce the size limit during reading too, even if a file changes after its initial size check.
 
 ## [1.22.15] — 2026-10-03
 
