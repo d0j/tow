@@ -131,12 +131,48 @@ def test_quarantined_history_is_never_replaced_by_an_empty_default():
         load_download_history()
 
 
-def test_download_history_with_wrong_shape_falls_back_to_schema_default():
+def test_download_history_with_wrong_shape_fails_closed_instead_of_becoming_empty():
     download_history_path().write_text("[1, 2, 3]", encoding="utf-8")
-    assert load_download_history() == {"schema_version": 1, "topics": {}}
+    with pytest.raises(StoreCorruptionError, match="unreadable"):
+        load_download_history()
+    assert not download_history_path().exists()
+    copies = list(download_history_path().parent.glob("download_history.json.corrupt-*"))
+    assert len(copies) == 1
+    assert copies[0].read_text(encoding="utf-8") == "[1, 2, 3]"
 
     download_history_path().write_text('{"topics": {"t": {}}}', encoding="utf-8")
     assert load_download_history() == {"schema_version": 1, "topics": {"t": {}}}
+
+
+@pytest.mark.parametrize("value", [[], None, True, {"topics": {}}, {"topics": [None]}, {"mirrors": []}])
+def test_invalid_state_container_never_reaches_callers(value):
+    state_path().write_text(json.dumps(value), encoding="utf-8")
+    before = state_path().read_bytes()
+    with pytest.raises(StoreCorruptionError, match="unreadable"):
+        load_state(quarantine=False)
+    assert state_path().read_bytes() == before
+    with pytest.raises(StoreCorruptionError, match="unreadable"):
+        load_state()
+    assert not state_path().exists()
+
+
+@pytest.mark.parametrize("value", [{"topics": []}, {"topics": {"t": None}}, {"topics": {"t": {"items": []}}}])
+def test_invalid_history_container_never_reaches_callers(value):
+    download_history_path().write_text(json.dumps(value), encoding="utf-8")
+    before = download_history_path().read_bytes()
+    with pytest.raises(StoreCorruptionError, match="unreadable"):
+        load_download_history(quarantine=False)
+    assert download_history_path().read_bytes() == before
+
+
+@pytest.mark.parametrize("kind", ["state", "history"])
+def test_invalid_store_structure_is_rejected_before_writing(kind):
+    original = _seed()
+    writer = save_state if kind == "state" else save_download_history
+    payload = {"topics": {}} if kind == "state" else {"topics": []}
+    with pytest.raises(StoreCorruptionError, match="malformed"):
+        writer(payload)
+    assert (state_path().read_bytes(), download_history_path().read_bytes()) == original
 
 
 def test_save_json_rejects_unserializable_payload_without_touching_the_store():

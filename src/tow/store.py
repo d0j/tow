@@ -114,7 +114,16 @@ def decode_json_bytes(raw: bytes) -> Any:
     return value
 
 
-def load_json(path: Path, default: Any, *, quarantine: bool = True) -> Any:
+def _validated_json(raw: bytes, validate: Callable[[Any], None] | None) -> Any:
+    value = decode_json_bytes(raw)
+    if validate is not None:
+        validate(value)
+    return value
+
+
+def load_json(
+    path: Path, default: Any, *, quarantine: bool = True, validate: Callable[[Any], None] | None = None
+) -> Any:
     if not path.is_file():
         if _has_quarantined_copy(path):
             # Never fall back to an empty default after quarantine: the next commit
@@ -129,7 +138,7 @@ def load_json(path: Path, default: Any, *, quarantine: bool = True) -> Any:
         # Transient (sharing violation, antivirus, permissions): not corruption.
         raise StoreReadError(f"persisted JSON cannot be read now: {path.name}") from exc
     try:
-        return decode_json_bytes(raw)
+        return _validated_json(raw, validate)
     except (UnicodeError, ValueError, RecursionError) as exc:
         if quarantine:
             # A lock-free reader may have caught a moment a writer replaced the file: look
@@ -142,7 +151,7 @@ def load_json(path: Path, default: Any, *, quarantine: bool = True) -> Any:
                     # never quarantine a good replacement we could not read yet.
                     raise StoreReadError(f"persisted JSON cannot be read now: {path.name}") from read_exc
                 try:
-                    return decode_json_bytes(reread)
+                    return _validated_json(reread, validate)
                 except UnicodeError, ValueError, RecursionError:
                     if path.is_file():
                         _quarantine(path)
@@ -843,6 +852,34 @@ def _migrate_state(data: dict[str, Any], version: int) -> dict[str, Any]:
     return data
 
 
+def _validate_state_container(value: Any) -> None:
+    mapping = isinstance(value, dict)
+    if not mapping:
+        raise ValueError("state JSON must be an object")
+    # A future data version is not corruption: preserve it untouched and report
+    # the version error before applying this version's container requirements.
+    state_schema_version(value)
+    topics = value.get("topics", [])
+    valid = isinstance(topics, list) and all(isinstance(topic, dict) for topic in topics)
+    if not valid or not isinstance(value.get("mirrors", {}), dict):
+        raise ValueError("state JSON has malformed containers")
+
+
+def _validate_history_container(value: Any) -> None:
+    mapping = isinstance(value, dict)
+    if not mapping:
+        raise ValueError("download history JSON must be an object")
+    topics = value.get("topics", {})
+    valid = isinstance(topics, dict) and all(isinstance(record, dict) for record in topics.values())
+    if not valid:
+        raise ValueError("download history JSON has malformed topics")
+    for record in topics.values():
+        items = record.get("items", {})
+        valid = isinstance(items, dict) and all(isinstance(item, dict) for item in items.values())
+        if not valid:
+            raise ValueError("download history JSON has malformed items")
+
+
 def load_state(*, quarantine: bool = True) -> dict[str, Any]:
     global _state_cache
     path = state_path()
@@ -852,7 +889,7 @@ def load_state(*, quarantine: bool = True) -> dict[str, Any]:
     if stamp is not None and cached is not None and cached[0] == stamp:
         copy_: dict[str, Any] = pickle.loads(cached[1])
         return copy_
-    data = load_json(path, {"topics": [], "mirrors": {}}, quarantine=quarantine)
+    data = load_json(path, {"topics": [], "mirrors": {}}, quarantine=quarantine, validate=_validate_state_container)
     version = state_schema_version(data)
     data.pop("schema_version", None)  # a file-format detail: callers see the topics, not it
     data = _migrate_state(data, version)
@@ -883,25 +920,30 @@ def save_state(data: dict[str, Any]) -> None:
     undo = data.get("undo")
     if isinstance(undo, dict) and "secrets" in undo:
         raise SecretStoreError("plaintext secret undo is not permitted")
-    save_json(
-        state_path(),
-        {"schema_version": STATE_SCHEMA_VERSION, **{k: v for k, v in data.items() if k != "schema_version"}},
-    )
+    payload = {"schema_version": STATE_SCHEMA_VERSION, **{k: v for k, v in data.items() if k != "schema_version"}}
+    try:
+        _validate_state_container(payload)
+    except ValueError as exc:
+        raise StoreCorruptionError("state JSON payload has malformed containers") from exc
+    save_json(state_path(), payload)
 
 
 def load_download_history(*, quarantine: bool = True) -> dict[str, Any]:
-    data = load_json(
+    data: dict[str, Any] = load_json(
         download_history_path(),
         {"schema_version": 1, "topics": {}},
         quarantine=quarantine,
+        validate=_validate_history_container,
     )
-    if not isinstance(data, dict):
-        data = {"schema_version": 1, "topics": {}}
     data.setdefault("schema_version", 1)
     data.setdefault("topics", {})
     return data
 
 
 def save_download_history(data: Mapping[str, Any]) -> None:
+    try:
+        _validate_history_container(data)
+    except ValueError as exc:
+        raise StoreCorruptionError("download history JSON payload has malformed containers") from exc
     # Machine data rewritten twice per apply-check: compact (~22% smaller than indent=2).
     save_json(download_history_path(), data, compact=True)

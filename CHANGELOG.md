@@ -15,6 +15,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   recognized regular journal files; interrupted preparation or cleanup no longer leaves a permanently blocking journal.
 - Persistent JSON rejects non-finite numbers and reports integer/depth parser limits as storage errors. Writes
   cannot persist invalid numbers; a transient I/O error during a corruption recheck never quarantines a valid replacement.
+- Malformed state/history containers fail closed instead of becoming empty history or escaping as attribute errors.
+  Read-only checks preserve the source; applying reads retain the corrupt bytes in quarantine, and invalid writes are refused.
 
 ## [1.22.17] — 2026-10-03
 
