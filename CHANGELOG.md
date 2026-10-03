@@ -3,6 +3,15 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.18] — 2026-10-03
+
+### Fixed
+
+- Check recovery verifies every backup and target before changing either state or download history, and restores
+  the already verified bytes. Damaged copies cannot overwrite working stores before the error is detected.
+- Malformed recovery fields, parser limits, directories and Windows reparse points fail closed. A failed journal
+  reservation never deletes another writer's files; backup writes are verified before a check can start.
+
 ## [1.22.17] — 2026-10-03
 
 ### Fixed

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shutil
+import stat
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
@@ -26,9 +26,21 @@ class CheckTransactionError(RuntimeError):
 
 def _root() -> Path:
     root = data_dir() / ".tow-check-transaction"
-    if root.is_symlink():
-        raise CheckTransactionError("check transaction directory must not be a symlink")
+    if _is_link(root):
+        raise CheckTransactionError("check transaction directory must not be a symlink or reparse point")
     return root
+
+
+def _is_link(path: Path) -> bool:
+    if path.is_symlink():
+        return True
+    try:
+        attributes = getattr(path.lstat(), "st_file_attributes", 0)
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise CheckTransactionError(f"cannot inspect check path: {path.name}") from exc
+    return bool(attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
 
 
 def _marker(root: Path) -> Path:
@@ -40,8 +52,8 @@ def _digest(content: bytes) -> str:
 
 
 def _read_target(path: Path) -> tuple[bool, bytes | None]:
-    if path.is_symlink():
-        raise CheckTransactionError(f"check store must not be a symlink: {path.name}")
+    if _is_link(path):
+        raise CheckTransactionError(f"check store must not be a symlink: {path.name} (or reparse point)")
     if not path.exists():
         return False, None
     if not path.is_file():
@@ -52,8 +64,8 @@ def _read_target(path: Path) -> tuple[bool, bytes | None]:
         raise CheckTransactionError(f"cannot read check store: {path.name}") from exc
 
 
-def _current_spec(name: str) -> dict[str, Any]:
-    exists, content = _read_target(_TARGETS[name]())
+def _snapshot_spec(name: str, content: bytes | None) -> dict[str, Any]:
+    exists = content is not None
     return {
         "path": _TARGETS[name]().name,
         "backup": _BACKUPS[name] if exists else None,
@@ -76,51 +88,74 @@ def _is_own_temporary(name: str) -> bool:
 
 
 def _validate_root(root: Path, *, marker_required: bool) -> None:
-    if not root.is_dir() or root.is_symlink():
+    if not root.is_dir() or _is_link(root):
         raise CheckTransactionError("check transaction directory is invalid")
     try:
         entries = list(root.iterdir())
     except OSError as exc:
         raise CheckTransactionError("cannot inspect check transaction directory") from exc
     if any(
-        entry.is_symlink() or (entry.name not in _ALLOWED and not _is_own_temporary(entry.name)) for entry in entries
+        _is_link(entry) or not entry.is_file() or (entry.name not in _ALLOWED and not _is_own_temporary(entry.name))
+        for entry in entries
     ):
         raise CheckTransactionError("check transaction directory contains an unexpected entry")
     if marker_required and not _marker(root).is_file():
         raise CheckTransactionError("check transaction marker is missing")
 
 
+def _valid_fingerprint(exists: Any, digest: Any) -> bool:
+    if not isinstance(exists, bool):
+        return False
+    if not exists:
+        return digest is None
+    return isinstance(digest, str) and len(digest) == 64 and all(c in "0123456789abcdef" for c in digest)
+
+
+def _validate_target(root: Path, name: str, spec: Any, status: str) -> None:
+    if not isinstance(spec, dict) or spec.get("path") != _TARGETS[name]().name:
+        raise CheckTransactionError("check transaction target binding mismatch")
+    if not _valid_fingerprint(spec.get("before_exists"), spec.get("before_sha256")):
+        raise CheckTransactionError("malformed check transaction snapshot fingerprint")
+    if spec["before_exists"]:
+        if spec.get("backup") != _BACKUPS[name]:
+            raise CheckTransactionError("check transaction backup binding mismatch")
+        backup_path = root / _BACKUPS[name]
+        # Committed transactions only need cleanup; an interrupted cleanup may
+        # already have removed a backup, and later store writes are legitimate.
+        if status != "committed" and (_is_link(backup_path) or not backup_path.is_file()):
+            raise CheckTransactionError("check transaction backup is missing")
+    elif spec.get("backup") is not None:
+        raise CheckTransactionError("malformed absent-store snapshot")
+
+
 def _load_manifest(root: Path) -> dict[str, Any]:
     try:
         manifest = json.loads(_marker(root).read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         raise CheckTransactionError("check transaction marker is unreadable") from exc
     if not isinstance(manifest, dict) or manifest.get("format") != _FORMAT:
         raise CheckTransactionError("unsupported check transaction marker")
     status = manifest.get("status")
     targets = manifest.get("targets")
-    if status not in _STATUS or not isinstance(targets, dict) or set(targets) != set(_TARGETS):
+    if (
+        not isinstance(status, str)
+        or status not in _STATUS
+        or not isinstance(targets, dict)
+        or set(targets) != set(_TARGETS)
+    ):
         raise CheckTransactionError("malformed check transaction marker")
     for name, spec in targets.items():
-        if not isinstance(spec, dict) or spec.get("path") != _TARGETS[name]().name:
-            raise CheckTransactionError("check transaction target binding mismatch")
-        if spec.get("before_exists"):
-            backup = spec.get("backup")
-            if backup != _BACKUPS[name]:
-                raise CheckTransactionError("check transaction backup binding mismatch")
-            backup_path = root / backup
-            # A committed transaction is final and never restored: its backups are not
-            # needed (an interrupted cleanup may already have removed them).
-            if status != "committed" and (backup_path.is_symlink() or not backup_path.is_file()):
-                raise CheckTransactionError("check transaction backup is missing")
-        elif spec.get("backup") is not None or spec.get("before_sha256") is not None:
-            raise CheckTransactionError("malformed absent-store snapshot")
+        _validate_target(root, name, spec, status)
     if status == "committed":
         after = manifest.get("after")
         if not isinstance(after, dict) or set(after) != set(_TARGETS):
             raise CheckTransactionError("committed check transaction lacks read-back")
         for spec in after.values():
-            if not isinstance(spec, dict) or set(spec) != {"exists", "sha256"}:
+            if (
+                not isinstance(spec, dict)
+                or set(spec) != {"exists", "sha256"}
+                or not _valid_fingerprint(spec.get("exists"), spec.get("sha256"))
+            ):
                 raise CheckTransactionError("malformed committed read-back")
     return manifest
 
@@ -130,13 +165,30 @@ def _current_readback(name: str) -> dict[str, Any]:
     return {"exists": exists, "sha256": _digest(content) if content is not None else None}
 
 
+def _verified_backups(root: Path, manifest: dict[str, Any]) -> dict[str, bytes]:
+    _validate_root(root, marker_required=False)
+    backups: dict[str, bytes] = {}
+    # Check every target and every backup before the first write or unlink. Keep
+    # the verified bytes: rereading a backup afterwards could restore other data.
+    for name, spec in manifest["targets"].items():
+        _read_target(_TARGETS[name]())
+        if spec["before_exists"]:
+            exists, content = _read_target(root / _BACKUPS[name])
+            if not exists or content is None:
+                raise CheckTransactionError(f"cannot restore check store: {_TARGETS[name]().name}")
+            if _digest(content) != spec["before_sha256"]:
+                raise CheckTransactionError(f"check transaction backup checksum mismatch: {_BACKUPS[name]}")
+            backups[name] = content
+    return backups
+
+
 def _restore(root: Path, manifest: dict[str, Any]) -> None:
+    backups = _verified_backups(root, manifest)
     for name, spec in manifest["targets"].items():
         target = _TARGETS[name]()
         if spec["before_exists"]:
-            backup = root / spec["backup"]
             try:
-                atomic_write_bytes(target, backup.read_bytes())
+                atomic_write_bytes(target, backups[name])
             except OSError as exc:
                 raise CheckTransactionError(f"cannot restore check store: {target.name}") from exc
         else:
@@ -240,21 +292,25 @@ def _begin_under_lock() -> CheckTransaction:
     root = _root()
     if root.exists():
         recover_locked()
+    created = False
     try:
         root.mkdir(parents=False, exist_ok=False)
+        created = True
+        contents = {name: _read_target(_TARGETS[name]())[1] for name in _TARGETS}
         manifest: dict[str, Any] = {
             "format": _FORMAT,
             "status": "prepared",
-            "targets": {name: _current_spec(name) for name in _TARGETS},
+            "targets": {name: _snapshot_spec(name, content) for name, content in contents.items()},
         }
-        for name, spec in manifest["targets"].items():
-            if spec["before_exists"]:
-                atomic_write_bytes(root / spec["backup"], _TARGETS[name]().read_bytes())
+        for name, content in contents.items():
+            if content is not None:
+                atomic_write_bytes(root / _BACKUPS[name], content)
+        _verified_backups(root, manifest)
         _write_json(_marker(root), manifest)
     except (OSError, CheckTransactionError) as exc:
-        if root.exists():
-            with suppress(OSError):
-                shutil.rmtree(root)
+        if created:
+            with suppress(OSError, CheckTransactionError):
+                _cleanup(root)
         if isinstance(exc, CheckTransactionError):
             raise
         raise CheckTransactionError("cannot prepare check persistence transaction") from exc
