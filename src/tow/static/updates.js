@@ -58,6 +58,11 @@
   let pollTimer = null;
   let rollbackVersion = "";
   let busy = false;
+  const dateLabel = (value, key) => {
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "";
+    const date = new Date(value * 1000);
+    return Number.isFinite(date.getTime()) ? t(key, { when: date.toLocaleString(document.documentElement.lang) }) : "";
+  };
   const render = (data) => {
     const available = data.available === true && /^\d+\.\d+\.\d+$/.test(data.latest || "");
     latest = available ? data.latest : "";
@@ -141,6 +146,13 @@
       if (Object.prototype.hasOwnProperty.call(phases, job.status)) {
         progress.hidden = false;
         progress.textContent = t(phases[job.status], { version: job.target || "" });
+        if (typeof job.error_message === "string" && job.error_message) {
+          progress.textContent = ["failed", "refused", "interrupted"].includes(job.status) ?
+            job.error_message : progress.textContent + " · " + job.error_message;
+        }
+        for (const label of [dateLabel(job.started_at, "js.releases.started"), dateLabel(job.finished_at, "js.releases.finished")]) {
+          if (label) progress.textContent += " · " + label;
+        }
       }
       if (reload) reload.hidden = job.status !== "ok";
       controls();

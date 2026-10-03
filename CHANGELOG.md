@@ -3,6 +3,16 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.23] — 2026-10-03
+
+### Fixed
+
+- Windows web updates use a local process broker when an outer job forbids detaching. The actual worker verifies
+  independence and waits for its relay to exit before stopping TOW; expired reservations refuse late launches.
+  The environment travels in memory, not through command-line secrets or a new scheduled task.
+- Update results show the specific refusal reason and local start/finish times. A later verified terminal recovery
+  clears a stale failed-job view without deleting its original record or log.
+
 ## [1.22.22] — 2026-10-03
 
 ### Fixed

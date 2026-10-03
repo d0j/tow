@@ -170,7 +170,7 @@ def test_main_launch_failure_preserves_a_terminal_result(tmp_path, monkeypatch):
     def fail(*_args):
         raise OSError("synthetic launch failure")
 
-    module = SimpleNamespace(System=lambda _: SimpleNamespace(spawn_handoff=fail))
+    module = SimpleNamespace(System=lambda _: SimpleNamespace(spawn_handoff=fail, updater_independent=lambda: True))
     spec = SimpleNamespace(name="isolated_handoff_failure", loader=SimpleNamespace(exec_module=lambda _: None))
     monkeypatch.setattr(update_worker.importlib.util, "spec_from_file_location", lambda *args: spec)
     monkeypatch.setattr(update_worker.importlib.util, "module_from_spec", lambda _: module)

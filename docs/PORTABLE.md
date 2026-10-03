@@ -286,7 +286,7 @@ the locked environment and requires the correct version and readable data. A fai
 check rolls back code and changed data. The web page reconnects after restart, displays the actual result and
 offers an explicit reload; a lost response is not treated as proof that no job started.
 
-Version selection accepts only published stable releases **from 1.22.20**, which retain these web controls.
+Version selection accepts only published stable releases **from 1.22.21**, which retain the exiting-parent handoff.
 The previous compatible release has a shortcut. Other versions can be entered explicitly; a target whose
 declared state schema is older than the current data is refused before stopping TOW. This is not a promise of
 safe downgrade to every historical release: older versions use the terminal, and future incompatible migrations
@@ -295,8 +295,15 @@ local log, recover through the terminal and verify health before retrying.
 An updater record confirming a later successful terminal recovery of the running version releases the stale
 web-job reservation; reading status never erases the previous job or changes data.
 
-Windows requires the worker to escape the supervisor's kill-on-close job; refusal never falls back to a child
-that will die with it. Linux/macOS installs started normally can detach into their own session. Web updates of
+Windows requires the actual worker to escape every inherited job and wait for its short-lived relay to exit.
+Since 1.22.23, a relay still inside an outer job uses local `Win32_Process.Create` with breakaway startup flags.
+The environment travels through stdin to a fixed PowerShell command, not through command-line secrets or a
+temporary secret file; no new task, elevation or remote connection is requested. A failed broker, independence
+check or parent wait refuses the update before stopping TOW, with a specific visible reason. This requires
+the local WMI service and permission to create a process as the current user. Older web engines can safely
+refuse this context; bootstrap the fixed release through the terminal. Both relay and worker use isolated
+base Python outside the replaceable app; a queued worker arriving after its reservation expires refuses.
+Linux/macOS installs started normally can detach into their own session. Web updates of
 systemd/launchd-managed installations are currently refused with terminal instructions: a new session alone
 does not guarantee survival when the service manager stops the process group or cgroup. No autostart or network
 access settings are changed by enabling these controls.

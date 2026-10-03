@@ -6,6 +6,7 @@ records phases and refuses a target that cannot understand the current state sch
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import json
 import os
@@ -46,6 +47,9 @@ def run(app: Path, job_path: Path, job_id: str, version: str, updater: Any) -> i
     job = json.loads(job_path.read_text(encoding="utf-8"))
     if job.get("id") != job_id or job.get("status") != "queued":
         return 2
+    started = job.get("started_at")
+    if started is not None and (type(started) not in {int, float} or not 0 <= time.time() - started < 30):
+        return refuse_handoff(job_path, job_id, "releases.interrupted")
     job.update(pid=os.getpid(), status="preparing")
     write_job(job_path, job)
     seen: dict[str, Any] = {}
@@ -104,8 +108,27 @@ def run(app: Path, job_path: Path, job_id: str, version: str, updater: Any) -> i
 
 def main() -> int:
     args = sys.argv[1:]
-    mode = args.pop(0) if args and args[0] in {"--handoff", "--after-parent"} else ""
-    parent = int(args.pop(0)) if mode == "--after-parent" else 0
+    mode = args.pop(0) if args and args[0] in {"--handoff", "--after-parent", "--broker-child"} else ""
+    parent = int(args.pop(0)) if mode in {"--after-parent", "--broker-child"} else 0
+    _app, job_path, job_id, _version = args
+    if mode == "--broker-child":
+        folder = Path(__file__).resolve().parent
+        record = folder.parent / "job.json"
+        if folder.name != job_id or str(record) != job_path:
+            return 2
+        job = json.loads(record.read_text(encoding="utf-8"))
+        if job.get("id") != job_id or job.get("status") != "queued":
+            return 2
+        with (
+            (folder / "update.log").open("a", encoding="utf-8") as output,
+            contextlib.redirect_stdout(output),
+            contextlib.redirect_stderr(output),
+        ):
+            return handoff(mode, parent, [_app, str(record), folder.name, _version])
+    return handoff(mode, parent, args)
+
+
+def handoff(mode: str, parent: int, args: list[str]) -> int:
     app, job_path, job_id, version = args
     script = Path(__file__).with_name("update.py")
     spec = importlib.util.spec_from_file_location("tow_detached_updater", script)
@@ -116,23 +139,42 @@ def main() -> int:
     spec.loader.exec_module(updater)
     machine = updater.System(Path(app))
     if mode == "--handoff":
+        independent = machine.updater_independent()
+        python = str(Path(getattr(sys, "_base_executable", sys.executable)).resolve())
+        child = [
+            python,
+            "-I",
+            "-S",
+            "-u",
+            str(Path(__file__).resolve()),
+            "--after-parent" if independent else "--broker-child",
+            str(os.getpid()),
+            *args,
+        ]
         try:
-            machine.spawn_handoff(
-                [sys.executable, "-u", str(Path(__file__).resolve()), "--after-parent", str(os.getpid()), *args],
-                Path(job_path).parent / job_id / "update.log",
-            )
+            if independent:
+                machine.spawn_handoff(child, Path(job_path).parent / job_id / "update.log")
+            else:
+                print("handoff: inherited job; requesting local Windows broker", flush=True)
+                machine.spawn_broker(child)
         except OSError:
-            return refuse_handoff(Path(job_path), job_id)
+            return refuse_handoff(
+                Path(job_path), job_id, "releases.launch_failed" if independent else "releases.broker_failed"
+            )
         return 0
-    if mode == "--after-parent" and (not machine.updater_independent() or not machine.wait_process_exit(parent, 10.0)):
-        return refuse_handoff(Path(job_path), job_id)
+    if mode in {"--after-parent", "--broker-child"}:
+        if not machine.updater_independent():
+            return refuse_handoff(Path(job_path), job_id, "releases.inherited_job")
+        if not machine.wait_process_exit(parent, 10.0):
+            return refuse_handoff(Path(job_path), job_id, "releases.parent_wait_failed")
     return run(Path(app), Path(job_path), job_id, version, updater)
 
 
-def refuse_handoff(path: Path, job_id: str) -> int:
+def refuse_handoff(path: Path, job_id: str, reason: str = "releases.launch_failed") -> int:
     job = json.loads(path.read_text(encoding="utf-8"))
     if job.get("id") == job_id and job.get("status") == "queued":
-        job.update(status="failed", error="releases.launch_failed", finished_at=time.time())
+        print(f"handoff refused: {reason}", flush=True)
+        job.update(status="failed", error=reason, finished_at=time.time())
         write_job(path, job)
     return 2
 

@@ -107,6 +107,9 @@
     "no_python": "The install's base Python could not be verified. Nothing was changed.",
     "backup_failed": "Could not create and verify the data archive. The update was not started.",
     "launch_failed": "The independent updater could not start. The data archive was kept.",
+    "broker_failed": "Windows could not start the updater outside the service process group. TOW was not stopped; the data archive was kept.",
+    "inherited_job": "Windows still links the updater to the service process group. The update was refused before stopping TOW; the data archive was kept.",
+    "parent_wait_failed": "The launch relay did not exit in time. The update was refused before stopping TOW; the data archive was kept.",
     "update_failed": "The update did not complete. Check the result and the local update log.",
     "notes": "Release notes",
     "log": "Update log",
@@ -783,7 +786,9 @@
       "superseded": "A previous update installed {version}; the installed version has changed since then.",
       "recovered": "A later terminal update recovered TOW and checked its startup. Web updates are available again.",
       "invalid_version": "Enter a stable release version, for example 1.22.21.",
-      "log_empty": "No web update has been started yet.",
+      "log_empty": "No log entries for this operation.",
+      "started": "Started: {when}",
+      "finished": "Finished: {when}",
       "log_unavailable": "Could not read the update log."
     },
     "submit": {
