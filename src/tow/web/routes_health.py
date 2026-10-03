@@ -4,13 +4,56 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
-from fastapi.responses import Response
+from fastapi import APIRouter, Form
+from fastapi.responses import JSONResponse, Response
 
 from tow import __version__
+from tow.web import services
 from tow.web.templating import header_health
+from tow.web.text import t
+from tow.web_update import WebUpdateError
 
 router = APIRouter()
+
+
+@router.get("/updates.json", response_model=None)
+def updates_json() -> dict[str, Any]:
+    return services.release_status()
+
+
+@router.post("/updates/check", response_model=None)
+def updates_check() -> dict[str, Any]:
+    return services.release_status(force=True)
+
+
+@router.get("/updates/status")
+def updates_status() -> Response:
+    try:
+        result = services.web_update_status()
+    except WebUpdateError as exc:
+        return JSONResponse({"ok": False, "error": t(str(exc))}, status_code=503)
+    if result.get("reason"):
+        result["message"] = t(result["reason"])
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/updates/install")
+def updates_install(version: str = Form("")) -> Response:
+    try:
+        result = services.start_web_update(version)
+    except WebUpdateError as exc:
+        return JSONResponse({"ok": False, "error": t(str(exc))}, status_code=409)
+    services.log_event("settings_update_started", target_version=result["target"], how="manual")
+    return JSONResponse(result, status_code=202, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/updates/log")
+def updates_log() -> Response:
+    try:
+        result = services.web_update_log()
+    except WebUpdateError as exc:
+        return JSONResponse({"ok": False, "error": t(str(exc))}, status_code=503)
+    return JSONResponse({"text": result}, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/healthz", response_model=None)

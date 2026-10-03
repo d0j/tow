@@ -102,6 +102,8 @@ def settings_restore_point_create() -> Response:
         services.log_event("settings_restore_point_create_fail", error=error_class(exc), how="manual")
         return flash_redirect("/settings?open=transfer", "web.settings.point_failed", "err", error=exc)
     services.log_event("settings_restore_point_created", restore_point=point["id"], how="manual")
+    if point.get("cleanup_warning"):
+        return flash_redirect("/settings?open=transfer", "backup.restore_point.cleanup_warning", "warn")
     return flash_redirect("/settings?open=transfer", "web.settings.point_saved", "ok")
 
 

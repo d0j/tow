@@ -203,6 +203,13 @@ async def secure(request: Request, call_next: Callable[[Request], Awaitable[Resp
                 await run_in_threadpool(_recover_before_dispatch)
             except RuntimeError:
                 return Response("TOW site transaction recovery unavailable", status_code=503)
+        if request.method in _WRITE_METHODS and not path.startswith("/updates/") and path not in {"/login", "/logout"}:
+            try:
+                update = await run_in_threadpool(services.web_update_status)
+            except RuntimeError:
+                return JSONResponse({"error": i18n.t("releases.job_unreadable")}, status_code=503)
+            if update.get("active"):
+                return JSONResponse({"error": i18n.t("releases.busy")}, status_code=409)
         return await call_next(request)
 
     if _serialized(request):

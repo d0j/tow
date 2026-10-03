@@ -60,6 +60,7 @@ flowchart TD
 | `tow.undo` | One undo engine: a record per change, restored through one transaction. |
 | `tow.access`, `tow.auth` | Password, sessions, this-computer-only actions. |
 | `tow.snapshots`, `tow.restore_points`, `tow.bundle` | Night copies, restore points, `.towx` export and import. |
+| `tow.releases`, `tow.web_update`, `tow.update_worker` | Cached read-only release discovery; serialized web launch with a verified archive; a copied standard-library worker outside `app/`, durable progress and the existing updater's rollback. |
 | `tow.watchdog`, `tow.pulse` | Is TOW up and on schedule; why it was silent (from facts the OS keeps). |
 | `tow.autostart` | Task Scheduler, systemd user unit, LaunchAgent — each change read back. |
 | `tow.platform` | Every OS difference (boot time, sleep, processes, browsers, protected folders). |
@@ -86,6 +87,7 @@ flowchart TD
   keys/master.key          the master key — outside data/, so no copy of data/ carries it
   backup/                  night/ copies, update-…-before-… snapshots
   runtime/                 Python and uv cache of this install
+    web-update/            durable job record, copied worker/updater and bounded UI log access
 ```
 
 `tow.paths.root()` finds the install: `TOW_ROOT`; else the parent of an `app` code folder that has `config.yaml`
@@ -154,8 +156,10 @@ Stable names other modules build on.
 - A backend has `name` and:
   - `boot_time(now=None)`, `asleep_seconds()`, `logon_time()` — unix times or seconds, `None` when unknown;
   - `shutdown_reasons(since, until)` — shutdown records, oldest first, `[]` when unknown;
-  - `spawn_detached(argv, *, hidden=True, log_path=None, cwd=None, env=None)` → pid (outlives the parent; no
+  - `spawn_detached(argv, *, hidden=True, log_path=None, cwd=None, env=None, require_breakaway=False)` → pid (outlives the parent; no
     console window on Windows; own session on POSIX);
+  - `publish_exclusive(source, destination)` — publish complete prepared bytes without replacing an occupied
+    name (Windows rename, POSIX hard link; unsupported destinations fail closed);
   - `popen_options(*, new_group=False, hidden=True)` — the same flags for a `subprocess.Popen` the caller keeps;
   - `process_alive(pid)`, `terminate(pid, timeout=10.0)` (the whole tree or process group) → bool;
   - `bind_children()` → bool: Windows puts this process into a kill-on-close job object its later children

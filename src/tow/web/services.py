@@ -24,6 +24,7 @@ from tow.doctor import doctor_report
 from tow.lifecycle import request_restart, service_status, set_autostart
 from tow.log import log_event
 from tow.ratelimit import LoginThrottle
+from tow.releases import release_status
 from tow.restore_points import (
     check_portable_bundle,
     create_restore_point,
@@ -43,6 +44,9 @@ from tow.store import (
 from tow.store_transaction import recover as recover_store_transaction
 from tow.supervisor.layout import next_check_at
 from tow.undo import cleanup as cleanup_secret_undo
+from tow.web_update import log_tail as web_update_log
+from tow.web_update import start as start_web_update
+from tow.web_update import status as web_update_status
 
 __all__ = [
     "browser_auth",
@@ -63,6 +67,7 @@ __all__ = [
     "persistence_lock",
     "record_check_failure",
     "recover_store_transaction",
+    "release_status",
     "request_restart",
     "restore_from_point",
     "restore_portable_bundle",
@@ -72,6 +77,9 @@ __all__ = [
     "save_state",
     "service_status",
     "set_autostart",
+    "start_web_update",
+    "web_update_log",
+    "web_update_status",
 ]
 
 # Failed sign-ins and password checks, per address and in total: one budget for the sign-in

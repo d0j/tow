@@ -417,6 +417,7 @@ HISTORY_GROUPS = {
             "backup_restored",
             "settings_restore_point_applied",
             "settings_portable_restore",
+            "settings_update_started",
         }
     ),
     "notifications": frozenset({"bot_delivery_succeeded", "bot_delivery_failed"}),

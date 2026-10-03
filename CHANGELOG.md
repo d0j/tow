@@ -3,6 +3,29 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.20] — 2026-10-03
+
+### Added
+
+- Installed version in the page header and a quiet new-release badge. Settings show release notes and a cached
+  stable-release check; offline discovery never turns into a false “up to date” result or breaks normal pages.
+- Explicit web updates and compatible version selection, with confirmation, a verified encrypted data archive
+  before launch, an independent updater, durable progress, bounded redacted logs and automatic code/data rollback
+  on installation or health failure. Concurrent web changes are refused while updating. Web targets start at
+  1.22.20; newer data schemas and unverified releases are refused. Service-managed POSIX installs use the terminal
+  until independently detached workers are supported. Updates are never installed automatically.
+
+### Fixed
+
+- A failed restore-point export never deletes an existing file. Rotation only removes decryptable, verified
+  local archives; foreign or damaged files remain. Failure to remove an old copy keeps the new verified point
+  and reports a cleanup warning instead of claiming that saving failed.
+- Export without overwrite publishes a complete archive without clobbering a file created by another writer.
+  Failed read-back never deletes a replacement file. The manual update command uses an explicit release tag
+  in both git and archive installs.
+- Service help distinguishes watchdog notifications from the supervisor's web-server restarts and removes the
+  obsolete five-Windows-task diagnostics description.
+
 ## [1.22.19] — 2026-10-03
 
 ### Fixed

@@ -88,6 +88,8 @@ RU_ALLOWED = {
     *("check", "serve", "backup", "watchdog", "progress"),
     # CLI commands the help names (tow export / tow import)
     *("export", "import"),
+    # Literal updater command shown in the manual alternative, not translated prose.
+    *("update", "ref", "latest"),
 }
 
 # Russian catalog entries that still carry an English word (ru.json, 1.17 i18n item "untranslated
