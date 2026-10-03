@@ -3,6 +3,21 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.19] — 2026-10-03
+
+### Fixed
+
+- Night-copy rollback verifies every saved file and destination before changing any live store, uses the verified
+  bytes, and checks each write back. Restore-point destinations are resolved from the saved configuration without
+  replacing the live configuration during preflight. Newly written safety copies are verified before restoration starts.
+- Failed safety-folder reservation never removes another writer's files. Automatic cleanup preserves unreadable,
+  unfinished and foreign-file-containing safety copies and import checkpoints, including links and Windows reparse points.
+- Encrypted secrets and undo snapshots reject non-finite numbers, excessive nesting and lossy JSON conversions before
+  writing. Invalid encrypted or legacy secret JSON produces a controlled error without replacing existing credentials.
+- Import checkpoints are verified before an import starts. An unreadable transaction refuses ordinary writes instead
+  of silently allowing edits over a potentially incomplete import; valid finished copies do not replay an old rollback.
+- Export refuses quarantined download history instead of creating an apparently healthy bundle with empty history.
+
 ## [1.22.18] — 2026-10-03
 
 ### Fixed

@@ -510,8 +510,12 @@ def master_fernet() -> Fernet:
 
 def _json_bytes(data: Any) -> bytes:
     try:
-        return json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    except (TypeError, ValueError, UnicodeError) as exc:
+        _check_json_depth(data)
+        encoded = json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        if decode_json_bytes(encoded) != data:
+            raise ValueError("secret JSON would change the payload")
+        return encoded
+    except (TypeError, ValueError, UnicodeError, RecursionError) as exc:
         raise SecretStoreError("TOW secret payload is not serializable") from exc
 
 
@@ -555,8 +559,8 @@ def encrypt_secrets_bytes(data: dict[str, Any]) -> bytes:
 
 def _decrypted_envelope(text: str, expected_format: str, fernet: Any = None) -> dict[str, Any]:
     try:
-        envelope = json.loads(text)
-    except json.JSONDecodeError as exc:
+        envelope = decode_json_bytes(text.encode("utf-8"))
+    except (UnicodeError, ValueError, RecursionError) as exc:
         raise SecretStoreError("encrypted TOW secrets are unreadable") from exc
     if not isinstance(envelope, dict) or envelope.get("format") != expected_format:
         raise SecretStoreError("unsupported encrypted TOW secrets format")
@@ -571,8 +575,8 @@ def _decrypted_envelope(text: str, expected_format: str, fernet: Any = None) -> 
         raise SecretStoreError("cryptography dependency is unavailable") from exc
     try:
         decoded = (fernet or master_fernet()).decrypt(token.encode("ascii"))
-        payload = json.loads(decoded.decode("utf-8"))
-    except (InvalidToken, UnicodeError, json.JSONDecodeError, ValueError, TypeError) as exc:
+        payload = decode_json_bytes(decoded)
+    except (InvalidToken, UnicodeError, ValueError, TypeError, RecursionError) as exc:
         raise SecretStoreError("cannot decrypt TOW secrets") from exc
     if not isinstance(payload, dict):
         raise SecretStoreError("decrypted TOW secrets must be an object")
@@ -587,8 +591,8 @@ def _write_encrypted(path: Path, data: dict[str, Any], envelope_format: str) -> 
 
 def _read_legacy() -> dict[str, Any]:
     try:
-        data = json.loads(secrets_path().read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        data = decode_json_bytes(secrets_path().read_bytes())
+    except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         raise SecretStoreError("legacy TOW secrets are unreadable") from exc
     if not isinstance(data, dict):
         raise SecretStoreError("legacy TOW secrets must be an object")

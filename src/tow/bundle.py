@@ -12,6 +12,7 @@ import math
 import os
 import re
 import shutil
+import stat
 import uuid
 import zipfile
 from collections.abc import Iterable
@@ -28,8 +29,11 @@ from tow.paths import config_path, data_dir, download_history_path, secrets_path
 from tow.store import (
     SecretStoreError,
     StateVersionError,
+    StoreCorruptionError,
     atomic_write_bytes,
+    decode_json_bytes,
     encrypted_secrets_path,
+    load_json,
     load_secret_undo,
     load_secrets,
     load_state,
@@ -590,12 +594,15 @@ def _build_export_members(*, include_log: bool) -> dict[str, bytes]:
 
 
 def load_json_for_export(path: Path, default: dict[str, Any]) -> dict[str, Any]:
-    if not path.is_file():
-        return default
-    raw = _read_limited(path, label=path.name)
     try:
-        data = json.loads(raw.decode("utf-8"))
-    except (UnicodeError, json.JSONDecodeError) as exc:
+        if not _checkpoint_file(path, missing=True):
+            # A quarantined history is not an empty history. Do not make an
+            # apparently healthy backup that silently omits the original data.
+            data = load_json(path, default, quarantine=False)
+        else:
+            raw = _read_limited(path, label=path.name)
+            data = decode_json_bytes(raw)
+    except (UnicodeError, ValueError, RecursionError, StoreCorruptionError) as exc:
         raise ExportImportError(f"invalid {path.name}") from exc
     if not isinstance(data, dict):
         raise ExportImportError(f"{path.name} must be an object")
@@ -733,7 +740,7 @@ def _create_import_checkpoint() -> Path:
     files_dir.mkdir(parents=True, exist_ok=False)
     entries = []
     for member, target in _checkpoint_targets():
-        exists = target.is_file()
+        exists = _checkpoint_file(target, missing=True)
         entry = {"member": member, "target": str(target), "exists": exists}
         if exists:
             content = _read_limited(target, label=member)
@@ -752,6 +759,7 @@ def _create_import_checkpoint() -> Path:
         "excluded": ["plaintext secrets", "TOW_MASTER_KEY", "TOW_MASTER_KEY_FILE", "media bytes", "qBittorrent data"],
     }
     _atomic_write(checkpoint / "MANIFEST.json", _json_bytes(manifest))
+    _read_checkpoint(checkpoint)  # every copy is intact before the operation can start
     _write_import_transaction(checkpoint, status="prepared")
     return checkpoint
 
@@ -769,46 +777,41 @@ def _write_import_transaction(checkpoint: Path, *, status: str, **fields: Any) -
     _atomic_write(Path(checkpoint) / "TRANSACTION.json", _json_bytes(transaction))
 
 
-def _read_import_transaction(checkpoint: Path) -> dict[str, Any]:
+def _read_import_transaction(checkpoint: Path, *, bound: bool = True) -> dict[str, Any]:
     path = Path(checkpoint) / "TRANSACTION.json"
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        _checkpoint_directory(Path(checkpoint))
+        _checkpoint_file(path)
+        value = decode_json_bytes(_read_limited(path, label="import transaction"))
+    except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         raise ExportImportError("import transaction is unreadable") from exc
     if not isinstance(value, dict) or value.get("format") != TRANSACTION_FORMAT:
         raise ExportImportError("unsupported import transaction")
-    if value.get("status") not in {"prepared", "committed", "rolled_back"}:
+    if not isinstance(value.get("status"), str) or value["status"] not in {"prepared", "committed", "rolled_back"}:
         raise ExportImportError("invalid import transaction status")
-    if value.get("checkpoint") != str(Path(checkpoint)):
+    if not isinstance(value.get("checkpoint"), str) or (bound and value["checkpoint"] != str(Path(checkpoint))):
         raise ExportImportError("import transaction checkpoint mismatch")
     return value
 
 
 def recover_import_transactions() -> list[str]:
     with persistence_lock():
-        return _recover_import_transactions_locked(strict=True)
+        return _recover_import_transactions_locked()
 
 
-def _recover_import_transactions_locked(*, strict: bool) -> list[str]:
+def _recover_import_transactions_locked() -> list[str]:
     root = data_dir() / "import-checkpoints"
-    if not root.is_dir():
+    if not _checkpoint_directory(root, missing=True):
         return []
     recovered: list[str] = []
     try:
         checkpoints = sorted(path for path in root.iterdir() if path.is_dir())
     except OSError as exc:
-        if not strict:
-            return []
         raise ExportImportError("cannot inspect import transactions") from exc
     for checkpoint in checkpoints:
-        if not (checkpoint / "MANIFEST.json").is_file() or not (checkpoint / "TRANSACTION.json").is_file():
+        if not _checkpoint_file(checkpoint / "TRANSACTION.json", missing=True):
             continue
-        try:
-            transaction = _read_import_transaction(checkpoint)
-        except ExportImportError:
-            if strict:
-                raise
-            continue
+        transaction = _read_import_transaction(checkpoint, bound=False)
         if transaction["status"] != "prepared":
             continue
         try:
@@ -825,18 +828,48 @@ def recover_interrupted_import() -> None:
 
     An import runs entirely under the persistence lock, so a "prepared" journal seen when
     a process takes the lock was left by a crash: roll it back before anyone writes.
-    A failed rollback fails closed; an unreadable old journal only blocks explicit imports.
+    An unreadable marker cannot prove that an import finished: it also fails closed.
     """
-    _recover_import_transactions_locked(strict=False)
+    _recover_import_transactions_locked()
+
+
+def _checkpoint_file(path: Path, *, missing: bool = False) -> bool:
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        if missing:
+            return False
+        raise ExportImportError("import checkpoint file is missing") from None
+    except OSError as exc:
+        raise ExportImportError("import checkpoint file cannot be inspected") from exc
+    if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        raise ExportImportError("import checkpoint file is unsafe")
+    return True
+
+
+def _checkpoint_directory(path: Path, *, missing: bool = False) -> bool:
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        if missing:
+            return False
+        raise ExportImportError("import checkpoint directory is missing") from None
+    except OSError as exc:
+        raise ExportImportError("import checkpoint directory cannot be inspected") from exc
+    if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        raise ExportImportError("import checkpoint directory is unsafe")
+    return True
 
 
 def _read_checkpoint(checkpoint: Path) -> dict[str, Any]:
     checkpoint = Path(checkpoint)
-    if not checkpoint.is_dir():
+    if not _checkpoint_directory(checkpoint, missing=True):
         raise ExportImportError("import checkpoint does not exist")
     try:
-        data = json.loads((checkpoint / "MANIFEST.json").read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        _checkpoint_directory(checkpoint)
+        _checkpoint_file(checkpoint / "MANIFEST.json")
+        data = decode_json_bytes(_read_limited(checkpoint / "MANIFEST.json", label="import checkpoint manifest"))
+    except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         raise ExportImportError("import checkpoint manifest is unreadable") from exc
     if (
         not isinstance(data, dict)
@@ -845,11 +878,15 @@ def _read_checkpoint(checkpoint: Path) -> dict[str, Any]:
     ):
         raise ExportImportError("unsupported import checkpoint")
     expected_targets = dict(_checkpoint_targets())
-    target_members = [entry.get("member") for entry in data["targets"] if isinstance(entry, dict)]
+    entries = data["targets"]
+    valid_entries = all(isinstance(entry, dict) and isinstance(entry.get("member"), str) for entry in entries)
+    if not valid_entries:
+        raise ExportImportError("malformed import checkpoint target")
+    target_members = [entry["member"] for entry in entries]
     if len(target_members) != len(set(target_members)) or set(target_members) != set(expected_targets):
         raise ExportImportError("import checkpoint target list is invalid")
     files_dir = checkpoint / "files"
-    if not files_dir.is_dir() or files_dir.is_symlink():
+    if not _checkpoint_directory(files_dir, missing=True):
         raise ExportImportError("import checkpoint files directory is invalid")
     for entry in data["targets"]:
         if not isinstance(entry, dict) or entry.get("member") not in expected_targets:
@@ -869,7 +906,7 @@ def _read_checkpoint(checkpoint: Path) -> dict[str, Any]:
         checksum = entry.get("sha256")
         backup = files_dir / member
         if exists:
-            if not backup.is_file() or backup.is_symlink():
+            if not _checkpoint_file(backup, missing=True):
                 raise ExportImportError(f"import checkpoint backup is missing: {member}")
             content = _read_limited(backup, label=f"checkpoint {member}")
             if (
@@ -896,11 +933,11 @@ def rollback_import(checkpoint: Path, *, apply: bool = False) -> dict[str, Any]:
 def _capture_runtime_targets(expected_targets: dict[str, Path]) -> dict[str, bytes | None]:
     snapshot: dict[str, bytes | None] = {}
     for member, target in expected_targets.items():
-        if target.is_symlink():
-            raise ExportImportError(f"import rollback target is a symlink: {member}")
-        if target.exists():
-            if not target.is_file():
-                raise ExportImportError(f"import rollback target is not a file: {member}")
+        try:
+            exists = _checkpoint_file(target, missing=True)
+        except ExportImportError as exc:
+            raise ExportImportError(f"import rollback target is not a file: {member}") from exc
+        if exists:
             try:
                 snapshot[member] = target.read_bytes()
             except OSError as exc:
@@ -1193,6 +1230,19 @@ def _import_bundle(
 IMPORT_CHECKPOINTS_KEPT = 5
 
 
+def _owned_checkpoint(checkpoint: Path) -> bool:
+    manifest = _read_checkpoint(checkpoint)
+    allowed = {"MANIFEST.json", "TRANSACTION.json", "files"}
+    if {entry.name for entry in checkpoint.iterdir()} != allowed:
+        return False
+    members = {entry["member"] for entry in manifest["targets"] if entry["exists"]}
+    for entry in (checkpoint / "files").iterdir():
+        if entry.name not in members:
+            return False
+        _checkpoint_file(entry)
+    return True
+
+
 def prune_import_checkpoints(*, keep: int = IMPORT_CHECKPOINTS_KEPT) -> int:
     """Remove finished import checkpoints beyond the newest ``keep``.
 
@@ -1202,13 +1252,17 @@ def prune_import_checkpoints(*, keep: int = IMPORT_CHECKPOINTS_KEPT) -> int:
     """
     root = data_dir() / "import-checkpoints"
     try:
+        if not _checkpoint_directory(root, missing=True):
+            return 0
         checkpoints = sorted((p for p in root.iterdir() if p.is_dir() and not p.is_symlink()), reverse=True)
-    except OSError:
+    except ExportImportError, OSError:
         return 0
     removed = 0
     for checkpoint in checkpoints[max(0, keep) :]:
         try:
             if _read_import_transaction(checkpoint)["status"] not in {"committed", "rolled_back"}:
+                continue
+            if not _owned_checkpoint(checkpoint):
                 continue
             shutil.rmtree(checkpoint)
             removed += 1
