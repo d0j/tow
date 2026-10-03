@@ -37,6 +37,27 @@ def test_check_help_has_dry_run(capsys):
     assert "--dry-run" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize(
+    ("language", "expected", "incorrect"),
+    [
+        ("en", "one supervised service", "one process"),
+        ("ru", "единым сервисом", "одном процессе"),
+    ],
+)
+def test_run_help_describes_a_supervised_service(capsys, language, expected, incorrect):
+    from tow.config import load_config, save_config
+
+    config = load_config()
+    config["language"] = language
+    save_config(config)
+    with pytest.raises(SystemExit) as exc:
+        main(["--help"])
+    assert exc.value.code == 0
+    output = " ".join(capsys.readouterr().out.split())
+    assert expected in output
+    assert incorrect not in output
+
+
 def test_the_five_task_commands_are_gone(capsys):
     # 1.21: no `install-task`; `autostart migrate` only says the switch belongs to 1.18-1.20.
     with pytest.raises(SystemExit):

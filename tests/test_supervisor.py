@@ -527,6 +527,112 @@ def test_stop_gives_up_on_a_job_after_ten_minutes(tmp_path):
     assert check.pid in world.stopped
 
 
+@pytest.mark.parametrize("operation", ["restart", "hang", "stop", "timeout", "stop_job"])
+@pytest.mark.parametrize("response", ["refused", "ignored", "error"])
+def test_unconfirmed_stops_keep_the_child_and_do_not_report_success(tmp_path, caplog, operation, response):
+    world, sup = make(tmp_path)
+    run_for(sup, world.clock, 5)
+    server = world.servers()[0]
+    attempts = []
+
+    def no_stop(child):
+        attempts.append(child.pid)
+        if response == "error":
+            raise OSError("secret=must-not-be-displayed")
+        return response == "ignored"  # even True without child read-back is not proof
+
+    sup.deps.stop = no_stop
+    if operation == "restart":
+        sup._restart_server({"by": "settings", "operation_id": "restart-unconfirmed"})
+        assert world.markers == [("restart-unconfirmed", "stopping"), ("restart-unconfirmed", "failed")]
+    elif operation == "hang":
+        world.healthy = False
+        run_for(sup, world.clock, 120)
+        assert sup.restarts == []
+    elif operation == "stop":
+        sup.request_stop({"by": "test"})
+        run_for(sup, world.clock, 5)
+        assert not sup.finished
+        assert len(attempts) == 1  # bounded retry, not every tick
+    else:
+        sup._start_job("check", world.clock.wall, world.clock.mono)
+        job = sup.job
+        if operation == "stop_job":
+            sup.request_stop({"by": "test"})
+            world.clock.advance(601)
+        else:
+            world.clock.advance(3601)
+        sup.tick()
+        assert sup.job is job
+        assert "check" not in sup.jobs_done
+        assert not sup.finished
+        if operation == "stop_job":
+            assert server.pid not in attempts
+    assert sup.server.child is server
+    assert server.poll() is None
+    assert len(world.servers()) == 1
+    assert "must-not-be-displayed" not in caplog.text
+    assert "stop was not confirmed" in caplog.text or "OSError" in caplog.text
+    # A later confirmed stop resumes the normal lifecycle without a second live child.
+    sup.deps.stop = world.stop
+    if operation == "restart":
+        sup._restart_server({"by": "settings", "operation_id": "restart-retry"})
+        assert len(world.servers()) == 2
+    elif operation == "hang":
+        run_for(sup, world.clock, 15)
+        assert len(world.servers()) == 2
+    else:
+        run_for(sup, world.clock, 15)
+        if operation in {"stop", "stop_job"}:
+            assert sup.finished
+        else:
+            assert "check" in sup.jobs_done
+
+
+def test_child_already_exited_is_not_sent_to_os_termination(tmp_path):
+    world, sup = make(tmp_path)
+    run_for(sup, world.clock, 5)
+    child = world.servers()[0]
+    child.code = 0
+    assert sup.stop_child(child, "web server") is True
+    assert world.stopped == []
+
+
+@pytest.mark.parametrize("response", [True, False])
+def test_confirmed_child_exit_wins_over_stop_command_result(tmp_path, response):
+    world, sup = make(tmp_path)
+    run_for(sup, world.clock, 5)
+    child = world.servers()[0]
+
+    def stopped(child):
+        child.code = -9
+        return response
+
+    sup.deps.stop = stopped
+    assert sup.stop_child(child, "web server") is True
+
+
+@pytest.mark.parametrize("job_name", ["check", "progress", "backup"])
+def test_unconfirmed_job_stop_retry_is_bounded_and_natural_exit_is_seen(tmp_path, job_name):
+    world, sup = make(tmp_path)
+    run_for(sup, world.clock, 5)
+    sup._start_job(job_name, world.clock.wall, world.clock.mono)
+    job = sup.job
+    attempts = []
+    sup.deps.stop = lambda child: attempts.append(child.pid) or False
+    world.clock.advance(3601)
+    run_for(sup, world.clock, 5)
+    assert attempts == [job.child.pid]
+    assert sup.job is job
+    assert job_name not in sup.jobs_done
+    # A natural exit between stop attempts is still recorded immediately.
+    job.child.code = 0
+    sup.tick()
+    assert sup.job is None
+    assert sup.jobs_done[job_name]["code"] == 0
+    assert sup.jobs_done[job_name]["stopped"] is False
+
+
 # --- sleep and wake ---------------------------------------------------------------------------
 
 

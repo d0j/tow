@@ -1,4 +1,4 @@
-"""``tow run``: one process that keeps TOW running - web server, schedule and watchdog.
+"""``tow run``: the supervisor that manages the web server, child jobs and watchdog.
 
 The loop ticks every second and never blocks for long:
 
@@ -52,6 +52,7 @@ RESTART_REPEAT_COUNT = 3
 RESTART_OPERATION_ATTEMPTS = 3
 # On stop, a running check / night copy is given this long to finish, then it is stopped.
 STOP_JOB_WAIT_SEC = 10 * 60
+STOP_RETRY_SEC = 10.0
 FACTS_EVERY_SEC = 60.0
 
 JOB_TIMEOUT_SEC = {"check": 3600.0, "progress": 600.0, "backup": 1800.0}
@@ -99,6 +100,7 @@ class Deps:
 @dataclass
 class _Server:
     child: Child | None = None
+    stop_retry_at: float = 0.0
     started_mono: float = 0.0
     started_wall: float = 0.0
     healthy_since: float | None = None  # monotonic, since the last failed probe
@@ -121,6 +123,7 @@ class _Job:
     child: Child
     started_mono: float
     started_wall: float
+    stop_retry_at: float = 0.0
 
 
 class Supervisor:
@@ -260,12 +263,31 @@ class Supervisor:
         if self.job is not None:
             if self.job.child.poll() is None and mono < self.stop_deadline:
                 return  # a running check / night copy finishes first
-            self._finish_job(self.deps.now(), mono, stopped=self.job.child.poll() is None)
+            if not self._finish_job(self.deps.now(), mono, stopped=self.job.child.poll() is None):
+                return
         if self.server.child is not None:
-            self.deps.stop(self.server.child)
+            if mono < self.server.stop_retry_at:
+                return
+            if not self.stop_child(self.server.child, "web server"):
+                self.server.stop_retry_at = mono + STOP_RETRY_SEC
+                return
             self.server.child = None
         self.finished = True
         LOG.info("stopped")
+
+    def stop_child(self, child: Child, name: str) -> bool:
+        """Confirm exit through the owned child handle, never just a stop command's result."""
+        try:
+            if child.poll() is not None:
+                return True  # already reaped; do not terminate a possibly reused PID
+            self.deps.stop(child)
+            if child.poll() is not None:
+                return True
+        except Exception as exc:  # noqa: BLE001 - retain the child and retry; another child still needs cleanup
+            LOG.error("%s stop was not confirmed (pid %s): %s", name, child.pid, type(exc).__name__)
+            return False
+        LOG.error("%s stop was not confirmed (pid %s)", name, child.pid)
+        return False
 
     # --- the web server ----------------------------------------------------------------------
 
@@ -283,6 +305,7 @@ class Supervisor:
             self._schedule_restart(mono, f"spawn failed: {type(exc).__name__}")
             return
         self.server.started_mono, self.server.started_wall = mono, wall
+        self.server.stop_retry_at = 0.0
         self.server.healthy_since = None
         self.server.answered = False
         self.server.fails = 0
@@ -334,7 +357,9 @@ class Supervisor:
         hung = server.fails >= HANG_FAILS if server.answered else mono - server.started_mono >= START_GRACE_SEC
         if hung:
             LOG.warning("web server does not answer on port %s: stopping it", self.port)
-            self.deps.stop(server.child)
+            if not self.stop_child(server.child, "web server"):
+                self._operation("failed", error="web server stop was not confirmed")
+                return
             server.last_exit = "hung"
             server.pending_cause = "hung"
             server.pending_crash = ""
@@ -365,8 +390,9 @@ class Supervisor:
         self.server.operation = request if request.get("operation_id") else None
         self.server.operation_exits = 0
         self._operation("stopping")
-        if self.server.child is not None:
-            self.deps.stop(self.server.child)
+        if self.server.child is not None and not self.stop_child(self.server.child, "web server"):
+            self._operation("failed", error="web server stop was not confirmed")
+            return
         self.server.child = None
         self.server.backoff = BACKOFF_FIRST_SEC
         self.server.next_start = mono
@@ -470,12 +496,16 @@ class Supervisor:
         self.job = _Job(name, child, mono, wall)
         LOG.info("%s started (pid %s)", name, child.pid)
 
-    def _finish_job(self, wall: float, mono: float, *, stopped: bool) -> None:
+    def _finish_job(self, wall: float, mono: float, *, stopped: bool) -> bool:
         job = self.job
         if job is None:
-            return
+            return True
         if stopped:
-            self.deps.stop(job.child)
+            if mono < job.stop_retry_at:
+                return False
+            if not self.stop_child(job.child, job.name):
+                job.stop_retry_at = mono + STOP_RETRY_SEC
+                return False
             LOG.warning("%s stopped after %.0f s", job.name, mono - job.started_mono)
         code = job.child.poll()
         self.jobs_done[job.name] = {
@@ -487,6 +517,7 @@ class Supervisor:
         LOG.info("%s finished (code %s)", job.name, code)
         self.job = None
         self._facts_at = -1e18  # re-read the state: the check moved its timestamps
+        return True
 
     # --- watchdog duties ---------------------------------------------------------------------
 

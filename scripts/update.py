@@ -92,7 +92,7 @@ MINIMUM_ARCHIVE_TARGET = (1, 22, 0)
 SKIP_FILES = frozenset({"lan-auth.token", "master.key", "sessions.json"})
 SKIP_DIRS = frozenset({"browser-auth", "run", "tmp", "keys", "logs"})
 SNAPSHOT_RE = re.compile(r"^(?:update|data)-(\d{8}-\d{6})-before-")
-# The oldest version an install that runs as one process can go to: older ones have no `tow run`.
+# The oldest version an install managed by `tow run` can go to: older ones have no supervisor.
 MINIMUM_TARGET = (1, 18, 0)
 UNIT_NAME = "tow.service"
 AGENT_LABEL = "io.tow"
@@ -111,7 +111,7 @@ TEXTS = {
         " v1.20.0 first and run `tow autostart migrate --apply` there; nothing was updated"
     ),
     "too_old": (
-        "{ref} is TOW {version}: an install that runs as one process goes no further back than v1.18.0"
+        "{ref} is TOW {version}: an install managed by `tow run` goes no further back than v1.18.0"
         " (older versions have no `tow run`); nothing was updated"
     ),
     "start": "TOW update: {previous} -> {target} ({ref}) in {root}",
@@ -1114,7 +1114,7 @@ class Update:
         self.code.check()
 
     def refuse_old_layout(self) -> None:
-        """The five Windows tasks of 1.17 are switched to one process by 1.18-1.20, not here."""
+        """The five Windows tasks of 1.17 switch to one supervisor in 1.18-1.20, not here."""
         if not self.sys.windows:
             return
         info = task_info(self.sys.task_xml("TOW-serve"))

@@ -162,7 +162,7 @@ are enforced by `tests/test_ui_standard.py` and the CSP.
 
 ## Periodic work and the runtime
 
-Everything TOW does on its own runs inside one process, `tow run` (`tow.supervisor`): the web server is its child,
+Everything TOW does on its own is managed by one supervisor, `tow run` (`tow.supervisor`): the web server is its child,
 scheduled checks, the progress pass and the night copy are child jobs on a schedule, the watchdog is a pass every
 10 minutes inside the process. New background work goes there too, never into a task of the OS:
 

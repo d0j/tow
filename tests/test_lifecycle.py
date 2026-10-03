@@ -38,7 +38,7 @@ def test_autostart_goes_to_this_oses_backend(monkeypatch):
     status = lifecycle.service_status()
     assert (status["autostart"], status["without_login"]) == (True, True)
     assert status["supports_without_login"] is True
-    assert "mode" not in status  # 1.21: one process only, no five-task mode
+    assert "mode" not in status  # 1.21: one supervised service, no five-task mode
     lifecycle.set_autostart(False)
     assert calls == [("on", True), ("off",)]
 

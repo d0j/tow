@@ -1,6 +1,7 @@
 """The TOW service as Settings sees it: its status, autostart and "Restart TOW".
 
-TOW runs as one process, ``tow run`` (``tow.supervisor``); autostart is ``tow.autostart``. A
+One supervisor, ``tow run`` (``tow.supervisor``), manages TOW's service and child processes;
+autostart is ``tow.autostart``. A
 restart asked from Settings goes to the supervisor as a control request and is followed on
 ``data/service-restart.json`` (queued → stopping → starting → ready / failed).
 """

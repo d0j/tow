@@ -131,10 +131,10 @@ The owner's guide is [install.md](install.md); the README links the stable relea
   macOS; `--desktop` (Linux) writes `$XDG_DATA_HOME/applications/tow.desktop` (the only write
   outside the folder besides autostart, both on request).
 
-## 2. One process: `tow run` (supervisor)
+## 2. One supervised service: `tow run`
 
-`tow run` (package `tow.supervisor`) is TOW on every OS since 1.18: web server, schedule, night
-copy and watchdog duties in one process. (The five Windows tasks of 1.17 — TOW-serve, -check,
+`tow run` (package `tow.supervisor`) manages TOW on every OS since 1.18: a web-server child,
+scheduled child jobs for checks and night copies, and watchdog duties. (The five Windows tasks of 1.17 — TOW-serve, -check,
 -progress, -backup, -watchdog — are gone since 1.21; see §8.) It ticks once a second and never
 blocks for long.
 
@@ -338,7 +338,7 @@ before the update does the same).
    tracked files and an install that still runs the five Windows tasks of 1.17 (update it to
    v1.20.0 and run `tow autostart migrate --apply` there first); `git fetch --tags --prune
    origin`; resolve the ref; refuse a target older than **v1.18.0** — the minimum rollback target
-   of the one-process layout (older versions have no `tow run`).
+   of the supervised-service layout (older versions have no `tow run`).
 2. Stop TOW: the stop request, and wait (it lets a running job finish); only if it does not stop
    within `--wait-minutes` is it stopped forcibly — the supervisor's process tree, and its web
    server and job from `status.json` (on Linux and macOS they have their own sessions), each only
@@ -574,18 +574,18 @@ Built so far (this workstream):
 
 An install from 1.17 or earlier ran as five Windows tasks (TOW-serve, -check, -progress, -backup,
 -watchdog) and kept its master key outside the folder (`TOW_MASTER_KEY_FILE`). To bring it to the
-one-folder, one-process layout: update to a 1.18–1.20 release with `deploy.ps1 -Ref <tag>`, move
-the key into the install with `tow keys adopt` (check `tow keys status`), switch to one process
+one-folder, single-supervisor layout: update to a 1.18–1.20 release with `deploy.ps1 -Ref <tag>`, move
+the key into the install with `tow keys adopt` (check `tow keys status`), switch to one supervisor
 with `tow autostart migrate` (a preview) and `tow autostart migrate --apply`, remove the
 `TOW_MASTER_KEY_FILE` variable, and run `tow setup` to put Python inside the install. Then update to
 the current release.
 
-Since 1.21 the five-task layout is gone from TOW (`tow install-task`, Settings → "Switch to one
-process", the per-task launchers, `restore-snapshot.ps1`, `windows_task.py`; `tow autostart
+Since 1.21 the five-task layout is gone from TOW (`tow install-task`, the old Settings migration
+action, the per-task launchers, `restore-snapshot.ps1`, `windows_task.py`; `tow autostart
 migrate` only points to v1.20.0). Consequences:
 
 - **Minimum rollback target: v1.18.0.** `deploy.ps1` / `update.py` go back to any version from
-  v1.18.0 on (they all run as one process) and refuse anything older before they stop TOW. To go
+  v1.18.0 on (they all use `tow run`) and refuse anything older before they stop TOW. To go
   back to the five tasks, deploy v1.20.0 first and follow that version's PORTABLE.md
   (`tow autostart off`, `tow install-task`, `schtasks /Run /TN TOW-serve`, then
   `deploy.ps1 -Ref v1.17.1`).

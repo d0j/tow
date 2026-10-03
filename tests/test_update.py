@@ -234,7 +234,7 @@ def snapshots(install) -> list[str]:
     return sorted(path.name for path in install["backup"].iterdir())
 
 
-# --- one process (tow run) ---------------------------------------------------------------------
+# --- supervised service (tow run) --------------------------------------------------------------
 
 
 def test_a_successful_update(install):
