@@ -2,6 +2,41 @@
 (() => {
   const badge = document.querySelector("[data-release-badge]");
   if (!badge) return;
+  const overlay = document.querySelector(".app-version");
+  let framePending = false;
+  const positionOverlay = () => {
+    if (!overlay || framePending) return;
+    framePending = true;
+    window.requestAnimationFrame(() => {
+      framePending = false;
+      const box = overlay.getBoundingClientRect();
+      const obstructing = [...document.querySelectorAll("button,input,select,textarea,a,summary,td,.flash")].some((control) => {
+        if (overlay.contains(control) || !control.getClientRects().length) return false;
+        if (control.checkVisibility && !control.checkVisibility({ visibilityProperty: true })) return false;
+        // Closed accordions may still expose child rectangles in older browsers.
+        for (let parent = control.parentElement; parent; parent = parent.parentElement) {
+          if (parent.tagName === "DETAILS" && !parent.open && !parent.querySelector("summary")?.contains(control)) return false;
+        }
+        const rect = control.getBoundingClientRect();
+        return Math.min(box.right, rect.right) - Math.max(box.left, rect.left) > .5 &&
+          Math.min(box.bottom, rect.bottom) - Math.max(box.top, rect.top) > .5;
+      });
+      overlay.classList.toggle("is-obstructing", obstructing);
+    });
+  };
+  if (overlay) {
+    window.addEventListener("scroll", positionOverlay, { passive: true, capture: true });
+    window.addEventListener("resize", positionOverlay);
+    document.addEventListener("toggle", positionOverlay, true);
+    if (typeof ResizeObserver !== "undefined") new ResizeObserver(positionOverlay).observe(document.body);
+    const main = document.querySelector("main");
+    if (main && typeof MutationObserver !== "undefined") {
+      new MutationObserver(positionOverlay).observe(main, {
+        childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "open", "class"],
+      });
+    }
+    positionOverlay();
+  }
   const status = document.querySelector("[data-release-status]");
   const check = document.querySelector("[data-release-check]");
   const notes = document.querySelector("[data-release-notes]");
@@ -33,6 +68,7 @@
     badge.hidden = !available;
     badge.textContent = available ? t("js.releases.badge", { version: data.latest }) : "";
     badge.title = available ? t("js.releases.available", { version: data.latest }) : "";
+    positionOverlay();
     if (notes && /^https:\/\/github\.com\/d0j\/tow\/releases(?:\/tag\/v\d+\.\d+\.\d+)?$/.test(data.url || "")) {
       notes.href = data.url;
     }

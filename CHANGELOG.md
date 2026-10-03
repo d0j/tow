@@ -7,8 +7,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
-- Keep the installed version, new-release badge and check clock in a wrapping header row. On narrow screens
-  the check clock no longer overlaps the version; the header stays compact without absolute positioning.
+- Move the installed version and quiet new-release badge into a small floating corner indicator, outside
+  the header layout. It hides while overlapping controls or table cells; the check clock stays in the header.
 
 ## [1.22.21] — 2026-10-03
 
