@@ -108,14 +108,14 @@ def _fixed_members() -> list[tuple[str, Path]]:
 def _members() -> list[tuple[str, Path]]:
     """(name inside the snapshot, live path) - the allowlist, with this install's restore points."""
     members = _fixed_members()
-    from tow.restore_points import RestorePointError, restore_points_dir
+    from tow.restore_points import RestorePointError, list_restore_points, point_path
 
     try:
-        points = restore_points_dir()
+        members.extend(
+            (f"restore-points/{point['id']}.towx", point_path(point["id"])) for point in list_restore_points()
+        )
     except RestorePointError as exc:  # restore_points_dir of another system: said, not skipped
         raise SnapshotError(str(exc)) from exc
-    if points.is_dir():
-        members.extend((f"restore-points/{p.name}", p) for p in sorted(points.glob("*.towx")) if p.is_file())
     return members
 
 

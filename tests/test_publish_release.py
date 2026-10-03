@@ -1,6 +1,7 @@
 """Release publication must synchronize the runtime's optional mirror before GitHub."""
 
 import importlib.util
+import os
 from pathlib import Path
 
 import pytest
@@ -102,3 +103,52 @@ def test_origin_readback_is_required_for_success(publisher):
     replies[("ls-remote", "--refs", "origin", "refs/tags/v1.2.3")] = ""
     with pytest.raises(module.PublishError, match="not confirmed"):
         module.publish("v1.2.3")
+
+
+@pytest.mark.allow_git
+def test_publication_with_real_git_on_throwaway_remotes(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location("publish_release_real_git", SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    for name in [name for name in os.environ if name.startswith("GIT_")]:
+        monkeypatch.delenv(name)
+    global_config = tmp_path / "gitconfig"
+    global_config.write_text("", encoding="utf-8")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    monkeypatch.setenv("GIT_TERMINAL_PROMPT", "0")
+    origin = tmp_path / "origin.git"
+    mirror = tmp_path / "mirror.git"
+    module.git(tmp_path, "init", "--bare", str(origin))
+    module.git(tmp_path, "init", "--bare", str(mirror))
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    module.git(checkout, "init", "-b", "main")
+    hooks = tmp_path / "empty-hooks"
+    hooks.mkdir()
+    for key, value in {
+        "core.hooksPath": str(hooks),
+        "user.name": "test",
+        "user.email": "test@example.invalid",
+        "commit.gpgsign": "false",
+        "tag.gpgsign": "false",
+    }.items():
+        module.git(checkout, "config", key, value)
+    (checkout / "pyproject.toml").write_text('[project]\nversion="1.2.3"\n', encoding="utf-8")
+    module.git(checkout, "add", "pyproject.toml")
+    module.git(checkout, "commit", "-m", "synthetic release")
+    module.git(checkout, "remote", "add", "origin", str(origin))
+    module.git(checkout, "remote", "add", "backup", str(mirror))
+    module.git(checkout, "push", "-u", "origin", "main")
+    module.git(checkout, "tag", "-a", "v1.2.3", "-m", "synthetic release")
+    before = module.git(checkout, "rev-parse", "HEAD")
+
+    module.publish("v1.2.3", root=checkout)
+
+    assert module.git(checkout, "rev-parse", "HEAD") == before
+    assert module.git(checkout, "status", "--porcelain") == ""
+    tag_oid = module.git(checkout, "rev-parse", "refs/tags/v1.2.3")
+    for remote in ("origin", "backup"):
+        module._verify_remote(checkout, remote, {"refs/heads/main": before, "refs/tags/v1.2.3": tag_oid})

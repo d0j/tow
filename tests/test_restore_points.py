@@ -96,6 +96,17 @@ def test_create_and_restore_preserves_current_lan_access(monkeypatch, tmp_path):
     assert len(list_restore_points()) == 2
 
 
+def test_a_directory_named_like_a_restore_point_is_not_listed_or_pruned(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    folder = restore_points.restore_points_dir() / "20260101T000000Z-deadbeef.towx"
+    folder.mkdir(parents=True)
+    (folder / "keep.txt").write_text("not a restore point", encoding="utf-8")
+    assert list_restore_points() == []
+    made = create_restore_point()
+    assert [point["id"] for point in list_restore_points()] == [made["id"]]
+    assert (folder / "keep.txt").read_text(encoding="utf-8") == "not a restore point"
+
+
 @pytest.mark.parametrize("point_id", ["../state", "..\\state", "C:evil", "not-an-id"])
 def test_restore_rejects_untrusted_identifier(monkeypatch, tmp_path, point_id):
     _seed(monkeypatch, tmp_path)

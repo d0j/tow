@@ -112,6 +112,24 @@ def test_plaintext_credentials_and_the_key_are_never_copied(backup):
     assert b"t-before" not in (snapshot / "secrets.enc").read_bytes()  # still encrypted
 
 
+def test_night_copy_only_includes_regular_restore_point_files(backup):
+    from tow.restore_points import create_restore_point, restore_points_dir
+
+    made = create_restore_point()
+    root = restore_points_dir()
+    foreign = root / "unrelated.towx"
+    foreign.write_bytes(b"not a restore point")
+    folder = root / "20260101T000000Z-deadbeef.towx"
+    folder.mkdir()
+    snapshot = Path(create_snapshot()["snapshot"])
+    members = verify_snapshot(snapshot)["files"]
+    assert f"restore-points/{made['id']}.towx" in members
+    assert "restore-points/unrelated.towx" not in members
+    assert "restore-points/20260101T000000Z-deadbeef.towx" not in members
+    assert foreign.read_bytes() == b"not a restore point"
+    assert folder.is_dir()
+
+
 def test_a_damaged_snapshot_is_refused_before_anything_changes(backup):
     snapshot = Path(create_snapshot()["snapshot"])
     (snapshot / "state.json").write_text('{"topics": []}', encoding="utf-8")
