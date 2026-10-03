@@ -3,6 +3,14 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.21] — 2026-10-03
+
+### Fixed
+
+- The web updater exits the Windows web-server process tree through an intermediate parent and waits for its
+  actual exit before stopping TOW. Job breakaway alone did not protect it against taskkill /T.
+- Web version selection refuses 1.22.20 and earlier, which lack this safe handoff.
+
 ## [1.22.20] — 2026-10-03
 
 ### Added

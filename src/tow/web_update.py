@@ -22,7 +22,7 @@ from tow.paths import repo_root, root, runtime_dir
 from tow.restore_points import RestorePointError, create_restore_point
 from tow.store import StoreCorruptionError, atomic_write_bytes, decode_json_bytes, persistence_lock
 
-MINIMUM_WEB_VERSION = (1, 22, 20)
+MINIMUM_WEB_VERSION = (1, 22, 21)
 _ACTIVE = frozenset({"queued", "preparing", "stopping", "backup", "installing", "checking", "rolling_back"})
 _TERMINAL = frozenset({"ok", "refused", "failed", "rolled_back", "recovered"})
 
@@ -215,7 +215,7 @@ def start(version: str) -> dict[str, Any]:
             }
             atomic_write_bytes(path, json.dumps(job).encode())
             platform.current().spawn_detached(
-                [str(python), "-u", str(folder / "worker.py"), str(app), str(path), job_id, version],
+                [str(python), "-u", str(folder / "worker.py"), "--handoff", str(app), str(path), job_id, version],
                 hidden=True,
                 cwd=root(),
                 log_path=folder / "update.log",

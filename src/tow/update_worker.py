@@ -103,7 +103,10 @@ def run(app: Path, job_path: Path, job_id: str, version: str, updater: Any) -> i
 
 
 def main() -> int:
-    app, job_path, job_id, version = sys.argv[1:]
+    args = sys.argv[1:]
+    mode = args.pop(0) if args and args[0] in {"--handoff", "--after-parent"} else ""
+    parent = int(args.pop(0)) if mode == "--after-parent" else 0
+    app, job_path, job_id, version = args
     script = Path(__file__).with_name("update.py")
     spec = importlib.util.spec_from_file_location("tow_detached_updater", script)
     if spec is None or spec.loader is None:
@@ -111,7 +114,27 @@ def main() -> int:
     updater = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = updater
     spec.loader.exec_module(updater)
+    machine = updater.System(Path(app))
+    if mode == "--handoff":
+        try:
+            machine.spawn_handoff(
+                [sys.executable, "-u", str(Path(__file__).resolve()), "--after-parent", str(os.getpid()), *args],
+                Path(job_path).parent / job_id / "update.log",
+            )
+        except OSError:
+            return refuse_handoff(Path(job_path), job_id)
+        return 0
+    if mode == "--after-parent" and (not machine.updater_independent() or not machine.wait_process_exit(parent, 10.0)):
+        return refuse_handoff(Path(job_path), job_id)
     return run(Path(app), Path(job_path), job_id, version, updater)
+
+
+def refuse_handoff(path: Path, job_id: str) -> int:
+    job = json.loads(path.read_text(encoding="utf-8"))
+    if job.get("id") == job_id and job.get("status") == "queued":
+        job.update(status="failed", error="releases.launch_failed", finished_at=time.time())
+        write_job(path, job)
+    return 2
 
 
 if __name__ == "__main__":

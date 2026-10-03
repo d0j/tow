@@ -60,7 +60,7 @@ flowchart TD
 | `tow.undo` | One undo engine: a record per change, restored through one transaction. |
 | `tow.access`, `tow.auth` | Password, sessions, this-computer-only actions. |
 | `tow.snapshots`, `tow.restore_points`, `tow.bundle` | Night copies, restore points, `.towx` export and import. |
-| `tow.releases`, `tow.web_update`, `tow.update_worker` | Cached read-only release discovery; serialized web launch with a verified archive; a copied standard-library worker outside `app/`, durable progress and the existing updater's rollback. |
+| `tow.releases`, `tow.web_update`, `tow.update_worker` | Cached read-only release discovery; serialized web launch with a verified archive; a copied standard-library worker outside `app/`, an exiting-parent handoff before server-tree termination, durable progress and the existing updater's rollback. |
 | `tow.watchdog`, `tow.pulse` | Is TOW up and on schedule; why it was silent (from facts the OS keeps). |
 | `tow.autostart` | Task Scheduler, systemd user unit, LaunchAgent — each change read back. |
 | `tow.platform` | Every OS difference (boot time, sleep, processes, browsers, protected folders). |

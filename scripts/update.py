@@ -402,6 +402,69 @@ class System:
             code, output = self._run(["ps", "-o", "command=", "-p", str(int(pid))], timeout=30)
         return output.strip() if code == 0 else ""
 
+    def spawn_handoff(self, argv: list[str], log: Path) -> None:
+        """Start the updater behind an exiting intermediate parent, outside the server's tree.
+
+        Breakaway alone does not protect a descendant against Windows taskkill /T.
+        The child waits for this process to exit before stopping TOW.
+        """
+        with log.open("ab") as output:
+            subprocess.Popen(
+                argv,
+                cwd=str(self.root),
+                stdin=subprocess.DEVNULL,
+                stdout=output,
+                stderr=output,
+                close_fds=True,
+                creationflags=NO_WINDOW,
+                start_new_session=not self.windows,
+            )
+
+    def wait_process_exit(self, pid: int, timeout: float) -> bool:
+        """Wait for the intermediate parent to disappear; uncertainty refuses the update."""
+        if pid <= 0:
+            return False
+        if self.windows:
+            import ctypes
+
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+            kernel.OpenProcess.restype = ctypes.c_void_p
+            kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+            kernel.WaitForSingleObject.restype = ctypes.c_ulong
+            kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+            handle = kernel.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE, never termination
+            if not handle:
+                return ctypes.get_last_error() == 87  # ERROR_INVALID_PARAMETER: PID no longer exists
+            try:
+                return bool(kernel.WaitForSingleObject(handle, int(timeout * 1000)) == 0)
+            finally:
+                kernel.CloseHandle(handle)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                os.kill(pid, 0)  # POSIX existence probe only; never used on Windows
+            except ProcessLookupError:
+                return True
+            except OSError:
+                return False
+            time.sleep(0.05)
+        return False
+
+    def updater_independent(self) -> bool:
+        """An inherited outer Windows job must not kill the updater when TOW exits."""
+        if not self.windows:
+            return True
+        import ctypes
+
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.GetCurrentProcess.restype = ctypes.c_void_p
+        kernel.IsProcessInJob.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_int)]
+        inherited = ctypes.c_int()
+        return bool(kernel.IsProcessInJob(kernel.GetCurrentProcess(), None, ctypes.byref(inherited))) and not bool(
+            inherited.value
+        )
+
     def status_pids(self) -> list[int]:
         """The web server and the job ``tow run`` last reported (data/run/status.json)."""
         try:
