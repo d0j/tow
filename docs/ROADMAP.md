@@ -25,13 +25,13 @@ These hold in every release:
 | Access | Loopback without password; network only with password, sessions, CSRF and CSP; local-only access switches. |
 | Runtime | One portable folder, one process (`tow run`), autostart for Windows, Linux and macOS, update with snapshot, health check and rollback. |
 | Languages | English and Russian; a new language is one JSON file. |
-| Quality | About 2,600 tests in random order with a guard against network, processes and writes outside the temp folder; branch coverage ≥ 89%; strict mypy; ruff with a complexity cap. |
+| Quality | Over 2,900 tests in random order with a guard against network, processes and writes outside the temp folder; branch coverage ≥ 89%; strict mypy; ruff with a complexity cap. Blocking CI on Windows, Ubuntu 24.04/26.04 and macOS. |
 
 ## Next
 
 Roughly in order of value:
 
-1. **Linux and macOS** — a green CI run on both, then make them blocking; real-machine checks of autostart.
+1. **Linux and macOS** — real-machine checks of autostart beyond the blocking CI and installer smoke tests.
 2. **qBittorrent on the shared client flow** (`clients/managed.py`) instead of its own, older transaction code.
 3. **Smaller check pipeline** — split the check into fetch, decide, apply and record steps.
 4. **Bot commands** — `/status`, `/check`, `/pause`, `/resume`, `/add` from the owner's chat via long polling (no

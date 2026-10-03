@@ -3,6 +3,19 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.17] — 2026-10-03
+
+### Fixed
+
+- Night copies reject malformed manifests and inconsistent file sizes with a clear error before restoring.
+  Member reads are bounded by the recorded size, including files that grow during verification.
+- Copies created in the same second no longer collide. Creation, verification and pruning are serialized;
+  automatic pruning keeps unsigned, foreign or damaged-manifest folders instead of deleting them.
+- Restore point lists and night copies exclude directories, links and unrelated `.towx` filenames.
+- A failed reservation of a temporary copy folder never removes another writer's files.
+- The release publication helper confirms the configured local mirror's main and annotated tag before
+  publishing to GitHub, so installations that fetch from the mirror can find the release.
+
 ## [1.22.16] — 2026-10-03
 
 ### Fixed

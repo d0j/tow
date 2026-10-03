@@ -108,14 +108,14 @@ def _fixed_members() -> list[tuple[str, Path]]:
 def _members() -> list[tuple[str, Path]]:
     """(name inside the snapshot, live path) - the allowlist, with this install's restore points."""
     members = _fixed_members()
-    from tow.restore_points import RestorePointError, restore_points_dir
+    from tow.restore_points import RestorePointError, list_restore_points, point_path
 
     try:
-        points = restore_points_dir()
+        members.extend(
+            (f"restore-points/{point['id']}.towx", point_path(point["id"])) for point in list_restore_points()
+        )
     except RestorePointError as exc:  # restore_points_dir of another system: said, not skipped
         raise SnapshotError(str(exc)) from exc
-    if points.is_dir():
-        members.extend((f"restore-points/{p.name}", p) for p in sorted(points.glob("*.towx")) if p.is_file())
     return members
 
 
@@ -163,6 +163,37 @@ def _signature(manifest: dict[str, Any], key: bytes) -> str:
     return hmac.new(key, canonical, hashlib.sha256).hexdigest()
 
 
+def _signature_matches(manifest: dict[str, Any], key: bytes) -> bool:
+    signature = manifest.get("signature")
+    return (
+        isinstance(signature, str) and signature.isascii() and hmac.compare_digest(signature, _signature(manifest, key))
+    )
+
+
+def _read_manifest(path: Path) -> dict[str, Any]:
+    lang = owner_language()
+    try:
+        manifest = json.loads((path / "MANIFEST.json").read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError, RecursionError) as exc:
+        raise SnapshotError(t("backup.snapshot.manifest_unreadable", lang)) from exc
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("format") not in (FORMAT, UNSIGNED_FORMAT)
+        or not isinstance(manifest.get("files"), dict)
+    ):
+        raise SnapshotError(t("backup.snapshot.not_tow", lang))
+    return manifest
+
+
+def _owned_manifest(path: Path, key: bytes) -> dict[str, Any] | None:
+    """Only a signed copy proves that TOW owns this folder and may prune it."""
+    try:
+        manifest = _read_manifest(path)
+    except SnapshotError:
+        return None
+    return manifest if manifest["format"] == FORMAT and _signature_matches(manifest, key) else None
+
+
 def backup_root(cfg: dict[str, Any] | None = None) -> Path:
     """The night copies folder: ``backup_dir`` from config.yaml, by default ``backup/night``
     next to config.yaml (moves with the install); a network share (\\\\server\\share) works too.
@@ -198,23 +229,17 @@ def _previous_members(root: Path, key: bytes) -> set[str]:
     """Stores a signed earlier copy proves existed; their later disappearance is not normal."""
     present: set[str] = set()
     for folder in _snapshots(root):
-        try:
-            manifest = json.loads((folder / "MANIFEST.json").read_text(encoding="utf-8"))
-        except OSError, UnicodeError, ValueError:
-            continue
-        if not isinstance(manifest, dict) or manifest.get("format") != FORMAT:
-            continue
-        signature = manifest.get("signature")
-        if isinstance(signature, str) and hmac.compare_digest(signature, _signature(manifest, key)):
-            files = manifest.get("files")
-            if isinstance(files, dict):
-                present.update(name for name in files if name in {"state.json", "download_history.json", "secrets.enc"})
+        if manifest := _owned_manifest(folder, key):
+            present.update(
+                name for name in manifest["files"] if name in {"state.json", "download_history.json", "secrets.enc"}
+            )
     return present
 
 
 def create_snapshot(*, keep: int | None = None, how: str = "auto") -> dict[str, Any]:
     try:
-        result = _create_snapshot(keep=keep, how=how)
+        with persistence_lock():  # creation, read-back and pruning cannot race another copy
+            result = _create_snapshot(keep=keep, how=how)
     except SnapshotError as exc:
         record_failure(str(exc))
         raise
@@ -270,12 +295,18 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
     stamp = datetime.now(UTC).astimezone().strftime("%Y%m%d-%H%M%S")
     target = root / f"{_PREFIX}{stamp}"
     partial = root / f".{_PREFIX}{stamp}.partial"
+    while target.exists() or partial.exists():
+        suffix = uuid.uuid4().hex[:6]
+        target = root / f"{_PREFIX}{stamp}-{suffix}"
+        partial = root / f".{_PREFIX}{stamp}-{suffix}.partial"
     files: dict[str, dict[str, Any]] = {}
     missing: list[str] = []
     key = _signing_key()  # no key, no copy: an unsigned copy could never be restored
     previous_members = _previous_members(root, key)
+    partial_created = False
     try:
         partial.mkdir(parents=True, exist_ok=False)
+        partial_created = True
         with persistence_lock():  # a consistent cut: no check or edit writes meanwhile
             for name, source in _members():
                 try:
@@ -303,10 +334,12 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
         (partial / "MANIFEST.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         _rename_with_retry(partial, target)
     except SnapshotError:
-        shutil.rmtree(partial, ignore_errors=True)
+        if partial_created:
+            shutil.rmtree(partial, ignore_errors=True)
         raise
     except OSError as exc:
-        shutil.rmtree(partial, ignore_errors=True)
+        if partial_created:
+            shutil.rmtree(partial, ignore_errors=True)
         raise SnapshotError(
             t("backup.snapshot.cannot_write", owner_language(), reason=exc.strerror or type(exc).__name__)
         ) from exc
@@ -315,7 +348,7 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
     except SnapshotError as exc:
         raise SnapshotError(t("backup.snapshot.unverified", owner_language(), name=target.name, reason=exc)) from exc
     # Never the copy just verified, even when the clock went back and it does not sort last.
-    others = [p.name for p in _snapshots(root) if p.name != target.name]
+    others = [p.name for p in _snapshots(root) if p.name != target.name and _owned_manifest(p, key) is not None]
     pruned = others[: max(0, len(others) - (keep - 1))] if keep > 0 else []
     for name in pruned:
         shutil.rmtree(root / name, ignore_errors=True)
@@ -361,31 +394,25 @@ def _read_verified(path: Path) -> tuple[dict[str, Any], dict[str, bytes], bool]:
     """
     path = Path(path)
     lang = owner_language()
-    try:
-        manifest = json.loads((path / "MANIFEST.json").read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, ValueError) as exc:
-        raise SnapshotError(t("backup.snapshot.manifest_unreadable", lang)) from exc
-    if (
-        not isinstance(manifest, dict)
-        or manifest.get("format") not in {FORMAT, UNSIGNED_FORMAT}
-        or not isinstance(manifest.get("files"), dict)
-    ):
-        raise SnapshotError(t("backup.snapshot.not_tow", lang))
+    manifest = _read_manifest(path)
     signed = manifest["format"] == FORMAT
-    if signed:
-        signature = manifest.get("signature")
-        if not isinstance(signature, str) or not hmac.compare_digest(
-            signature.encode("ascii", "replace"), _signature(manifest, _signing_key()).encode("ascii")
-        ):
-            raise SnapshotError(t("backup.snapshot.bad_signature", lang))
+    if signed and not _signature_matches(manifest, _signing_key()):
+        raise SnapshotError(t("backup.snapshot.bad_signature", lang))
     contents: dict[str, bytes] = {}
     for name, meta in manifest["files"].items():
         _member_target(name)  # a strict name, and a target that stays where it belongs
+        size = meta.get("size") if isinstance(meta, dict) else None
+        if type(size) is not int or size < 0:
+            raise SnapshotError(t("backup.snapshot.file_damaged", lang, name=name))
         try:
-            content = (path / name).read_bytes()
+            source = path / name
+            if source.stat().st_size != size:
+                raise SnapshotError(t("backup.snapshot.file_damaged", lang, name=name))
+            with source.open("rb") as handle:
+                content = handle.read(size + 1)
         except OSError as exc:
             raise SnapshotError(t("backup.snapshot.file_missing", lang, name=name)) from exc
-        if not isinstance(meta, dict) or hashlib.sha256(content).hexdigest() != meta.get("sha256"):
+        if len(content) != size or hashlib.sha256(content).hexdigest() != meta.get("sha256"):
             raise SnapshotError(t("backup.snapshot.file_damaged", lang, name=name))
         contents[name] = content
     return manifest, contents, signed

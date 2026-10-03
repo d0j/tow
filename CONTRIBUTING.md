@@ -69,3 +69,18 @@ being pushed. CI runs the same gate on Windows, Linux and macOS.
   screenshots or logs.
 
 By contributing you agree that your contribution is licensed under the [MIT License](LICENSE).
+
+## Publishing a release
+
+Merge the gated release commit through a pull request, fetch `origin/main`, and create an annotated
+`vX.Y.Z` tag on that commit (matching `pyproject.toml`). Publish it with:
+
+```sh
+uv run --frozen python scripts/publish-release.py vX.Y.Z
+```
+
+When a `backup` remote is configured, this first atomically synchronizes its `main` and the release tag,
+then confirms both by reading them back. Only then is the tag sent to `origin`; existing remote history
+is never overwritten. The post-commit mirror alone is not enough: it cannot copy a later GitHub merge
+or a tag created after the commit. Git's full pre-push gate still applies. Wait for the release workflow
+and its installer checks to finish before updating a runtime installation.

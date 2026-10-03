@@ -94,7 +94,7 @@ def point_path(point_id: str, *, must_exist: bool = True) -> Path:
 
 def _point_view(path: Path) -> dict[str, Any] | None:
     match = _ID_RE.fullmatch(path.stem)
-    if match is None or path.suffix != ".towx" or path.is_symlink() or _is_reparse_point(path):
+    if match is None or path.suffix != ".towx" or path.is_symlink() or _is_reparse_point(path) or not path.is_file():
         return None
     try:
         size = path.stat().st_size
