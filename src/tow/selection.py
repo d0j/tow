@@ -71,6 +71,14 @@ def normalize_policy(mode: object = "all", expression: object = "", tracking_mod
         value = ""
     elif not value:
         raise SelectionError("selection.empty")
+    if normalized_mode == "episodes":
+        rules = _split_rules(value)
+        if "*" in rules and len(rules) != 1:
+            raise SelectionError("selection.star_alone")
+        for rule in rules:
+            _episode_range(rule)
+    elif normalized_mode == "files":
+        _safe_globs(value)
     return {"mode": normalized_mode, "value": value, "tracking_mode": lifecycle}
 
 
@@ -100,7 +108,7 @@ def _episode_range(token: str) -> tuple[EpisodeLabel, ...] | None:
         first = int(match.group(2))
         end_season = int(match.group(3) or season)
         last = int(match.group(4) or first)
-        if end_season != season or last < first or last - first > 1000:
+        if season <= 0 or first <= 0 or end_season != season or last < first or last - first > 1000:
             raise SelectionError("selection.bad_range", rule=token)
         return tuple(EpisodeLabel(episode=n, season=season) for n in range(first, last + 1))
     match = re.fullmatch(r"(?i)(?:e|ep)?(\d{1,4})(?:-(?:e|ep)?(\d{1,4}))?", compact)

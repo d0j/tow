@@ -215,6 +215,44 @@ def test_refused_add_reopens_form_with_draft_and_saves_nothing(no_check, client,
     assert "undo" not in load_state()
 
 
+@pytest.mark.parametrize("action", ["add", "edit"])
+@pytest.mark.parametrize(
+    ("mode", "value"),
+    [
+        ("episodes", "*,1"),
+        ("episodes", "S01E00-E01"),
+        ("episodes", "S01E03-E01"),
+        ("episodes", "invalid"),
+        ("files", "../*.mkv"),
+        ("files", "/outside/*.mkv"),
+    ],
+)
+def test_invalid_selection_syntax_is_refused_before_a_check_or_state_change(no_check, client, action, mode, value):
+    _two_clients()
+    if action == "edit":
+        _seed(_topic(hash=INFOHASH))
+    before = load_state()
+    data = {
+        "title": "Show",
+        "url": RUTOR_URL,
+        "save_path": r"M:\anime",
+        "client_id": "default",
+        "selection_mode": mode,
+        "selection_value": value,
+    }
+    response = client.post("/topics/add" if action == "add" else "/topics/t1/edit", data=data, follow_redirects=False)
+    assert response.status_code == 303
+    assert load_state() == before
+    if action == "add":
+        from tow.web.views import _ADD_DRAFTS
+
+        draft = _ADD_DRAFTS.get(_query(response)["add"])
+        assert draft["error"]
+        assert draft["selection_value"] == value
+    else:
+        assert _flash(response)
+
+
 def test_unknown_tracker_add_is_logged_as_no_tracker(no_check, client):
     client.post(
         "/topics/add", data={"url": "https://unknown.example/t/1", "save_path": r"M:\a"}, follow_redirects=False

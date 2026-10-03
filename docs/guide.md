@@ -66,6 +66,10 @@ If the site is not known yet, add it first on **Sites** — pasting any topic li
 If nothing matches, or the match is unclear, nothing is started. A range of episodes that are not out yet is
 *waiting for episodes*, not an error.
 
+Specials (`Season 00`, `S00`, OVA and bonus folders) stay separate files, not ordinary season episodes.
+They can be downloaded with **All files** or **Files by pattern**, without inflating the episode counter.
+Invalid episode ranges or unsafe file patterns are refused when saving, before a client check.
+
 How an add works, for every client: the torrent is added **stopped** and tagged `tow` + `tow-pending`; the files
 are selected; the selection is **read back** from the client; only then the torrent starts and `tow-pending` is
 removed. If any step is not confirmed, TOW stops what it added and reports the failure.

@@ -346,6 +346,27 @@ def test_specials_folder_overrides_episode_like_filename():
     assert [[label.key for label in row] for row in coverages] == [["episode:e01"], []]
 
 
+@pytest.mark.parametrize("folder", ["Season 00", "Season_0", "S00", "Сезон 0", "0 сезон", "Season 00 (2026)"])
+@pytest.mark.parametrize("name", ["01.mkv", "Show.S01E01.mkv", "01.ass"])
+def test_zero_season_folder_is_special_even_with_regular_numbering(folder, name):
+    assert resolve_episode_coverages([f"{folder}/{name}"]) == ((),)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Show.S00E01&E02.mkv",
+        "Show.S01E01&E00.mkv",
+        "Show.S00E01+E02+E03.mkv",
+        "Show S0-Ep01.mkv",
+        "Show Season 0 Episode 1.mkv",
+        "Show Сезон 0 Серия 1.mkv",
+    ],
+)
+def test_explicit_zero_numbering_never_becomes_regular_episode(name):
+    assert parse_episode_coverage(name) == ()
+
+
 def test_crc_audio_and_inline_ova_do_not_invent_regular_episodes():
     assert [label.key for label in parse_episode_coverage("[Grp] Show - 05 [E3A1B2C4].mkv")] == ["episode:e05"]
     assert parse_episode_coverage("Movie.2019.DD5.1x264-G.mkv") == ()

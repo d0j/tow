@@ -53,7 +53,7 @@ flowchart TD
 | `tow.web` | FastAPI app built by `create_app()`: one `APIRouter` per `routes_*.py`, the request middleware, templates. Everything outside the package is called through `tow.web.services`. |
 | `tow.check`, `check_steps`, `check_transaction` | A check run: fetch, decide, hand to the client, record — with a journal for the commit. |
 | `tow.trackers` | `generic.GenericHttpTracker` reads any configured site; `presets/<site>.py` adds what TOW knows about a particular site. `tow.mirrors` picks mirrors, cooldowns, redirects. |
-| `tow.clients` | Torrent client adapters behind the `TorrentClientAdapter` protocol; `managed.ManagedClient` gives every client the same transactional add. |
+| `tow.clients` | Torrent adapters behind `TorrentClientAdapter`; Transmission and Deluge use `managed.ManagedClient`, while qBittorrent implements the same read-back contract separately. |
 | `tow.notifiers` | One module per messenger behind the `Notifier` protocol; `outbox` is the per-recipient delivery queue; `tow.delivery` groups, delays and digests. |
 | `tow.selection`, `tow.episodes`, `tow.torrent` | Which files to download; episode parsing; bencode and info-hash. |
 | `tow.store`, `tow.store_transaction`, `tow.site_journal` | State, history, encrypted secrets; the data lock; journaled multi-file writes. |
@@ -79,8 +79,9 @@ flowchart TD
     secrets.enc            passwords, tokens, cookies, password record — Fernet, master key
     secrets-undo.enc       the secrets before the last undoable change
     sessions.json          revoked network sessions
+    tow.jsonl              structured events — rotated
     restore-points/        restore points (.towx)
-    logs/                  tow.jsonl (events), run.log, serve.log, job logs — rotated
+    logs/                  process and job output (including serve.log) — rotated
     run/                   supervisor lock, pid, status, schedule, control/
     tmp/                   private temp folder (cleaned after a day)
     browser-auth/          temporary browser profiles for site sign-in
