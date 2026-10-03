@@ -159,4 +159,21 @@ const fixture = async (options = {}) => {
   assert.notEqual(f.el("update-log-text").textContent, "obsolete log");
   assert.doesNotMatch(f.el("release-status").textContent, /Invalid Date/);
 }
-console.log(JSON.stringify({ repeatedLostResponse: true, noStaleSuccess: true, statusRetry: true, liveJournal: true, staleLogIgnored: true, finiteDates: true }));
+// Completion during a slow read must request the final log again after that read ends.
+{
+  const f = await fixture();
+  f.el("update-log").open = true;
+  await f.click("release-install");
+  let resolve;
+  f.state.deferredLog = new Promise(done => { resolve = done; });
+  await f.poll();
+  f.state.job = { ...f.state.job, active: false, status: "ok" };
+  f.state.log = "final log after completion";
+  await f.poll();
+  f.state.deferredLog = null;
+  resolve(f.response({ text: "older log captured while preparing" }));
+  await flush();
+  assert.equal(f.el("update-log-text").textContent, "final log after completion");
+  assert.equal(f.state.logReads, 2); // one in-flight read plus one coalesced final refresh
+}
+console.log(JSON.stringify({ repeatedLostResponse: true, noStaleSuccess: true, statusRetry: true, liveJournal: true, staleLogIgnored: true, finiteDates: true, finalLogAfterSlowRead: true }));

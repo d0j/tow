@@ -3,6 +3,13 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.25] — 2026-10-03
+
+### Fixed
+
+- When installation finishes during a slow update-log read, request the final log after that read completes
+  instead of leaving older progress on screen. Coalesce refresh requests without parallel duplicate reads.
+
 ## [1.22.24] — 2026-10-03
 
 ### Fixed
