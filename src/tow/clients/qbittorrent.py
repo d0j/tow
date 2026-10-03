@@ -9,7 +9,7 @@ from typing import Any, ClassVar
 from qbittorrentapi import Client
 
 from tow.clients import files
-from tow.clients.managed import ClientError
+from tow.clients.managed import UNSAFE_STATES, ClientError, completed_progress
 from tow.clients.spec import TorrentClientAdapter
 from tow.errors import Msg
 from tow.folders import paths_equal
@@ -280,6 +280,7 @@ class QBittorrentClient:
                 resolved = self._resolved_hash(candidate, allow_full_scan=False)
                 if resolved is not None:
                     observed = self.inspect_torrent(resolved)
+                    self._check_state(observed)
                     tags = {str(tag).strip().casefold() for tag in (observed or {}).get("tags") or []}
                     if {"tow", "tow-pending"}.issubset(tags):
                         return resolved, observed or {}
@@ -287,6 +288,7 @@ class QBittorrentClient:
                 resolved = self._resolved_hash(candidates[0])
                 if resolved is not None:
                     observed = self.inspect_torrent(resolved)
+                    self._check_state(observed)
                     tags = {str(tag).strip().casefold() for tag in (observed or {}).get("tags") or []}
                     if {"tow", "tow-pending"}.issubset(tags):
                         return resolved, observed or {}
@@ -373,17 +375,22 @@ class QBittorrentClient:
             raise _fail("client.qbittorrent.no_start")
         method(torrent_hashes=infohash.lower())
 
+    @staticmethod
+    def _check_state(info: dict[str, Any] | None) -> None:
+        state = str((info or {}).get("state") or "").casefold()
+        if state in UNSAFE_STATES:
+            raise _fail("client.managed.error_state", state=state)
+
     def _wait_started(self, infohash: str) -> dict[str, Any]:
         last: dict[str, Any] | None = None
         for _attempt in range(50):
             last = self.inspect_torrent(infohash)
             if last is not None:
                 state = str(last.get("state") or "").casefold()
-                if state in {"error", "missingfiles", "unknown"}:
-                    raise _fail("client.managed.error_state", state=state)
+                self._check_state(last)
                 if state and not state.startswith(("stopped", "paused")):
                     return last
-                if state.startswith(("stopped", "paused")) and float(last.get("progress") or 0) >= 1:
+                if state.startswith(("stopped", "paused")) and completed_progress(last.get("progress")):
                     return last
             time.sleep(0.1)
         raise _fail("client.managed.start_unconfirmed")
@@ -396,6 +403,7 @@ class QBittorrentClient:
         remove(tags="tow-pending", torrent_hashes=infohash.lower())
         for attempt in range(50):
             inspected = self.inspect_torrent(infohash)
+            self._check_state(inspected)
             tags = {str(tag).strip().casefold() for tag in (inspected or {}).get("tags") or []}
             if "tow" in tags and "tow-pending" not in tags:
                 return inspected or {}
@@ -601,6 +609,7 @@ class QBittorrentClient:
             try:
                 self._require_owned(infohash)
                 self._stop(infohash)
+                self._wait_stopped(infohash)
                 for priority in sorted(set(previous.values())):
                     ids = sorted(index for index, value in previous.items() if value == priority)
                     if ids:
@@ -652,7 +661,9 @@ class QBittorrentClient:
             "hash": str(getattr(torrent, "hash", infohash) or infohash),
             "infohash_v1": str(getattr(torrent, "infohash_v1", "") or ""),
             "infohash_v2": str(getattr(torrent, "infohash_v2", "") or ""),
-            "progress": getattr(torrent, "progress", 0.0),
+            "progress": torrent.get("progress", 0.0)
+            if isinstance(torrent, Mapping)
+            else getattr(torrent, "progress", 0.0),
             "downloaded": getattr(torrent, "downloaded", 0),
             "added_on": getattr(torrent, "added_on", None),
             "completion_on": getattr(torrent, "completion_on", None),

@@ -133,6 +133,148 @@ def client() -> FakeClient:
     return FakeClient()
 
 
+@pytest.mark.parametrize(
+    "progress",
+    [
+        None,
+        True,
+        False,
+        -1,
+        0.9,
+        1.1,
+        float("inf"),
+        float("-inf"),
+        float("nan"),
+        "bad",
+        [],
+        {},
+        [1],
+        {"value": 1},
+        10**1000,
+    ],
+)
+def test_stopped_invalid_progress_never_confirms_start(client, progress):
+    client.seed(tags=[OWNER], state="stoppedDL")
+    client.torrents[H]["progress"] = progress
+    with pytest.raises(ClientError) as error:
+        client._wait_started(H)
+    assert error.value.code == "client.managed.start_unconfirmed"
+
+
+@pytest.mark.parametrize("progress", [1, 1.0, "1.0"])
+def test_completed_stopped_torrent_can_confirm_start(client, progress):
+    client.seed(tags=[OWNER], state="stoppedUP")
+    client.torrents[H]["progress"] = progress
+    assert client._wait_started(H)["state"] == "stoppedUP"
+
+
+@pytest.mark.parametrize("state", ["error", "missingFiles", "unknown"])
+def test_ownership_wait_preserves_unsafe_state(client, state):
+    client.seed(tags=[OWNER, PENDING], state=state)
+    with pytest.raises(ClientError) as error:
+        client._wait_owned(H)
+    assert error.value.code == "client.managed.error_state"
+    assert error.value.params["state"] == state.casefold()
+
+
+def test_ownership_wait_preserves_inspection_error(client, monkeypatch):
+    original = ClientError("client.managed.no_files", prefix="Fake")
+
+    def inspect(_hash):
+        raise original
+
+    monkeypatch.setattr(client, "inspect_torrent", inspect)
+    with pytest.raises(ClientError) as error:
+        client._wait_owned(H)
+    assert error.value is original
+
+
+def test_rollback_requires_confirmed_stop_before_restoring_files(client, monkeypatch, caplog):
+    client.seed(tags=[OWNER], state="downloading", wanted={E01})
+    real_stop = client._stop
+    stops = 0
+
+    def stop(infohash):
+        nonlocal stops
+        stops += 1
+        if stops == 1:
+            real_stop(infohash)
+        else:
+            client.calls.append(("stop ignored",))
+
+    def set_wanted(_hash, _wanted, _ids):
+        client.calls.append(("selection ignored",))
+        client.torrents[H]["state"] = "downloading"
+
+    monkeypatch.setattr(client, "_stop", stop)
+    monkeypatch.setattr(client, "_set_wanted", set_wanted)
+    with pytest.raises(ClientError) as error:
+        client.configure_torrent_selection(TORRENT, H, [E02])
+    assert error.value.code == "client.managed.wrong_selection"
+    assert client.calls == [("stop",), ("selection ignored",), ("stop ignored",)]
+    assert _msg("client.managed.stop_unconfirmed") in caplog.text
+
+
+def test_rollback_reports_unconfirmed_restart_without_hiding_original(client, monkeypatch, caplog):
+    client.seed(tags=[OWNER], state="downloading", wanted={E01})
+    client.start_works = False
+    real_set_wanted = client._set_wanted
+    writes = 0
+
+    def set_wanted(infohash, wanted, all_ids):
+        nonlocal writes
+        writes += 1
+        if writes > 1:
+            real_set_wanted(infohash, wanted, all_ids)
+
+    monkeypatch.setattr(client, "_set_wanted", set_wanted)
+    with pytest.raises(ClientError) as error:
+        client.configure_torrent_selection(TORRENT, H, [E02])
+    assert error.value.code == "client.managed.wrong_selection"
+    assert client.wanted_torrent_indices() == {E01}
+    assert _msg("client.managed.start_unconfirmed") in caplog.text
+
+
+def test_rollback_waits_for_delayed_stop_before_restoring_files(client, monkeypatch):
+    client.seed(tags=[OWNER], state="downloading", wanted={E01})
+    real_stop = client._stop
+    real_inspect = client.inspect_torrent
+    real_set = client._set_wanted
+    stops = writes = waiting_reads = 0
+
+    def stop(infohash):
+        nonlocal stops
+        stops += 1
+        real_stop(infohash)
+        if stops == 2:
+            client.torrents[H]["state"] = "downloading"
+
+    def inspect(infohash):
+        nonlocal waiting_reads
+        if stops == 2 and waiting_reads < 2:
+            waiting_reads += 1
+            if waiting_reads == 2:
+                client.torrents[H]["state"] = "stoppedDL"
+        return real_inspect(infohash)
+
+    def set_wanted(infohash, wanted, ids):
+        nonlocal writes
+        writes += 1
+        if writes > 1:
+            assert client.torrents[H]["state"] == "stoppedDL"
+            real_set(infohash, wanted, ids)
+
+    monkeypatch.setattr(client, "_stop", stop)
+    monkeypatch.setattr(client, "inspect_torrent", inspect)
+    monkeypatch.setattr(client, "_set_wanted", set_wanted)
+    with pytest.raises(ClientError) as error:
+        client.configure_torrent_selection(TORRENT, H, [E02])
+    assert error.value.code == "client.managed.wrong_selection"
+    assert waiting_reads == 2
+    assert client.wanted_torrent_indices() == {E01}
+    assert client.torrents[H]["state"] == "downloading"
+
+
 # --- configure_torrent_selection: refusals ----------------------------------------------------
 
 
