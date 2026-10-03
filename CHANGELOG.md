@@ -3,6 +3,16 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.24] — 2026-10-03
+
+### Fixed
+
+- Match repeated web-update requests to the new operation after a lost response, without showing an older
+  successful result or automatically resending installation. Follow newer operations from another tab.
+- Retry transient update-status failures with disabled installation controls instead of claiming the
+  installation is unsupported. Refresh an open update log through completion and ignore obsolete responses.
+- Reject invalid release-check timestamps instead of displaying an invalid date.
+
 ## [1.22.23] — 2026-10-03
 
 ### Fixed

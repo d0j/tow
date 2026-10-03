@@ -285,6 +285,10 @@ an additional exact snapshot of `config.yaml` and persistent data in `backup/`, 
 the locked environment and requires the correct version and readable data. A failed installation or health
 check rolls back code and changed data. The web page reconnects after restart, displays the actual result and
 offers an explicit reload; a lost response is not treated as proof that no job started.
+Each new request is matched to a new job, never to an older successful result. If acceptance cannot be
+confirmed, the page only retries reading status and offers reload; it does not resend installation.
+Temporary status failures disable installation controls until status is readable again. An open update
+log refreshes with progress and completion; late responses from an older operation cannot replace it.
 
 Version selection accepts only published stable releases **from 1.22.21**, which retain the exiting-parent handoff.
 The previous compatible release has a shortcut. Other versions can be entered explicitly; a target whose
