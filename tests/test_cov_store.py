@@ -131,12 +131,48 @@ def test_quarantined_history_is_never_replaced_by_an_empty_default():
         load_download_history()
 
 
-def test_download_history_with_wrong_shape_falls_back_to_schema_default():
+def test_download_history_with_wrong_shape_fails_closed_instead_of_becoming_empty():
     download_history_path().write_text("[1, 2, 3]", encoding="utf-8")
-    assert load_download_history() == {"schema_version": 1, "topics": {}}
+    with pytest.raises(StoreCorruptionError, match="unreadable"):
+        load_download_history()
+    assert not download_history_path().exists()
+    copies = list(download_history_path().parent.glob("download_history.json.corrupt-*"))
+    assert len(copies) == 1
+    assert copies[0].read_text(encoding="utf-8") == "[1, 2, 3]"
 
     download_history_path().write_text('{"topics": {"t": {}}}', encoding="utf-8")
     assert load_download_history() == {"schema_version": 1, "topics": {"t": {}}}
+
+
+@pytest.mark.parametrize("value", [[], None, True, {"topics": {}}, {"topics": [None]}, {"mirrors": []}])
+def test_invalid_state_container_never_reaches_callers(value):
+    state_path().write_text(json.dumps(value), encoding="utf-8")
+    before = state_path().read_bytes()
+    with pytest.raises(StoreCorruptionError, match="unreadable"):
+        load_state(quarantine=False)
+    assert state_path().read_bytes() == before
+    with pytest.raises(StoreCorruptionError, match="unreadable"):
+        load_state()
+    assert not state_path().exists()
+
+
+@pytest.mark.parametrize("value", [{"topics": []}, {"topics": {"t": None}}, {"topics": {"t": {"items": []}}}])
+def test_invalid_history_container_never_reaches_callers(value):
+    download_history_path().write_text(json.dumps(value), encoding="utf-8")
+    before = download_history_path().read_bytes()
+    with pytest.raises(StoreCorruptionError, match="unreadable"):
+        load_download_history(quarantine=False)
+    assert download_history_path().read_bytes() == before
+
+
+@pytest.mark.parametrize("kind", ["state", "history"])
+def test_invalid_store_structure_is_rejected_before_writing(kind):
+    original = _seed()
+    writer = save_state if kind == "state" else save_download_history
+    payload = {"topics": {}} if kind == "state" else {"topics": []}
+    with pytest.raises(StoreCorruptionError, match="malformed"):
+        writer(payload)
+    assert (state_path().read_bytes(), download_history_path().read_bytes()) == original
 
 
 def test_save_json_rejects_unserializable_payload_without_touching_the_store():
@@ -854,7 +890,7 @@ def test_journal_without_marker_is_discarded_without_restoring():
         (lambda m: m["targets"]["state"].update(backup="../state.json"), "backup binding mismatch"),
         (
             lambda m: m["targets"]["history"].update(before_exists=False, backup=None, before_sha256="ab"),
-            "malformed absent-store snapshot",
+            "malformed check transaction snapshot fingerprint",
         ),
         (lambda m: m.update(status="committed"), "lacks read-back"),
         (
@@ -898,14 +934,182 @@ def test_missing_backup_fails_closed():
     assert load_state(quarantine=False)["topics"] == _NEW_STATE["topics"]
 
 
-def test_tampered_backup_is_detected_by_restore_read_back():
+@pytest.mark.parametrize("backup", ["state.before", "download_history.before"])
+def test_tampered_backup_is_refused_before_either_store_changes(backup):
     _seed()
     _crash("prepared")
-    (_tx_root() / "state.before").write_bytes(b'{"topics": [], "mirrors": {}}\n')
+    before = (state_path().read_bytes(), download_history_path().read_bytes())
+    (_tx_root() / backup).write_bytes(b'{"topics": [], "mirrors": {}}\n')
 
-    with pytest.raises(CheckTransactionError, match=r"restore read-back mismatch: state\.json"):
+    with pytest.raises(CheckTransactionError, match="backup checksum mismatch"):
+        recover_check_transaction()
+    assert (state_path().read_bytes(), download_history_path().read_bytes()) == before
+    assert (_tx_root() / "TRANSACTION.json").exists()
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda m: m.update(status=[]),
+        lambda m: m.update(status={}),
+        lambda m: m["targets"]["state"].pop("before_exists"),
+        lambda m: m["targets"]["state"].update(before_exists="false"),
+        lambda m: m["targets"]["state"].update(before_exists=1),
+        lambda m: m["targets"]["history"].update(before_sha256=None),
+        lambda m: m["targets"]["history"].update(before_sha256="z" * 64),
+        lambda m: m["targets"]["history"].update(before_sha256=[]),
+        lambda m: m["after"]["state"].update(exists="false"),
+        lambda m: m["after"]["history"].update(sha256="invalid"),
+        lambda m: m["after"]["history"].update(exists=False),
+    ],
+)
+def test_invalid_marker_types_leave_both_stores_and_journal_unchanged(mutate):
+    _seed()
+    _crash("committed")
+    _edit_marker(mutate)
+    before = (state_path().read_bytes(), download_history_path().read_bytes())
+    marker = (_tx_root() / "TRANSACTION.json").read_bytes()
+    with pytest.raises(CheckTransactionError):
+        recover_check_transaction()
+    assert (state_path().read_bytes(), download_history_path().read_bytes()) == before
+    assert (_tx_root() / "TRANSACTION.json").read_bytes() == marker
+
+
+@pytest.mark.parametrize(
+    "raw", [b"[" * 20000 + b"]" * 20000, b'{"number":' + b"1" * 5000 + b"}"], ids=["deep", "large-number"]
+)
+def test_marker_parser_limits_are_reported_as_recovery_errors(raw):
+    _seed()
+    _crash("prepared")
+    (_tx_root() / "TRANSACTION.json").write_bytes(raw)
+    before = (state_path().read_bytes(), download_history_path().read_bytes())
+    with pytest.raises(CheckTransactionError, match="marker is unreadable"):
+        recover_check_transaction()
+    assert (state_path().read_bytes(), download_history_path().read_bytes()) == before
+
+
+@pytest.mark.parametrize("name", ["state.before", "TRANSACTION.json", ".state.before.test.tmp"])
+def test_journal_directories_with_allowed_names_are_not_deleted(name):
+    root = _tx_root()
+    root.mkdir()
+    (root / name).mkdir()
+    with pytest.raises(CheckTransactionError, match="unexpected entry"):
+        recover_check_transaction()
+    assert (root / name).is_dir()
+
+
+def test_recovery_preflights_all_targets_before_restoring_the_first():
+    _seed()
+    _crash("prepared")
+    state_before = state_path().read_bytes()
+    download_history_path().unlink()
+    download_history_path().mkdir()
+    with pytest.raises(CheckTransactionError, match="not a regular file"):
+        recover_check_transaction()
+    assert state_path().read_bytes() == state_before
+    assert download_history_path().is_dir()
+    assert (_tx_root() / "TRANSACTION.json").exists()
+
+
+def test_failed_journal_reservation_never_deletes_another_directory(monkeypatch):
+    _seed()
+    real_mkdir = Path.mkdir
+    root = _tx_root()
+
+    def racing_mkdir(path, *args, **kwargs):
+        if path == root:
+            real_mkdir(path)
+            (path / "foreign.txt").write_bytes(b"not ours")
+            raise FileExistsError("reserved by another writer")
+        return real_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", racing_mkdir)
+    with pytest.raises(CheckTransactionError, match="cannot prepare"), check_store_transaction():
+        pytest.fail("the check must not start")
+    assert (_tx_root() / "foreign.txt").read_bytes() == b"not ours"
+
+
+def test_recovery_uses_verified_bytes_even_if_a_backup_changes_later(monkeypatch):
+    original = _seed()
+    _crash("prepared")
+    real_write = check_transaction.atomic_write_bytes
+
+    def changing_backup(path, content):
+        if path == state_path():
+            (_tx_root() / "download_history.before").write_bytes(b"corrupted after preflight")
+        return real_write(path, content)
+
+    monkeypatch.setattr(check_transaction, "atomic_write_bytes", changing_backup)
+    recover_check_transaction()
+    assert (state_path().read_bytes(), download_history_path().read_bytes()) == original
+    assert not _tx_root().exists()
+
+
+def test_failed_second_restore_can_be_retried_with_the_complete_journal(monkeypatch):
+    original = _seed()
+    _crash("prepared")
+    real_write = check_transaction.atomic_write_bytes
+    with monkeypatch.context() as patched:
+        patched.setattr(
+            check_transaction,
+            "atomic_write_bytes",
+            _fail_for("download_history.json", real_write, PermissionError("locked")),
+        )
+        with pytest.raises(CheckTransactionError, match="cannot restore check store"):
+            recover_check_transaction()
+        assert (_tx_root() / "TRANSACTION.json").exists()
+    recover_check_transaction()
+    assert (state_path().read_bytes(), download_history_path().read_bytes()) == original
+    assert not _tx_root().exists()
+
+
+def test_bad_restore_write_readback_keeps_the_journal(monkeypatch):
+    _seed()
+    _crash("prepared")
+    real_write = check_transaction.atomic_write_bytes
+
+    def corrupt_write(path, content):
+        return real_write(path, b"bad write" if path == state_path() else content)
+
+    monkeypatch.setattr(check_transaction, "atomic_write_bytes", corrupt_write)
+    with pytest.raises(CheckTransactionError, match="restore read-back mismatch"):
         recover_check_transaction()
     assert (_tx_root() / "TRANSACTION.json").exists()
+
+
+def test_bad_backup_write_is_rejected_before_the_check_starts(monkeypatch):
+    original = _seed()
+    real_write = check_transaction.atomic_write_bytes
+
+    def corrupt_write(path, content):
+        return real_write(path, b"bad copy" if path.name == "download_history.before" else content)
+
+    monkeypatch.setattr(check_transaction, "atomic_write_bytes", corrupt_write)
+    with pytest.raises(CheckTransactionError, match="backup checksum mismatch"), check_store_transaction():
+        pytest.fail("the check must not start")
+    assert (state_path().read_bytes(), download_history_path().read_bytes()) == original
+    assert not _tx_root().exists()
+
+
+@pytest.mark.parametrize("name", [".tow-check-transaction", "state.before", "state.json"])
+def test_reparse_paths_are_refused_without_store_changes(monkeypatch, name):
+    import stat
+    from types import SimpleNamespace
+
+    _seed()
+    _crash("prepared")
+    before = (state_path().read_bytes(), download_history_path().read_bytes())
+    real_lstat = Path.lstat
+
+    def reparse(path, *args, **kwargs):
+        if path.name == name:
+            return SimpleNamespace(st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT)
+        return real_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "lstat", reparse)
+    with pytest.raises(CheckTransactionError):
+        recover_check_transaction()
+    assert (state_path().read_bytes(), download_history_path().read_bytes()) == before
 
 
 def test_unreadable_backup_fails_closed(monkeypatch):
@@ -913,7 +1117,7 @@ def test_unreadable_backup_fails_closed(monkeypatch):
     _crash("prepared")
     monkeypatch.setattr(Path, "read_bytes", _fail_for("state.before", Path.read_bytes, PermissionError("locked")))
 
-    with pytest.raises(CheckTransactionError, match=r"cannot restore check store: state\.json"):
+    with pytest.raises(CheckTransactionError, match=r"cannot read check store: state\.before"):
         recover_check_transaction()
     assert _tx_root().exists()
 

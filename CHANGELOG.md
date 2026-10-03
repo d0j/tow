@@ -3,6 +3,21 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.18] — 2026-10-03
+
+### Fixed
+
+- Check recovery verifies every backup and target before changing either state or download history, and restores
+  the already verified bytes. Damaged copies cannot overwrite working stores before the error is detected.
+- Malformed recovery fields, parser limits, directories and Windows reparse points fail closed. A failed journal
+  reservation never deletes another writer's files; backup writes are verified before a check can start.
+- Settings and undo recovery also reuse verified backup bytes and preflight every target. Cleanup only removes
+  recognized regular journal files; interrupted preparation or cleanup no longer leaves a permanently blocking journal.
+- Persistent JSON rejects non-finite numbers and reports integer/depth parser limits as storage errors. Writes
+  cannot persist invalid numbers; a transient I/O error during a corruption recheck never quarantines a valid replacement.
+- Malformed state/history containers fail closed instead of becoming empty history or escaping as attribute errors.
+  Read-only checks preserve the source; applying reads retain the corrupt bytes in quarantine, and invalid writes are refused.
+
 ## [1.22.17] — 2026-10-03
 
 ### Fixed

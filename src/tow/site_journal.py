@@ -18,15 +18,16 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
-import json
-import shutil
+import stat
 from pathlib import Path
+from typing import Any
 
 from tow.paths import config_path, secrets_path, state_path
-from tow.store import atomic_write_bytes
+from tow.store import atomic_write_bytes, decode_json_bytes
 
 FORMAT = "tow-site-transaction/v1"
 DIR_NAME = ".tow-site-transaction"
+_FILES = frozenset({"MANIFEST.json", "config.bin", "state.bin", "secrets.bin", "secret_undo.bin"})
 
 
 def secret_undo_path() -> Path:
@@ -50,34 +51,89 @@ def digest(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
-def remove_journal(root: Path) -> None:
-    if not root.exists():
-        return
-    if root.is_symlink() or not root.is_dir():
-        raise RuntimeError("site transaction journal path is unsafe")
-    shutil.rmtree(root)
-
-
-def recover_unlocked(root: Path, targets: dict[str, Path]) -> bool:
-    """Roll an unfinished transaction back (the caller holds the data lock); True if it did."""
-    if not root.exists():
+def is_link(path: Path) -> bool:
+    if path.is_symlink():
+        return True
+    try:
+        attributes = getattr(path.lstat(), "st_file_attributes", 0)
+    except FileNotFoundError:
         return False
-    if root.is_symlink() or not root.is_dir():
+    except OSError as exc:
+        raise RuntimeError("site transaction path cannot be inspected") from exc
+    return bool(attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def _own_temporary(name: str) -> bool:
+    return name.endswith(".tmp") and any(name.startswith(f".{allowed}.") for allowed in _FILES)
+
+
+def _validate_root(root: Path) -> None:
+    if is_link(root) or not root.is_dir():
         raise RuntimeError("site transaction journal path is unsafe")
     try:
-        manifest = json.loads((root / "MANIFEST.json").read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        entries = list(root.iterdir())
+    except OSError as exc:
+        raise RuntimeError("site transaction journal cannot be inspected") from exc
+    if any(
+        is_link(entry) or not entry.is_file() or (entry.name not in _FILES and not _own_temporary(entry.name))
+        for entry in entries
+    ):
+        raise RuntimeError("site transaction journal contains an unexpected entry")
+
+
+def remove_journal(root: Path) -> None:
+    if is_link(root):
+        raise RuntimeError("site transaction journal path is unsafe")
+    if not root.exists():
+        return
+    _validate_root(root)
+    try:
+        # Removing the marker first makes interrupted cleanup recognizable: stores
+        # are final, so a later lock holder only removes the remaining owned files.
+        (root / "MANIFEST.json").unlink(missing_ok=True)
+        for entry in root.iterdir():
+            if entry.name in _FILES or _own_temporary(entry.name):
+                entry.unlink(missing_ok=True)
+        root.rmdir()
+    except OSError as exc:
+        raise RuntimeError("site transaction journal cleanup failed") from exc
+
+
+def read_store(path: Path, key: str) -> bytes | None:
+    if is_link(path) or (path.exists() and not path.is_file()):
+        raise RuntimeError(f"store transaction target is unsafe: {key}")
+    if not path.exists():
+        return None
+    try:
+        return path.read_bytes()
+    except OSError as exc:
+        raise RuntimeError(f"site transaction store cannot be read: {key}") from exc
+
+
+def _load_manifest(root: Path) -> dict[str, Any]:
+    try:
+        manifest = decode_json_bytes((root / "MANIFEST.json").read_bytes())
+    except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         raise RuntimeError("site transaction journal is unreadable") from exc
     if not isinstance(manifest, dict) or manifest.get("format") != FORMAT:
         raise RuntimeError("site transaction journal format is invalid")
     status = manifest.get("status")
-    if status == "committed":
-        remove_journal(root)
-        return False
-    if status != "prepared" or not isinstance(manifest.get("targets"), list):
+    if status not in ("prepared", "committed") or not isinstance(manifest.get("targets"), list):
         raise RuntimeError("site transaction journal state is invalid")
-    entries = {entry.get("key"): entry for entry in manifest["targets"] if isinstance(entry, dict)}
-    if set(entries) != set(targets) or len(entries) != len(manifest["targets"]):
+    return manifest
+
+
+def _validated_entries(manifest: dict[str, Any], targets: dict[str, Path]) -> dict[str, dict[str, Any]]:
+    entries: dict[str, dict[str, Any]] = {}
+    for entry in manifest["targets"]:
+        if not isinstance(entry, dict) or not isinstance(entry.get("key"), str):
+            # Recovery failures use RuntimeError so the web boundary returns 503.
+            raise RuntimeError("site transaction journal targets are invalid")  # noqa: TRY004
+        key = entry["key"]
+        if key not in targets or key in entries:
+            raise RuntimeError("site transaction journal targets are invalid")
+        entries[key] = entry
+    if set(entries) != set(targets):
         raise RuntimeError("site transaction journal targets are invalid")
     for key, target in targets.items():
         entry = entries[key]
@@ -91,25 +147,66 @@ def recover_unlocked(root: Path, targets: dict[str, Path]) -> bool:
         if exists:
             if backup_name != f"{key}.bin":
                 raise RuntimeError("site transaction journal backup name is invalid")
-            backup = root / backup_name
-            if backup.is_symlink() or not backup.is_file():
-                raise RuntimeError("site transaction journal backup is missing")
-            if entry.get("sha256") != digest(backup.read_bytes()):
-                raise RuntimeError("site transaction journal backup checksum mismatch")
+            checksum = entry.get("sha256")
+            if (
+                not isinstance(checksum, str)
+                or len(checksum) != 64
+                or any(c not in "0123456789abcdef" for c in checksum)
+            ):
+                raise RuntimeError("site transaction journal backup checksum is invalid")
         elif backup_name is not None or entry.get("sha256") is not None:
             raise RuntimeError("site transaction journal has unexpected backup")
+    return entries
+
+
+def _restore_plan(root: Path, targets: dict[str, Path], entries: dict[str, dict[str, Any]]) -> dict[str, bytes | None]:
+    plan: dict[str, bytes | None] = {}
     for key, target in targets.items():
+        read_store(target, key)
         entry = entries[key]
         if entry["exists"]:
-            content = (root / entry["backup"]).read_bytes()
-            atomic_write_bytes(target, content)
-            if target.read_bytes() != content:
-                raise RuntimeError(f"site transaction recovery read-back failed: {key}")
+            content = read_store(root / f"{key}.bin", key)
+            if content is None:
+                raise RuntimeError("site transaction journal backup is missing")
+            if entry["sha256"] != digest(content):
+                raise RuntimeError("site transaction journal backup checksum mismatch")
+            plan[key] = content
         else:
-            with contextlib.suppress(FileNotFoundError):
-                target.unlink()
-            if target.exists():
-                raise RuntimeError(f"site transaction recovery could not remove: {key}")
+            plan[key] = None
+    return plan
+
+
+def recover_unlocked(root: Path, targets: dict[str, Path]) -> bool:
+    """Roll an unfinished transaction back (the caller holds the data lock); True if it did."""
+    if is_link(root):
+        raise RuntimeError("site transaction journal path is unsafe")
+    if not root.exists():
+        return False
+    _validate_root(root)
+    if not (root / "MANIFEST.json").exists():
+        # Preparation had not published its marker, or final cleanup was interrupted.
+        remove_journal(root)
+        return False
+    manifest = _load_manifest(root)
+    entries = _validated_entries(manifest, targets)
+    if manifest["status"] == "committed":
+        remove_journal(root)
+        return False
+    plan = _restore_plan(root, targets, entries)
+    try:
+        for key, target in targets.items():
+            content = plan[key]
+            if content is not None:
+                atomic_write_bytes(target, content)
+                if read_store(target, key) != content:
+                    raise RuntimeError(f"site transaction recovery read-back failed: {key}")
+            else:
+                with contextlib.suppress(FileNotFoundError):
+                    target.unlink()
+                if target.exists():
+                    raise RuntimeError(f"site transaction recovery could not remove: {key}")
+    except OSError as exc:
+        raise RuntimeError("site transaction recovery write failed") from exc
     remove_journal(root)
     return True
 
@@ -120,6 +217,4 @@ def recover_site_journal() -> None:
     A transaction in progress is never in the way: the web writes it while it holds the
     data lock, so no other thread or process can take the lock (and run this) meanwhile.
     """
-    root = journal_root()
-    if root.exists():
-        recover_unlocked(root, journal_targets())
+    recover_unlocked(journal_root(), journal_targets())
