@@ -112,15 +112,19 @@ def main() -> int:
     parent = int(args.pop(0)) if mode in {"--after-parent", "--broker-child"} else 0
     _app, job_path, job_id, _version = args
     if mode == "--broker-child":
-        job = json.loads(Path(job_path).read_text(encoding="utf-8"))
+        folder = Path(__file__).resolve().parent
+        record = folder.parent / "job.json"
+        if folder.name != job_id or str(record) != job_path:
+            return 2
+        job = json.loads(record.read_text(encoding="utf-8"))
         if job.get("id") != job_id or job.get("status") != "queued":
             return 2
         with (
-            (Path(job_path).parent / job_id / "update.log").open("a", encoding="utf-8") as output,
+            (folder / "update.log").open("a", encoding="utf-8") as output,
             contextlib.redirect_stdout(output),
             contextlib.redirect_stderr(output),
         ):
-            return handoff(mode, parent, args)
+            return handoff(mode, parent, [_app, str(record), folder.name, _version])
     return handoff(mode, parent, args)
 
 

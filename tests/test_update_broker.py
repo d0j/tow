@@ -103,6 +103,7 @@ def test_broker_worker_checks_independence_and_parent_before_running(
     path = tmp_path / "job.json"
     path.write_text(json.dumps({"id": "owned", "status": "queued"}))
     (tmp_path / "owned").mkdir()
+    monkeypatch.setattr(update_worker, "__file__", str(tmp_path / "owned" / "worker.py"))
     calls = []
 
     def broker(argv):
@@ -155,3 +156,19 @@ def test_expired_or_invalid_reservations_cannot_start_late(tmp_path, monkeypatch
     path.write_text(json.dumps({"id": "owned", "status": "queued", "started_at": started}))
     assert update_worker.run(tmp_path, path, "owned", "1.22.23", None) == 2
     assert json.loads(path.read_text())["error"] == "releases.interrupted"
+
+
+@pytest.mark.parametrize("foreign", ["path", "id"])
+def test_broker_child_refuses_foreign_record_before_any_file_access(tmp_path, monkeypatch, foreign):
+    folder = tmp_path / "owned"
+    monkeypatch.setattr(update_worker, "__file__", str(folder / "worker.py"))
+    record = tmp_path / "job.json" if foreign == "id" else tmp_path / "foreign.json"
+    identifier = "other" if foreign == "id" else "owned"
+    monkeypatch.setattr(
+        update_worker.sys,
+        "argv",
+        ["worker.py", "--broker-child", "42", str(tmp_path), str(record), identifier, "1.22.23"],
+    )
+    assert update_worker.main() == 2
+    assert not folder.exists()
+    assert not record.exists()
