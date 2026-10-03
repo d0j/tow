@@ -61,6 +61,7 @@
   let generation = 0;
   let pollRequest = null;
   let logRequest = null;
+  let logRefreshPending = false;
   let pollTimer = null;
   let rollbackVersion = "";
   let busy = false;
@@ -241,8 +242,11 @@
   previous?.addEventListener("click", () => { begin(rollbackVersion); });
   reload?.addEventListener("click", () => { window.location.reload(); });
   const refreshLog = async () => {
-    if (!logPanel?.open || !logText || pendingTarget ||
-        (logRequest?.generation === generation && logRequest.job === seenJob)) return;
+    if (!logPanel?.open || !logText || pendingTarget) return;
+    if (logRequest?.generation === generation && logRequest.job === seenJob) {
+      logRefreshPending = true;
+      return;
+    }
     const request = { generation, job: seenJob };
     logRequest = request;
     try {
@@ -253,7 +257,10 @@
     } catch {
       if (request.generation === generation && request.job === seenJob) logText.textContent = t("js.releases.log_unavailable");
     } finally {
-      if (logRequest === request) logRequest = null;
+      if (logRequest === request) {
+        logRequest = null;
+        if (logRefreshPending) { logRefreshPending = false; refreshLog(); }
+      }
     }
   };
   logPanel?.addEventListener("toggle", refreshLog);
