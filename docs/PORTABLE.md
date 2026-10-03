@@ -264,6 +264,54 @@ registration is taken over (or turned off).
 
 ## 4. Update: `tow update --ref <tag>` (`scripts/update.py`)
 
+### Web updates (1.22.20)
+
+Every page shows the installed version. A new stable-release badge opens Settings → Service → Version and
+updates, without a modal or an automatic installation. The shared release cache checks at most every 12 hours
+while the interface is open (manual checks are throttled to one per minute; failures back off for an hour).
+No configuration, topics, credentials or diagnostics are sent to GitHub. Offline means “not checked”, not
+“up to date”. Normal pages and health do not wait for release discovery.
+
+**Update** requires confirmation and a published stable version. Before launching anything, TOW exports and
+reads back an encrypted `.towx` archive of settings, topics, history and credentials into the configured restore
+points folder. Its key is derived from the installation's master key: keep `keys/master.key` separately, since
+the archive does not contain it. Download a portable backup for moving to another computer; a server-local
+copy alone does not protect against disk loss. Media files are never included or changed.
+
+The updater and its base Python run outside `app/` and `.venv/`, so replacing the environment or closing the
+web page does not stop the update. Its durable record and bounded redacted log live in `runtime/web-update/`.
+Normal web mutations are refused while the job is active. The existing updater stops TOW, creates and verifies
+an additional exact snapshot of `config.yaml` and persistent data in `backup/`, then switches code, synchronizes
+the locked environment and requires the correct version and readable data. A failed installation or health
+check rolls back code and changed data. The web page reconnects after restart, displays the actual result and
+offers an explicit reload; a lost response is not treated as proof that no job started.
+
+Version selection accepts only published stable releases **from 1.22.20**, which retain these web controls.
+The previous compatible release has a shortcut. Other versions can be entered explicitly; a target whose
+declared state schema is older than the current data is refused before stopping TOW. This is not a promise of
+safe downgrade to every historical release: older versions use the terminal, and future incompatible migrations
+need restoration of matching data as well as code. Interrupted jobs are not silently overwritten; inspect the
+local log, recover through the terminal and verify health before retrying.
+An updater record confirming a later successful terminal recovery of the running version releases the stale
+web-job reservation; reading status never erases the previous job or changes data.
+
+Windows requires the worker to escape the supervisor's kill-on-close job; refusal never falls back to a child
+that will die with it. Linux/macOS installs started normally can detach into their own session. Web updates of
+systemd/launchd-managed installations are currently refused with terminal instructions: a new session alone
+does not guarantee survival when the service manager stops the process group or cgroup. No autostart or network
+access settings are changed by enabling these controls.
+
+Release discovery uses fixed HTTPS endpoints of `d0j/tow` with public-IP-pinned requests, strict version checks,
+timeouts and response limits. Archive installs verify SHA256SUMS; git installs use the configured origin.
+These establish integrity and transport/repository trust, **not an independent publisher signature**. Keep
+the configured origin trusted; installing from an arbitrary URL or branch is not a web option.
+
+Export without overwrite atomically publishes prepared bytes (Windows rename; POSIX hard link) and refuses an
+occupied name even if another writer creates it during preparation. POSIX destinations without hard-link support
+fail safely rather than using a replacement fallback; choose a supported local filesystem. Unreadable/foreign
+restore archives are preserved during rotation. Failure to delete an old copy retains the verified new copy
+and reports a cleanup warning.
+
 `app/scripts/update.py`: standard library only, Python 3.11 syntax, run by the install's **base**
 Python (the one `app/.venv/pyvenv.cfg` names), not the venv, so `uv sync` can replace venv files
 on Windows. `tow update --ref <tag>` prints the exact command; on Windows

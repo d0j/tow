@@ -30,6 +30,7 @@ from tow.store import (
     SecretStoreError,
     StateVersionError,
     StoreCorruptionError,
+    atomic_create_bytes,
     atomic_write_bytes,
     decode_json_bytes,
     encrypted_secrets_path,
@@ -609,6 +610,11 @@ def load_json_for_export(path: Path, default: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def verify_bundle(path: Path, passphrase: str) -> None:
+    """Decrypt and validate an archive without recovering or changing any live store."""
+    _read_bundle(path, passphrase)
+
+
 def export_bundle(
     output: Path, passphrase: str, *, include_log: bool = False, overwrite: bool = False
 ) -> dict[str, Any]:
@@ -627,7 +633,7 @@ def _export_bundle(
     output = Path(output)
     if output.exists() and not overwrite:
         raise ExportImportError("export output already exists; choose another path or use --force")
-    previous = output.read_bytes() if output.is_file() else None
+    previous = output.read_bytes() if overwrite and output.is_file() else None
     members = _build_export_members(include_log=include_log)
     payload = _zip_payload(members)
     salt = os.urandom(KDF_SALT_BYTES)
@@ -641,7 +647,11 @@ def _export_bundle(
         },
         "payload": _encrypt_outer(payload, passphrase, salt),
     }
-    _atomic_write(output, _json_bytes(outer))
+    content = _json_bytes(outer)
+    if overwrite:
+        _atomic_write(output, content)
+    else:
+        atomic_create_bytes(output, content)
     _restrict_file(output)
     try:
         verified = _read_bundle(output, passphrase)
@@ -650,7 +660,8 @@ def _export_bundle(
     except ExportImportError:
         if previous is None:
             with contextlib.suppress(OSError):
-                output.unlink()
+                if not output.is_symlink() and output.read_bytes() == content:
+                    output.unlink()  # never remove a replacement supplied by another writer
         else:
             _atomic_write(output, previous)
         raise

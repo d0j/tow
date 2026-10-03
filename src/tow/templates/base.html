@@ -98,6 +98,10 @@
       </svg>
     </a>
   </div>
+  <div class="app-version">
+    <a href="/settings?open=service#acc-service" title="{{ t('releases.current', version=h.ver) }}">TOW {{ h.ver }}</a>
+    <a href="/settings?open=service#acc-service" class="release-badge" data-release-badge hidden></a>
+  </div>
 </header>
 <main id="main" aria-labelledby="page-title">
   {#- A message an action left (typed flash): its kind comes from the route - ok fades, warn stays, err is an alert that stays. -#}
@@ -116,5 +120,6 @@
 </dialog>
 <script type="application/json" id="tow-i18n">{{ js_texts()|tojson }}</script>
 <script src="/static/app.js?v={{ static_version }}" defer></script>
+<script src="/static/updates.js?v={{ static_version }}" defer></script>
 </body>
 </html>

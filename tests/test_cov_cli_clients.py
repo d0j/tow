@@ -1005,6 +1005,8 @@ def _stub_export(monkeypatch) -> None:
         "export_bundle",
         lambda path, _passphrase, **_kwargs: Path(path).write_bytes(b"bundle") and {"ok": True},
     )
+    # Synthetic archives stand in for this installation's verified copies.
+    monkeypatch.setattr(restore_points, "verify_bundle", lambda *_args: None)
 
 
 def test_list_is_newest_first_and_skips_damaged_entries():
@@ -1059,15 +1061,15 @@ def test_create_rotates_to_the_limit_but_keeps_protected_points(monkeypatch):
 
 
 @pytest.mark.skipif(os.name != "nt", reason="read-only files refuse deletion only on Windows")
-def test_create_that_cannot_rotate_removes_its_new_point():
+def test_create_that_cannot_rotate_keeps_its_new_point_with_warning():
     old = [_fake_point(f"202001{day:02d}T000000Z", f"{day:08x}") for day in range(1, 11)]
     old[0].chmod(stat.S_IREAD)
     try:
         with pytest.MonkeyPatch.context() as monkeypatch:
             _stub_export(monkeypatch)
-            with pytest.raises(RestorePointError, match=_says("cannot_create", reason=_text("cannot_rotate"))):
-                create_restore_point()
-        assert sorted(point["id"] for point in list_restore_points()) == sorted(path.stem for path in old)
+            created = create_restore_point()
+        assert created["cleanup_warning"] == _text("cleanup_warning")
+        assert {point["id"] for point in list_restore_points()} == {created["id"], *(path.stem for path in old)}
     finally:
         old[0].chmod(stat.S_IREAD | stat.S_IWRITE)
 

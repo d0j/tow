@@ -10,6 +10,15 @@ import pytest
 NODE = shutil.which("node")
 
 
+@pytest.mark.allow_system
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_web_update_confirmation_lost_response_rollback_and_offline():
+    script = Path(__file__).parent / "js" / "release_updates.mjs"
+    result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=30, check=True)
+    verdict = json.loads(result.stdout.strip().splitlines()[-1])
+    assert all(verdict.values())
+
+
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_home_countdown_polls_with_backoff_and_never_in_a_hidden_tab():

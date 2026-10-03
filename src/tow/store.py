@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from cryptography.fernet import Fernet
 from tow.paths import data_dir, download_history_path, key_file, legacy_key_file, secrets_path
 from tow.paths import state_path as state_path  # noqa: PLC0414 - re-exported: the web package imports it from here
+from tow.platform import current as current_platform
 from tow.platform import locks
 
 
@@ -328,6 +329,15 @@ def write_generation() -> int:
 
 
 def atomic_write_bytes(path: Path, content: bytes) -> None:
+    _atomic_write_bytes(path, content, overwrite=True)
+
+
+def atomic_create_bytes(path: Path, content: bytes) -> None:
+    """Publish complete bytes only if the name is free, never clobber another writer."""
+    _atomic_write_bytes(path, content, overwrite=False)
+
+
+def _atomic_write_bytes(path: Path, content: bytes, *, overwrite: bool) -> None:
     global _write_generation
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_name = None
@@ -344,7 +354,10 @@ def atomic_write_bytes(path: Path, content: bytes) -> None:
                 handle.write(content)
                 handle.flush()
                 os.fsync(handle.fileno())
-            _replace_with_retry(temporary_name, path)
+            if overwrite:
+                _replace_with_retry(temporary_name, path)
+            else:
+                current_platform().publish_exclusive(temporary_name, path)
             _write_generation += 1  # after the replace, under the writer lock (one writer at a time)
             try:
                 directory_fd = os.open(path.parent, os.O_RDONLY)

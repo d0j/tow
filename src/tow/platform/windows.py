@@ -395,6 +395,7 @@ class WindowsBackend:
         log_path: Path | None = None,
         cwd: Path | None = None,
         env: dict[str, str] | None = None,
+        require_breakaway: bool = False,
     ) -> int:
         """Start ``argv`` so it outlives this process (and the task or console that started it)."""
         flags = CREATE_NEW_PROCESS_GROUP | (CREATE_NO_WINDOW if hidden else CREATE_NEW_CONSOLE)
@@ -412,7 +413,7 @@ class WindowsBackend:
                         close_fds=True,
                     )
                 except PermissionError:
-                    if extra:
+                    if extra and not require_breakaway:
                         continue
                     raise
                 return int(process.pid)
@@ -420,6 +421,10 @@ class WindowsBackend:
 
     def process_alive(self, pid: int) -> bool:
         return process_alive(pid)
+
+    def publish_exclusive(self, source: Path, destination: Path) -> None:
+        """Windows rename refuses an existing destination, including on non-NTFS volumes."""
+        os.rename(source, destination)
 
     def bind_children(self) -> bool:
         return bind_children()

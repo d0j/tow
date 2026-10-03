@@ -25,6 +25,8 @@ def test_the_service_card_shows_one_process_and_its_autostart():
     # 1.21: the five Windows tasks and the switch from them are gone.
     assert 'action="/settings/service/migrate"' not in page
     assert "пятью задачами" not in page
+    assert "задачами Windows" not in page
+    assert "сам сторож не перезапускает TOW" in page
 
 
 def test_the_switch_route_is_gone():

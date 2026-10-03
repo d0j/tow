@@ -322,6 +322,39 @@
         <span class="pill {{ 'ok' if service.autostart else 'mut' }}">{{ t('settings.service.autostart_on') if service.autostart else t('settings.service.autostart_off') }}</span>
       </summary>
       <div class="settings-panel">
+        <section id="updates" class="release-panel" aria-labelledby="release-title">
+          <h2 id="release-title">{{ t('releases.title') }}</h2>
+          <p>{{ t('releases.current', version=hh.ver) }}</p>
+          <p class="action-hint" data-release-status role="status">{{ t('releases.pending') }}</p>
+          <div class="settings-actions">
+            <button type="button" class="ghost" data-release-check>{{ t('releases.check') }}</button>
+            <a href="https://github.com/d0j/tow/releases" class="btn ghost" data-release-notes target="_blank" rel="noopener noreferrer">{{ t('releases.notes') }}</a>
+            <button type="button" data-release-install hidden disabled>{{ t('releases.update_button') }}</button>
+          </div>
+          <p class="action-hint" data-update-progress role="status" hidden></p>
+          <div class="settings-actions"><button type="button" class="ghost" data-update-reload hidden>{{ t('js.releases.reload') }}</button></div>
+          <p class="action-hint" data-update-support></p>
+          <details class="technical-details" data-update-rollback hidden>
+            <summary>{{ t('releases.rollback_title') }}</summary>
+            <p class="action-hint">{{ t('releases.rollback_policy') }}</p>
+            <div class="field">
+              <label for="rollback-version">{{ t('releases.target_label') }}</label>
+              <input id="rollback-version" data-update-version inputmode="text" placeholder="1.22.20" maxlength="32" autocomplete="off">
+            </div>
+            <div class="settings-actions"><button type="button" class="ghost" data-update-apply>{{ t('releases.apply_version') }}</button><button type="button" class="ghost" data-update-previous hidden></button></div>
+          </details>
+          <p class="action-hint">{{ t('releases.policy') }}</p>
+          <details class="technical-details">
+            <summary>{{ t('releases.how') }}</summary>
+            <p>{{ t('releases.install') }}</p>
+            <code data-release-command>{{ os_launcher() }} update --ref v{{ hh.ver }}</code>
+          </details>
+          <details class="technical-details" data-update-log>
+            <summary>{{ t('releases.log') }}</summary>
+            <pre data-update-log-text>{{ t('releases.log_pending') }}</pre>
+          </details>
+          <noscript><p class="action-hint">{{ t('releases.no_script') }}</p></noscript>
+        </section>
         <p class="action-hint">{{ t('settings.service.mode_supervisor') }}</p>
         <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
           <input type="hidden" name="enabled" value="0">

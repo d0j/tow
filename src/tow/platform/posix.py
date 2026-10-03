@@ -304,6 +304,10 @@ class PosixBackend:
         self.name = name
         self._home = home
 
+    def publish_exclusive(self, source: Path, destination: Path) -> None:
+        """Publish complete bytes without replacement; unsupported filesystems fail closed."""
+        os.link(source, destination)
+
     @property
     def home(self) -> str:
         value = self._home if self._home is not None else os.environ.get("HOME", "")
@@ -346,8 +350,11 @@ class PosixBackend:
         log_path: Path | None = None,
         cwd: Path | None = None,
         env: dict[str, str] | None = None,
+        require_breakaway: bool = False,
     ) -> int:
         """Start ``argv`` in its own session, so it outlives this process and its terminal."""
+        if require_breakaway and os.environ.get("TOW_AUTOSTART") in {"systemd", "launchd"}:
+            raise OSError("the updater needs an independent service-manager job")
         with _common.output_to(log_path) as output:
             process = subprocess.Popen(
                 list(argv),

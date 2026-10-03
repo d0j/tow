@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import contextlib
+import logging
 import re
 import stat
 import uuid
@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from tow.bundle import ExportImportError, export_bundle, import_bundle, rollback_import
+from tow.bundle import ExportImportError, export_bundle, import_bundle, rollback_import, verify_bundle
 from tow.config import load_config
 from tow.i18n import t
 from tow.log import owner_language
@@ -133,11 +133,16 @@ def _prune(*, protected: set[str]) -> None:
         point_id = str(point["id"])
         if point_id in protected:
             continue
+        path = point_path(point_id)
+        try:
+            verify_bundle(path, _passphrase())
+        except ExportImportError:
+            continue  # a foreign, unreadable or damaged copy is never ours to remove
         keep += 1
         if keep <= RESTORE_POINT_LIMIT - len(protected):
             continue
         try:
-            point_path(point_id).unlink()
+            path.unlink()
         except OSError as exc:
             raise RestorePointError(
                 t("backup.restore_point.cannot_rotate", owner_language()), kind=CREATE_FAILED
@@ -167,16 +172,21 @@ def _create_restore_point(*, protected: set[str] | None = None) -> dict[str, Any
         view = _point_view(path)
         if view is None:
             raise RestorePointError(t("backup.restore_point.read_back_failed", owner_language()), kind=CREATE_FAILED)
-        _prune(protected={point_id, *(protected or set())})
-        return view
     except (ExportImportError, OSError, RestorePointError) as exc:
-        with contextlib.suppress(OSError):
-            path.unlink(missing_ok=True)
+        # The exporter owns its failed writes. An existing or concurrently created
+        # file at this name is not ours to delete.
         # Name the cause (OSError without its filename: no local paths in the UI flash).
         reason = (exc.strerror or type(exc).__name__) if isinstance(exc, OSError) else str(exc)
         raise RestorePointError(
             t("backup.restore_point.cannot_create", owner_language(), reason=reason), kind=CREATE_FAILED
         ) from exc
+    try:
+        _prune(protected={point_id, *(protected or set())})
+    except OSError, RestorePointError:
+        # A verified copy remains usable even when an old copy cannot be removed.
+        view["cleanup_warning"] = t("backup.restore_point.cleanup_warning", owner_language())
+        logging.getLogger("tow.restore_points").warning("%s", view["cleanup_warning"])
+    return view
 
 
 def restore_from_point(point_id: str) -> dict[str, Any]:

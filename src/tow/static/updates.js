@@ -1,0 +1,160 @@
+// Optional discovery: pages and health keep working when GitHub is unavailable.
+(() => {
+  const badge = document.querySelector("[data-release-badge]");
+  if (!badge) return;
+  const status = document.querySelector("[data-release-status]");
+  const check = document.querySelector("[data-release-check]");
+  const notes = document.querySelector("[data-release-notes]");
+  const command = document.querySelector("[data-release-command]");
+  const install = document.querySelector("[data-release-install]");
+  const progress = document.querySelector("[data-update-progress]");
+  const support = document.querySelector("[data-update-support]");
+  const rollback = document.querySelector("[data-update-rollback]");
+  const input = document.querySelector("[data-update-version]");
+  const apply = document.querySelector("[data-update-apply]");
+  const previous = document.querySelector("[data-update-previous]");
+  const reload = document.querySelector("[data-update-reload]");
+  const logPanel = document.querySelector("[data-update-log]");
+  const logText = document.querySelector("[data-update-log-text]");
+  let latest = "";
+  let supported = false;
+  let updating = false;
+  let operation = "";
+  let pollTimer = null;
+  let rollbackVersion = "";
+  let busy = false;
+  const render = (data) => {
+    const available = data.available === true && /^\d+\.\d+\.\d+$/.test(data.latest || "");
+    latest = available ? data.latest : "";
+    if (command && /^\d+\.\d+\.\d+$/.test(data.latest || "")) {
+      command.textContent = command.textContent.replace(/--ref\s+\S+$/, "--ref v" + data.latest);
+    }
+    if (install) { install.hidden = !latest || !supported; install.disabled = updating; }
+    badge.hidden = !available;
+    badge.textContent = available ? t("js.releases.badge", { version: data.latest }) : "";
+    badge.title = available ? t("js.releases.available", { version: data.latest }) : "";
+    if (notes && /^https:\/\/github\.com\/d0j\/tow\/releases(?:\/tag\/v\d+\.\d+\.\d+)?$/.test(data.url || "")) {
+      notes.href = data.url;
+    }
+    if (status) {
+      status.textContent = available ? t("js.releases.available", { version: data.latest }) :
+        (data.ok ? t(data.comparable === false ? "js.releases.unknown_build" : "js.releases.current") : t("js.releases.unavailable"));
+      if (available && !data.ok) status.textContent += " · " + t("js.releases.stale");
+      if (data.checked_at) {
+        const when = new Date(data.checked_at * 1000).toLocaleString(document.documentElement.lang);
+        status.textContent += " · " + t("js.releases.checked", { when });
+      }
+    }
+  };
+  const refresh = async (manual = false) => {
+    if (busy) return;
+    busy = true;
+    if (check) { check.disabled = true; check.setAttribute("aria-busy", "true"); }
+    if (status) status.textContent = t("js.releases.checking");
+    try {
+      const response = await fetch(manual ? "/updates/check" : "/updates.json", {
+        method: manual ? "POST" : "GET", credentials: "same-origin", cache: "no-store",
+        signal: AbortSignal.timeout(15000), headers: { Accept: "application/json" },
+      });
+      if (!response.ok) throw new Error("release check unavailable");
+      const data = await response.json();
+      render(data);
+    } catch {
+      if (status) status.textContent = t("js.releases.unavailable");
+    } finally {
+      busy = false;
+      if (check) { check.disabled = false; check.removeAttribute("aria-busy"); }
+    }
+  };
+  check?.addEventListener("click", () => { refresh(true); });
+  const controls = () => {
+    if (install) { install.hidden = !latest || !supported; install.disabled = updating; }
+    if (apply) apply.disabled = updating;
+    if (input) input.disabled = updating;
+    if (previous) previous.disabled = updating;
+  };
+  const schedulePoll = () => {
+    if (pollTimer !== null) window.clearTimeout(pollTimer);
+    pollTimer = window.setTimeout(() => { pollTimer = null; pollJob(); }, 5000);
+  };
+  const pollJob = async () => {
+    if (!progress) return;
+    try {
+      const response = await fetch("/updates/status", { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(10000) });
+      if (!response.ok) throw new Error("update status unavailable");
+      const job = await response.json();
+      if (operation && job.id !== operation) throw new Error("another update result");
+      supported = job.supported === true;
+      if (rollback) rollback.hidden = !supported;
+      if (support) support.textContent = !supported && typeof job.message === "string" ? job.message :
+        t(supported ? "js.releases.supported" : "js.releases.unsupported");
+      rollbackVersion = job.rollback_version || "";
+      if (previous) {
+        previous.hidden = !rollbackVersion;
+        previous.textContent = rollbackVersion ? t("js.releases.previous", { version: rollbackVersion }) : "";
+      }
+      updating = job.active === true;
+      const phases = {
+        queued: "js.releases.queued", preparing: "js.releases.preparing", stopping: "js.releases.stopping",
+        backup: "js.releases.backup", installing: "js.releases.installing", checking: "js.releases.phase_checking",
+        rolling_back: "js.releases.rolling_back", ok: "js.releases.ok", rolled_back: "js.releases.rolled_back",
+        failed: "js.releases.failed", refused: "js.releases.refused", interrupted: "js.releases.interrupted",
+        superseded: "js.releases.superseded",
+        recovered: "js.releases.recovered",
+      };
+      if (Object.prototype.hasOwnProperty.call(phases, job.status)) {
+        progress.hidden = false;
+        progress.textContent = t(phases[job.status], { version: job.target || "" });
+      }
+      if (reload) reload.hidden = job.status !== "ok";
+      controls();
+      if (updating) { operation = job.id; schedulePoll(); }
+    } catch {
+      if (updating) {
+        progress.hidden = false;
+        progress.textContent = t("js.releases.reconnecting");
+        schedulePoll();
+      } else if (support) support.textContent = t("js.releases.unsupported");
+    }
+  };
+  const begin = async (version) => {
+    if (updating || !supported) return;
+    if (!/^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(version || "")) {
+      progress.hidden = false; progress.textContent = t("js.releases.invalid_version"); return;
+    }
+    if (!window.confirm(t("js.releases.confirm", { version }))) return;
+    updating = true; controls();
+    progress.hidden = false; progress.textContent = t("js.releases.backup");
+    let refused = false;
+    try {
+      const body = new URLSearchParams({ version });
+      const response = await fetch("/updates/install", { method: "POST", body, credentials: "same-origin", signal: AbortSignal.timeout(60000) });
+      const job = await response.json();
+      if (!response.ok || !job.ok) { refused = true; throw new Error(job.error || t("js.releases.failed")); }
+      operation = job.id;
+      progress.textContent = t("js.releases.queued");
+      schedulePoll();
+    } catch (error) {
+      // A lost POST response does not prove that the background updater did not start.
+      progress.textContent = error.message || t("js.releases.failed");
+      if (refused) { updating = false; controls(); return; }
+      await pollJob();
+    }
+  };
+  install?.addEventListener("click", () => { begin(latest); });
+  apply?.addEventListener("click", () => { begin(input?.value.trim() || ""); });
+  previous?.addEventListener("click", () => { begin(rollbackVersion); });
+  reload?.addEventListener("click", () => { window.location.reload(); });
+  logPanel?.addEventListener("toggle", async () => {
+    if (!logPanel.open || !logText) return;
+    try {
+      const response = await fetch("/updates/log", { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(10000) });
+      if (!response.ok) throw new Error("log unavailable");
+      logText.textContent = (await response.json()).text || t("js.releases.log_empty");
+    } catch { logText.textContent = t("js.releases.log_unavailable"); }
+  });
+  refresh();
+  pollJob();
+  // Long-running dashboards discover releases too, not only after a reload.
+  window.setInterval(() => { if (!document.hidden) refresh(); }, 60 * 60 * 1000);
+})();
