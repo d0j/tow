@@ -1814,7 +1814,8 @@
   "store": {
     "state_newer": "state.json was written by a newer TOW (data version {found}; this TOW knows {known}). Update TOW or restore a backup made by this version; nothing was changed.",
     "state_bad_version": "state.json has a data version this TOW cannot read ({found}); nothing was changed. Restore it from a restore point or a backup.",
-    "no_master_key": "The master key is missing, so the saved passwords and tokens cannot be opened. Put the key file back as keys/master.key in the install (or point TOW_MASTER_KEY_FILE at it), or bring it in with: tow keys adopt --from FILE. On a new install without saved secrets, run: tow keys ensure"
+    "no_master_key": "The master key is missing, so the saved passwords and tokens cannot be opened. Put the key file back as keys/master.key in the install (or point TOW_MASTER_KEY_FILE at it), or bring it in with: tow keys adopt --from FILE. On a new install without saved secrets, run: tow keys ensure",
+    "key_path_outside_data": "A relative TOW_MASTER_KEY_FILE path must stay inside the TOW data folder. Use an absolute path for an external key file."
   },
   "not_found": {
     "title": "Page not found",

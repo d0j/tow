@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -97,6 +98,39 @@ def test_a_folder_of_another_system_in_config_is_refused_never_created(tmp_path)
     assert not any(  # nothing created inside the install
         "Backups" in p.name or p.name == "mnt" for p in tmp_path.rglob("*")
     )
+
+
+@pytest.mark.parametrize("key", ["backup_dir", "restore_points_dir"])
+def test_configured_backup_folder_cannot_escape_install_with_dotdot(key, tmp_path):
+    from tow.restore_points import RestorePointError, restore_points_dir
+    from tow.snapshots import SnapshotError, backup_root
+
+    cfg = load_config()
+    cfg[key] = "../outside"
+    save_config(cfg)
+    error = SnapshotError if key == "backup_dir" else RestorePointError
+    with pytest.raises(error):
+        backup_root() if key == "backup_dir" else restore_points_dir()
+    assert not (tmp_path.parent / "outside").exists()
+
+
+@pytest.mark.parametrize("key", ["backup_dir", "restore_points_dir"])
+def test_configured_backup_folder_rechecks_protected_roots(key, monkeypatch):
+    from tow import platform
+    from tow.restore_points import RestorePointError, restore_points_dir
+    from tow.snapshots import SnapshotError, backup_root
+
+    monkeypatch.setenv("SystemRoot", r"C:\Windows")
+    path = r"C:\Windows\TOW" if platform.is_windows() else "/etc/tow"
+    location = NIGHT if key == "backup_dir" else MANUAL
+    reason = problem(path, location)
+    assert reason is not None
+    cfg = load_config()
+    cfg[key] = path
+    save_config(cfg)
+    error = SnapshotError if key == "backup_dir" else RestorePointError
+    with pytest.raises(error, match=re.escape(reason)):
+        backup_root() if key == "backup_dir" else restore_points_dir()
 
 
 def test_night_copies_never_inside_the_data_folder():

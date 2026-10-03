@@ -3,6 +3,14 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.16] — 2026-10-03
+
+### Fixed
+
+- Configured backup and restore-point folders now receive the same path checks when used as they do when saved in
+  Settings. A relative master-key filename cannot escape the data folder through `..` or a link; absolute paths for
+  external keys remain supported.
+
 ## [1.22.15] — 2026-10-03
 
 ### Fixed

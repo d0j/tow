@@ -16,6 +16,7 @@ from tow import cli
 from tow.i18n import t
 from tow.paths import key_file, keys_dir
 from tow.store import (
+    InvalidMasterKeyPathError,
     MasterKeyError,
     SecretStoreError,
     adopt_master_key,
@@ -67,6 +68,26 @@ def test_an_explicit_key_file_wins_over_the_install_key(no_env_key, monkeypatch,
     assert secret_store_status()["key_source"] == "file"
     monkeypatch.setenv("TOW_MASTER_KEY_FILE", "relative.key")  # inside the data folder, as before
     assert master_key_file() == tmp_path / "relative.key"
+
+
+@pytest.mark.parametrize("relative", ["../outside.key", "sub/../../outside.key"])
+def test_relative_explicit_key_file_cannot_escape_data(no_env_key, monkeypatch, relative):
+    monkeypatch.setenv("TOW_MASTER_KEY_FILE", relative)
+    with pytest.raises(InvalidMasterKeyPathError):
+        master_key_file()
+
+
+def test_relative_explicit_key_file_cannot_follow_link_outside_data(no_env_key, monkeypatch, tmp_path):
+    outside = tmp_path.parent / f"{tmp_path.name}-outside"
+    outside.mkdir()
+    link = tmp_path / "linked"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("directory links are unavailable on this system")
+    monkeypatch.setenv("TOW_MASTER_KEY_FILE", "linked/master.key")
+    with pytest.raises(InvalidMasterKeyPathError):
+        master_key_file()
 
 
 def test_the_environment_key_wins_over_every_file(monkeypatch, tmp_path):

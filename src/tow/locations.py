@@ -55,14 +55,14 @@ class LocationError(ValueError):
 
 
 def resolve_checked(value: str | None, location: Location) -> Path:
-    """``resolve`` for the code that writes there: a path of another system (``D:\\Backups`` in a
-    config carried from Windows to Linux) is refused instead of becoming a folder named
-    ``D:\\Backups`` inside the install."""
+    """Apply the Settings folder policy again when a configured path is actually used."""
     raw = str(value or "").strip().strip('"')
     if raw and _of_another_system(raw):
         raise LocationError(
             t("locations.other_system_config", owner_language(), title=location.title, key=location.key, value=raw)
         )
+    if reason := problem(raw, location):
+        raise LocationError(reason)
     return resolve(raw, location)
 
 
