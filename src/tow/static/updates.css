@@ -1,16 +1,26 @@
 /* Version and update information is separate from torrent and service health. */
 .app-version {
-  grid-column: 1 / -1;
+  position: fixed;
+  inset-inline-end: max(.6rem, env(safe-area-inset-right));
+  inset-block-end: max(.4rem, env(safe-area-inset-bottom));
+  z-index: 9;
+  max-width: calc(100% - 1.2rem);
   display: flex;
   justify-content: flex-end;
   flex-wrap: wrap;
   align-items: center;
   gap: .5rem;
+  padding: .15rem .4rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--header-bg);
+  backdrop-filter: blur(8px);
   font-size: 11px;
   line-height: 1.4;
 }
 .app-version > a { color: var(--mut); text-decoration: none; }
 .app-version > a:hover, .app-version > a:focus-visible { text-decoration: underline; }
+.app-version.is-obstructing { visibility: hidden; pointer-events: none; }
 .app-version .release-badge {
   color: var(--nav-fg-hi);
   background: var(--panel2);
@@ -24,3 +34,6 @@
 .release-panel code { white-space: normal; overflow-wrap: anywhere; }
 .release-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18rem; overflow-y: auto; }
 .release-panel [hidden], [data-release-badge][hidden] { display: none !important; }
+@media (max-width: 480px) {
+  .hdr-sites { min-height: 1rem; }
+}

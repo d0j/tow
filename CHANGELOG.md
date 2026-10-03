@@ -3,6 +3,13 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.22] — 2026-10-03
+
+### Fixed
+
+- Move the installed version and quiet new-release badge into a small floating corner indicator, outside
+  the header layout. It hides while overlapping controls or table cells; the check clock stays in the header.
+
 ## [1.22.21] — 2026-10-03
 
 ### Fixed

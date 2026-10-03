@@ -5,10 +5,31 @@ from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 import pytest
+from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
 
 from tow import releases
 from tow.web import app, services
+
+
+def test_version_floats_outside_header_without_duplicating_check_clock():
+    page = BeautifulSoup(TestClient(app).get("/settings").text, "html.parser")
+    version = page.select_one(".app-version")
+    clock = page.select_one("#next-check")
+    assert version is not None
+    assert clock is not None
+    assert version.parent is page.body
+    assert clock.find_parent("header") is not None
+    assert clock.parent is page.select_one(".hdr-right")
+    assert len(page.select("#next-check")) == 1
+    from pathlib import Path
+
+    css = (Path(__file__).parents[1] / "src" / "tow" / "static" / "updates.css").read_text()
+    assert "position: fixed;" in css
+    assert "inset-inline-end:" in css
+    assert "inset-block-end:" in css
+    assert ".app-version.is-obstructing { visibility: hidden;" in css
+    assert "flex-wrap: wrap" in css
 
 
 @pytest.fixture
