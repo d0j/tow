@@ -420,6 +420,55 @@ class System:
                 start_new_session=not self.windows,
             )
 
+    def spawn_broker(self, argv: list[str]) -> None:
+        """Local WMI starts outside the caller's jobs; the child still verifies independence.
+
+        The environment travels through stdin, never a command line or an on-disk secret file.
+        No task, service configuration, elevation or remote connection is created.
+        """
+        if not self.windows:
+            raise OSError("Windows broker unavailable")
+        script = """
+$ErrorActionPreference='Stop'
+[Console]::InputEncoding=[Text.UTF8Encoding]::new($false)
+$request=[Console]::In.ReadToEnd() | ConvertFrom-Json
+$startup=New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{
+  ShowWindow=[uint16]0; CreateFlags=[uint32]0x09000400
+  EnvironmentVariables=[string[]]$request.environment
+}
+Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+  CommandLine=[string]$request.command; CurrentDirectory=[string]$request.cwd
+  ProcessStartupInformation=$startup
+} | Select-Object ReturnValue,ProcessId | ConvertTo-Json -Compress
+"""
+        payload = {
+            "command": subprocess.list2cmdline(argv),
+            "cwd": str(self.root),
+            "environment": [f"{key}={value}" for key, value in self.env.items()],
+        }
+        try:
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                input=json.dumps(payload, ensure_ascii=True),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=15,
+                creationflags=NO_WINDOW,
+                check=False,
+            )
+            answer = json.loads(result.stdout) if result.returncode == 0 else None
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            raise OSError("Windows broker launch failed") from exc
+        if (
+            not isinstance(answer, dict)
+            or type(answer.get("ReturnValue")) is not int
+            or answer["ReturnValue"] != 0
+            or type(answer.get("ProcessId")) is not int
+            or not 0 < answer["ProcessId"] <= 0xFFFFFFFF
+        ):
+            raise OSError("Windows broker did not confirm process creation")
+
     def wait_process_exit(self, pid: int, timeout: float) -> bool:
         """Wait for the intermediate parent to disappear; uncertainty refuses the update."""
         if pid <= 0:

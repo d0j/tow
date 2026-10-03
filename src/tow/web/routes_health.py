@@ -34,6 +34,16 @@ def updates_status() -> Response:
         return JSONResponse({"ok": False, "error": t(str(exc))}, status_code=503)
     if result.get("reason"):
         result["message"] = t(result["reason"])
+    error = result.get("error")
+    if isinstance(error, str) and error in {
+        "releases.launch_failed",
+        "releases.broker_failed",
+        "releases.inherited_job",
+        "releases.parent_wait_failed",
+        "releases.interrupted",
+        "releases.update_failed",
+    }:
+        result["error_message"] = t(error)
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
 

@@ -131,14 +131,17 @@ def status() -> dict[str, Any]:
 def _completed_job(job: dict[str, Any], updater: dict[str, Any]) -> dict[str, Any]:
     """A finished terminal recovery can unblock a dead job; GET itself writes nothing."""
     active = _active(job)  # validate types before set membership, including damaged journals
-    if active or job.get("status") not in _ACTIVE:
+    if active or job.get("status") not in _ACTIVE | {"failed", "refused", "rolled_back"}:
         return job
     started = job.get("started_at")
     if not isinstance(started, (int, float)) or isinstance(started, bool) or not math.isfinite(started):
         return job
     try:
         finished = datetime.fromisoformat(updater["finished_at"])
-        if finished.tzinfo is None or finished.timestamp() < started:
+        last = job.get("finished_at", started)
+        if type(last) not in {int, float} or not math.isfinite(last):
+            return job
+        if finished.tzinfo is None or finished.timestamp() < max(started, last):
             return job
     except ValueError, TypeError, KeyError, OverflowError:
         return job
@@ -149,7 +152,7 @@ def _completed_job(job: dict[str, Any], updater: dict[str, Any]) -> dict[str, An
         or expected != __version__
     ):
         return job
-    return {**job, "status": "recovered", "error": ""}
+    return {**job, "status": "recovered", "error": "", "finished_at": finished.timestamp()}
 
 
 def log_tail() -> str:
@@ -215,12 +218,25 @@ def start(version: str) -> dict[str, Any]:
             }
             atomic_write_bytes(path, json.dumps(job).encode())
             platform.current().spawn_detached(
-                [str(python), "-u", str(folder / "worker.py"), "--handoff", str(app), str(path), job_id, version],
+                [
+                    str(python),
+                    "-I",
+                    "-S",
+                    "-u",
+                    str(folder / "worker.py"),
+                    "--handoff",
+                    str(app),
+                    str(path),
+                    job_id,
+                    version,
+                ],
                 hidden=True,
                 cwd=root(),
                 log_path=folder / "update.log",
                 env=dict(os.environ),
-                require_breakaway=True,
+                # This is only the short-lived relay. The actual worker must verify that
+                # it left every job, using the local Windows broker when breakaway cannot.
+                require_breakaway=False,
             )
         except (OSError, RuntimeError) as exc:
             if path.exists() and _read(path).get("id") == job_id:

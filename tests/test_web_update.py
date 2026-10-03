@@ -50,11 +50,11 @@ def test_start_reserves_job_and_copies_worker_outside_replaceable_app(install):
     argv, options = calls[0]
     assert Path(argv[0]).is_file()
     assert not Path(argv[0]).is_relative_to(runtime / "app" / ".venv")
-    assert argv[1] == "-u"
-    assert Path(argv[2]).is_relative_to(runtime / "runtime")
-    assert Path(argv[2]).is_file()
-    assert argv[3] == "--handoff"
-    assert options["require_breakaway"] is True
+    assert argv[1:4] == ["-I", "-S", "-u"]
+    assert Path(argv[4]).is_relative_to(runtime / "runtime")
+    assert Path(argv[4]).is_file()
+    assert argv[5] == "--handoff"
+    assert options["require_breakaway"] is False
     assert options["hidden"] is True
     assert argv[-1] == "1.22.21"
 
@@ -310,11 +310,12 @@ def test_web_mutations_are_refused_during_an_update_but_reads_and_signout_work(m
     assert client.post("/logout", follow_redirects=False).status_code != 409
 
 
-def test_a_completed_terminal_recovery_unblocks_a_dead_job_without_get_writes(install):
+@pytest.mark.parametrize("old_status", ["installing", "failed", "refused", "rolled_back"])
+def test_a_completed_terminal_recovery_unblocks_a_dead_job_without_get_writes(install, old_status):
     web_update.start("1.22.21")
     path = install[0] / "runtime" / "web-update" / "job.json"
     job = json.loads(path.read_text())
-    job.update(status="installing", pid=456, started_at=time.time() - 60)
+    job.update(status=old_status, pid=456, started_at=time.time() - 60, finished_at=time.time() - 30)
     path.write_text(json.dumps(job))
     before = path.read_bytes()
     (install[0] / "update-state.json").write_text(
@@ -330,3 +331,30 @@ def test_a_completed_terminal_recovery_unblocks_a_dead_job_without_get_writes(in
     assert path.read_bytes() == before
     assert web_update.start("1.22.22")["ok"] is True
     assert len(install[1]) == 2
+
+
+@pytest.mark.parametrize("newer", [False, True])
+def test_terminal_recovery_does_not_hide_a_later_web_failure(install, newer):
+    web_update.start("1.22.21")
+    path = install[0] / "runtime" / "web-update" / "job.json"
+    job = json.loads(path.read_text())
+    job.update(status="failed", started_at=time.time() - 120, finished_at=time.time() - 30)
+    path.write_text(json.dumps(job))
+    finished = datetime.fromtimestamp(time.time() - (10 if newer else 60), UTC).isoformat()
+    (install[0] / "update-state.json").write_text(
+        json.dumps({"status": "ok", "target_version": "1.22.20", "finished_at": finished})
+    )
+    assert web_update.status()["status"] == ("recovered" if newer else "failed")
+
+
+@pytest.mark.parametrize(
+    "error", ["releases.broker_failed", "releases.inherited_job", "releases.parent_wait_failed", "foreign-secret"]
+)
+def test_update_status_localizes_only_known_reasons(monkeypatch, error):
+    monkeypatch.setattr(services, "web_update_status", lambda: {"supported": True, "status": "failed", "error": error})
+    response = TestClient(app).get("/updates/status")
+    assert response.status_code == 200
+    result = response.json()
+    assert ("error_message" in result) is (error != "foreign-secret")
+    if "error_message" in result:
+        assert result["error_message"] != error
