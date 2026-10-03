@@ -151,6 +151,8 @@ class TransmissionClient(ManagedClient):
         stats = row.get("fileStats") or []
         for index, item in enumerate(row.get("files") or []):
             stat = stats[index] if index < len(stats) else {}
+            wanted = stat.get("wanted")
+            priority = int(wanted) if isinstance(wanted, (bool, int)) and wanted in (0, 1) else None
             length = int(item.get("length") or 0)
             done = int(item.get("bytesCompleted") or 0)
             files.append(
@@ -159,7 +161,7 @@ class TransmissionClient(ManagedClient):
                     "name": str(item.get("name") or ""),
                     "size": length,
                     "progress": (done / length) if length else 1.0,
-                    "priority": 1 if stat.get("wanted", True) else 0,
+                    "priority": priority,
                 }
             )
         save_path = str(row.get("downloadDir") or "")

@@ -22,6 +22,42 @@ def padding_like(value: object) -> bool:
     return any(part == ".pad" or part.startswith("_____padding_file_") for part in normalize_path(value).split("/"))
 
 
+def priorities(rows: list[dict[str, Any]], *, fail: Callable[[], Exception]) -> dict[int, int]:
+    """A complete, unambiguous priority snapshot; missing flags are not skipped files."""
+    result: dict[int, int] = {}
+    for row in rows:
+        index, priority = row.get("index"), row.get("priority")
+        if type(index) is not int or index < 0 or index in result or type(priority) is not int or priority < 0:
+            raise fail()
+        result[index] = priority
+    return result
+
+
+def verify_selection(
+    before: list[dict[str, Any]],
+    after: list[dict[str, Any]],
+    wanted: set[int],
+    *,
+    fail: Callable[[], Exception],
+    ignored: set[int] | None = None,
+) -> None:
+    """Confirm every file identity and flag, even files the new selection skips."""
+    initial = priorities(before, fail=fail)
+    current = priorities(after, fail=fail)
+    if initial.keys() != current.keys() or not wanted.issubset(initial):
+        raise fail()
+
+    def identities(rows: list[dict[str, Any]]) -> dict[int, tuple[str, Any]]:
+        return {row["index"]: (normalize_path(row.get("name")), row.get("size")) for row in rows}
+
+    if identities(before) != identities(after):
+        raise fail()
+    ignored_ids = ignored or set()
+    for index, priority in current.items():
+        if index not in ignored_ids and (priority > 0) != (index in wanted):
+            raise fail()
+
+
 def map_files(
     source_files: tuple[TorrentFile, ...],
     client_files: list[dict[str, Any]],
@@ -34,7 +70,7 @@ def map_files(
     lookup: dict[tuple[str, int | None], list[int]] = {}
     for row in client_files:
         index = row.get("index")
-        if not isinstance(index, int):
+        if type(index) is not int or index < 0:
             continue
         size = row.get("size")
         lookup.setdefault((normalize_path(row.get("name")), int(size) if size is not None else None), []).append(index)

@@ -329,6 +329,36 @@ def test_location_change(client, tmp_path):
     assert server.torrents[K].path == str(tmp_path / "moved")
 
 
+@pytest.mark.parametrize("malformed", ["missing", "short"])
+def test_missing_file_flags_are_unknown_and_refuse_selection(client, tmp_path, monkeypatch, malformed):
+    adapter, server = client
+    adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    if isinstance(server, FakeTransmission):
+        original = server._row
+
+        def row(torrent):
+            result = original(torrent)
+            result["fileStats"] = [] if malformed == "missing" else result["fileStats"][:1]
+            return result
+
+        monkeypatch.setattr(server, "_row", row)
+    else:
+        original = server.m_core_get_torrent_status
+
+        def status(*args):
+            result = original(*args)
+            result["file_priorities"] = [] if malformed == "missing" else result["file_priorities"][:1]
+            return result
+
+        monkeypatch.setattr(server, "m_core_get_torrent_status", status)
+    info = adapter.inspect_torrent(H)
+    assert info["files"][-1]["priority"] is None
+    with pytest.raises(ClientError) as error:
+        adapter.configure_torrent_selection(TORRENT, H, [E02])
+    assert error.value.code == "client.managed.wrong_selection"
+    assert server.torrents[K].running
+
+
 def test_foreign_torrents_are_never_touched(client, tmp_path):
     adapter, server = client
     server.torrents[K] = Torrent(TORRENT, str(tmp_path), [], paused=False)
@@ -336,6 +366,8 @@ def test_foreign_torrents_are_never_touched(client, tmp_path):
         adapter.stop_owned_torrent(H)
     with pytest.raises(ClientError, match="не через TOW"):
         adapter.configure_torrent_selection(TORRENT, H, [E01])
+    with pytest.raises(ClientError, match="не через TOW"):
+        adapter.set_location(H, str(tmp_path / "moved"))
     assert server.torrents[K].running
     assert server.torrents[K].wanted == [True, True, True]
 

@@ -115,6 +115,12 @@ class ManagedClient:
     def _stopped(info: dict[str, Any] | None) -> bool:
         return str((info or {}).get("state") or "").casefold().startswith(STOPPED_PREFIXES)
 
+    def _require_owned(self, infohash: str) -> dict[str, Any]:
+        info = self.inspect_torrent(infohash)
+        if OWNER not in self._tags(info):
+            raise self._fail("client.managed.not_owned")
+        return info or {}
+
     def _labels_for_add(self) -> list[str]:
         extra = [str(tag).strip() for tag in self.add_tags or () if str(tag).strip()]
         category = str(self.add_category or "").strip()
@@ -198,31 +204,31 @@ class ManagedClient:
     ) -> dict[str, Any]:
         inspected = self._inspect_with_files(infohash)
         rows = list(inspected.get("files") or [])
+        files.priorities(rows, fail=lambda: self._fail("client.managed.wrong_selection"))
         mapping = self._map_files(source_files, rows, root_name)
+        mapped_ids = set(mapping.values())
         if not selected or any(index not in mapping for index in selected):
             raise self._fail("client.managed.bad_selection")
         all_ids = sorted(int(row["index"]) for row in rows if isinstance(row.get("index"), int))
         wanted = {mapping[index] for index in selected}
+        self._require_owned(infohash)
         self._set_wanted(infohash, wanted, all_ids)
         verified = self._inspect_with_files(infohash)
-        priorities = {
-            int(row["index"]): int(row.get("priority") or 0)
-            for row in verified.get("files") or []
-            if isinstance(row.get("index"), int)
-        }
-        for client_id in all_ids:
-            name = next((row.get("name") for row in rows if row.get("index") == client_id), "")
-            if client_id not in wanted and self._padding_like(name):
-                continue  # padding files are never downloaded; their flag does not matter
-            if (priorities.get(client_id, 0) > 0) != (client_id in wanted):
-                raise self._fail("client.managed.wrong_selection")
+        files.verify_selection(
+            rows,
+            list(verified.get("files") or []),
+            wanted,
+            fail=lambda: self._fail("client.managed.wrong_selection"),
+            ignored={
+                row["index"] for row in rows if row["index"] not in mapped_ids and self._padding_like(row.get("name"))
+            },
+        )
+        self._require_owned(infohash)
         return verified
 
     def _clear_pending(self, infohash: str) -> dict[str, Any]:
-        info = self.inspect_torrent(infohash) or {}
-        labels = [str(tag) for tag in info.get("tags") or [] if str(tag).casefold() != PENDING]
-        if OWNER not in {label.casefold() for label in labels}:
-            labels.insert(0, OWNER)
+        info = self._require_owned(infohash)
+        labels = [str(tag) for tag in info.get("tags") or [] if str(tag).strip().casefold() != PENDING]
         self._set_labels(infohash, labels)
         return self._wait(
             infohash,
@@ -266,9 +272,11 @@ class ManagedClient:
             if not paths_equal(str(added.get("save_path") or ""), destination):
                 raise self._fail("client.managed.wrong_folder")
             if not self._stopped(added):
+                self._require_owned(infohash)
                 self._stop(infohash)
             self._wait_stopped(infohash)
             self._apply_selection(infohash, metadata.files, selected, metadata.name)
+            self._require_owned(infohash)
             self._start(infohash)
             self._wait_started(infohash)
             release_requested = True
@@ -276,6 +284,7 @@ class ManagedClient:
         except Exception:
             if not release_requested:
                 try:
+                    self._require_owned(infohash)
                     self._stop(infohash)
                 except Exception as cleanup_error:  # noqa: BLE001 - the original failure is re-raised; this must not hide it
                     _LOG.warning("cleanup after a failed client change did not finish: %s", cleanup_error)
@@ -299,20 +308,20 @@ class ManagedClient:
         if OWNER not in self._tags(before):
             raise self._fail("client.managed.not_owned")
         pending = PENDING in self._tags(before)
-        previous = {
-            int(row["index"]): int(row.get("priority") or 0)
-            for row in before.get("files") or []
-            if isinstance(row.get("index"), int)
-        }
+        previous = files.priorities(
+            list(before.get("files") or []), fail=lambda: self._fail("client.managed.wrong_selection")
+        )
         was_stopped = self._stopped(before)
         release_requested = False
         try:
+            self._require_owned(infohash)
             self._stop(infohash)
             self._wait_stopped(infohash)
             verified = self._apply_selection(
                 infohash, metadata.files, {int(index) for index in selected_indices}, metadata.name
             )
             if pending or not was_stopped or ensure_started:
+                self._require_owned(infohash)
                 self._start(infohash)
                 verified = self._wait_started(infohash)
             if pending:
@@ -323,9 +332,19 @@ class ManagedClient:
             if release_requested:
                 raise
             try:
+                self._require_owned(infohash)
                 self._stop(infohash)
+                self._require_owned(infohash)
                 self._set_wanted(infohash, {i for i, p in previous.items() if p > 0}, sorted(previous))
+                restored = self._inspect_with_files(infohash)
+                files.verify_selection(
+                    list(before.get("files") or []),
+                    list(restored.get("files") or []),
+                    {i for i, p in previous.items() if p > 0},
+                    fail=lambda: self._fail("client.managed.wrong_selection"),
+                )
                 if not was_stopped:
+                    self._require_owned(infohash)
                     self._start(infohash)
             except Exception as cleanup_error:  # noqa: BLE001 - the original failure is re-raised; this must not hide it
                 _LOG.warning("cleanup after a failed client change did not finish: %s", cleanup_error)
@@ -346,6 +365,7 @@ class ManagedClient:
         destination = (save_path or "").strip()
         if not destination:
             raise self._fail("client.managed.no_folder")
+        self._require_owned(infohash)
         self._move(infohash, destination)
         return "ok"
 

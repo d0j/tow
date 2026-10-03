@@ -302,7 +302,22 @@ def test_an_unsafe_state_during_the_change_is_reported_and_rolled_back(client, m
     with pytest.raises(ClientError) as error:
         client.configure_torrent_selection(TORRENT, H, [E02])
     assert str(error.value) == _msg("client.managed.error_state", state="missingfiles")
-    assert client.calls[-1] == ("start",)  # rollback restarts what was running
+    assert ("start",) not in client.calls  # an unsafe rollback is never resumed
+
+
+def test_an_unconfirmed_selection_rollback_never_restarts(client, monkeypatch):
+    client.seed(tags=[OWNER], state="downloading", wanted={E01})
+
+    def set_wanted(*_args):
+        client.calls.append(("set_wanted ignored",))
+        for row in client.torrents[H]["files"]:
+            row["priority"] = 0
+
+    monkeypatch.setattr(client, "_set_wanted", set_wanted)
+    with pytest.raises(ClientError) as error:
+        client.configure_torrent_selection(TORRENT, H, [E02])
+    assert str(error.value) == _msg("client.managed.wrong_selection")
+    assert ("start",) not in client.calls
 
 
 # --- add_torrent_selected: rarer branches ----------------------------------------------------
@@ -344,6 +359,36 @@ def test_add_without_the_owner_mark_is_not_confirmed(client, monkeypatch):
     with pytest.raises(ClientError) as error:
         client.add_torrent_selected(TORRENT, "D:/tv", H, [E01])
     assert str(error.value) == _msg("client.managed.no_owner_mark")
+    assert not any(call[0] in {"stop", "start", "set_wanted", "labels"} for call in client.calls)
+
+
+def test_selection_readback_cannot_hide_an_unwanted_file(client, monkeypatch):
+    client.seed(tags=[OWNER], state="stoppedDL")
+    real_inspect = client.inspect_torrent
+
+    def inspect(infohash):
+        info = real_inspect(infohash)
+        if any(call[0] == "set_wanted" for call in client.calls):
+            info["files"] = [row for row in info["files"] if row["index"] == client.client_id_of(E01)]
+        return info
+
+    monkeypatch.setattr(client, "inspect_torrent", inspect)
+    with pytest.raises(ClientError):
+        client._apply_selection(H, META.files, {E01}, META.name)
+
+
+def test_selection_failure_after_ownership_loss_never_restores_or_restarts(client, monkeypatch):
+    client.seed(tags=[OWNER], state="downloading", wanted={E01})
+
+    def set_wanted(*_args):
+        client.calls.append(("set_wanted",))
+        client.torrents[H]["tags"] = ["manual"]
+        raise ConnectionError("selection connection failed")
+
+    monkeypatch.setattr(client, "_set_wanted", set_wanted)
+    with pytest.raises(ConnectionError, match="selection connection failed"):
+        client.configure_torrent_selection(TORRENT, H, [E02])
+    assert client.calls == [("stop",), ("set_wanted",)]
 
 
 def test_add_whose_stop_is_not_confirmed_is_stopped_again_and_fails(client):
@@ -417,11 +462,12 @@ def test_read_back_polls_sleep_between_attempts(client, monkeypatch):
     assert sleeps == [0.25] * (client.POLLS - 1)
 
 
-def test_clear_pending_puts_the_owner_mark_back_first(client):
+def test_clear_pending_never_reclaims_a_torrent_without_ownership(client):
     client.seed(tags=[PENDING, "kids"], state="downloading")
-    info = client._clear_pending(H)
-    assert client.calls[0] == ("labels", (OWNER, "kids"))
-    assert info["tags"] == [OWNER, "kids"]
+    with pytest.raises(ClientError) as error:
+        client._clear_pending(H)
+    assert str(error.value) == _msg("client.managed.not_owned")
+    assert client.calls == []
 
 
 # --- stop / move / magnet ---------------------------------------------------------------------
@@ -448,6 +494,14 @@ def test_move_needs_a_folder_and_passes_it_trimmed(client):
     assert client.calls == [("move", "E:/moved")]
     assert client.has_hash(H)
     assert not client.has_hash("0" * 40)
+
+
+def test_move_of_a_foreign_torrent_is_refused_before_mutation(client):
+    client.seed(tags=["manual"], state="downloading")
+    with pytest.raises(ClientError) as error:
+        client.set_location(H, "E:/moved")
+    assert str(error.value) == _msg("client.managed.not_owned")
+    assert client.calls == []
 
 
 def test_the_base_class_primitives_must_be_implemented():
