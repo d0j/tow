@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import importlib
 import json
+import math
 import os
 import pickle
 import tempfile
@@ -82,6 +83,17 @@ def _has_quarantined_copy(path: Path) -> bool:
         return False
 
 
+def _finite_json_float(value: str) -> float:
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("non-finite JSON number")
+    return number
+
+
+def _decode_json(raw: bytes) -> Any:
+    return json.loads(raw.decode("utf-8"), parse_float=_finite_json_float, parse_constant=_finite_json_float)
+
+
 def load_json(path: Path, default: Any, *, quarantine: bool = True) -> Any:
     if not path.is_file():
         if _has_quarantined_copy(path):
@@ -97,15 +109,21 @@ def load_json(path: Path, default: Any, *, quarantine: bool = True) -> Any:
         # Transient (sharing violation, antivirus, permissions): not corruption.
         raise StoreReadError(f"persisted JSON cannot be read now: {path.name}") from exc
     try:
-        return json.loads(raw.decode("utf-8"))
-    except (UnicodeError, json.JSONDecodeError) as exc:
+        return _decode_json(raw)
+    except (UnicodeError, ValueError, RecursionError) as exc:
         if quarantine:
             # A lock-free reader may have caught a moment a writer replaced the file: look
             # again under the lock and set aside only a file that is still unreadable.
             with persistence_lock():
                 try:
-                    return json.loads(path.read_bytes().decode("utf-8"))
-                except OSError, UnicodeError, json.JSONDecodeError:
+                    reread = path.read_bytes()
+                except OSError as read_exc:
+                    # A transient lock is not evidence of corruption. In particular,
+                    # never quarantine a good replacement we could not read yet.
+                    raise StoreReadError(f"persisted JSON cannot be read now: {path.name}") from read_exc
+                try:
+                    return _decode_json(reread)
+                except UnicodeError, ValueError, RecursionError:
                     if path.is_file():
                         _quarantine(path)
         raise StoreCorruptionError(f"persisted JSON is unreadable: {path.name}") from exc
@@ -321,10 +339,12 @@ def atomic_write_bytes(path: Path, content: bytes) -> None:
 def save_json(path: Path, data: Any, *, compact: bool = False) -> None:
     try:
         if compact:
-            content = (json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+            content = (json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False) + "\n").encode(
+                "utf-8"
+            )
         else:
-            content = (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
-    except (TypeError, ValueError, UnicodeError) as exc:
+            content = (json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8")
+    except (TypeError, ValueError, UnicodeError, RecursionError) as exc:
         raise StoreCorruptionError(f"JSON payload is not serializable: {path.name}") from exc
     atomic_write_bytes(path, content)
 

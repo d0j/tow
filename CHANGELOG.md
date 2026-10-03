@@ -13,6 +13,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   reservation never deletes another writer's files; backup writes are verified before a check can start.
 - Settings and undo recovery also reuse verified backup bytes and preflight every target. Cleanup only removes
   recognized regular journal files; interrupted preparation or cleanup no longer leaves a permanently blocking journal.
+- Persistent JSON rejects non-finite numbers and reports integer/depth parser limits as storage errors. Writes
+  cannot persist invalid numbers; a transient I/O error during a corruption recheck never quarantines a valid replacement.
 
 ## [1.22.17] — 2026-10-03
 

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from helpers import reaped
 
-from tow.store import StoreCorruptionError, load_json, persistence_lock, save_json
+from tow.store import StoreCorruptionError, StoreReadError, load_json, persistence_lock, save_json
 
 
 def _lock_probe(home: str, started, acquired) -> None:
@@ -67,6 +67,102 @@ def test_corrupt_json_read_only_mode_does_not_quarantine(tmp_path):
 
     assert path.read_bytes() == before
     assert list(tmp_path.glob("state.json.corrupt-*")) == []
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        b'{"number":NaN}',
+        b'{"number":Infinity}',
+        b'{"number":-Infinity}',
+        b'{"number":1e9999}',
+        b'{"number":-1e9999}',
+        b'{"number":' + b"1" * 5000 + b"}",
+        b"[" * 20000 + b"]" * 20000,
+    ],
+    ids=["nan", "inf", "negative-inf", "overflow", "negative-overflow", "integer-limit", "deep"],
+)
+@pytest.mark.parametrize("quarantine", [False, True])
+def test_invalid_json_numbers_and_parser_limits_fail_as_store_errors(tmp_path, raw, quarantine):
+    path = tmp_path / "state.json"
+    path.write_bytes(raw)
+    with pytest.raises(StoreCorruptionError, match="unreadable"):
+        load_json(path, {}, quarantine=quarantine)
+    copies = list(tmp_path.glob("state.json.corrupt-*"))
+    if quarantine:
+        assert not path.exists()
+        assert len(copies) == 1
+        assert copies[0].read_bytes() == raw
+    else:
+        assert path.read_bytes() == raw
+        assert not copies
+
+
+@pytest.mark.parametrize("compact", [False, True])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_json_cannot_overwrite_an_existing_store(tmp_path, compact, value):
+    path = tmp_path / "state.json"
+    save_json(path, {"keep": True})
+    before = path.read_bytes()
+    with pytest.raises(StoreCorruptionError, match="not serializable"):
+        save_json(path, {"nested": [{"number": value}]}, compact=compact)
+    assert path.read_bytes() == before
+    assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_transient_io_error_during_corruption_recheck_never_quarantines(monkeypatch, tmp_path):
+    path = tmp_path / "state.json"
+    path.write_bytes(b'{"keep": true}')
+    original = Path.read_bytes
+    reads = 0
+
+    def racing_read(current):
+        nonlocal reads
+        if current == path:
+            reads += 1
+            if reads == 1:
+                return b"{partial observation"
+            raise PermissionError("transient lock")
+        return original(current)
+
+    with monkeypatch.context() as patched:
+        patched.setattr(Path, "read_bytes", racing_read)
+        with pytest.raises(StoreReadError):
+            load_json(path, {})
+    assert path.read_bytes() == b'{"keep": true}'
+    assert not list(tmp_path.glob("state.json.corrupt-*"))
+
+
+def test_store_replaced_with_valid_json_before_the_recheck_is_not_quarantined(monkeypatch, tmp_path):
+    path = tmp_path / "state.json"
+    path.write_bytes(b'{"keep": true, "number": 1.25}')
+    original = Path.read_bytes
+    reads = 0
+
+    def racing_read(current):
+        nonlocal reads
+        if current == path:
+            reads += 1
+            if reads == 1:
+                return b"{partial observation"
+        return original(current)
+
+    monkeypatch.setattr(Path, "read_bytes", racing_read)
+    assert load_json(path, {}) == {"keep": True, "number": 1.25}
+    assert path.exists()
+    assert not list(tmp_path.glob("state.json.corrupt-*"))
+
+
+def test_excessive_json_encoding_depth_never_overwrites_the_store(tmp_path):
+    path = tmp_path / "state.json"
+    save_json(path, {"keep": True})
+    before = path.read_bytes()
+    value = []
+    for _ in range(20000):
+        value = [value]
+    with pytest.raises(StoreCorruptionError, match="not serializable"):
+        save_json(path, value, compact=True)
+    assert path.read_bytes() == before
 
 
 def test_persistence_lock_is_exclusive_across_processes(tmp_path, monkeypatch):
