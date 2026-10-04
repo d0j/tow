@@ -829,9 +829,12 @@ def _main(argv: list[str] | None) -> int:
         from tow.config import ConfigError
         from tow.i18n import t
         from tow.store import SecretStoreError, StateVersionError
+        from tow.yaml_guard import YamlLimitError
 
         reason = (
-            str(exc) if isinstance(exc, (ConfigError, SecretStoreError, StateVersionError)) else t("cli.command_failed")
+            str(exc)
+            if isinstance(exc, (ConfigError, SecretStoreError, StateVersionError, YamlLimitError))
+            else t("cli.command_failed")
         )
         if getattr(args, "json", False):  # a script asked for JSON: it gets JSON on failure too
             print(json.dumps({"ok": False, "error": reason}, ensure_ascii=False))

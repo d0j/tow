@@ -11,6 +11,9 @@ import yaml
 
 from tow.paths import config_path
 from tow.store import atomic_write_text
+from tow.yaml_guard import SAFE_LOADER, validate_graph
+from tow.yaml_guard import load as load_yaml
+from tow.yaml_guard import read_text as read_yaml_text
 
 
 def as_bool(value: object, default: bool = False) -> bool:
@@ -28,7 +31,7 @@ def as_bool(value: object, default: bool = False) -> bool:
 
 
 # libyaml's loader is ~8x faster than the pure-Python one; same safe tag set.
-_SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+_SAFE_LOADER = SAFE_LOADER
 # The config is read several times per request; reparse only when the file changes.
 # Writers replace the file atomically, so (mtime, size, file id) changes with every write.
 _CACHE_LOCK = threading.Lock()
@@ -43,7 +46,7 @@ def _parsed_config_file(path: Path) -> Any:
         cached = _cache
     if cached is not None and cached[0] == key:
         return copy.deepcopy(cached[1])
-    data = yaml.load(path.read_text(encoding="utf-8"), Loader=_SAFE_LOADER)
+    data = load_yaml(read_yaml_text(path), loader=_SAFE_LOADER)
     with _CACHE_LOCK:
         _cache = (key, data)
     return copy.deepcopy(data)
@@ -133,7 +136,9 @@ def load_config() -> dict[str, Any]:
     path = config_path()
     if not path.is_file():
         raise FileNotFoundError(f"TOW config not found: {path}; create it or set TOW_CONFIG")
-    data = _parsed_config_file(path) or {}
+    data = _parsed_config_file(path)
+    if data is None:
+        data = {}
     if not isinstance(data, dict):
         raise TypeError("config.yaml must be a mapping")
     return validated(data)
@@ -145,6 +150,7 @@ def validated(raw: dict[str, Any]) -> dict[str, Any]:
     The one schema of config.yaml: ``load_config`` and an imported bundle both use it.
     Raises ``ConfigError`` naming the first wrong value; ``raw`` itself is not changed.
     """
+    validate_graph(raw)
     data = copy.deepcopy(raw)  # the parsed file stays as it is on disk (see save_config)
     for key, value in defaults().items():
         data.setdefault(key, value)
@@ -228,6 +234,7 @@ _HEADER = "# TOW config. Settings changed in the web UI are written here; commen
 
 def save_config(data: dict[str, Any]) -> None:
     """Write the config without the defaults load_config added (unless the file had them)."""
+    validate_graph(data)
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     on_disk = _parsed_config_file(path) if path.is_file() else {}
@@ -248,14 +255,14 @@ def _set_top_level_int(key: str, value: int) -> None:
     ``key`` changed, the whole config is rewritten from the parsed data instead.
     """
     path = config_path()
-    text = path.read_text(encoding="utf-8")
+    text = read_yaml_text(path)
     line = f"{key}: {value}"
     new, count = re.subn(rf"(?m)^{re.escape(key)}:[ \t]*[^\s#]*", line, text, count=1)
     if not count:
         new = text.rstrip() + f"\n{line}\n"
     try:
-        before = yaml.safe_load(text) or {}
-        after = yaml.safe_load(new) or {}
+        before = load_yaml(text) or {}
+        after = load_yaml(new) or {}
     except yaml.YAMLError:
         before = after = None
     if isinstance(before, dict) and after == {**before, key: value}:

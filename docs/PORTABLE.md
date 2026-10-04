@@ -427,6 +427,24 @@ config, nothing else has to follow it. (1.17's `scripts/restore-snapshot.ps1`, w
 TOW-check task around it, is gone.) An update snapshot holds no keys: put it back only into the
 install it came from.
 
+Since 1.22.37, YAML settings are bounded before object construction, including aliases and merge keys:
+16 MiB of UTF-8 input, 100,000 expanded nodes (keys included), 16,777,216 expanded text characters and
+32 levels of nesting. Shared references count at each occurrence, and a subtree reused deeper is checked
+at that depth. Cyclic, undefined or duplicate anchor names and multiple documents are refused. Ordinary
+safe anchors, merge precedence and UTF-8 settings remain supported. The parsed/programmatic graph is
+checked again before copying, comparison or serialization. These limits apply to YAML, not JSON history.
+An empty document or mapping is valid; `false`, `0`, an empty string or a list is not a settings mapping.
+Night-copy verification and preview check the configuration as well as its signature and checksums, before
+restoration writes anything. A broken live configuration can still be replaced by a healthy copy; when its
+local access settings cannot be read, the restored settings are local-only.
+
+The pre-construction check uses [PyYAML parsing events](https://pyyaml.org/wiki/PyYAMLDocumentation)
+because [PyYAML 6.0.3 expands merge mappings during construction](https://github.com/yaml/pyyaml/blob/6.0.3/lib/yaml/constructor.py),
+before schema validation. Resource bounds also follow the approach used by
+[SnakeYAML loader options](https://github.com/snakeyaml/snakeyaml/blob/master/src/main/java/org/yaml/snakeyaml/LoaderOptions.java)
+and [go-yaml's alias expansion guard](https://github.com/go-yaml/yaml/blob/v3/decode.go); TOW counts complete
+expanded subtrees and text rather than only alias occurrences.
+
 Night-copy and before-restore cleanup is best effort, separate from the verified copy or committed
 restore. Only confirmed removals count as pruned. A held file, inaccessible directory or uncertain
 read-back shows a cleanup warning; it does not turn a usable new copy or completed restore into a

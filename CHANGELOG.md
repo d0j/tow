@@ -3,6 +3,18 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.37] — 2026-10-04
+
+### Fixed
+
+- Bound YAML input, expanded nodes, text and depth before constructing aliases or merge mappings, and check
+  programmatic graphs before copying or saving them. Cyclic, oversized and deeply reused references cannot
+  reach recursive configuration, backup or restore operations; ordinary safe anchors and merges remain supported.
+- Check night-copy configuration during verification and preview, before a restore starts writing. Reject
+  non-mapping values such as `false`, `0` and `[]` instead of silently treating them as empty settings.
+- Scan credential-shaped fields iteratively, inspecting shared containers once and building a path only for
+  the actual match. Large JSON histories do not inherit YAML expansion limits; refusals do not expose input values.
+
 ## [1.22.36] — 2026-10-04
 
 ### Fixed

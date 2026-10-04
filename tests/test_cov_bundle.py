@@ -231,6 +231,32 @@ def _rejects(tmp_path, bundle: Path, match: str, **kwargs) -> None:
     _assert_untouched(before)
 
 
+@pytest.mark.parametrize("apply", [False, True])
+@pytest.mark.parametrize(
+    "source",
+    [b"extra: &loop [*loop]\n", b"extra: &loop {<<: *loop}\n", b"---\na: 1\n---\na: 2\n"],
+)
+def test_correctly_encrypted_and_hashed_unsafe_yaml_is_refused_without_writes(tmp_path, source, apply):
+    before = _seed_destination()
+    archive = _bundle(tmp_path / "in" / "unsafe.towx", _members(config_yaml=source))
+    assert _open_bundle(archive)["config.yaml"] == source
+    with pytest.raises(ExportImportError, match=r"invalid config\.yaml:"):
+        import_bundle(archive, PASS, apply=apply)
+    _assert_untouched(before)
+
+
+def test_aliased_text_in_a_valid_archive_is_refused_before_apply(tmp_path, monkeypatch):
+    from tow import yaml_guard
+
+    monkeypatch.setattr(yaml_guard, "MAX_EXPANDED_TEXT", 64)
+    before = _seed_destination()
+    source = b"extra: [&a '" + b"x" * 32 + b"', *a, *a]\n"
+    archive = _bundle(tmp_path / "in" / "unsafe.towx", _members(config_yaml=source))
+    with pytest.raises(ExportImportError, match=r"invalid config\.yaml:"):
+        import_bundle(archive, PASS, apply=True)
+    _assert_untouched(before)
+
+
 # --------------------------------------------------------------------------- envelope
 
 
@@ -432,7 +458,7 @@ def _deep(levels: int) -> dict[str, Any]:
         ("config.yaml", {"trackers": {"t": {"login_form": "x"}}}, r"login_form has an invalid shape"),
         ("config.yaml", {"trackers": {"t": {"login_form": {"extra": {"a": 1}}}}}, r"login_form\.extra has an"),
         ("config.yaml", {"trackers": {"t": {"fail_threshold": 1.5}}}, r"fail_threshold has an invalid type"),
-        ("config.yaml", {"nest": _deep(40)}, r"config\.yaml is nested too deeply"),
+        ("config.yaml", {"nest": _deep(40)}, r"invalid config\.yaml: .*32"),
         ("config.yaml", {"telegram": {"token": "plain"}}, r"outside encrypted payload: config\.yaml:telegram\.token"),
         ("state.json", {"topics": {}}, r"state\.json has an unsupported schema"),
         ("state.json", {"mirrors": []}, r"state\.json has an unsupported schema"),
