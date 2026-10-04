@@ -1,9 +1,8 @@
 // F6: the home countdown polls /health.json with backoff and never in a hidden tab.
-// Runs app.js in a VM with a tiny DOM and fake timers; prints a JSON verdict.
-import { readFileSync } from "node:fs";
-import vm from "node:vm";
+// Runs the checked-in app.js with a tiny DOM and fake timers; prints a JSON verdict.
+import { createRequire } from "node:module";
 
-const source = readFileSync(new URL("../../src/tow/static/app.js", import.meta.url), "utf8");
+const require = createRequire(import.meta.url);
 let now = 1_000_000_000_000;
 let nextId = 1;
 const timers = new Map(); // id -> {at, fn, every}
@@ -44,8 +43,8 @@ const context = {
     return { ok: true, json: async () => ({ ok: true, next_from_ts: next, interval_sec: 43200, check_ok: true }) };
   },
 };
-vm.createContext(context);
-vm.runInContext(source, context);
+Object.assign(globalThis, context);
+require("../../src/tow/static/app.js");
 
 const advance = async (ms) => {
   const end = now + ms;

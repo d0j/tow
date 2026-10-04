@@ -2,12 +2,13 @@
 
 ## Supported versions
 
-Only the latest release line receives security fixes.
+Only the latest stable release receives security fixes. Update to it before reporting a problem
+with an older release.
 
 | Version | Supported |
 |---|---|
-| 1.21.x | yes |
-| < 1.21 | no — update with `deploy.ps1 -Ref <tag>` or `tow update --ref <tag>` |
+| Latest stable release | yes |
+| Older releases | no — update with `deploy.ps1 -Ref <tag>` or `tow update --ref <tag>` |
 
 ## Reporting a vulnerability
 

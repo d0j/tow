@@ -1828,6 +1828,7 @@
       "file_invalid": "the file did not pass the check; data unchanged",
       "safety_point_failed": "the file is fine; could not create a safety point; data unchanged",
       "file_unreadable": "could not read the file; data unchanged",
+      "file_stage_failed": "could not prepare the backup file; check folder permissions and free disk space; data unchanged",
       "hours": "{count} h",
       "minutes": "{count} min",
       "bad_port": "wrong port",

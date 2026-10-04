@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import vm from "node:vm";
+import { createRequire } from "node:module";
 
-const source = readFileSync(new URL("../../src/tow/static/updates.js", import.meta.url), "utf8");
+const require = createRequire(import.meta.url);
 const elements = new Map();
 for (const name of ["release-badge", "release-status", "release-check", "release-notes", "release-install", "update-progress", "update-support", "update-rollback", "update-version", "update-apply", "update-previous", "update-reload"]) {
   elements.set(`[data-${name}]`, { hidden: true, disabled: false, textContent: "", value: "", events: {}, attributes: {},
@@ -34,8 +33,8 @@ const context = {
     return { ok: true, json: async () => url === "/updates/status" ? job : latest };
   },
 };
-vm.createContext(context);
-vm.runInContext(source, context);
+Object.assign(globalThis, context);
+require("../../src/tow/static/updates.js");
 const flush = async () => { for (let n = 0; n < 6; n++) await new Promise((resolve) => setImmediate(resolve)); };
 const click = async (name) => { el(name).events.click(); await flush(); };
 const poll = async () => { const entry = timers.entries().next().value; assert.ok(entry); timers.delete(entry[0]); entry[1](); await flush(); };
@@ -105,7 +104,9 @@ const guardContext = {
   MutationObserver: class { constructor(callback) { listeners.mutationObserver = callback; } observe() {} },
   fetch: async () => ({ ok: true, json: async () => ({ ok: true, available: false }) }),
 };
-vm.runInNewContext(source, guardContext);
+Object.assign(globalThis, guardContext);
+delete require.cache[require.resolve("../../src/tow/static/updates.js")];
+require("../../src/tow/static/updates.js");
 await flush();
 assert.equal(frames.length, 1); // badge discovery and initial layout are coalesced
 frames.shift()();

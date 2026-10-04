@@ -158,10 +158,11 @@ async def settings_portable_import(
     action = str(operation or "").strip().lower()
     if action not in {"check", "restore"}:
         return flash_redirect("/settings?open=transfer", "web.settings.unknown_action", "err")
-    temp_dir = Path(tempfile.mkdtemp(prefix="tow-browser-import-", dir=data_dir()))
-    upload_path = temp_dir / "uploaded.towx"
+    temp_dir: Path | None = None
     total = 0
     try:
+        temp_dir = Path(tempfile.mkdtemp(prefix="tow-browser-import-", dir=data_dir()))
+        upload_path = temp_dir / "uploaded.towx"
         with upload_path.open("xb") as handle:
             while chunk := await backup_file.read(1024 * 1024):
                 total += len(chunk)
@@ -200,11 +201,16 @@ async def settings_portable_import(
             flash = t("web.settings.file_invalid")
         elif failure == CREATE_FAILED:
             flash = t("web.settings.safety_point_failed")
+        elif temp_dir is None:
+            flash = t("web.settings.file_stage_failed")
         elif isinstance(exc, OSError):
             flash = t("web.settings.file_unreadable")
         else:
             flash = t("web.settings.restore_failed")
     finally:
-        await backup_file.close()
-        shutil.rmtree(temp_dir, ignore_errors=True)
+        try:
+            await backup_file.close()
+        finally:
+            if temp_dir is not None:
+                shutil.rmtree(temp_dir, ignore_errors=True)
     return flash_redirect("/settings?open=transfer", flash, kind)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import io
 import json
 import re
 from pathlib import Path
@@ -235,6 +237,61 @@ def test_browser_rejects_oversized_request_before_multipart_parse(monkeypatch, t
     )
 
     assert response.status_code == 413
+
+
+@pytest.mark.parametrize("language", ["en", "ru"])
+@pytest.mark.parametrize("operation", ["check", "restore"])
+@pytest.mark.parametrize("failure", [PermissionError, FileNotFoundError, OSError])
+def test_browser_import_reports_preparation_failure_without_changing_data(
+    monkeypatch, tmp_path, language, operation, failure
+):
+    _seed(monkeypatch, tmp_path, language)
+    before = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+
+    def cannot_prepare(*_args, **_kwargs):
+        raise failure("synthetic storage failure")
+
+    def must_not_import(_path):
+        pytest.fail("an unprepared upload must never enter the import engine")
+
+    monkeypatch.setattr("tow.web.routes_backup.tempfile.mkdtemp", cannot_prepare)
+    monkeypatch.setattr("tow.web.services.check_portable_bundle", must_not_import)
+    monkeypatch.setattr("tow.web.services.restore_portable_bundle", must_not_import)
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"}, raise_server_exceptions=False)
+
+    response = client.post(
+        "/settings/portable/import",
+        data={"operation": operation},
+        files={"backup_file": ("backup.towx", b"not-empty", "application/octet-stream")},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert t("web.settings.file_stage_failed", language) in shown(response.headers["location"])
+    assert all(path.read_bytes() == content for path, content in before.items())
+    assert list((tmp_path / "data").glob("tow-browser-import-*")) == []
+
+
+def test_browser_import_cleans_staged_file_when_upload_close_fails(monkeypatch, tmp_path):
+    from starlette.datastructures import UploadFile
+
+    from tow.web.routes_backup import settings_portable_import
+
+    _seed(monkeypatch, tmp_path)
+    upload = UploadFile(file=io.BytesIO(b"not-empty"), filename="backup.towx")
+
+    async def cannot_close():
+        raise OSError("synthetic close failure")
+
+    monkeypatch.setattr(upload, "close", cannot_close)
+    monkeypatch.setattr("tow.web.services.check_portable_bundle", lambda _path: None)
+
+    with pytest.raises(OSError, match="synthetic close failure"):
+        asyncio.run(settings_portable_import(upload, "check"))
+
+    assert list((tmp_path / "data").glob("tow-browser-import-*")) == []
+    assert load_state()["topics"] == [{"id": "before"}]
+    upload.file.close()
 
 
 def test_browser_reports_critical_rollback_failure_truthfully(monkeypatch, tmp_path):
