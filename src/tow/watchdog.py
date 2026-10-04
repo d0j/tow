@@ -62,6 +62,8 @@ def _load_state() -> dict[str, Any]:
                     "checks",
                     "backup",
                     "backup_cleanup",
+                    "backup_cleanup_monitoring",
+                    "backup_cleanup_bound",
                     "restore_point_cleanup",
                     "restore_point_cleanup_monitoring",
                     "restore_point_cleanup_bound",
@@ -70,7 +72,9 @@ def _load_state() -> dict[str, Any]:
                 bool,
             ),
         )
-        check_types(value, {"last_problem": dict, "restore_point_cleanup_location": str})
+        check_types(
+            value, {"last_problem": dict, "restore_point_cleanup_location": str, "backup_cleanup_location": str}
+        )
         problem = value.get("last_problem")
         if isinstance(problem, dict):
             check_epochs(problem, ("at",))
@@ -266,6 +270,7 @@ def _checks(p: _Pass, interval: int, state: dict[str, Any], *, wake_ts: float | 
 def _backups(p: _Pass, cfg: dict[str, Any]) -> None:
     """Did the last night copy fail, or is the newest good one too old?"""
     from tow.restore_points import cleanup_status
+    from tow.snapshots import cleanup_status as night_cleanup_status
     from tow.snapshots import list_snapshots, status, status_failed
 
     st = status()
@@ -279,25 +284,8 @@ def _backups(p: _Pass, cfg: dict[str, Any]) -> None:
     failed = status_failed(st)
     stale = p.now() - float(last_ok if last_ok else since) > BACKUP_STALE_SEC
     p.report["backup_ok"] = not failed and not stale
-    p.report["backup_cleanup_pending"] = st.get("last_cleanup_pending") is True
-    p.report["backup_cleanup_read_error"] = st.get("read_error") is True
-    cleanup = cleanup_status(cfg=cfg)
-    location = cleanup["location"] or p.previous.get("restore_point_cleanup_location") or ""
-    same_folder = p.previous.get("restore_point_cleanup_location") in (None, location)
-    previously_known = same_folder and type(p.previous.get("restore_point_cleanup")) is bool
-    previously_bound = same_folder and p.previous.get("restore_point_cleanup_bound") is True
-    lost_binding = previously_bound and cleanup.get("legacy") is True
-    pending = None if lost_binding else cleanup["pending"]
-    legacy_migration = cleanup.get("legacy") is True and not previously_bound
-    p.report["restore_point_cleanup_legacy_migration"] = legacy_migration
-    p.report["restore_point_cleanup_bound"] = previously_bound or (
-        type(pending) is bool and cleanup.get("legacy") is not True
-    )
-    p.report["restore_point_cleanup_location"] = location
-    p.report["restore_point_cleanup_pending"] = pending
-    p.report["restore_point_cleanup_read_error"] = (
-        cleanup["read_error"] or lost_binding or (pending is None and previously_known and not legacy_migration)
-    )
+    _cleanup_observation(p, "backup_cleanup", night_cleanup_status(cfg=cfg))
+    _cleanup_observation(p, "restore_point_cleanup", cleanup_status(cfg=cfg))
     if failed:
         reason = st.get("last_error") or t("watchdog.backup.unknown_reason", p.lang)
         p.backup_why = (
@@ -309,6 +297,25 @@ def _backups(p: _Pass, cfg: dict[str, Any]) -> None:
         p.backup_why = (
             t("watchdog.backup.stale", p.lang, at=clock(last_ok)) if last_ok else t("watchdog.backup.never", p.lang)
         )
+
+
+def _cleanup_observation(p: _Pass, key: str, cleanup: dict[str, Any]) -> None:
+    """Keep a folder's last confirmed fact independently of its monitoring health."""
+    location = cleanup["location"] or p.previous.get(f"{key}_location") or ""
+    same_folder = p.previous.get(f"{key}_location") in (None, location)
+    previously_known = same_folder and type(p.previous.get(key)) is bool
+    previously_bound = same_folder and p.previous.get(f"{key}_bound") is True
+    lost_binding = previously_bound and cleanup.get("legacy") is True
+    pending = None if lost_binding else cleanup["pending"]
+    legacy_migration = cleanup.get("legacy") is True and not previously_bound
+    p.report[f"{key}_previously_known"] = previously_known
+    p.report[f"{key}_legacy_migration"] = legacy_migration
+    p.report[f"{key}_bound"] = previously_bound or (type(pending) is bool and cleanup.get("legacy") is not True)
+    p.report[f"{key}_location"] = location
+    p.report[f"{key}_pending"] = pending
+    p.report[f"{key}_read_error"] = (
+        cleanup["read_error"] or lost_binding or (pending is None and previously_known and not legacy_migration)
+    )
 
 
 def _outage(p: _Pass, probes: Probes, machine: Machine | None) -> None:
@@ -341,12 +348,15 @@ def _outage(p: _Pass, probes: Probes, machine: Machine | None) -> None:
 def _change_alerts(p: _Pass, current: dict[str, bool]) -> None:
     report, previous = p.report, p.previous
     for key, ok in current.items():
-        if key == "restore_point_cleanup_monitoring" and report["restore_point_cleanup_legacy_migration"]:
+        cleanup_key = next((name for name in ("backup_cleanup", "restore_point_cleanup") if key.startswith(name)), None)
+        if cleanup_key and key.endswith("_monitoring") and report[f"{cleanup_key}_legacy_migration"]:
             continue  # readable legacy metadata is neither a folder outage nor cleanup recovery
+        if key == "backup_cleanup_monitoring" and not report["backup_cleanup_previously_known"]:
+            continue  # there is no prior cleanup fact to lose; copy-status errors are reported separately
         before = previous.get(key)
-        if key.startswith("restore_point_cleanup") and previous.get("restore_point_cleanup_location") not in (
+        if cleanup_key and previous.get(f"{cleanup_key}_location") not in (
             None,
-            report["restore_point_cleanup_location"],
+            report[f"{cleanup_key}_location"],
         ):
             before = None  # a new folder cannot resolve a warning about the old one
         if (before if type(before) is bool else True) == ok:
@@ -368,6 +378,13 @@ def _change_alerts(p: _Pass, current: dict[str, bool]) -> None:
                 t("watchdog.alert.backup_cleanup_pending", p.lang)
                 if not ok
                 else t("watchdog.alert.backup_cleanup_ok", p.lang)
+            )
+        elif key == "backup_cleanup_monitoring":
+            report["alerts"].append(
+                t(
+                    "watchdog.alert.backup_cleanup_unreadable" if not ok else "watchdog.alert.backup_cleanup_readable",
+                    p.lang,
+                )
             )
         elif key == "restore_point_cleanup":
             report["alerts"].append(
@@ -411,8 +428,9 @@ def _change_alerts(p: _Pass, current: dict[str, bool]) -> None:
 def _remember(p: _Pass, current: dict[str, bool], machine: Machine | None) -> None:
     previous, report = p.previous, p.report
     saved: dict[str, Any] = {**current, "at": int(p.now()), "backup_watch_since": report.get("backup_watch_since")}
-    saved["restore_point_cleanup_location"] = report["restore_point_cleanup_location"]
-    saved["restore_point_cleanup_bound"] = report["restore_point_cleanup_bound"]
+    for key in ("backup_cleanup", "restore_point_cleanup"):
+        saved[f"{key}_location"] = report[f"{key}_location"]
+        saved[f"{key}_bound"] = report[f"{key}_bound"]
     if report.get("checks_watch_since"):
         saved["checks_watch_since"] = report["checks_watch_since"]
     if machine is not None:
@@ -478,21 +496,15 @@ def run_watchdog(
         "service": report["service_ok"],
         "checks": report["checks_ok"],
         "backup": report["backup_ok"],
-        "restore_point_cleanup_monitoring": not report["restore_point_cleanup_read_error"],
     }
     # An unreadable observation keeps the last confirmed result, not a fabricated recovery.
-    if not report["backup_cleanup_read_error"]:
-        current["backup_cleanup"] = not report["backup_cleanup_pending"]
-    elif type(previous.get("backup_cleanup")) is bool:
-        current["backup_cleanup"] = previous["backup_cleanup"]
-    pending = report["restore_point_cleanup_pending"]
-    if type(pending) is bool:
-        current["restore_point_cleanup"] = not pending
-    elif (
-        previous.get("restore_point_cleanup_location") in (None, report["restore_point_cleanup_location"])
-        and type(previous.get("restore_point_cleanup")) is bool
-    ):
-        current["restore_point_cleanup"] = previous["restore_point_cleanup"]
+    for key in ("backup_cleanup", "restore_point_cleanup"):
+        current[f"{key}_monitoring"] = not report[f"{key}_read_error"]
+        pending = report[f"{key}_pending"]
+        if type(pending) is bool:
+            current[key] = not pending
+        elif previous.get(f"{key}_location") in (None, report[f"{key}_location"]) and type(previous.get(key)) is bool:
+            current[key] = previous[key]
     if report.get("skipped"):
         current["service"] = previous.get("service", True)  # a deploy is not an outage
     _outage(p, probes, machine)

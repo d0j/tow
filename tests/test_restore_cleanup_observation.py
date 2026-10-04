@@ -285,9 +285,15 @@ def test_writer_validation_failure_keeps_previous_bytes(monkeypatch, tmp_path):
     assert path.read_bytes() == before
 
 
-def test_damaged_night_record_does_not_resolve_night_cleanup_warning(tmp_path):
+def test_damaged_night_record_does_not_resolve_night_cleanup_warning(tmp_path, tmp_path_factory):
     _seed()
-    (tmp_path / "backup-status.json").write_text(json.dumps({"last_cleanup_pending": True}), encoding="utf-8")
+    folder = tmp_path_factory.mktemp("night-copies")
+    cfg = load_config()
+    cfg["backup_dir"] = str(folder)
+    save_config(cfg)
+    (tmp_path / "backup-status.json").write_text(
+        json.dumps({"last_cleanup_pending": True, "location": str(folder.resolve())}), encoding="utf-8"
+    )
     sent = []
     _check(sent)
     (tmp_path / "backup-status.json").write_bytes(b"{")
