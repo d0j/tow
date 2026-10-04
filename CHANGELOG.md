@@ -3,6 +3,18 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.34] — 2026-10-04
+
+### Fixed
+
+- Confirm absence after removing an old restore-point archive; held files, unchanged paths and unreadable
+  results leave a cleanup warning while the new verified archive stays usable. Retain foreign and protected copies.
+- Preserve safety-archive cleanup warnings through point/file restores, Monitorrent import and web updates.
+  Show successful restores separately from incomplete cleanup, including simultaneous audit-log warnings.
+- Keep folder-bound cleanup status visible after a page reload, in the collapsed Settings section, archive
+  card, history and localized update progress. The watchdog reports pending cleanup and completion once per
+  state change without turning a working service or verified copy into an outage.
+
 ## [1.22.33] — 2026-10-04
 
 ### Fixed

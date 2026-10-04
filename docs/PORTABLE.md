@@ -436,6 +436,14 @@ pending night cleanup even with the section collapsed; CLI output and history re
 The watchdog sends separate cleanup-pending and cleanup-complete messenger alerts once per state
 change; a usable copy with pending cleanup remains healthy rather than becoming a failed backup.
 
+The same confirmed-absence rule applies to `.towx` restore-point retention. Incomplete cleanup
+does not cancel a verified new archive, restore, import or update: their results carry the warning
+instead. `data/restore-point-status.json` is best-effort monitoring state, bound to the current archive
+folder; it grants no deletion rights. Settings and the watchdog keep point cleanup separate from
+night-copy health. A successful subsequent point creation retries retention and clears the warning
+for that folder. Web-update jobs also retain a typed cleanup flag across worker restarts and show it
+beside the actual update outcome; older jobs without this flag remain readable.
+
 Verification: `tests/test_update.py` runs the real script against a throwaway git clone (git is
 the only program the test guard lets through, marker `allow_git`) with uv, the web server,
 autostart and processes faked: success with pruning, a target that does not answer (rollback with

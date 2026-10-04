@@ -74,6 +74,8 @@
       "cannot_read": "cannot read the restore points",
       "cannot_rotate": "cannot remove an old restore point",
       "cleanup_warning": "the new restore point is saved and verified, but old copies could not be removed",
+      "restore_cleanup_warning": "The data is restored and the safety archive is verified, but cleanup of old restore points is incomplete.",
+      "cleanup_pending": "Cleanup of old restore points is incomplete. Check folder access and files held by other programs; the next restore point will retry cleanup. Verified copies remain available.",
       "cannot_create_dir": "cannot create the restore points folder",
       "unsafe_dir": "unsafe restore points folder",
       "read_back_failed": "the new restore point could not be read back",
@@ -797,6 +799,7 @@
       "log_empty": "No log entries for this operation.",
       "started": "Started: {when}",
       "finished": "Finished: {when}",
+      "backup_cleanup_pending": "The data archive is verified; cleanup of old restore points is incomplete.",
       "log_unavailable": "Could not read the update log."
     },
     "submit": {
@@ -877,7 +880,8 @@
   "log": {
     "cleanup": {
       "night": "night copies",
-      "safety": "safety copies before a restore"
+      "safety": "safety copies before a restore",
+      "restore_point": "restore point archives"
     },
     "how": {
       "manual": "manual",
@@ -1579,6 +1583,8 @@
       "backup_ok": "TOW: night copies are being made again",
       "backup_cleanup_pending": "TOW: the night copy is saved, but cleanup of old copies is incomplete. Check backup folder access and files held by other programs; the next copy will retry cleanup.",
       "backup_cleanup_ok": "TOW: cleanup of old night copies is complete",
+      "point_cleanup_pending": "TOW: the restore point is saved and verified, but cleanup of old archives is incomplete. Check folder access and files held by other programs; the next restore point will retry cleanup.",
+      "point_cleanup_ok": "TOW: cleanup of old restore points in the current folder is complete",
       "was_down_for": " (was down for {duration})",
       "up_again": "TOW works again",
       "checks_late": "TOW: scheduled checks have not run since {since}",

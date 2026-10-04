@@ -33,9 +33,12 @@ def _backup_redirect(message: Any, kind: str = "ok", /, **params: Any) -> Redire
 
 def _restore_outcome(key: str, result: dict[str, Any]) -> tuple[str, str]:
     message = t(key)
+    warnings = []
     if result.get("log_recorded") is False:
-        return f"{message}; {t('web.settings.audit_missing')}", "warn"
-    return message, "ok"
+        warnings.append(t("web.settings.audit_missing"))
+    if result.get("cleanup_warning"):
+        warnings.append(t("backup.restore_point.restore_cleanup_warning"))
+    return "; ".join([message, *warnings]), "warn" if warnings else "ok"
 
 
 @router.post("/settings/backup/location")

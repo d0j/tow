@@ -242,6 +242,7 @@ def _checks(p: _Pass, interval: int, state: dict[str, Any], *, wake_ts: float | 
 
 def _backups(p: _Pass) -> None:
     """Did the last night copy fail, or is the newest good one too old?"""
+    from tow.restore_points import cleanup_pending
     from tow.snapshots import list_snapshots, status
 
     st = status()
@@ -257,6 +258,7 @@ def _backups(p: _Pass) -> None:
     stale = p.now() - float(last_ok if last_ok else since) > BACKUP_STALE_SEC
     p.report["backup_ok"] = not failed and not stale
     p.report["backup_cleanup_pending"] = st.get("last_cleanup_pending") is True
+    p.report["restore_point_cleanup_pending"] = cleanup_pending()
     if failed:
         reason = st.get("last_error") or t("watchdog.backup.unknown_reason", p.lang)
         p.backup_why = t("watchdog.backup.failed", p.lang, error=reason)
@@ -311,6 +313,12 @@ def _change_alerts(p: _Pass, current: dict[str, bool]) -> None:
                 t("watchdog.alert.backup_cleanup_pending", p.lang)
                 if not ok
                 else t("watchdog.alert.backup_cleanup_ok", p.lang)
+            )
+        elif key == "restore_point_cleanup":
+            report["alerts"].append(
+                t("watchdog.alert.point_cleanup_pending", p.lang)
+                if not ok
+                else t("watchdog.alert.point_cleanup_ok", p.lang)
             )
         elif key == "service":
             down_since = previous.get("down_since")
@@ -401,6 +409,7 @@ def run_watchdog(
         "checks": report["checks_ok"],
         "backup": report["backup_ok"],
         "backup_cleanup": not report["backup_cleanup_pending"],
+        "restore_point_cleanup": not report["restore_point_cleanup_pending"],
     }
     if report.get("skipped"):
         current["service"] = previous.get("service", True)  # a deploy is not an outage

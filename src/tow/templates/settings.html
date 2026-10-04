@@ -415,7 +415,7 @@
     <details class="settings-section settings-accordion acc" id="acc-transfer" data-q="{{ t('settings.backups.q') }}">
       <summary>
         <span id="settings-transfer-title" class="settings-summary-title">{{ t('settings.backups.title') }}</span>
-        <span class="pill {{ 'bad' if backups.failed else ('warn' if backups.cleanup_pending else ('ok' if backups.last_ok else 'mut')) }}">{% if backups.failed %}{{ t('settings.backups.pill_failed') }}{% elif backups.cleanup_pending %}{{ t('settings.backups.pill_cleanup') }}{% elif backups.last_ok %}{{ t('settings.backups.pill_last', at=backups.last_ok) }}{% else %}{{ t('settings.backups.pill_none') }}{% endif %}</span>
+        <span class="pill {{ 'bad' if backups.failed else ('warn' if backups.cleanup_pending or backups.point_cleanup_pending else ('ok' if backups.last_ok else 'mut')) }}">{% if backups.failed %}{{ t('settings.backups.pill_failed') }}{% elif backups.cleanup_pending or backups.point_cleanup_pending %}{{ t('settings.backups.pill_cleanup') }}{% elif backups.last_ok %}{{ t('settings.backups.pill_last', at=backups.last_ok) }}{% else %}{{ t('settings.backups.pill_none') }}{% endif %}</span>
       </summary>
       <div class="settings-panel">
         {# L6: three ways to keep TOW safe, one card each: night copies, copies made by hand, a TOW file. #}
@@ -463,8 +463,9 @@
           <article class="integration-card backup-card" id="backup-manual" aria-labelledby="backup-manual-title">
             <div class="integration-head">
               <div><h2 id="backup-manual-title">{{ t('settings.backups.manual_title') }}</h2><p>{{ t('settings.backups.manual_note') }}</p></div>
-              <span class="pill {{ 'ok' if restore_points else 'mut' }}">{% if restore_points %}{{ t('settings.backups.saved_count', n=restore_points|length) }}{% else %}{{ t('settings.backups.manual_empty') }}{% endif %}</span>
+              <span class="pill {{ 'warn' if backups.point_cleanup_pending else ('ok' if restore_points else 'mut') }}">{% if backups.point_cleanup_pending %}{{ t('settings.backups.pill_cleanup') }}{% elif restore_points %}{{ t('settings.backups.saved_count', n=restore_points|length) }}{% else %}{{ t('settings.backups.manual_empty') }}{% endif %}</span>
             </div>
+            {% if backups.point_cleanup_pending %}<p class="section-note" role="status">{{ t('backup.restore_point.cleanup_pending') }}</p>{% endif %}
             <form method="post" action="/settings/restore-points" data-return-target="acc-transfer" class="settings-actions backup-make">
               <button type="submit">{{ t('settings.backups.create') }}</button>
             </form>
