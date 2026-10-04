@@ -594,6 +594,29 @@ Built so far (this workstream):
   (POSIX sh, `sh -n`, the uninstall of install.sh on a stub, PowerShell parsing, the release
   workflow's order and permissions).
 
+## Migrating from Monitorrent
+
+`tow import-monitorrent --db <database>` previews the migration without importing data. Add `--apply` to import.
+Use `--client <id>` to choose an enabled, supported client; otherwise the currently configured main client is used.
+New topics keep that explicit client binding even if the main client changes later. Existing topics, selections,
+paused/one-time state and configured credentials are not overwritten. qBittorrent connection settings only go to
+a qBittorrent client; another destination reports them as skipped rather than putting them into its secret block.
+A secret reference shared by different client types also skips these settings with an explicit warning;
+intentional sharing between clients of the same type remains compatible. Preview reports these skips too.
+Partly configured connections are kept as a whole, without mixing accounts: an existing client login/password,
+address or non-default port, any Kinozal credential, or Telegram token/recipients prevents replacement.
+An otherwise empty client block containing only the default port remains eligible for import.
+
+The source is opened read-only and every query uses one SQLite read transaction, so concurrent Monitorrent writes
+cannot mix topics and credentials from different snapshots. Missing optional tables/columns remain compatible;
+corrupt files and failed queries report an error, not a successful empty import.
+
+Applying first creates a verified restore point, then writes state and encrypted secrets in one store transaction.
+Both stores are read back before commit. A write/read-back failure restores the original stores; a crash leaves a
+journal for recovery on the next data lock. If recovery itself fails, the error explicitly says so and retains the
+journal. The restore point remains available; incomplete archive cleanup is reported separately from import success.
+No torrent-client or messenger request is made by this command.
+
 ## 8. Upgrading from the five-task layout (≤1.17)
 
 An install from 1.17 or earlier ran as five Windows tasks (TOW-serve, -check, -progress, -backup,

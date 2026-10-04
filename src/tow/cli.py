@@ -130,6 +130,7 @@ def _build_parser() -> argparse.ArgumentParser:
     im = sub.add_parser("import-monitorrent", help=t("cli.help.import_monitorrent"))
     im.add_argument("--json", action="store_true", help=as_json)
     im.add_argument("--db", required=True, type=Path, help=t("cli.help.monitorrent_db"))
+    im.add_argument("--client", help=t("cli.help.monitorrent_client"))
     im.add_argument("--apply", action="store_true", help=t("cli.help.monitorrent_apply"))
     c = sub.add_parser("check", help=t("cli.help.check"), description=t("cli.help.check"))
     c.add_argument("--json", action="store_true", help=as_json)
@@ -354,7 +355,7 @@ def _cmd_import_monitorrent(args: argparse.Namespace) -> int:
     from tow.import_monitorrent import MonitorrentImportError, import_monitorrent
 
     try:
-        _print(import_monitorrent(args.db, apply=args.apply), args.json)
+        _print(import_monitorrent(args.db, apply=args.apply, client_id=args.client), args.json)
     except MonitorrentImportError as exc:
         _print({"ok": False, "error": str(exc)}, args.json)
         return 3

@@ -112,8 +112,9 @@ def test_missing_tables_and_missing_file(tmp_path):
     connection.close()
 
     assert import_monitorrent(partial)["credentials_found"] == []
-    with pytest.raises(MonitorrentImportError, match="not found"):
+    with pytest.raises(MonitorrentImportError) as caught:
         import_monitorrent(tmp_path / "absent.sqlite")
+    assert caught.value.code == "monitorrent.missing"
 
 
 def test_cli_previews_unless_apply(database, capsys):
