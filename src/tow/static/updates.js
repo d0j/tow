@@ -182,6 +182,9 @@
           progress.textContent = ["failed", "refused", "interrupted"].includes(job.status) ?
             job.error_message : progress.textContent + " · " + job.error_message;
         }
+        if (job.backup_cleanup_pending === true) {
+          progress.textContent += " · " + t("js.releases.backup_cleanup_pending");
+        }
         for (const label of [dateLabel(job.started_at, "js.releases.started"), dateLabel(job.finished_at, "js.releases.finished")]) {
           if (label) progress.textContent += " · " + label;
         }

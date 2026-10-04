@@ -57,7 +57,7 @@ def import_monitorrent(db_path: Path, *, apply: bool = False) -> dict[str, Any]:
             save_secrets(secrets)
         state["topics"] = [*(state.get("topics") or []), *new_topics]
         save_state(state)
-    return {
+    result = {
         "preview": False,
         "restore_point": point["id"],
         "topics_added": len(new_topics),
@@ -65,6 +65,9 @@ def import_monitorrent(db_path: Path, *, apply: bool = False) -> dict[str, Any]:
         "credentials_filled": sorted(filled),
         "credentials_kept": sorted(kept),
     }
+    if point.get("cleanup_warning"):
+        result["cleanup_warning"] = point["cleanup_warning"]
+    return result
 
 
 def _rows(con: sqlite3.Connection, sql: str) -> list[sqlite3.Row]:

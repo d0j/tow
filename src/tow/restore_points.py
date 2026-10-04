@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import json
 import logging
 import re
 import stat
@@ -11,8 +13,9 @@ from typing import Any
 from tow.bundle import ExportImportError, export_bundle, import_bundle, rollback_import, verify_bundle
 from tow.config import load_config
 from tow.i18n import t
-from tow.log import owner_language
-from tow.store import SecretStoreError, derive_local_secret, persistence_lock
+from tow.log import log_event, owner_language
+from tow.paths import data_dir
+from tow.store import SecretStoreError, atomic_write_text, derive_local_secret, persistence_lock
 
 RESTORE_POINT_LIMIT = 10
 _ID_RE = re.compile(r"^(?P<stamp>\d{8}T\d{6}Z)-(?P<nonce>[a-f0-9]{8})$")
@@ -63,6 +66,31 @@ def _passphrase() -> str:
         return derive_local_secret("restore-points")
     except SecretStoreError as exc:
         raise RestorePointError(t("backup.restore_point.master_key", owner_language()), kind=MASTER_KEY) from exc
+
+
+def cleanup_pending() -> bool:
+    """Informational state only; it never grants permission to delete an archive."""
+    try:
+        state = json.loads((data_dir() / "restore-point-status.json").read_text(encoding="utf-8"))
+        return (
+            isinstance(state, dict)
+            and state.get("cleanup_pending") is True
+            and state.get("location") == str(restore_points_dir().resolve())
+        )
+    except OSError, ValueError, UnicodeError, RecursionError, RestorePointError:
+        return False
+
+
+def _record_cleanup(pending: bool, location: Path) -> None:
+    # A monitoring write must not invalidate an already verified archive.
+    with contextlib.suppress(OSError):
+        atomic_write_text(
+            data_dir() / "restore-point-status.json",
+            json.dumps({"cleanup_pending": pending, "location": str(location.resolve())}),
+        )
+    if pending:
+        with contextlib.suppress(OSError):
+            log_event("backup_cleanup_pending", copy_kind="restore_point", how="manual")
 
 
 def _portable_passphrase() -> str:
@@ -143,6 +171,13 @@ def _prune(*, protected: set[str]) -> None:
             continue
         try:
             path.unlink()
+            try:
+                path.lstat()
+            except FileNotFoundError:
+                continue
+            # A successful call is not proof of absence (network filesystems, replacements).
+            # Never delete a replacement in a second attempt.
+            raise RestorePointError(t("backup.restore_point.cannot_rotate", owner_language()), kind=CREATE_FAILED)
         except OSError as exc:
             raise RestorePointError(
                 t("backup.restore_point.cannot_rotate", owner_language()), kind=CREATE_FAILED
@@ -186,6 +221,7 @@ def _create_restore_point(*, protected: set[str] | None = None) -> dict[str, Any
         # A verified copy remains usable even when an old copy cannot be removed.
         view["cleanup_warning"] = t("backup.restore_point.cleanup_warning", owner_language())
         logging.getLogger("tow.restore_points").warning("%s", view["cleanup_warning"])
+    _record_cleanup(bool(view.get("cleanup_warning")), root)
     return view
 
 
@@ -282,7 +318,7 @@ def _restore_bundle(
         if isinstance(exc, RestorePointError):
             raise
         raise RestorePointError(t("backup.restore_point.data_kept", owner_language()), kind=RESTORE_FAILED) from exc
-    return {
+    result = {
         "ok": True,
         "restored": restored,
         "safety_point": str(safety_point["id"]),
@@ -290,11 +326,15 @@ def _restore_bundle(
         "checkpoint": str(applied["checkpoint"]),
         "log_recorded": applied.get("log_recorded") is True,
     }
+    if safety_point.get("cleanup_warning"):
+        result["cleanup_warning"] = safety_point["cleanup_warning"]
+    return result
 
 
 __all__ = [
     "RestorePointError",
     "check_portable_bundle",
+    "cleanup_pending",
     "create_restore_point",
     "export_portable_bundle",
     "list_restore_points",

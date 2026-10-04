@@ -177,6 +177,9 @@ def status() -> dict[str, Any]:
     for key in ("target", "previous", "error", "safety_point"):
         if key in job and not isinstance(job[key], str):
             raise WebUpdateError("releases.job_unreadable")
+    if "backup_cleanup_pending" in job and not isinstance(job["backup_cleanup_pending"], bool):
+        raise WebUpdateError("releases.job_unreadable")
+    result["backup_cleanup_pending"] = job.get("backup_cleanup_pending") is True
     if job.get("status") in _ACTIVE and not active:
         result.update(status="interrupted", error="releases.interrupted")
     elif unverified:
@@ -281,6 +284,7 @@ def start(version: str) -> dict[str, Any]:
                 "previous": __version__,
                 "started_at": time.time(),
                 "safety_point": safety["id"],
+                "backup_cleanup_pending": bool(safety.get("cleanup_warning")),
                 "lease_version": 1,
             }
             atomic_write_bytes(path, json.dumps(job).encode())
@@ -310,4 +314,11 @@ def start(version: str) -> dict[str, Any]:
                 job.update(status="failed", error="releases.launch_failed", finished_at=time.time())
                 atomic_write_bytes(path, json.dumps(job).encode())
             raise WebUpdateError("releases.launch_failed") from exc
-    return {"ok": True, "id": job_id, "target": version, "status": "queued", "safety_point": safety["id"]}
+    return {
+        "ok": True,
+        "id": job_id,
+        "target": version,
+        "status": "queued",
+        "safety_point": safety["id"],
+        "backup_cleanup_pending": bool(safety.get("cleanup_warning")),
+    }
