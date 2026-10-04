@@ -3,6 +3,15 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.53] — 2026-10-05
+
+### Changed
+
+- Home filters sit closer to the header and list, with smaller gaps and wrapping on
+  narrow screens. Sorting uses a compact icon button and a menu with labelled icons,
+  a checked choice, keyboard navigation and focus return. Search, tracker and status
+  filters and the selected order still survive reload through the page URL.
+
 ## [1.22.52] — 2026-10-04
 
 ### Fixed

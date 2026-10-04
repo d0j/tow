@@ -103,7 +103,7 @@
     <a href="/settings?open=service#acc-service" title="{{ t('releases.current', version=h.ver) }}">TOW {{ h.ver }}</a>
     <a href="/settings?open=service#acc-service" class="release-badge" data-release-badge hidden></a>
   </div>
-<main id="main" aria-labelledby="page-title">
+<main id="main"{% if request.url.path == '/' %} class="home-page"{% endif %} aria-labelledby="page-title">
   {#- A message an action left (typed flash): its kind comes from the route - ok fades, warn stays, err is an alert that stays. -#}
   {% if flash %}<div class="flash{% if flash.kind == 'err' %} error{% elif flash.kind == 'warn' %} warn{% endif %}" id="flash" role="{{ 'alert' if flash.kind == 'err' else 'status' }}"{% if flash.kind == 'ok' %} data-ttl="{{ undo_left_sec() if undo_in_flash else flash_ttl_sec() }}"{% endif %}><span>{{ flash.text|sentence }}</span>
   {%- if undo_in_flash %}<form method="post" action="/undo" class="flash-undo" id="undo-form" data-ttl="{{ undo_left_sec() }}"><button class="ghost sm" type="submit" data-keep title="{{ t('base.undo.title', what=undo_label()) }}">{{ t('base.undo.button') }} <span class="undo-left" data-undo-left aria-hidden="true"></span></button></form>{% endif -%}
