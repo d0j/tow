@@ -402,6 +402,7 @@ HISTORY_GROUPS = {
             "browser_auth_failed",
             "watchdog_alert",
             "client_stop_failed",
+            "backup_cleanup_pending",
         }
     ),
     "changes": frozenset(
@@ -540,6 +541,12 @@ def format_event(rec: Mapping[str, Any], *, title_index: Mapping[str, str] | Non
         bits.append(t("log.how.manual", lang))
     elif how == "auto":
         bits.append(t("log.how.auto", lang))
+    if kind == "backup_cleanup_pending":
+        cleanup_key = {"night": "log.cleanup.night", "safety": "log.cleanup.safety"}.get(
+            str(rec.get("copy_kind") or "")
+        )
+        if cleanup_key:
+            bits.append(t(cleanup_key, lang))
     cls = str(rec.get("cls") or "")
     if cls:
         bits.append(CLS_RU.label(cls, lang, cls))

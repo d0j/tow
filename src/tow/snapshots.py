@@ -18,6 +18,7 @@ import contextlib
 import hashlib
 import hmac
 import json
+import os
 import re
 import shutil
 import stat
@@ -250,6 +251,7 @@ def create_snapshot(*, keep: int | None = None, how: str = "auto") -> dict[str, 
         last_snapshot=Path(result["snapshot"]).name,
         last_bytes=result["bytes"],
         last_missing=result["missing"],
+        last_cleanup_pending=bool(result.get("cleanup_warning")),
         location=str(Path(result["snapshot"]).parent),
         last_error="",
     )
@@ -350,10 +352,7 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
     except SnapshotError as exc:
         raise SnapshotError(t("backup.snapshot.unverified", owner_language(), name=target.name, reason=exc)) from exc
     # Never the copy just verified, even when the clock went back and it does not sort last.
-    others = [p.name for p in _snapshots(root) if p.name != target.name and _owned_manifest(p, key) is not None]
-    pruned = others[: max(0, len(others) - (keep - 1))] if keep > 0 else []
-    for name in pruned:
-        shutil.rmtree(root / name, ignore_errors=True)
+    pruned, cleanup_pending = _prune_night_copies(root, target, keep, key)
     size = sum(item["size"] for item in files.values())
     log_event(
         "backup_created",
@@ -361,10 +360,11 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
         files=len(files),
         bytes=size,
         pruned=len(pruned),
+        cleanup_pending=cleanup_pending,
         missing=missing,
         how=how,
     )
-    return {
+    result = {
         "ok": True,
         "snapshot": str(target),
         "files": len(files),
@@ -372,6 +372,104 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
         "pruned": pruned,
         "missing": missing,
     }
+    if cleanup_pending:
+        result["cleanup_warning"] = t("backup.snapshot.cleanup_warning", owner_language())
+        log_event("backup_cleanup_pending", copy_kind="night", how=how)
+    return result
+
+
+def _prune_night_copies(root: Path, target: Path, keep: int, key: bytes) -> tuple[list[str], bool]:
+    removed: list[str] = []
+    pending = False
+    try:
+        others = []
+        fixed = {name for name, _path in _fixed_members()}
+        for folder in _snapshots(root):
+            if folder == target:
+                continue
+            manifest = _owned_manifest(folder, key)
+            if manifest is None or any(
+                name not in fixed and _POINT_MEMBER.fullmatch(name) is None for name in manifest["files"]
+            ):
+                continue
+            if _owned_tree(folder, {"MANIFEST.json", *manifest["files"]}):
+                others.append((folder, {"MANIFEST.json", *manifest["files"]}))
+        for folder, expected in others[: max(0, len(others) - (keep - 1))] if keep > 0 else []:
+            if _remove_copy(folder, root, "MANIFEST.json", expected):
+                removed.append(folder.name)
+            else:
+                pending = True
+    except OSError, ValueError, SnapshotError:
+        pending = True  # the new verified copy is usable even when cleanup cannot be checked
+    return removed, pending
+
+
+def _owned_tree(folder: Path, expected: set[str]) -> bool:
+    """No foreign file, special file or link may be swept up with an owned copy."""
+    _ordinary_directory(folder)
+    for path in folder.iterdir():
+        if path.name == "restore-points":
+            _ordinary_directory(path)
+            for point in path.iterdir():
+                if f"restore-points/{point.name}" not in expected:
+                    return False
+                _ordinary_file(point)
+        elif path.name in expected:
+            _ordinary_file(path)
+        else:
+            return False
+    return True
+
+
+def _remove_copy(folder: Path, parent: Path, marker: str, expected: set[str]) -> bool:
+    """Remove an already-owned copy, retaining its proof until the final directory step."""
+    try:
+        if Path(marker).name != marker or marker not in expected:
+            return False
+        _ordinary_directory(folder)
+        if folder.resolve().parent != parent.resolve():
+            return False
+        proof = folder / marker
+        _ordinary_file(proof)
+        content = proof.read_bytes()
+        if not _owned_tree(folder, expected):
+            return False
+        for child in sorted(folder.iterdir()):
+            if child == proof:
+                continue
+            if child.name == "restore-points":
+                _ordinary_directory(child)
+                if not _owned_tree(folder, expected):
+                    return False
+                shutil.rmtree(child)
+            else:
+                if child.name not in expected:
+                    return False
+                _ordinary_file(child)
+                child.unlink()
+            try:
+                child.lstat()
+            except FileNotFoundError:
+                continue
+            return False  # a no-op or partial deletion is not a removed member
+        proof.unlink()
+        # Verify below, and retain the proof if the final directory is still held.
+        with contextlib.suppress(OSError):
+            folder.rmdir()
+        try:
+            folder.lstat()
+        except FileNotFoundError:
+            return True
+        _ordinary_directory(folder)
+        if folder.resolve().parent == parent.resolve():
+            # Never overwrite a marker that a concurrent writer supplied.
+            with proof.open("xb") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+    except OSError, ValueError:
+        return False
+    return False
 
 
 def _rename_with_retry(source: Path, target: Path, *, attempts: int = 6) -> None:
@@ -462,8 +560,10 @@ def restore_snapshot(path: Path, *, apply: bool = False) -> dict[str, Any]:
         before_interval = _interval()
         plan = _restore_plan(contents)  # everything merged and checked before the first write
         safety = _begin_restore(plan, snapshot=path.name)
-        _apply_restore(plan, safety)
+        cleanup_pending = _apply_restore(plan, safety)
     result.update({"applied": True, "safety_copy": str(safety)})
+    if cleanup_pending:
+        result["cleanup_warning"] = t("backup.snapshot.restore_cleanup_warning", owner_language())
     after_interval = _interval()
     if after_interval != before_interval:
         result["interval_changed"] = {"from": before_interval, "to": after_interval}
@@ -666,22 +766,13 @@ def _rollback_plan(safety: Path) -> list[tuple[str, Path, bytes | None]]:
 def _owned_safety(safety: Path, journal: dict[str, Any]) -> bool:
     """Never prune an unrecognized file or descend into a link/junction."""
     expected = {_JOURNAL, *(entry["name"] for entry in journal["entries"] if entry["existed"])}
-    for path in safety.rglob("*"):
-        name = path.relative_to(safety).as_posix()
-        if name == "restore-points":
-            _ordinary_directory(path)
-        elif name in expected:
-            _ordinary_file(path)
-        else:
-            return False
-    return True
+    return _owned_tree(safety, expected)
 
 
 def _finish(safety: Path, status: str) -> None:
     """Record the outcome first, then drop the marker: a marker left behind is harmless."""
     _write_journal(safety, _read_journal(safety), status)
     (data_dir() / _MARKER).unlink(missing_ok=True)
-    _tidy_safety_copies()
 
 
 def _marked_safety() -> str | None:
@@ -702,16 +793,28 @@ def _tidy_safety_copies(keep: int = SAFETY_KEEP) -> list[str]:
     that is not finished needs every file). Best effort: a file held right now goes next time.
     Returns the names of the folders removed.
     """
+    return _cleanup_safety_copies(keep)[0]
+
+
+def _cleanup_safety_copies(keep: int = SAFETY_KEEP) -> tuple[list[str], bool]:
+    removed, pending = _prune_safety_copies(keep)
+    if pending:
+        log_event("backup_cleanup_pending", copy_kind="safety", how="auto")
+    return removed, pending
+
+
+def _prune_safety_copies(keep: int) -> tuple[list[str], bool]:
     marked = _marked_safety()
     if marked == "":
-        return []
+        return [], True
     try:
         folders = sorted(
             p for p in data_dir().iterdir() if p.is_dir() and not p.is_symlink() and _SAFETY_NAME.fullmatch(p.name)
         )
     except OSError:
-        return []
+        return [], True
     finished = []
+    pending = False
     for folder in folders:
         if folder.name == marked:
             continue
@@ -720,17 +823,25 @@ def _tidy_safety_copies(keep: int = SAFETY_KEEP) -> list[str]:
             if journal["status"] == "prepared" or not _owned_safety(folder, journal):
                 continue
         except OSError, UnicodeError, ValueError, KeyError, TypeError, RecursionError:
+            pending = True
             continue  # unreadable is not evidence that a restore has finished
-        finished.append(folder)
-        with contextlib.suppress(OSError):
+        finished.append((folder, {_JOURNAL, *(entry["name"] for entry in journal["entries"] if entry["existed"])}))
+        try:
             (folder / _UNDO_IN_SAFETY).unlink(missing_ok=True)
-    removed = finished[: max(0, len(finished) - keep)]
-    for folder in removed:
-        shutil.rmtree(folder, ignore_errors=True)
-    return [folder.name for folder in removed]
+            if _ordinary_file(folder / _UNDO_IN_SAFETY, missing=True):
+                pending = True
+        except OSError, ValueError:
+            pending = True
+    removed = []
+    for folder, expected in finished[: max(0, len(finished) - keep)]:
+        if _remove_copy(folder, data_dir(), _JOURNAL, expected):
+            removed.append(folder.name)
+        else:
+            pending = True
+    return removed, pending
 
 
-def _apply_restore(plan: list[tuple[str, Path, bytes | None]], safety: Path) -> None:
+def _apply_restore(plan: list[tuple[str, Path, bytes | None]], safety: Path) -> bool:
     try:
         for name, target, content in plan:
             if content is None:
@@ -750,6 +861,8 @@ def _apply_restore(plan: list[tuple[str, Path, bytes | None]], safety: Path) -> 
             ) from rollback_exc
         log_event("backup_restore_failed", error=_reason(exc), rollback="done", how="manual")
         raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=_reason(exc))) from exc
+    # Cleanup is outside the transaction: its failure must not undo a committed restore.
+    return _cleanup_safety_copies()[1]
 
 
 def _roll_back(safety: Path) -> None:
@@ -766,6 +879,7 @@ def _roll_back(safety: Path) -> None:
             if target.read_bytes() != content:
                 raise SnapshotError(t("backup.snapshot.read_back_failed", owner_language(), name=name))
     _finish(safety, "rolled_back")
+    _tidy_safety_copies()
 
 
 class _MarkerGone(Exception):

@@ -449,4 +449,5 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
         "failed": bool(isinstance(failed_at, (int, float)) and (not last_ok or failed_at > last_ok)),
         "error": str(st.get("last_error") or ""),
         "error_at": clock(failed_at) if isinstance(failed_at, (int, float)) else "",
+        "cleanup_pending": st.get("last_cleanup_pending") is True,
     }

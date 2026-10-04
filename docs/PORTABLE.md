@@ -427,6 +427,15 @@ config, nothing else has to follow it. (1.17's `scripts/restore-snapshot.ps1`, w
 TOW-check task around it, is gone.) An update snapshot holds no keys: put it back only into the
 install it came from.
 
+Night-copy and before-restore cleanup is best effort, separate from the verified copy or committed
+restore. Only confirmed removals count as pruned. A held file, inaccessible directory or uncertain
+read-back shows a cleanup warning; it does not turn a usable new copy or completed restore into a
+failure. Ownership manifests/journals remain until the final directory step so interrupted cleanup
+can be retried. Foreign members, links, junctions and unfinished restores are kept. Settings shows
+pending night cleanup even with the section collapsed; CLI output and history retain the warning.
+The watchdog sends separate cleanup-pending and cleanup-complete messenger alerts once per state
+change; a usable copy with pending cleanup remains healthy rather than becoming a failed backup.
+
 Verification: `tests/test_update.py` runs the real script against a throwaway git clone (git is
 the only program the test guard lets through, marker `allow_git`) with uv, the web server,
 autostart and processes faked: success with pruning, a target that does not answer (rollback with
