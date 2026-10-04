@@ -628,6 +628,69 @@ if (downloadPop && downloadBody) {
 // Search and list tools (E1): words match in any order (AND), "ё" = "е", the
 // state lives in the URL, matches are highlighted and "/" opens the search.
 const fold = (value) => String(value || "").toLowerCase().replaceAll("ё", "е");
+// A radio menu keeps the native select as the single source of the sort value.
+const initSortMenu = (select) => {
+  const picker = document.getElementById("sort-picker");
+  const toggle = document.getElementById("sort-toggle");
+  const menu = document.getElementById("sort-menu");
+  if (!select || !picker || !toggle || !menu) return;
+  const items = [...menu.querySelectorAll("[data-sort-value]")];
+  const sync = () => {
+    items.forEach((item) => item.setAttribute("aria-checked", String(item.dataset.sortValue === select.value)));
+    const current = items.find((item) => item.dataset.sortValue === select.value) || items[0];
+    const label = `${toggle.dataset.sortLabel}: ${current.querySelector("span").textContent}`;
+    toggle.title = label;
+    toggle.setAttribute("aria-label", label);
+    toggle.querySelector("use").setAttribute("href", current.querySelector("use").getAttribute("href"));
+  };
+  const close = (restoreFocus = false) => {
+    menu.hidden = true;
+    toggle.setAttribute("aria-expanded", "false");
+    if (restoreFocus) toggle.focus();
+  };
+  const open = (index = 0) => {
+    menu.hidden = false;
+    toggle.setAttribute("aria-expanded", "true");
+    items[index].focus();
+  };
+  toggle.addEventListener("click", () => menu.hidden ? open() : close(true));
+  toggle.addEventListener("keydown", (event) => {
+    if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+    event.preventDefault();
+    open(event.key === "ArrowUp" ? items.length - 1 : 0);
+  });
+  menu.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-sort-value]");
+    if (!item || !menu.contains(item)) return;
+    select.value = item.dataset.sortValue;
+    select.dispatchEvent(new Event("change"));
+    close(true);
+  });
+  menu.addEventListener("keydown", (event) => {
+    const index = items.indexOf(document.activeElement);
+    const next = { ArrowDown: (index + 1) % items.length, ArrowUp: (index + items.length - 1) % items.length, Home: 0, End: items.length - 1 };
+    if (Object.hasOwn(next, event.key)) {
+      event.preventDefault();
+      items[next[event.key]].focus();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      close(true);
+    } else if (event.key === "Tab") {
+      // Continue native tab order from the opener; never trap focus in the popup.
+      close(true);
+    }
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (!menu.hidden && !picker.contains(event.target)) close(menu.contains(document.activeElement));
+  });
+  picker.addEventListener("focusout", (event) => {
+    if (!picker.contains(event.relatedTarget)) close();
+  });
+  select.addEventListener("change", sync);
+  sync();
+  select.hidden = true;
+  picker.hidden = false;
+};
 const q = document.getElementById("q");
 if (q) {
   const searchStatus = document.getElementById("search-status");
@@ -644,7 +707,11 @@ if (q) {
   let filter = params.get("f") || "";
   let tracker = params.get("t") || "";
   q.value = params.get("q") || "";
-  if (sortSelect) sortSelect.value = params.get("s") || "";
+  if (sortSelect) {
+    const mode = params.get("s") || "";
+    sortSelect.value = [...sortSelect.options].some((option) => option.value === mode) ? mode : "";
+    initSortMenu(sortSelect);
+  }
 
   if (tools && trackerChips) {
     const names = [...new Set(originalOrder.map((row) => row.dataset.tracker).filter(Boolean))].sort();
@@ -733,7 +800,7 @@ if (q) {
   q.addEventListener("input", () => { announce(); remember(); });
   tools?.addEventListener("click", (event) => {
     const chip = event.target.closest("button");
-    if (!chip) return;
+    if (!chip || (!chip.hasAttribute("data-filter") && !trackerChips?.contains(chip))) return;
     if (chip.dataset.filter !== undefined) filter = chip.dataset.filter;
     else tracker = tracker === chip.value ? "" : chip.value;
     announce();

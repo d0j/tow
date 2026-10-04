@@ -873,9 +873,14 @@ summary:focus-visible, select:focus-visible { outline: 2px solid var(--acc); out
 svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 
 /* E1: list tools on the home page */
-.list-tools { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; margin: 0 0 .6rem; }
+.home-page { padding-top: .45rem; }
+.list-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: .3rem .5rem; margin: 0 0 .35rem; }
 /* `display: flex` above beats the UA's [hidden] rule: one topic (or none) shows no tools. */
 .list-tools[hidden] { display: none; }
+.list-filters { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .5rem; min-width: 0; }
+.list-filters .chips { gap: .2rem; }
+.list-filters .chip { padding-inline: .45rem; }
+.list-filters .chips:empty { display: none; }
 .chips { display: inline-flex; flex-wrap: wrap; gap: .3rem; }
 .chip {
   background: transparent; color: var(--mut); border: 1px solid var(--line);
@@ -884,6 +889,22 @@ svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 .chip.on, .chip:hover { color: var(--fg); border-color: var(--acc2); background: var(--panel2); }
 /* L1: the sort select is a field like every other select (40 px). */
 #list-sort { width: auto; max-width: 100%; }
+.sort-picker { position: relative; }
+.sort-picker[hidden], .sort-menu[hidden] { display: none; }
+.sort-toggle.ico { width: 2.5rem; height: var(--btn-h); padding: 0; gap: .15rem; }
+.sort-toggle[aria-expanded="true"] { border-color: var(--acc2); background: var(--panel2); }
+.sort-menu {
+  position: absolute; top: calc(100% + .25rem); right: 0; z-index: 9;
+  width: max-content; max-width: min(19rem, calc(100vw - 1.5rem));
+  padding: .25rem; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); box-shadow: var(--shadow);
+}
+.sort-menu .sort-option { width: 100%; justify-content: start; text-align: left; border-color: transparent; }
+.sort-option + .sort-option { margin-top: .2rem; }
+.sort-option svg { flex-shrink: 0; }
+.sort-option:hover, .sort-option:focus-visible { background: var(--panel2); }
+.sort-selected { margin-left: auto; visibility: hidden; }
+.sort-option[aria-checked="true"] .sort-selected { visibility: visible; }
 mark { background: rgba(240,180,41,.35); color: inherit; border-radius: 2px; }
 
 /* G3: needs-attention banner */
