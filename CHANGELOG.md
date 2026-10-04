@@ -3,6 +3,15 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.36] — 2026-10-04
+
+### Fixed
+
+- Retry a briefly busy update-worker lease for at most one second using nonblocking attempts and a monotonic
+  deadline. A status reader no longer aborts the initial handoff; a competing worker is still excluded.
+- Re-read the queued job and check its handoff expiry again after acquiring the lease. Replaced, changed,
+  completed or expired jobs cannot start an installation after the wait.
+
 ## [1.22.35] — 2026-10-04
 
 ### Fixed
