@@ -3,6 +3,14 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.38] — 2026-10-04
+
+### Fixed
+
+- Bound serialized YAML by the same UTF-8 byte limit as its reader, including headers, multibyte text,
+  escaped scalars and expanded scalar aliases. Save, night restore and import overrides cannot create
+  an oversized configuration; refusal happens before replacing files or creating a destination directory.
+
 ## [1.22.37] — 2026-10-04
 
 ### Fixed

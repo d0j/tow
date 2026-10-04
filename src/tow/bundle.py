@@ -46,6 +46,7 @@ from tow.store import (
     state_schema_version,
 )
 from tow.yaml_guard import YamlLimitError, validate_graph
+from tow.yaml_guard import dump as dump_yaml
 from tow.yaml_guard import load as load_yaml
 
 FORMAT = "tow-export-v1"
@@ -1161,6 +1162,15 @@ def import_bundle(
         raise ExportImportError("cannot import TOW bundle safely") from exc
 
 
+def _config_override_bytes(effective_config: dict[str, Any]) -> bytes:
+    try:
+        return dump_yaml(effective_config).encode("utf-8")
+    except YamlLimitError as exc:
+        raise ExportImportError(f"invalid config.yaml: {exc}") from exc
+    except (TypeError, ValueError, UnicodeError, yaml.YAMLError) as exc:
+        raise ExportImportError("cannot apply safe config overrides") from exc
+
+
 def _import_bundle(
     input_path: Path,
     passphrase: str,
@@ -1183,15 +1193,7 @@ def _import_bundle(
         effective_config = copy.deepcopy(parsed["config"])
         effective_config.update(copy.deepcopy(overrides))
         _validate_config_schema(effective_config)
-        try:
-            parsed["config_bytes"] = yaml.safe_dump(
-                effective_config,
-                allow_unicode=True,
-                sort_keys=False,
-                default_flow_style=False,
-            ).encode("utf-8")
-        except (TypeError, ValueError, UnicodeError, yaml.YAMLError) as exc:
-            raise ExportImportError("cannot apply safe config overrides") from exc
+        parsed["config_bytes"] = _config_override_bytes(effective_config)
         parsed["config"] = effective_config
     secret_keys = {str(key) for key in (preserve_secret_keys or ())}
     if not secret_keys.issubset({"lan_auth"}):

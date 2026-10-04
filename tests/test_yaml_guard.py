@@ -278,6 +278,60 @@ def test_all_production_yaml_construction_goes_through_the_guard():
             and isinstance(node.func, ast.Attribute)
             and isinstance(node.func.value, ast.Name)
             and node.func.value.id == "yaml"
-            and node.func.attr in {"load", "safe_load", "full_load", "unsafe_load"}
+            and node.func.attr in {"load", "safe_load", "full_load", "unsafe_load", "dump", "safe_dump"}
         )
-    assert calls == [("yaml_guard.py", "load")]
+    # CLI renders to stdout; it does not persist a live configuration.
+    assert sorted(calls) == [("cli.py", "safe_dump"), ("yaml_guard.py", "load"), ("yaml_guard.py", "safe_dump")]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {},
+        {"a": "текст"},
+        {"a": "line\nnext"},
+        {"a": b"bytes"},
+        {"a": dt.date(2026, 10, 4)},
+        {"a": [1, True, None]},
+        {"a": "\x00"},
+    ],
+)
+def test_guarded_dump_preserves_safe_dump_contract(value):
+    expected = yaml.safe_dump(value, allow_unicode=True, sort_keys=False, default_flow_style=False)
+    assert guard.dump(value) == expected
+    assert guard.load(guard.dump(value)) == value
+
+
+def test_output_limit_counts_utf8_bytes_and_prefix_inclusively(monkeypatch):
+    monkeypatch.setattr(guard, "MAX_INPUT_BYTES", 5)
+    assert guard.dump({}, prefix="#\n") == "#\n{}\n"
+    monkeypatch.setattr(guard, "MAX_INPUT_BYTES", 4)
+    with pytest.raises(guard.YamlLimitError) as caught:
+        guard.dump({}, prefix="#\n")
+    assert caught.value.code == "yaml_limits.size"
+
+
+def test_sink_does_not_retain_over_budget_output(monkeypatch):
+    monkeypatch.setattr(guard, "MAX_INPUT_BYTES", 4)
+    with guard._Utf8Sink() as stream:
+        assert stream.write("яя") == 2
+        with pytest.raises(guard.YamlLimitError):
+            stream.write("x")
+        assert stream.getvalue() == "яя"
+        assert stream._size == 4
+    assert stream.closed
+
+
+def test_escaped_scalar_output_is_bounded_as_well_as_plain_text(monkeypatch):
+    monkeypatch.setattr(guard, "MAX_INPUT_BYTES", 64)
+    with pytest.raises(guard.YamlLimitError):
+        guard.dump({"a": "\x00" * 40})
+
+
+def test_dump_refuses_a_cycle_before_serialization(monkeypatch):
+    monkeypatch.setattr(yaml, "safe_dump", lambda *args, **kwargs: pytest.fail("cycle reached serialization"))
+    cycle = []
+    cycle.append(cycle)
+    with pytest.raises(guard.YamlLimitError) as caught:
+        guard.dump(cycle)
+    assert caught.value.code == "yaml_limits.references"

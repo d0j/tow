@@ -48,7 +48,8 @@ from tow.store import (
     persistence_lock,
     secret_undo_path,
 )
-from tow.yaml_guard import MAX_INPUT_BYTES, YamlLimitError, validate_graph
+from tow.yaml_guard import MAX_INPUT_BYTES, YamlLimitError
+from tow.yaml_guard import dump as dump_yaml
 from tow.yaml_guard import load as load_yaml
 from tow.yaml_guard import read_text as read_yaml_text
 
@@ -1015,7 +1016,6 @@ def _keep_local_access(snapshot_config: bytes) -> bytes:
     else:
         restored.update(bind="127.0.0.1", allow_lan=False)
     try:
-        validate_graph(restored)
+        return dump_yaml(restored).encode("utf-8")
     except YamlLimitError as exc:
         raise SnapshotError(str(exc)) from exc
-    return str(yaml.safe_dump(restored, allow_unicode=True, sort_keys=False, default_flow_style=False)).encode("utf-8")

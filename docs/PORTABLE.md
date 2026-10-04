@@ -433,6 +433,10 @@ Since 1.22.37, YAML settings are bounded before object construction, including a
 at that depth. Cyclic, undefined or duplicate anchor names and multiple documents are refused. Ordinary
 safe anchors, merge precedence and UTF-8 settings remain supported. The parsed/programmatic graph is
 checked again before copying, comparison or serialization. These limits apply to YAML, not JSON history.
+Since 1.22.38, serialization is streamed into a bounded buffer using the same UTF-8 byte limit, including
+the header and YAML escaping. A short scalar alias may expand during dumping, and Unicode characters
+can occupy several bytes; neither can create a file larger than the reader permits. Save, night restore
+and import overrides refuse before replacing files. Destination directories are not created on refusal.
 An empty document or mapping is valid; `false`, `0`, an empty string or a list is not a settings mapping.
 Night-copy verification and preview check the configuration as well as its signature and checksums, before
 restoration writes anything. A broken live configuration can still be replaced by a healthy copy; when its
