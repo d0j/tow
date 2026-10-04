@@ -14,8 +14,8 @@
     "prepare_failed": "Could not prepare a safe Monitorrent import write. Check access to the data and try again.",
     "write_failed": "Could not write the Monitorrent import. Changes were rolled back and the previous data restored.",
     "rollback_failed": "The Monitorrent import stopped and the previous data could not be restored. Do not make further changes: the recovery journal was kept; check access to the data.",
-    "qbittorrent_skipped": "qBittorrent connection settings were skipped because another torrent client is selected. Topics are bound to the selected client.",
-    "shared_credentials": "qBittorrent connection settings were skipped because the selected client shares its credentials block with a different client type. Topics are bound to the selected client; existing settings are unchanged."
+    "qbittorrent_skipped": "qBittorrent connection settings were skipped because a different torrent-client type is selected.",
+    "shared_credentials": "qBittorrent connection settings were skipped because the selected client shares its credentials block with a different client type. Connection settings are kept unchanged."
   },
   "auth": {
     "password_too_short": {

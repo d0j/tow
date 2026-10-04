@@ -316,3 +316,42 @@ def test_intentionally_shared_same_kind_credentials_remain_compatible(database):
     result = importer.import_monitorrent(database, client_id="chosen", apply=True)
     assert result["credentials_skipped"] == []
     assert store.load_secrets()["clients"]["shared"]["username"] == "mr-user"
+
+
+@pytest.mark.parametrize("modern", [False, True])
+@pytest.mark.parametrize("block", [{"username": "owner"}, {"password": "owner-secret"}, {"port": 8181}])
+def test_partly_configured_client_credentials_are_not_replaced(database, modern, block):
+    if modern:
+        _clients()
+        store.save_secrets({"clients": {"chosen": block}})
+    else:
+        store.save_secrets({"qbittorrent": block})
+    result = importer.import_monitorrent(database, client_id="chosen" if modern else None, apply=True)
+    after = store.load_secrets()
+    assert (after["clients"]["chosen"] if modern else after["qbittorrent"]) == block
+    assert "qbittorrent" in result["credentials_kept"]
+    assert "qbittorrent" not in result["credentials_filled"]
+
+
+@pytest.mark.parametrize("field", ["uid", "pass", "username", "password"])
+def test_any_existing_tracker_credential_is_kept_without_mixing_accounts(database, field):
+    block = {field: "owner-value"}
+    store.save_secrets({"trackers": {"kinozal": block}})
+    result = importer.import_monitorrent(database, apply=True)
+    assert store.load_secrets()["trackers"]["kinozal"] == block
+    assert "kinozal" in result["credentials_kept"]
+
+
+def test_existing_notification_recipients_are_not_replaced_by_import(database):
+    store.save_secrets({"telegram": {"chat_ids": ["synthetic-owner-recipient"]}})
+    result = importer.import_monitorrent(database, apply=True)
+    assert store.load_secrets()["telegram"] == {"chat_ids": ["synthetic-owner-recipient"]}
+    assert "telegram" in result["credentials_kept"]
+
+
+@pytest.mark.parametrize("port", [8080, "8080"])
+def test_default_port_alone_does_not_make_an_empty_client_configured(database, port):
+    store.save_secrets({"qbittorrent": {"host": "", "username": "", "password": "", "port": port}})
+    result = importer.import_monitorrent(database, apply=True)
+    assert "qbittorrent" in result["credentials_filled"]
+    assert store.load_secrets()["qbittorrent"]["port"] == 8081

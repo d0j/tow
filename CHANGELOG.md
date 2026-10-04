@@ -13,6 +13,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Bind newly imported topics to the selected enabled client (`--client ID`, or the current main client), leaving
   existing topics unchanged. Never copy qBittorrent credentials into another client's secret block, including
   cross-type shared references; report skipped settings in preview and apply.
+- Preserve partly configured client/tracker logins, passwords, custom ports and notification recipients too,
+  without mixing them with a different imported account. An empty client's default port alone is not a configured login.
 - Read all source queries from one SQLite snapshot. Corrupt, busy and malformed databases no longer look like
   successful empty imports; errors are localized and do not print private exception details.
 

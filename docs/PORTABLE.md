@@ -603,6 +603,9 @@ paused/one-time state and configured credentials are not overwritten. qBittorren
 a qBittorrent client; another destination reports them as skipped rather than putting them into its secret block.
 A secret reference shared by different client types also skips these settings with an explicit warning;
 intentional sharing between clients of the same type remains compatible. Preview reports these skips too.
+Partly configured connections are kept as a whole, without mixing accounts: an existing client login/password,
+address or non-default port, any Kinozal credential, or Telegram token/recipients prevents replacement.
+An otherwise empty client block containing only the default port remains eligible for import.
 
 The source is opened read-only and every query uses one SQLite read transaction, so concurrent Monitorrent writes
 cannot mix topics and credentials from different snapshots. Missing optional tables/columns remain compatible;

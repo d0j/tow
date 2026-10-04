@@ -203,20 +203,23 @@ def _fill_credentials(
     kept: list[str] = []
     if "qbittorrent" in found:
         block = client_secret_block(cfg, secrets, client_id, ensure=True)
-        if block.get("host"):
+        spec = get("qbittorrent")
+        default_port = spec.default_port if spec is not None else 8080
+        configured_port = block.get("port") not in (None, "", default_port, str(default_port))
+        if configured_port or any(block.get(key) for key in ("host", "username", "password")):
             kept.append("qbittorrent")
         else:
             block.update(found["qbittorrent"])
             filled.append("qbittorrent")
     if "kinozal" in found:
         trackers = secrets.setdefault("trackers", {})
-        if (trackers.get("kinozal") or {}).get("uid") or (trackers.get("kinozal") or {}).get("username"):
+        if any((trackers.get("kinozal") or {}).get(key) for key in ("uid", "pass", "username", "password")):
             kept.append("kinozal")
         else:
             trackers["kinozal"] = found["kinozal"]
             filled.append("kinozal")
     if "telegram" in found:
-        if (secrets.get("telegram") or {}).get("token"):
+        if any((secrets.get("telegram") or {}).get(key) for key in ("token", "chat_ids")):
             kept.append("telegram")
         else:
             secrets["telegram"] = found["telegram"]
