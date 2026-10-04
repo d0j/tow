@@ -688,6 +688,7 @@
       "new": "New",
       "paused": "Paused",
       "site": "Site",
+      "all_sites": "All trackers",
       "order": "Sort"
     },
     "sort": {

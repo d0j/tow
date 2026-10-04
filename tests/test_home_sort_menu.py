@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
 
 from tow.config import load_config, save_config
@@ -22,10 +23,11 @@ def test_sort_menu_has_labelled_radio_choices_and_native_backing(language):
     assert 'id="sort-picker" hidden' in page
     assert 'aria-haspopup="menu" aria-expanded="false" aria-controls="sort-menu"' in page
     assert 'id="sort-menu" role="menu"' in page
-    assert page.count('role="menuitemradio"') == 4
-    assert page.count('aria-checked="true"') == 1
+    menu = BeautifulSoup(page, "html.parser").select_one("#sort-menu")
+    assert len(menu.select('[role="menuitemradio"]')) == 4
+    assert len(menu.select('[aria-checked="true"]')) == 1
     for mode in ("", "name", "event", "status"):
-        assert f'data-sort-value="{mode}"' in page
+        assert menu.select_one(f'[data-choice-value="{mode}"]') is not None
     for icon in ("added", "name", "event", "status"):
         assert f'href="#i-sort-{icon}"' in page
     assert "Сортировка" in page if language == "ru" else "Sort" in page
@@ -42,7 +44,7 @@ def test_home_spacing_does_not_change_other_pages():
 
 def test_sort_choices_do_not_toggle_tracker_filters():
     js = (STATIC / "app.js").read_text(encoding="utf-8")
-    assert '!chip.hasAttribute("data-filter") && !trackerChips?.contains(chip)' in js
+    assert 'if (!chip || !chip.hasAttribute("data-filter")) return' in js
     assert 'select.dispatchEvent(new Event("change"))' in js
     assert 'select.addEventListener("change", sync)' in js
     assert 'sortSelect?.addEventListener("change", () => { sortRows(); remember(); })' in js
@@ -52,7 +54,7 @@ def test_menu_restores_known_url_modes_and_rejects_unknown_values():
     js = (STATIC / "app.js").read_text(encoding="utf-8")
     assert '[...sortSelect.options].some((option) => option.value === mode) ? mode : ""' in js
     assert 'set("s", sortSelect?.value || "")' in js
-    assert 'item.setAttribute("aria-checked", String(item.dataset.sortValue === select.value))' in js
+    assert 'item.setAttribute("aria-checked", String(item.dataset.choiceValue === select.value))' in js
 
 
 def test_menu_keyboard_navigation_focus_return_and_outside_dismissal():

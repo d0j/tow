@@ -30,7 +30,9 @@ def test_hidden_list_tools_are_really_hidden():
     """`.list-tools { display: flex }` beat the UA's [hidden]: the filter bar never went away."""
     rules = _rules(CSS)
     assert "display: none" in rules[".list-tools[hidden]"]
-    assert "tools.hidden = originalOrder.length < 2;" in JS
+    # A single watch still hides unnecessary tools, except when a restored tracker
+    # filter must remain visible so the owner can reset it.
+    assert "tools.hidden = originalOrder.length < 2 && !tracker;" in JS
 
 
 # --- Status-colour contract: transport trouble is amber, "not checked yet" is grey ----------------
