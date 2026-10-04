@@ -3,6 +3,15 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.40] — 2026-10-04
+
+### Fixed
+
+- Reject Windows device namespaces with forward, back or mixed slashes before backup folder
+  resolution, write probes and torrent-client actions. Shared syntax and folder-policy checks apply
+  on every operating system, including configured paths and edits keeping an existing path.
+  Ordinary local folders, relative backup locations and explicitly enabled network shares still work.
+
 ## [1.22.39] — 2026-10-04
 
 ### Fixed

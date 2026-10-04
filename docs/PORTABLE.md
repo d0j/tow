@@ -6,6 +6,13 @@ is described in [architecture.md](architecture.md#code-api-paths-and-platform).
 
 ## 1. One folder
 
+Backup locations and client save paths refuse Windows device namespaces (`\\?\`, `\\.\`),
+including forward and mixed separators, before path resolution or filesystem access. Windows
+[normalizes forward slashes and recognizes device namespaces](https://learn.microsoft.com/en-us/dotnet/standard/io/file-path-formats);
+comparing these paths only with ordinary protected-folder names is not sufficient. The rule applies
+on every OS, since a remote client can run on Windows. Ordinary local paths, relative backup folders
+and explicitly enabled client network shares are unaffected.
+
 ```
 <TOW>/                      the install root (movable, any drive, any OS)
   app/                      the code: a git clone at a release tag, or a release's source archive

@@ -13,6 +13,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from tow.folders import is_windows_device_path, protected_kind
 from tow.i18n import t
 from tow.log import owner_language
 from tow.paths import config_path, data_dir
@@ -76,15 +77,13 @@ def problem(value: str, location: Location) -> str | None:
     raw = str(value or "").strip().strip('"')
     if not raw:
         return None
-    if any(ord(ch) < 32 for ch in raw) or raw.startswith(("\\\\?\\", "\\\\.\\")):
+    if any(ord(ch) < 32 for ch in raw) or is_windows_device_path(raw):
         return t("locations.bad_chars", owner_language())
     if ".." in Path(raw.replace("\\", "/")).parts:
         return t("locations.dotdot", owner_language())
     if _of_another_system(raw):
         return t("locations.other_system", owner_language())
     path = resolve(raw, location)
-    from tow.folders import protected_kind
-
     # The same rule as for downloads (system, programs, AppData), as typed and as it resolves.
     kind = protected_kind(raw) or protected_kind(str(path))
     if kind is not None:

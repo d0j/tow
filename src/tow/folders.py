@@ -72,6 +72,15 @@ def resolve_save_path(path: str, state: dict[str, Any]) -> str:
 _DRIVE_ABSOLUTE = re.compile(r"^[A-Za-z]:[\\/]")
 
 
+def is_windows_device_path(path: str) -> bool:
+    """Windows recognizes namespace prefixes with forward, back or mixed slashes.
+
+    Refuse them before resolving a path: device namespaces can bypass ordinary folder rules.
+    This also applies to a Windows client when TOW itself runs on another system.
+    """
+    return path.replace("/", "\\").startswith(("\\\\?\\", "\\\\.\\"))
+
+
 def _protected_roots_by_kind() -> tuple[tuple[str, list[str], bool], ...]:
     """("windows" | "system", roots, fold case): this system's protected folders (tow.platform)
     and the other systems' defaults - a client on another machine may run either.
@@ -173,6 +182,8 @@ def is_protected_folder(path: str) -> bool:
 def _protected_by(path: str) -> str | None:
     """ "windows" or "system" when ``path`` - as typed, or as this PC resolves it - is inside a
     protected folder (compared with each root as typed and as resolved too)."""
+    if is_windows_device_path(path):
+        return "windows"
     candidates = [path]
     if (real := _real_path(path)) is not None:
         candidates.append(real)
@@ -221,7 +232,7 @@ def save_path_problem(path: str, *, allow_unc: bool = False) -> str | None:
     value = str(path or "")
     if any(ord(ch) < 32 for ch in value):
         return t("folders.control_chars", owner_language())
-    if value.startswith(("\\\\?\\", "\\\\.\\", "//?/", "//./")):
+    if is_windows_device_path(value):
         return t("folders.device_paths", owner_language())
     is_unc = value.startswith(("\\\\", "//"))
     if is_unc and not allow_unc:
