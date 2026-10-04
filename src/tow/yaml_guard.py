@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import dataclass
+from io import StringIO
 from itertools import chain
 from pathlib import Path
 from typing import Any
@@ -168,3 +169,28 @@ def load(data: str | bytes, *, loader: type[Any] | None = None) -> Any:
     value = yaml.load(data, Loader=selected)
     validate_graph(value)
     return value
+
+
+class _Utf8Sink(StringIO):
+    """Retain at most the configured UTF-8 byte budget, including the header."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._size = 0
+
+    def write(self, text: str) -> int:
+        size = self._size + len(text.encode("utf-8"))
+        if size > MAX_INPUT_BYTES:
+            raise YamlLimitError("yaml_limits.size")
+        result = super().write(text)
+        self._size = size
+        return result
+
+
+def dump(value: Any, *, prefix: str = "") -> str:
+    """Safe-loader-compatible text that never exceeds the reader's byte limit."""
+    validate_graph(value)
+    with _Utf8Sink() as stream:
+        stream.write(prefix)
+        yaml.safe_dump(value, stream=stream, allow_unicode=True, sort_keys=False, default_flow_style=False)
+        return stream.getvalue()

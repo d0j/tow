@@ -12,6 +12,7 @@ import yaml
 from tow.paths import config_path
 from tow.store import atomic_write_text
 from tow.yaml_guard import SAFE_LOADER, validate_graph
+from tow.yaml_guard import dump as dump_yaml
 from tow.yaml_guard import load as load_yaml
 from tow.yaml_guard import read_text as read_yaml_text
 
@@ -236,14 +237,14 @@ def save_config(data: dict[str, Any]) -> None:
     """Write the config without the defaults load_config added (unless the file had them)."""
     validate_graph(data)
     path = config_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
     on_disk = _parsed_config_file(path) if path.is_file() else {}
     present = set(on_disk) if isinstance(on_disk, dict) else set()
     default = defaults()
     out = {key: value for key, value in data.items() if key in present or key not in default or value != default[key]}
     if "clients" in out and out.get("client") == DEFAULTS["client"]:
         out.pop("client")  # the single-client block is replaced by the clients list
-    text = _HEADER + yaml.safe_dump(out, allow_unicode=True, sort_keys=False, default_flow_style=False)
+    text = dump_yaml(out, prefix=_HEADER)
+    path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(path, text)
 
 

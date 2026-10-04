@@ -138,3 +138,39 @@ def test_secret_scan_does_not_apply_yaml_node_limits_to_large_json_history(monke
 
     monkeypatch.setattr(yaml_guard, "MAX_EXPANDED_NODES", 5)
     assert bundle._secret_key_path({"history": [{"episode": number} for number in range(50)]}) is None
+
+
+def test_saving_multibyte_text_cannot_create_a_config_above_its_read_limit(tmp_path, monkeypatch):
+    from tow import yaml_guard
+
+    target = tmp_path / "config.yaml"
+    target.write_bytes(b"{}\n")
+    monkeypatch.setattr(yaml_guard, "MAX_INPUT_BYTES", 128)
+    before = target.read_bytes()
+    with pytest.raises(yaml_guard.YamlLimitError):
+        config.save_config({"extra": "я" * 60})
+    assert target.read_bytes() == before
+
+
+def test_restoration_cannot_expand_scalar_aliases_into_an_unreadable_config(tmp_path, monkeypatch):
+    from tow import yaml_guard
+
+    target = tmp_path / "config.yaml"
+    target.write_bytes(b"{}\n")
+    monkeypatch.setattr(yaml_guard, "MAX_INPUT_BYTES", 128)
+    source = ("a: &a " + "я" * 20 + "\nb: [*a, *a, *a, *a]\n").encode()
+    assert len(source) < 128
+    with pytest.raises(snapshots.SnapshotError):
+        snapshots._keep_local_access(source)
+    assert target.read_bytes() == b"{}\n"
+
+
+def test_oversized_serialization_does_not_create_a_new_destination_directory(tmp_path, monkeypatch):
+    from tow import yaml_guard
+
+    target = tmp_path / "new-folder" / "config.yaml"
+    monkeypatch.setenv("TOW_CONFIG", str(target))
+    monkeypatch.setattr(yaml_guard, "MAX_INPUT_BYTES", 128)
+    with pytest.raises(yaml_guard.YamlLimitError):
+        config.save_config({"extra": "я" * 60})
+    assert not target.parent.exists()

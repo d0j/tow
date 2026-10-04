@@ -257,6 +257,19 @@ def test_aliased_text_in_a_valid_archive_is_refused_before_apply(tmp_path, monke
     _assert_untouched(before)
 
 
+def test_valid_scalar_aliases_cannot_expand_past_read_limit_during_import_override(tmp_path, monkeypatch):
+    from tow import yaml_guard
+
+    before = _seed_destination()
+    monkeypatch.setattr(yaml_guard, "MAX_INPUT_BYTES", 128)
+    source = ("a: &a " + "я" * 20 + "\nb: [*a, *a, *a, *a]\n").encode()
+    assert len(source) < 128
+    archive = _bundle(tmp_path / "in" / "aliased.towx", _members(config_yaml=source))
+    with pytest.raises(ExportImportError, match=r"invalid config\.yaml:"):
+        import_bundle(archive, PASS, apply=True, config_overrides={"port": 8790})
+    _assert_untouched(before)
+
+
 # --------------------------------------------------------------------------- envelope
 
 
