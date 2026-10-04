@@ -72,6 +72,8 @@
       "file_missing": "file missing in the copy: {name}",
       "source_missing": "a file present in an earlier night copy is now missing: {name}; older copies were kept",
       "file_damaged": "file damaged in the copy: {name}",
+      "file_unusable": "cannot read {name}: damaged data or an unsupported format or data version. Existing data and older copies are kept.",
+      "secrets_unusable": "cannot read {name} with the local master key: damaged encrypted data or a different key. Existing data and older copies are kept.",
       "cannot_check": "cannot check {name}: {error}",
       "other_key": "{name} was encrypted with another master key; set TOW_MASTER_KEY_FILE to that key first",
       "cannot_merge_config": "cannot merge the copy's settings",
