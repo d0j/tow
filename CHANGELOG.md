@@ -3,6 +3,19 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.35] — 2026-10-04
+
+### Fixed
+
+- Import Monitorrent state and encrypted credentials in one journaled transaction with read-back before commit.
+  Restore the original stores after a write failure, recover interrupted writes on the next data lock, and report
+  failed recovery distinctly without discarding its journal or verified safety archive.
+- Bind newly imported topics to the selected enabled client (`--client ID`, or the current main client), leaving
+  existing topics unchanged. Never copy qBittorrent credentials into another client's secret block, including
+  cross-type shared references; report skipped settings in preview and apply.
+- Read all source queries from one SQLite snapshot. Corrupt, busy and malformed databases no longer look like
+  successful empty imports; errors are localized and do not print private exception details.
+
 ## [1.22.34] — 2026-10-04
 
 ### Fixed

@@ -7,6 +7,16 @@
     "decimal": ".",
     "datetime_short": "%Y-%m-%d %H:%M"
   },
+  "monitorrent": {
+    "missing": "The Monitorrent database file was not found.",
+    "invalid_database": "Could not read the Monitorrent database: the file is corrupt, busy or contains unsupported data. Nothing was imported.",
+    "backup_failed": "Could not create a verified backup before the Monitorrent import. Nothing was imported.",
+    "prepare_failed": "Could not prepare a safe Monitorrent import write. Check access to the data and try again.",
+    "write_failed": "Could not write the Monitorrent import. Changes were rolled back and the previous data restored.",
+    "rollback_failed": "The Monitorrent import stopped and the previous data could not be restored. Do not make further changes: the recovery journal was kept; check access to the data.",
+    "qbittorrent_skipped": "qBittorrent connection settings were skipped because another torrent client is selected. Topics are bound to the selected client.",
+    "shared_credentials": "qBittorrent connection settings were skipped because the selected client shares its credentials block with a different client type. Topics are bound to the selected client; existing settings are unchanged."
+  },
   "auth": {
     "password_too_short": {
       "one": "the password must have at least {n} character",
@@ -279,6 +289,7 @@
       "doctor_notify": "also send the report to the connected messengers",
       "import_monitorrent": "take the topics over from a Monitorrent database (a preview unless --apply)",
       "monitorrent_db": "the Monitorrent database file (monitorrent.db)",
+      "monitorrent_client": "client ID for new topics (default: the currently configured main client)",
       "monitorrent_apply": "take the topics over (without it: a preview only)",
       "check": "check the topics now (a preview that changes nothing unless --apply)",
       "check_apply": "hand what is found to the torrent client and save the result",

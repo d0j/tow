@@ -103,8 +103,8 @@ registered recovery hooks first, so no process ever reads half-written stores.
 | Journal | Protects | On a crash |
 |---|---|---|
 | Check transaction (`data/.tow-check-transaction/`) | `state.json` + `download_history.json` of one check | rolled back or completed |
-| Store transaction (`tow.store_transaction`, `tow.site_journal`) | `config.yaml` + `state.json` + secrets + undo snapshot (site edits, settings, undo) | all four back as before |
-| Import checkpoint (`tow.backup`) | `.towx` and Monitorrent imports | rolled back |
+| Store transaction (`tow.store_transaction`, `tow.site_journal`) | `config.yaml` + `state.json` + secrets + undo snapshot (site edits, settings, undo, Monitorrent import) | all four back as before |
+| Import checkpoint (`tow.backup`) | `.towx` imports | rolled back |
 | Night restore marker (`.tow-night-restore.json`) | restoring a night copy | previous data put back |
 
 Single files are written atomically (temp file, fsync, rename). `state.json` carries a data version: an older TOW

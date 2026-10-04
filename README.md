@@ -98,7 +98,7 @@ Linux and macOS. `tow --help` lists all commands.
 | `tow autostart on\|off\|status` | start with the system |
 | `tow check --apply` | check every topic now |
 | `tow doctor` | ask the torrent client and the sites now |
-| `tow import-monitorrent --db FILE` | for Monitorrent users: show what its database would bring over; `--apply` imports it |
+| `tow import-monitorrent --db FILE` | preview migration; `--apply` imports it; `--client ID` selects the destination client |
 
 Exit codes: `0` done · `1` wrong command or option · `2` done in part · `3` cannot run · `130` interrupted.
 
