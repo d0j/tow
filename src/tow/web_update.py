@@ -19,6 +19,7 @@ import httpx
 from tow import __version__, platform, releases
 from tow.log import scrub_text
 from tow.paths import repo_root, root, runtime_dir
+from tow.platform import locks
 from tow.restore_points import RestorePointError, create_restore_point
 from tow.store import StoreCorruptionError, atomic_write_bytes, decode_json_bytes, persistence_lock
 
@@ -76,6 +77,10 @@ def _job_file() -> Path:
 
 
 def _active(job: dict[str, Any]) -> bool:
+    return _activity(job)[0]
+
+
+def _activity(job: dict[str, Any]) -> tuple[bool, bool]:
     if job and (
         not isinstance(job.get("status"), str)
         or job["status"] not in _ACTIVE | _TERMINAL
@@ -83,19 +88,73 @@ def _active(job: dict[str, Any]) -> bool:
         or re.fullmatch(r"[a-f0-9]{32}", job["id"]) is None
     ):
         raise WebUpdateError("releases.job_unreadable")
+    if "lease_version" in job and (type(job["lease_version"]) is not int or job["lease_version"] != 1):
+        raise WebUpdateError("releases.job_unreadable")
     if job.get("status") not in _ACTIVE:
-        return False
-    pid = job.get("pid")
-    if isinstance(pid, int) and not isinstance(pid, bool) and pid > 0:
-        return platform.current().process_alive(pid)
+        return False, False
+    if "lease_version" in job:
+        if _lease_active(job["id"]):
+            return True, False
+    else:
+        # Older workers do not hold a lease. Preserve their conservative reservation;
+        # never silently turn an unverified old live worker into a dead one.
+        pid = job.get("pid")
+        if isinstance(pid, int) and not isinstance(pid, bool) and pid > 0:
+            identity = _legacy_worker_active(pid, job["id"])
+            return identity is not False, identity is None
     started = job.get("started_at")
     return (
         job.get("status") == "queued"
         and isinstance(started, (float, int))
         and not isinstance(started, bool)
         and math.isfinite(started)
-        and 0 <= time.time() - started < 30
+        and 0 <= time.time() - started < 30,
+        False,
     )
+
+
+def _lease_active(job_id: str) -> bool:
+    folder = _job_file().parent / job_id
+    path = folder / "worker.lock"
+    try:
+        info = folder.lstat()
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+            or folder.resolve() != _job_file().parent.resolve() / job_id
+            or not _safe_file(path)
+            or path.stat().st_size != 1
+        ):
+            raise WebUpdateError("releases.job_unreadable")
+        # Open an existing lease, never create/replace it during a status read.
+        with path.open("r+b") as handle:
+            if not locks.lock(handle, wait=False):
+                return True
+            locks.unlock(handle)
+    except OSError as exc:
+        raise WebUpdateError("releases.job_unreadable") from exc
+    return False
+
+
+def _legacy_worker_active(pid: int, job_id: str) -> bool | None:
+    backend = platform.current()
+    if not backend.process_alive(pid):
+        return False
+    command_reader = getattr(backend, "process_command", None)
+    command = command_reader(pid) if command_reader else None
+    if not isinstance(command, str) or not command:
+        return None  # unknown identity is not permission to overwrite a possibly live job
+    expected = str(_job_file().parent / job_id / "worker.py").replace("\\", "/")
+    command = command.replace("\\", "/")
+    if backend.name == "windows":
+        expected, command = expected.casefold(), command.casefold()
+    # Pre-lease workers already have a unique nonce in their absolute script path.
+    # Match the entire script argument, not a basename, substring or arbitrary PID.
+    if re.search(r"(?:^|[\s\"'])" + re.escape(expected) + r"(?=$|[\s\"'])", command) is not None:
+        return True
+    # ps can escape unusual filesystem characters. If the unique nonce is still
+    # present but the complete argument cannot be verified, do not declare it dead.
+    return None if job_id in command else False
 
 
 def status() -> dict[str, Any]:
@@ -105,7 +164,8 @@ def status() -> dict[str, Any]:
         return {"supported": False, "reason": str(exc), "current": __version__, "status": "idle", "previous": ""}
     job = _read(_job_file())
     updater = _read(root() / "update-state.json")
-    job = _completed_job(job, updater)
+    active, unverified = _activity(job)
+    job = _recover_completed(job, updater, active)
     previous = updater.get("previous_version") if updater.get("status") == "ok" else ""
     parsed = releases.version_parts(previous)
     if parsed is None or parsed < MINIMUM_WEB_VERSION or previous == __version__:
@@ -114,12 +174,13 @@ def status() -> dict[str, Any]:
         key: job.get(key)
         for key in ("id", "status", "target", "previous", "started_at", "finished_at", "error", "safety_point")
     }
-    active = _active(job)
     for key in ("target", "previous", "error", "safety_point"):
         if key in job and not isinstance(job[key], str):
             raise WebUpdateError("releases.job_unreadable")
     if job.get("status") in _ACTIVE and not active:
         result.update(status="interrupted", error="releases.interrupted")
+    elif unverified:
+        result["error"] = "releases.worker_unverified"
     if job.get("status") == "ok" and job.get("target") != __version__:
         result["status"] = "superseded"  # a later terminal update changed the installed version
     result.update(supported=True, current=__version__, active=active, rollback_version=previous)
@@ -130,7 +191,10 @@ def status() -> dict[str, Any]:
 
 def _completed_job(job: dict[str, Any], updater: dict[str, Any]) -> dict[str, Any]:
     """A finished terminal recovery can unblock a dead job; GET itself writes nothing."""
-    active = _active(job)  # validate types before set membership, including damaged journals
+    return _recover_completed(job, updater, _active(job))
+
+
+def _recover_completed(job: dict[str, Any], updater: dict[str, Any], active: bool) -> dict[str, Any]:
     if active or job.get("status") not in _ACTIVE | {"failed", "refused", "rolled_back"}:
         return job
     started = job.get("started_at")
@@ -208,6 +272,8 @@ def start(version: str) -> dict[str, Any]:
             folder.mkdir(parents=True, exist_ok=False)
             atomic_write_bytes(folder / "update.py", (app / "scripts" / "update.py").read_bytes())
             atomic_write_bytes(folder / "worker.py", Path(__file__).with_name("update_worker.py").read_bytes())
+            atomic_write_bytes(folder / "locks.py", Path(locks.__file__).read_bytes())
+            atomic_write_bytes(folder / "worker.lock", b"\0")
             job = {
                 "id": job_id,
                 "status": "queued",
@@ -215,6 +281,7 @@ def start(version: str) -> dict[str, Any]:
                 "previous": __version__,
                 "started_at": time.time(),
                 "safety_point": safety["id"],
+                "lease_version": 1,
             }
             atomic_write_bytes(path, json.dumps(job).encode())
             platform.current().spawn_detached(

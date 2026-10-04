@@ -950,3 +950,57 @@ def test_no_module_outside_tow_platform_checks_the_os_itself():
             and (node.value.id, node.attr) in {("os", "name"), ("sys", "platform")}
         )
     assert found == [], f"ask tow.platform (current(), is_windows()) instead: {found}"
+
+
+@pytest.mark.parametrize("system", ["linux", "macos"])
+@pytest.mark.parametrize("command", ["python synthetic-worker", "", None])
+def test_posix_process_command_reads_identity_without_signals(monkeypatch, system, command):
+    from tow.platform.posix import PosixBackend
+
+    backend = PosixBackend(system)
+    seen = []
+    monkeypatch.setattr(
+        backend, "_process", lambda pid: seen.append(pid) or (None if command is None else (1, command))
+    )
+    assert backend.process_command(123) == (command or None)
+    assert seen == [123]
+    for invalid in (0, -1, "invalid", None):
+        assert backend.process_command(invalid) is None
+    assert seen == [123]
+
+
+@pytest.mark.parametrize(
+    ("reply", "expected"),
+    [
+        ('{"ProcessId":123,"CommandLine":"python synthetic-worker"}', "python synthetic-worker"),
+        ('{"ProcessId":456,"CommandLine":"foreign"}', None),
+        ('{"ProcessId":123,"CommandLine":null}', None),
+        ('{"ProcessId":123,"CommandLine":[]}', None),
+        ("[]", None),
+        ("invalid", None),
+        ("", None),
+    ],
+)
+def test_windows_process_command_is_a_bounded_read_only_probe(monkeypatch, reply, expected):
+    from tow.platform import windows
+
+    calls = []
+    monkeypatch.setattr(windows, "_run", lambda args, **kwargs: calls.append((args, kwargs)) or reply)
+    assert windows.WindowsBackend().process_command(123) == expected
+    assert calls[0][0][:4] == ["powershell", "-NoProfile", "-NonInteractive", "-Command"]
+    assert "ProcessId=123" in calls[0][0][4]
+    assert calls[0][1]["timeout"] == 5
+    for invalid in (0, -1, "invalid", None):
+        assert windows.process_command(invalid) is None
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("system", ["linux", "macos"])
+def test_posix_identity_probe_never_truncates_long_process_arguments(monkeypatch, system):
+    from tow.platform import posix
+
+    calls = []
+    command = "python " + "a" * 500 + " synthetic-worker"
+    monkeypatch.setattr(posix, "_run", lambda args, **kwargs: calls.append(args) or f"1 {command}")
+    assert posix.PosixBackend(system).process_command(123) == command
+    assert calls == [["ps", "-ww", "-o", "ppid=,command=", "-p", "123"]]

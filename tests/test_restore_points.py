@@ -466,6 +466,50 @@ def _upload(client: TestClient, content: bytes, operation: str = "restore") -> s
     return shown(response.headers["location"])
 
 
+@pytest.mark.parametrize("language", LANGUAGES)
+@pytest.mark.parametrize("operation", ["check", "restore"])
+def test_browser_copy_needs_its_original_key_and_preserves_a_different_install(
+    monkeypatch, tmp_path, language, operation
+):
+    import os
+
+    _seed(monkeypatch, tmp_path, language)
+    original_key = os.environ["TOW_MASTER_KEY"]
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    exported = client.post("/settings/portable/export").content
+    destination = tmp_path / "different-install"
+    destination.mkdir()
+    _seed(monkeypatch, destination, language)
+    members = [
+        destination / "config.yaml",
+        *(destination / "data" / name for name in ("state.json", "download_history.json", "secrets.enc")),
+    ]
+    before = {path: path.read_bytes() for path in members}
+
+    assert t("web.settings.file_invalid", language) in _upload(client, exported, operation)
+    assert {path: path.read_bytes() for path in members} == before
+    assert not (destination / "data" / "restore-points").exists()
+
+    # The same archive is valid with its source key: it is not a corrupted export.
+    saved_file = tmp_path / "source-copy.towx"
+    saved_file.write_bytes(exported)
+    monkeypatch.setenv("TOW_MASTER_KEY", original_key)
+    assert restore_points.check_portable_bundle(saved_file)["preview"] is True
+    assert {path: path.read_bytes() for path in members} == before
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_master_key_requirement_is_visible_in_the_file_copy_card(monkeypatch, tmp_path, language):
+    from bs4 import BeautifulSoup
+
+    _seed(monkeypatch, tmp_path, language)
+    response = TestClient(app).get("/settings")
+    assert response.status_code == 200
+    card = BeautifulSoup(response.text, "html.parser").find(id="backup-file")
+    assert card is not None
+    assert "keys/master.key" in card.get_text(" ", strip=True)
+
+
 def _drift_then_fail_rollback(monkeypatch) -> None:
     """The restore applies, loses the network settings, and its undo fails too."""
     real_import = restore_points.import_bundle

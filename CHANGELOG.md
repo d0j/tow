@@ -3,6 +3,21 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.32] — 2026-10-04
+
+### Fixed
+
+- Bind new web-update jobs to a process-held file lease, not a reusable PID. Long-running updates remain
+  protected; an exited worker releases the lease even after a crash. Interrupted jobs stay visible, and a
+  later verified terminal recovery can unblock them without rewriting the old journal.
+- Check the unique worker script path for older jobs before accepting a live PID as their worker. If process
+  identity cannot be read unambiguously, explain it and keep the reservation rather than risk overlapping writes.
+  Read old-worker identity only once per status request; do not truncate POSIX process arguments.
+- Refuse missing, unreadable or unsupported worker leases before installation; retain the standard-library,
+  Python 3.11-compatible detached runner and copied lock module.
+- Explain the original master-key requirement directly beside the backup-file controls. Browser backups do
+  not contain the key; a different installation's key cannot open them, and a failed check changes no data.
+
 ## [1.22.31] — 2026-10-04
 
 ### Fixed

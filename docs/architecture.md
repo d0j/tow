@@ -163,6 +163,7 @@ Stable names other modules build on.
     name (Windows rename, POSIX hard link; unsupported destinations fail closed);
   - `popen_options(*, new_group=False, hidden=True)` — the same flags for a `subprocess.Popen` the caller keeps;
   - `process_alive(pid)`, `terminate(pid, timeout=10.0)` (the whole tree or process group) → bool;
+  - `process_command(pid)` → command line or `None` when unknown; read-only, used to identify pre-lease update workers;
   - `bind_children()` → bool: Windows puts this process into a kill-on-close job object its later children
     inherit (they end with it; `spawn_detached` still breaks away); `False` elsewhere;
   - `die_with_parent(parent_pid)` → bool: Linux asks for SIGTERM when the parent ends (`PR_SET_PDEATHSIG`);

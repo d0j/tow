@@ -53,6 +53,11 @@ def test_start_reserves_job_and_copies_worker_outside_replaceable_app(install):
     assert argv[1:4] == ["-I", "-S", "-u"]
     assert Path(argv[4]).is_relative_to(runtime / "runtime")
     assert Path(argv[4]).is_file()
+    from tow.platform import locks
+
+    assert (Path(argv[4]).parent / "locks.py").read_bytes() == Path(locks.__file__).read_bytes()
+    assert (Path(argv[4]).parent / "worker.lock").read_bytes() == b"\0"
+    assert job["lease_version"] == 1
     assert argv[5] == "--handoff"
     assert options["require_breakaway"] is False
     assert options["hidden"] is True
@@ -163,6 +168,214 @@ def test_interrupted_job_is_visible_and_not_silently_replaced(install):
     assert len(install[1]) == 1
 
 
+@pytest.mark.parametrize("phase", ["preparing", "stopping", "backup", "installing", "checking", "rolling_back"])
+def test_unheld_worker_lease_does_not_mistake_a_reused_pid_for_an_active_update(install, phase):
+    web_update.start("1.22.21")
+    path = install[0] / "runtime" / "web-update" / "job.json"
+    job = json.loads(path.read_text())
+    lease = path.parent / job["id"] / "worker.lock"
+    lease.write_bytes(b"\0")
+    job.update(status=phase, pid=123, started_at=time.time() - 60, lease_version=1)
+    path.write_text(json.dumps(job))
+    before = path.read_bytes()
+
+    result = web_update.status()
+
+    assert result["active"] is False
+    assert result["status"] == "interrupted"
+    assert path.read_bytes() == before
+
+
+def test_reused_pid_does_not_block_a_later_verified_terminal_recovery(install):
+    web_update.start("1.22.21")
+    path = install[0] / "runtime" / "web-update" / "job.json"
+    job = json.loads(path.read_text())
+    (path.parent / job["id"] / "worker.lock").write_bytes(b"\0")
+    job.update(status="installing", pid=123, started_at=time.time() - 60, lease_version=1)
+    path.write_text(json.dumps(job))
+    before = path.read_bytes()
+    (install[0] / "update-state.json").write_text(
+        json.dumps({"status": "ok", "target_version": "1.22.20", "finished_at": datetime.now(UTC).isoformat()})
+    )
+
+    assert web_update.status()["status"] == "recovered"
+    assert path.read_bytes() == before
+    assert web_update.start("1.22.22")["ok"] is True
+    assert len(install[1]) == 2
+
+
+def test_worker_lease_keeps_a_long_update_active_even_without_a_pid(install):
+    from tow.platform import locks
+
+    web_update.start("1.22.21")
+    path = install[0] / "runtime" / "web-update" / "job.json"
+    job = json.loads(path.read_text())
+    lease = path.parent / job["id"] / "worker.lock"
+    lease.write_bytes(b"\0")
+    job.update(status="installing", started_at=time.time() - 86400, lease_version=1)
+    path.write_text(json.dumps(job))
+    with lease.open("r+b") as handle:
+        assert locks.lock(handle, wait=False)
+        try:
+            assert web_update.status()["active"] is True
+            with pytest.raises(web_update.WebUpdateError, match=r"releases\.busy"):
+                web_update.start("1.22.22")
+            assert len(install[1]) == 1
+        finally:
+            locks.unlock(handle)
+    assert web_update.status()["status"] == "interrupted"
+
+
+@pytest.mark.parametrize("lease_version", [None, False, True, 0, 2, "1", []])
+def test_unknown_or_malformed_worker_lease_fails_closed(install, lease_version):
+    web_update.start("1.22.21")
+    path = install[0] / "runtime" / "web-update" / "job.json"
+    job = json.loads(path.read_text())
+    job["lease_version"] = lease_version
+    path.write_text(json.dumps(job))
+    with pytest.raises(web_update.WebUpdateError, match=r"releases\.job_unreadable"):
+        web_update.status()
+    with pytest.raises(web_update.WebUpdateError, match=r"releases\.job_unreadable"):
+        web_update.start("1.22.22")
+    assert len(install[1]) == 1
+
+
+@pytest.mark.parametrize("damage", ["missing", "empty", "oversized", "directory", "permission"])
+def test_unreadable_worker_lease_never_unblocks_web_writes(install, monkeypatch, damage):
+    web_update.start("1.22.21")
+    path = install[0] / "runtime" / "web-update" / "job.json"
+    job = json.loads(path.read_text())
+    job.update(status="installing", pid=123, started_at=time.time() - 60)
+    path.write_text(json.dumps(job))
+    lease = path.parent / job["id"] / "worker.lock"
+    if damage in {"missing", "directory"}:
+        lease.unlink()
+        if damage == "directory":
+            lease.mkdir()
+    elif damage in {"empty", "oversized"}:
+        lease.write_bytes(b"" if damage == "empty" else b"xx")
+    else:
+        original = Path.open
+
+        def denied(self, *args, **kwargs):
+            if self == lease:
+                raise PermissionError("synthetic lease access denied")
+            return original(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "open", denied)
+    monkeypatch.setattr(services, "web_update_status", web_update.status)
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    assert client.post("/settings/service/restart").status_code == 503
+    assert client.get("/healthz").status_code == 200
+    assert client.get("/updates/status").status_code == 503
+    assert len(install[1]) == 1
+
+
+def test_real_lease_controls_the_http_write_guard_and_recovery(install, monkeypatch):
+    from tow.platform import locks
+
+    web_update.start("1.22.21")
+    path = install[0] / "runtime" / "web-update" / "job.json"
+    job = json.loads(path.read_text())
+    job.update(status="installing", pid=123, started_at=time.time() - 60)
+    path.write_text(json.dumps(job))
+    before = path.read_bytes()
+    (install[0] / "update-state.json").write_text(
+        json.dumps({"status": "ok", "target_version": "1.22.20", "finished_at": datetime.now(UTC).isoformat()})
+    )
+    monkeypatch.setattr(services, "web_update_status", web_update.status)
+    restarted = []
+    monkeypatch.setattr(services, "request_restart", lambda: restarted.append(True) or {"ok": True, "id": "test"})
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    with (path.parent / job["id"] / "worker.lock").open("r+b") as handle:
+        assert locks.lock(handle, wait=False)
+        try:
+            assert client.get("/updates/status").json()["active"] is True
+            assert client.post("/settings/service/restart").status_code == 409
+            assert restarted == []
+        finally:
+            locks.unlock(handle)
+    assert client.get("/updates/status").json()["status"] == "recovered"
+    assert client.post("/settings/service/restart", follow_redirects=False).status_code == 303
+    assert restarted == [True]
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("alive", [False, True])
+def test_pre_lease_worker_records_remain_conservative_and_readable(install, alive):
+    web_update.start("1.22.21")
+    path = install[0] / "runtime" / "web-update" / "job.json"
+    job = json.loads(path.read_text())
+    job.pop("lease_version")
+    job.update(status="installing", pid=123 if alive else 456, started_at=time.time() - 60)
+    path.write_text(json.dumps(job))
+    before = path.read_bytes()
+    assert web_update.status()["active"] is alive
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("system", ["windows", "linux", "macos"])
+@pytest.mark.parametrize("identity", ["own", "quoted", "foreign", "suffix", "unknown"])
+def test_legacy_worker_identity_is_bound_to_the_whole_unique_script_path(install, system, identity):
+    web_update.start("1.22.21")
+    path = install[0] / "runtime" / "web-update" / "job.json"
+    job = json.loads(path.read_text())
+    job.pop("lease_version")
+    job.update(status="installing", pid=123, started_at=time.time() - 60)
+    path.write_text(json.dumps(job))
+    script = str(path.parent / job["id"] / "worker.py")
+    commands = {
+        "own": f"python -I -S -u {script} --after-parent 123",
+        "quoted": f'python -I -S -u "{script}" --after-parent 123',
+        "foreign": "unrelated-program --watch",
+        "suffix": f"python {script}.not-the-worker",
+        "unknown": None,
+    }
+    install[2].name = system
+    command = commands[identity]
+    install[2].process_command = lambda _pid: command
+    assert web_update.status()["active"] is (identity in {"own", "quoted", "unknown", "suffix"})
+    if identity in {"unknown", "suffix"}:
+        assert web_update.status()["error"] == "releases.worker_unverified"
+
+
+def test_legacy_reused_pid_with_another_command_allows_verified_terminal_recovery(install):
+    web_update.start("1.22.21")
+    path = install[0] / "runtime" / "web-update" / "job.json"
+    job = json.loads(path.read_text())
+    job.pop("lease_version")
+    job.update(status="installing", pid=123, started_at=time.time() - 60)
+    path.write_text(json.dumps(job))
+    before = path.read_bytes()
+    install[2].process_command = lambda _pid: "unrelated-program"
+    (install[0] / "update-state.json").write_text(
+        json.dumps({"status": "ok", "target_version": "1.22.20", "finished_at": datetime.now(UTC).isoformat()})
+    )
+    assert web_update.status()["status"] == "recovered"
+    assert path.read_bytes() == before
+    assert web_update.start("1.22.22")["ok"] is True
+
+
+def test_unknown_legacy_identity_is_an_explicit_safe_http_warning(install, monkeypatch):
+    from tow.i18n import t
+
+    web_update.start("1.22.21")
+    path = install[0] / "runtime" / "web-update" / "job.json"
+    job = json.loads(path.read_text())
+    job.pop("lease_version")
+    job.update(status="installing", pid=123, started_at=time.time() - 60)
+    path.write_text(json.dumps(job))
+    before = path.read_bytes()
+    monkeypatch.setattr(services, "web_update_status", web_update.status)
+    probes = []
+    install[2].process_command = lambda pid: probes.append(pid) or None
+    result = TestClient(app).get("/updates/status").json()
+    assert result["active"] is True
+    assert result["error_message"] == t("releases.worker_unverified", "ru")
+    assert path.read_bytes() == before
+    assert probes == [123]
+
+
 @pytest.mark.parametrize(
     "content",
     ["not json", "[]", '{"status":[]}', " " * 65537],
@@ -214,7 +427,10 @@ def test_web_install_route_confirms_queue_and_enforces_origin(monkeypatch):
 
 
 def test_worker_is_still_python_311_compatible():
+    from tow.platform import locks
+
     ast.parse(Path(update_worker.__file__).read_text(), feature_version=(3, 11))
+    ast.parse(Path(locks.__file__).read_text(), feature_version=(3, 11))
 
 
 @pytest.mark.parametrize("schema", [True, -1, 2, "1", None])
@@ -348,7 +564,14 @@ def test_terminal_recovery_does_not_hide_a_later_web_failure(install, newer):
 
 
 @pytest.mark.parametrize(
-    "error", ["releases.broker_failed", "releases.inherited_job", "releases.parent_wait_failed", "foreign-secret"]
+    "error",
+    [
+        "releases.broker_failed",
+        "releases.inherited_job",
+        "releases.parent_wait_failed",
+        "releases.job_unreadable",
+        "foreign-secret",
+    ],
 )
 def test_update_status_localizes_only_known_reasons(monkeypatch, error):
     monkeypatch.setattr(services, "web_update_status", lambda: {"supported": True, "status": "failed", "error": error})

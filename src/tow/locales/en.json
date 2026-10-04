@@ -111,6 +111,7 @@
     "inherited_job": "Windows still links the updater to the service process group. The update was refused before stopping TOW; the data archive was kept.",
     "parent_wait_failed": "The launch relay did not exit in time. The update was refused before stopping TOW; the data archive was kept.",
     "update_failed": "The update did not complete. Check the result and the local update log.",
+    "worker_unverified": "The old update job's process could not be verified. Changes are blocked to protect the data; check the local log and complete recovery on the computer running TOW.",
     "notes": "Release notes",
     "log": "Update log",
     "log_pending": "Open this section to read the latest update log.",
@@ -1391,11 +1392,11 @@
       "manual_empty": "No saved backups.",
       "manual_note": "Before restoring, TOW checks the backup and saves its current state. The network settings stay as they are now. The last 10 backups are kept.",
       "file_title": "TOW file",
-      "file_intro": "A full encrypted copy to keep or to move TOW to another computer.",
+      "file_intro": "A full encrypted copy to keep or to move together with the original master key.",
       "file_save": "Save file",
       "file_choose": "Choose a file:",
       "file_restore_confirm": "Restore TOW from this file? The current state is saved automatically before it is replaced.",
-      "file_note": "Restoring always checks the file again and makes a safety copy first. <a href=\"{more}\">More</a>."
+      "file_note": "Restoring needs the original <code>keys/master.key</code> — it is not in the archive, so keep it separately. Before replacing data, TOW checks the file and saves the current state. <a href=\"{more}\">More</a>."
     },
     "log": {
       "q": "log journal events failure diagnostics",

@@ -289,6 +289,13 @@ Each new request is matched to a new job, never to an older successful result. I
 confirmed, the page only retries reading status and offers reload; it does not resend installation.
 Temporary status failures disable installation controls until status is readable again. An open update
 log refreshes with progress and completion; late responses from an older operation cannot replace it.
+Since 1.22.32, a new worker holds a job-specific OS file lock for its entire installation and rollback,
+outside the replaceable app. A long installation is not expired by a timeout; process exit or a crash
+releases the lock. Status reads only probe the existing lock, never recreate it or rewrite the journal.
+Missing, inaccessible or unsupported leases fail closed. Older job records retain their PID reservation
+only while their unique worker script path matches the process command, or its identity cannot be verified;
+a clearly unrelated process with a recycled PID does not keep an old job active.
+An unknown or ambiguous old-worker identity has an explicit warning; it is not presented as verified.
 
 Version selection accepts only published stable releases **from 1.22.21**, which retain the exiting-parent handoff.
 The previous compatible release has a shortcut. Other versions can be entered explicitly; a target whose

@@ -429,10 +429,20 @@ class PosixBackend:
         return proc_listener_pid(port)
 
     def _process(self, pid: int) -> tuple[int, str] | None:
-        found = parse_ps(_run(["ps", "-o", "ppid=,command=", "-p", str(pid)], timeout=5))
+        found = parse_ps(_run(["ps", "-ww", "-o", "ppid=,command=", "-p", str(pid)], timeout=5))
         if found is None and self.name == "linux":
             found = proc_parent_and_command(pid)  # ps is not installed everywhere either
         return found
+
+    def process_command(self, pid: int) -> str | None:
+        try:
+            pid = int(pid)
+        except TypeError, ValueError:
+            return None
+        if pid <= 0:
+            return None
+        found = self._process(pid)
+        return found[1] if found and found[1] else None
 
     def port_owner(self, port: int) -> dict[str, Any] | None:
         pid = self._listener(port)

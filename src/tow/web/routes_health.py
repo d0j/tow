@@ -42,6 +42,8 @@ def updates_status() -> Response:
         "releases.parent_wait_failed",
         "releases.interrupted",
         "releases.update_failed",
+        "releases.job_unreadable",
+        "releases.worker_unverified",
     }:
         result["error_message"] = t(error)
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
