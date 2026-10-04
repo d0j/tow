@@ -68,6 +68,10 @@
       "cannot_write": "cannot write the night copy: {reason}",
       "manifest_unreadable": "the copy's file list (MANIFEST.json) is missing or unreadable",
       "manifest_too_large": "the copy's file list (MANIFEST.json) exceeds 1 MiB",
+      "record_size": "restore metadata exceeds the permitted size",
+      "record_type": "restore metadata must be a regular file, not a link or special file",
+      "record_changed": "restore metadata changed while it was being read",
+      "record_invalid": "restore metadata is damaged or has an invalid format",
       "not_tow": "this is not a TOW night copy",
       "unexpected_file": "unexpected file in the copy: {name}",
       "unsafe_path": "unsafe path in the copy: {name}",
@@ -87,7 +91,7 @@
       "rollback_failed": "the restore stopped, and putting the data back failed too; TOW tries again before its next write. The files as they were before the restore are in {path}",
       "read_back_failed": "{name} could not be read back after writing",
       "unverified": "the new copy {name} did not pass the read-back check ({reason}); older copies were kept",
-      "recovery_blocked": "an interrupted restore of a night copy could not be checked or undone ({reason}); TOW changes no data until it is and tries again before every write. If this does not go away, close the program that holds the files (an antivirus), or put back by hand the files of the data/before-restore-… folder the marker names and then delete {marker}"
+      "recovery_blocked": "an interrupted restore of a night copy could not be checked or undone ({reason}); TOW changes no data until it is and tries again before every write. Check access to and integrity of the data/before-restore-… folder named by {marker}. If a program holds the files, close it and retry. Do not delete the marker or safety copies until the previous data have been verified and recovered"
     },
     "restore_point": {
       "master_key": "the master key is not available",

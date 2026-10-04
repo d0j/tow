@@ -576,7 +576,8 @@ def _remove_copy(folder: Path, parent: Path, marker: str, expected: set[str]) ->
             return False
         proof = folder / marker
         _ordinary_file(proof)
-        content = proof.read_bytes()
+        limit = MAX_MANIFEST_BYTES if marker == "MANIFEST.json" else MAX_RESTORE_JOURNAL_BYTES
+        content = _read_metadata_bytes(proof, limit=limit)
         if not _owned_tree(folder, expected):
             return False
         for child in sorted(folder.iterdir()):
@@ -788,6 +789,10 @@ def _interval() -> int:
 _MARKER = ".tow-night-restore.json"
 _JOURNAL = "RESTORE.json"
 _JOURNAL_FORMAT = "tow-night-restore/v1"
+MAX_RESTORE_MARKER_BYTES = 64 * 1024
+# A journal carries names/checksums, not payloads. Allow ample encoding overhead
+# above the entire supported manifest; these limits never cap state or history.
+MAX_RESTORE_JOURNAL_BYTES = 4 * MAX_MANIFEST_BYTES
 _SAFETY_NAME = re.compile(r"before-restore-[0-9]{8}-[0-9]{6}(?:-[0-9a-f]{6})?")
 SAFETY_KEEP = 3
 _RECOVERY_ATTEMPTS = 5
@@ -839,9 +844,14 @@ def _begin_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str)
                 entries.append({"name": name, "existed": True, "sha256": hashlib.sha256(saved).hexdigest()})
             else:
                 entries.append({"name": name, "existed": False})
-        _write_journal(safety, {"format": _JOURNAL_FORMAT, "snapshot": snapshot, "entries": entries}, "prepared")
+        journal = {"format": _JOURNAL_FORMAT, "snapshot": snapshot, "entries": entries}
+        # Every final status must remain writable before publishing a recovery marker.
+        for status in ("prepared", "committed", "rolled_back"):
+            _journal_bytes(journal, status)
+        _write_journal(safety, journal, "prepared")
         _rollback_plan(safety)  # verify every just-written copy before publishing the marker
-        atomic_write_bytes(data_dir() / _MARKER, json.dumps({"safety": safety.name}).encode("utf-8"))
+        marker = _restore_record_bytes({"safety": safety.name}, limit=MAX_RESTORE_MARKER_BYTES)
+        atomic_write_bytes(data_dir() / _MARKER, marker)
     except (OSError, ValueError, TypeError, RecursionError, yaml.YAMLError) as exc:
         # A failed exclusive mkdir may belong to another writer. Retain partial
         # copies too: a marker published just before an I/O error still needs them.
@@ -849,15 +859,70 @@ def _begin_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str)
     return safety
 
 
+def _read_metadata_bytes(path: Path, *, limit: int) -> bytes:
+    """Bound a regular opened record before allocating or interpreting its contents."""
+    try:
+        _ordinary_file(path)
+    except ValueError as exc:
+        raise ValueError(t("backup.snapshot.record_type", owner_language())) from exc
+    with path.open("rb") as handle:
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError(t("backup.snapshot.record_type", owner_language()))
+        if not 0 <= info.st_size <= limit:
+            raise ValueError(t("backup.snapshot.record_size", owner_language()))
+        raw = handle.read(info.st_size + 1)
+    if len(raw) > limit:
+        raise ValueError(t("backup.snapshot.record_size", owner_language()))
+    if len(raw) != info.st_size:
+        raise ValueError(t("backup.snapshot.record_changed", owner_language()))
+    return raw
+
+
+def _read_restore_record(path: Path, *, limit: int) -> dict[str, Any]:
+    raw = _read_metadata_bytes(path, limit=limit)
+    try:
+        value = decode_json_bytes(raw)
+    except (UnicodeError, ValueError, RecursionError) as exc:
+        raise ValueError(t("backup.snapshot.record_invalid", owner_language())) from exc
+    if not isinstance(value, dict):
+        raise TypeError(t("backup.snapshot.record_invalid", owner_language()))
+    return value
+
+
+def _restore_record_bytes(value: dict[str, Any], *, limit: int) -> bytes:
+    """Preflight strict JSON and its byte budget before replacing any existing record."""
+    with io.BytesIO() as output:
+        for chunk in json.JSONEncoder(indent=2, allow_nan=False).iterencode(value):
+            content = chunk.encode("utf-8")
+            if output.tell() + len(content) + 1 > limit:
+                raise ValueError(t("backup.snapshot.record_size", owner_language()))
+            output.write(content)
+        output.write(b"\n")
+        raw = output.getvalue()
+    decode_json_bytes(raw)  # the same finite-number and depth contract as the reader
+    return raw
+
+
+def _journal_bytes(journal: dict[str, Any], status: str) -> bytes:
+    # Fixed-width dates leave the same budget for every phase, including exact-second clocks.
+    journal = {**journal, "status": status, "updated_at": datetime.now(UTC).isoformat(timespec="microseconds")}
+    _validate_restore_journal(journal)
+    return _restore_record_bytes(journal, limit=MAX_RESTORE_JOURNAL_BYTES)
+
+
 def _write_journal(safety: Path, journal: dict[str, Any], status: str) -> None:
-    journal = {**journal, "status": status, "updated_at": datetime.now(UTC).isoformat()}
-    atomic_write_bytes(safety / _JOURNAL, (json.dumps(journal, indent=2) + "\n").encode("utf-8"))
+    atomic_write_bytes(safety / _JOURNAL, _journal_bytes(journal, status))
 
 
 def _read_journal(safety: Path) -> dict[str, Any]:
     _ordinary_directory(safety)
-    _ordinary_file(safety / _JOURNAL)
-    journal = decode_json_bytes((safety / _JOURNAL).read_bytes())
+    journal = _read_restore_record(safety / _JOURNAL, limit=MAX_RESTORE_JOURNAL_BYTES)
+    _validate_restore_journal(journal)
+    return journal
+
+
+def _validate_restore_journal(journal: dict[str, Any]) -> None:
     if (
         not isinstance(journal, dict)
         or journal.get("format") != _JOURNAL_FORMAT
@@ -883,7 +948,6 @@ def _read_journal(safety: Path) -> dict[str, Any]:
                 raise ValueError("malformed night-copy restore checksum")
         elif checksum is not None:
             raise ValueError("unexpected night-copy restore checksum")
-    return journal
 
 
 def _ordinary_directory(path: Path, *, missing: bool = False) -> bool:
@@ -971,7 +1035,7 @@ def _finish(safety: Path, status: str) -> None:
 def _marked_safety() -> str | None:
     """The before-restore folder the marker names (a restore in progress or to recover), if any."""
     try:
-        name = decode_json_bytes((data_dir() / _MARKER).read_bytes())["safety"]
+        name = _read_restore_record(data_dir() / _MARKER, limit=MAX_RESTORE_MARKER_BYTES)["safety"]
     except FileNotFoundError:
         return None
     except OSError, UnicodeError, ValueError, KeyError, TypeError, RecursionError:
@@ -1061,6 +1125,7 @@ def _apply_restore(plan: list[tuple[str, Path, bytes | None]], safety: Path) -> 
 def _roll_back(safety: Path) -> None:
     """Put back every file the journal saved (config.yaml first: it says where restore points live)."""
     try:
+        _journal_bytes(_read_journal(safety), "rolled_back")  # legacy final metadata fits before any live write
         plan = _rollback_plan(safety)
     except (OSError, ValueError, TypeError, RecursionError, yaml.YAMLError) as exc:
         raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=_reason(exc))) from exc
@@ -1082,11 +1147,10 @@ class _MarkerGone(Exception):
 def _marked_journal(marker: Path) -> tuple[Path, str]:
     """(before-restore folder, journal status) the marker points at."""
     try:
-        _ordinary_file(marker)
-        raw = marker.read_bytes()
+        record = _read_restore_record(marker, limit=MAX_RESTORE_MARKER_BYTES)
     except FileNotFoundError as exc:
         raise _MarkerGone from exc
-    name = decode_json_bytes(raw)["safety"]
+    name = record["safety"]
     if not isinstance(name, str) or _SAFETY_NAME.fullmatch(name) is None:
         raise ValueError("unexpected before-restore folder name")
     safety = data_dir() / name
@@ -1116,8 +1180,6 @@ def recover_interrupted_restore() -> None:
     the reason (fail closed), so a half-applied restore is never left as if it were done.
     """
     marker = data_dir() / _MARKER
-    if not marker.exists():
-        return
     for attempt in range(_RECOVERY_ATTEMPTS):
         try:
             safety, status = _marked_journal(marker)
