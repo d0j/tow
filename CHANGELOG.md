@@ -3,6 +3,22 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.43] — 2026-10-04
+
+### Fixed
+
+- Bound small service records before JSON decoding, reject excessive nesting, non-finite
+  numbers and invalid dates, and preserve the original files during observation. Damaged
+  backup or watchdog records show an unknown result, not a healthy backup or fabricated outage;
+  settings remain available. Diagnostic writes enforce the same size and JSON limits.
+- Use the latest backup attempt's recorded error, not timestamp ordering, to distinguish
+  success and failure after clock corrections or attempts within the same millisecond.
+  Invalid scheduler timestamps and countdown containers no longer escape into scheduling;
+  unreadable or future-dated update markers do not suppress outage reporting.
+- Pin future-dated scheduler facts once after a backward clock correction. Repeated ticks
+  no longer postpone checks, progress, watchdog duties or failed-copy retries indefinitely;
+  startup delays remain bounded, and a future backup date cannot skip every following night.
+
 ## [1.22.42] — 2026-10-04
 
 ### Fixed

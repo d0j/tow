@@ -8,7 +8,6 @@ restart asked from Settings goes to the supervisor as a control request and is f
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import time
@@ -18,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from tow.config import load_config, port_of
+from tow.diagnostic_json import check_types, encode_object, read_object
 from tow.i18n import t
 from tow.paths import data_dir
 from tow.store import atomic_write_text
@@ -34,7 +34,7 @@ def _now() -> str:
 
 
 def _write_marker(payload: dict[str, Any]) -> None:
-    atomic_write_text(service_restart_path(), json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    atomic_write_text(service_restart_path(), encode_object(payload))
 
 
 def update_restart_marker(operation_id: str, fields: dict[str, Any]) -> bool:
@@ -51,13 +51,16 @@ def update_restart_marker(operation_id: str, fields: dict[str, Any]) -> bool:
 
 def _read_marker() -> dict[str, Any] | None:
     path = service_restart_path()
-    if not path.is_file():
-        return None
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except OSError, UnicodeError, json.JSONDecodeError:
+        value = read_object(path)
+        check_types(
+            value, dict.fromkeys(("status", "operation_id", "error", "reason", "updated_at", "started_at"), str)
+        )
+    except FileNotFoundError:
+        return None
+    except OSError, UnicodeError, ValueError, TypeError, RecursionError:
         return {"status": "unknown", "error": "restart marker unreadable"}
-    return value if isinstance(value, dict) else {"status": "unknown", "error": "restart marker invalid"}
+    return value
 
 
 # The settings page would ask the OS (schtasks, systemctl, launchctl) on every render; the

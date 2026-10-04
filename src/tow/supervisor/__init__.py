@@ -88,22 +88,19 @@ def _stop(child: Any) -> bool:
 
 
 def _facts() -> dict[str, float]:
+    from tow.diagnostic_json import epoch
     from tow.snapshots import list_snapshots
     from tow.snapshots import status as backup_status
     from tow.store import load_state
 
     health = load_state().get("health") or {}
-    last_check = 0.0
-    with contextlib.suppress(TypeError, ValueError, AttributeError):
-        # The attempt time (auto_at_ts) on purpose: a check failing every run is not retried
-        # every second - the watchdog duty reports it from auto_ok_at_ts. Never at_ts: manual
-        # checks and progress passes move it (the supervisor's own schedule.json comes first).
-        last_check = float(health.get("auto_at_ts") or 0)
-    last_ok = backup_status().get("last_ok_at")
-    if not isinstance(last_ok, (int, float)):
+    # The attempt time on purpose: failed checks are not retried every second.
+    last_check = (epoch(health.get("auto_at_ts")) or 0.0) if isinstance(health, dict) else 0.0
+    last_ok = epoch(backup_status().get("last_ok_at")) or 0.0
+    if not last_ok:
         newest = list_snapshots(limit=1)
-        last_ok = newest[0]["created_ts"] if newest else 0.0
-    return {"last_scheduled_check": last_check, "last_backup_ok": float(last_ok or 0.0)}
+        last_ok = (epoch(newest[0]["created_ts"]) or 0.0) if newest else 0.0
+    return {"last_scheduled_check": last_check, "last_backup_ok": last_ok}
 
 
 def _expire_undo() -> None:

@@ -450,20 +450,21 @@ class Supervisor:
     # --- scheduled jobs ----------------------------------------------------------------------
 
     def _persisted_ts(self, key: str) -> float:
-        try:
-            return float(self._persisted.get(key) or 0.0)
-        except TypeError, ValueError:
-            return 0.0
+        from tow.diagnostic_json import epoch
+
+        return epoch(self._persisted.get(key)) or 0.0
 
     def _facts_now(self) -> dict[str, float]:
+        from tow.diagnostic_json import epoch
+
         # The cadence follows this supervisor's own last scheduled start (schedule.json); the
         # state's auto_at_ts only stands in when there is none yet (an install updated from
         # 1.20 or earlier). Never at_ts: manual checks and progress passes move it every half
         # hour, and the scheduled checks stopped for good behind it.
-        check = self._persisted_ts("check_started_at") or float(self._facts.get("last_scheduled_check") or 0.0)
+        check = self._persisted_ts("check_started_at") or (epoch(self._facts.get("last_scheduled_check")) or 0.0)
         return {
             "last_scheduled_check": check,
-            "last_backup_ok": float(self._facts.get("last_backup_ok") or 0.0),
+            "last_backup_ok": epoch(self._facts.get("last_backup_ok")) or 0.0,
             "last_backup_attempt": self._persisted_ts("backup_attempt_at"),
         }
 

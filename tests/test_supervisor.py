@@ -684,6 +684,31 @@ def test_checks_follow_the_interval_and_a_clock_moved_back():
     assert schedule.check_due_at(T0 - 3600, T0) == T0
 
 
+def test_supervisor_recovers_regular_jobs_after_backward_clock_correction(tmp_path):
+    world, supervisor = make(tmp_path)
+    # The service starts normally, then the date is corrected by a full day.
+    for _ in range(62):
+        for child in world.jobs():
+            child.code = 0
+        supervisor.tick()
+        world.clock.advance(60)
+    before = len(world.jobs())
+    corrected_mono = world.clock.mono
+    world.clock.wall -= 86400
+    for _ in range(125):
+        for child in world.jobs():
+            child.code = 0
+        supervisor.tick()
+        world.clock.advance(60)
+    new_jobs = world.jobs()[before:]
+    checks = [child for child in new_jobs if "--apply" in child.argv]
+    progress = [child for child in new_jobs if "--progress-only" in child.argv]
+    assert len(checks) >= 2
+    assert checks[0].at - corrected_mono <= 3660
+    assert len(progress) >= 4
+    assert world.passes
+
+
 def test_the_night_copy_runs_once_per_local_day():
     zone = ZoneInfo("Asia/Jerusalem")
     day = datetime(2026, 10, 1, tzinfo=zone).date()

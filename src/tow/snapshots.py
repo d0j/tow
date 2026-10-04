@@ -33,6 +33,7 @@ import yaml
 
 from tow import __version__
 from tow.config import interval_sec_of, load_config
+from tow.diagnostic_json import check_epochs, check_types, encode_object, read_object
 from tow.i18n import t
 from tow.log import log_event, log_path, owner_language
 from tow.paths import config_path, data_dir, download_history_path, state_path
@@ -85,20 +86,50 @@ def status_path() -> Path:
 def status() -> dict[str, Any]:
     """Last success and last failure of a night copy (for the watchdog and Settings)."""
     try:
-        value = json.loads(status_path().read_text(encoding="utf-8"))
-    except OSError, UnicodeError, ValueError:
+        value = read_object(status_path())
+        check_epochs(value, ("last_ok_at", "last_error_at"))
+        check_types(
+            value,
+            {
+                "last_error": str,
+                "last_snapshot": str,
+                "location": str,
+                "last_cleanup_pending": bool,
+                "last_bytes": int,
+                "last_missing": list,
+            },
+        )
+        if value.get("last_bytes", 0) is not None and value.get("last_bytes", 0) < 0:
+            raise ValueError("invalid service size")
+        if any(not isinstance(item, str) for item in (value.get("last_missing") or [])):
+            raise ValueError("invalid missing members")
+    except FileNotFoundError:
         return {}
-    return value if isinstance(value, dict) else {}
+    except OSError, UnicodeError, ValueError, TypeError, RecursionError:
+        return {"read_error": True, "last_error": t("watchdog.backup.status_unreadable")}
+    return value
+
+
+def status_failed(value: dict[str, Any]) -> bool:
+    """The latest attempt's error wins, even with equal dates or a clock correction."""
+    if value.get("read_error"):
+        return True
+    if "last_error" in value:
+        return bool(value["last_error"])
+    failed = value.get("last_error_at")
+    return bool(failed is not None and (not value.get("last_ok_at") or failed >= value["last_ok_at"]))
 
 
 def _record(**fields: Any) -> None:
     from tow.store import atomic_write_text
 
     current = status()
+    if current.get("read_error"):
+        current = {}
     current.update(fields)
     # The status is informative; the copy itself already succeeded or failed.
-    with contextlib.suppress(OSError):
-        atomic_write_text(status_path(), json.dumps(current, ensure_ascii=False, indent=2) + "\n")
+    with contextlib.suppress(OSError, ValueError, UnicodeError, RecursionError):
+        atomic_write_text(status_path(), encode_object(current))
 
 
 def record_failure(error: str) -> None:

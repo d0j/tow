@@ -17,7 +17,8 @@ for each calendar day in the owner's zone (PEP 495: a time skipped by the spring
 hour later, a time the autumn switch repeats is its first occurrence), so a DST switch neither
 skips nor repeats a night: a copy is due only when the newest good one is older than the latest
 slot, never because 24 hours have passed (the autumn day has 25). A wall clock moved backwards
-never stalls a job: a "last run" in the future counts as now.
+never stalls a job: a "last run" in the future counts as the first observation of that
+correction, not the continually advancing current tick.
 """
 
 from __future__ import annotations
@@ -61,19 +62,34 @@ class Schedule:
     backup_at: tuple[int, int] = DEFAULT_BACKUP_TIME
     zone: tzinfo | None = None
     last: dict[str, float] = field(default_factory=dict)  # this process's last start of each job
+    _corrected: dict[str, tuple[float, float]] = field(default_factory=dict, init=False, repr=False)
 
-    def _clamp(self, ts: float, now: float) -> float:
-        return min(ts, now) if ts else 0.0
+    def _clamp(self, ts: float, now: float, *, source: str) -> float:
+        # Pin a future fact once. Repeated min(ts, now) moves the deadline on every
+        # tick and starves the job until the machine catches up with the old clock.
+        previous = self._corrected.get(source)
+        if ts and previous is not None and previous[0] == ts:
+            anchor = min(previous[1], now)  # another backward correction
+            self._corrected[source] = (ts, anchor)
+            return anchor
+        if ts > now:
+            self._corrected[source] = (ts, now)
+            return now
+        self._corrected.pop(source, None)
+        return ts if ts else 0.0
 
     def check_due_at(self, now: float, last_scheduled_check: float) -> float:
-        last = max(self._clamp(last_scheduled_check, now), self._clamp(self.last.get("check", 0.0), now))
+        last = max(
+            self._clamp(last_scheduled_check, now, source="check:persisted"),
+            self._clamp(self.last.get("check", 0.0), now, source="check:own"),
+        )
         if not last:
-            return self.started_at + CHECK_FIRST_DELAY_SEC
+            return self._clamp(self.started_at, now, source="startup") + CHECK_FIRST_DELAY_SEC
         return last + self.interval_sec
 
     def _every_due_at(self, name: str, every: float, first_delay: float, now: float) -> float:
-        last = self._clamp(self.last.get(name, 0.0), now)
-        return last + every if last else self.started_at + first_delay
+        last = self._clamp(self.last.get(name, 0.0), now, source=f"{name}:own")
+        return last + every if last else self._clamp(self.started_at, now, source="startup") + first_delay
 
     def _slot(self, day: date) -> float:
         return local_slot(day, self.backup_at, self.zone)
@@ -92,8 +108,11 @@ class Schedule:
 
     def backup_due_at(self, now: float, last_ok: float, last_attempt: float) -> float:
         """When the next night copy is due (``now`` or earlier means: run it)."""
-        last_ok = self._clamp(last_ok, now)
-        tried = max(self._clamp(last_attempt, now), self._clamp(self.last.get("backup", 0.0), now))
+        last_ok = self._clamp(last_ok, now, source="backup:ok")
+        tried = max(
+            self._clamp(last_attempt, now, source="backup:attempt"),
+            self._clamp(self.last.get("backup", 0.0), now, source="backup:own"),
+        )
         previous = self.previous_slot(now)
         if last_ok >= previous:
             return self.next_slot(now)  # the latest slot has its good copy
@@ -116,6 +135,11 @@ class Schedule:
         return [(name, now - at) for name, at in due_at.items() if at <= now]
 
     def started(self, name: str, now: float) -> None:
+        self._corrected.pop(f"{name}:own", None)
+        if name == "check":
+            self._corrected.pop("check:persisted", None)
+        elif name == "backup":
+            self._corrected.pop("backup:attempt", None)
         self.last[name] = now
 
     def next_due(self, now: float, **facts: float) -> dict[str, float]:
