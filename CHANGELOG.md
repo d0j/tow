@@ -13,6 +13,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   instance lock. Cleanup failures do not hide the original error or skip the other child.
 - Do not terminate a finished child's possibly reused PID. Describe TOW consistently as one supervised
   service, not one operating-system process, in Settings, CLI help and current documentation.
+- The activity log describes a queued restart as requested, not completed. Recovery notifications no
+  longer claim the reporting watchdog performs the restart.
 
 ## [1.22.28] — 2026-10-04
 

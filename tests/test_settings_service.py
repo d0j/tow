@@ -101,3 +101,16 @@ def test_a_refused_autostart_says_why(monkeypatch):
 
 def test_restart_without_tow_run_says_it_did_not_start():
     assert "перезапуск" in _post("/settings/service/restart", {}).lower()
+
+
+@pytest.mark.parametrize(("language", "expected"), [("en", "TOW restart requested"), ("ru", "Запрошен перезапуск TOW")])
+def test_accepted_restart_log_describes_a_request_not_completed_work(monkeypatch, language, expected):
+    from tow.log import format_event, read_events
+
+    monkeypatch.setattr("tow.web.services.request_restart", lambda: {"ok": True, "operation_id": "restart-test"})
+    _post("/settings/service/restart", {})
+    records = [row for row in read_events(limit=10) if row["kind"] == "settings_service_restart"]
+    assert len(records) == 1
+    assert records[0]["operation_id"] == "restart-test"
+    monkeypatch.setattr("tow.log.owner_language", lambda: language)
+    assert format_event(records[0])["label"] == expected

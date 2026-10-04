@@ -178,7 +178,7 @@ def test_a_hung_server_is_stopped_restarted_and_the_owner_told(tmp_path):
     run_for(sup, world.clock, 10)
 
     assert len(world.servers()) == 2
-    assert world.sent == ["TOW завис и не отвечал — сторож остановил его и запустил заново, TOW снова работает"]
+    assert world.sent == ["TOW не отвечал — выполнен перезапуск, TOW снова работает"]
     assert sup.server.last_exit == "hung"
 
 
@@ -196,7 +196,7 @@ def test_repeated_restarts_are_told_once_per_window(tmp_path):
     for _ in range(4):
         world.servers()[-1].code = 1
         run_for(sup, world.clock, 60)
-    assert world.sent[0] == "TOW был закрыт или упал — сторож запустил его заново, TOW снова работает"
+    assert world.sent[0] == "TOW был закрыт или упал — выполнен перезапуск, TOW снова работает"
     assert len(world.sent) == 2
     assert world.sent[1].startswith("TOW: перезапусков за ")
     assert ": 3 — что-то раз за разом ломает TOW" in world.sent[1]
@@ -208,9 +208,7 @@ def test_a_crash_is_told_with_its_last_error(tmp_path):
     run_for(sup, world.clock, 5)
     world.servers()[0].code = 1
     run_for(sup, world.clock, 10)
-    assert world.sent == [
-        "TOW упал (последняя ошибка: OSError: disk full) — сторож запустил его заново, TOW снова работает"
-    ]
+    assert world.sent == ["TOW упал (последняя ошибка: OSError: disk full) — выполнен перезапуск, TOW снова работает"]
 
 
 def test_a_spawn_failure_is_retried(tmp_path):
@@ -285,6 +283,23 @@ def test_the_port_held_by_another_tow_is_a_clear_refusal(tmp_path):
     assert message is not None
     assert "8787" in message
     assert "другой программой" in message
+
+
+@pytest.mark.parametrize("language", ["en", "ru"])
+@pytest.mark.parametrize("cause", ["hung", "crashed", "crashed_no_detail"])
+def test_recovery_message_does_not_claim_the_watchdog_restarted_tow(tmp_path, language, cause):
+    world, sup = make(tmp_path)
+    sup.deps.load_config = lambda: {"language": language}
+    sup.server.pending_cause = "hung" if cause == "hung" else "crashed"
+    sup.server.pending_crash = "synthetic failure" if cause == "crashed" else ""
+    sup._count_restart(world.clock.wall)
+    sup._tell_restarted(world.clock.wall)
+    assert len(world.sent) == 1
+    assert "watchdog" not in world.sent[0].casefold()
+    assert "сторож" not in world.sent[0].casefold()
+    assert "working again" in world.sent[0] if language == "en" else "снова работает" in world.sent[0]
+    if cause == "crashed":
+        assert "synthetic failure" in world.sent[0]
 
 
 # --- scheduled jobs ---------------------------------------------------------------------------
