@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import vm from "node:vm";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 // Run only checked-in fixtures; no external arguments or values enter the VM.
 const fixtures = new Map([
@@ -37,7 +38,6 @@ const fixtures = new Map([
 ]);
 for (const selected of fixtures.values()) {
 const scenario = { page: "1.22.29", current: "1.22.30", target: "1.22.30", mutate: true, ...selected };
-const source = readFileSync(new URL("../../src/tow/static/updates.js", import.meta.url), "utf8");
 const elements = new Map();
 for (const name of ["release-badge", "release-status", "release-check", "update-progress", "update-support", "update-reload", "update-log", "update-log-text"]) {
   elements.set(`[data-${name}]`, { hidden: true, textContent: "", open: true, events: {},
@@ -54,7 +54,7 @@ const posts = [];
 let statusReads = 0;
 let hourly;
 const document = { querySelector: selector => elements.get(selector), documentElement: { lang: "en" }, hidden: false };
-vm.runInNewContext(source, {
+Object.assign(globalThis, {
   document,
   t: (key, vars = {}) => `${key}:${JSON.stringify(vars)}`, AbortSignal, Date,
   window: { location: { reload() { reloads++; } }, setTimeout() {}, clearTimeout() {}, setInterval(callback) { hourly = callback; } },
@@ -68,6 +68,9 @@ vm.runInNewContext(source, {
       { ok: true, available: false, current: scenario.current, latest: scenario.current } };
   },
 });
+// Load the fixed, checked-in module normally; never evaluate file contents as a string.
+delete require.cache[require.resolve("../../src/tow/static/updates.js")];
+require("../../src/tow/static/updates.js");
 for (let i = 0; i < 8; i++) await new Promise(resolve => setImmediate(resolve));
 if (scenario.trigger) {
   assert.equal(elements.get("[data-update-reload]").hidden, true);
