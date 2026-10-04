@@ -136,9 +136,10 @@ def test_worker_refuses_an_unreadable_lease_before_running_the_updater(tmp_path,
     else:
         job["lease_version"] = 2
     path.write_text(json.dumps(job))
+    before = path.read_bytes()
     assert update_worker.run(tmp_path, path, job_id, "1.22.21", None) == 2
-    assert json.loads(path.read_text())["status"] == "failed"
-    assert json.loads(path.read_text())["error"] == "releases.job_unreadable"
+    # An unreadable lease is not ownership, even to publish a refusal.
+    assert path.read_bytes() == before
 
 
 def test_second_worker_cannot_take_over_a_held_job_lease(tmp_path):

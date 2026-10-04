@@ -9,26 +9,102 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import json
+import math
 import os
 import re
 import stat
 import sys
 import time
+import uuid
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 _LEASE_WAIT = 1.0
 _LEASE_POLL = 0.05
+_JOB_MAX_BYTES = 65536
+_JSON_MAX_DEPTH = 128
+_STATUSES = frozenset(
+    {
+        "queued",
+        "preparing",
+        "stopping",
+        "backup",
+        "installing",
+        "checking",
+        "rolling_back",
+        "ok",
+        "refused",
+        "failed",
+        "rolled_back",
+        "recovered",
+    }
+)
+
+
+def _finite_number(value: str) -> float:
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("non-finite JSON number")
+    return number
+
+
+def _decode_object(raw: bytes) -> dict[str, Any]:
+    # Keep in step with tow.store, without importing a replaceable Python 3.14 app.
+    value = json.loads(raw.decode("utf-8"), parse_float=_finite_number, parse_constant=_finite_number)
+    if not isinstance(value, dict):
+        raise TypeError("record is not an object")
+    stack = [(value, 0)]
+    while stack:
+        item, depth = stack.pop()
+        if depth > _JSON_MAX_DEPTH:
+            raise ValueError("record nesting exceeds limit")
+        if isinstance(item, dict):
+            stack.extend((child, depth + 1) for child in item.values())
+        elif isinstance(item, list):
+            stack.extend((child, depth + 1) for child in item)
+    return value
+
+
+def _check_job(job: dict[str, Any]) -> None:
+    identifier = job.get("id")
+    status = job.get("status")
+    if not isinstance(identifier, str) or re.fullmatch(r"[A-Za-z0-9_-]{1,64}", identifier) is None:
+        raise ValueError("invalid job identifier")
+    if not isinstance(status, str) or status not in _STATUSES:
+        raise ValueError("invalid job status")
+
+
+def _read_job(path: Path) -> dict[str, Any]:
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        raise ValueError("unsafe job record")
+    with path.open("rb") as handle:
+        raw = handle.read(_JOB_MAX_BYTES + 1)
+    if len(raw) > _JOB_MAX_BYTES:
+        raise ValueError("job record exceeds size limit")
+    job = _decode_object(raw)
+    _check_job(job)
+    return job
 
 
 def write_job(path: Path, job: dict[str, Any]) -> None:
-    temporary = path.with_name(f".{job['id']}.tmp")
-    with temporary.open("w", encoding="utf-8") as handle:
-        json.dump(job, handle)
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(temporary, path)
+    _check_job(job)
+    raw = json.dumps(job, allow_nan=False).encode("utf-8")
+    if len(raw) > _JOB_MAX_BYTES:
+        raise ValueError("job record exceeds size limit")
+    _decode_object(raw)
+    temporary = path.with_name(f".{job['id']}-{uuid.uuid4().hex}.tmp")
+    handle = temporary.open("xb")
+    try:
+        with handle:
+            handle.write(raw)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        with contextlib.suppress(OSError):
+            temporary.unlink()
 
 
 def schema_preflight(work: Any, error: Any) -> None:
@@ -40,37 +116,50 @@ def schema_preflight(work: Any, error: Any) -> None:
     if match is None:
         raise error("target state schema cannot be verified")
     state_path = work.root / "data" / "state.json"
-    if state_path.exists():
+    try:
         with state_path.open("rb") as handle:
-            state = json.load(handle)
-        schema = state.get("schema_version", 0) if isinstance(state, dict) else None
-        if type(schema) is not int or schema < 0 or schema > int(match[1]):
-            raise error("target version cannot read current data")
+            state = _decode_object(handle.read())
+    except FileNotFoundError:
+        return
+    except (OSError, ValueError, TypeError, RecursionError) as exc:
+        raise error("current data cannot be verified") from exc
+    schema = state.get("schema_version", 0)
+    if type(schema) is not int or schema < 0 or schema > int(match[1]):
+        raise error("target version cannot read current data")
 
 
 def _handoff_expired(job: dict[str, Any]) -> bool:
     started = job.get("started_at")
-    return started is not None and (type(started) not in {int, float} or not 0 <= time.time() - started < 30)
+    if started is None:
+        return False  # compatible with pre-expiry reservations already on disk
+    if type(started) not in {int, float}:
+        return True
+    try:
+        return not math.isfinite(float(started)) or not 0 <= time.time() - started < 30
+    except OverflowError:
+        return True
 
 
 def run(app: Path, job_path: Path, job_id: str, version: str, updater: Any) -> int:
-    job = json.loads(job_path.read_text(encoding="utf-8"))
-    if job.get("id") != job_id or job.get("status") != "queued":
-        return 2
-    if _handoff_expired(job):
-        return refuse_handoff(job_path, job_id, "releases.interrupted")
     try:
+        job = _read_job(job_path)
+        if job.get("id") != job_id or job.get("status") != "queued":
+            return 2
+        if "target" in job and job["target"] != version:
+            return refuse_handoff(job_path, job_id, "releases.job_unreadable")
+        if _handoff_expired(job):
+            return refuse_handoff(job_path, job_id, "releases.interrupted")
         with worker_lease(job_path, job) as acquired:
             if not acquired:
                 return 2
             # A second worker may have completed this job before this one took the lease.
-            latest = json.loads(job_path.read_text(encoding="utf-8"))
+            latest = _read_job(job_path)
             if latest.get("id") != job_id or latest.get("status") != "queued" or latest != job:
                 return 2
             if _handoff_expired(latest):
-                return refuse_handoff(job_path, job_id, "releases.interrupted")
+                return _record_refusal(job_path, latest, "releases.interrupted")
             return _run(app, job_path, job, version, updater)
-    except (OSError, ValueError, ImportError, SyntaxError):
+    except (OSError, ValueError, TypeError, RecursionError, ImportError, SyntaxError):
         return refuse_handoff(job_path, job_id, "releases.job_unreadable")
 
 
@@ -180,14 +269,22 @@ def _run(app: Path, job_path: Path, job: dict[str, Any], version: str, updater: 
 def main() -> int:
     args = sys.argv[1:]
     mode = args.pop(0) if args and args[0] in {"--handoff", "--after-parent", "--broker-child"} else ""
-    parent = int(args.pop(0)) if mode in {"--after-parent", "--broker-child"} else 0
+    try:
+        parent = int(args.pop(0)) if mode in {"--after-parent", "--broker-child"} else 0
+    except (ValueError, IndexError):
+        return 2
+    if len(args) != 4 or (mode in {"--after-parent", "--broker-child"} and not 0 < parent <= 0xFFFFFFFF):
+        return 2
     _app, job_path, job_id, _version = args
     if mode == "--broker-child":
         folder = Path(__file__).resolve().parent
         record = folder.parent / "job.json"
         if folder.name != job_id or str(record) != job_path:
             return 2
-        job = json.loads(record.read_text(encoding="utf-8"))
+        try:
+            job = _read_job(record)
+        except (OSError, ValueError, TypeError, RecursionError):
+            return refuse_handoff(record, job_id, "releases.job_unreadable")
         if job.get("id") != job_id or job.get("status") != "queued":
             return 2
         with (
@@ -242,8 +339,22 @@ def handoff(mode: str, parent: int, args: list[str]) -> int:
 
 
 def refuse_handoff(path: Path, job_id: str, reason: str = "releases.launch_failed") -> int:
-    job = json.loads(path.read_text(encoding="utf-8"))
-    if job.get("id") == job_id and job.get("status") == "queued":
+    try:
+        job = _read_job(path)
+        if job.get("id") == job_id and job.get("status") == "queued":
+            with worker_lease(path, job) as acquired:
+                if acquired:
+                    return _record_refusal(path, job, reason)
+    except (OSError, ValueError, TypeError, RecursionError, ImportError, SyntaxError):
+        # A damaged record is evidence, not permission to reconstruct or overwrite it.
+        print("handoff refused: releases.job_unreadable", flush=True)
+    return 2
+
+
+def _record_refusal(path: Path, job: dict[str, Any], reason: str) -> int:
+    # Called only with the worker lease (or a compatible pre-lease reservation).
+    # Taking ownership is not permission to replace a changed record.
+    if _read_job(path) == job:
         print(f"handoff refused: {reason}", flush=True)
         job.update(status="failed", error=reason, finished_at=time.time())
         write_job(path, job)
