@@ -98,6 +98,7 @@
       "restore_cleanup_warning": "The data is restored and the safety archive is verified, but cleanup of old restore points is incomplete.",
       "cleanup_pending": "Cleanup of old restore points is incomplete. Check folder access and files held by other programs; the next restore point will retry cleanup. Verified copies remain available.",
       "cleanup_unknown": "Cleanup status is unknown. Check folder access and create a new copy to retry cleanup. Existing copies are checked before restoration.",
+      "cleanup_legacy": "The saved cleanup result uses an older format. Creating the next copy will confirm the result in the new format; existing copies remain available for verification and restoration.",
       "cannot_create_dir": "cannot create the restore points folder",
       "unsafe_dir": "unsafe restore points folder",
       "read_back_failed": "the new restore point could not be read back",

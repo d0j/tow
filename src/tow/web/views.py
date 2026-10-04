@@ -455,4 +455,5 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
         "point_cleanup_pending": cleanup["pending"] is True,
         "point_cleanup_read_error": cleanup["read_error"],
         "point_cleanup_unrecorded": cleanup["pending"] is None,
+        "point_cleanup_legacy": cleanup.get("legacy") is True and cleanup["pending"] is None,
     }

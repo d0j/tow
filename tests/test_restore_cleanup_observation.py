@@ -354,3 +354,109 @@ def test_invalid_inventory_binding_is_unknown(tmp_path, inventory):
     )
     assert restore_points.cleanup_status()["pending"] is None
     assert restore_points.cleanup_status()["read_error"] is True
+
+
+@pytest.mark.parametrize("lang", ["en", "ru"])
+@pytest.mark.parametrize("previous", [True, False])
+def test_readable_legacy_migration_is_not_a_folder_outage(tmp_path, lang, previous):
+    _seed(lang)
+    record = tmp_path / "restore-point-status.json"
+    record.write_text(
+        json.dumps({"cleanup_pending": False, "location": str((tmp_path / "restore-points").resolve())}),
+        encoding="utf-8",
+    )
+    (tmp_path / watchdog.STATE_NAME).write_text(json.dumps({"restore_point_cleanup": previous}), encoding="utf-8")
+    raw = record.read_bytes()
+    sent = []
+    for _ in range(3):
+        report = _check(sent)
+        assert report["restore_point_cleanup_pending"] is None
+        assert watchdog._load_state()["restore_point_cleanup"] is previous
+        assert report["restore_point_cleanup_read_error"] is False
+    assert not sent
+    assert record.read_bytes() == raw
+    restore_points._record_cleanup(False, tmp_path / "restore-points")
+    _check(sent)
+    _check(sent)
+    assert sent == ([] if previous else [t("watchdog.alert.point_cleanup_ok", lang)])
+
+
+@pytest.mark.parametrize("lang", ["en", "ru"])
+def test_prior_migration_alarm_clears_without_fabricating_a_cleanup_result(tmp_path, lang):
+    _seed(lang)
+    (tmp_path / "restore-point-status.json").write_text(
+        json.dumps({"cleanup_pending": False, "location": str((tmp_path / "restore-points").resolve())}),
+        encoding="utf-8",
+    )
+    (tmp_path / watchdog.STATE_NAME).write_text(
+        json.dumps({"restore_point_cleanup": True, "restore_point_cleanup_monitoring": False}), encoding="utf-8"
+    )
+    sent = []
+    _check(sent)
+    assert watchdog._load_state()["restore_point_cleanup_monitoring"] is True
+    assert not sent
+
+
+@pytest.mark.parametrize("pending", [True, False])
+@pytest.mark.parametrize("legacy_pending", [True, False])
+def test_losing_binding_after_new_format_was_observed_is_still_an_error(tmp_path, pending, legacy_pending):
+    _seed()
+    restore_points._record_cleanup(pending, tmp_path / "restore-points")
+    sent = []
+    _check(sent)
+    sent.clear()
+    (tmp_path / "restore-point-status.json").write_text(
+        json.dumps({"cleanup_pending": legacy_pending, "location": str((tmp_path / "restore-points").resolve())}),
+        encoding="utf-8",
+    )
+    for _ in range(3):
+        assert _check(sent)["restore_point_cleanup_read_error"] is True
+        assert watchdog._load_state()["restore_point_cleanup"] is not pending
+    assert sent == [t("watchdog.alert.point_cleanup_unreadable", "en")]
+
+
+@pytest.mark.parametrize("lang", ["en", "ru"])
+def test_legacy_settings_explain_format_not_inaccessible_folder(tmp_path, lang):
+    _seed(lang)
+    made = restore_points.create_restore_point()
+    record = tmp_path / "restore-point-status.json"
+    value = json.loads(record.read_text())
+    value.pop("inventory")
+    record.write_text(json.dumps(value), encoding="utf-8")
+    raw = record.read_bytes()
+    with TestClient(app, headers={"Accept-Language": lang}) as client:
+        response = client.get("/settings")
+    manual = response.text.split('id="backup-manual"', 1)[1].split("</article>", 1)[0]
+    assert t("backup.restore_point.cleanup_legacy", lang) in manual
+    assert t("backup.restore_point.cleanup_unknown", lang) not in manual
+    assert made["id"] in manual
+    assert 'class="pill warn"' in manual
+    assert record.read_bytes() == raw
+
+
+@pytest.mark.parametrize("mode", ["permission", "not-directory"])
+def test_legacy_metadata_cannot_hide_an_inaccessible_folder(tmp_path, monkeypatch, mode):
+    _seed()
+    folder = tmp_path / "restore-points"
+    if mode == "not-directory":
+        folder.write_bytes(b"synthetic non-directory")
+    else:
+        folder.mkdir()
+        original = Path.iterdir
+
+        def iterdir(candidate):
+            if candidate == folder:
+                raise PermissionError("synthetic folder refusal")
+            return original(candidate)
+
+        monkeypatch.setattr(Path, "iterdir", iterdir)
+    (tmp_path / "restore-point-status.json").write_text(
+        json.dumps({"cleanup_pending": False, "location": str(folder.resolve())}), encoding="utf-8"
+    )
+    sent = []
+    result = restore_points.cleanup_status()
+    assert result["pending"] is None
+    assert result["read_error"] is True
+    assert result["legacy"] is False
+    assert _check(sent)["restore_point_cleanup_read_error"] is True
+    assert sent == [t("watchdog.alert.point_cleanup_unreadable", "en")]

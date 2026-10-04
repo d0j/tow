@@ -3,6 +3,17 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.46] — 2026-10-04
+
+### Fixed
+
+- Do not report readable legacy restore-point metadata as a folder outage after an update.
+  Keep unbound cleanup success unknown and retain the last confirmed fact; neither migration
+  nor clearing its monitoring alarm fabricates cleanup completion. Once bound metadata has
+  been observed, losing its binding still raises the normal observation warning.
+- Explain the older format in Settings instead of suggesting that the folder is inaccessible.
+  Existing copies remain available for normal verification and restoration.
+
 ## [1.22.45] — 2026-10-04
 
 ### Fixed
