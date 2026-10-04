@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
-// The argument selects a checked-in fixture; it never supplies values to the VM.
+// Run only checked-in fixtures; no external arguments or values enter the VM.
 const fixtures = new Map([
   ["old-success", { page: "1.22.29", current: "1.22.30", target: "1.22.30", status: "ok", reload: true, key: "js.releases.ok" }],
   ["current-success", { page: "1.22.30", current: "1.22.30", target: "1.22.30", status: "ok", reload: false, key: "js.releases.ok_current" }],
@@ -31,14 +31,17 @@ const fixtures = new Map([
   ["boolean-current", { status: "ok", current: true, reload: true, key: "js.releases.ok" }],
   ["number-current", { status: "ok", current: 123, reload: true, key: "js.releases.ok" }],
   ["rollback-null-current", { status: "rolled_back", current: null, reload: false, key: "js.releases.rolled_back" }],
+  ["external-manual", { page: "1.22.29", current: "1.22.29", target: "1.22.29", status: "ok", reload: true, key: "js.releases.ok", trigger: "manual" }],
+  ["external-hourly", { page: "1.22.29", current: "1.22.29", target: "1.22.29", status: "ok", reload: true, key: "js.releases.ok", trigger: "hourly" }],
+  ["hidden-hourly", { page: "1.22.29", current: "1.22.29", target: "1.22.29", status: "ok", reload: false, key: "js.releases.ok_current", trigger: "hidden" }],
 ]);
-const selected = fixtures.get(process.argv[2]);
-assert.ok(selected, "Unknown fixture name");
+for (const selected of fixtures.values()) {
 const scenario = { page: "1.22.29", current: "1.22.30", target: "1.22.30", mutate: true, ...selected };
 const source = readFileSync(new URL("../../src/tow/static/updates.js", import.meta.url), "utf8");
 const elements = new Map();
-for (const name of ["release-badge", "release-status", "update-progress", "update-support", "update-reload", "update-log", "update-log-text"]) {
+for (const name of ["release-badge", "release-status", "release-check", "update-progress", "update-support", "update-reload", "update-log", "update-log-text"]) {
   elements.set(`[data-${name}]`, { hidden: true, textContent: "", open: true, events: {},
+    setAttribute() {}, removeAttribute() {},
     addEventListener(name, callback) { this.events[name] = callback; } });
 }
 const page = { dataset: { pageVersion: scenario.page } };
@@ -48,12 +51,16 @@ const job = { supported: true, active: scenario.active || false, status: scenari
   error_message: scenario.error || "" };
 let reloads = 0;
 const posts = [];
+let statusReads = 0;
+let hourly;
+const document = { querySelector: selector => elements.get(selector), documentElement: { lang: "en" }, hidden: false };
 vm.runInNewContext(source, {
-  document: { querySelector: selector => elements.get(selector), documentElement: { lang: "en" } },
+  document,
   t: (key, vars = {}) => `${key}:${JSON.stringify(vars)}`, AbortSignal, Date,
-  window: { location: { reload() { reloads++; } }, setTimeout() {}, clearTimeout() {}, setInterval() {} },
+  window: { location: { reload() { reloads++; } }, setTimeout() {}, clearTimeout() {}, setInterval(callback) { hourly = callback; } },
   fetch: async (url, options = {}) => {
     if (options.method === "POST") posts.push(url);
+    if (url === "/updates/status") statusReads++;
     // Even a later marker change is not the identity of the originally loaded document.
     if (scenario.mutate) page.dataset.pageVersion = scenario.current;
     return { ok: true, json: async () => url === "/updates/status" ? job :
@@ -62,6 +69,15 @@ vm.runInNewContext(source, {
   },
 });
 for (let i = 0; i < 8; i++) await new Promise(resolve => setImmediate(resolve));
+if (scenario.trigger) {
+  assert.equal(elements.get("[data-update-reload]").hidden, true);
+  job.current = "1.22.30";
+  job.target = "1.22.30";
+  if (scenario.trigger === "manual") elements.get("[data-release-check]").events.click();
+  else { document.hidden = scenario.trigger === "hidden"; hourly(); }
+  for (let i = 0; i < 8; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(statusReads, scenario.trigger === "hidden" ? 1 : 2);
+}
 const progress = elements.get("[data-update-progress]");
 const reload = elements.get("[data-update-reload]");
 assert.equal(reload.hidden, !scenario.reload);
@@ -75,5 +91,7 @@ if (scenario.key || scenario.error) {
 if (scenario.error) assert.ok(progress.textContent.includes(scenario.error));
 assert.equal(elements.get("[data-update-log-text]").textContent, "retained operation log");
 assert.equal(reloads, 0); // never reload automatically, including after rollback
-assert.deepEqual(posts, []); // observing a completed operation never installs anything
-console.log(JSON.stringify({ pageVersion: true, explicitReload: true, datesAndLogRetained: true, noInstallation: true }));
+assert.deepEqual(posts, scenario.trigger === "manual" ? ["/updates/check"] : []);
+assert.ok(!posts.includes("/updates/install")); // observing never installs anything
+}
+console.log(JSON.stringify({ scenarios: fixtures.size, pageVersion: true, explicitReload: true, datesAndLogRetained: true, noInstallation: true }));

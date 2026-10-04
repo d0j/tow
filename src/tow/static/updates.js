@@ -114,7 +114,7 @@
       if (check) { check.disabled = false; check.removeAttribute("aria-busy"); }
     }
   };
-  check?.addEventListener("click", () => { refresh(true); });
+  check?.addEventListener("click", () => { refresh(true); pollJob(); });
   const controls = () => {
     const disabled = updating || !supported;
     if (install) { install.hidden = !latest || !supported; install.disabled = disabled; }
@@ -274,5 +274,5 @@
   refresh();
   pollJob();
   // Long-running dashboards discover releases too, not only after a reload.
-  window.setInterval(() => { if (!document.hidden) refresh(); }, 60 * 60 * 1000);
+  window.setInterval(() => { if (!document.hidden) { refresh(); pollJob(); } }, 60 * 60 * 1000);
 })();

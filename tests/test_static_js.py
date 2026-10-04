@@ -12,42 +12,12 @@ NODE = shutil.which("node")
 
 @pytest.mark.allow_system
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
-@pytest.mark.parametrize(
-    "fixture",
-    [
-        "old-success",
-        "current-success",
-        "empty-page",
-        "legacy-old",
-        "legacy-current",
-        "rollback-old",
-        "rollback-current",
-        "rollback-unknown",
-        "recovered-old",
-        "recovered-current",
-        "superseded-old",
-        "superseded-current",
-        "failed-current",
-        "failed-old",
-        "refused-current",
-        "interrupted-old",
-        "idle-old",
-        "idle-current",
-        "active-preparing",
-        "active-checking",
-        "active-rollback",
-        "retained-error",
-        "missing-marker",
-        "null-current",
-        "boolean-current",
-        "number-current",
-        "rollback-null-current",
-    ],
-)
-def test_update_reload_follows_loaded_document_and_preserves_operation(fixture):
+def test_update_reload_follows_loaded_document_and_preserves_operation():
     script = Path(__file__).parent / "js" / "update_page_version.mjs"
-    result = subprocess.run([NODE, str(script), fixture], capture_output=True, text=True, timeout=30, check=True)
-    assert all(json.loads(result.stdout.strip()).values())
+    result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=30, check=True)
+    verdict = json.loads(result.stdout.strip())
+    assert verdict.pop("scenarios") == 30
+    assert all(verdict.values())
 
 
 @pytest.mark.allow_system

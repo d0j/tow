@@ -11,6 +11,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   rollback or recovery. A freshly loaded page no longer asks to reload itself; an older tab retains an
   explicit reload action without automatically navigating or installing again.
 - Preserve operation dates, failure details and the update log; keep reload hidden during an active operation.
+- Refresh installation status on a manual release check and the existing hourly visible-page check, so
+  updates from another tab can be discovered without additional frequent background polling.
 
 ## [1.22.29] — 2026-10-04
 
