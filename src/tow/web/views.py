@@ -443,6 +443,7 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
     last_ok = st.get("last_ok_at")
     failed_at = st.get("last_error_at")
     cleanup = services.restore_point_cleanup_status(cfg=cfg)
+    night_cleanup = services.night_cleanup_status(cfg=cfg)
     return {
         "folders": folders,
         "snapshots": snapshots,
@@ -451,7 +452,10 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
         "read_error": st.get("read_error") is True,
         "error": str(st.get("last_error") or ""),
         "error_at": clock(failed_at) if isinstance(failed_at, (int, float)) else "",
-        "cleanup_pending": st.get("last_cleanup_pending") is True,
+        "cleanup_pending": night_cleanup["pending"] is True,
+        "cleanup_read_error": night_cleanup["read_error"],
+        "cleanup_unrecorded": night_cleanup["pending"] is None,
+        "cleanup_legacy": night_cleanup.get("legacy") is True and night_cleanup["pending"] is None,
         "point_cleanup_pending": cleanup["pending"] is True,
         "point_cleanup_read_error": cleanup["read_error"],
         "point_cleanup_unrecorded": cleanup["pending"] is None,

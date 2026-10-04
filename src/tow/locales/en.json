@@ -61,6 +61,8 @@
     "snapshot": {
       "inside_data": "the night copies folder must be outside the TOW data folder",
       "cleanup_warning": "The new copy is saved and verified, but cleanup of old copies is incomplete. Check folder access and files held by other programs; TOW will try again at the next copy.",
+      "cleanup_unknown": "Cleanup status is unknown. Check folder access and create a new night copy to retry cleanup. Existing copies are checked before restoration.",
+      "cleanup_legacy": "The saved cleanup result uses an older format. The next night copy will confirm the result in the new format; existing copies remain available for verification and restoration.",
       "restore_cleanup_warning": "The data is restored, but cleanup of safety copies is incomplete. Check folder access and files held by other programs; the next restore will try again.",
       "unknown": "unknown night copy",
       "cannot_write": "cannot write the night copy: {reason}",
@@ -1612,6 +1614,8 @@
       "backup_ok": "TOW: night copies are being made again",
       "backup_cleanup_pending": "TOW: the night copy is saved, but cleanup of old copies is incomplete. Check backup folder access and files held by other programs; the next copy will retry cleanup.",
       "backup_cleanup_ok": "TOW: cleanup of old night copies is complete",
+      "backup_cleanup_unreadable": "TOW: the night-copy cleanup result is unavailable. The last confirmed state is retained; cleanup completion is not confirmed. Check folder access in Settings → Backups.",
+      "backup_cleanup_readable": "TOW: the night-copy cleanup result is readable again. This confirms observation, not cleanup completion.",
       "point_cleanup_pending": "TOW: the restore point is saved and verified, but cleanup of old archives is incomplete. Check folder access and files held by other programs; the next restore point will retry cleanup.",
       "point_cleanup_ok": "TOW: cleanup of old restore points in the current folder is complete",
       "point_cleanup_unreadable": "TOW: cleanup status of restore points is unavailable. The last confirmed result is retained; cleanup is not confirmed complete. Check folder access in Settings → Backups.",

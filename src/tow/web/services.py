@@ -34,6 +34,7 @@ from tow.restore_points import (
     restore_portable_bundle,
 )
 from tow.restore_points import cleanup_status as restore_point_cleanup_status
+from tow.snapshots import cleanup_status as night_cleanup_status
 from tow.store import (
     load_download_history,
     load_secrets,
@@ -65,6 +66,7 @@ __all__ = [
     "log_event",
     "login_throttle",
     "next_check_at",
+    "night_cleanup_status",
     "persistence_lock",
     "record_check_failure",
     "recover_store_transaction",

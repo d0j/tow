@@ -86,6 +86,9 @@ def status_path() -> Path:
 def status() -> dict[str, Any]:
     """Last success and last failure of a night copy (for the watchdog and Settings)."""
     try:
+        info = status_path().lstat()
+        if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+            raise ValueError("backup record is not a regular file")
         value = read_object(status_path())
         check_epochs(value, ("last_ok_at", "last_error_at"))
         check_types(
@@ -108,6 +111,62 @@ def status() -> dict[str, Any]:
     except OSError, UnicodeError, ValueError, TypeError, RecursionError:
         return {"read_error": True, "last_error": t("watchdog.backup.status_unreadable")}
     return value
+
+
+def _cleanup_inventory(location: Path) -> str:
+    """Bind cleanup to committed candidate names; this does not grant deletion ownership."""
+    digest = hashlib.sha256()
+    try:
+        info = location.lstat()
+    except FileNotFoundError:
+        return digest.hexdigest()
+    if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        raise ValueError("cleanup folder is not a regular directory")
+    # Partial copies begin with a dot. Do not inspect candidate contents or follow links.
+    for name in sorted(path.name for path in location.iterdir() if path.name.startswith(_PREFIX)):
+        digest.update(name.encode("utf-8"))
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def cleanup_status(*, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Cleanup in the current folder: pending, complete or unknown, never inferred from absence."""
+    with persistence_lock():  # inventory and record must describe the same completed copy
+        return _cleanup_status(cfg=cfg)
+
+
+def _cleanup_status(*, cfg: dict[str, Any] | None) -> dict[str, Any]:
+    result: dict[str, Any] = {"pending": None, "read_error": False, "location": "", "legacy": False}
+    try:
+        location = backup_root(cfg)
+        result["location"] = str(location.resolve())
+        state = status()
+        if state.get("read_error"):
+            raise ValueError("unreadable backup record")
+        if "last_cleanup_pending" not in state:
+            return result  # a new install or a copy failure alone has no cleanup observation
+        if type(state["last_cleanup_pending"]) is not bool or not isinstance(state.get("location"), str):
+            raise ValueError("invalid cleanup observation")
+        if not state["location"]:
+            raise ValueError("missing cleanup location")
+        inventory = state.get("cleanup_inventory")
+        if "cleanup_inventory" in state and (
+            not isinstance(inventory, str) or re.fullmatch(r"[a-f0-9]{64}", inventory) is None
+        ):
+            raise ValueError("invalid cleanup inventory")
+        if state["location"] == result["location"]:
+            observed = _cleanup_inventory(location)
+            if "cleanup_inventory" not in state:
+                result["legacy"] = True
+                if state["last_cleanup_pending"]:
+                    result["pending"] = True
+            elif observed != inventory:
+                raise ValueError("cleanup observation belongs to an earlier inventory")
+            else:
+                result["pending"] = state["last_cleanup_pending"]
+    except OSError, ValueError, TypeError, UnicodeError, RecursionError, SnapshotError:
+        result["read_error"] = True
+    return result
 
 
 def status_failed(value: dict[str, Any]) -> bool:
@@ -306,18 +365,26 @@ def create_snapshot(*, keep: int | None = None, how: str = "auto") -> dict[str, 
     try:
         with persistence_lock():  # creation, read-back and pruning cannot race another copy
             result = _create_snapshot(keep=keep, how=how)
+            location = Path(result["snapshot"]).parent
+            fields: dict[str, Any] = {"location": str(location), "cleanup_inventory": None}
+            # A diagnostic failure cannot invalidate a verified copy. A missing binding
+            # remains unknown, rather than binding an earlier result to a later copy.
+            with contextlib.suppress(OSError, ValueError, UnicodeError):
+                fields["location"] = str(location.resolve())
+                fields["cleanup_inventory"] = _cleanup_inventory(location)
+            _record(
+                last_ok_at=round(time.time(), 3),
+                last_snapshot=Path(result["snapshot"]).name,
+                last_bytes=result["bytes"],
+                last_missing=result["missing"],
+                last_cleanup_pending=bool(result.get("cleanup_warning")),
+                location=fields["location"],
+                cleanup_inventory=fields.get("cleanup_inventory"),
+                last_error="",
+            )
     except SnapshotError as exc:
         record_failure(str(exc))
         raise
-    _record(
-        last_ok_at=round(time.time(), 3),
-        last_snapshot=Path(result["snapshot"]).name,
-        last_bytes=result["bytes"],
-        last_missing=result["missing"],
-        last_cleanup_pending=bool(result.get("cleanup_warning")),
-        location=str(Path(result["snapshot"]).parent),
-        last_error="",
-    )
     return result
 
 

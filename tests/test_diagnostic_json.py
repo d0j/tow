@@ -203,6 +203,8 @@ def test_known_container_and_scalar_shapes_are_validated(name, payload):
 
 @pytest.mark.parametrize("name", READERS)
 def test_io_failure_is_not_first_start(name, monkeypatch):
+    _write(name, b"{}")
+
     def denied(self, *args, **kwargs):
         raise PermissionError("synthetic denial")
 

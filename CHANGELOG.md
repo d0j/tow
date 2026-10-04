@@ -3,6 +3,19 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.48] — 2026-10-04
+
+### Fixed
+
+- Treat missing, damaged and stale night-copy cleanup records as unknown, not completion.
+  Keep the last confirmed result across watchdog restarts, report observation loss separately
+  and never resolve an old folder's warning when the configured folder changes.
+- Bind new cleanup results to the committed copy inventory under the creation lock. A failed
+  monitoring write cannot confirm an earlier result for newer copies; verified copies remain
+  usable. Legacy warnings are retained, and readable legacy metadata migrates quietly.
+- Show unknown and legacy cleanup results in Backups without hiding existing copies. Reject
+  nonregular night-copy diagnostic records before attempting to open them.
+
 ## [1.22.47] — 2026-10-04
 
 ### Fixed
