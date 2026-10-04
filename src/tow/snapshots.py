@@ -65,6 +65,8 @@ _POINT_MEMBER = re.compile(r"restore-points/(?P<id>[A-Za-z0-9-]{1,64})\.towx")
 KEEP_DEFAULT = 14
 MAX_MANIFEST_BYTES = 1024 * 1024
 MAX_MEMBER_SIZE = 2**63 - 1
+_READ_CHUNK_BYTES = 1024 * 1024
+_VALIDATED_MEMBERS = ("config.yaml", "state.json", "download_history.json", "secrets.enc", "secrets-undo.enc")
 # Exists only while a settings change can still be undone: its absence is normal.
 _OPTIONAL_MEMBERS = frozenset({"secrets-undo.enc"})
 _PREFIX = "tow-"
@@ -288,6 +290,8 @@ def _signature_matches(manifest: dict[str, Any], key: bytes) -> bool:
 def _read_manifest(path: Path) -> dict[str, Any]:
     lang = owner_language()
     try:
+        _ordinary_directory(path)
+        _ordinary_file(path / "MANIFEST.json")
         with (path / "MANIFEST.json").open("rb") as handle:
             content = handle.read(MAX_MANIFEST_BYTES + 1)
         if len(content) > MAX_MANIFEST_BYTES:
@@ -625,11 +629,48 @@ def _rename_with_retry(source: Path, target: Path, *, attempts: int = 6) -> None
             time.sleep(0.05 * 2**attempt)
 
 
-def _read_verified(path: Path) -> tuple[dict[str, Any], dict[str, bytes], bool]:
-    """(manifest, contents by member name, signed): every file read once and checked.
+def _verified_member(source: Path, name: str, meta: Any, *, collect: bool) -> bytes | None:
+    """Hash one regular file in bounded blocks, optionally retaining exactly those bytes."""
+    size = _member_size(name, meta)
+    lang = owner_language()
+    if name == "config.yaml" and size > MAX_INPUT_BYTES:
+        raise SnapshotError(str(YamlLimitError("yaml_limits.size")))
+    digest = hashlib.sha256()
+    content = bytearray() if collect else None
+    seen = 0
+    try:
+        _ordinary_directory(source.parent)
+        _ordinary_file(source)
+        with source.open("rb") as handle:
+            info = os.fstat(handle.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size != size:
+                raise ValueError("member is not a regular file of the expected size")
+            while block := handle.read(min(_READ_CHUNK_BYTES, size - seen + 1)):
+                seen += len(block)
+                if seen > size:
+                    raise ValueError("member grew while reading")
+                digest.update(block)
+                if content is not None:
+                    content.extend(block)
+    except OSError as exc:
+        raise SnapshotError(t("backup.snapshot.file_missing", lang, name=name)) from exc
+    except (ValueError, OverflowError) as exc:
+        raise SnapshotError(t("backup.snapshot.file_damaged", lang, name=name)) from exc
+    if seen != size or digest.hexdigest() != meta.get("sha256"):
+        raise SnapshotError(t("backup.snapshot.file_damaged", lang, name=name))
+    return bytes(content) if content is not None else None
+
+
+def _read_verified(
+    path: Path, *, retain: bool = True, require_signed: bool = False
+) -> tuple[dict[str, Any], dict[str, bytes], bool]:
+    """(manifest, contents by member name, signed): all hashes pass before payload parsing.
 
     The bytes returned are the ones whose hash was checked, so a restore writes exactly
     what was verified (no second read the copies folder could change in between).
+    Verification and preview hash everything, then re-read/hash only semantic stores
+    one at a time: no parser sees changed bytes or an initially damaged copy. Restore
+    reads each file once and retains its checked bytes, never re-reading for a write.
     A signed MANIFEST must carry this install's signature; an unsigned one (made before
     1.17) is still checked file by file, and the caller decides what it may be used for.
     """
@@ -639,34 +680,36 @@ def _read_verified(path: Path) -> tuple[dict[str, Any], dict[str, bytes], bool]:
     signed = manifest["format"] == FORMAT
     if signed and not _signature_matches(manifest, _signing_key()):
         raise SnapshotError(t("backup.snapshot.bad_signature", lang))
+    if require_signed and not signed:
+        raise SnapshotError(t("backup.snapshot.unsigned", lang))
     contents: dict[str, bytes] = {}
     for name, meta in manifest["files"].items():
         _member_target(name)  # a strict name, and a target that stays where it belongs
-        size = _member_size(name, meta)
-        if name == "config.yaml" and size > MAX_INPUT_BYTES:
-            raise SnapshotError(str(YamlLimitError("yaml_limits.size")))
-        try:
-            source = path / name
-            if source.stat().st_size != size:
-                raise SnapshotError(t("backup.snapshot.file_damaged", lang, name=name))
-            with source.open("rb") as handle:
-                content = handle.read(size + 1)
-        except OverflowError as exc:
-            raise SnapshotError(t("backup.snapshot.file_damaged", lang, name=name)) from exc
-        except OSError as exc:
-            raise SnapshotError(t("backup.snapshot.file_missing", lang, name=name)) from exc
-        if len(content) != size or hashlib.sha256(content).hexdigest() != meta.get("sha256"):
-            raise SnapshotError(t("backup.snapshot.file_damaged", lang, name=name))
-        contents[name] = content
-    if "config.yaml" in contents:
-        _snapshot_config(contents["config.yaml"])
-    _check_payloads(contents)
+        content = _verified_member(path / name, name, meta, collect=retain)
+        if content is not None:
+            contents[name] = content
+        del content
+    if retain:
+        if "config.yaml" in contents:
+            _snapshot_config(contents["config.yaml"])
+        _check_payloads(contents)
+    else:
+        for name in _VALIDATED_MEMBERS:
+            if name not in manifest["files"]:
+                continue
+            content = _verified_member(path / name, name, manifest["files"][name], collect=True)
+            assert content is not None
+            if name == "config.yaml":
+                _snapshot_config(content)
+            else:
+                _check_payloads({name: content})
+            del content  # the next store must not overlap a previous verification-only buffer
     return manifest, contents, signed
 
 
 def verify_snapshot(path: Path) -> dict[str, Any]:
     """The MANIFEST when hashes and store contents pass (``signed`` permits restoration)."""
-    manifest, _contents, signed = _read_verified(path)
+    manifest, _contents, signed = _read_verified(path, retain=False)
     return {**manifest, "signed": signed}
 
 
@@ -694,7 +737,7 @@ def _check_payloads(contents: dict[str, bytes]) -> None:
 
 def restore_snapshot(path: Path, *, apply: bool = False) -> dict[str, Any]:
     path = Path(path)
-    manifest, contents, signed = _read_verified(path)
+    manifest, contents, signed = _read_verified(path, retain=apply, require_signed=apply)
     result: dict[str, Any] = {
         "ok": True,
         "snapshot": str(path),
@@ -706,8 +749,6 @@ def restore_snapshot(path: Path, *, apply: bool = False) -> dict[str, Any]:
     }
     if not apply:
         return result
-    if not signed:
-        raise SnapshotError(t("backup.snapshot.unsigned", owner_language()))
     with persistence_lock():
         before_interval = _interval()
         plan = _restore_plan(contents)  # everything merged and checked before the first write

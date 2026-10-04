@@ -140,6 +140,13 @@ decisions; unreadable dates fail closed without modifying the journal.
 
 ## Recovery
 
+Night-copy verification and preview first stream-check every member's signed hash, then
+read and re-check one semantic store at a time before parsing it. Opaque logs and nested
+archives are not retained. Regular-file and opened-descriptor checks refuse special files,
+links and inconsistent sizes. An applied restore requires a signed manifest and retains its
+checked bytes for the transaction; it never re-reads an unchecked source to write live data.
+This reduces verification memory, not the full applied-restore transaction's memory footprint.
+
 Every multi-file write is journaled; whichever TOW process next takes the data lock (`persistence_lock`) runs the
 registered recovery hooks first, so no process ever reads half-written stores.
 

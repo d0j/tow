@@ -3,6 +3,17 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.51] — 2026-10-04
+
+### Fixed
+
+- Night-copy verification and restore preview hash large logs and nested archives in bounded
+  blocks instead of retaining all files in memory. Store contents are still validated after
+  every initial hash passes; semantic re-reads are checked again before parsing.
+- Reject links and special files in night-copy manifests and members before reading them;
+  check the opened file's type and size. An unsigned apply is refused before allocating payloads.
+  Applied restores continue writing the exact verified bytes, not re-reading changed sources.
+
 ## [1.22.50] — 2026-10-04
 
 ### Fixed

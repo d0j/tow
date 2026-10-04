@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import stat
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -273,6 +275,146 @@ def test_bad_hash_is_rejected_before_semantic_validation(point, name, monkeypatc
     with pytest.raises(snapshots.SnapshotError) as failed:
         snapshots.verify_snapshot(point)
     assert str(failed.value) == t("backup.snapshot.file_damaged", "ru", name=name)
+
+
+@pytest.mark.parametrize("surface", ["verify", "preview"])
+def test_opaque_snapshot_members_are_hashed_in_bounded_blocks(point, surface, monkeypatch):
+    content = b"x" * (3 * snapshots._READ_CHUNK_BYTES + 37)
+    _replace(point, "tow.jsonl", content)
+    member = point / "tow.jsonl"
+    real_open = Path.open
+    reads = []
+
+    class ChunkReader:
+        def __init__(self, handle):
+            self.handle = handle
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.handle.close()
+
+        def fileno(self):
+            return self.handle.fileno()
+
+        def read(self, size=-1):
+            assert 0 < size <= snapshots._READ_CHUNK_BYTES
+            reads.append(size)
+            return self.handle.read(size)
+
+    def watched_open(path, *args, **kwargs):
+        handle = real_open(path, *args, **kwargs)
+        return ChunkReader(handle) if path == member and args == ("rb",) else handle
+
+    before = _read_live()
+    monkeypatch.setattr(Path, "open", watched_open)
+    assert _inspect(point, surface)["signed"]
+    assert len(reads) == 5  # three blocks, the remainder, then EOF; no retained/second opaque read
+    assert _read_live() == before
+
+
+def test_verification_releases_members_and_validates_one_store_at_a_time(point, monkeypatch):
+    calls = []
+    original = snapshots._check_payloads
+
+    def watched(contents):
+        calls.append(tuple(contents))
+        return original(contents)
+
+    monkeypatch.setattr(snapshots, "_check_payloads", watched)
+    manifest, contents, signed = snapshots._read_verified(point, retain=False)
+    assert signed
+    assert manifest["files"]
+    assert contents == {}
+    assert calls == [("state.json",), ("download_history.json",), ("secrets.enc",), ("secrets-undo.enc",)]
+
+
+@pytest.mark.parametrize("surface", ["verify", "preview", "apply"])
+@pytest.mark.parametrize(
+    ("member", "mode", "attributes"),
+    [
+        ("state.json", stat.S_IFIFO, 0),
+        ("state.json", stat.S_IFLNK, 0),
+        ("state.json", stat.S_IFREG, stat.FILE_ATTRIBUTE_REPARSE_POINT),
+        ("MANIFEST.json", stat.S_IFLNK, 0),
+        ("", stat.S_IFLNK, 0),
+    ],
+)
+def test_snapshot_special_files_and_links_are_refused_before_open_or_write(
+    point, surface, member, mode, attributes, monkeypatch
+):
+    unsafe = point / member if member else point
+    real_lstat, real_open = Path.lstat, Path.open
+    opened = []
+
+    def watched_lstat(path, *args, **kwargs):
+        if path == unsafe:
+            return SimpleNamespace(st_mode=mode, st_file_attributes=attributes)
+        return real_lstat(path, *args, **kwargs)
+
+    def watched_open(path, *args, **kwargs):
+        if path == unsafe:
+            opened.append(path)
+        return real_open(path, *args, **kwargs)
+
+    before = _read_live()
+    monkeypatch.setattr(Path, "lstat", watched_lstat)
+    monkeypatch.setattr(Path, "open", watched_open)
+    with pytest.raises(snapshots.SnapshotError):
+        _inspect(point, surface)
+    assert not opened
+    assert _read_live() == before
+
+
+def test_preview_checks_again_before_parsing_a_changed_semantic_store(point, monkeypatch):
+    name = "download_history.json"
+    original = snapshots._verified_member
+    calls = 0
+
+    def watched(source, member, meta, *, collect):
+        nonlocal calls
+        if member == name:
+            calls += 1
+            if calls == 2:
+                source.write_bytes(b"{broken")
+        return original(source, member, meta, collect=collect)
+
+    monkeypatch.setattr(snapshots, "_verified_member", watched)
+    before = _read_live()
+    with pytest.raises(snapshots.SnapshotError) as failed:
+        snapshots.restore_snapshot(point)
+    assert str(failed.value) == t("backup.snapshot.file_damaged", "ru", name=name)
+    assert calls == 2
+    assert _read_live() == before
+
+
+def test_applied_restore_writes_the_original_verified_bytes_not_a_changed_source(point, monkeypatch):
+    original = snapshots._restore_plan
+    state = (point / "state.json").read_bytes()
+
+    def watched(contents):
+        (point / "state.json").write_bytes(b"changed after verification")
+        assert contents["state.json"] == state
+        return original(contents)
+
+    monkeypatch.setattr(snapshots, "_restore_plan", watched)
+    assert snapshots.restore_snapshot(point, apply=True)["applied"]
+    assert state_path().read_bytes() == state
+
+
+def test_unsigned_apply_is_refused_before_allocating_or_parsing_any_member(point, monkeypatch):
+    _replace(point, "state.json", (point / "state.json").read_bytes(), signed=False)
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("an unsigned apply read a member")
+
+    before = _read_live()
+    monkeypatch.setattr(snapshots, "_verified_member", unexpected)
+    with pytest.raises(snapshots.SnapshotError) as failed:
+        snapshots.restore_snapshot(point, apply=True)
+    assert str(failed.value) == t("backup.snapshot.unsigned", "ru")
+    assert _read_live() == before
 
 
 @pytest.mark.parametrize("command", ["verify", "apply", "create"])
