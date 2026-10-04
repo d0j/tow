@@ -203,8 +203,14 @@ def register_recovery_hook(hook: Callable[[], None]) -> None:
 def _recovery_steps() -> list[Callable[[], None]]:
     steps: list[Callable[[], None]] = []
     for module, name, marker in RECOVERY_STEPS:
-        if marker is None or (data_dir() / marker).exists():
-            steps.append(getattr(importlib.import_module(module), name))
+        if marker is not None:
+            try:
+                (data_dir() / marker).lstat()
+            except FileNotFoundError:
+                continue
+            except OSError:
+                pass  # an unreadable marker is not absent; let its recovery hook refuse safely
+        steps.append(getattr(importlib.import_module(module), name))
     return [*steps, *_RECOVERY_HOOKS]
 
 

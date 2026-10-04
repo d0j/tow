@@ -3,6 +3,20 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.52] — 2026-10-04
+
+### Fixed
+
+- Night-restore metadata is bounded before reading and parsing: 64 KiB for the marker,
+  4 MiB for the journal, with regular-file and opened-descriptor checks. Damaged, changed,
+  oversized or linked records keep the recovery files and refuse subsequent writes.
+  Dangling markers are no longer mistaken for absent markers. New journal writes and all
+  final phases are size-checked before a recovery marker is published; legacy rollback
+  checks its final metadata before changing data. These limits do not cap torrent stores.
+- Cleanup proof reads are also bounded before deleting any copy member. Recovery errors
+  explain the metadata problem in the selected language and no longer suggest deleting
+  a marker before the previous data have been verified and recovered.
+
 ## [1.22.51] — 2026-10-04
 
 ### Fixed

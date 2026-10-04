@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -161,8 +162,8 @@ def test_old_snapshots_are_pruned_to_backup_keep(backup, monkeypatch):
                 def strftime(self, _fmt):
                     return next(stamps)
 
-                def isoformat(self):
-                    return "2026-10-01T00:00:00+00:00"
+                def isoformat(self, *, timespec="auto"):
+                    return datetime.fromisoformat("2026-10-01T00:00:00+00:00").isoformat(timespec=timespec)
 
             return Stamp()
 
@@ -187,8 +188,8 @@ def _clock(monkeypatch, stamps):
                 def strftime(self, _fmt):
                     return next(stamps)
 
-                def isoformat(self):
-                    return "2026-10-01T00:00:00+00:00"
+                def isoformat(self, *, timespec="auto"):
+                    return datetime.fromisoformat("2026-10-01T00:00:00+00:00").isoformat(timespec=timespec)
 
             return Stamp()
 

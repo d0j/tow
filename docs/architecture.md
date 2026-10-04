@@ -147,6 +147,15 @@ links and inconsistent sizes. An applied restore requires a signed manifest and 
 checked bytes for the transaction; it never re-reads an unchecked source to write live data.
 This reduces verification memory, not the full applied-restore transaction's memory footprint.
 
+Night-restore metadata uses separate byte budgets: the marker is limited to 64 KiB,
+the journal to 4 MiB (with headroom for every member of a supported 1 MiB manifest).
+Opened regular records are size-checked before reading and strict JSON decoding; changed
+or unreadable records are preserved and never treated as successful recovery. Marker
+discovery uses lstat, so dangling links do not disappear from recovery checks. Producers
+preflight every final journal phase before publishing the marker; legacy rollback checks
+its final record before any live write. Cleanup proof reads obey the same metadata limits.
+These bounds do not limit state/history payloads or remove the full restore's memory plans.
+
 Every multi-file write is journaled; whichever TOW process next takes the data lock (`persistence_lock`) runs the
 registered recovery hooks first, so no process ever reads half-written stores.
 
