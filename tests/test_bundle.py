@@ -158,3 +158,34 @@ def test_the_bundle_takes_the_python_of_the_project():
     # The Python inside is the one .python-version names (prepare_runtime reads it there).
     assert re.fullmatch(r"3\.\d+\.\d+", (ROOT / ".python-version").read_text(encoding="utf-8").strip())
     assert bundle.UV_URL.endswith(f"/{bundle.UV_VERSION}/uv-x86_64-pc-windows-msvc.zip")
+
+
+def test_python_bootstrap_uses_an_immutable_official_manifest_for_older_uv():
+    import tomllib
+
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    manifest = config["tool"]["uv"]["python-downloads-json-url"]
+    assert re.fullmatch(
+        r"https://raw\.githubusercontent\.com/astral-sh/uv/[a-f0-9]{40}/crates/uv-python/download-metadata\.json",
+        manifest,
+    )
+
+
+def test_bundle_caches_its_bootstrap_manifest_despite_isolated_builder_config(tmp_path, monkeypatch):
+    app = tmp_path / "app"
+    app.mkdir()
+    app.joinpath("pyproject.toml").write_text(
+        '[tool.uv]\npython-downloads-json-url = "https://example.test/pinned.json"\n', encoding="utf-8"
+    )
+    monkeypatch.setenv("UV_PYTHON_DOWNLOADS_JSON_URL", "https://example.test/unrelated.json")
+    env = bundle.uv_env(tmp_path, tmp_path / "venv")
+    assert env["UV_NO_CONFIG"] == "1"
+    assert env["UV_PYTHON_DOWNLOADS_JSON_URL"] == "https://example.test/pinned.json"
+
+
+def test_bundle_rejects_a_wrongly_typed_bootstrap_manifest(tmp_path):
+    app = tmp_path / "app"
+    app.mkdir()
+    app.joinpath("pyproject.toml").write_text("[tool.uv]\npython-downloads-json-url = 123\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="must be a string"):
+        bundle.uv_env(tmp_path, tmp_path / "venv")

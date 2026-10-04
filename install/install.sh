@@ -26,7 +26,7 @@
 set -eu
 
 REPO=d0j/tow
-UV_VERSION=0.12.20
+UV_VERSION=0.12.23
 SOURCE_ASSET=tow-source.tar.gz
 
 say() { printf '%s\n' "TOW: $*"; }

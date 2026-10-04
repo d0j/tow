@@ -47,7 +47,7 @@ jobs:
         with:
           enable-cache: true
       - name: Install Python from .python-version
-        run: uv python install
+        run: uv python install --no-bin --no-registry
       - name: Sync locked environment
         run: uv sync --frozen
       - name: Quality gate (with dependency audit)
@@ -91,9 +91,9 @@ jobs:
       - name: Build the bundle
         shell: pwsh
         run: uv run --no-project python scripts/build-bundle.py --out dist --source tow-source.tar.gz
-      - name: Unpack into a path with spaces and Cyrillic letters, start offline, check, stop
+      - name: Unpack, start offline, stop, move with its existing environment, start offline again
         shell: pwsh
-        run: ./scripts/bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Offline
+        run: ./scripts/bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Offline -Move
       - name: install.ps1 on Windows PowerShell 5.1, then uninstall
         shell: pwsh
         run: |

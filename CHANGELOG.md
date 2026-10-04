@@ -3,6 +3,20 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.47] — 2026-10-04
+
+### Fixed
+
+- Use Python 3.14.8 and uv 0.12.23 in new portable bundles. A commit-pinned official Python
+  download manifest also lets existing uv 0.12 installations discover the new patch without
+  modifying system tools or requiring an intermediate TOW upgrade.
+- Rebuild Windows Python environments after moving a stopped portable installation. A broken
+  old Python launcher is no longer mistaken for a running service; a genuinely running TOW
+  still refuses setup before changing its environment.
+- Require the base Python to be inside the managed directory, not a similarly named sibling.
+- Exercise relocation with an existing environment in Windows, Linux and macOS release smokes:
+  offline rebuild, correct Python/module ownership, preserved settings/key, start and stop.
+
 ## [1.22.46] — 2026-10-04
 
 ### Fixed

@@ -1,6 +1,6 @@
 [project]
 name = "tow"
-version = "1.22.46"
+version = "1.22.47"
 description = "Torrent topic watcher: follows forum tracker topics that replace their torrent in place and hands each new revision to your torrent client."
 readme = "README.md"
 license = "MIT"
@@ -71,6 +71,8 @@ dev = [
 
 [tool.uv]
 required-version = ">=0.12"
+# The pinned upstream manifest lets older portable uv builds fetch this Python patch too.
+python-downloads-json-url = "https://raw.githubusercontent.com/astral-sh/uv/46b84fd0bfec23b72f29e8e2185ba68a65052f48/crates/uv-python/download-metadata.json"
 
 [tool.mypy]
 python_version = "3.14"
