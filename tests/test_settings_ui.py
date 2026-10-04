@@ -84,6 +84,10 @@ def test_settings_ui_is_sectioned_and_explains_actions():
 
 def test_settings_renders_saved_restore_points(monkeypatch):
     monkeypatch.setattr(
+        "tow.web.services.restore_point_cleanup_status",
+        lambda **_kwargs: {"pending": False, "read_error": False, "location": "synthetic-folder"},
+    )
+    monkeypatch.setattr(
         "tow.web.services.list_restore_points",
         lambda: [
             {

@@ -43,6 +43,13 @@ flowchart TD
   use. Dates must be finite, non-negative and displayable. Reading does not rewrite or quarantine
   them; an unreadable backup/watchdog record is an observation error, not success or an outage.
   New diagnostic writes follow the same limits. These limits do not cap torrent state or history.
+- Restore-point cleanup is a folder-scoped observation: pending, complete or unknown.
+  Losing its record retains the watchdog's last confirmed result and raises a separate
+  observation alert. Readability recovery does not confirm cleanup; a folder change cannot
+  resolve an old folder's warning. Missing records on a fresh install are not failures.
+  A digest of archive names binds a result to its inventory independently of wall-clock
+  order. A new archive without a new monitoring write makes the old result unknown;
+  an unbound legacy warning is retained, but unbound success needs a fresh observation.
 - A future scheduler fact after a backward clock correction is anchored once to its first
   observation, per fact source; repeated ticks do not move its deadline. Fresh job starts
   replace the corresponding anchor. Calendar backup slots remain wall-clock based; process

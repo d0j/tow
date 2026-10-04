@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import contextlib
-import json
+import hashlib
 import logging
 import re
 import stat
@@ -12,6 +12,7 @@ from typing import Any
 
 from tow.bundle import ExportImportError, export_bundle, import_bundle, rollback_import, verify_bundle
 from tow.config import load_config
+from tow.diagnostic_json import encode_object, read_object
 from tow.i18n import t
 from tow.log import log_event, owner_language
 from tow.paths import data_dir
@@ -50,13 +51,14 @@ def _is_rollback_failure(exc: BaseException) -> bool:
     return isinstance(exc, ExportImportError) and "rollback also failed" in str(exc)
 
 
-def restore_points_dir() -> Path:
+def restore_points_dir(*, cfg: dict[str, Any] | None = None) -> Path:
     """``restore_points_dir`` from config.yaml (local or network folder); by default data/restore-points.
     A path of another system (a Windows config on Linux) is refused, never created."""
     from tow.locations import MANUAL, LocationError, resolve_checked
 
     try:
-        return resolve_checked(str(load_config().get("restore_points_dir") or ""), MANUAL)
+        current = load_config() if cfg is None else cfg
+        return resolve_checked(str(current.get("restore_points_dir") or ""), MANUAL)
     except LocationError as exc:
         raise RestorePointError(str(exc), kind=CREATE_FAILED) from exc
 
@@ -68,25 +70,78 @@ def _passphrase() -> str:
         raise RestorePointError(t("backup.restore_point.master_key", owner_language()), kind=MASTER_KEY) from exc
 
 
-def cleanup_pending() -> bool:
-    """Informational state only; it never grants permission to delete an archive."""
+def _cleanup_inventory(location: Path) -> str:
+    """Bind an observation to archive names without reading or trusting their media."""
+    digest = hashlib.sha256()
     try:
-        state = json.loads((data_dir() / "restore-point-status.json").read_text(encoding="utf-8"))
-        return (
-            isinstance(state, dict)
-            and state.get("cleanup_pending") is True
-            and state.get("location") == str(restore_points_dir().resolve())
-        )
-    except OSError, ValueError, UnicodeError, RecursionError, RestorePointError:
-        return False
+        info = location.lstat()
+    except FileNotFoundError:
+        return digest.hexdigest()
+    if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        raise ValueError("cleanup folder is not a regular directory")
+    names = sorted(
+        path.name for path in location.iterdir() if path.suffix == ".towx" and _ID_RE.fullmatch(path.stem) is not None
+    )
+    for name in names:
+        digest.update(name.encode("utf-8"))
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def cleanup_status(*, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+    """A scoped observation, not permission to delete; None never means completion."""
+    result: dict[str, Any] = {"pending": None, "read_error": False, "location": ""}
+    try:
+        location = restore_points_dir() if cfg is None else restore_points_dir(cfg=cfg)
+        result["location"] = str(location.resolve())
+        path = data_dir() / "restore-point-status.json"
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            return result  # no observation yet, or an observation that disappeared
+        if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+            raise ValueError("cleanup record is not a regular file")
+        state = read_object(path)
+        if type(state.get("cleanup_pending")) is not bool or not isinstance(state.get("location"), str):
+            raise ValueError("invalid cleanup observation")
+        if not state["location"]:
+            raise ValueError("missing cleanup location")
+        if "inventory" in state and (
+            not isinstance(state["inventory"], str) or re.fullmatch(r"[a-f0-9]{64}", state["inventory"]) is None
+        ):
+            raise ValueError("invalid cleanup inventory")
+        if state["location"] == result["location"]:
+            if "inventory" not in state:
+                if state["cleanup_pending"]:
+                    result["pending"] = True  # retain a legacy warning, not legacy success
+                return result
+            if state["inventory"] != _cleanup_inventory(location):
+                raise ValueError("cleanup observation belongs to an earlier inventory")
+            result["pending"] = state["cleanup_pending"]
+    except OSError, ValueError, TypeError, UnicodeError, RecursionError, RestorePointError:
+        result["read_error"] = True
+    return result
+
+
+def cleanup_pending() -> bool:
+    """Compatibility flag: False includes unknown, and is not proof of completion."""
+    return cleanup_status()["pending"] is True
 
 
 def _record_cleanup(pending: bool, location: Path) -> None:
+    if type(pending) is not bool:
+        raise TypeError("cleanup observation must be boolean")
     # A monitoring write must not invalidate an already verified archive.
-    with contextlib.suppress(OSError):
+    with contextlib.suppress(OSError, ValueError, TypeError, UnicodeError, RecursionError):
         atomic_write_text(
             data_dir() / "restore-point-status.json",
-            json.dumps({"cleanup_pending": pending, "location": str(location.resolve())}),
+            encode_object(
+                {
+                    "cleanup_pending": pending,
+                    "location": str(location.resolve()),
+                    "inventory": _cleanup_inventory(location),
+                }
+            ),
         )
     if pending:
         with contextlib.suppress(OSError):
@@ -335,6 +390,7 @@ __all__ = [
     "RestorePointError",
     "check_portable_bundle",
     "cleanup_pending",
+    "cleanup_status",
     "create_restore_point",
     "export_portable_bundle",
     "list_restore_points",

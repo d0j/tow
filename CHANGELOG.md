@@ -3,6 +3,25 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.45] — 2026-10-04
+
+### Fixed
+
+- Treat missing, damaged or wrongly typed restore-point cleanup observations as unknown,
+  never as completed cleanup. Read diagnostic records within the finite-JSON, nesting and
+  size limits without changing their bytes; refuse non-regular monitoring files.
+- Retain the last confirmed cleanup result across repeated watchdog passes and restarts.
+  Report lost observation and restored reading separately from confirmed cleanup completion;
+  changing the backup folder cannot resolve an old folder's warning. Unknown legacy flags
+  cannot fabricate recovery, and an unreadable night-copy record retains its cleanup warning.
+- Show an unknown cleanup result in the backup summary and manual-copy card while keeping
+  existing restore actions available for their normal verification. A fresh install without
+  copies or a prior observation remains quiet. Diagnostic writes validate before replacement.
+- Bind cleanup observations to the archive-name inventory, not wall-clock ordering. If a
+  later copy is created but its result cannot be recorded, an older valid success becomes
+  unknown instead of silently winning. Legacy unbound success needs a fresh observation;
+  legacy pending warnings remain valid. Reuse the request's configuration for observation.
+
 ## [1.22.44] — 2026-10-04
 
 ### Fixed
