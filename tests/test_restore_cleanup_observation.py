@@ -8,10 +8,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from tow import diagnostic_json, restore_points, snapshots, watchdog
+from tow import diagnostic_json, restore_points, watchdog
 from tow.config import load_config, save_config
 from tow.i18n import t
-from tow.paths import data_dir
 from tow.pulse import Probes
 from tow.store import save_secrets, save_state
 from tow.web import app
@@ -40,8 +39,7 @@ def _check(sent):
     )
 
 
-def _damage(mode):
-    path = data_dir() / "restore-point-status.json"
+def _damage(mode, path):
     if mode == "missing":
         path.unlink()
     else:
@@ -51,12 +49,12 @@ def _damage(mode):
 
 @pytest.mark.parametrize("lang", ["ru", "en"])
 @pytest.mark.parametrize("mode", ["missing", "malformed", "type"])
-def test_unknown_observation_does_not_resolve_warning_after_restart(lang, mode):
+def test_unknown_observation_does_not_resolve_warning_after_restart(tmp_path, lang, mode):
     _seed(lang)
-    restore_points._record_cleanup(True, restore_points.restore_points_dir())
+    restore_points._record_cleanup(True, tmp_path / "restore-points")
     sent = []
     _check(sent)
-    path = _damage(mode)
+    path = _damage(mode, tmp_path / "restore-point-status.json")
     raw = path.read_bytes() if path.exists() else None
     for _ in range(3):
         _check(sent)
@@ -67,10 +65,10 @@ def test_unknown_observation_does_not_resolve_warning_after_restart(lang, mode):
 
 @pytest.mark.parametrize("lang", ["ru", "en"])
 @pytest.mark.parametrize("mode", ["missing", "malformed", "type"])
-def test_settings_do_not_claim_known_cleanup_for_missing_or_damaged_record(lang, mode):
+def test_settings_do_not_claim_known_cleanup_for_missing_or_damaged_record(tmp_path, lang, mode):
     _seed(lang)
     point = restore_points.create_restore_point()
-    _damage(mode)
+    _damage(mode, tmp_path / "restore-point-status.json")
     with TestClient(app, headers={"Accept-Language": lang}) as client:
         response = client.get("/settings")
     assert response.status_code == 200
@@ -82,23 +80,23 @@ def test_settings_do_not_claim_known_cleanup_for_missing_or_damaged_record(lang,
 
 def test_changed_folder_cannot_resolve_old_folder_warning(tmp_path):
     _seed()
-    restore_points._record_cleanup(True, restore_points.restore_points_dir())
+    restore_points._record_cleanup(True, tmp_path / "restore-points")
     sent = []
     _check(sent)
     cfg = load_config()
     cfg["restore_points_dir"] = str(tmp_path / "other-points")
     save_config(cfg)
     _check(sent)
-    restore_points._record_cleanup(False, restore_points.restore_points_dir())
+    restore_points._record_cleanup(False, tmp_path / "other-points")
     _check(sent)
     assert sent == [t("watchdog.alert.point_cleanup_pending", "en")]
 
 
 @pytest.mark.parametrize("previous", [None, True])
-def test_unknown_or_healthy_previous_state_cannot_create_recovery(previous):
+def test_unknown_or_healthy_previous_state_cannot_create_recovery(tmp_path, previous):
     _seed()
-    watchdog._state_path().write_text(json.dumps({"restore_point_cleanup": previous}), encoding="utf-8")
-    restore_points._record_cleanup(False, restore_points.restore_points_dir())
+    (tmp_path / watchdog.STATE_NAME).write_text(json.dumps({"restore_point_cleanup": previous}), encoding="utf-8")
+    restore_points._record_cleanup(False, tmp_path / "restore-points")
     sent = []
     _check(sent)
     assert not sent
@@ -107,14 +105,14 @@ def test_unknown_or_healthy_previous_state_cannot_create_recovery(previous):
 @pytest.mark.parametrize("lang", ["ru", "en"])
 @pytest.mark.parametrize("pending", [True, False])
 @pytest.mark.parametrize("mode", ["missing", "malformed", "type"])
-def test_observation_recovery_is_distinct_from_cleanup_completion(lang, pending, mode):
+def test_observation_recovery_is_distinct_from_cleanup_completion(tmp_path, lang, pending, mode):
     _seed(lang)
-    folder = restore_points.restore_points_dir()
+    folder = tmp_path / "restore-points"
     restore_points._record_cleanup(pending, folder)
     sent = []
     _check(sent)
     sent.clear()
-    path = _damage(mode)
+    path = _damage(mode, tmp_path / "restore-point-status.json")
     for _ in range(3):
         report = _check(sent)
         assert report["restore_point_cleanup_pending"] is None
@@ -156,22 +154,22 @@ BAD_RECORDS = (
 
 
 @pytest.mark.parametrize("raw", BAD_RECORDS)
-def test_cleanup_record_is_bounded_typed_and_read_only(raw):
+def test_cleanup_record_is_bounded_typed_and_read_only(tmp_path, raw):
     _seed()
-    path = data_dir() / "restore-point-status.json"
+    path = tmp_path / "restore-point-status.json"
     path.write_bytes(raw)
     before = set(path.parent.iterdir())
     result = restore_points.cleanup_status()
     assert result["pending"] is None
     assert result["read_error"] is True
-    assert result["location"] == str(restore_points.restore_points_dir().resolve())
+    assert result["location"] == str((tmp_path / "restore-points").resolve())
     assert path.read_bytes() == raw
     assert set(path.parent.iterdir()) == before
 
 
-def test_size_limit_applies_before_decode(monkeypatch):
+def test_size_limit_applies_before_decode(monkeypatch, tmp_path):
     _seed()
-    path = data_dir() / "restore-point-status.json"
+    path = tmp_path / "restore-point-status.json"
     raw = b" " * (diagnostic_json.MAX_BYTES + 1)
     path.write_bytes(raw)
     assert restore_points.cleanup_status()["read_error"] is True
@@ -179,13 +177,13 @@ def test_size_limit_applies_before_decode(monkeypatch):
 
 
 @pytest.mark.parametrize("mode", ["directory", "permission", "reparse"])
-def test_nonregular_or_inaccessible_records_are_not_opened(monkeypatch, mode):
+def test_nonregular_or_inaccessible_records_are_not_opened(monkeypatch, tmp_path, mode):
     _seed()
-    path = data_dir() / "restore-point-status.json"
+    path = tmp_path / "restore-point-status.json"
     if mode == "directory":
         path.mkdir()
     else:
-        restore_points._record_cleanup(False, restore_points.restore_points_dir())
+        restore_points._record_cleanup(False, tmp_path / "restore-points")
         original = Path.lstat
 
         def lstat(candidate, *args, **kwargs):
@@ -208,9 +206,9 @@ def test_nonregular_or_inaccessible_records_are_not_opened(monkeypatch, mode):
     assert result["read_error"] is True
 
 
-def test_folder_resolution_failure_retains_previous_fact(monkeypatch):
+def test_folder_resolution_failure_retains_previous_fact(monkeypatch, tmp_path):
     _seed()
-    restore_points._record_cleanup(True, restore_points.restore_points_dir())
+    restore_points._record_cleanup(True, tmp_path / "restore-points")
     sent = []
     _check(sent)
 
@@ -227,13 +225,13 @@ def test_folder_resolution_failure_retains_previous_fact(monkeypatch):
 
 def test_new_folder_pending_has_its_own_warning_not_old_recovery(tmp_path):
     _seed()
-    restore_points._record_cleanup(True, restore_points.restore_points_dir())
+    restore_points._record_cleanup(True, tmp_path / "restore-points")
     sent = []
     _check(sent)
     cfg = load_config()
     cfg["restore_points_dir"] = str(tmp_path / "new-points")
     save_config(cfg)
-    restore_points._record_cleanup(True, restore_points.restore_points_dir())
+    restore_points._record_cleanup(True, tmp_path / "new-points")
     _check(sent)
     assert sent == [t("watchdog.alert.point_cleanup_pending", "en")] * 2
 
@@ -255,9 +253,9 @@ def test_first_start_without_record_is_quiet_and_unknown():
 
 
 @pytest.mark.parametrize("pending", [True, False])
-def test_unrecorded_legacy_watchdog_retains_known_result(pending):
+def test_unrecorded_legacy_watchdog_retains_known_result(tmp_path, pending):
     _seed()
-    watchdog._state_path().write_text(json.dumps({"restore_point_cleanup": not pending}), encoding="utf-8")
+    (tmp_path / watchdog.STATE_NAME).write_text(json.dumps({"restore_point_cleanup": not pending}), encoding="utf-8")
     sent = []
     _check(sent)
     assert watchdog._load_state()["restore_point_cleanup"] is not pending
@@ -265,34 +263,34 @@ def test_unrecorded_legacy_watchdog_retains_known_result(pending):
 
 
 @pytest.mark.parametrize("bad", [None, 0, "false", [], {}])
-def test_invalid_writer_input_cannot_replace_existing_observation(bad):
+def test_invalid_writer_input_cannot_replace_existing_observation(tmp_path, bad):
     _seed()
-    folder = restore_points.restore_points_dir()
+    folder = tmp_path / "restore-points"
     restore_points._record_cleanup(True, folder)
-    path = data_dir() / "restore-point-status.json"
+    path = tmp_path / "restore-point-status.json"
     before = path.read_bytes()
     with pytest.raises(TypeError):
         restore_points._record_cleanup(bad, folder)
     assert path.read_bytes() == before
 
 
-def test_writer_validation_failure_keeps_previous_bytes(monkeypatch):
+def test_writer_validation_failure_keeps_previous_bytes(monkeypatch, tmp_path):
     _seed()
-    folder = restore_points.restore_points_dir()
+    folder = tmp_path / "restore-points"
     restore_points._record_cleanup(True, folder)
-    path = data_dir() / "restore-point-status.json"
+    path = tmp_path / "restore-point-status.json"
     before = path.read_bytes()
     monkeypatch.setattr(diagnostic_json, "MAX_BYTES", 10)
     restore_points._record_cleanup(False, folder)
     assert path.read_bytes() == before
 
 
-def test_damaged_night_record_does_not_resolve_night_cleanup_warning():
+def test_damaged_night_record_does_not_resolve_night_cleanup_warning(tmp_path):
     _seed()
-    snapshots.status_path().write_text(json.dumps({"last_cleanup_pending": True}), encoding="utf-8")
+    (tmp_path / "backup-status.json").write_text(json.dumps({"last_cleanup_pending": True}), encoding="utf-8")
     sent = []
     _check(sent)
-    snapshots.status_path().write_bytes(b"{")
+    (tmp_path / "backup-status.json").write_bytes(b"{")
     for _ in range(3):
         _check(sent)
         assert watchdog._load_state()["backup_cleanup"] is False
@@ -301,11 +299,11 @@ def test_damaged_night_record_does_not_resolve_night_cleanup_warning():
 
 @pytest.mark.parametrize("initial_pending", [True, False])
 @pytest.mark.parametrize("prune_fails", [True, False])
-def test_failed_metadata_write_cannot_confirm_stale_cleanup(monkeypatch, initial_pending, prune_fails):
+def test_failed_metadata_write_cannot_confirm_stale_cleanup(monkeypatch, tmp_path, initial_pending, prune_fails):
     _seed()
     first = restore_points.create_restore_point()
-    restore_points._record_cleanup(initial_pending, restore_points.restore_points_dir())
-    path = data_dir() / "restore-point-status.json"
+    restore_points._record_cleanup(initial_pending, tmp_path / "restore-points")
+    path = tmp_path / "restore-point-status.json"
     before = path.read_bytes()
 
     def denied(*_args, **_kwargs):
@@ -315,29 +313,30 @@ def test_failed_metadata_write_cannot_confirm_stale_cleanup(monkeypatch, initial
     if prune_fails:
         monkeypatch.setattr(restore_points, "_prune", denied)
     made = restore_points.create_restore_point()
-    assert restore_points.point_path(first["id"]).is_file()
-    assert restore_points.point_path(made["id"]).is_file()
+    retained = [path.name for path in (tmp_path / "restore-points").iterdir() if path.is_file()]
+    assert f"{first['id']}.towx" in retained
+    assert f"{made['id']}.towx" in retained
     assert bool(made.get("cleanup_warning")) is prune_fails
     assert path.read_bytes() == before
     assert restore_points.cleanup_status()["pending"] is None
     assert restore_points.cleanup_status()["read_error"] is True
 
 
-def test_new_archive_with_backward_clock_invalidates_old_result():
+def test_new_archive_with_backward_clock_invalidates_old_result(tmp_path):
     _seed()
     restore_points.create_restore_point()
     assert restore_points.cleanup_status()["pending"] is False
-    path = restore_points.restore_points_dir() / "20000101T000000Z-deadbeef.towx"
+    path = tmp_path / "restore-points" / "20000101T000000Z-deadbeef.towx"
     path.write_bytes(b"synthetic foreign archive with an older clock")
     assert restore_points.cleanup_status()["pending"] is None
     assert restore_points.cleanup_status()["read_error"] is True
 
 
 @pytest.mark.parametrize("pending", [True, False])
-def test_legacy_unbound_record_cannot_confirm_completed_cleanup(pending):
+def test_legacy_unbound_record_cannot_confirm_completed_cleanup(tmp_path, pending):
     _seed()
-    folder = restore_points.restore_points_dir()
-    path = data_dir() / "restore-point-status.json"
+    folder = tmp_path / "restore-points"
+    path = tmp_path / "restore-point-status.json"
     path.write_text(json.dumps({"cleanup_pending": pending, "location": str(folder.resolve())}), encoding="utf-8")
     result = restore_points.cleanup_status()
     assert result["pending"] is (True if pending else None)
@@ -345,10 +344,10 @@ def test_legacy_unbound_record_cannot_confirm_completed_cleanup(pending):
 
 
 @pytest.mark.parametrize("inventory", [None, 0, [], "wrong", "g" * 64])
-def test_invalid_inventory_binding_is_unknown(inventory):
+def test_invalid_inventory_binding_is_unknown(tmp_path, inventory):
     _seed()
-    folder = restore_points.restore_points_dir()
-    path = data_dir() / "restore-point-status.json"
+    folder = tmp_path / "restore-points"
+    path = tmp_path / "restore-point-status.json"
     path.write_text(
         json.dumps({"cleanup_pending": False, "location": str(folder.resolve()), "inventory": inventory}),
         encoding="utf-8",
