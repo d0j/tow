@@ -19,6 +19,7 @@ def test_version_floats_outside_header_without_duplicating_check_clock():
     assert version is not None
     assert clock is not None
     assert version.parent is page.body
+    assert version["data-page-version"] == releases.__version__
     assert clock.find_parent("header") is not None
     assert clock.parent is page.select_one(".hdr-right")
     assert len(page.select("#next-check")) == 1

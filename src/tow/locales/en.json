@@ -782,6 +782,7 @@
       "phase_checking": "Starting TOW and checking its version and data…",
       "rolling_back": "The update failed; restoring the previous version and data…",
       "ok": "TOW {version} installed and verified. Reload the page to open the new interface.",
+      "ok_current": "TOW {version} installed and verified.",
       "reload": "Reload page",
       "rolled_back": "The update failed; the previous version and data were restored and verified.",
       "failed": "The update or its rollback did not complete. Check the local update log; do not repeat installation blindly.",
