@@ -518,14 +518,27 @@ def test_snapshot_member_reads_are_bounded_by_the_verified_size(backup, monkeypa
     original = member.read_bytes()
     real_open = Path.open
 
-    class GrowingFile(io.BytesIO):
+    class GrowingFile:
+        def __init__(self, handle):
+            self.handle = handle
+            self.content = io.BytesIO(original + b"changed after stat")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.handle.close()
+
+        def fileno(self):
+            return self.handle.fileno()
+
         def read(self, size=-1):
-            assert size == len(original) + 1
-            return super().read(size)
+            assert 0 < size <= len(original) + 1
+            return self.content.read(size)
 
     def open_file(path, *args, **kwargs):
         if path == member and args == ("rb",):
-            return GrowingFile(original + b"changed after stat")
+            return GrowingFile(real_open(path, *args, **kwargs))
         return real_open(path, *args, **kwargs)
 
     monkeypatch.setattr(Path, "open", open_file)

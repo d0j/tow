@@ -154,27 +154,39 @@ def test_manifest_read_accepts_the_exact_byte_limit(night, monkeypatch):
         snapshots._read_manifest(folder)
 
 
-def test_unrepresentable_member_read_is_a_snapshot_error(night, monkeypatch):
+def test_extreme_declared_member_size_is_refused_before_reading(night, monkeypatch):
     size = snapshots.MAX_MEMBER_SIZE
     folder = _plant(night, json.dumps(_manifest(size, format_value=snapshots.UNSIGNED_FORMAT)))
     source = folder / "state.json"
-    real_stat, real_open = Path.stat, Path.open
+    source.write_bytes(b"{}")
+    real_open = Path.open
+    reads = []
 
-    def inspected(path, *args, **kwargs):
-        return SimpleNamespace(st_size=size) if path == source else real_stat(path, *args, **kwargs)
+    class Unreadable:
+        def __init__(self, handle):
+            self.handle = handle
 
-    class Unreadable(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.handle.close()
+
+        def fileno(self):
+            return self.handle.fileno()
+
         def read(self, amount=-1):
-            assert amount == size + 1
-            raise OverflowError("cannot fit read size in platform integer")
+            reads.append(amount)
+            pytest.fail("an impossible declared size reached a read allocation")
 
     def opened(path, mode="r", *args, **kwargs):
-        return Unreadable() if path == source and mode == "rb" else real_open(path, mode, *args, **kwargs)
+        handle = real_open(path, mode, *args, **kwargs)
+        return Unreadable(handle) if path == source and mode == "rb" else handle
 
-    monkeypatch.setattr(Path, "stat", inspected)
     monkeypatch.setattr(Path, "open", opened)
     with pytest.raises(snapshots.SnapshotError, match=re.escape(t("backup.snapshot.file_damaged", name="state.json"))):
         snapshots.verify_snapshot(folder)
+    assert not reads
 
 
 @pytest.mark.parametrize("size", [0, 10, snapshots.MAX_MEMBER_SIZE])
