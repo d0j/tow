@@ -50,6 +50,8 @@ flowchart TD
   A digest of archive names binds a result to its inventory independently of wall-clock
   order. A new archive without a new monitoring write makes the old result unknown;
   an unbound legacy warning is retained, but unbound success needs a fresh observation.
+  Readable legacy metadata is not a folder-access outage during migration. Once a bound
+  result has been observed for a folder, losing its binding is an observation error.
 - A future scheduler fact after a backward clock correction is anchored once to its first
   observation, per fact source; repeated ticks do not move its deadline. Fresh job starts
   replace the corresponding anchor. Calendar backup slots remain wall-clock based; process

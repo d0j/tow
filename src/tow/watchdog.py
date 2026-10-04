@@ -64,6 +64,7 @@ def _load_state() -> dict[str, Any]:
                     "backup_cleanup",
                     "restore_point_cleanup",
                     "restore_point_cleanup_monitoring",
+                    "restore_point_cleanup_bound",
                     "monitoring",
                 ),
                 bool,
@@ -284,10 +285,18 @@ def _backups(p: _Pass, cfg: dict[str, Any]) -> None:
     location = cleanup["location"] or p.previous.get("restore_point_cleanup_location") or ""
     same_folder = p.previous.get("restore_point_cleanup_location") in (None, location)
     previously_known = same_folder and type(p.previous.get("restore_point_cleanup")) is bool
+    previously_bound = same_folder and p.previous.get("restore_point_cleanup_bound") is True
+    lost_binding = previously_bound and cleanup.get("legacy") is True
+    pending = None if lost_binding else cleanup["pending"]
+    legacy_migration = cleanup.get("legacy") is True and not previously_bound
+    p.report["restore_point_cleanup_legacy_migration"] = legacy_migration
+    p.report["restore_point_cleanup_bound"] = previously_bound or (
+        type(pending) is bool and cleanup.get("legacy") is not True
+    )
     p.report["restore_point_cleanup_location"] = location
-    p.report["restore_point_cleanup_pending"] = cleanup["pending"]
-    p.report["restore_point_cleanup_read_error"] = cleanup["read_error"] or (
-        cleanup["pending"] is None and previously_known
+    p.report["restore_point_cleanup_pending"] = pending
+    p.report["restore_point_cleanup_read_error"] = (
+        cleanup["read_error"] or lost_binding or (pending is None and previously_known and not legacy_migration)
     )
     if failed:
         reason = st.get("last_error") or t("watchdog.backup.unknown_reason", p.lang)
@@ -332,6 +341,8 @@ def _outage(p: _Pass, probes: Probes, machine: Machine | None) -> None:
 def _change_alerts(p: _Pass, current: dict[str, bool]) -> None:
     report, previous = p.report, p.previous
     for key, ok in current.items():
+        if key == "restore_point_cleanup_monitoring" and report["restore_point_cleanup_legacy_migration"]:
+            continue  # readable legacy metadata is neither a folder outage nor cleanup recovery
         before = previous.get(key)
         if key.startswith("restore_point_cleanup") and previous.get("restore_point_cleanup_location") not in (
             None,
@@ -401,6 +412,7 @@ def _remember(p: _Pass, current: dict[str, bool], machine: Machine | None) -> No
     previous, report = p.previous, p.report
     saved: dict[str, Any] = {**current, "at": int(p.now()), "backup_watch_since": report.get("backup_watch_since")}
     saved["restore_point_cleanup_location"] = report["restore_point_cleanup_location"]
+    saved["restore_point_cleanup_bound"] = report["restore_point_cleanup_bound"]
     if report.get("checks_watch_since"):
         saved["checks_watch_since"] = report["checks_watch_since"]
     if machine is not None:

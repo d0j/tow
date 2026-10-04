@@ -90,7 +90,7 @@ def _cleanup_inventory(location: Path) -> str:
 
 def cleanup_status(*, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     """A scoped observation, not permission to delete; None never means completion."""
-    result: dict[str, Any] = {"pending": None, "read_error": False, "location": ""}
+    result: dict[str, Any] = {"pending": None, "read_error": False, "location": "", "legacy": False}
     try:
         location = restore_points_dir() if cfg is None else restore_points_dir(cfg=cfg)
         result["location"] = str(location.resolve())
@@ -112,6 +112,8 @@ def cleanup_status(*, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
             raise ValueError("invalid cleanup inventory")
         if state["location"] == result["location"]:
             if "inventory" not in state:
+                _cleanup_inventory(location)  # legacy format cannot hide a real folder-access failure
+                result["legacy"] = True
                 if state["cleanup_pending"]:
                     result["pending"] = True  # retain a legacy warning, not legacy success
                 return result
