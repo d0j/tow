@@ -13,6 +13,14 @@ comparing these paths only with ordinary protected-folder names is not sufficien
 on every OS, since a remote client can run on Windows. Ordinary local paths, relative backup folders
 and explicitly enabled client network shares are unaffected.
 
+Backup folders also refuse drive-relative Windows forms such as `D:copies` and `D:` on every OS.
+Unlike `D:\copies`, these depend on the drive's current directory, as described by
+[Microsoft's path-format guidance](https://learn.microsoft.com/en-us/dotnet/standard/io/file-path-formats).
+Joining such a path to an install on a different drive does not make it absolute. Use a full drive
+path, or an ordinary relative folder such as `copies/daily` (relative to the TOW install). Paths
+already stored in settings are checked again before backup/restore-point use; no folder is probed
+or created for the refused form.
+
 ```
 <TOW>/                      the install root (movable, any drive, any OS)
   app/                      the code: a git clone at a release tag, or a release's source archive
@@ -457,6 +465,15 @@ even if the original live configuration was unreadable. Live settings themselves
 Night-copy verification and preview check the configuration as well as its signature and checksums, before
 restoration writes anything. A broken live configuration can still be replaced by a healthy copy; when its
 local access settings cannot be read, the restored settings are local-only.
+
+Since 1.22.41, night-copy `MANIFEST.json` is limited to 1 MiB before JSON decoding. New
+descriptions are encoded into a bounded buffer before publication; an oversized description
+does not publish a new copy or prune earlier ones. File sizes must be exact, nonnegative integers
+within the signed 64-bit filesystem range: strings, booleans, fractions and non-finite numbers
+are not coerced. Settings skips unreadable descriptions, invalid dates and sizes; inventory
+is not proof of signature verification. The descriptor limit follows the
+[Python JSON guidance](https://docs.python.org/3/library/json.html) on bounded untrusted input
+and does not limit the size of JSON history or stream the full contents of a restore.
 
 The pre-construction check uses [PyYAML parsing events](https://pyyaml.org/wiki/PyYAMLDocumentation)
 because [PyYAML 6.0.3 expands merge mappings during construction](https://github.com/yaml/pyyaml/blob/6.0.3/lib/yaml/constructor.py),

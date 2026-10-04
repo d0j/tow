@@ -2376,22 +2376,41 @@ def test_no_banner_when_all_is_well():
 
 
 def test_a_successful_check_records_when_it_last_worked(monkeypatch):
+    from types import SimpleNamespace
+
     from tow import check
 
+    # A later health write must not make the topic depend on the wall-clock second.
+    success_at = "01.01.2026 10:00:00 UTC"
+    stamps = iter([success_at, "01.01.2026 10:00:01 UTC"])
+    monkeypatch.setattr(check, "_now", lambda: next(stamps))
     _topic_state(save_path=r"M:\TV", hash="H")
     monkeypatch.setattr(
         check,
         "_check_topic",
         lambda topic, run: (check._stamp(topic, {"ok": True}), {"id": topic["id"], "ok": True})[1],
     )
-    monkeypatch.setattr(
-        check.client_factory, "from_secrets", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("off"))
-    )
+    monkeypatch.setattr(check.client_factory, "from_secrets", lambda *a, **k: SimpleNamespace(ping=lambda: "ok"))
+    monkeypatch.setattr(check, "reconcile_topic", lambda *a, **k: {"events": []})
 
-    check.run_check(apply=True, notify=False, how="test")
+    result = check.run_check(apply=True, notify=False, how="test")
 
     topic = load_state()["topics"][0]
-    assert topic["last_ok_at"] == topic["last_check"]
+    assert result["results"][0]["ok"] is True
+    assert topic["last_ok"] is True
+    assert not topic["last_error"]
+    assert topic["last_ok_at"] == topic["last_check"] == success_at
+
+
+@pytest.mark.parametrize("status", ["failed", "skipped"])
+def test_a_failed_or_skipped_check_keeps_the_previous_success_time(monkeypatch, status):
+    from tow import check
+
+    topic = {"last_ok_at": "previous success"}
+    monkeypatch.setattr(check, "_now", lambda: "current attempt")
+    check._stamp(topic, {"ok": status == "skipped", "status": status})
+    assert topic["last_check"] == "current attempt"
+    assert topic["last_ok_at"] == "previous success"
 
 
 def test_edit_panel_links_to_tracker_search_and_the_next_season():

@@ -3,6 +3,19 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.41] — 2026-10-04
+
+### Fixed
+
+- Refuse drive-relative Windows backup folders such as `D:copies` or `D:` before resolution
+  and write probes, including paths already stored in settings. These depend on a drive's current
+  directory instead of the TOW install. The refusal explains how to use a full drive path or an
+  ordinary install-relative folder; both remain supported on their respective operating systems.
+- Bound night-copy descriptions to 1 MiB before parsing and before publishing a new copy.
+  Invalid file sizes and dates no longer break Settings; verification refuses coerced or
+  unrepresentable sizes. A description exceeding the limit leaves earlier copies untouched.
+  Unrepresentable byte counts show an unknown size rather than an application error.
+
 ## [1.22.40] — 2026-10-04
 
 ### Fixed

@@ -79,6 +79,8 @@ def problem(value: str, location: Location) -> str | None:
         return None
     if any(ord(ch) < 32 for ch in raw) or is_windows_device_path(raw):
         return t("locations.bad_chars", owner_language())
+    if _DRIVE_RELATIVE.match(raw):
+        return t("locations.drive_relative", owner_language())
     if ".." in Path(raw.replace("\\", "/")).parts:
         return t("locations.dotdot", owner_language())
     if _of_another_system(raw):
@@ -105,6 +107,7 @@ def _of_another_system(raw: str) -> bool:
 
 
 _ABSOLUTE = re.compile(r"^(?:[A-Za-z]:[\\/]|\\\\|//|/)")
+_DRIVE_RELATIVE = re.compile(r"^[A-Za-z]:(?![\\/])")
 
 
 def check_writable(path: Path) -> str | None:
