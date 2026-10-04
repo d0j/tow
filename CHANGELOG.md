@@ -3,6 +3,15 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.49] — 2026-10-04
+
+### Fixed
+
+- Recognize complete night-copy records from before cleanup monitoring existed. Readable
+  metadata without a cleanup field migrates quietly as unknown, not as a folder-access
+  failure or confirmed completion. Incomplete records, real access errors and lost bound
+  observations still retain their normal warnings.
+
 ## [1.22.48] — 2026-10-04
 
 ### Fixed
