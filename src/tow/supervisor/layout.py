@@ -14,7 +14,6 @@ Everything lives in ``tow.paths.run_dir()`` (``data/run/``):
 
 from __future__ import annotations
 
-import json
 import os
 import uuid
 from contextlib import suppress
@@ -23,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from tow import paths
+from tow.diagnostic_json import encode_object, epoch, read_object
 from tow.paths import repo_root
 from tow.platform import locks
 from tow.store import atomic_write_text, init_lock_file
@@ -83,16 +83,15 @@ def child_env(base: dict[str, str] | None = None) -> dict[str, str]:
 
 def read_json(path: Path) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except OSError, UnicodeError, ValueError:
+        return read_object(path)
+    except OSError, UnicodeError, ValueError, TypeError, RecursionError:
         return {}
-    return value if isinstance(value, dict) else {}
 
 
 def write_json(path: Path, value: dict[str, Any], *, durable: bool = True) -> None:
     """Replace the file whole; ``durable=False`` skips the flush to disk (status, rewritten often)."""
+    text = encode_object(value)
     path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
     if durable:
         atomic_write_text(path, text)
         return
@@ -195,10 +194,7 @@ def status() -> dict[str, Any]:
 
 
 def _epoch(value: Any) -> float:
-    try:
-        return float(value or 0)
-    except TypeError, ValueError:
-        return 0.0
+    return epoch(value) or 0.0
 
 
 def next_check_at(interval_sec: int, health: dict[str, Any] | None = None) -> float | None:
@@ -208,9 +204,14 @@ def next_check_at(interval_sec: int, health: dict[str, Any] | None = None) -> fl
     (``schedule.json``) or the last scheduled check in the state (``health.auto_at_ts``) plus
     the interval. Never ``at_ts``: manual checks and progress passes move it too.
     """
-    planned = (status().get("next") or {}).get("check")
+    next_jobs = status().get("next")
+    planned = next_jobs.get("check") if isinstance(next_jobs, dict) else None
     if isinstance(planned, str):
-        with suppress(ValueError):
-            return datetime.fromisoformat(planned).timestamp()
-    last = _epoch(read_json(schedule_path()).get("check_started_at")) or _epoch((health or {}).get("auto_at_ts"))
-    return last + int(interval_sec) if last > 0 else None
+        with suppress(ValueError, OverflowError, OSError):
+            when = epoch(datetime.fromisoformat(planned).timestamp())
+            if when is not None:
+                return when
+    last = _epoch(read_json(schedule_path()).get("check_started_at")) or _epoch(
+        health.get("auto_at_ts") if isinstance(health, dict) else None
+    )
+    return epoch(last + int(interval_sec)) if last > 0 else None

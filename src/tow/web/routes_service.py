@@ -19,12 +19,16 @@ router = APIRouter()
 
 def service_view() -> dict[str, Any]:
     service = services.service_status()
+    from tow.diagnostic_json import epoch
     from tow.pulse import clock
     from tow.watchdog import last_problem
 
     problem = last_problem()
+    problem_at = epoch(problem.get("at")) if problem else None
     service["watchdog_problem"] = (
-        {"at": clock(float(problem.get("at") or 0)), "lines": str(problem["text"]).splitlines()} if problem else None
+        {"at": clock(problem_at) if problem_at else "—", "lines": str(problem["text"]).splitlines()}
+        if problem
+        else None
     )
     supervisor = service.get("supervisor")
     server = supervisor.get("server") if isinstance(supervisor, dict) else None

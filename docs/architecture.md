@@ -39,6 +39,14 @@ flowchart TD
 - The schedule is the supervisor's own: checks every `interval_sec` after its last scheduled start
   (`data/run/schedule.json`), the night copy once per local day (a copy older than the latest slot is due; DST
   neither skips nor repeats a night). The watchdog duty only reports.
+- Small diagnostic JSON records are bounded to 1 MiB and the store's nesting limit before
+  use. Dates must be finite, non-negative and displayable. Reading does not rewrite or quarantine
+  them; an unreadable backup/watchdog record is an observation error, not success or an outage.
+  New diagnostic writes follow the same limits. These limits do not cap torrent state or history.
+- A future scheduler fact after a backward clock correction is anchored once to its first
+  observation, per fact source; repeated ticks do not move its deadline. Fresh job starts
+  replace the corresponding anchor. Calendar backup slots remain wall-clock based; process
+  timeouts still use the monotonic clock, which cannot supply dates across process restarts.
 - Other processes never send signals: they write a request file into `data/run/control/` and the supervisor polls
   it. SIGTERM and Ctrl+C stop it the same way.
 - **Checks** hold `check_run_lock` for their whole run (one applying check at a time across processes) and take

@@ -420,7 +420,7 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
     from tow.locations import LOCATIONS, free_bytes, is_default, resolve
     from tow.pulse import clock
     from tow.restore_points import cleanup_pending
-    from tow.snapshots import list_snapshots, status
+    from tow.snapshots import list_snapshots, status, status_failed
 
     folders = {}
     for kind, location in LOCATIONS.items():
@@ -447,7 +447,8 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
         "folders": folders,
         "snapshots": snapshots,
         "last_ok": clock(last_ok) if isinstance(last_ok, (int, float)) else (snapshots[0]["at"] if snapshots else ""),
-        "failed": bool(isinstance(failed_at, (int, float)) and (not last_ok or failed_at > last_ok)),
+        "failed": status_failed(st),
+        "read_error": st.get("read_error") is True,
         "error": str(st.get("last_error") or ""),
         "error_at": clock(failed_at) if isinstance(failed_at, (int, float)) else "",
         "cleanup_pending": st.get("last_cleanup_pending") is True,

@@ -16,7 +16,6 @@ Messages go to the owner's messengers only when something changes - never on eve
 
 from __future__ import annotations
 
-import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -26,6 +25,7 @@ from typing import Any
 
 from tow import i18n
 from tow.config import interval_sec_of, load_config, port_of
+from tow.diagnostic_json import check_epochs, check_types, encode_object, epoch, read_object
 from tow.i18n import t
 from tow.log import log_event
 from tow.paths import data_dir
@@ -52,14 +52,28 @@ def _state_path() -> Path:
 
 def _load_state() -> dict[str, Any]:
     try:
-        value = json.loads(_state_path().read_text(encoding="utf-8"))
-    except OSError, UnicodeError, ValueError:
+        value = read_object(_state_path())
+        check_epochs(value, ("at", "checks_watch_since", "backup_watch_since", "down_since", "boot_ts", "asleep_sec"))
+        check_types(
+            value,
+            dict.fromkeys(
+                ("service", "checks", "backup", "backup_cleanup", "restore_point_cleanup", "monitoring"), bool
+            ),
+        )
+        check_types(value, {"last_problem": dict})
+        problem = value.get("last_problem")
+        if isinstance(problem, dict):
+            check_epochs(problem, ("at",))
+            check_types(problem, {"text": str})
+    except FileNotFoundError:
         return {}
-    return value if isinstance(value, dict) else {}
+    except OSError, UnicodeError, ValueError, TypeError, RecursionError:
+        return {"read_error": True}
+    return value
 
 
 def _save_state(value: dict[str, Any]) -> None:
-    atomic_write_text(_state_path(), json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+    atomic_write_text(_state_path(), encode_object(value))
 
 
 def healthy(port: int, *, timeout: float = 3.0) -> bool:
@@ -69,8 +83,9 @@ def healthy(port: int, *, timeout: float = 3.0) -> bool:
         # trust_env=False: a system proxy (HTTP_PROXY without 127.0.0.1 in NO_PROXY) must never
         # stand between the watchdog and this machine's TOW - it made a healthy TOW look hung.
         response = httpx.get(f"http://127.0.0.1:{port}/healthz", timeout=timeout, trust_env=False)
-        return response.status_code == 200 and response.json().get("ok") is True
-    except httpx.HTTPError, ValueError:
+        value = response.json() if response.status_code == 200 else None
+        return isinstance(value, dict) and value.get("ok") is True
+    except httpx.HTTPError, ValueError, RecursionError:
         return False
 
 
@@ -81,12 +96,12 @@ UPDATE_MARKERS = ("update-state.json", "deploy-state.json")
 
 def _update_in_progress(marker: Path) -> bool:
     try:
-        state = json.loads(marker.read_text(encoding="utf-8-sig"))
+        state = read_object(marker, bom=True)
         started = datetime.fromisoformat(str(state.get("started_at")))
-    except OSError, UnicodeError, ValueError, TypeError, AttributeError:
+        age = (datetime.now(UTC) - started.astimezone(UTC)).total_seconds()
+    except OSError, UnicodeError, ValueError, TypeError, AttributeError, RecursionError, OverflowError:
         return False
-    age = (datetime.now(UTC) - started.astimezone(UTC)).total_seconds()
-    return state.get("status") == "in_progress" and age < DEPLOY_GRACE_SEC
+    return state.get("status") == "in_progress" and 0 <= age < DEPLOY_GRACE_SEC
 
 
 def _deploy_running() -> bool:
@@ -104,19 +119,15 @@ def _last_scheduled_check(state: dict[str, Any]) -> int:
     health = state.get("health")
     if not isinstance(health, dict):
         return 0
-    try:
-        if "auto_ok_at_ts" in health:
-            return int(health.get("auto_ok_at_ts") or 0)
-        return int(health.get("auto_at_ts") or 0)
-    except TypeError, ValueError:
-        return 0
+    value = health.get("auto_ok_at_ts") if "auto_ok_at_ts" in health else health.get("auto_at_ts")
+    return int(epoch(value) or 0)
 
 
 def _scheduled_failures(state: dict[str, Any]) -> int:
     health = state.get("health")
     try:
         return int(health.get("check_failures") or 0) if isinstance(health, dict) else 0
-    except TypeError, ValueError:
+    except TypeError, ValueError, OverflowError:
         return 0
 
 
@@ -214,6 +225,8 @@ def _service(
 def _checks(p: _Pass, interval: int, state: dict[str, Any], *, wake_ts: float | None = None) -> None:
     """Are scheduled checks running; if not, since when and why."""
     report = p.report
+    health = state.get("health")
+    health = health if isinstance(health, dict) else {}
     last_check = _last_scheduled_check(state)
     report["last_check_ts"] = last_check
     # No scheduled check yet: lateness counts from the first pass that saw none.
@@ -229,12 +242,12 @@ def _checks(p: _Pass, interval: int, state: dict[str, Any], *, wake_ts: float | 
     failures = _scheduled_failures(state)
     if failures >= CHECK_FAILURES_ALERT:
         report["checks_failing"] = failures  # they start, but every one of them fails (M6)
-        report["checks_error"] = str((state.get("health") or {}).get("check_error") or "")
+        report["checks_error"] = str(health.get("check_error") or "")
     report["checks_late"] = late
     report["checks_ok"] = not late and not report.get("checks_failing")
     if not late or not report["service_ok"]:
         return
-    error = str((state.get("health") or {}).get("check_error") or "").strip()
+    error = str(health.get("check_error") or "").strip()
     if error:
         p.checks_why = t("pulse.checks.last_error", p.lang, error=error[:160])
         report["checks_cause"] = p.checks_why
@@ -243,7 +256,7 @@ def _checks(p: _Pass, interval: int, state: dict[str, Any], *, wake_ts: float | 
 def _backups(p: _Pass) -> None:
     """Did the last night copy fail, or is the newest good one too old?"""
     from tow.restore_points import cleanup_pending
-    from tow.snapshots import list_snapshots, status
+    from tow.snapshots import list_snapshots, status, status_failed
 
     st = status()
     last_ok = st.get("last_ok_at")
@@ -253,15 +266,18 @@ def _backups(p: _Pass) -> None:
     watched = p.previous.get("backup_watch_since")
     since = float(watched) if isinstance(watched, (int, float)) else p.now()
     p.report["backup_watch_since"] = int(since)
-    failed_at = st.get("last_error_at")
-    failed = isinstance(failed_at, (int, float)) and (not last_ok or failed_at > last_ok)
+    failed = status_failed(st)
     stale = p.now() - float(last_ok if last_ok else since) > BACKUP_STALE_SEC
     p.report["backup_ok"] = not failed and not stale
     p.report["backup_cleanup_pending"] = st.get("last_cleanup_pending") is True
     p.report["restore_point_cleanup_pending"] = cleanup_pending()
     if failed:
         reason = st.get("last_error") or t("watchdog.backup.unknown_reason", p.lang)
-        p.backup_why = t("watchdog.backup.failed", p.lang, error=reason)
+        p.backup_why = (
+            t("watchdog.backup.status_unreadable", p.lang)
+            if st.get("read_error")
+            else t("watchdog.backup.failed", p.lang, error=reason)
+        )
     elif stale:
         p.backup_why = (
             t("watchdog.backup.stale", p.lang, at=clock(last_ok)) if last_ok else t("watchdog.backup.never", p.lang)
@@ -300,7 +316,11 @@ def _change_alerts(p: _Pass, current: dict[str, bool]) -> None:
     for key, ok in current.items():
         if previous.get(key, True) == ok:
             continue
-        if key == "service" and not ok:
+        if key == "monitoring":
+            report["alerts"].append(
+                t("watchdog.alert.monitoring_unreadable" if not ok else "watchdog.alert.monitoring_ok", p.lang)
+            )
+        elif key == "service" and not ok:
             report["alerts"].append(t("watchdog.alert.down", p.lang, cause=p.cause))
         elif key == "backup":
             report["alerts"].append(
@@ -388,7 +408,12 @@ def run_watchdog(
     previous = _load_state()
     last_pass = previous.get("at")
     since = float(last_pass) if isinstance(last_pass, (int, float)) else now() - 600
-    report: dict[str, Any] = {"port": port, "service_ok": is_healthy(port), "alerts": []}
+    report: dict[str, Any] = {
+        "port": port,
+        "service_ok": is_healthy(port),
+        "monitoring_ok": not previous.get("read_error"),
+        "alerts": [],
+    }
     p = _Pass(now=now, previous=previous, report=report, lang=i18n.message_language(cfg))
 
     _service(
@@ -405,6 +430,7 @@ def run_watchdog(
     _checks(p, interval, load_state(), wake_ts=max(wakes) if wakes else None)
     _backups(p)
     current = {
+        "monitoring": report["monitoring_ok"],
         "service": report["service_ok"],
         "checks": report["checks_ok"],
         "backup": report["backup_ok"],
@@ -431,7 +457,10 @@ def run_watchdog(
 
 def last_problem() -> dict[str, Any] | None:
     """The last thing the watchdog reported (for the settings page)."""
-    value = _load_state().get("last_problem")
+    state = _load_state()
+    if state.get("read_error"):
+        return {"at": None, "text": t("watchdog.alert.monitoring_unreadable")}
+    value = state.get("last_problem")
     return value if isinstance(value, dict) and value.get("text") else None
 
 

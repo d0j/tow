@@ -1401,6 +1401,7 @@
       "q": "backups transfer export / import towx",
       "title": "Backups",
       "pill_failed": "Backup failed",
+      "pill_unknown": "Result unknown",
       "pill_cleanup": "Cleanup pending",
       "pill_last": "Nightly backup {at}",
       "pill_none": "No nightly backups",
@@ -1592,11 +1593,14 @@
     },
     "backup": {
       "unknown_reason": "reason unknown",
+      "status_unreadable": "the night-copy status cannot be read; its latest result is unknown",
       "failed": "the night copy failed: {error}",
       "stale": "no night copy since {at}",
       "never": "no night copy has been made yet"
     },
     "alert": {
+      "monitoring_unreadable": "TOW: the previous watchdog record cannot be read; continuity of monitoring is unknown",
+      "monitoring_ok": "TOW: watchdog records can be read again",
       "outage": "TOW was not running from {start} to {end} ({duration}): {cause}",
       "restarted_hung": "TOW stopped responding — it was restarted and is working again",
       "restarted_crashed": "TOW crashed (last error: {error}) — it was restarted and is working again",
