@@ -1,5 +1,12 @@
 # Architecture
 
+Download folder history is a convenience, not an access allowlist: every authorized owner device
+may enter a new absolute client folder. Syntax, protected-system-folder and optional UNC checks
+still run before a topic is saved or moved. The legacy `allowed_save_roots` config field is accepted
+for old config/import compatibility but no longer restricts the owner. `state.save_roots` keeps up to
+ten full recently used paths, newest first; older ancestor-only entries remain usable without a data
+rewrite. The editable folder picker shows this entire list on its arrow, independent of typed text.
+
 One page on how TOW is built: processes, modules, data, recovery and the security model. For running an install
 see [PORTABLE.md](PORTABLE.md); for adding a client, messenger, site, language or page see
 [EXTENDING.md](EXTENDING.md).

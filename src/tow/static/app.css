@@ -262,6 +262,18 @@ button.danger, .btn.danger { background: var(--danger); }
 button.sm, .btn.sm { min-height: var(--btn-h-sm); padding: 0 .6rem; }
 /* Icon and inline controls keep their own geometry. */
 button.ico, button.row-ico, button.flash-x { min-height: 0; }
+.folder-input { position: relative; min-width: 0; }
+.folder-input input[role="combobox"] { padding-right: 2.6rem; }
+.folder-toggle { position: absolute; right: .4rem; top: .4375rem; width: var(--btn-h); height: var(--btn-h); padding: 0; }
+.folder-toggle[hidden] { display: none; }
+.folder-options {
+  position: absolute; top: calc(100% + .2rem); left: 0; right: 0; z-index: 15;
+  margin: 0; padding: .2rem; list-style: none; max-height: min(50vh, 20rem); overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--field-line); border-radius: 8px; box-shadow: var(--shadow);
+}
+.folder-options [role="option"] { padding: .4rem .5rem; cursor: pointer; border-radius: 4px; overflow-wrap: anywhere; }
+.folder-options.above { top: auto; bottom: calc(100% + .2rem); }
+.folder-options [role="option"]:hover, .folder-options [aria-selected="true"] { background: var(--panel2); color: var(--acc); }
 .edit-actions {
   display: flex; align-items: center; gap: .5rem;
   margin-top: .55rem;

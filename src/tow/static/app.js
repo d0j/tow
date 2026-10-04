@@ -853,6 +853,111 @@ document.addEventListener("click", (event) => {
   details.querySelector("summary")?.focus();
 });
 
+// Editable recent folders: the arrow shows every recent path, even when the input is filled.
+// Keep native text editing; a highlighted suggestion changes the value only when accepted.
+let openFolders = null;
+const initSaveFolders = (root = document) => {
+  root.querySelectorAll('.folder-input input[list="save-roots"]').forEach((input) => {
+    const button = input.parentElement.querySelector("[data-save-folders]");
+    const values = Array.from(document.getElementById("save-roots")?.options || [], (option) => option.value).slice(0, 10);
+    if (!button || !values.length) return; // no scripts/history: native text input still works
+    input.removeAttribute("list");
+    const list = document.createElement("ul");
+    list.id = `${input.id}-recent`;
+    list.className = "folder-options";
+    list.hidden = true;
+    list.setAttribute("role", "listbox");
+    list.setAttribute("aria-label", button.getAttribute("aria-label"));
+    const options = values.map((value, index) => {
+      const option = document.createElement("li");
+      option.id = `${list.id}-${index}`;
+      option.textContent = value;
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", "false");
+      list.append(option);
+      return option;
+    });
+    input.parentElement.append(list);
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-autocomplete", "none");
+    input.setAttribute("aria-controls", list.id);
+    input.setAttribute("aria-expanded", "false");
+    button.setAttribute("aria-controls", list.id);
+    button.setAttribute("aria-expanded", "false");
+    button.hidden = false;
+    let active = -1;
+    const highlight = (index) => {
+      active = index;
+      options.forEach((option, i) => option.setAttribute("aria-selected", String(i === active)));
+      if (active < 0) input.removeAttribute("aria-activedescendant");
+      else {
+        input.setAttribute("aria-activedescendant", options[active].id);
+        options[active].scrollIntoView({ block: "nearest" });
+      }
+    };
+    const close = () => {
+      list.hidden = true;
+      input.setAttribute("aria-expanded", "false");
+      button.setAttribute("aria-expanded", "false");
+      highlight(-1);
+      if (openFolders?.input === input) openFolders = null;
+    };
+    const open = () => {
+      if (openFolders?.input !== input) openFolders?.close();
+      list.hidden = false;
+      list.classList.remove("above");
+      const bounds = list.getBoundingClientRect();
+      list.classList.toggle("above", bounds.bottom > window.innerHeight && input.getBoundingClientRect().top > bounds.height);
+      input.setAttribute("aria-expanded", "true");
+      button.setAttribute("aria-expanded", "true");
+      openFolders = { input, close, wrapper: input.parentElement };
+    };
+    const choose = (index) => {
+      input.value = values[index];
+      close();
+      input.focus();
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    button.addEventListener("pointerdown", (event) => event.preventDefault());
+    button.addEventListener("click", () => {
+      const wasOpen = !list.hidden;
+      input.focus();
+      if (wasOpen) close(); else open();
+    });
+    options.forEach((option, index) => {
+      option.addEventListener("pointerdown", (event) => event.preventDefault());
+      option.addEventListener("click", () => choose(index));
+    });
+    input.addEventListener("input", () => highlight(-1));
+    input.addEventListener("keydown", (event) => {
+      if (event.isComposing) return;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        event.stopPropagation();
+        open();
+        highlight(event.key === "ArrowDown" ? Math.min(active + 1, options.length - 1) : (active < 0 ? options.length - 1 : Math.max(active - 1, 0)));
+      } else if (!list.hidden && event.key === "Enter" && active >= 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        choose(active);
+      } else if (!list.hidden && event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+      } else if (!list.hidden && event.key === "Tab") close();
+    });
+    input.parentElement.addEventListener("focusout", (event) => {
+      if (!input.parentElement.contains(event.relatedTarget)) close();
+    });
+  });
+};
+document.addEventListener("pointerdown", (event) => {
+  if (openFolders && !openFolders.wrapper.contains(event.target)) openFolders.close();
+});
+document.addEventListener("reset", () => openFolders?.close());
+initSaveFolders();
+
 // M2: a Home row's edit panel is fetched when the row opens (200 inline forms made Home
 // a megabyte). Without scripts the panel's link opens the same form as a page.
 const loadEditPanel = async (details) => {
@@ -868,6 +973,7 @@ const loadEditPanel = async (details) => {
     const panel = template.content.querySelector(".edit-panel");
     if (!panel) throw new Error(t("js.submit.unknown_error"));
     slot.replaceWith(panel);
+    initSaveFolders(panel);
   } catch (error) {
     delete slot.dataset.loading;
     slot.removeAttribute("aria-busy");

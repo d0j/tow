@@ -39,18 +39,21 @@ def _root_key(root: str) -> str:
     (as Windows does); a POSIX path only where the system does - macOS by default - and
     exactly on Linux (and from Windows, where it is a Linux client's: a container, a NAS)."""
     if _windows_shaped(root):
-        return ntpath.normcase(root)
+        return ntpath.normcase(ntpath.normpath(root))
+    root = posixpath.normpath(root)
     return root.casefold() if platform.current().name == "macos" else root
 
 
 def recent_save_roots(state: dict[str, Any], *, n: int = 10) -> list[str]:
-    stored = [str(x) for x in (state.get("save_roots") or []) if str(x).strip()]
-    if stored:
-        return stored[:n]
+    """Most recently used full folders, retaining older root-only history without rewriting it."""
+    if n <= 0:
+        return []
+    stored = state.get("save_roots") or []
+    candidates = [*stored, *(topic.get("save_path") for topic in reversed(state.get("topics") or []))]
     seen: list[str] = []
     keys: set[str] = set()
-    for topic in reversed(list(state.get("topics") or [])):
-        root = save_root(str(topic.get("save_path") or ""))
+    for value in candidates:
+        root = str(value or "").strip()
         if not root or _root_key(root) in keys:
             continue
         keys.add(_root_key(root))
@@ -199,25 +202,12 @@ def _protected_by(path: str) -> str | None:
     return None
 
 
-def allowed_save_roots(state: dict[str, Any], cfg: dict[str, Any]) -> list[str]:
-    """Folders a request from the network may use: those of existing topics, the remembered
-    roots and ``allowed_save_roots`` from config.yaml. New ones are added on this PC."""
-    roots = [str(x) for x in cfg.get("allowed_save_roots") or [] if str(x).strip()]
-    roots += [str(x) for x in state.get("save_roots") or [] if str(x).strip()]
-    roots += [save_root(str(t.get("save_path") or "")) for t in state.get("topics") or [] if t.get("save_path")]
-    return list(dict.fromkeys(root for root in roots if root))
-
-
-def save_path_policy_problem(path: str, *, local: bool, allowed_roots: list[str]) -> str | None:
-    """Where a download may go, beyond the path syntax (see ``save_path_problem``)."""
+def save_path_policy_problem(path: str) -> str | None:
+    """Protect system folders equally for every owner device; history is not an allowlist."""
     if (name := _ambiguous_component(path)) is not None:
         return t("folders.ambiguous_name", owner_language(), name=name)
     if (kind := _protected_by(path)) is not None:
         return t("folders.protected" if kind == "windows" else "folders.protected_system", owner_language())
-    if not local and not any(_inside(path, root) for root in allowed_roots):
-        lang = owner_language()
-        known = ", ".join(allowed_roots[:5]) or t("folders.none", lang)
-        return t("folders.network_only", lang, known=known)
     return None
 
 
@@ -279,9 +269,10 @@ def paths_equal(a: str, b: str) -> bool:
 
 
 def remember_save_root(state: dict[str, Any], path: str, *, n: int = 10) -> None:
-    root = save_root(path)
+    """Remember the exact full folder, not a guessed ancestor, newest first."""
+    root = (path or "").strip()
     if not root:
         return
     key = _root_key(root)
-    cur = [str(x) for x in (state.get("save_roots") or []) if str(x).strip() and _root_key(str(x)) != key]
+    cur = [x for x in recent_save_roots(state, n=n) if _root_key(x) != key]
     state["save_roots"] = [root, *cur][:n]

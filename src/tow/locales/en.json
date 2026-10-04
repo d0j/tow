@@ -550,8 +550,6 @@
   },
   "folders": {
     "protected": "TOW does not save to Windows, program and AppData folders — this protects against harmful files",
-    "network_only": "from the network you can only pick a folder inside the ones already in use ({known}); pick a new folder on the PC running TOW",
-    "none": "none",
     "control_chars": "the path has control characters",
     "device_paths": "Windows device paths (\\\\?\\, \\\\.\\) are not supported",
     "unc_off": "network paths (\\\\server\\folder) are off: allow_unc_save_paths in config.yaml",
@@ -651,6 +649,7 @@
       "name": "Name",
       "name_placeholder": "taken from the link",
       "folder": "Folder in the torrent client",
+      "recent_folders": "Last 10 folders",
       "client": "Torrent client",
       "what": "What to download",
       "mode_all": "All files of the torrent",

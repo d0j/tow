@@ -133,6 +133,34 @@ def test_a_folder_problem_points_at_the_folder_field(client, no_check):
     assert 'aria-invalid="true"' in folder.group(0)
 
 
+@pytest.mark.parametrize(
+    ("endpoint", "data", "clean_page"),
+    [
+        ("/topics/add", {"url": "http://rutor.info/torrent/5/x", "save_path": "relative"}, "/"),
+        ("/sites/new", {"name": "invalid name"}, "/sites"),
+    ],
+)
+def test_cancel_refused_add_returns_clean_page_even_without_scripts(client, no_check, endpoint, data, clean_page):
+    from bs4 import BeautifulSoup
+
+    before = load_state()
+    location = client.post(endpoint, data=data, follow_redirects=False).headers["location"]
+    assert "?add=" in location
+    page = BeautifulSoup(client.get(location).text, "html.parser")
+    form = page.select_one("#new form")
+    assert form is not None
+    assert form.select_one("#add-error") is not None
+    cancel = form.select_one(".actions a.btn.ghost")
+    assert cancel is not None
+    assert cancel["href"] == clean_page
+    assert not cancel.has_attr("data-close-details")
+    for _ in range(2):  # follow Cancel, then refresh the same clean URL
+        refreshed = BeautifulSoup(client.get(cancel["href"]).text, "html.parser")
+        assert refreshed.select_one("#add-error") is None
+        assert not refreshed.select_one("#new").has_attr("open")
+    assert load_state() == before
+
+
 def test_a_crafted_link_does_not_fill_the_add_form(client):
     page = client.get(
         "/?add_error=x&draft_url=https://evil.example/t/1&draft_save_path=C:%5CEvil&add=forged-token"

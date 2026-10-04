@@ -26,12 +26,12 @@ def test_remember_last_10_newest_first():
     st: dict = {}
     remember_save_root(st, r"M:\TV\a")
     remember_save_root(st, r"D:\films\b")
-    remember_save_root(st, r"M:\TV\c")
-    assert st["save_roots"] == [r"M:\TV", r"D:\films"]
+    remember_save_root(st, r"M:\TV\a")
+    assert st["save_roots"] == [r"M:\TV\a", r"D:\films\b"]
     for i in range(12):
         remember_save_root(st, rf"E:\p{i}\x")
     assert len(st["save_roots"]) == 10
-    assert st["save_roots"][0] == r"E:\p11"
+    assert st["save_roots"][0] == r"E:\p11\x"
 
 
 def test_empty_path_uses_last_root():
@@ -50,7 +50,7 @@ def test_recent_from_topics_if_empty():
             {"save_path": r"M:\TV\x"},
         ]
     }
-    assert recent_save_roots(st) == [r"M:\TV", r"M:\old"]
+    assert recent_save_roots(st) == [r"M:\TV\x", r"M:\old\show"]
 
 
 def test_posix_save_root_keeps_the_first_two_folders():
@@ -94,13 +94,30 @@ def test_remembered_roots_ignore_case_only_where_the_paths_system_does(name, mer
     with platform.use(backend):
         state: dict = {}
         remember_save_root(state, "/srv/Media/Show")
-        remember_save_root(state, "/srv/media/Other")
-        assert state["save_roots"] == (["/srv/media"] if merged else ["/srv/media", "/srv/Media"])
+        remember_save_root(state, "/srv/media/show")
+        assert state["save_roots"] == (["/srv/media/show"] if merged else ["/srv/media/show", "/srv/Media/Show"])
         remember_save_root(state, r"D:\Serials\a")
-        remember_save_root(state, r"d:\serials\b")  # a Windows path: one folder on every system
-        assert [root for root in state["save_roots"] if ":" in root] == [r"d:\serials"]
-        topics = {"topics": [{"save_path": "/srv/Media/a"}, {"save_path": "/srv/media/b"}]}
+        remember_save_root(state, r"d:\serials\A")  # a Windows path: one folder on every system
+        assert [root for root in state["save_roots"] if ":" in root] == [r"d:\serials\A"]
+        topics = {"topics": [{"save_path": "/srv/Media/a"}, {"save_path": "/srv/media/A"}]}
         assert len(recent_save_roots(topics)) == (1 if merged else 2)
+
+
+def test_recent_folders_preserve_legacy_history_fill_gaps_and_deduplicate():
+    state = {
+        "save_roots": [r"D:\old", "d:/OLD/", "", r"D:\series\Season 2"],
+        "topics": [{"save_path": r"M:\cartoons"}, {"save_path": r"D:\series\Season 2"}],
+    }
+    assert recent_save_roots(state) == [r"D:\old", r"D:\series\Season 2", r"M:\cartoons"]
+    before = list(state["save_roots"])
+    assert recent_save_roots(state, n=0) == []
+    assert state["save_roots"] == before  # rendering never rewrites older data
+
+
+def test_reusing_a_full_folder_moves_it_to_the_front_without_truncation():
+    state = {"save_roots": [r"M:\old", r"D:\series\Season 2", r"D:\series\Season 1"]}
+    remember_save_root(state, "d:/series/Season 2/")
+    assert state["save_roots"] == ["d:/series/Season 2/", r"M:\old", r"D:\series\Season 1"]
 
 
 @pytest.mark.parametrize(("name", "folded"), [("linux", False), ("macos", True), ("windows", True)])

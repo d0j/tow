@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
-from tow import access, undo
+from tow import undo
 from tow.check import await_relocation, client_owned_by_tow
 from tow.clock import iso_now
 from tow.config import as_bool
@@ -40,18 +40,16 @@ from tow.web.views import (
 router = APIRouter()
 
 
-def _save_path_refusal(dest: str, state: dict[str, Any], request: Request, *, current: str = "") -> str | None:
-    """Syntax first, then where a download may go (system folders never; from the network
-    only folders already in use). A topic keeping its current folder is always fine."""
-    from tow.folders import allowed_save_roots, save_path_policy_problem
+def _save_path_refusal(dest: str, *, current: str = "") -> str | None:
+    """Every owner device may choose a new valid folder; protected folders remain refused."""
+    from tow.folders import save_path_policy_problem
 
     cfg = services.load_config()
     if problem := save_path_problem(dest, allow_unc=as_bool(cfg.get("allow_unc_save_paths"))):
         return problem
     if current and paths_equal(dest, current):
         return None
-    local = access.is_local(request)
-    return save_path_policy_problem(dest, local=local, allowed_roots=allowed_save_roots(state, cfg))
+    return save_path_policy_problem(dest)
 
 
 @router.get("/topics/{tid}/downloads.json", response_model=None)
@@ -188,7 +186,7 @@ def topics_add(
         no_folder = TowError("web.topics.no_folder", cls="no_path")
         services.log_event("check_fail", title=name, url=url, **error_fields(no_folder), how="manual")
         return _add_refused(t("web.topics.need_folder"), draft, "folder")
-    if problem := _save_path_refusal(dest, state, request):
+    if problem := _save_path_refusal(dest):
         services.log_event("check_fail", title=name, url=url, error=problem, cls="no_path", how="manual")
         return _add_refused(problem, draft, "folder")
     try:
@@ -431,7 +429,7 @@ def topics_edit(
         dest = resolve_save_path(save_path, state)
         if not dest:
             return flash_redirect("/", "web.topics.need_folder_short", "err")
-        if problem := _save_path_refusal(dest, state, request, current=str(topic.get("save_path") or "")):
+        if problem := _save_path_refusal(dest, current=str(topic.get("save_path") or "")):
             return flash_redirect("/", problem, "err")
         undo.stamp(state, "topic_put", item=copy.deepcopy(topic))
         topic.update(candidate)
