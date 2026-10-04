@@ -106,13 +106,14 @@ def test_a_supervisor_that_fails_does_not_leave_its_web_server(run_env):
 @pytest.mark.parametrize("stop_failure", [None, "refused", "ignored", "error"])
 @pytest.mark.parametrize("failure", [RuntimeError, KeyboardInterrupt])
 def test_abnormal_exit_attempts_every_child_before_releasing_the_lock(
-    run_env, monkeypatch, caplog, job_name, stop_failure, failure
+    run_env, monkeypatch, caplog, tmp_path, job_name, stop_failure, failure
 ):
     from tow.supervisor.core import Supervisor
 
     world = World(clock=Clock())
     deps = world.deps()
     stopped = []
+    expected_pid = tmp_path / "run" / "run.pid"
 
     def broken_loop(supervisor):
         if supervisor.server.child is None:
@@ -121,6 +122,7 @@ def test_abnormal_exit_attempts_every_child_before_releasing_the_lock(
         raise failure("original loop failure")
 
     def stop(child):
+        assert expected_pid.is_file()
         stopped.append((child.pid, layout.running() is not None))
         if "serve" not in child.argv:
             if stop_failure == "refused":
@@ -142,7 +144,7 @@ def test_abnormal_exit_attempts_every_child_before_releasing_the_lock(
     else:
         assert "stop was not confirmed" in caplog.text or "OSError" in caplog.text
     assert "must-not-be-displayed" not in caplog.text
-    assert not layout.pid_path().exists()
+    assert not expected_pid.exists()
     assert layout.running() is None
 
 
