@@ -23,7 +23,7 @@ These hold in every release:
 | Notifications | Telegram, Discord, WhatsApp, ntfy; grouping, quiet hours, digest, a persistent outbox; watchdog alerts with the reason for downtime. |
 | Safety | One-step undo of any change; journaled multi-file writes recovered by any process; night copies (signed), restore points, `.towx` transfer; data version guard. |
 | Access | Loopback without password; network only with password, sessions, CSRF and CSP; local-only access switches. |
-| Runtime | One portable folder, one process (`tow run`), autostart for Windows, Linux and macOS, version/release display and explicit web update with verified archive, snapshot, health check and rollback (terminal for service-managed POSIX). |
+| Runtime | One portable folder, one supervised service (`tow run`), autostart for Windows, Linux and macOS, version/release display and explicit web update with verified archive, snapshot, health check and rollback (terminal for service-managed POSIX). |
 | Languages | English and Russian; a new language is one JSON file. |
 | Quality | Over 2,900 tests in random order with a guard against network, processes and writes outside the temp folder; branch coverage ≥ 89%; strict mypy; ruff with a complexity cap. Blocking CI on Windows, Ubuntu 24.04/26.04 and macOS. |
 

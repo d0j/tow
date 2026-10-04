@@ -91,7 +91,7 @@ Linux and macOS. `tow --help` lists all commands.
 
 | Command | Does |
 |---|---|
-| `tow run` | web UI, schedule, night copy, watchdog — in one process |
+| `tow run` | one supervised service: web UI, schedule, night copy, watchdog |
 | `tow start` | `tow run` in the background, then the page in the browser (what the start files do) |
 | `tow status` | one line: running, client, sites, topics, last and next check (`--json`) |
 | `tow stop` · `tow restart` | stop TOW · restart its web server |

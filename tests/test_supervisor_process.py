@@ -102,6 +102,52 @@ def test_a_supervisor_that_fails_does_not_leave_its_web_server(run_env):
     assert layout.running() is None
 
 
+@pytest.mark.parametrize("job_name", ["check", "progress", "backup"])
+@pytest.mark.parametrize("stop_failure", [None, "refused", "ignored", "error"])
+@pytest.mark.parametrize("failure", [RuntimeError, KeyboardInterrupt])
+def test_abnormal_exit_attempts_every_child_before_releasing_the_lock(
+    run_env, monkeypatch, caplog, tmp_path, job_name, stop_failure, failure
+):
+    from tow.supervisor.core import Supervisor
+
+    world = World(clock=Clock())
+    deps = world.deps()
+    stopped = []
+    expected_pid = tmp_path / "run" / "run.pid"
+
+    def broken_loop(supervisor):
+        if supervisor.server.child is None:
+            supervisor._start_server(world.clock.wall, world.clock.mono)
+            supervisor._start_job(job_name, world.clock.wall, world.clock.mono)
+        raise failure("original loop failure")
+
+    def stop(child):
+        assert expected_pid.is_file()
+        stopped.append((child.pid, layout.running() is not None))
+        if "serve" not in child.argv:
+            if stop_failure == "refused":
+                return False
+            if stop_failure == "ignored":
+                return True
+            if stop_failure == "error":
+                raise OSError("secret=must-not-be-displayed")
+        return world.stop(child)
+
+    monkeypatch.setattr(Supervisor, "loop", broken_loop)
+    deps.stop = stop
+    with pytest.raises(failure, match="original loop failure"):
+        run_supervisor(deps)
+    assert stopped == [(world.jobs()[0].pid, True), (world.servers()[0].pid, True)]
+    assert world.servers()[0].poll() == -9
+    if stop_failure is None:
+        assert world.jobs()[0].poll() == -9
+    else:
+        assert "stop was not confirmed" in caplog.text or "OSError" in caplog.text
+    assert "must-not-be-displayed" not in caplog.text
+    assert not expected_pid.exists()
+    assert layout.running() is None
+
+
 def test_the_next_run_takes_over_a_server_left_by_a_killed_supervisor(run_env, tmp_path):
     # A supervisor killed outright (no finally) left its server; the next one stops it and runs.
     first = World(clock=Clock())
@@ -350,7 +396,7 @@ def test_spawned_children_write_to_their_log_and_are_stopped_whole(monkeypatch, 
 
     def fake_spawn(argv, **kwargs):
         calls.append((argv, kwargs))
-        return SimpleNamespace(pid=77, wait=lambda timeout: 0)
+        return SimpleNamespace(pid=77, poll=lambda: None, wait=lambda timeout: 0)
 
     monkeypatch.setattr(_os, "spawn", fake_spawn)
     child = _spawn(["py", "-m", "tow", "serve"], tmp_path / "logs" / "serve-stderr.log", True)
@@ -365,6 +411,16 @@ def test_spawned_children_write_to_their_log_and_are_stopped_whole(monkeypatch, 
     with platform.use(gone):  # type: ignore[arg-type]
         assert _stop(child) is True  # nothing to stop counts as stopped
     assert gone.calls == []
+
+
+def test_default_stop_does_not_terminate_a_reused_pid(monkeypatch):
+    from tow.supervisor import _stop
+
+    def forbidden(*_args):
+        pytest.fail("an exited child's PID must not be terminated")
+
+    monkeypatch.setattr("tow.supervisor._stop_pid", forbidden)
+    assert _stop(SimpleNamespace(pid=77, poll=lambda: 0)) is True
 
 
 # --- the OS adapter ---------------------------------------------------------------------------

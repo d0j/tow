@@ -75,7 +75,8 @@ tracker degradation from a client or TOW failure before changing state.
   the install (`scripts/deploy.ps1 -Ref <tag>` on Windows, the command `tow update --ref <tag>` prints on any OS).
   The oldest version an update goes back to is v1.18.0 (v1.22.0 for an install without git). The Windows bundle
   and the installers are built and tested by `.github/workflows/release.yml` (`docs/PORTABLE.md` §1a).
-- The runtime is one process, `tow run` (`tow.supervisor`): web server, schedule, night copy and watchdog. It is
+- The runtime is one supervised service, `tow run` (`tow.supervisor`): a managed web-server child,
+  scheduled child jobs and watchdog duties. It is
   controlled through `data/run/control/{restart,stop}` (`tow restart`, `tow stop`, Settings), never by killing
   processes. Its web server never outlives it (`finally`, `tow serve --parent-pid`, a Windows job object, Linux
   `PR_SET_PDEATHSIG`); a server a dead supervisor left on the port is taken over at the next start, anything else

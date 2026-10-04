@@ -26,7 +26,7 @@ flowchart TD
     BROWSER["browser (this PC, or LAN with password)"] --> SERVE
 ```
 
-- **`tow run`** is the only long-lived process. It holds `data/run/run.lock` (a second instance exits), starts
+- **`tow run`** is the single supervisor, not a single-process runtime. It holds `data/run/run.lock` (a second instance exits), starts
   every job as a child process, one job at a time, each with a time limit, and writes `data/run/status.json` only
   when something changes. A wall clock that jumps ahead of the monotonic one means the machine slept: overdue jobs
   run at once.

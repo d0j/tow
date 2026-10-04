@@ -3,6 +3,19 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.29] — 2026-10-04
+
+### Fixed
+
+- Confirm child-process exit before reporting a stop, finishing a timed-out job or replacing the web server.
+  Failed stops retain the tracked process and retry with a pause instead of starting overlapping work.
+- On an abnormal supervisor exit, attempt to stop both the active job and web server before releasing the
+  instance lock. Cleanup failures do not hide the original error or skip the other child.
+- Do not terminate a finished child's possibly reused PID. Describe TOW consistently as one supervised
+  service, not one operating-system process, in Settings, CLI help and current documentation.
+- The activity log describes a queued restart as requested, not completed. Recovery notifications no
+  longer claim the reporting watchdog performs the restart.
+
 ## [1.22.28] — 2026-10-04
 
 ### Fixed

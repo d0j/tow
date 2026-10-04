@@ -1,7 +1,8 @@
-"""Settings → TOW service: autostart and restart of the one process (`tow run`)."""
+"""Settings → TOW service: autostart and restart through the supervisor (`tow run`)."""
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 from helpers import shown
 
@@ -18,15 +19,33 @@ def _post(path: str, data: dict) -> str:
     return shown(response.headers["location"])  # the address and the message it shows
 
 
-def test_the_service_card_shows_one_process_and_its_autostart():
+def test_the_service_card_shows_one_service_and_its_autostart():
     page = _page()
-    assert "TOW работает одним процессом" in page
+    assert "TOW работает как единый сервис" in page
     assert "Запускать TOW при входе в этот компьютер" in page
     # 1.21: the five Windows tasks and the switch from them are gone.
     assert 'action="/settings/service/migrate"' not in page
     assert "пятью задачами" not in page
     assert "задачами Windows" not in page
     assert "сам сторож не перезапускает TOW" in page
+
+
+@pytest.mark.parametrize(
+    ("language", "description", "incorrect"),
+    [
+        ("en", "TOW runs as one service", "TOW runs as one process"),
+        ("ru", "TOW работает как единый сервис", "TOW работает одним процессом"),
+    ],
+)
+def test_service_card_describes_the_service_not_a_single_pid(language, description, incorrect):
+    from tow.config import load_config, save_config
+
+    config = load_config()
+    config["language"] = language
+    save_config(config)
+    page = _page()
+    assert description in page
+    assert incorrect not in page
 
 
 def test_the_switch_route_is_gone():
@@ -82,3 +101,16 @@ def test_a_refused_autostart_says_why(monkeypatch):
 
 def test_restart_without_tow_run_says_it_did_not_start():
     assert "перезапуск" in _post("/settings/service/restart", {}).lower()
+
+
+@pytest.mark.parametrize(("language", "expected"), [("en", "TOW restart requested"), ("ru", "Запрошен перезапуск TOW")])
+def test_accepted_restart_log_describes_a_request_not_completed_work(monkeypatch, language, expected):
+    from tow.log import format_event, read_events
+
+    monkeypatch.setattr("tow.web.services.request_restart", lambda: {"ok": True, "operation_id": "restart-test"})
+    _post("/settings/service/restart", {})
+    records = [row for row in read_events(limit=10) if row["kind"] == "settings_service_restart"]
+    assert len(records) == 1
+    assert records[0]["operation_id"] == "restart-test"
+    monkeypatch.setattr("tow.log.owner_language", lambda: language)
+    assert format_event(records[0])["label"] == expected

@@ -1,7 +1,7 @@
-"""``tow run``, ``tow stop`` and ``tow restart``: TOW as one supervised process (since 1.18).
+"""``tow run``, ``tow stop`` and ``tow restart``: one supervised TOW service (since 1.18).
 
-The web server, the scheduled checks, the night copy and the watchdog's duties in one process
-on every OS: see ``core`` for the loop, ``schedule`` for the timing and ``layout`` for its
+One supervisor owns the web server and scheduled child jobs, and runs watchdog duties.
+On every OS: see ``core`` for the loop, ``schedule`` for the timing and ``layout`` for its
 files and the control requests other processes send it.
 """
 
@@ -79,6 +79,8 @@ def _stop_pid(pid: int, timeout: float = 10.0) -> bool:
 
 
 def _stop(child: Any) -> bool:
+    if child.poll() is not None:
+        return True
     gone = _stop_pid(int(child.pid), 10.0)
     with contextlib.suppress(Exception):
         child.wait(timeout=5)  # reaped: no zombie on POSIX
@@ -174,6 +176,20 @@ def _acquire(lock: layout.InstanceLock, tries: int = 3) -> bool:
     return False
 
 
+def _cleanup_children(supervisor: Supervisor) -> None:
+    """Attempt every tracked child before releasing the instance lock on an abnormal exit."""
+    children = []
+    if supervisor.job is not None:
+        children.append((supervisor.job.name, supervisor.job.child))
+    if supervisor.server.child is not None:
+        children.append(("web server", supervisor.server.child))
+    for name, child in children:
+        LOG.error("stopping %s (pid %s) on the way out", name, child.pid)
+        supervisor.stop_child(child, name)
+    supervisor.job = None
+    supervisor.server.child = None
+
+
 def run_supervisor(deps: Deps | None = None) -> int:
     """``tow run``: returns the exit code (0 after a requested stop)."""
     from tow import __version__, platform
@@ -235,12 +251,8 @@ def run_supervisor(deps: Deps | None = None) -> int:
                 signal.signal(signal.SIGTERM, previous)
         return 0
     finally:
-        if supervisor is not None and supervisor.server.child is not None:
-            # Left the loop by an error: the web server must not outlive its supervisor.
-            with contextlib.suppress(Exception):
-                LOG.error("stopping the web server (pid %s) on the way out", supervisor.server.child.pid)
-                supervisor.deps.stop(supervisor.server.child)
-            supervisor.server.child = None
+        if supervisor is not None:
+            _cleanup_children(supervisor)
         with contextlib.suppress(OSError):
             layout.pid_path().unlink(missing_ok=True)
         lock.release()
