@@ -239,6 +239,7 @@ def test_handoff_failure_does_not_overwrite_a_running_job(tmp_path):
 def test_main_handoff_waits_before_running_or_refuses(tmp_path, monkeypatch, mode, waited):
     path = tmp_path / "job.json"
     path.write_text(json.dumps({"id": "owned", "status": "queued"}))
+    monkeypatch.setattr(update_worker, "__file__", str(tmp_path / "owned" / "worker.py"))
     calls = []
     machine = SimpleNamespace(
         spawn_handoff=lambda args, log: calls.append(("spawn", args, log)),
@@ -266,6 +267,7 @@ def test_main_handoff_waits_before_running_or_refuses(tmp_path, monkeypatch, mod
 def test_main_launch_failure_preserves_a_terminal_result(tmp_path, monkeypatch):
     path = tmp_path / "job.json"
     path.write_text(json.dumps({"id": "owned", "status": "queued"}))
+    monkeypatch.setattr(update_worker, "__file__", str(tmp_path / "owned" / "worker.py"))
 
     def fail(*_args):
         raise OSError("synthetic launch failure")

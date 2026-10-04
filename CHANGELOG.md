@@ -19,6 +19,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   for a web update. Malformed state produces a safe preflight refusal without rewriting data;
   torrent state is not subject to the small job-size limit. The worker remains standalone and
   Python 3.11 compatible.
+- Bind every copied-worker entry to the fixed journal next to its own job folder. A foreign
+  journal or identifier is refused before opening the record; relays propagate the derived path,
+  not a command-line-selected filename. Equivalent absolute paths remain supported.
 
 ## [1.22.43] — 2026-10-04
 

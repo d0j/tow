@@ -113,6 +113,8 @@ re-reads the unchanged queued reservation before publishing a result. Damaged re
 leases are retained, not reconstructed or turned into terminal results without ownership.
 Journal writes validate before an exclusive temporary file, fsync and atomic replace;
 current-state schema preflight uses strict JSON without the small job-size cap.
+Every worker entry binds its journal and nonce to the copied script's own job folder;
+relays use the derived path, not the supplied filename, after checking path equivalence.
 
 ## Recovery
 

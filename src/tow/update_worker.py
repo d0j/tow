@@ -276,11 +276,16 @@ def main() -> int:
     if len(args) != 4 or (mode in {"--after-parent", "--broker-child"} and not 0 < parent <= 0xFFFFFFFF):
         return 2
     _app, job_path, job_id, _version = args
-    if mode == "--broker-child":
-        folder = Path(__file__).resolve().parent
-        record = folder.parent / "job.json"
-        if folder.name != job_id or str(record) != job_path:
+    folder = Path(__file__).resolve().parent
+    record = folder.parent / "job.json"
+    if folder.name != job_id:
+        return 2
+    try:
+        if Path(job_path).resolve() != record:
             return 2
+    except (OSError, ValueError, RuntimeError):
+        return 2
+    if mode == "--broker-child":
         try:
             job = _read_job(record)
         except (OSError, ValueError, TypeError, RecursionError):
@@ -292,12 +297,11 @@ def main() -> int:
             contextlib.redirect_stdout(output),
             contextlib.redirect_stderr(output),
         ):
-            return handoff(mode, parent, [_app, str(record), folder.name, _version])
-    return handoff(mode, parent, args)
+            return handoff(mode, parent, _app, record, folder.name, _version)
+    return handoff(mode, parent, _app, record, folder.name, _version)
 
 
-def handoff(mode: str, parent: int, args: list[str]) -> int:
-    app, job_path, job_id, version = args
+def handoff(mode: str, parent: int, app: str, job_path: Path, job_id: str, version: str) -> int:
     script = Path(__file__).with_name("update.py")
     spec = importlib.util.spec_from_file_location("tow_detached_updater", script)
     if spec is None or spec.loader is None:
@@ -317,25 +321,28 @@ def handoff(mode: str, parent: int, args: list[str]) -> int:
             str(Path(__file__).resolve()),
             "--after-parent" if independent else "--broker-child",
             str(os.getpid()),
-            *args,
+            app,
+            str(job_path),
+            job_id,
+            version,
         ]
         try:
             if independent:
-                machine.spawn_handoff(child, Path(job_path).parent / job_id / "update.log")
+                machine.spawn_handoff(child, job_path.parent / job_id / "update.log")
             else:
                 print("handoff: inherited job; requesting local Windows broker", flush=True)
                 machine.spawn_broker(child)
         except OSError:
             return refuse_handoff(
-                Path(job_path), job_id, "releases.launch_failed" if independent else "releases.broker_failed"
+                job_path, job_id, "releases.launch_failed" if independent else "releases.broker_failed"
             )
         return 0
     if mode in {"--after-parent", "--broker-child"}:
         if not machine.updater_independent():
-            return refuse_handoff(Path(job_path), job_id, "releases.inherited_job")
+            return refuse_handoff(job_path, job_id, "releases.inherited_job")
         if not machine.wait_process_exit(parent, 10.0):
-            return refuse_handoff(Path(job_path), job_id, "releases.parent_wait_failed")
-    return run(Path(app), Path(job_path), job_id, version, updater)
+            return refuse_handoff(job_path, job_id, "releases.parent_wait_failed")
+    return run(Path(app), job_path, job_id, version, updater)
 
 
 def refuse_handoff(path: Path, job_id: str, reason: str = "releases.launch_failed") -> int:

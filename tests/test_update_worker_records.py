@@ -313,3 +313,58 @@ def test_invalid_command_line_refuses_without_opening_a_job(monkeypatch, argumen
     monkeypatch.setattr(update_worker.sys, "argv", ["worker.py", *arguments])
     monkeypatch.setattr(update_worker, "handoff", lambda *args: pytest.fail("invalid command must not relay"))
     assert update_worker.main() == 2
+
+
+@pytest.mark.parametrize("mode", ["--handoff", "--after-parent", "--broker-child", ""])
+@pytest.mark.parametrize("foreign", ["path", "id"])
+def test_every_worker_entry_binds_the_journal_to_the_copied_script(tmp_path, monkeypatch, mode, foreign):
+    folder = tmp_path / JOB_ID
+    monkeypatch.setattr(update_worker, "__file__", str(folder / "worker.py"))
+    record = tmp_path / "job.json" if foreign == "id" else tmp_path / "foreign.json"
+    identifier = "c" * 32 if foreign == "id" else JOB_ID
+    monkeypatch.setattr(
+        update_worker.sys,
+        "argv",
+        [
+            "worker.py",
+            *([mode] if mode else []),
+            *(["42"] if mode in {"--after-parent", "--broker-child"} else []),
+            str(tmp_path / "app"),
+            str(record),
+            identifier,
+            VERSION,
+        ],
+    )
+    monkeypatch.setattr(update_worker, "handoff", lambda *args: pytest.fail("foreign journal must not relay"))
+    assert update_worker.main() == 2
+    assert not folder.exists()
+    assert not record.exists()
+
+
+@pytest.mark.parametrize("mode", ["--handoff", "--after-parent", ""])
+@pytest.mark.parametrize("form", ["canonical", "normalised"])
+def test_valid_entry_passes_only_the_derived_journal_to_the_relay(tmp_path, monkeypatch, mode, form):
+    folder = tmp_path / JOB_ID
+    record = tmp_path / "job.json"
+    supplied = record if form == "canonical" else tmp_path / "absent" / ".." / "job.json"
+    monkeypatch.setattr(update_worker, "__file__", str(folder / "worker.py"))
+    calls = []
+    monkeypatch.setattr(update_worker, "handoff", lambda *args: calls.append(args) or 0)
+    monkeypatch.setattr(
+        update_worker.sys,
+        "argv",
+        [
+            "worker.py",
+            *([mode] if mode else []),
+            *(["42"] if mode == "--after-parent" else []),
+            str(tmp_path / "app"),
+            str(supplied),
+            JOB_ID,
+            VERSION,
+        ],
+    )
+    assert update_worker.main() == 0
+    assert calls == [
+        (mode, 42 if mode == "--after-parent" else 0, str(tmp_path / "app"), record.resolve(), JOB_ID, VERSION)
+    ]
+    assert not record.exists()
