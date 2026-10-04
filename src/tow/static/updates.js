@@ -3,6 +3,8 @@
   const badge = document.querySelector("[data-release-badge]");
   if (!badge) return;
   const overlay = document.querySelector(".app-version");
+  // Capture the loaded document's version, not the newer server's polling response.
+  const pageVersion = document.querySelector("[data-page-version]")?.dataset?.pageVersion || "";
   let framePending = false;
   const positionOverlay = () => {
     if (!overlay || framePending) return;
@@ -159,6 +161,9 @@
         previous.textContent = rollbackVersion ? t("js.releases.previous", { version: rollbackVersion }) : "";
       }
       updating = job.active === true;
+      const installedVersion = typeof job.current === "string" && job.current ? job.current :
+        (job.status === "ok" && typeof job.target === "string" ? job.target : "");
+      const needsReload = !updating && Boolean(installedVersion) && pageVersion !== installedVersion;
       const phases = {
         queued: "js.releases.queued", preparing: "js.releases.preparing", stopping: "js.releases.stopping",
         backup: "js.releases.backup", installing: "js.releases.installing", checking: "js.releases.phase_checking",
@@ -169,7 +174,9 @@
       };
       if (Object.prototype.hasOwnProperty.call(phases, job.status)) {
         progress.hidden = false;
-        progress.textContent = t(phases[job.status], { version: job.target || "" });
+        const messageKey = job.status === "ok" && pageVersion && pageVersion === installedVersion ?
+          "js.releases.ok_current" : phases[job.status];
+        progress.textContent = t(messageKey, { version: job.target || installedVersion });
         if (replaced) progress.textContent = t("js.releases.operation_changed") + " · " + progress.textContent;
         if (typeof job.error_message === "string" && job.error_message) {
           progress.textContent = ["failed", "refused", "interrupted"].includes(job.status) ?
@@ -179,7 +186,7 @@
           if (label) progress.textContent += " · " + label;
         }
       }
-      if (reload) reload.hidden = job.status !== "ok";
+      if (reload) reload.hidden = !needsReload;
       controls();
       if (updating) { operation = job.id; schedulePoll(); }
       else operation = "";
