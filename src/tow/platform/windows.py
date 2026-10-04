@@ -188,6 +188,29 @@ def process_alive(pid: int) -> bool:
         kernel32.CloseHandle(ctypes.c_void_p(handle))
 
 
+def process_command(pid: int) -> str | None:
+    """Read a process command line; missing rights or an exited process mean unknown."""
+    try:
+        pid = int(pid)
+    except TypeError, ValueError:
+        return None
+    if pid <= 0:
+        return None
+    script = (
+        f'Get-CimInstance Win32_Process -Filter "ProcessId={pid}" -ErrorAction SilentlyContinue '
+        "| Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"
+    )
+    raw = _run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], timeout=5)
+    try:
+        info = json.loads(raw) if raw else None
+    except ValueError:
+        return None
+    if not isinstance(info, dict) or info.get("ProcessId") != pid:
+        return None
+    command = info.get("CommandLine")
+    return command if isinstance(command, str) and command else None
+
+
 def terminate(pid: int, timeout: float = 10.0) -> bool:
     """Stop ``pid`` and every process it started (taskkill /T /F); True when they are gone."""
     try:
@@ -421,6 +444,9 @@ class WindowsBackend:
 
     def process_alive(self, pid: int) -> bool:
         return process_alive(pid)
+
+    def process_command(self, pid: int) -> str | None:
+        return process_command(pid)
 
     def publish_exclusive(self, source: Path, destination: Path) -> None:
         """Windows rename refuses an existing destination, including on non-NTFS volumes."""

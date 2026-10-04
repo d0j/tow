@@ -11,8 +11,10 @@ import importlib.util
 import json
 import os
 import re
+import stat
 import sys
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +52,57 @@ def run(app: Path, job_path: Path, job_id: str, version: str, updater: Any) -> i
     started = job.get("started_at")
     if started is not None and (type(started) not in {int, float} or not 0 <= time.time() - started < 30):
         return refuse_handoff(job_path, job_id, "releases.interrupted")
+    try:
+        with worker_lease(job_path, job) as acquired:
+            if not acquired:
+                return 2
+            # A second worker may have completed this job before this one took the lease.
+            latest = json.loads(job_path.read_text(encoding="utf-8"))
+            if latest.get("id") != job_id or latest.get("status") != "queued" or latest != job:
+                return 2
+            return _run(app, job_path, job, version, updater)
+    except (OSError, ValueError, ImportError, SyntaxError):
+        return refuse_handoff(job_path, job_id, "releases.job_unreadable")
+
+
+@contextlib.contextmanager
+def worker_lease(path: Path, job: dict[str, Any]) -> Iterator[bool]:
+    if "lease_version" not in job:
+        yield True  # compatible with pre-lease handoffs already on disk
+        return
+    if type(job["lease_version"]) is not int or job["lease_version"] != 1:
+        raise ValueError("unsupported worker lease")
+    if not isinstance(job.get("id"), str) or re.fullmatch(r"[a-f0-9]{32}", job["id"]) is None:
+        raise ValueError("invalid worker lease identifier")
+    folder = path.parent / job["id"]
+    info = folder.lstat()
+    if (
+        not stat.S_ISDIR(info.st_mode)
+        or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        or folder.resolve() != path.parent.resolve() / job["id"]
+    ):
+        raise ValueError("unsafe worker lease folder")
+    for member in ("worker.lock", "locks.py"):
+        info = (folder / member).lstat()
+        if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+            raise ValueError("unsafe worker lease member")
+    if (folder / "worker.lock").stat().st_size != 1:
+        raise ValueError("invalid worker lease file")
+    spec = importlib.util.spec_from_file_location("tow_detached_locks", folder / "locks.py")
+    if spec is None or spec.loader is None:
+        raise ImportError("worker lease module unavailable")
+    locks = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(locks)
+    with (folder / "worker.lock").open("r+b") as handle:
+        acquired = locks.lock(handle, wait=False)
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                locks.unlock(handle)
+
+
+def _run(app: Path, job_path: Path, job: dict[str, Any], version: str, updater: Any) -> int:
     job.update(pid=os.getpid(), status="preparing")
     write_job(job_path, job)
     seen: dict[str, Any] = {}

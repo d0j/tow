@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 import test_update as fixture_module
+from helpers import reaped
 from test_update import Fake, _load
 
 from tow import update_worker
+from tow.platform import locks
 
 pytestmark = pytest.mark.allow_git
 origin = fixture_module.origin
@@ -23,7 +27,10 @@ git_install = fixture_module.install
         ({"uv_fails_on": (1,)}, "rolled_back"),
     ],
 )
-def test_detached_runner_uses_real_update_and_rollback_on_throwaway_git(git_install, monkeypatch, scenario, result):
+@pytest.mark.parametrize("use_lease", [False, True])
+def test_detached_runner_uses_real_update_and_rollback_on_throwaway_git(
+    git_install, monkeypatch, scenario, result, use_lease
+):
     updater = _load()
 
     class Machine(Fake):
@@ -36,11 +43,18 @@ def test_detached_runner_uses_real_update_and_rollback_on_throwaway_git(git_inst
     monkeypatch.setattr(update_worker, "schema_preflight", lambda *_args: None)
     path = git_install["root"] / "worker-job.json"
     job_id = "a" * 32
-    path.write_text(json.dumps({"id": job_id, "status": "queued", "target": "1.21.0"}))
+    job = {"id": job_id, "status": "queued", "target": "1.21.0"}
+    if use_lease:
+        job["lease_version"] = 1
+        _prepare_lease(path, job_id)
+    path.write_text(json.dumps(job))
     phases = []
     real_write = update_worker.write_job
 
     def record(target, job):
+        if use_lease:
+            with (path.parent / job_id / "worker.lock").open("r+b") as handle:
+                assert not locks.lock(handle, wait=False)
         phases.append(job["status"])
         real_write(target, job)
 
@@ -55,6 +69,91 @@ def test_detached_runner_uses_real_update_and_rollback_on_throwaway_git(git_inst
     if result == "rolled_back":
         assert "rolling_back" in phases
     assert (git_install["data"] / "state.json").exists()
+    if use_lease:
+        with (path.parent / job_id / "worker.lock").open("r+b") as handle:
+            assert locks.lock(handle, wait=False)
+            locks.unlock(handle)
+
+
+def _prepare_lease(path: Path, job_id: str) -> Path:
+    folder = path.parent / job_id
+    folder.mkdir()
+    (folder / "locks.py").write_bytes(Path(locks.__file__).read_bytes())
+    lease = folder / "worker.lock"
+    lease.write_bytes(b"\0")
+    return lease
+
+
+def _leased_child(path: str, job_id: str, ready, finish, abrupt: bool) -> None:
+    with update_worker.worker_lease(Path(path), {"id": job_id, "lease_version": 1}) as acquired:
+        ready.put(acquired)
+        if not finish.wait(10):
+            raise RuntimeError("test lease holder was not released")
+        if abrupt:
+            os._exit(17)
+
+
+@pytest.mark.parametrize("abrupt", [False, True])
+def test_os_releases_the_worker_lease_after_normal_or_abrupt_process_exit(tmp_path, abrupt):
+    path = tmp_path / "job.json"
+    job_id = "d" * 32
+    lease = _prepare_lease(path, job_id)
+    context = multiprocessing.get_context("spawn")
+    ready, finish = context.Queue(), context.Event()
+    process = context.Process(target=_leased_child, args=(str(path), job_id, ready, finish, abrupt))
+    try:
+        with reaped(process):
+            process.start()
+            assert ready.get(timeout=10) is True
+            with lease.open("r+b") as handle:
+                assert not locks.lock(handle, wait=False)
+            finish.set()
+            process.join(10)
+            assert process.exitcode == (17 if abrupt else 0)
+            with lease.open("r+b") as handle:
+                assert locks.lock(handle, wait=False)
+                locks.unlock(handle)
+    finally:
+        finish.set()
+        ready.close()
+        ready.join_thread()
+
+
+@pytest.mark.parametrize("damage", ["missing", "empty", "module", "syntax", "version"])
+def test_worker_refuses_an_unreadable_lease_before_running_the_updater(tmp_path, damage):
+    path = tmp_path / "job.json"
+    job_id = "e" * 32
+    lease = _prepare_lease(path, job_id)
+    job = {"id": job_id, "status": "queued", "lease_version": 1}
+    if damage == "missing":
+        lease.unlink()
+    elif damage == "empty":
+        lease.write_bytes(b"")
+    elif damage == "module":
+        (lease.parent / "locks.py").unlink()
+    elif damage == "syntax":
+        (lease.parent / "locks.py").write_text("def broken(:\n")
+    else:
+        job["lease_version"] = 2
+    path.write_text(json.dumps(job))
+    assert update_worker.run(tmp_path, path, job_id, "1.22.21", None) == 2
+    assert json.loads(path.read_text())["status"] == "failed"
+    assert json.loads(path.read_text())["error"] == "releases.job_unreadable"
+
+
+def test_second_worker_cannot_take_over_a_held_job_lease(tmp_path):
+    path = tmp_path / "job.json"
+    job_id = "f" * 32
+    lease = _prepare_lease(path, job_id)
+    path.write_text(json.dumps({"id": job_id, "status": "queued", "lease_version": 1}))
+    before = path.read_bytes()
+    with lease.open("r+b") as handle:
+        assert locks.lock(handle, wait=False)
+        try:
+            assert update_worker.run(tmp_path, path, job_id, "1.22.21", None) == 2
+            assert path.read_bytes() == before
+        finally:
+            locks.unlock(handle)
 
 
 def test_worker_never_runs_a_job_that_was_replaced(tmp_path):
