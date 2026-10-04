@@ -3,6 +3,31 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.44] — 2026-10-04
+
+### Fixed
+
+- Apply the job journal's 64 KiB, finite-number and nesting limits in the detached updater,
+  including the initial read, broker entry and lease re-read. Unreadable records are retained
+  without starting installation or escaping with a parser error. Job identifiers cannot select
+  a temporary path; writes validate before an exclusive temporary file, fsync and atomic replace.
+- Require ownership of the worker lease and read back the unchanged queued reservation even
+  to publish a handoff refusal. A late or failed second worker cannot overwrite another worker's
+  job; an unreadable lease never grants permission to publish a terminal result. Refuse a launch
+  target that disagrees with its reservation and handle overflowing handoff dates safely.
+- Verify current state with strict finite JSON and the store's nesting contract before stopping
+  for a web update. Malformed state produces a safe preflight refusal without rewriting data;
+  torrent state is not subject to the small job-size limit. The worker remains standalone and
+  Python 3.11 compatible.
+- Bind every copied-worker entry to the fixed journal next to its own job folder. A foreign
+  journal or identifier is refused before opening the record; relays propagate the derived path,
+  not a command-line-selected filename. Canonicalize the trusted producer's install path;
+  the worker checks supplied names without resolving or inspecting a foreign path. Equivalent
+  absolute paths and install-root aliases remain supported.
+- Validate job dates before status, log and new-update decisions, including terminal records.
+  Overflowing, wrongly typed or undisplayable dates fail closed without rewriting evidence;
+  OS date-conversion failures cannot claim a successful terminal recovery.
+
 ## [1.22.43] — 2026-10-04
 
 ### Fixed

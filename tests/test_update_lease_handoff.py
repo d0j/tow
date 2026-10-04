@@ -192,13 +192,25 @@ def test_real_status_reader_cannot_abort_the_first_worker_acquisition(tmp_path, 
     assert (path.read_bytes(), lease.read_bytes()) == before
 
 
-@pytest.mark.parametrize("started_at", [True, "100", float("nan"), float("inf"), -float("inf"), 101, 70, 69])
-def test_invalid_or_expired_handoff_does_not_acquire_the_lease(tmp_path, monkeypatch, started_at):
+@pytest.mark.parametrize("started_at", [True, "100", 101, 70, 69])
+def test_invalid_or_expired_handoff_claims_lease_only_to_publish_refusal(tmp_path, monkeypatch, started_at):
     path, job, _lease = _job(tmp_path, started_at=started_at)
-    _elapsed, sleeps, unlocks = _fake_lease(
-        monkeypatch, lambda handle, *, wait: pytest.fail("refused handoff must not take the lease")
-    )
+    _elapsed, sleeps, unlocks = _fake_lease(monkeypatch, lambda handle, *, wait: True)
+    monkeypatch.setattr(update_worker, "_run", lambda *args: pytest.fail("refused handoff must not install"))
     assert update_worker.run(tmp_path, path, job["id"], "1.22.35", None) == 2
     assert json.loads(path.read_text())["error"] == "releases.interrupted"
+    assert sleeps == []
+    assert unlocks == [False]
+
+
+@pytest.mark.parametrize("started_at", [float("nan"), float("inf"), -float("inf")])
+def test_nonfinite_record_is_preserved_without_acquiring_lease(tmp_path, monkeypatch, started_at):
+    path, job, _lease = _job(tmp_path, started_at=started_at)
+    before = path.read_bytes()
+    _elapsed, sleeps, unlocks = _fake_lease(
+        monkeypatch, lambda handle, *, wait: pytest.fail("unreadable record cannot grant ownership")
+    )
+    assert update_worker.run(tmp_path, path, job["id"], "1.22.35", None) == 2
+    assert path.read_bytes() == before
     assert sleeps == []
     assert unlocks == []

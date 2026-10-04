@@ -508,6 +508,55 @@ def test_nonfinite_journal_is_never_treated_as_a_running_job(install):
         web_update.status()
 
 
+@pytest.mark.parametrize("phase", ["queued", "failed", "ok"])
+@pytest.mark.parametrize("field", ["started_at", "finished_at"])
+@pytest.mark.parametrize(
+    "value",
+    [10**1000, 1e300, -1, True, "1", [], {}],
+    ids=["integer-overflow", "calendar-overflow", "negative", "boolean", "string", "list", "object"],
+)
+def test_invalid_job_dates_fail_closed_without_rewriting_evidence(install, monkeypatch, phase, field, value):
+    web_update.start("1.22.21")
+    path = install[0] / "runtime" / "web-update" / "job.json"
+    job = json.loads(path.read_text())
+    job.update(status=phase)
+    job[field] = value
+    path.write_text(json.dumps(job))
+    before = path.read_bytes()
+    monkeypatch.setattr(services, "web_update_status", web_update.status)
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+
+    for action in (web_update.status, web_update.log_tail, lambda: web_update.start("1.22.22")):
+        with pytest.raises(web_update.WebUpdateError, match=r"releases\.job_unreadable"):
+            action()
+    assert client.get("/updates/status").status_code == 503
+    assert client.post("/settings/service/restart").status_code == 503
+    assert client.get("/healthz").status_code == 200
+    assert path.read_bytes() == before
+    assert len(install[1]) == 1
+
+
+def test_os_date_conversion_failure_never_claims_terminal_recovery(install, monkeypatch):
+    web_update.start("1.22.21")
+    path = install[0] / "runtime" / "web-update" / "job.json"
+    job = json.loads(path.read_text())
+    job.update(status="failed")
+    path.write_text(json.dumps(job))
+    before = path.read_bytes()
+    (install[0] / "update-state.json").write_text(json.dumps({"finished_at": "synthetic-os-date"}))
+
+    def unsupported_timestamp():
+        raise OSError("synthetic calendar conversion failure")
+
+    monkeypatch.setattr(
+        web_update,
+        "datetime",
+        SimpleNamespace(fromisoformat=lambda _value: SimpleNamespace(tzinfo=UTC, timestamp=unsupported_timestamp)),
+    )
+    assert web_update.status()["status"] == "failed"
+    assert path.read_bytes() == before
+
+
 def test_old_success_does_not_claim_another_version_is_installed(install):
     web_update.start("1.22.21")
     path = install[0] / "runtime" / "web-update" / "job.json"

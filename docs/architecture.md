@@ -107,6 +107,18 @@ The detached update worker holds its per-job OS lease throughout the installatio
 retries nonblocking calls for at most one second on a monotonic clock, so a brief status probe does not abort
 the handoff. After acquisition it re-reads the unchanged queued job and checks its 30-second handoff expiry
 again before starting. A busy lease never grants ownership or permission to overwrite another worker's result.
+The copied Python 3.11 worker enforces the job journal's 64 KiB, finite-number and nesting
+limits independently of the replaceable app. Even a handoff refusal takes the lease and
+re-reads the unchanged queued reservation before publishing a result. Damaged records or
+leases are retained, not reconstructed or turned into terminal results without ownership.
+Journal writes validate before an exclusive temporary file, fsync and atomic replace;
+current-state schema preflight uses strict JSON without the small job-size cap.
+Every worker entry binds its journal and nonce to the copied script's own job folder;
+relays use the derived path, not the supplied filename, after checking path equivalence.
+The trusted producer resolves the install path; the worker's supplied-name check is lexical
+and does not inspect a foreign path. Install-root aliases therefore remain supported.
+The app validates displayable job timestamps for every phase before status, log or launch
+decisions; unreadable dates fail closed without modifying the journal.
 
 ## Recovery
 
