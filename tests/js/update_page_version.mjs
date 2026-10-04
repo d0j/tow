@@ -2,7 +2,39 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
-const scenario = JSON.parse(process.argv[2]);
+// The argument selects a checked-in fixture; it never supplies values to the VM.
+const fixtures = new Map([
+  ["old-success", { page: "1.22.29", current: "1.22.30", target: "1.22.30", status: "ok", reload: true, key: "js.releases.ok" }],
+  ["current-success", { page: "1.22.30", current: "1.22.30", target: "1.22.30", status: "ok", reload: false, key: "js.releases.ok_current" }],
+  ["empty-page", { page: "", current: "1.22.30", target: "1.22.30", status: "ok", reload: true, key: "js.releases.ok" }],
+  ["legacy-old", { page: "1.22.29", current: "", target: "1.22.30", status: "ok", reload: true, key: "js.releases.ok" }],
+  ["legacy-current", { page: "1.22.30", current: "", target: "1.22.30", status: "ok", reload: false, key: "js.releases.ok_current" }],
+  ["rollback-old", { page: "1.22.30", current: "1.22.29", target: "1.22.30", status: "rolled_back", reload: true, key: "js.releases.rolled_back" }],
+  ["rollback-current", { page: "1.22.29", current: "1.22.29", target: "1.22.30", status: "rolled_back", reload: false, key: "js.releases.rolled_back" }],
+  ["rollback-unknown", { page: "1.22.30", current: "", target: "1.22.30", status: "rolled_back", reload: false, key: "js.releases.rolled_back" }],
+  ["recovered-old", { page: "1.22.29", current: "1.22.30", target: "1.22.30", status: "recovered", reload: true, key: "js.releases.recovered" }],
+  ["recovered-current", { page: "1.22.30", current: "1.22.30", target: "1.22.30", status: "recovered", reload: false, key: "js.releases.recovered" }],
+  ["superseded-old", { page: "1.22.31", current: "1.22.30", target: "1.22.29", status: "superseded", reload: true, key: "js.releases.superseded" }],
+  ["superseded-current", { page: "1.22.30", current: "1.22.30", target: "1.22.29", status: "superseded", reload: false, key: "js.releases.superseded" }],
+  ["failed-current", { page: "1.22.29", current: "1.22.29", target: "1.22.30", status: "failed", reload: false, key: "js.releases.failed" }],
+  ["failed-old", { page: "1.22.29", current: "1.22.30", target: "1.22.30", status: "failed", reload: true, key: "js.releases.failed" }],
+  ["refused-current", { page: "1.22.29", current: "1.22.29", target: "1.22.30", status: "refused", reload: false, key: "js.releases.refused" }],
+  ["interrupted-old", { page: "1.22.29", current: "1.22.30", target: "1.22.30", status: "interrupted", reload: true, key: "js.releases.interrupted" }],
+  ["idle-old", { page: "1.22.29", current: "1.22.30", target: "1.22.30", status: "idle", reload: true }],
+  ["idle-current", { page: "1.22.30", current: "1.22.30", target: "1.22.30", status: "idle", reload: false }],
+  ["active-preparing", { status: "preparing", active: true, reload: false, key: "js.releases.preparing" }],
+  ["active-checking", { status: "checking", active: true, reload: false, key: "js.releases.phase_checking" }],
+  ["active-rollback", { status: "rolling_back", active: true, reload: false, key: "js.releases.rolling_back" }],
+  ["retained-error", { status: "failed", reload: true, error: "Retained failure details" }],
+  ["missing-marker", { status: "ok", reload: true, key: "js.releases.ok", noMarker: true }],
+  ["null-current", { status: "ok", current: null, reload: true, key: "js.releases.ok" }],
+  ["boolean-current", { status: "ok", current: true, reload: true, key: "js.releases.ok" }],
+  ["number-current", { status: "ok", current: 123, reload: true, key: "js.releases.ok" }],
+  ["rollback-null-current", { status: "rolled_back", current: null, reload: false, key: "js.releases.rolled_back" }],
+]);
+const selected = fixtures.get(process.argv[2]);
+assert.ok(selected, "Unknown fixture name");
+const scenario = { page: "1.22.29", current: "1.22.30", target: "1.22.30", mutate: true, ...selected };
 const source = readFileSync(new URL("../../src/tow/static/updates.js", import.meta.url), "utf8");
 const elements = new Map();
 for (const name of ["release-badge", "release-status", "update-progress", "update-support", "update-reload", "update-log", "update-log-text"]) {
