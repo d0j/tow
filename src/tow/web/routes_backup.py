@@ -31,6 +31,13 @@ def _backup_redirect(message: Any, kind: str = "ok", /, **params: Any) -> Redire
     return flash_redirect("/settings?open=transfer", message, kind, **params)
 
 
+def _restore_outcome(key: str, result: dict[str, Any]) -> tuple[str, str]:
+    message = t(key)
+    if result.get("log_recorded") is False:
+        return f"{message}; {t('web.settings.audit_missing')}", "warn"
+    return message, "ok"
+
+
 @router.post("/settings/backup/location")
 @services.locked_state_mutation
 def settings_backup_location(kind: str = Form(""), path: str = Form(""), action: str = Form("save")) -> Response:
@@ -123,7 +130,7 @@ def settings_restore_point_apply(point_id: str) -> Response:
         how="manual",
     )
     # A restored check interval needs nothing more: `tow run` reads it from the config.
-    return flash_redirect("/settings?open=transfer", "web.settings.restored", "ok")
+    return _backup_redirect(*_restore_outcome("web.settings.restored", result))
 
 
 @router.post("/settings/portable/export")
@@ -183,7 +190,7 @@ async def settings_portable_import(
                 status="restored",
                 how="manual",
             )
-            flash, kind = t("web.settings.restored_file"), "ok"
+            flash, kind = _restore_outcome("web.settings.restored_file", result)
     except (OSError, RestorePointError) as exc:
         services.log_event(
             "settings_portable_import_fail",

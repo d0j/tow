@@ -327,7 +327,7 @@ def _rotate_if_needed(path: Path) -> None:
     path.replace(path.with_name(f"{path.name}.1"))
 
 
-def log_event(kind: str, **fields: Any) -> None:
+def log_event(kind: str, **fields: Any) -> bool:
     ts = iso_now()
     rec = {
         "ts": ts,
@@ -349,6 +349,8 @@ def log_event(kind: str, **fields: Any) -> None:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     except OSError as exc:
         print(f"TOW log write failed ({kind}): {type(exc).__name__}", file=sys.stderr)
+        return False
+    return True
 
 
 def read_events(*, limit: int = 80) -> list[dict[str, Any]]:
