@@ -3,6 +3,19 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.33] — 2026-10-04
+
+### Fixed
+
+- Report only confirmed removals of old night and safety copies. A held file, partial deletion or unreadable
+  outcome leaves a cleanup warning instead of claiming success; a verified new copy remains usable and a
+  committed restore is not rolled back because cleanup failed.
+- Retain ownership manifests/journals until the final directory removal and preserve them after a held
+  directory so cleanup can be retried. Never sweep up foreign files, links, junctions or unfinished restores.
+- Show pending night-copy cleanup in the collapsed Settings summary and card, localized copy/restore results,
+  CLI output and a labelled history event; clear the night warning after successful cleanup. Messenger
+  alerts report cleanup pending and completion once per change, without calling a usable copy a failure.
+
 ## [1.22.32] — 2026-10-04
 
 ### Fixed

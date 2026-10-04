@@ -86,7 +86,9 @@ def settings_backup_now() -> Response:
     message = t("web.backup.copy_made", name=result["snapshot"], size=format_bytes(result["bytes"]))
     if result.get("missing"):
         message += t("web.backup.copy_missing", names=", ".join(result["missing"]))
-    return _backup_redirect(message, "warn" if result.get("missing") else "ok")
+    if result.get("cleanup_warning"):
+        message += f" · {t('backup.snapshot.cleanup_warning')}"
+    return _backup_redirect(message, "warn" if result.get("missing") or result.get("cleanup_warning") else "ok")
 
 
 @router.post("/settings/backup/night/{name}/restore")
@@ -98,7 +100,10 @@ def settings_backup_restore(name: str) -> Response:
         result = restore_snapshot(snapshot_path(name), apply=True)
     except SnapshotError as exc:
         return _backup_redirect("web.backup.restore_failed", "err", error=exc)
-    return _backup_redirect(t("web.backup.restored", name=name, path=result["safety_copy"]))
+    message = t("web.backup.restored", name=name, path=result["safety_copy"])
+    if result.get("cleanup_warning"):
+        return _backup_redirect(f"{message} · {t('backup.snapshot.restore_cleanup_warning')}", "warn")
+    return _backup_redirect(message)
 
 
 @router.post("/settings/restore-points")

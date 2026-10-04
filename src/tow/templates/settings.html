@@ -415,7 +415,7 @@
     <details class="settings-section settings-accordion acc" id="acc-transfer" data-q="{{ t('settings.backups.q') }}">
       <summary>
         <span id="settings-transfer-title" class="settings-summary-title">{{ t('settings.backups.title') }}</span>
-        <span class="pill {{ 'bad' if backups.failed else ('ok' if backups.last_ok else 'mut') }}">{% if backups.failed %}{{ t('settings.backups.pill_failed') }}{% elif backups.last_ok %}{{ t('settings.backups.pill_last', at=backups.last_ok) }}{% else %}{{ t('settings.backups.pill_none') }}{% endif %}</span>
+        <span class="pill {{ 'bad' if backups.failed else ('warn' if backups.cleanup_pending else ('ok' if backups.last_ok else 'mut')) }}">{% if backups.failed %}{{ t('settings.backups.pill_failed') }}{% elif backups.cleanup_pending %}{{ t('settings.backups.pill_cleanup') }}{% elif backups.last_ok %}{{ t('settings.backups.pill_last', at=backups.last_ok) }}{% else %}{{ t('settings.backups.pill_none') }}{% endif %}</span>
       </summary>
       <div class="settings-panel">
         {# L6: three ways to keep TOW safe, one card each: night copies, copies made by hand, a TOW file. #}
@@ -441,6 +441,7 @@
               <div><h2 id="backup-night-title">{{ t('settings.backups.night_title') }}</h2><p>{{ t('settings.backups.night_hint') }}</p></div>
             </div>
             {% if backups.failed %}<p class="form-error" role="alert">{{ t('settings.backups.failed', at=backups.error_at, error=backups.error) }}</p>{% endif %}
+            {% if backups.cleanup_pending %}<p class="section-note" role="status">{{ t('backup.snapshot.cleanup_warning') }}</p>{% endif %}
             <form method="post" action="/settings/backup/now" data-return-target="acc-transfer" class="settings-actions backup-make">
               <button type="submit">{{ t('settings.backups.make_now') }}</button>
             </form>

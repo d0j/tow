@@ -42,6 +42,8 @@
   "backup": {
     "snapshot": {
       "inside_data": "the night copies folder must be outside the TOW data folder",
+      "cleanup_warning": "The new copy is saved and verified, but cleanup of old copies is incomplete. Check folder access and files held by other programs; TOW will try again at the next copy.",
+      "restore_cleanup_warning": "The data is restored, but cleanup of safety copies is incomplete. Check folder access and files held by other programs; the next restore will try again.",
       "unknown": "unknown night copy",
       "cannot_write": "cannot write the night copy: {reason}",
       "manifest_unreadable": "the copy's file list (MANIFEST.json) is missing or unreadable",
@@ -873,6 +875,10 @@
     "other_system_config": "{key}: {value} in config.yaml is a folder of another system (for {title}); TOW does not create it inside its folder. Choose a folder of this computer in Settings (or remove {key} from config.yaml for the default one)"
   },
   "log": {
+    "cleanup": {
+      "night": "night copies",
+      "safety": "safety copies before a restore"
+    },
     "how": {
       "manual": "manual",
       "auto": "auto"
@@ -969,6 +975,7 @@
       "settings_undo_cleanup_fail": "undo: cleanup failed",
       "settings_undo_cleanup_marker_fail": "undo: cleanup not recorded",
       "backup_created": "night copy made",
+      "backup_cleanup_pending": "old backup cleanup incomplete",
       "backup_failed": "night copy failed",
       "backup_restored": "night copy restored",
       "browser_auth": "browser sign-in",
@@ -1367,6 +1374,7 @@
       "q": "backups transfer export / import towx",
       "title": "Backups",
       "pill_failed": "Backup failed",
+      "pill_cleanup": "Cleanup pending",
       "pill_last": "Nightly backup {at}",
       "pill_none": "No nightly backups",
       "night_title": "Nightly backups",
@@ -1569,6 +1577,8 @@
       "down": "TOW is unreachable: {cause}",
       "backup_failing": "TOW: {problem} — check the backup folder in Settings → Backups",
       "backup_ok": "TOW: night copies are being made again",
+      "backup_cleanup_pending": "TOW: the night copy is saved, but cleanup of old copies is incomplete. Check backup folder access and files held by other programs; the next copy will retry cleanup.",
+      "backup_cleanup_ok": "TOW: cleanup of old night copies is complete",
       "was_down_for": " (was down for {duration})",
       "up_again": "TOW works again",
       "checks_late": "TOW: scheduled checks have not run since {since}",

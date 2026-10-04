@@ -256,6 +256,7 @@ def _backups(p: _Pass) -> None:
     failed = isinstance(failed_at, (int, float)) and (not last_ok or failed_at > last_ok)
     stale = p.now() - float(last_ok if last_ok else since) > BACKUP_STALE_SEC
     p.report["backup_ok"] = not failed and not stale
+    p.report["backup_cleanup_pending"] = st.get("last_cleanup_pending") is True
     if failed:
         reason = st.get("last_error") or t("watchdog.backup.unknown_reason", p.lang)
         p.backup_why = t("watchdog.backup.failed", p.lang, error=reason)
@@ -304,6 +305,12 @@ def _change_alerts(p: _Pass, current: dict[str, bool]) -> None:
                 t("watchdog.alert.backup_failing", p.lang, problem=p.backup_why)
                 if not ok
                 else t("watchdog.alert.backup_ok", p.lang)
+            )
+        elif key == "backup_cleanup":
+            report["alerts"].append(
+                t("watchdog.alert.backup_cleanup_pending", p.lang)
+                if not ok
+                else t("watchdog.alert.backup_cleanup_ok", p.lang)
             )
         elif key == "service":
             down_since = previous.get("down_since")
@@ -389,7 +396,12 @@ def run_watchdog(
     wakes = [ts for ts in (_wake_ts(p, machine), wake_ts) if ts is not None]
     _checks(p, interval, load_state(), wake_ts=max(wakes) if wakes else None)
     _backups(p)
-    current = {"service": report["service_ok"], "checks": report["checks_ok"], "backup": report["backup_ok"]}
+    current = {
+        "service": report["service_ok"],
+        "checks": report["checks_ok"],
+        "backup": report["backup_ok"],
+        "backup_cleanup": not report["backup_cleanup_pending"],
+    }
     if report.get("skipped"):
         current["service"] = previous.get("service", True)  # a deploy is not an outage
     _outage(p, probes, machine)
