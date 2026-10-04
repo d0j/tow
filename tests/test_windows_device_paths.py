@@ -34,8 +34,7 @@ def test_standalone_folder_policy_rejects_namespace_before_filesystem_lookup(pre
     path = prefix + "C:/Windows/tow-fixture"
     assert folders.protected_kind(path) == "windows"
     assert folders.is_protected_folder(path)
-    assert folders.save_path_policy_problem(path, local=True, allowed_roots=[path]) is not None
-    assert folders.save_path_policy_problem(path, local=False, allowed_roots=[path]) is not None
+    assert folders.save_path_policy_problem(path) is not None
 
 
 @pytest.mark.parametrize("prefix", PREFIXES)

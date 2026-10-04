@@ -1545,7 +1545,7 @@ def test_add_cdn_becomes_rutor_topic(monkeypatch):
     t = load_state()["topics"][-1]
     assert t["url"] == "http://rutor.info/torrent/1234568"
     assert t["save_path"] == r"M:\TV\Show"
-    assert load_state()["save_roots"] == [r"M:\TV"]
+    assert load_state()["save_roots"] == [r"M:\TV\Show"]
 
 
 def test_add_empty_path_uses_last_root(monkeypatch):
@@ -1563,7 +1563,7 @@ def test_add_empty_path_uses_last_root(monkeypatch):
     )
     assert r.status_code == 303
     assert "укажи" not in (r.headers.get("location") or "")
-    assert load_state()["topics"][-1]["save_path"] == r"M:\TV"
+    assert load_state()["topics"][-1]["save_path"] == r"M:\TV\Show"
 
 
 def test_add_empty_path_without_history(monkeypatch):

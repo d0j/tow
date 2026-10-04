@@ -3,6 +3,17 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.50] — 2026-10-04
+
+### Fixed
+
+- Choose new download folders from any signed-in owner device, not only the TOW computer.
+  Protected system folders, invalid paths and the existing network-share switch remain guarded.
+- The folder arrow shows the last ten used folders without filtering by the current input.
+  Remember full paths, newest first, with keyboard selection and the same picker in topic editing.
+- Cancel a refused topic or site add by returning to the clean page; refreshing no longer
+  reopens the cancelled draft. This also works without JavaScript.
+
 ## [1.22.49] — 2026-10-04
 
 ### Fixed

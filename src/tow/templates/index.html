@@ -26,7 +26,7 @@
     <input id="topic-url" name="url" required placeholder="https://…" value="{{ draft.get('url', '') }}" inputmode="url"{{ invalid('topic-url', bad_field) }}>
     <div class="row row-two">
       <div><label for="topic-title">{{ t('home.add.name') }}</label><input id="topic-title" name="title" placeholder="{{ t('home.add.name_placeholder') }}" value="{{ draft.get('title', '') }}"><span id="guess-msg" class="field-hint" aria-live="polite"></span></div>
-      <div><label for="topic-save-path">{{ t('home.add.folder') }}</label><input id="topic-save-path" name="save_path" list="save-roots" value="{{ draft.get('save_path') or (save_roots[0] if save_roots else '') }}" placeholder="{{ os_example_folder() }}" autocomplete="off"{{ invalid('topic-save-path', bad_field) }}></div>
+      <div><label for="topic-save-path">{{ t('home.add.folder') }}</label><div class="folder-input"><input id="topic-save-path" name="save_path" list="save-roots" value="{{ draft.get('save_path') or (save_roots[0] if save_roots else '') }}" placeholder="{{ os_example_folder() }}" autocomplete="off"{{ invalid('topic-save-path', bad_field) }}><button type="button" class="ghost ico folder-toggle" data-save-folders aria-label="{{ t('home.add.recent_folders') }}" tabindex="-1" hidden><span aria-hidden="true">▾</span></button></div></div>
     </div>
     <label for="topic-client">{{ t('home.add.client') }}</label>
     <select id="topic-client" name="client_id" required{{ invalid('topic-client', bad_field) }}>
@@ -59,7 +59,7 @@
     <p class="field-hint busy-note" data-busy-note role="status" hidden>{{ t('home.add.checking_note') }}</p>
     <div class="actions">
       <button type="submit" data-busy-label="{{ t('home.add.checking') }}">{{ t('home.add.submit') }}</button>
-      <button type="button" class="ghost" data-close-details formnovalidate>{{ t('home.cancel') }}</button>
+      <a class="btn ghost" href="/">{{ t('home.cancel') }}</a>
     </div>
   </form>
 </details>

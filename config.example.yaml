@@ -20,9 +20,8 @@ interval_sec: 3600
 # user_agent: Mozilla/5.0 (...)
 
 # --- download folders --------------------------------------------------------------------
-# Folders a device on the network may choose for downloads, besides those already in use
-# (on this PC any folder may be chosen).
-# allowed_save_roots: ['D:\Media', /srv/media]
+# Every signed-in owner device may choose a new absolute download folder.
+# System folders are still refused. Legacy allowed_save_roots is accepted but no longer restricts access.
 # Allow network folders (\\server\share) as download folders: the torrent client then
 # connects to that server with its own account.
 # allow_unc_save_paths: false

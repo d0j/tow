@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from helpers import flash_kind, flash_of
 
-from tow.folders import allowed_save_roots, save_path_policy_problem
+from tow.folders import save_path_policy_problem
 from tow.web import app
 
 LAN = ("192.168.1.7", 50000)
@@ -155,7 +155,7 @@ def test_system_folders_are_never_a_download_target(path, monkeypatch):
     monkeypatch.setenv("ProgramData", r"C:\ProgramData")
     monkeypatch.setenv("USERPROFILE", r"C:\Users\user")
     monkeypatch.setenv("APPDATA", r"C:\Users\user\AppData\Roaming")
-    problem = save_path_policy_problem(path, local=True, allowed_roots=[])
+    problem = save_path_policy_problem(path)
     assert problem is not None
     assert "AppData" in problem
 
@@ -181,7 +181,7 @@ def windows_profile(monkeypatch):
     ],
 )
 def test_names_windows_reads_as_another_folder_are_refused(path, windows_profile):
-    problem = save_path_policy_problem(path, local=True, allowed_roots=[])
+    problem = save_path_policy_problem(path)
     assert problem is not None
     assert problem.startswith("имя папки «")
 
@@ -195,7 +195,7 @@ def test_backup_folders_follow_the_same_rule(path, windows_profile):
 
 @pytest.mark.parametrize("path", [r"D:\Media\Show", r"M:\TV\Show S01", r"D:\Фильмы\2024.10 Season", "/downloads/tv"])
 def test_ordinary_folders_still_pass(path, windows_profile):
-    assert save_path_policy_problem(path, local=True, allowed_roots=[]) is None
+    assert save_path_policy_problem(path) is None
 
 
 def test_a_link_into_appdata_is_judged_by_where_it_really_leads(tmp_path, monkeypatch):
@@ -216,36 +216,37 @@ def test_a_link_into_appdata_is_judged_by_where_it_really_leads(tmp_path, monkey
     else:
         os.symlink(profile / "AppData", link)
 
-    problem = save_path_policy_problem(str(link / "Roaming" / "Startup"), local=True, allowed_roots=[])
+    problem = save_path_policy_problem(str(link / "Roaming" / "Startup"))
 
     assert problem is not None
     assert "AppData" in problem
-    assert save_path_policy_problem(str(tmp_path / "media" / "Show"), local=True, allowed_roots=[]) is None
+    assert save_path_policy_problem(str(tmp_path / "media" / "Show")) is None
 
 
 # "/ETC/x" is /etc only where case is ignored (macOS, and from Windows): tests/test_folders.py.
 @pytest.mark.parametrize("path", ["/etc/cron.d", "/usr/local/bin/x", "/System/Library/x"])
 def test_posix_system_folders_are_never_a_download_target(path):
-    problem = save_path_policy_problem(path, local=True, allowed_roots=[])
+    problem = save_path_policy_problem(path)
     assert problem is not None
     assert "/etc" in problem
 
 
-def test_from_the_network_only_folders_already_in_use():
-    state = {"topics": [{"save_path": r"M:\TV\Show"}], "save_roots": [r"D:\Films"]}
-    roots = allowed_save_roots(state, {"allowed_save_roots": [r"\\nas\media"]})
-    assert roots == [r"\\nas\media", r"D:\Films", r"M:\TV"]
-    assert save_path_policy_problem(r"M:\TV\New", local=False, allowed_roots=roots) is None
-    assert save_path_policy_problem(r"M:\TV", local=False, allowed_roots=roots) is None
-    refused = save_path_policy_problem(r"E:\other", local=False, allowed_roots=roots)
-    assert refused is not None
-    assert "новую папку укажите на компьютере с TOW" in refused
-    assert save_path_policy_problem(r"E:\other", local=True, allowed_roots=roots) is None  # on this PC: fine
+@pytest.mark.parametrize("path", [r"M:\TV\New", r"E:\other", "/srv/media/new"])
+def test_history_is_not_a_download_folder_allowlist(path):
+    assert save_path_policy_problem(path) is None
 
 
-def test_adding_a_topic_from_the_network_cannot_pick_a_new_folder(lan_config, monkeypatch):
+def test_adding_a_topic_from_the_network_can_pick_a_new_folder(monkeypatch):
     from tow.auth import issue_session
-    from tow.store import save_state
+    from tow.config import load_config, save_config
+    from tow.store import load_state, save_state
+
+    cfg = load_config()
+    cfg.update(bind="0.0.0.0", allow_lan=True)
+    save_config(cfg)
+    monkeypatch.setenv("TOW_LAN_AUTH_TOKEN", "t" * 32)
+    monkeypatch.setattr("tow.web.services.run_check", lambda **kw: {"qbit": "ok", "results": []})
+    monkeypatch.setattr("tow.title.guess_topic_title", lambda *args, **kw: "Synthetic series")
 
     save_state({"topics": [{"id": "a", "url": "http://rutor.info/torrent/1/x", "save_path": r"M:\TV"}]})
     lan = TestClient(
@@ -256,10 +257,10 @@ def test_adding_a_topic_from_the_network_cannot_pick_a_new_folder(lan_config, mo
         data={"url": "http://rutor.info/torrent/2/y", "title": "Y", "save_path": r"E:\Startup-ish"},
         follow_redirects=False,
     )
-    assert response.status_code in (200, 303)
-    from tow.store import load_state
-
-    assert [t["id"] for t in load_state()["topics"]] == ["a"]  # refused
+    assert response.status_code == 303
+    assert len(load_state()["topics"]) == 2
+    assert load_state()["topics"][-1]["save_path"] == r"E:\Startup-ish"
+    assert load_state()["save_roots"][0] == r"E:\Startup-ish"
 
 
 def test_names_resolving_to_internal_addresses_count_as_internal(monkeypatch):
