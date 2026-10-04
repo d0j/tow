@@ -13,6 +13,14 @@ comparing these paths only with ordinary protected-folder names is not sufficien
 on every OS, since a remote client can run on Windows. Ordinary local paths, relative backup folders
 and explicitly enabled client network shares are unaffected.
 
+Backup folders also refuse drive-relative Windows forms such as `D:copies` and `D:` on every OS.
+Unlike `D:\copies`, these depend on the drive's current directory, as described by
+[Microsoft's path-format guidance](https://learn.microsoft.com/en-us/dotnet/standard/io/file-path-formats).
+Joining such a path to an install on a different drive does not make it absolute. Use a full drive
+path, or an ordinary relative folder such as `copies/daily` (relative to the TOW install). Paths
+already stored in settings are checked again before backup/restore-point use; no folder is probed
+or created for the refused form.
+
 ```
 <TOW>/                      the install root (movable, any drive, any OS)
   app/                      the code: a git clone at a release tag, or a release's source archive
