@@ -95,6 +95,11 @@ flowchart TD
 or `data/` next to it; else the development checkout itself. Nothing is written outside the install except the
 autostart entry, and that only on request.
 
+The detached update worker holds its per-job OS lease throughout the installation. Its initial acquisition
+retries nonblocking calls for at most one second on a monotonic clock, so a brief status probe does not abort
+the handoff. After acquisition it re-reads the unchanged queued job and checks its 30-second handoff expiry
+again before starting. A busy lease never grants ownership or permission to overwrite another worker's result.
+
 ## Recovery
 
 Every multi-file write is journaled; whichever TOW process next takes the data lock (`persistence_lock`) runs the

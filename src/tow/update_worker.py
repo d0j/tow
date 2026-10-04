@@ -18,6 +18,9 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+_LEASE_WAIT = 1.0
+_LEASE_POLL = 0.05
+
 
 def write_job(path: Path, job: dict[str, Any]) -> None:
     temporary = path.with_name(f".{job['id']}.tmp")
@@ -45,12 +48,16 @@ def schema_preflight(work: Any, error: Any) -> None:
             raise error("target version cannot read current data")
 
 
+def _handoff_expired(job: dict[str, Any]) -> bool:
+    started = job.get("started_at")
+    return started is not None and (type(started) not in {int, float} or not 0 <= time.time() - started < 30)
+
+
 def run(app: Path, job_path: Path, job_id: str, version: str, updater: Any) -> int:
     job = json.loads(job_path.read_text(encoding="utf-8"))
     if job.get("id") != job_id or job.get("status") != "queued":
         return 2
-    started = job.get("started_at")
-    if started is not None and (type(started) not in {int, float} or not 0 <= time.time() - started < 30):
+    if _handoff_expired(job):
         return refuse_handoff(job_path, job_id, "releases.interrupted")
     try:
         with worker_lease(job_path, job) as acquired:
@@ -60,6 +67,8 @@ def run(app: Path, job_path: Path, job_id: str, version: str, updater: Any) -> i
             latest = json.loads(job_path.read_text(encoding="utf-8"))
             if latest.get("id") != job_id or latest.get("status") != "queued" or latest != job:
                 return 2
+            if _handoff_expired(latest):
+                return refuse_handoff(job_path, job_id, "releases.interrupted")
             return _run(app, job_path, job, version, updater)
     except (OSError, ValueError, ImportError, SyntaxError):
         return refuse_handoff(job_path, job_id, "releases.job_unreadable")
@@ -94,7 +103,16 @@ def worker_lease(path: Path, job: dict[str, Any]) -> Iterator[bool]:
     locks = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(locks)
     with (folder / "worker.lock").open("r+b") as handle:
+        deadline = time.monotonic() + _LEASE_WAIT
         acquired = locks.lock(handle, wait=False)
+        while not acquired:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            # A status read briefly takes this same byte. Do not abandon the
+            # handoff for that probe, or block indefinitely behind a real worker.
+            time.sleep(min(_LEASE_POLL, remaining))
+            acquired = locks.lock(handle, wait=False)
         try:
             yield acquired
         finally:
