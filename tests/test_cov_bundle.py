@@ -8,6 +8,7 @@ contract and the error a user sees for a damaged, tampered or unsafe bundle.
 from __future__ import annotations
 
 import base64
+import codecs
 import functools
 import hashlib
 import io
@@ -229,6 +230,145 @@ def _rejects(tmp_path, bundle: Path, match: str, **kwargs) -> None:
     with pytest.raises(ExportImportError, match=match):
         import_bundle(bundle, kwargs.pop("passphrase", PASS), apply=True, **kwargs)
     _assert_untouched(before)
+
+
+CONFIG_ENCODINGS = [
+    ("utf-8", b""),
+    ("utf-8", codecs.BOM_UTF8),
+    ("utf-16-le", b""),
+    ("utf-16-le", codecs.BOM_UTF16_LE),
+    ("utf-16-be", b""),
+    ("utf-16-be", codecs.BOM_UTF16_BE),
+    ("utf-32-le", b""),
+    ("utf-32-le", codecs.BOM_UTF32_LE),
+    ("utf-32-be", b""),
+    ("utf-32-be", codecs.BOM_UTF32_BE),
+]
+
+
+@pytest.mark.parametrize(("codec", "bom"), CONFIG_ENCODINGS)
+def test_import_commits_a_config_the_runtime_can_read(tmp_path, codec, bom):
+    from tow.config import load_config
+
+    before = _seed_destination()
+    text = "# Keep комментарий\r\nbind: 127.0.0.1\r\nport: 8787\r\nextra: &a {x: '例😀\ufeff'}\r\ncopy: {<<: *a}\r\n"
+    source = bom + text.encode(codec)
+    archive = _bundle(tmp_path / "in" / "unicode.towx", _members(config_yaml=source))
+    archive_bytes = archive.read_bytes()
+    tow_bundle.verify_bundle(archive, PASS)
+    preview = import_bundle(archive, PASS)
+    assert preview["committed"] is False
+    _assert_untouched(before)
+    result = import_bundle(archive, PASS, apply=True)
+    assert result["committed"] is True
+    assert config_path().read_bytes() == (source if codec == "utf-8" else text.encode("utf-8"))
+    assert load_config()["port"] == 8787
+    assert load_config()["copy"] == {"x": "例😀\ufeff"}
+    assert load_secrets() == BASE_SECRETS
+    assert archive.read_bytes() == archive_bytes
+    assert _open_bundle(archive)["config.yaml"] == source
+    rollback_import(Path(result["checkpoint"]), apply=True)
+    assert _targets() == before
+
+
+@pytest.mark.parametrize(("codec", "bom"), CONFIG_ENCODINGS)
+def test_export_normalizes_only_archive_config_not_source_files(tmp_path, codec, bom):
+    _seed_destination()
+    text = "# Keep this comment\r\nbind: 127.0.0.1\r\nport: 8787\r\n"
+    source = bom + text.encode(codec)
+    config_path().write_bytes(source)
+    before = _targets()
+    output = tmp_path / "out" / "unicode.towx"
+    result = export_bundle(output, PASS)
+    assert result["source_mutation"] is False
+    assert _open_bundle(output)["config.yaml"] == (source if codec == "utf-8" else text.encode("utf-8"))
+    tow_bundle.verify_bundle(output, PASS)
+    _assert_untouched(before)
+
+
+@pytest.mark.parametrize("action", ["verify", "preview", "apply"])
+@pytest.mark.parametrize(
+    "source",
+    [
+        b"\xff",
+        b"\xef\xbb",
+        b"\xff\xfea",
+        b"\xfe\xff\x00",
+        b"\xff\xfe\x00\x00a",
+        b"\x00\x00\xfe\xffa",
+        b"key: \xed\xa0\x80",
+        b"\xff\xfe\x00\x00\x00\x00\x11\x00",
+    ],
+)
+def test_malformed_config_encoding_is_refused_before_import_writes(tmp_path, source, action):
+    before = _seed_destination()
+    archive = _bundle(tmp_path / "in" / "malformed.towx", _members(config_yaml=source))
+    operation = (
+        functools.partial(tow_bundle.verify_bundle, archive, PASS)
+        if action == "verify"
+        else functools.partial(import_bundle, archive, PASS, apply=action == "apply")
+    )
+    with pytest.raises(ExportImportError, match=r"^invalid config\.yaml$"):
+        operation()
+    _assert_untouched(before)
+
+
+@pytest.mark.parametrize("action", ["verify", "preview", "apply", "export"])
+@pytest.mark.parametrize("codec", ["utf-16-le", "utf-16-be"])
+def test_normalized_config_size_is_checked_before_any_write(tmp_path, monkeypatch, action, codec):
+    from tow import yaml_guard
+
+    _seed_destination()
+    text = "extra: '" + "例" * 45 + "'\n"
+    source = text.encode(codec)
+    assert len(source) < 128 < len(text.encode("utf-8"))
+    archive = _bundle(tmp_path / "in" / "oversized.towx", _members(config_yaml=source))
+    if action == "export":
+        config_path().write_bytes(source)
+    before = _targets()
+    monkeypatch.setattr(yaml_guard, "MAX_INPUT_BYTES", 128)
+    output = tmp_path / "output" / "not-written.towx"
+    operations = {
+        "verify": functools.partial(tow_bundle.verify_bundle, archive, PASS),
+        "export": functools.partial(export_bundle, output, PASS),
+        "preview": functools.partial(import_bundle, archive, PASS),
+        "apply": functools.partial(import_bundle, archive, PASS, apply=True),
+    }
+    with pytest.raises(ExportImportError, match=r"invalid config\.yaml:"):
+        operations[action]()
+    assert not output.parent.exists()
+    _assert_untouched(before)
+
+
+def test_checksum_is_checked_before_normalizing_archive_config(tmp_path, monkeypatch):
+    before = _seed_destination()
+    members = _members(config_yaml="bind: 127.0.0.1\nport: 8787\n".encode("utf-16"))
+    manifest = _manifest(members)
+    manifest["sha256"]["config.yaml"] = "0" * 64
+    archive = _bundle(tmp_path / "in" / "tampered.towx", members, manifest=manifest)
+    monkeypatch.setattr(tow_bundle, "normalize_utf8", lambda *a: pytest.fail("unauthenticated content decoded"))
+    with pytest.raises(ExportImportError, match=r"bundle checksum mismatch: config\.yaml"):
+        import_bundle(archive, PASS, apply=True)
+    _assert_untouched(before)
+
+
+@pytest.mark.parametrize(("codec", "bom"), CONFIG_ENCODINGS[2:])
+def test_import_readback_failure_restores_original_bytes_after_normalization(tmp_path, monkeypatch, codec, bom):
+    _seed_destination()
+    # A recovery snapshot preserves even a pre-existing invalid config exactly.
+    config_path().write_bytes(b"pre-existing-invalid-config: \xff")
+    before = _targets()
+    source = bom + "bind: 127.0.0.1\nport: 8787\n".encode(codec)
+    archive = _bundle(tmp_path / "in" / "unicode.towx", _members(config_yaml=source))
+
+    def fail_readback(*args):
+        assert config_path().read_bytes() == b"bind: 127.0.0.1\nport: 8787\n"
+        raise ExportImportError("synthetic read-back failure")
+
+    monkeypatch.setattr(tow_bundle, "_destination_readback", fail_readback)
+    with pytest.raises(ExportImportError, match="synthetic read-back failure"):
+        import_bundle(archive, PASS, apply=True)
+    assert _targets() == before
 
 
 @pytest.mark.parametrize("apply", [False, True])

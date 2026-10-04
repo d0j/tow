@@ -45,7 +45,7 @@ from tow.store import (
     secret_undo_path,
     state_schema_version,
 )
-from tow.yaml_guard import YamlLimitError, validate_graph
+from tow.yaml_guard import YamlLimitError, normalize_utf8, validate_graph
 from tow.yaml_guard import dump as dump_yaml
 from tow.yaml_guard import load as load_yaml
 
@@ -207,6 +207,15 @@ def _parse_mapping(data: bytes, *, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ExportImportError(f"{label} must be an object")
     return value
+
+
+def _utf8_config(data: bytes) -> bytes:
+    try:
+        return normalize_utf8(data)
+    except YamlLimitError as exc:
+        raise ExportImportError(f"invalid config.yaml: {exc}") from exc
+    except UnicodeError as exc:
+        raise ExportImportError("invalid config.yaml") from exc
 
 
 def _validate_tree(value: Any, *, label: str, depth: int = 0) -> None:
@@ -537,7 +546,10 @@ def _validated_payload(payload: bytes) -> dict[str, Any]:
         if checksums.get(name) != _sha256(members[name]):
             raise ExportImportError(f"bundle checksum mismatch: {name}")
 
-    config_data = _parse_mapping(members["config.yaml"], label="config.yaml")
+    # Authenticate the original member above, then prepare readable destination
+    # bytes without altering the source archive or its checksum manifest.
+    config_bytes = _utf8_config(members["config.yaml"])
+    config_data = _parse_mapping(config_bytes, label="config.yaml")
     state_data = _parse_mapping(members["state.json"], label="state.json")
     history_data = _parse_mapping(members["download_history.json"], label="download_history.json")
     secrets_data = _parse_mapping(members["secrets.json"], label="secrets.json")
@@ -570,7 +582,7 @@ def _validated_payload(payload: bytes) -> dict[str, Any]:
     return {
         "manifest": manifest,
         "members": members,
-        "config_bytes": members["config.yaml"],
+        "config_bytes": config_bytes,
         "config": config_data,
         "state": state_data,
         "history": history_data,
@@ -582,7 +594,7 @@ def _validated_payload(payload: bytes) -> dict[str, Any]:
 
 def _build_export_members(*, include_log: bool) -> dict[str, bytes]:
     config_file = config_path()
-    config_bytes = _read_limited(config_file, label="config.yaml")
+    config_bytes = _utf8_config(_read_limited(config_file, label="config.yaml"))
     config_data = _parse_mapping(config_bytes, label="config.yaml")
     state_data = load_state()
     history_data = load_json_for_export(download_history_path(), {"schema_version": 1, "topics": {}})

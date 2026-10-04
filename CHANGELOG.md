@@ -3,6 +3,15 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.39] — 2026-10-04
+
+### Fixed
+
+- Normalize UTF-16 and UTF-32 configurations in portable archives to UTF-8 before import writes,
+  keeping comments, quoting, anchors and line endings. Verify original checksums first and bound both
+  input and converted bytes. Preview, verification and apply agree; malformed Unicode is refused
+  without changing live files. Export normalizes only the archive, and rollback preserves exact prior bytes.
+
 ## [1.22.38] — 2026-10-04
 
 ### Fixed
