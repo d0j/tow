@@ -305,6 +305,51 @@ def _plant(snapshot: Path, name: str, content: bytes = b"planted", *, sign: bool
     (snapshot / "MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
 
 
+@pytest.mark.parametrize("action", ["verify", "preview", "apply"])
+@pytest.mark.parametrize("source", [b"extra: &loop [*loop]\n", b"false", b"[]"])
+def test_signed_and_hashed_unsafe_yaml_is_not_reported_as_restorable(backup, source, action):
+    from tow.paths import config_path
+
+    snapshot = Path(create_snapshot()["snapshot"])
+    (snapshot / "config.yaml").write_bytes(source)
+    _plant(snapshot, "config.yaml", source)
+    before_config = config_path().read_bytes()
+    before_data = {p.relative_to(data_dir()).as_posix(): p.read_bytes() for p in data_dir().rglob("*") if p.is_file()}
+
+    def invoke():
+        if action == "verify":
+            verify_snapshot(snapshot)
+        else:
+            restore_snapshot(snapshot, apply=action == "apply")
+
+    with pytest.raises(SnapshotError):
+        invoke()
+    assert config_path().read_bytes() == before_config
+    assert {
+        p.relative_to(data_dir()).as_posix(): p.read_bytes() for p in data_dir().rglob("*") if p.is_file()
+    } == before_data
+
+
+def test_signed_oversized_config_is_refused_before_allocating_member_bytes(backup, monkeypatch):
+    from tow import snapshots, yaml_guard
+
+    snapshot = Path(create_snapshot()["snapshot"])
+    monkeypatch.setattr(snapshots, "MAX_INPUT_BYTES", 8)
+    reads = []
+    real_open = Path.open
+
+    def watched_open(path, *args, **kwargs):
+        if path == snapshot / "config.yaml":
+            reads.append(path)
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", watched_open)
+    with pytest.raises(SnapshotError) as caught:
+        verify_snapshot(snapshot)
+    assert str(yaml_guard.YamlLimitError("yaml_limits.size")) == str(caught.value)
+    assert not reads
+
+
 def test_manifest_rejects_foreign_files(backup):
     snapshot = Path(create_snapshot()["snapshot"])
     _plant(snapshot, "../evil.txt", b"")

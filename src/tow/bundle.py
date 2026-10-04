@@ -45,6 +45,8 @@ from tow.store import (
     secret_undo_path,
     state_schema_version,
 )
+from tow.yaml_guard import YamlLimitError, validate_graph
+from tow.yaml_guard import load as load_yaml
 
 FORMAT = "tow-export-v1"
 CHECKPOINT_FORMAT = "tow-import-checkpoint-v1"
@@ -124,21 +126,46 @@ def _atomic_write(path: Path, content: bytes) -> None:
 
 def _secret_key_path(value: Any, path: str = "") -> str | None:
     """Path of the first credential-named field in ``value``, or None."""
-    if isinstance(value, dict):
-        for key, item in value.items():
+    segments = _secret_segments(value, set())
+    if segments is None:
+        return None
+    for segment in segments:
+        if isinstance(segment, int):
+            path += f"[{segment}]"
+        else:
+            path += ("." if path else "") + segment
+    return path
+
+
+def _secret_segments(value: Any, seen: set[int]) -> list[str | int] | None:
+    # Shared containers need one scan. Build a path only for the actual match,
+    # not one long prefix per innocent child of a large-keyed mapping.
+    if not isinstance(value, (dict, list)):
+        return None
+    seen.add(id(value))
+    stack = [(isinstance(value, dict), iter(value.items()) if isinstance(value, dict) else iter(enumerate(value)))]
+    path: list[str | int] = []
+    while stack:
+        mapping, children = stack[-1]
+        try:
+            key, item = next(children)
+        except StopIteration:
+            stack.pop()
+            if path:
+                path.pop()
+            continue
+        segment = str(key) if mapping else key
+        if mapping:
             lowered = str(key).lower()
-            child = f"{path}.{key}" if path else str(key)
             is_secret_name = lowered in _SECRET_FIELD_NAMES or lowered.endswith(_SECRET_FIELD_SUFFIXES)
             if is_secret_name and item not in (None, "", False, True):
-                return child
-            found = _secret_key_path(item, child)
-            if found:
-                return found
-    elif isinstance(value, list):
-        for index, item in enumerate(value):
-            found = _secret_key_path(item, f"{path}[{index}]")
-            if found:
-                return found
+                return [*path, segment]
+        if isinstance(item, (dict, list)) and id(item) not in seen:
+            seen.add(id(item))
+            path.append(segment)
+            stack.append(
+                (isinstance(item, dict), iter(item.items()) if isinstance(item, dict) else iter(enumerate(item)))
+            )
     return None
 
 
@@ -171,7 +198,9 @@ def _events_are_redacted(value: Any) -> bool:
 
 def _parse_mapping(data: bytes, *, label: str) -> dict[str, Any]:
     try:
-        value = yaml.safe_load(data) if label == "config.yaml" else json.loads(data.decode("utf-8"))
+        value = load_yaml(data) if label == "config.yaml" else json.loads(data.decode("utf-8"))
+    except YamlLimitError as exc:
+        raise ExportImportError(f"invalid {label}: {exc}") from exc
     except (UnicodeError, ValueError, RecursionError, yaml.YAMLError) as exc:
         raise ExportImportError(f"invalid {label}") from exc
     if not isinstance(value, dict):
@@ -212,6 +241,10 @@ def _validate_field(mapping: dict[str, Any], key: str, expected: type | tuple[ty
 def _validate_config_schema(data: dict[str, Any]) -> None:
     """config.yaml of a bundle: the schema ``load_config`` applies (``tow.config.validated``),
     plus the shape of each site's settings an import must not let through."""
+    try:
+        validate_graph(data)
+    except YamlLimitError as exc:
+        raise ExportImportError(f"invalid config.yaml: {exc}") from exc
     _validate_tree(data, label="config.yaml")
     if isinstance(data.get("trackers"), dict):  # named per site below, before the shared check
         _validate_tracker_settings(data["trackers"])

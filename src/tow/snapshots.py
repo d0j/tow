@@ -48,6 +48,9 @@ from tow.store import (
     persistence_lock,
     secret_undo_path,
 )
+from tow.yaml_guard import MAX_INPUT_BYTES, YamlLimitError, validate_graph
+from tow.yaml_guard import load as load_yaml
+from tow.yaml_guard import read_text as read_yaml_text
 
 FORMAT = "tow-snapshot-v2"  # a signed MANIFEST
 UNSIGNED_FORMAT = "tow-snapshot-v1"  # copies made before 1.17: checked, never restored automatically
@@ -504,6 +507,8 @@ def _read_verified(path: Path) -> tuple[dict[str, Any], dict[str, bytes], bool]:
         size = meta.get("size") if isinstance(meta, dict) else None
         if type(size) is not int or size < 0:
             raise SnapshotError(t("backup.snapshot.file_damaged", lang, name=name))
+        if name == "config.yaml" and size > MAX_INPUT_BYTES:
+            raise SnapshotError(str(YamlLimitError("yaml_limits.size")))
         try:
             source = path / name
             if source.stat().st_size != size:
@@ -515,6 +520,8 @@ def _read_verified(path: Path) -> tuple[dict[str, Any], dict[str, bytes], bool]:
         if len(content) != size or hashlib.sha256(content).hexdigest() != meta.get("sha256"):
             raise SnapshotError(t("backup.snapshot.file_damaged", lang, name=name))
         contents[name] = content
+    if "config.yaml" in contents:
+        _snapshot_config(contents["config.yaml"])
     return manifest, contents, signed
 
 
@@ -725,7 +732,7 @@ def _rollback_target(name: str, config_bytes: bytes | None) -> Path:
     # Resolve them without temporarily replacing the live config during preflight.
     from tow.locations import MANUAL, resolve_checked
 
-    config = yaml.safe_load(config_bytes)
+    config = load_yaml(config_bytes)
     if not isinstance(config, dict):
         raise TypeError("night-copy restore config is malformed")
     match = _POINT_MEMBER.fullmatch(name)
@@ -973,6 +980,20 @@ def _keep_local_password(copy_secrets: bytes | None) -> bytes:
         ) from exc
 
 
+def _snapshot_config(content: bytes) -> dict[str, Any]:
+    try:
+        parsed = load_yaml(content.decode("utf-8"))
+    except YamlLimitError as exc:
+        raise SnapshotError(str(exc)) from exc
+    except (UnicodeError, yaml.YAMLError) as exc:
+        raise SnapshotError(t("backup.snapshot.config_not_mapping", owner_language())) from exc
+    if parsed is None:
+        parsed = {}
+    if not isinstance(parsed, dict):
+        raise SnapshotError(t("backup.snapshot.config_not_mapping", owner_language()))
+    return parsed
+
+
 def _keep_local_access(snapshot_config: bytes) -> bytes:
     """The copy's config with this machine's access settings (the live ones).
 
@@ -980,14 +1001,9 @@ def _keep_local_access(snapshot_config: bytes) -> bytes:
     the point - and then the restored config is local-only: network access is turned back on
     from this PC, as always.
     """
+    restored = _snapshot_config(snapshot_config)
     try:
-        restored = yaml.safe_load(snapshot_config.decode("utf-8")) or {}
-    except (UnicodeError, yaml.YAMLError) as exc:
-        raise SnapshotError(t("backup.snapshot.config_not_mapping", owner_language())) from exc
-    if not isinstance(restored, dict):
-        raise SnapshotError(t("backup.snapshot.config_not_mapping", owner_language()))
-    try:
-        current = yaml.safe_load(config_path().read_text(encoding="utf-8")) or {}
+        current = load_yaml(read_yaml_text(config_path()))
     except OSError, UnicodeError, yaml.YAMLError:
         current = None
     if isinstance(current, dict):
@@ -998,4 +1014,8 @@ def _keep_local_access(snapshot_config: bytes) -> bytes:
                 restored.pop(key, None)
     else:
         restored.update(bind="127.0.0.1", allow_lan=False)
+    try:
+        validate_graph(restored)
+    except YamlLimitError as exc:
+        raise SnapshotError(str(exc)) from exc
     return str(yaml.safe_dump(restored, allow_unicode=True, sort_keys=False, default_flow_style=False)).encode("utf-8")
