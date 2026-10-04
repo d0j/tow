@@ -419,7 +419,6 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
     """Night copies: folder, last result, the newest copies; folders of both kinds of copies."""
     from tow.locations import LOCATIONS, free_bytes, is_default, resolve
     from tow.pulse import clock
-    from tow.restore_points import cleanup_pending
     from tow.snapshots import list_snapshots, status, status_failed
 
     folders = {}
@@ -443,6 +442,7 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
     ]
     last_ok = st.get("last_ok_at")
     failed_at = st.get("last_error_at")
+    cleanup = services.restore_point_cleanup_status(cfg=cfg)
     return {
         "folders": folders,
         "snapshots": snapshots,
@@ -452,5 +452,7 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
         "error": str(st.get("last_error") or ""),
         "error_at": clock(failed_at) if isinstance(failed_at, (int, float)) else "",
         "cleanup_pending": st.get("last_cleanup_pending") is True,
-        "point_cleanup_pending": cleanup_pending(),
+        "point_cleanup_pending": cleanup["pending"] is True,
+        "point_cleanup_read_error": cleanup["read_error"],
+        "point_cleanup_unrecorded": cleanup["pending"] is None,
     }

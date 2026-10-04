@@ -33,6 +33,7 @@ from tow.restore_points import (
     restore_from_point,
     restore_portable_bundle,
 )
+from tow.restore_points import cleanup_status as restore_point_cleanup_status
 from tow.store import (
     load_download_history,
     load_secrets,
@@ -70,6 +71,7 @@ __all__ = [
     "release_status",
     "request_restart",
     "restore_from_point",
+    "restore_point_cleanup_status",
     "restore_portable_bundle",
     "run_check",
     "save_config",
