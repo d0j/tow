@@ -56,6 +56,37 @@ def _input_size(data: str | bytes) -> None:
         raise YamlLimitError("yaml_limits.size")
 
 
+def normalize_utf8(data: bytes) -> bytes:
+    """Strict YAML 1.2 encoding detection; bound both source and UTF-8 output.
+
+    UTF-32 must precede UTF-16 because their little-endian BOMs overlap.
+    Decode text, not its YAML graph: comments, anchors, quoting and line breaks
+    survive unchanged. Existing UTF-8 bytes (including a BOM) are retained.
+    """
+    _input_size(data)
+    encoding, offset = "utf-8", 0
+    if data.startswith(b"\x00\x00\xfe\xff"):
+        encoding, offset = "utf-32-be", 4
+    elif len(data) >= 4 and data[:3] == b"\x00\x00\x00":
+        encoding = "utf-32-be"
+    elif data.startswith(b"\xff\xfe\x00\x00"):
+        encoding, offset = "utf-32-le", 4
+    elif len(data) >= 4 and data[1:4] == b"\x00\x00\x00":
+        encoding = "utf-32-le"
+    elif data.startswith(b"\xfe\xff"):
+        encoding, offset = "utf-16-be", 2
+    elif len(data) >= 2 and data[0] == 0:
+        encoding = "utf-16-be"
+    elif data.startswith(b"\xff\xfe"):
+        encoding, offset = "utf-16-le", 2
+    elif len(data) >= 2 and data[1] == 0:
+        encoding = "utf-16-le"
+    text = data[offset:].decode(encoding)
+    result = data if encoding == "utf-8" else text.encode("utf-8")
+    _input_size(result)
+    return result
+
+
 def read_text(path: Path) -> str:
     """Read the existing UTF-8 config contract without allocating an unbounded file."""
     with path.open("rb") as handle:

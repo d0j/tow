@@ -438,6 +438,15 @@ the header and YAML escaping. A short scalar alias may expand during dumping, an
 can occupy several bytes; neither can create a file larger than the reader permits. Save, night restore
 and import overrides refuse before replacing files. Destination directories are not created on refusal.
 An empty document or mapping is valid; `false`, `0`, an empty string or a list is not a settings mapping.
+Since 1.22.39, portable archives accept UTF-8, UTF-16 and UTF-32 YAML with either byte order, with a BOM
+or the ASCII/null-byte prefix defined by [YAML 1.2 §5.2](https://yaml.org/spec/1.2.2/#52-character-encodings).
+Import checks the original archived bytes against the manifest before converting settings to UTF-8;
+the source archive is not modified. Both the original and converted configuration are limited to 16 MiB,
+before parsing, checkpoint creation or destination writes. Malformed Unicode is refused, never guessed
+or replaced. Conversion preserves comments, quoting, anchors, line endings and BOM characters inside
+quoted values; an existing UTF-8 file is preserved byte for byte, including its leading BOM. Export
+normalizes only the archived configuration, not the live file. Rollback restores the exact original bytes,
+even if the original live configuration was unreadable. Live settings themselves remain UTF-8.
 Night-copy verification and preview check the configuration as well as its signature and checksums, before
 restoration writes anything. A broken live configuration can still be replaced by a healthy copy; when its
 local access settings cannot be read, the restored settings are local-only.
