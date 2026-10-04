@@ -66,7 +66,7 @@ if [ "${1:-}" = setup ]; then
     fi
     # .venv holds absolute paths: built again when its Python no longer runs (a moved folder) or
     # is not the one inside the install (an install from before 1.18).
-    inside='import os, sys; sys.exit(not os.path.realpath(sys.base_prefix).startswith(os.path.realpath(os.environ["UV_PYTHON_INSTALL_DIR"])))'
+    inside='import os, sys; base=os.path.normcase(os.path.realpath(sys.base_prefix)); managed=os.path.normcase(os.path.realpath(os.environ["UV_PYTHON_INSTALL_DIR"])); sys.exit(os.path.commonpath([base,managed]) != managed)'
     if [ -e .venv/bin/python ] && ! .venv/bin/python -c "$inside" >/dev/null 2>&1; then
         rm -rf .venv
     fi

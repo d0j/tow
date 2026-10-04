@@ -33,13 +33,14 @@ import sys
 import tarfile
 import tempfile
 import time
+import tomllib
 import zipfile
 from pathlib import Path
 from urllib.request import Request, urlopen
 
 REPO = Path(__file__).resolve().parents[1]
 # uv inside the bundle (and install.sh downloads the same one: tests/test_bundle.py keeps them in step).
-UV_VERSION = "0.12.20"
+UV_VERSION = "0.12.23"
 UV_TARGET = "x86_64-pc-windows-msvc"
 UV_URL = f"https://github.com/astral-sh/uv/releases/download/{UV_VERSION}/uv-{UV_TARGET}.zip"
 ZIP_NAME = "TOW-windows-x64.zip"
@@ -205,6 +206,16 @@ def uv_env(top: Path, venv: Path) -> dict[str, str]:
         UV_MANAGED_PYTHON="1",
         UV_NO_CONFIG="1",  # the build machine's uv.toml stays out
     )
+    # --no-config isolates the builder from its machine, but the portable bootstrap's
+    # pinned manifest must be cached too: first start must not fetch it from the network.
+    config = top / "app" / "pyproject.toml"
+    if config.is_file():
+        settings = tomllib.loads(config.read_text(encoding="utf-8")).get("tool", {}).get("uv", {})
+        manifest = settings.get("python-downloads-json-url")
+        if manifest is not None:
+            if not isinstance(manifest, str):
+                raise ValueError("python-downloads-json-url must be a string")
+            env["UV_PYTHON_DOWNLOADS_JSON_URL"] = manifest
     return env
 
 

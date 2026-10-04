@@ -81,6 +81,33 @@ while healthy; do
     sleep 1
 done
 
+say 'move the stopped install, keeping its old absolute-path environment'
+key_before=$(sha "$dir/keys/master.key")
+config_before=$(sha "$dir/config.yaml")
+moved="$base/tow relocated $$"
+case $dir in "$base"/*) ;; *) fail 'move source is outside the owned test base' ;; esac
+case $moved in "$base"/*) ;; *) fail 'move destination is outside the owned test base' ;; esac
+[ ! -e "$moved" ] || fail 'move destination exists'
+mv -- "$dir" "$moved"
+dir=$moved
+case $(uname -s) in
+    Darwin) start="$dir/Start TOW.command" stop="$dir/Stop TOW.command" ;;
+    *) start="$dir/start-tow" stop="$dir/stop-tow" ;;
+esac
+UV_OFFLINE=1 UV_PYTHON_DOWNLOADS=never TOW_NO_BROWSER=1 "$start" </dev/null || fail 'relocated start failed offline'
+healthy || fail 'relocated service is unhealthy'
+[ "$(sha "$dir/keys/master.key")" = "$key_before" ] || fail 'move replaced the master key'
+[ "$(sha "$dir/config.yaml")" = "$config_before" ] || fail 'move changed config'
+TOW_MOVE_ROOT=$dir "$dir/app/.venv/bin/python" -c 'import os, sys, tow; from pathlib import Path; root=Path(os.environ["TOW_MOVE_ROOT"]).resolve(); assert Path(sys.base_prefix).resolve().is_relative_to(root); assert Path(tow.__file__).resolve().is_relative_to(root)' || fail 'moved Python or module belongs to the old folder'
+"$stop" </dev/null || fail 'moved service did not stop'
+tries=0
+while healthy; do
+    tries=$((tries + 1))
+    [ "$tries" -lt 60 ] || fail 'moved service still answers after stop'
+    sleep 1
+done
+say 'relocated install rebuilt offline, preserved its key and config, started and stopped'
+
 say "uninstall --yes (keeps data, keys, config.yaml, backup)"
 sh "$installer" --uninstall --yes --dir "$dir" </dev/null
 left=$(ls -A "$dir" | tr '\n' ' ')

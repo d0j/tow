@@ -137,6 +137,52 @@ def test_setup_takes_no_options_and_never_runs_under_a_running_tow():
     assert posix.index("import busy") < posix.index("rm -rf .venv")
 
 
+def test_windows_setup_does_not_treat_a_broken_moved_python_as_a_running_service():
+    windows = (ROOT / "scripts" / "tow-setup.cmd").read_text(encoding="utf-8")
+    # cmd's `if errorlevel 4` also matches 103: a relocated venv cannot find its old base.
+    assert 'if "%ERRORLEVEL%"=="4"' in windows
+    assert not any("if errorlevel 4" in line for line in windows.splitlines() if not line.startswith("rem "))
+
+
+@pytest.mark.parametrize("launcher", ["tow", "tow-setup.cmd"])
+@pytest.mark.parametrize("location", ["managed", "child", "sibling", "outside"])
+def test_setup_requires_python_inside_the_managed_directory(monkeypatch, tmp_path, launcher, location):
+    import re
+    import runpy
+    import sys
+
+    text = (ROOT / "scripts" / launcher).read_text(encoding="utf-8")
+    pattern = r"inside='([^\n]+)'" if launcher == "tow" else r'-c "(import os,sys; base=[^\n]+?)" >nul'
+    matched = re.search(pattern, text)
+    assert matched is not None
+    managed = tmp_path / "runtime" / "python"
+    locations = {
+        "managed": managed,
+        "child": managed / "cpython-test",
+        "sibling": managed.with_name("python-foreign"),
+        "outside": tmp_path / "external-python",
+    }
+    monkeypatch.setenv("UV_PYTHON_INSTALL_DIR", str(managed))
+    monkeypatch.setattr(sys, "base_prefix", str(locations[location]))
+    probe = tmp_path / "launcher-predicate.py"
+    probe.write_text(matched[1], encoding="utf-8")
+    with pytest.raises(SystemExit) as exited:
+        runpy.run_path(str(probe))  # the launcher's actual predicate, not a second implementation
+    assert exited.value.code == (location not in {"managed", "child"})
+
+
+def test_release_smokes_relocate_an_existing_environment():
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "-Offline -Move" in workflow
+    windows = (ROOT / "scripts" / "bundle-smoke.ps1").read_text(encoding="utf-8")
+    posix = (ROOT / "scripts" / "install-smoke.sh").read_text(encoding="utf-8")
+    assert "Move-Item -LiteralPath $root -Destination $movedRoot" in windows
+    assert 'UV_OFFLINE=1 UV_PYTHON_DOWNLOADS=never TOW_NO_BROWSER=1 "$start"' in posix
+    for text in windows, posix:
+        assert "sys.base_prefix" in text
+        assert "tow.__file__" in text
+
+
 @pytest.mark.allow_git
 def test_posix_launcher_and_hooks_are_executable_in_git():
     # 02.10.2026: the first public commit lost the bits (built from an archive on Windows).

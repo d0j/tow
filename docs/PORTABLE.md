@@ -90,6 +90,16 @@ runtime install `UV_PYTHON_INSTALL_DIR=<root>/runtime/python`,
 `UV_PROJECT_ENVIRONMENT=<root>/app/.venv`, `UV_MANAGED_PYTHON=1`; a `runtime/bin/uv(.exe)` is
 preferred over uv on PATH. A development checkout keeps the developer's uv setup unchanged.
 `.venv` holds absolute paths: after moving the folder `tow setup` rebuilds it.
+The release smoke tests also move a previously started and stopped installation with its
+existing `.venv`, then require an offline rebuild, Python and TOW inside the new folder,
+unchanged configuration and master key, and a successful start and stop. This checks relocation,
+not only unpacking a fresh archive. Moving a folder between operating systems still requires
+that system's uv/Python and dependencies; a Windows binary is not a Linux/macOS executable.
+Python is pinned to 3.14.8. New bundles/installers carry uv 0.12.23; existing uv 0.12 builds
+can discover the new patch through `tool.uv.python-downloads-json-url`, an official upstream
+manifest pinned to a commit (not `main` or `latest`). uv installs and verifies the managed
+interpreter normally inside `runtime/python`; old interpreters remain available for rollback.
+No external uv executable, system Python, PATH or registry registration is updated.
 
 Prerequisites (1.22):
 - the Windows bundle: nothing (uv, Python and every wheel are inside; the first start is

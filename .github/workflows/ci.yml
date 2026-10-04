@@ -30,7 +30,7 @@ jobs:
         with:
           enable-cache: true
       - name: Install Python from .python-version
-        run: uv python install
+        run: uv python install --no-bin --no-registry
       - name: Sync locked environment
         run: uv sync --frozen
       - name: Quality gate (with dependency audit)

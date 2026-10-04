@@ -21,6 +21,7 @@ param(
     [int]$Port = 18877,
     [string]$Base = $(if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }),
     [switch]$Offline,
+    [switch]$Move,
     [switch]$Keep
 )
 
@@ -116,10 +117,64 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "the second Start TOW.cmd exited with $LASTEXITCODE`n$output" }
     Step ("second start took {0:n1} s" -f $watch.Elapsed.TotalSeconds)
 
+    Step 'setup refuses to rebuild the environment under a running service'
+    $venvConfig = Join-Path $root 'app/.venv/pyvenv.cfg'
+    $venvBefore = (Get-FileHash -LiteralPath $venvConfig).Hash
+    $output = & (Join-Path $root 'app/scripts/tow.cmd') setup 2>&1 | Out-String
+    $code = $LASTEXITCODE
+    if ($code -ne 3 -or $output -notmatch 'TOW is running') { throw 'bundle-smoke: running setup was not refused' }
+    if ((Get-FileHash -LiteralPath $venvConfig).Hash -ne $venvBefore -or -not (Test-Health)) {
+        throw 'bundle-smoke: running setup changed the environment or stopped the service'
+    }
+
     Step 'Stop TOW.cmd'
     $output = '' | & (Join-Path $root 'Stop TOW.cmd') 2>&1 | Out-String
     Write-Host $output
     if (-not (Wait-Until { -not (Test-Health) } 60)) { throw 'TOW still answers after Stop TOW.cmd' }
+
+    if ($Move) {
+        $original = @{}
+        foreach ($relative in 'config.yaml', 'keys/master.key') {
+            $original[$relative] = (Get-FileHash -LiteralPath (Join-Path $root $relative)).Hash
+        }
+        $movedRoot = Join-Path $folder "relocated $cyrillic TOW"
+        $owned = [IO.Path]::GetFullPath($folder).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+        foreach ($target in $root, $movedRoot) {
+            if (-not [IO.Path]::GetFullPath($target).StartsWith($owned, [StringComparison]::OrdinalIgnoreCase)) {
+                throw 'bundle-smoke: move outside the owned test folder refused'
+            }
+        }
+        if (Test-Path -LiteralPath $movedRoot) { throw 'bundle-smoke: move destination already exists' }
+        Step 'moving the stopped install, including its existing absolute-path environment'
+        Move-Item -LiteralPath $root -Destination $movedRoot
+        $root = $movedRoot
+        if ($Offline) {
+            $env:HTTP_PROXY = 'http://127.0.0.1:9'; $env:HTTPS_PROXY = 'http://127.0.0.1:9'; $env:ALL_PROXY = 'http://127.0.0.1:9'
+            $env:NO_PROXY = ''
+        }
+        $output = '' | & (Join-Path $root 'Start TOW.cmd') 2>&1 | Out-String
+        $code = $LASTEXITCODE
+        Write-Host $output
+        if ($code -ne 0 -or ($Offline -and $output -match 'were not enough')) {
+            throw "bundle-smoke: relocated start failed, exit $code"
+        }
+        if (-not (Wait-Until { Test-Health } 30)) { throw 'bundle-smoke: moved install is unhealthy' }
+        foreach ($relative in $original.Keys) {
+            if ((Get-FileHash -LiteralPath (Join-Path $root $relative)).Hash -ne $original[$relative]) {
+                throw "bundle-smoke: persistent file changed after move: $relative"
+            }
+        }
+        $saved['TOW_MOVE_ROOT'] = $env:TOW_MOVE_ROOT
+        $env:TOW_MOVE_ROOT = $root
+        & (Join-Path $root 'app/.venv/Scripts/python.exe') -c 'import os, sys, tow; from pathlib import Path; root=Path(os.environ["TOW_MOVE_ROOT"]).resolve(); assert Path(sys.base_prefix).resolve().is_relative_to(root); assert Path(tow.__file__).resolve().is_relative_to(root)'
+        if ($LASTEXITCODE) { throw 'bundle-smoke: moved Python or module belongs to the old location' }
+        $output = '' | & (Join-Path $root 'Stop TOW.cmd') 2>&1 | Out-String
+        $code = $LASTEXITCODE
+        Write-Host $output
+        if ($code -ne 0 -or -not (Wait-Until { -not (Test-Health) } 60)) { throw 'bundle-smoke: moved service did not stop' }
+        foreach ($name in 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY') { Set-Item "env:$name" $saved[$name] }
+        Step 'relocated install rebuilt offline, kept its key and config, started and stopped'
+    }
 
     $after = Get-Outside
     $changed = @($before.Keys | Where-Object { "$($before[$_])" -ne "$($after[$_])" })
