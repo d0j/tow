@@ -330,3 +330,105 @@ def test_legacy_record_does_not_hide_real_folder_access_failure(night, monkeypat
 
         monkeypatch.setattr(Path, "iterdir", iterdir)
     assert snapshots.cleanup_status()["read_error"] is True
+
+
+def _pre_cleanup_record(night):
+    return {
+        "last_ok_at": NOW,
+        "last_snapshot": "tow-20261001-000000",
+        "last_bytes": 1,
+        "last_missing": [],
+        "last_error": "",
+        "location": str(night.resolve()),
+    }
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+@pytest.mark.parametrize("prior_alarm", [True, False])
+def test_pre_cleanup_copy_metadata_migrates_quietly_without_confirming_completion(night, lang, prior_alarm):
+    cfg = load_config()
+    cfg["language"] = lang
+    save_config(cfg)
+    snapshots._record(**_pre_cleanup_record(night))
+    # Older watchdogs recorded True when the cleanup field did not exist.
+    watchdog._save_state({"backup_cleanup": True, "backup_cleanup_monitoring": not prior_alarm})
+    sent = []
+    for _ in range(3):
+        report = _check(sent)
+        assert report["backup_cleanup_pending"] is None
+        assert report["backup_cleanup_read_error"] is False
+        assert report["backup_cleanup_legacy_migration"] is True
+        assert watchdog._load_state()["backup_cleanup_monitoring"] is True
+    assert not sent
+
+
+@pytest.mark.parametrize("mode", ["missing-snapshot", "unsafe-snapshot", "missing-location", "bound-missing-flag"])
+def test_incomplete_or_bound_metadata_is_not_pre_cleanup_migration(night, tmp_path, mode):
+    record = _pre_cleanup_record(night)
+    if mode == "missing-snapshot":
+        del record["last_snapshot"]
+    elif mode == "unsafe-snapshot":
+        record["last_snapshot"] = "../tow-20261001-000000"
+    elif mode == "missing-location":
+        del record["location"]
+    else:
+        record["cleanup_inventory"] = snapshots._cleanup_inventory(night)
+    (tmp_path / snapshots.STATUS_NAME).write_text(json.dumps(record), encoding="utf-8")
+    watchdog._save_state({"backup_cleanup": False})
+    sent = []
+    report = _check(sent)
+    assert report["backup_cleanup_pending"] is None
+    assert report["backup_cleanup_read_error"] is True
+    assert report["backup_cleanup_legacy_migration"] is False
+    assert watchdog._load_state()["backup_cleanup"] is False
+    assert sent == [t("watchdog.alert.backup_cleanup_unreadable", "en")]
+
+
+def test_losing_both_bound_fields_cannot_masquerade_as_a_legacy_migration(night, tmp_path):
+    _record(night, False)
+    sent = []
+    _check(sent)
+    (tmp_path / snapshots.STATUS_NAME).write_text(json.dumps(_pre_cleanup_record(night)), encoding="utf-8")
+    report = _check(sent)
+    assert report["backup_cleanup_pending"] is None
+    assert report["backup_cleanup_read_error"] is True
+    assert report["backup_cleanup_legacy_migration"] is False
+    assert sent == [t("watchdog.alert.backup_cleanup_unreadable", "en")]
+
+
+@pytest.mark.parametrize("mode", ["permission", "not-directory"])
+def test_pre_cleanup_metadata_cannot_hide_a_folder_access_error(night, monkeypatch, mode):
+    snapshots._record(**_pre_cleanup_record(night))
+    if mode == "not-directory":
+        night.write_bytes(b"synthetic non-directory")
+    else:
+        night.mkdir()
+        original = Path.iterdir
+
+        def denied(path):
+            if path == night:
+                raise PermissionError("synthetic directory refusal")
+            return original(path)
+
+        monkeypatch.setattr(Path, "iterdir", denied)
+    result = snapshots.cleanup_status()
+    assert result["read_error"] is True
+    assert result["legacy"] is False
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_settings_explain_pre_cleanup_metadata_without_claiming_inaccessible_folder(night, tmp_path, lang):
+    cfg = load_config()
+    cfg["language"] = lang
+    save_config(cfg)
+    snapshots.create_snapshot()
+    record = snapshots.status()
+    del record["last_cleanup_pending"]
+    del record["cleanup_inventory"]
+    (tmp_path / snapshots.STATUS_NAME).write_text(json.dumps(record), encoding="utf-8")
+    response = TestClient(app, headers={"Accept-Language": lang}).get("/settings")
+    assert response.status_code == 200
+    card = response.text.split('id="backup-night"', 1)[1].split("</article>", 1)[0]
+    assert t("backup.snapshot.cleanup_legacy", lang) in card
+    assert t("backup.snapshot.cleanup_unknown", lang) not in card
+    assert t("settings.backups.pill_unknown", lang) in card

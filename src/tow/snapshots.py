@@ -144,6 +144,18 @@ def _cleanup_status(*, cfg: dict[str, Any] | None) -> dict[str, Any]:
         if state.get("read_error"):
             raise ValueError("unreadable backup record")
         if "last_cleanup_pending" not in state:
+            # Copies made before cleanup monitoring have a full copy result but no flag.
+            # This is migration, not lost observation; a prior bound watchdog still detects
+            # loss of both new fields through its persistent bound marker.
+            if (
+                "cleanup_inventory" not in state
+                and isinstance(state.get("last_ok_at"), (int, float))
+                and isinstance(state.get("last_snapshot"), str)
+                and re.fullmatch(r"tow-\d{8}-\d{6}(?:-[a-f0-9]{6})?", state["last_snapshot"])
+                and state.get("location") == result["location"]
+            ):
+                _cleanup_inventory(location)  # old metadata cannot hide a folder-access failure
+                result["legacy"] = True
             return result  # a new install or a copy failure alone has no cleanup observation
         if type(state["last_cleanup_pending"]) is not bool or not isinstance(state.get("location"), str):
             raise ValueError("invalid cleanup observation")
