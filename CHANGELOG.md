@@ -3,6 +3,16 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.42] — 2026-10-04
+
+### Fixed
+
+- Check night-copy state, history and both encrypted settings files using the same readers
+  as live data, after signature and checksum verification. Damaged containers, non-finite
+  numbers, excessive nesting, unsupported state versions and unreadable secrets are refused
+  before restore writes or pruning earlier copies. Preview and verification use the same
+  preflight; valid legacy stores remain supported without rewriting their bytes.
+
 ## [1.22.41] — 2026-10-04
 
 ### Fixed

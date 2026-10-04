@@ -475,6 +475,17 @@ is not proof of signature verification. The descriptor limit follows the
 [Python JSON guidance](https://docs.python.org/3/library/json.html) on bounded untrusted input
 and does not limit the size of JSON history or stream the full contents of a restore.
 
+Since 1.22.42, night-copy verification, preview and restore also validate the exact verified
+state and history bytes with their live-store parsers: finite numbers, bounded nesting,
+supported state versions and readable containers. Both encrypted stores must have their
+expected format and cipher, decrypt with the local master key, and contain a readable object;
+settings undo must contain its secrets object. Validation never quarantines or rewrites source
+files. A hash-correct but unusable new copy is recorded as a failure and cannot prune older
+copies. Missing optional stores and valid legacy containers remain supported. This follows
+the separation of cryptographic verification and archive consistency checks described in
+[Borg's check documentation](https://borgbackup.readthedocs.io/en/stable/usage/check.html),
+with application-format checks supplied by TOW's own readers.
+
 The pre-construction check uses [PyYAML parsing events](https://pyyaml.org/wiki/PyYAMLDocumentation)
 because [PyYAML 6.0.3 expands merge mappings during construction](https://github.com/yaml/pyyaml/blob/6.0.3/lib/yaml/constructor.py),
 before schema validation. Resource bounds also follow the approach used by

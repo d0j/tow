@@ -38,16 +38,19 @@ from tow.log import log_event, log_path, owner_language
 from tow.paths import config_path, data_dir, download_history_path, state_path
 from tow.store import (
     SecretStoreError,
+    StateVersionError,
     atomic_write_bytes,
     decode_json_bytes,
+    decrypt_secret_undo_bytes,
     decrypt_secrets_bytes,
     derive_local_secret,
     encrypt_secrets_bytes,
     encrypted_secrets_path,
     load_secrets,
-    master_fernet,
     persistence_lock,
     secret_undo_path,
+    validate_download_history_bytes,
+    validate_state_bytes,
 )
 from tow.yaml_guard import MAX_INPUT_BYTES, YamlLimitError
 from tow.yaml_guard import dump as dump_yaml
@@ -547,34 +550,41 @@ def _read_verified(path: Path) -> tuple[dict[str, Any], dict[str, bytes], bool]:
         contents[name] = content
     if "config.yaml" in contents:
         _snapshot_config(contents["config.yaml"])
+    _check_payloads(contents)
     return manifest, contents, signed
 
 
 def verify_snapshot(path: Path) -> dict[str, Any]:
-    """The copy's MANIFEST when every file is intact (``signed`` says whether it may be restored)."""
+    """The MANIFEST when hashes and store contents pass (``signed`` permits restoration)."""
     manifest, _contents, signed = _read_verified(path)
     return {**manifest, "signed": signed}
 
 
-def _check_key_opens(contents: dict[str, bytes]) -> None:
-    """Refuse before touching anything when this machine's key cannot read the copy's secrets."""
-    for name in ("secrets.enc", "secrets-undo.enc"):
+def _check_payloads(contents: dict[str, bytes]) -> None:
+    """Checksums alone do not make a usable copy; validate the exact bytes before any write or prune."""
+    for name, validate in (
+        ("state.json", validate_state_bytes),
+        ("download_history.json", validate_download_history_bytes),
+    ):
         if name in contents:
             try:
-                envelope = json.loads(contents[name].decode("utf-8"))
-                master_fernet().decrypt(str(envelope["token"]).encode("ascii"))
+                validate(contents[name])
+            except (UnicodeError, ValueError, RecursionError, StateVersionError) as exc:
+                raise SnapshotError(t("backup.snapshot.file_unusable", owner_language(), name=name)) from exc
+    for name, decrypt in (
+        ("secrets.enc", decrypt_secrets_bytes),
+        ("secrets-undo.enc", decrypt_secret_undo_bytes),
+    ):
+        if name in contents:
+            try:
+                decrypt(contents[name])
             except SecretStoreError as exc:
-                raise SnapshotError(
-                    t("backup.snapshot.cannot_check", owner_language(), name=name, error=str(exc))
-                ) from exc
-            except Exception as exc:  # InvalidToken, a damaged envelope
-                raise SnapshotError(t("backup.snapshot.other_key", owner_language(), name=name)) from exc
+                raise SnapshotError(t("backup.snapshot.secrets_unusable", owner_language(), name=name)) from exc
 
 
 def restore_snapshot(path: Path, *, apply: bool = False) -> dict[str, Any]:
     path = Path(path)
     manifest, contents, signed = _read_verified(path)
-    _check_key_opens(contents)
     result: dict[str, Any] = {
         "ok": True,
         "snapshot": str(path),

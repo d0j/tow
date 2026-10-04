@@ -555,11 +555,20 @@ def _encrypted_payload(path: Path, expected_format: str) -> dict[str, Any]:
 
 def decrypt_secrets_bytes(content: bytes) -> dict[str, Any]:
     """The secrets of a secrets.enc file's bytes (a night copy's, before it is written back)."""
+    return _decrypt_envelope_bytes(content, _SECRETS_FORMAT)
+
+
+def decrypt_secret_undo_bytes(content: bytes) -> dict[str, Any]:
+    """Validate encrypted settings undo without writing or quarantining any file."""
+    return _secret_undo_data(_decrypt_envelope_bytes(content, _UNDO_FORMAT))
+
+
+def _decrypt_envelope_bytes(content: bytes, expected_format: str) -> dict[str, Any]:
     try:
         text = content.decode("utf-8")
     except UnicodeError as exc:
         raise SecretStoreError("encrypted TOW secrets are unreadable") from exc
-    return _decrypted_envelope(text, _SECRETS_FORMAT)
+    return _decrypted_envelope(text, expected_format)
 
 
 def encrypt_secrets_bytes(data: dict[str, Any]) -> bytes:
@@ -816,7 +825,10 @@ def save_secret_undo(data: dict[str, Any]) -> str:
 def load_secret_undo(reference: str) -> dict[str, Any]:
     if reference != _SETTINGS_UNDO_REF:
         raise SecretStoreError("unknown TOW secret undo reference")
-    payload = _encrypted_payload(secret_undo_path(), _UNDO_FORMAT)
+    return _secret_undo_data(_encrypted_payload(secret_undo_path(), _UNDO_FORMAT))
+
+
+def _secret_undo_data(payload: dict[str, Any]) -> dict[str, Any]:
     data = payload.get("secrets")
     if not isinstance(data, dict):
         raise SecretStoreError("encrypted TOW undo payload is malformed")
@@ -895,6 +907,16 @@ def _validate_history_container(value: Any) -> None:
         valid = isinstance(items, dict) and all(isinstance(item, dict) for item in items.values())
         if not valid:
             raise ValueError("download history JSON has malformed items")
+
+
+def validate_state_bytes(content: bytes) -> None:
+    """Check the live-store read contract without migration, quarantine or other writes."""
+    _validated_json(content, _validate_state_container)
+
+
+def validate_download_history_bytes(content: bytes) -> None:
+    """Check history by the same parser and containers as its live reader."""
+    _validated_json(content, _validate_history_container)
 
 
 def load_state(*, quarantine: bool = True) -> dict[str, Any]:
