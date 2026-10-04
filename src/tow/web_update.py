@@ -17,6 +17,7 @@ from typing import Any
 import httpx
 
 from tow import __version__, platform, releases
+from tow.diagnostic_json import check_epochs
 from tow.log import scrub_text
 from tow.paths import repo_root, root, runtime_dir
 from tow.platform import locks
@@ -73,7 +74,9 @@ def _job_file() -> Path:
     folder = runtime_dir() / "web-update"
     if folder.is_symlink() or folder.resolve() != root().resolve() / "runtime" / "web-update":
         raise WebUpdateError("releases.job_unreadable")
-    return folder / "job.json"
+    # The relay binds the journal to its resolved copied-script location. Normalize
+    # our trusted install path here; never resolve a caller-selected path in the worker.
+    return folder.resolve() / "job.json"
 
 
 def _active(job: dict[str, Any]) -> bool:
@@ -90,6 +93,10 @@ def _activity(job: dict[str, Any]) -> tuple[bool, bool]:
         raise WebUpdateError("releases.job_unreadable")
     if "lease_version" in job and (type(job["lease_version"]) is not int or job["lease_version"] != 1):
         raise WebUpdateError("releases.job_unreadable")
+    try:
+        check_epochs(job, ("started_at", "finished_at"))
+    except ValueError as exc:
+        raise WebUpdateError("releases.job_unreadable") from exc
     if job.get("status") not in _ACTIVE:
         return False, False
     if "lease_version" in job:
@@ -210,7 +217,7 @@ def _recover_completed(job: dict[str, Any], updater: dict[str, Any], active: boo
             return job
         if finished.tzinfo is None or finished.timestamp() < max(started, last):
             return job
-    except ValueError, TypeError, KeyError, OverflowError:
+    except OSError, ValueError, TypeError, KeyError, OverflowError:
         return job
     expected = updater.get("target_version") if updater.get("status") == "ok" else updater.get("previous_version")
     if (

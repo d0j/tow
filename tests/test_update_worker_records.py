@@ -368,3 +368,40 @@ def test_valid_entry_passes_only_the_derived_journal_to_the_relay(tmp_path, monk
         (mode, 42 if mode == "--after-parent" else 0, str(tmp_path / "app"), record.resolve(), JOB_ID, VERSION)
     ]
     assert not record.exists()
+
+
+def test_worker_does_not_resolve_or_inspect_a_foreign_command_line_path(tmp_path, monkeypatch):
+    folder = tmp_path / JOB_ID
+    foreign = tmp_path / "foreign" / "job.json"
+    original = Path.resolve
+
+    def resolve_only_script(path, *args, **kwargs):
+        if path == foreign:
+            pytest.fail("a supplied journal path must not trigger filesystem resolution")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", resolve_only_script)
+    monkeypatch.setattr(update_worker, "__file__", str(folder / "worker.py"))
+    monkeypatch.setattr(
+        update_worker.sys,
+        "argv",
+        ["worker.py", "--handoff", str(tmp_path / "app"), str(foreign), JOB_ID, VERSION],
+    )
+    monkeypatch.setattr(update_worker, "handoff", lambda *args: pytest.fail("foreign path must not relay"))
+    assert update_worker.main() == 2
+
+
+def test_trusted_producer_canonicalizes_an_install_root_alias(tmp_path, monkeypatch):
+    from tow import web_update
+
+    real = tmp_path / "real"
+    alias = tmp_path / "alias"
+    real.mkdir()
+    try:
+        alias.symlink_to(real, target_is_directory=True)
+    except OSError, NotImplementedError:
+        pytest.skip("directory symlinks are unavailable on this runner")
+    monkeypatch.setattr(web_update, "root", lambda: alias)
+    monkeypatch.setattr(web_update, "runtime_dir", lambda: alias / "runtime")
+    assert web_update._job_file() == real / "runtime" / "web-update" / "job.json"
+    assert not (real / "runtime").exists()

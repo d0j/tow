@@ -21,7 +21,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   Python 3.11 compatible.
 - Bind every copied-worker entry to the fixed journal next to its own job folder. A foreign
   journal or identifier is refused before opening the record; relays propagate the derived path,
-  not a command-line-selected filename. Equivalent absolute paths remain supported.
+  not a command-line-selected filename. Canonicalize the trusted producer's install path;
+  the worker checks supplied names without resolving or inspecting a foreign path. Equivalent
+  absolute paths and install-root aliases remain supported.
+- Validate job dates before status, log and new-update decisions, including terminal records.
+  Overflowing, wrongly typed or undisplayable dates fail closed without rewriting evidence;
+  OS date-conversion failures cannot claim a successful terminal recovery.
 
 ## [1.22.43] — 2026-10-04
 

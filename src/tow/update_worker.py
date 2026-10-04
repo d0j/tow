@@ -281,7 +281,7 @@ def main() -> int:
     if folder.name != job_id:
         return 2
     try:
-        if Path(job_path).resolve() != record:
+        if os.path.normcase(os.path.abspath(job_path)) != os.path.normcase(str(record)):
             return 2
     except (OSError, ValueError, RuntimeError):
         return 2

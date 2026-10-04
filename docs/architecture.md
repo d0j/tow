@@ -115,6 +115,10 @@ Journal writes validate before an exclusive temporary file, fsync and atomic rep
 current-state schema preflight uses strict JSON without the small job-size cap.
 Every worker entry binds its journal and nonce to the copied script's own job folder;
 relays use the derived path, not the supplied filename, after checking path equivalence.
+The trusted producer resolves the install path; the worker's supplied-name check is lexical
+and does not inspect a foreign path. Install-root aliases therefore remain supported.
+The app validates displayable job timestamps for every phase before status, log or launch
+decisions; unreadable dates fail closed without modifying the journal.
 
 ## Recovery
 
