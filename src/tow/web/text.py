@@ -48,12 +48,20 @@ def format_bytes(value: Any) -> str:
     """A size in the page's language and its decimal point: "1.5 GB", "1,5 ГБ"; "—" for no size."""
     try:
         size = max(0, int(value))
-    except TypeError, ValueError:
+    except TypeError, ValueError, OverflowError:
         return "—"
     if size < 1024:
         return t("web.bytes.b", size=size)
     lang = owner_language()
-    for key, power in (("web.bytes.tb", 4), ("web.bytes.gb", 3), ("web.bytes.mb", 2)):
-        if size >= 1024**power:
-            return t(key, size=i18n.format_decimal(size / 1024**power, 1, lang))
-    return t("web.bytes.kb", size=i18n.format_decimal(size / 1024, 1, lang))
+    key, power = next(
+        (
+            (key, power)
+            for key, power in (("web.bytes.tb", 4), ("web.bytes.gb", 3), ("web.bytes.mb", 2))
+            if size >= 1024**power
+        ),
+        ("web.bytes.kb", 1),
+    )
+    try:
+        return t(key, size=i18n.format_decimal(size / 1024**power, 1, lang))
+    except OverflowError:
+        return "—"

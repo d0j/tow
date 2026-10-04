@@ -11,6 +11,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   and write probes, including paths already stored in settings. These depend on a drive's current
   directory instead of the TOW install. The refusal explains how to use a full drive path or an
   ordinary install-relative folder; both remain supported on their respective operating systems.
+- Bound night-copy descriptions to 1 MiB before parsing and before publishing a new copy.
+  Invalid file sizes and dates no longer break Settings; verification refuses coerced or
+  unrepresentable sizes. A description exceeding the limit leaves earlier copies untouched.
+  Unrepresentable byte counts show an unknown size rather than an application error.
 
 ## [1.22.40] — 2026-10-04
 

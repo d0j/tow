@@ -65,6 +65,7 @@
       "unknown": "unknown night copy",
       "cannot_write": "cannot write the night copy: {reason}",
       "manifest_unreadable": "the copy's file list (MANIFEST.json) is missing or unreadable",
+      "manifest_too_large": "the copy's file list (MANIFEST.json) exceeds 1 MiB",
       "not_tow": "this is not a TOW night copy",
       "unexpected_file": "unexpected file in the copy: {name}",
       "unsafe_path": "unsafe path in the copy: {name}",

@@ -69,6 +69,7 @@
       "unknown": "неизвестная ночная копия",
       "cannot_write": "не удалось записать ночную копию: {reason}",
       "manifest_unreadable": "список файлов копии (MANIFEST.json) отсутствует или не читается",
+      "manifest_too_large": "список файлов копии (MANIFEST.json) превышает 1 МиБ",
       "not_tow": "это не ночная копия TOW",
       "unexpected_file": "лишний файл в копии: {name}",
       "unsafe_path": "небезопасный путь в копии: {name}",

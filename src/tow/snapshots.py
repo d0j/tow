@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import hmac
+import io
 import json
 import os
 import re
@@ -58,6 +59,8 @@ UNSIGNED_FORMAT = "tow-snapshot-v1"  # copies made before 1.17: checked, never r
 _SIGNATURE_PURPOSE = "night-copies"
 _POINT_MEMBER = re.compile(r"restore-points/(?P<id>[A-Za-z0-9-]{1,64})\.towx")
 KEEP_DEFAULT = 14
+MAX_MANIFEST_BYTES = 1024 * 1024
+MAX_MEMBER_SIZE = 2**63 - 1
 # Exists only while a settings change can still be undone: its absence is normal.
 _OPTIONAL_MEMBERS = frozenset({"secrets-undo.enc"})
 _PREFIX = "tow-"
@@ -180,7 +183,11 @@ def _signature_matches(manifest: dict[str, Any], key: bytes) -> bool:
 def _read_manifest(path: Path) -> dict[str, Any]:
     lang = owner_language()
     try:
-        manifest = json.loads((path / "MANIFEST.json").read_text(encoding="utf-8"))
+        with (path / "MANIFEST.json").open("rb") as handle:
+            content = handle.read(MAX_MANIFEST_BYTES + 1)
+        if len(content) > MAX_MANIFEST_BYTES:
+            raise SnapshotError(t("backup.snapshot.manifest_too_large", lang))
+        manifest = json.loads(content.decode("utf-8"))
     except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         raise SnapshotError(t("backup.snapshot.manifest_unreadable", lang)) from exc
     if (
@@ -190,6 +197,24 @@ def _read_manifest(path: Path) -> dict[str, Any]:
     ):
         raise SnapshotError(t("backup.snapshot.not_tow", lang))
     return manifest
+
+
+def _member_size(name: str, meta: Any) -> int:
+    """A file size, not a coerced float/string or an unrepresentable filesystem integer."""
+    size = meta.get("size") if isinstance(meta, dict) else None
+    if type(size) is not int or not 0 <= size <= MAX_MEMBER_SIZE:
+        raise SnapshotError(t("backup.snapshot.file_damaged", owner_language(), name=name))
+    return size
+
+
+def _manifest_bytes(manifest: dict[str, Any]) -> bytes:
+    with io.BytesIO() as output:
+        for chunk in json.JSONEncoder(indent=2).iterencode(manifest):
+            content = chunk.encode("utf-8")
+            if output.tell() + len(content) > MAX_MANIFEST_BYTES:
+                raise SnapshotError(t("backup.snapshot.manifest_too_large", owner_language()))
+            output.write(content)
+        return output.getvalue()
 
 
 def _owned_manifest(path: Path, key: bytes) -> dict[str, Any] | None:
@@ -272,14 +297,13 @@ def list_snapshots(limit: int = 10) -> list[dict[str, Any]]:
     rows = []
     for folder in reversed(folders[-limit:]):
         try:
-            manifest = json.loads((folder / "MANIFEST.json").read_text(encoding="utf-8"))
+            manifest = _read_manifest(folder)
             created = datetime.fromisoformat(str(manifest.get("created_at")))
-            size = sum(int(item.get("size") or 0) for item in (manifest.get("files") or {}).values())
-        except OSError, UnicodeError, ValueError, TypeError, AttributeError:
+            created_ts = created.timestamp()
+            size = sum(_member_size(name, meta) for name, meta in manifest["files"].items())
+        except SnapshotError, OSError, ValueError, TypeError, AttributeError, OverflowError:
             continue
-        rows.append(
-            {"name": folder.name, "created_ts": created.timestamp(), "bytes": size, "version": manifest.get("version")}
-        )
+        rows.append({"name": folder.name, "created_ts": created_ts, "bytes": size, "version": manifest.get("version")})
     return rows
 
 
@@ -339,7 +363,7 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
             "missing": missing,
         }
         manifest["signature"] = _signature(manifest, key)
-        (partial / "MANIFEST.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        (partial / "MANIFEST.json").write_bytes(_manifest_bytes(manifest))
         _rename_with_retry(partial, target)
     except SnapshotError:
         if partial_created:
@@ -505,9 +529,7 @@ def _read_verified(path: Path) -> tuple[dict[str, Any], dict[str, bytes], bool]:
     contents: dict[str, bytes] = {}
     for name, meta in manifest["files"].items():
         _member_target(name)  # a strict name, and a target that stays where it belongs
-        size = meta.get("size") if isinstance(meta, dict) else None
-        if type(size) is not int or size < 0:
-            raise SnapshotError(t("backup.snapshot.file_damaged", lang, name=name))
+        size = _member_size(name, meta)
         if name == "config.yaml" and size > MAX_INPUT_BYTES:
             raise SnapshotError(str(YamlLimitError("yaml_limits.size")))
         try:
@@ -516,6 +538,8 @@ def _read_verified(path: Path) -> tuple[dict[str, Any], dict[str, bytes], bool]:
                 raise SnapshotError(t("backup.snapshot.file_damaged", lang, name=name))
             with source.open("rb") as handle:
                 content = handle.read(size + 1)
+        except OverflowError as exc:
+            raise SnapshotError(t("backup.snapshot.file_damaged", lang, name=name)) from exc
         except OSError as exc:
             raise SnapshotError(t("backup.snapshot.file_missing", lang, name=name)) from exc
         if len(content) != size or hashlib.sha256(content).hexdigest() != meta.get("sha256"):

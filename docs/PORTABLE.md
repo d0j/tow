@@ -466,6 +466,15 @@ Night-copy verification and preview check the configuration as well as its signa
 restoration writes anything. A broken live configuration can still be replaced by a healthy copy; when its
 local access settings cannot be read, the restored settings are local-only.
 
+Since 1.22.41, night-copy `MANIFEST.json` is limited to 1 MiB before JSON decoding. New
+descriptions are encoded into a bounded buffer before publication; an oversized description
+does not publish a new copy or prune earlier ones. File sizes must be exact, nonnegative integers
+within the signed 64-bit filesystem range: strings, booleans, fractions and non-finite numbers
+are not coerced. Settings skips unreadable descriptions, invalid dates and sizes; inventory
+is not proof of signature verification. The descriptor limit follows the
+[Python JSON guidance](https://docs.python.org/3/library/json.html) on bounded untrusted input
+and does not limit the size of JSON history or stream the full contents of a restore.
+
 The pre-construction check uses [PyYAML parsing events](https://pyyaml.org/wiki/PyYAMLDocumentation)
 because [PyYAML 6.0.3 expands merge mappings during construction](https://github.com/yaml/pyyaml/blob/6.0.3/lib/yaml/constructor.py),
 before schema validation. Resource bounds also follow the approach used by
