@@ -374,6 +374,25 @@ def test_import_log_failure_keeps_committed_result_and_readable_state(tmp_path, 
     assert state_path().is_file()
 
 
+def test_import_reports_a_real_best_effort_log_write_failure(tmp_path, monkeypatch):
+    _seed_source(monkeypatch, tmp_path / "source")
+    bundle = tmp_path / "tow.towx"
+    export_bundle(bundle, "bundle-passphrase")
+
+    def unavailable_log():
+        raise OSError("synthetic audit storage unavailable")
+
+    monkeypatch.setattr("tow.log.log_path", unavailable_log)
+    result = import_bundle(bundle, "bundle-passphrase", apply=True)
+
+    assert result["committed"] is True
+    assert result["read_back"] is True
+    assert result["log_recorded"] is False
+    assert result["log_error"]
+    marker = Path(result["checkpoint"]) / "TRANSACTION.json"
+    assert json.loads(marker.read_text(encoding="utf-8"))["log_recorded"] is False
+
+
 def test_incomplete_import_transaction_is_recovered_before_next_import(tmp_path, monkeypatch):
     from tow import bundle as tow_bundle
 

@@ -264,7 +264,7 @@ def test_log_write_failure_does_not_raise(monkeypatch, capsys):
         return real_open(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "open", failing_open)
-    tow_log.log_event("client_added", topic="t1")  # must not raise
+    assert tow_log.log_event("client_added", topic="t1") is False  # must not raise
 
     assert "TOW log write failed (client_added)" in capsys.readouterr().err
 
@@ -276,7 +276,7 @@ def test_log_rotation_failure_still_appends(monkeypatch):
         raise PermissionError("rotation target in use")
 
     monkeypatch.setattr(tow_log, "_rotate_if_needed", failing_rotate)
-    tow_log.log_event("check_ok", topic="t2")
+    assert tow_log.log_event("check_ok", topic="t2") is True
 
     assert any(e.get("kind") == "check_ok" for e in tow_log.read_events(limit=10))
 

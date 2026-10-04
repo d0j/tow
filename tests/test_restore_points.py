@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import io
 import json
 import re
 from pathlib import Path
@@ -8,7 +10,7 @@ import pytest
 import yaml
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
-from helpers import shown
+from helpers import flash_kind, shown
 
 from tow import restore_points
 from tow.bundle import ExportImportError
@@ -237,6 +239,93 @@ def test_browser_rejects_oversized_request_before_multipart_parse(monkeypatch, t
     assert response.status_code == 413
 
 
+@pytest.mark.parametrize("language", ["en", "ru"])
+@pytest.mark.parametrize("operation", ["check", "restore"])
+@pytest.mark.parametrize("failure", [PermissionError, FileNotFoundError, OSError])
+def test_browser_import_reports_preparation_failure_without_changing_data(
+    monkeypatch, tmp_path, language, operation, failure
+):
+    _seed(monkeypatch, tmp_path, language)
+    before = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+
+    def cannot_prepare(*_args, **_kwargs):
+        raise failure("synthetic storage failure")
+
+    def must_not_import(_path):
+        pytest.fail("an unprepared upload must never enter the import engine")
+
+    monkeypatch.setattr("tow.web.routes_backup.tempfile.mkdtemp", cannot_prepare)
+    monkeypatch.setattr("tow.web.services.check_portable_bundle", must_not_import)
+    monkeypatch.setattr("tow.web.services.restore_portable_bundle", must_not_import)
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"}, raise_server_exceptions=False)
+
+    response = client.post(
+        "/settings/portable/import",
+        data={"operation": operation},
+        files={"backup_file": ("backup.towx", b"not-empty", "application/octet-stream")},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert t("web.settings.file_stage_failed", language) in shown(response.headers["location"])
+    assert all(path.read_bytes() == content for path, content in before.items())
+    assert list((tmp_path / "data").glob("tow-browser-import-*")) == []
+
+
+def test_browser_import_cleans_staged_file_when_upload_close_fails(monkeypatch, tmp_path):
+    from starlette.datastructures import UploadFile
+
+    from tow.web.routes_backup import settings_portable_import
+
+    _seed(monkeypatch, tmp_path)
+    upload = UploadFile(file=io.BytesIO(b"not-empty"), filename="backup.towx")
+
+    async def cannot_close():
+        raise OSError("synthetic close failure")
+
+    monkeypatch.setattr(upload, "close", cannot_close)
+    monkeypatch.setattr("tow.web.services.check_portable_bundle", lambda _path: None)
+
+    with pytest.raises(OSError, match="synthetic close failure"):
+        asyncio.run(settings_portable_import(upload, "check"))
+
+    assert list((tmp_path / "data").glob("tow-browser-import-*")) == []
+    assert load_state()["topics"] == [{"id": "before"}]
+    upload.file.close()
+
+
+@pytest.mark.parametrize("operation", ["check", "restore"])
+@pytest.mark.parametrize(
+    "filename", ["backup.towx", "../../outside.towx", r"..\..\outside.towx", r"Z:\outside.towx", "/outside.towx"]
+)
+def test_browser_import_never_uses_the_uploaded_filename_as_a_path(monkeypatch, tmp_path, operation, filename):
+    _seed(monkeypatch, tmp_path)
+    seen = []
+
+    def inspect_staging(path):
+        seen.append(path)
+        assert path.name == "uploaded.towx"
+        assert path.parent.name.startswith("tow-browser-import-")
+        assert path.parent.parent.resolve() == (tmp_path / "data").resolve()
+        return {"safety_point": "synthetic-point"}
+
+    monkeypatch.setattr("tow.web.services.check_portable_bundle", inspect_staging)
+    monkeypatch.setattr("tow.web.services.restore_portable_bundle", inspect_staging)
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+
+    response = client.post(
+        "/settings/portable/import",
+        data={"operation": operation},
+        files={"backup_file": (filename, b"not-empty", "application/octet-stream")},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert len(seen) == 1
+    assert list((tmp_path / "data").glob("tow-browser-import-*")) == []
+    assert load_state()["topics"] == [{"id": "before"}]
+
+
 def test_browser_reports_critical_rollback_failure_truthfully(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
@@ -256,6 +345,42 @@ def test_browser_reports_critical_rollback_failure_truthfully(monkeypatch, tmp_p
     message = shown(response.headers["location"])
     assert "критическая ошибка отката" in message
     assert "данные могли измениться" in message
+
+
+@pytest.mark.parametrize("language", ["en", "ru"])
+@pytest.mark.parametrize("source", ["file", "point"])
+def test_browser_reports_restored_data_but_missing_audit_event(monkeypatch, tmp_path, language, source):
+    _seed(monkeypatch, tmp_path, language)
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    if source == "point":
+        point = create_restore_point()
+    else:
+        exported = client.post("/settings/portable/export").content
+    save_state({"topics": [{"id": "current"}], "mirrors": {}})
+
+    def unavailable_log():
+        raise OSError("synthetic audit storage unavailable")
+
+    monkeypatch.setattr("tow.log.log_path", unavailable_log)
+    if source == "point":
+        response = client.post(f"/settings/restore-points/{point['id']}/restore", follow_redirects=False)
+        success = t("web.settings.restored", language)
+    else:
+        response = client.post(
+            "/settings/portable/import",
+            data={"operation": "restore"},
+            files={"backup_file": ("backup.towx", exported, "application/octet-stream")},
+            follow_redirects=False,
+        )
+        success = t("web.settings.restored_file", language)
+
+    assert response.status_code == 303
+    message = shown(response.headers["location"])
+    assert success in message
+    assert t("web.settings.audit_missing", language) in message
+    assert flash_kind(response.headers["location"]) == "warn"
+    assert t("web.settings.file_unreadable", language) not in message
+    assert load_state()["topics"] == [{"id": "before"}]
 
 
 def test_restore_point_and_export_work_after_settings_and_site_edits(monkeypatch, tmp_path):

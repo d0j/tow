@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import vm from "node:vm";
+import { createRequire } from "node:module";
 
-const source = readFileSync(new URL("../../src/tow/static/updates.js", import.meta.url), "utf8");
+const require = createRequire(import.meta.url);
 const flush = async () => { for (let i = 0; i < 8; i++) await new Promise(resolve => setImmediate(resolve)); };
 const fixture = async (options = {}) => {
   const elements = new Map();
@@ -19,7 +18,7 @@ const fixture = async (options = {}) => {
   const timers = new Map();
   let timerId = 0;
   const response = data => ({ ok: true, json: async () => data });
-  vm.runInNewContext(source, {
+  Object.assign(globalThis, {
     document: { querySelector: selector => elements.get(selector), documentElement: { lang: "en" } },
     t: (key, vars = {}) => `${key}:${JSON.stringify(vars)}`, URLSearchParams, AbortSignal, Date,
     window: { confirm: () => true, location: { reload() {} }, setInterval() {},
@@ -46,6 +45,8 @@ const fixture = async (options = {}) => {
       return response({ ok: true, available: true, latest: "1.22.21", checked_at: 1e300 });
     },
   });
+  delete require.cache[require.resolve("../../src/tow/static/updates.js")];
+  require("../../src/tow/static/updates.js");
   await flush();
   const el = name => elements.get(`[data-${name}]`);
   const click = async name => { el(name).events.click(); await flush(); };

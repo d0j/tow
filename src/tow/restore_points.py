@@ -288,6 +288,7 @@ def _restore_bundle(
         "safety_point": str(safety_point["id"]),
         "access_preserved": True,
         "checkpoint": str(applied["checkpoint"]),
+        "log_recorded": applied.get("log_recorded") is True,
     }
 
 

@@ -3,6 +3,19 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.31] — 2026-10-04
+
+### Fixed
+
+- Report backup-file preparation failures in Settings instead of an unexplained server error. Checking and
+  restoring a file now explain unavailable storage or folder permissions without changing the current data.
+- Clean up staged uploads even if closing the uploaded file fails.
+- Report a missing restore audit event without undoing a successfully committed restore. Settings show a
+  warning, and the import result and durable transaction marker no longer claim an unwritten event was recorded.
+- Run browser-script tests by loading the checked-in modules directly, without evaluating source strings;
+  retain the update, rollback, recovery, overlay and countdown checks.
+- Keep the security support policy aligned with the latest stable release rather than an obsolete version line.
+
 ## [1.22.30] — 2026-10-04
 
 ### Fixed

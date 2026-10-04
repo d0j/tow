@@ -1088,6 +1088,21 @@ def _destination_readback(parsed: dict[str, Any], state_bytes: bytes, history_by
         raise ExportImportError("encrypted destination secret read-back failed") from exc
 
 
+def _record_import_event(checkpoint: Path, mappings: list[tuple[str, str]], members: list[str]) -> bool:
+    try:
+        return log_event(
+            "portable_import_applied",
+            operation_id=uuid.uuid4().hex,
+            format=FORMAT,
+            checkpoint=str(checkpoint),
+            path_maps=mappings,
+            members=members,
+        )
+    except Exception as exc:  # noqa: BLE001 - the import is committed; a lost audit line is not fatal
+        logging.getLogger("tow.bundle").warning("import audit event not written: %s", type(exc).__name__)
+        return False
+
+
 def import_bundle(
     input_path: Path,
     passphrase: str,
@@ -1164,12 +1179,13 @@ def _import_bundle(
     mapped_state, warnings = _apply_path_maps(parsed["state"], mappings)
     state_bytes = _json_bytes(mapped_state)
     history_bytes = _json_bytes(parsed["history"])
+    members = sorted(name for name in parsed["members"] if name != "manifest.json")
     result = {
         "ok": True,
         "format": FORMAT,
         "preview": not apply,
         "apply_required": not apply,
-        "members": sorted(name for name in parsed["members"] if name != "manifest.json"),
+        "members": members,
         "path_maps": [{"old": old, "new": new} for old, new in mappings],
         "config_overrides": sorted(overrides),
         "preserved_secret_keys": sorted(secret_keys),
@@ -1217,18 +1233,8 @@ def _import_bundle(
     result.update(
         {"preview": False, "apply_required": False, "checkpoint": str(checkpoint), "read_back": True, "committed": True}
     )
-    try:
-        log_event(
-            "portable_import_applied",
-            operation_id=uuid.uuid4().hex,
-            format=FORMAT,
-            checkpoint=str(checkpoint),
-            path_maps=mappings,
-            members=result["members"],
-        )
-        result["log_recorded"] = True
-    except Exception as exc:  # noqa: BLE001 - the import is committed; a lost audit line is reported, not fatal
-        logging.getLogger("tow.bundle").warning("import audit event not written: %s", type(exc).__name__)
+    result["log_recorded"] = _record_import_event(checkpoint, mappings, members)
+    if not result["log_recorded"]:
         result["log_error"] = "audit event could not be persisted"
     try:
         _write_import_transaction(checkpoint, status="committed", log_recorded=result["log_recorded"])
