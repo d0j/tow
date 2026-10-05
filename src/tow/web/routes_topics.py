@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import heapq
+import json
 import uuid
 from typing import Any
 
@@ -18,9 +19,10 @@ from tow.config import as_bool
 from tow.errors import TowError
 from tow.folders import paths_equal, recent_save_roots, remember_save_root, resolve_save_path, save_path_problem
 from tow.log import error_fields
-from tow.selection import normalize_policy
+from tow.selection import normalize_policy, stored_policy
 from tow.store import CheckBusyError, SecretStoreError
 from tow.topic_timers import parse_interval, set_interval
+from tow.torrent import parse_torrent_metadata
 from tow.trackers import load_trackers, match_tracker
 from tow.web import _context, services
 from tow.web.templating import TEMPLATES
@@ -148,7 +150,34 @@ _DRAFT_FIELDS = (
     "selection_value",
     "tracking_mode",
     "check_interval_min",
+    "content_token",
+    "selection_indices",
 )
+
+
+def _selection_form(
+    mode: str,
+    value: str,
+    tracking: str,
+    token: str,
+    indices: str,
+    url: str,
+    client_id: str,
+    previous: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if mode != "exact":
+        return normalize_policy(mode, value, tracking)
+    if not token and not indices and previous and previous.get("mode") == "exact":
+        return normalize_policy(
+            mode, tracking_mode=tracking, files=previous.get("files"), source_hash=previous.get("source_hash")
+        )
+    if len(indices) > 200_000:
+        raise TowError("selection.exact_invalid")
+    try:
+        parsed = json.loads(indices)
+    except (ValueError, RecursionError) as exc:
+        raise TowError("selection.exact_invalid") from exc
+    return services.content_selection(token, url, client_id, parsed, tracking)
 
 
 def _add_refused(problem: str, draft: dict[str, str], kind: str = "") -> RedirectResponse:
@@ -168,6 +197,8 @@ def topics_add(
     selection_value: str = Form(""),
     tracking_mode: str = Form("watch"),
     check_interval_min: str = Form(""),
+    content_token: str = Form(""),
+    selection_indices: str = Form(""),
 ) -> Response:
     from tow.clients.factory import client_configuration
     from tow.title import guess_topic_title, title_is_placeholder
@@ -184,6 +215,8 @@ def topics_add(
         "selection_value": selection_value,
         "tracking_mode": tracking_mode,
         "check_interval_min": check_interval_min,
+        "content_token": content_token,
+        "selection_indices": selection_indices,
     }
     try:
         interval = parse_interval(check_interval_min)
@@ -219,8 +252,20 @@ def topics_add(
     if not selected_client.get("enabled", True):
         return _add_refused(t("web.topics.client_disabled"), draft, "client")
     try:
-        policy = normalize_policy(selection_mode, selection_value, tracking_mode)
-    except ValueError as exc:
+        policy = _selection_form(
+            selection_mode,
+            selection_value,
+            tracking_mode,
+            content_token,
+            selection_indices,
+            url,
+            str(selected_client["id"]),
+        )
+        if content_token:
+            prepared_hash = parse_torrent_metadata(
+                services.read_content(content_token, url, str(selected_client["id"]))
+            ).infohash
+    except (ValueError, RuntimeError) as exc:
         return _add_refused(str(exc), draft, "selection")
     new: dict[str, Any] = {
         "id": uuid.uuid4().hex[:12],
@@ -229,9 +274,12 @@ def topics_add(
         "save_path": dest,
         "hash": None,
         "client_id": str(selected_client["id"]),
-        "selection": {"mode": policy["mode"], "value": policy["value"]},
+        "selection": stored_policy(policy),
         "tracking_mode": policy["tracking_mode"],
     }
+    if content_token:
+        new["content_token"] = content_token
+        new["content_hash"] = prepared_hash
     set_interval(new, interval)
     with services.persistence_lock():
         state = services.load_state()
@@ -394,6 +442,21 @@ def _move_in_client(
         return t("web.topics.move_failed"), "warn"
 
 
+def _bind_content_edit(topic: dict[str, Any], candidate: dict[str, Any], client_id: str, token: str, mode: str) -> None:
+    changed = candidate["url"] != topic.get("url") or client_id != topic.get("client_id", client_id)
+    if mode == "exact" and not token and changed:
+        raise TowError("content.changed")
+    if topic.get("hash"):
+        return
+    if token:
+        metadata = parse_torrent_metadata(services.read_content(token, str(candidate["url"]), client_id))
+        candidate["content_token"] = token
+        candidate["content_hash"] = metadata.infohash
+    elif changed:
+        candidate.pop("content_token", None)
+        candidate.pop("content_hash", None)
+
+
 @router.post("/topics/{tid}/edit")
 @services.locked_state_mutation
 def topics_edit(
@@ -407,6 +470,8 @@ def topics_edit(
     selection_value: str = Form(""),
     tracking_mode: str = Form("watch"),
     check_interval_min: str | None = Depends(_interval_form),
+    content_token: str = Form(""),
+    selection_indices: str = Form(""),
 ) -> Response:
     state = services.load_state()
     moved, moved_kind = "", "ok"
@@ -418,10 +483,6 @@ def topics_edit(
             if check_interval_min is not None:
                 set_interval(candidate, parse_interval(check_interval_min))
         except TowError as exc:
-            return flash_redirect("/", exc, "err")
-        try:
-            policy = normalize_policy(selection_mode, selection_value, tracking_mode)
-        except ValueError as exc:
             return flash_redirect("/", exc, "err")
         if title.strip():
             candidate["title"] = title.strip()
@@ -447,7 +508,21 @@ def topics_edit(
         old_selection = (
             topic.get("selection") if isinstance(topic.get("selection"), dict) else {"mode": "all", "value": ""}
         )
-        new_selection = {"mode": policy["mode"], "value": policy["value"]}
+        try:
+            policy = _selection_form(
+                selection_mode,
+                selection_value,
+                tracking_mode,
+                content_token,
+                selection_indices,
+                str(candidate["url"]),
+                new_client_id,
+                old_selection,
+            )
+            _bind_content_edit(topic, candidate, new_client_id, content_token, selection_mode)
+        except (ValueError, RuntimeError) as exc:
+            return flash_redirect("/", exc, "err")
+        new_selection = stored_policy(policy)
         selection_changed = old_selection != new_selection
         tracking_changed = str(topic.get("tracking_mode") or "watch") != policy["tracking_mode"]
         candidate["client_id"] = new_client_id

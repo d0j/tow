@@ -85,9 +85,10 @@ def root() -> Path:
     raise RuntimeError("TOW_ROOT must be configured for a portable runtime")
 
 
-def data_dir() -> Path:
+def data_dir(*, create: bool = True) -> Path:
     p = _env_path(_RUNTIME_HOME_ENV, _LEGACY_RUNTIME_HOME_ENV) or root() / "data"
-    p.mkdir(parents=True, exist_ok=True)
+    if create:
+        p.mkdir(parents=True, exist_ok=True)
     return p
 
 
@@ -129,8 +130,10 @@ def _subdir(name: str) -> Path:
     return p
 
 
-def tmp_dir() -> Path:
+def tmp_dir(*, create: bool = True) -> Path:
     """``<data>/tmp``: TOW's temporary files (never the system temp folder)."""
+    if not create:
+        return data_dir(create=False) / "tmp"
     return _subdir("tmp")
 
 

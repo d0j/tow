@@ -344,6 +344,8 @@ def _validate_state_topic(index: int, topic: Any) -> None:
         "tracker_title",
         "tracking_mode",
         "selection_hash",
+        "content_token",
+        "content_hash",
     ):
         _validate_field(topic, key, str, label=label)
     for key in (
@@ -366,6 +368,13 @@ def _validate_state_topic(index: int, topic: Any) -> None:
             raise ExportImportError(f"{label}.selection has an invalid type")
         for key in ("mode", "value"):
             _validate_field(selection, key, str, label=f"{label}.selection")
+        if selection.get("mode") == "exact":
+            from tow.selection import policy_from_topic
+
+            try:
+                policy_from_topic(topic)
+            except ValueError as exc:
+                raise ExportImportError(f"{label}.selection has an invalid exact file selection") from exc
 
 
 def _validate_state_mirror(name: Any, mirror: Any) -> None:

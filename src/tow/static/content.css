@@ -1,0 +1,19 @@
+.content-picker { grid-column: 1 / -1; min-width: 0; border: 1px solid var(--line); border-radius: .4rem; padding: .5rem; }
+.content-picker .actions { flex-wrap: wrap; }
+.content-tree { max-height: 22rem; overflow: auto; margin-block: .4rem; }
+.content-file, .content-folder { display: flex; align-items: center; gap: .5rem; margin: 0; padding: .25rem; overflow-wrap: anywhere; }
+.content-file label, .content-folder label { display: flex; align-items: center; flex: 1; min-width: 0; gap: .5rem; margin: 0; }
+.content-file span, .content-folder span { flex: 1; min-width: 0; }
+.content-file small { white-space: nowrap; }
+.content-folder { font-weight: 600; }
+.content-file input, .content-folder input { flex: none; width: 1rem; height: 1rem; }
+.content-unused { display: none; }
+.content-picker [hidden] { display: none; }
+.content-tree [data-depth="1"] { padding-inline-start: .75rem; }
+.content-tree [data-depth="2"] { padding-inline-start: 1.25rem; }
+.content-tree [data-depth="3"] { padding-inline-start: 1.75rem; }
+.content-tree [data-depth="4"] { padding-inline-start: 2.25rem; }
+.content-tree [data-depth="5"] { padding-inline-start: 2.75rem; }
+.content-tree [data-depth="6"] { padding-inline-start: 3.25rem; }
+.content-tree [data-depth="7"] { padding-inline-start: 3.75rem; }
+.content-tree [data-depth="8"] { padding-inline-start: 4.25rem; }

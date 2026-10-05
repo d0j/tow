@@ -822,10 +822,10 @@ details.help[open] > summary { color: var(--acc); border-color: var(--acc2); }
 .portable-import-form { display: grid; gap: .4rem; max-width: 42rem; }
 .portable-import-form label { margin: 0; }
 /* L1: 40 px like the other fields; its 26 px button sits centred inside. */
-.portable-import-form input[type="file"] {
+.portable-import-form input[type="file"], .content-picker input[type="file"] {
   height: var(--field-h); padding: calc((var(--field-h) - var(--btn-h-sm)) / 2 - 1px) .35rem; font-size: 12.5px; line-height: var(--btn-h-sm);
 }
-.portable-import-form input[type="file"]::file-selector-button {
+.portable-import-form input[type="file"]::file-selector-button, .content-picker input[type="file"]::file-selector-button {
   height: var(--btn-h-sm); margin-right: .55rem; padding: 0 .6rem;
   color: #fff; background: var(--acc2); border: 0; border-radius: 8px;
   cursor: pointer; font: inherit;

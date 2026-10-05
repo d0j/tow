@@ -81,6 +81,8 @@ CLASSES: dict[str, str] = {
     "mirrors.frozen": "frozen",
     "mirrors.no_hosts": "error",
     "selection.": "error",
+    "content.": "error",
+    "content.limited": "quota",
     "tracker.": "error",
     "tracker.no_download_link": "tracker_auth",
     "tracker.not_torrent": "not_torrent",

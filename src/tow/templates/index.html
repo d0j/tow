@@ -40,6 +40,7 @@
         <select id="topic-selection-mode" name="selection_mode">
           {% set mode = draft.get('selection_mode', 'all') %}
           <option value="all"{% if mode == 'all' %} selected{% endif %}>{{ t('home.add.mode_all') }}</option>
+          <option value="exact"{% if mode == 'exact' %} selected{% endif %}>{{ t('content.manual') }}</option>
           <option value="episodes"{% if mode == 'episodes' %} selected{% endif %}>{{ t('home.add.mode_episodes') }}</option>
           <option value="files"{% if mode == 'files' %} selected{% endif %}>{{ t('home.add.mode_files') }}</option>
         </select>
@@ -52,9 +53,12 @@
         </select>
       </div>
     </div>
+    <div data-content-expression>
     <label for="topic-selection-value">{{ t('home.add.selection') }}</label>
     <textarea id="topic-selection-value" name="selection_value" rows="2" placeholder="{{ t('home.add.selection_placeholder') }}"{{ invalid('topic-selection-value', bad_field) }}>{{ draft.get('selection_value', '') }}</textarea>
     <p class="sub">{{ t('home.add.selection_hint') }}</p>
+    </div>
+    {% set topic = none %}{% include '_content_picker.html' %}
     <label for="topic-check-interval">{{ t('timer.field') }}</label>
     <input id="topic-check-interval" name="check_interval_min" type="number" min="1" max="10080" step="1" placeholder="{{ t('timer.global_placeholder') }}" value="{{ draft.get('check_interval_min', '') }}" aria-describedby="topic-check-interval-hint"{{ invalid('topic-check-interval', bad_field) }}>
     <p id="topic-check-interval-hint" class="field-hint">{{ t('timer.hint') }}</p>

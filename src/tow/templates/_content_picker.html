@@ -1,0 +1,28 @@
+<section class="content-picker" data-content-picker data-existing="{{ content_existing(topic)|tojson|forceescape }}">
+  <div class="actions">
+    <strong>{{ t('content.title') }}</strong>
+    <button type="button" class="ghost" data-content-help aria-label="{{ t('content.help_label') }}" aria-expanded="false" aria-controls="content-help-{{ topic.id if topic else 'new' }}">?</button>
+    <button type="button" data-content-load>{{ t('content.load') }}</button>
+  </div>
+  <p class="field-hint" id="content-help-{{ topic.id if topic else 'new' }}" data-content-help-text hidden>{{ t('content.help') }}</p>
+  <noscript><p class="field-hint">{{ t('content.no_script') }}</p></noscript>
+  {% if topic and topic.selection and topic.selection.mode == 'exact' %}<p class="field-hint">{{ t('content.pending') }}</p>{% endif %}
+  <label>{{ t('content.upload') }}<input type="file" accept=".torrent,application/x-bittorrent" data-content-upload></label>
+  <button type="button" class="ghost" data-content-limited hidden>{{ t('content.limited_load') }}</button>
+  <input type="hidden" name="content_token" value="{{ draft.get('content_token', '') if draft else '' }}">
+  <input type="hidden" name="selection_indices" value="{{ draft.get('selection_indices', '') if draft else '' }}">
+  <p class="field-hint" data-content-status role="status" aria-live="polite"></p>
+  <div data-content-results hidden>
+    <label>{{ t('content.search') }}<input type="search" data-content-search></label>
+    <div class="actions" data-content-manual-actions>
+      <button type="button" class="ghost" data-content-all>{{ t('content.all') }}</button>
+      <button type="button" class="ghost" data-content-none>{{ t('content.none') }}</button>
+    </div>
+    <div class="content-tree" data-content-tree></div>
+    <div class="actions" data-content-pages hidden>
+      <button type="button" class="ghost" data-content-prev>{{ t('content.previous') }}</button>
+      <span class="field-hint" data-content-page></span>
+      <button type="button" class="ghost" data-content-more>{{ t('content.more') }}</button>
+    </div>
+  </div>
+</section>

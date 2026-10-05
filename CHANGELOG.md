@@ -3,6 +3,21 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [Unreleased]
+
+### Added
+
+- Graphical torrent-content selection in add and edit forms: collapsible folders,
+  partial folder selection, search that preserves checked files, byte totals and
+  bounded 200-row pages. Exact selections store literal paths and sizes, not masks
+  or client indices; new files remain unselected and changed selected files require review.
+- Explicit metadata preparation from the tracker or a local `.torrent`, with
+  encrypted, source/client-bound temporary snapshots and an explicit confirmation
+  for download-limited sites. Refused forms restore their prepared selection without
+  another tracker request. Expired pending adds may refetch only the proven revision.
+  The existing stopped-add, ownership and priority read-back pipeline applies selections.
+  State schema 2 prevents older releases from misinterpreting structured selections.
+
 ## [1.22.58] — 2026-10-05
 
 ### Added

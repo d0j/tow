@@ -21,6 +21,8 @@ class Selection(TypedDict, total=False):
 
     mode: str  # all | episodes | files ...
     value: str
+    files: list[dict[str, Any]]
+    source_hash: str
 
 
 # A client relocation the owner started; the check ends it when the client agrees.
@@ -38,6 +40,8 @@ class Topic(TypedDict, total=False):
     save_path: str
     client_id: str
     selection: Selection
+    content_token: str
+    content_hash: str
     tracking_mode: str  # watch | once
     check_interval_min: int | None
     check_timer_revision: str
