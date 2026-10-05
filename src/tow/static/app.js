@@ -628,20 +628,25 @@ if (downloadPop && downloadBody) {
 // Search and list tools (E1): words match in any order (AND), "ё" = "е", the
 // state lives in the URL, matches are highlighted and "/" opens the search.
 const fold = (value) => String(value || "").toLowerCase().replaceAll("ё", "е");
-// A radio menu keeps the native select as the single source of the sort value.
-const initSortMenu = (select) => {
-  const picker = document.getElementById("sort-picker");
-  const toggle = document.getElementById("sort-toggle");
-  const menu = document.getElementById("sort-menu");
+// Both radio menus keep their native selects as the single source of the value.
+const initChoiceMenu = (select, name) => {
+  const picker = document.getElementById(`${name}-picker`);
+  const toggle = document.getElementById(`${name}-toggle`);
+  const menu = document.getElementById(`${name}-menu`);
   if (!select || !picker || !toggle || !menu) return;
-  const items = [...menu.querySelectorAll("[data-sort-value]")];
+  const items = [...menu.querySelectorAll("[data-choice-value]")];
+  if (!items.length) return;
   const sync = () => {
-    items.forEach((item) => item.setAttribute("aria-checked", String(item.dataset.sortValue === select.value)));
-    const current = items.find((item) => item.dataset.sortValue === select.value) || items[0];
-    const label = `${toggle.dataset.sortLabel}: ${current.querySelector("span").textContent}`;
+    items.forEach((item) => item.setAttribute("aria-checked", String(item.dataset.choiceValue === select.value)));
+    const current = items.find((item) => item.dataset.choiceValue === select.value) || items[0];
+    const label = `${toggle.dataset.menuLabel}: ${current.querySelector("span").textContent}`;
     toggle.title = label;
     toggle.setAttribute("aria-label", label);
-    toggle.querySelector("use").setAttribute("href", current.querySelector("use").getAttribute("href"));
+    const icon = current.querySelector("use");
+    if (icon) toggle.querySelector("use").setAttribute("href", icon.getAttribute("href"));
+    const text = toggle.querySelector("span");
+    if (text) text.textContent = current.querySelector("span").textContent;
+    toggle.classList.toggle("on", Boolean(select.value));
   };
   const close = (restoreFocus = false) => {
     menu.hidden = true;
@@ -660,9 +665,9 @@ const initSortMenu = (select) => {
     open(event.key === "ArrowUp" ? items.length - 1 : 0);
   });
   menu.addEventListener("click", (event) => {
-    const item = event.target.closest("[data-sort-value]");
+    const item = event.target.closest("[data-choice-value]");
     if (!item || !menu.contains(item)) return;
-    select.value = item.dataset.sortValue;
+    select.value = item.dataset.choiceValue;
     select.dispatchEvent(new Event("change"));
     close(true);
   });
@@ -699,7 +704,7 @@ if (q) {
   const tools = document.getElementById("list-tools");
   const list = document.getElementById("topics");
   const sortSelect = document.getElementById("list-sort");
-  const trackerChips = tools?.querySelector("[data-tracker-chips]");
+  const trackerSelect = document.getElementById("list-tracker");
   const originalOrder = list ? [...list.querySelectorAll(":scope > .row-wrap")] : [];
   const tone = (row) => ["bad", "warn", "new", "mut", "ok"].find((name) => row.querySelector(".dot.lg")?.classList.contains(name)) || "mut";
   const rank = { bad: 0, warn: 1, new: 2, mut: 3, ok: 4 };
@@ -710,18 +715,14 @@ if (q) {
   if (sortSelect) {
     const mode = params.get("s") || "";
     sortSelect.value = [...sortSelect.options].some((option) => option.value === mode) ? mode : "";
-    initSortMenu(sortSelect);
+    initChoiceMenu(sortSelect, "sort");
   }
-
-  if (tools && trackerChips) {
-    const names = [...new Set(originalOrder.map((row) => row.dataset.tracker).filter(Boolean))].sort();
-    if (names.length > 1) {
-      trackerChips.append(...names.map((name) => Object.assign(document.createElement("button"), {
-        type: "button", className: "chip", textContent: name, value: name,
-      })));
-    }
-    tools.hidden = originalOrder.length < 2;
+  if (trackerSelect) {
+    trackerSelect.value = [...trackerSelect.options].some((option) => option.value === tracker) ? tracker : "";
+    tracker = trackerSelect.value;
+    initChoiceMenu(trackerSelect, "tracker");
   }
+  if (tools) tools.hidden = originalOrder.length < 2 && !tracker;
 
   const highlight = (el, tokens) => {
     if (el.dataset.text === undefined) el.dataset.text = el.textContent;
@@ -779,10 +780,6 @@ if (q) {
       chip.classList.toggle("on", chip.dataset.filter === filter);
       chip.setAttribute("aria-pressed", String(chip.dataset.filter === filter));
     });
-    trackerChips?.querySelectorAll("button").forEach((chip) => {
-      chip.classList.toggle("on", chip.value === tracker);
-      chip.setAttribute("aria-pressed", String(chip.value === tracker));
-    });
     const narrowed = tokens.length || filter || tracker;
     if (searchStatus) searchStatus.textContent = narrowed ? (shown ? t("js.search.shown_of", { shown, total: searchable.length }) : t("js.search.nothing")) : t("js.search.shown", { shown });
   };
@@ -800,9 +797,13 @@ if (q) {
   q.addEventListener("input", () => { announce(); remember(); });
   tools?.addEventListener("click", (event) => {
     const chip = event.target.closest("button");
-    if (!chip || (!chip.hasAttribute("data-filter") && !trackerChips?.contains(chip))) return;
-    if (chip.dataset.filter !== undefined) filter = chip.dataset.filter;
-    else tracker = tracker === chip.value ? "" : chip.value;
+    if (!chip || !chip.hasAttribute("data-filter")) return;
+    filter = chip.dataset.filter;
+    announce();
+    remember();
+  });
+  trackerSelect?.addEventListener("change", () => {
+    tracker = trackerSelect.value;
     announce();
     remember();
   });

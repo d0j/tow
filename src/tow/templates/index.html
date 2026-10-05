@@ -117,7 +117,26 @@
     <button type="button" class="chip" data-filter="new" aria-pressed="false">{{ t('home.tools.new') }}</button>
     <button type="button" class="chip" data-filter="paused" aria-pressed="false">{{ t('home.tools.paused') }}</button>
   </span>
-  <span class="chips" role="group" aria-label="{{ t('home.tools.site') }}" data-tracker-chips></span>
+  <label class="sr-only" for="list-tracker">{{ t('home.tools.site') }}</label>
+  <select id="list-tracker">
+    <option value="">{{ t('home.tools.all_sites') }}</option>
+    {% for name in tracker_options %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+  </select>
+  <div class="tracker-picker" id="tracker-picker" hidden>
+    <button type="button" class="ghost tracker-toggle" id="tracker-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="tracker-menu" aria-label="{{ t('home.tools.site') }}" data-menu-label="{{ t('home.tools.site') }}">
+      <svg width="16" height="16" aria-hidden="true" focusable="false"><use href="#i-globe"/></svg>
+      <span>{{ t('home.tools.all_sites') }}</span>
+      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg>
+    </button>
+    <div class="sort-menu tracker-menu" id="tracker-menu" role="menu" aria-label="{{ t('home.tools.site') }}" hidden>
+      {% for name in [''] + tracker_options %}
+      <button type="button" class="ghost sort-option tracker-option" role="menuitemradio" aria-checked="{{ 'true' if not name else 'false' }}" tabindex="-1" data-choice-value="{{ name }}" title="{{ name or t('home.tools.all_sites') }}">
+        <span>{{ name or t('home.tools.all_sites') }}</span>
+        <svg class="sort-selected" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>
+      </button>
+      {% endfor %}
+    </div>
+  </div>
   </div>
   <label class="sr-only" for="list-sort">{{ t('home.tools.order') }}</label>
   <select id="list-sort">
@@ -127,13 +146,13 @@
     <option value="status">{{ t('home.sort.status') }}</option>
   </select>
   <div class="sort-picker" id="sort-picker" hidden>
-    <button type="button" class="ghost ico sort-toggle" id="sort-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="sort-menu" aria-label="{{ t('home.tools.order') }}" title="{{ t('home.tools.order') }}" data-sort-label="{{ t('home.tools.order') }}">
+    <button type="button" class="ghost ico sort-toggle" id="sort-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="sort-menu" aria-label="{{ t('home.tools.order') }}" title="{{ t('home.tools.order') }}" data-menu-label="{{ t('home.tools.order') }}">
       <svg width="18" height="18" aria-hidden="true" focusable="false"><use href="#i-sort-added"/></svg>
       <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg>
     </button>
     <div class="sort-menu" id="sort-menu" role="menu" aria-label="{{ t('home.tools.order') }}" hidden>
       {% for value, icon, key in [('', 'added', 'home.sort.added'), ('name', 'name', 'home.sort.name'), ('event', 'event', 'home.sort.event'), ('status', 'status', 'home.sort.status')] %}
-      <button type="button" class="ghost sort-option" role="menuitemradio" aria-checked="{{ 'true' if not value else 'false' }}" tabindex="-1" data-sort-value="{{ value }}">
+      <button type="button" class="ghost sort-option" role="menuitemradio" aria-checked="{{ 'true' if not value else 'false' }}" tabindex="-1" data-choice-value="{{ value }}">
         <svg width="18" height="18" aria-hidden="true" focusable="false"><use href="#i-sort-{{ icon }}"/></svg>
         <span>{{ t(key) }}</span>
         <svg class="sort-selected" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>

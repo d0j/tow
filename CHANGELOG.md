@@ -3,6 +3,16 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.54] — 2026-10-05
+
+### Changed
+
+- Home tracker filters use one compact dropdown instead of a row of site buttons.
+  The alphabetic list includes every configured site and sites still represented in
+  watched topics, with an All trackers choice, scrolling for long lists, keyboard
+  navigation and URL persistence. Status filters remain separate.
+  Legacy YAML scalar site names are displayed as text without rewriting configuration.
+
 ## [1.22.53] — 2026-10-05
 
 ### Changed

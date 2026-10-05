@@ -47,13 +47,21 @@ def index(request: Request) -> Response:
     if is_browser_navigation(request) and access.is_local(request) and first_run(cfg):
         return RedirectResponse("/setup", status_code=303)
     state = _context.state()
+    rows = topic_rows(state)
+    # YAML accepts scalar keys; HTML/URL filter values are always text. Preserve
+    # these legacy names without sorting mixed types or duplicating the All choice.
+    tracker_options = sorted(
+        {str(name) for name in cfg.get("trackers") or {} if str(name)}
+        | {str(row["tracker"]) for row in rows if row.get("tracker")}
+    )
     client_options = [row for row in client_configurations(cfg) if row.get("enabled", True)]
     return TEMPLATES.TemplateResponse(
         request,
         "index.html",
         {
             "title": t("web.title.home"),
-            "topics": topic_rows(state),
+            "topics": rows,
+            "tracker_options": tracker_options,
             "save_roots": recent_save_roots(state),
             "client_options": client_options,
             "default_client_id": default_client_id(cfg),

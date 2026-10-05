@@ -874,7 +874,7 @@ svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 
 /* E1: list tools on the home page */
 .home-page { padding-top: .45rem; }
-.list-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: .3rem .5rem; margin: 0 0 .35rem; }
+.list-tools { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: .3rem .5rem; margin: 0 0 .35rem; }
 /* `display: flex` above beats the UA's [hidden] rule: one topic (or none) shows no tools. */
 .list-tools[hidden] { display: none; }
 .list-filters { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .5rem; min-width: 0; }
@@ -905,6 +905,14 @@ svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 .sort-option:hover, .sort-option:focus-visible { background: var(--panel2); }
 .sort-selected { margin-left: auto; visibility: hidden; }
 .sort-option[aria-checked="true"] .sort-selected { visibility: visible; }
+#list-tracker { width: auto; max-width: 100%; }
+.tracker-picker[hidden] { display: none; }
+.tracker-toggle { max-width: 10rem; }
+.tracker-toggle svg { flex-shrink: 0; }
+.tracker-toggle span, .tracker-option span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tracker-toggle.on, .tracker-toggle[aria-expanded="true"] { border-color: var(--acc2); background: var(--panel2); }
+/* Anchor to the toolbar so a wide menu never runs off the edge of a narrow screen. */
+.tracker-menu { left: 0; right: auto; max-width: min(19rem, 100%); max-height: min(20rem, 45dvh); overflow-y: auto; overscroll-behavior: contain; }
 mark { background: rgba(240,180,41,.35); color: inherit; border-radius: 2px; }
 
 /* G3: needs-attention banner */
