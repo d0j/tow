@@ -73,6 +73,7 @@ class ManagedClient:
         "priority_readback": True,
         "start_stop": True,
         "magnet_metadata": False,
+        "metadata_preview": False,
     }
     # Read-back polling: how many times and how often (tests set the pause to zero).
     POLLS = 50
@@ -387,3 +388,6 @@ class ManagedClient:
 
     def materialize_magnet(self, magnet_url: str, save_path: str | None, infohash: str) -> bytes:
         raise self._fail("client.managed.no_magnet")
+
+    def preview_magnet(self, magnet_url: str) -> bytes:
+        raise self._fail("content.magnet_unsupported")

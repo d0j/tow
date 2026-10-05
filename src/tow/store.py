@@ -63,7 +63,7 @@ class StateVersionError(TowError, StoreCorruptionError):
 
 # The data version of state.json this TOW writes. A TOW that finds a newer one refuses to
 # start; an older one (or none: TOW 1.18 and before) is brought up to date in _migrate_state.
-STATE_SCHEMA_VERSION = 1
+STATE_SCHEMA_VERSION = 2
 
 
 def _quarantine(path: Path) -> Path:
@@ -905,6 +905,14 @@ def _validate_state_container(value: Any) -> None:
             interval_of(topic)
         except TowError as exc:
             raise ValueError("invalid topic check interval") from exc
+        selection = topic.get("selection")
+        if isinstance(selection, dict) and selection.get("mode") == "exact":
+            from tow.selection import policy_from_topic
+
+            try:
+                policy_from_topic(topic)
+            except TowError as exc:
+                raise ValueError("invalid exact file selection") from exc
 
 
 def _validate_history_container(value: Any) -> None:

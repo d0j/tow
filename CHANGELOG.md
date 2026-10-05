@@ -3,6 +3,44 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [Unreleased]
+
+## [1.23.0] — 2026-10-05
+
+### Added
+
+- Graphical torrent-content selection in add and edit forms: collapsible folders,
+  partial folder selection, search that preserves checked files, byte totals and
+  bounded 200-row pages. Exact selections store literal paths and sizes, not masks
+  or client indices; new files remain unselected and changed selected files require review.
+- Explicit metadata preparation from the tracker or a local `.torrent`, with
+  encrypted, source/client-bound temporary snapshots and an explicit confirmation
+  for download-limited sites. Refused forms restore their prepared selection without
+  another tracker request. Expired pending adds may refetch only the proven revision.
+  The existing stopped-add, ownership and priority read-back pipeline applies selections.
+  State schema 2 prevents older releases from misinterpreting structured selections.
+- Explicit native magnet metadata preview, without adding or changing transfer tasks:
+  qBittorrent Web API 2.11.9+ and Deluge, plus read-only export of existing qBittorrent
+  torrents on older clients. Unsupported clients require a `.torrent`; peer access
+  and qBittorrent's uncancellable metadata request are disclosed before use.
+  Deluge responses are size-bounded, strictly decoded and verified against both magnet hashes.
+- Cancelling an edit discards prepared file-picker state and ignores late metadata replies.
+
+### Fixed
+
+- Content API errors render catalog messages separately from unexpected exceptions;
+  storage and parsing diagnostics never become public exception text. Adversarial
+  cache tokens are rejected before any filesystem access.
+- Portable exports preserve the state-format version, including exact choices kept
+  only in undo. Older readers refuse new-format archives before destination writes;
+  unversioned exact selections are rejected rather than imported without a guard.
+
+### Compatibility
+
+- Existing episode and file-pattern rules remain supported. State writes now use
+  schema 2: code-only downgrade to an older schema is refused. Keep the verified
+  pre-update copy for restoring matching data and code together.
+
 ## [1.22.58] — 2026-10-05
 
 ### Added

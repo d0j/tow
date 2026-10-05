@@ -410,9 +410,11 @@ def test_row_buttons_have_distinct_names(client):
 
 
 def _rule(selector: str) -> str:
-    match = re.search(r"(?:^|[}/])\s*" + re.escape(selector) + r"\s*\{([^}]*)\}", CSS)
-    assert match, selector
-    return match.group(1)
+    clean = re.sub(r"/\*.*?\*/", "", CSS, flags=re.DOTALL)
+    for match in re.finditer(r"([^{}]+)\{([^{}]*)\}", clean):
+        if selector in [item.strip() for item in match[1].split(",")]:
+            return match[2]
+    raise AssertionError(selector)
 
 
 def test_header_icons_share_one_32px_rule_in_and_out_of_nav(client):

@@ -14,9 +14,9 @@ from tow.episodes import (
     resolve_episode_coverages,
 )
 from tow.errors import TowError
-from tow.torrent import TorrentFile
+from tow.torrent import MAX_FILES, TorrentFile, validate_relative_path, windows_path_key
 
-MODES = frozenset({"all", "episodes", "files"})
+MODES = frozenset({"all", "episodes", "files", "exact"})
 TRACKING_MODES = frozenset({"watch", "once"})
 
 
@@ -57,7 +57,14 @@ class SelectionPlan:
         }
 
 
-def normalize_policy(mode: object = "all", expression: object = "", tracking_mode: object = "watch") -> dict[str, str]:
+def normalize_policy(
+    mode: object = "all",
+    expression: object = "",
+    tracking_mode: object = "watch",
+    *,
+    files: object = None,
+    source_hash: object = None,
+) -> dict[str, Any]:
     normalized_mode = str(mode or "all").strip().lower()
     lifecycle = str(tracking_mode or "watch").strip().lower()
     value = str(expression or "").strip()
@@ -67,7 +74,7 @@ def normalize_policy(mode: object = "all", expression: object = "", tracking_mod
         raise SelectionError("selection.unknown_tracking")
     if len(value) > MAX_RULE_TEXT:
         raise SelectionError("selection.too_long", limit=MAX_RULE_TEXT)
-    if normalized_mode == "all":
+    if normalized_mode in {"all", "exact"}:
         value = ""
     elif not value:
         raise SelectionError("selection.empty")
@@ -79,14 +86,58 @@ def normalize_policy(mode: object = "all", expression: object = "", tracking_mod
             _episode_range(rule)
     elif normalized_mode == "files":
         _safe_globs(value)
-    return {"mode": normalized_mode, "value": value, "tracking_mode": lifecycle}
+    policy: dict[str, Any] = {"mode": normalized_mode, "value": value, "tracking_mode": lifecycle}
+    if normalized_mode == "exact":
+        policy["files"] = normalize_exact_files(files)
+        if not isinstance(source_hash, str) or not re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", source_hash):
+            raise SelectionError("selection.exact_invalid")
+        policy["source_hash"] = source_hash.upper()
+    return policy
 
 
-def policy_from_topic(topic: Mapping[str, Any]) -> dict[str, str]:
+def normalize_exact_files(value: object) -> list[dict[str, Any]]:
+    """Literal metadata paths and sizes, never patterns or client indices."""
+    if not isinstance(value, list) or not 1 <= len(value) <= MAX_FILES:
+        raise SelectionError("selection.exact_invalid")
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, dict) or set(item) != {"path", "size"}:
+            raise SelectionError("selection.exact_invalid")
+        path, size = item["path"], item["size"]
+        if not isinstance(path, str) or type(size) is not int or not 0 <= size <= 2**63 - 1:
+            raise SelectionError("selection.exact_invalid")
+        try:
+            normalized = validate_relative_path(path)
+        except (ValueError, UnicodeError) as exc:
+            raise SelectionError("selection.exact_invalid") from exc
+        key = windows_path_key(normalized)
+        if normalized != path or key in seen:
+            raise SelectionError("selection.exact_invalid")
+        seen.add(key)
+        result.append({"path": path, "size": size})
+    return sorted(result, key=lambda row: row["path"])
+
+
+def stored_policy(policy: Mapping[str, Any]) -> dict[str, Any]:
+    """The durable selection only; lifecycle remains the topic's separate setting."""
+    result = {"mode": policy["mode"], "value": policy["value"]}
+    if policy["mode"] == "exact":
+        result.update(files=policy["files"], source_hash=policy["source_hash"])
+    return result
+
+
+def policy_from_topic(topic: Mapping[str, Any]) -> dict[str, Any]:
     raw = topic.get("selection")
     if not isinstance(raw, dict):
         raw = {}
-    return normalize_policy(raw.get("mode", "all"), raw.get("value", ""), topic.get("tracking_mode", "watch"))
+    return normalize_policy(
+        raw.get("mode", "all"),
+        raw.get("value", ""),
+        topic.get("tracking_mode", "watch"),
+        files=raw.get("files"),
+        source_hash=raw.get("source_hash"),
+    )
 
 
 def _split_rules(value: str) -> list[str]:
@@ -191,7 +242,7 @@ def _safe_globs(value: str) -> list[str]:
 
 def resolve_selection(
     files: Iterable[TorrentFile],
-    policy: dict[str, str],
+    policy: dict[str, Any],
     *,
     preferred_season: int | None = None,
 ) -> SelectionPlan:
@@ -224,6 +275,16 @@ def resolve_selection(
     elif mode == "episodes":
         episode_keys = _resolve_episode_keys(expression, selectable, preferred_season)
         selected = [row for row in selectable if episode_keys.intersection(label.key for label in labels(row))]
+    elif mode == "exact":
+        wanted = normalize_exact_files(policy.get("files"))
+        available = {(row.path, row.size): row for row in selectable}
+        if any((item["path"], item["size"]) not in available for item in wanted):
+            raise SelectionError("selection.exact_changed")
+        identities = {(item["path"], item["size"]) for item in wanted}
+        selected = [row for row in selectable if (row.path, row.size) in identities]
+        for row in selected:
+            if is_video_file(row.path):
+                episode_keys.update(label.key for label in labels(row))
     elif mode == "files":
         patterns = _safe_globs(expression)
         selected = []

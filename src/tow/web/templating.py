@@ -18,6 +18,7 @@ from tow import __version__, access, i18n, platform, undo
 from tow.auth import password_hint
 from tow.clients.factory import client_name
 from tow.config import interval_sec_of, port_of
+from tow.jsonish import as_dict
 from tow.trackers import load_trackers, match_tracker
 from tow.web import _context, services
 from tow.web.text import t, tm
@@ -29,7 +30,7 @@ STATIC_DIR = PACKAGE_DIR / "static"
 
 def _static_asset_version() -> str:
     digest = hashlib.sha256()
-    for name in ("app.css", "app.js", "updates.css", "updates.js"):
+    for name in ("app.css", "app.js", "updates.css", "updates.js", "content.css", "content.js"):
         path = STATIC_DIR / name
         if path.is_file():
             digest.update(path.read_bytes())
@@ -156,7 +157,19 @@ def _languages() -> list[dict[str, str]]:
 
 def js_texts() -> dict[str, str]:
     """The ``js.*`` texts of app.js in the current language (base.html hands them over as JSON)."""
-    return i18n.texts_with_prefix("js.")  # built once per language, not per page
+    return i18n.texts_with_prefix("js.")
+
+
+def content_texts() -> dict[str, str]:
+    return i18n.texts_with_prefix("content.js.")
+
+
+def content_existing(topic: dict[str, Any] | None) -> list[dict[str, str]]:
+    """A browser must not round file identities above JavaScript's safe integer range."""
+    selection = as_dict((topic or {}).get("selection"))
+    if selection.get("mode") != "exact":
+        return []
+    return [{"path": row["path"], "size": str(row["size"])} for row in selection.get("files") or []]
 
 
 def sentence(text: object) -> str:
@@ -175,6 +188,8 @@ def configure(templates: Jinja2Templates = TEMPLATES) -> None:
     env["lang"] = i18n.current
     env["languages"] = _languages
     env["js_texts"] = js_texts
+    env["content_texts"] = content_texts
+    env["content_existing"] = content_existing
     env["header_health"] = _header_health_once
     env["static_version"] = STATIC_VERSION
     env["undo_label"] = undo_label

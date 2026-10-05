@@ -233,6 +233,72 @@ def test_export_bundle_is_encrypted_and_contains_authoritative_sections(tmp_path
     )
 
 
+def _exact_topic():
+    return {
+        "id": "manual-fixture",
+        "selection": {
+            "mode": "exact",
+            "source_hash": "A" * 40,
+            "files": [{"path": "Season 1/literal*.mkv", "size": 9007199254740993}],
+        },
+    }
+
+
+@pytest.mark.parametrize("kind", ["active", "undo", "legacy"])
+def test_every_export_preserves_schema_and_old_reader_refuses_before_writes(tmp_path, monkeypatch, kind):
+    from tow import store
+
+    root = tmp_path / "source"
+    _seed_source(monkeypatch, root)
+    state = {"topics": [], "mirrors": {}}
+    if kind == "active":
+        state["topics"] = [_exact_topic()]
+    elif kind == "undo":
+        state["undo"] = {"kind": "topic", "item": _exact_topic()}
+    save_state(state)
+    archive = tmp_path / "guarded.towx"
+    export_bundle(archive, "bundle-passphrase")
+    parsed = _read_bundle(archive, "bundle-passphrase")
+    assert parsed["state"]["schema_version"] == store.STATE_SCHEMA_VERSION == 2
+    targets = [config_path(), state_path(), store.download_history_path(), store.encrypted_secrets_path()]
+    before = {path: path.read_bytes() for path in targets}
+    monkeypatch.setattr(store, "STATE_SCHEMA_VERSION", 1)
+    with pytest.raises(ExportImportError, match=r"state\.json"):
+        import_bundle(archive, "bundle-passphrase", apply=True)
+    assert all(path.read_bytes() == data for path, data in before.items())
+    assert not (root / "data" / "import-checkpoints").exists()
+
+
+@pytest.mark.parametrize("schema", [None, 0, 1])
+@pytest.mark.parametrize("kind", ["active", "undo"])
+def test_unmarked_exact_selection_is_refused_even_inside_undo(schema, kind):
+    state = {"topics": [], "mirrors": {}}
+    if schema is not None:
+        state["schema_version"] = schema
+    if kind == "active":
+        state["topics"] = [_exact_topic()]
+    else:
+        state["undo"] = {"kind": "topic", "item": _exact_topic()}
+    with pytest.raises(ExportImportError, match="require schema 2"):
+        _validate_state_schema(state)
+
+
+def test_exact_selection_export_apply_and_readback_keep_format_guard(tmp_path, monkeypatch):
+    from tow import store
+
+    root = tmp_path / "source"
+    _seed_source(monkeypatch, root)
+    topic = _exact_topic()
+    save_state({"topics": [topic], "mirrors": {}})
+    archive = tmp_path / "exact.towx"
+    export_bundle(archive, "bundle-passphrase")
+    save_state({"topics": [], "mirrors": {}})
+    result = import_bundle(archive, "bundle-passphrase", apply=True)
+    assert result["committed"] is True
+    assert json.loads(state_path().read_bytes())["schema_version"] == store.STATE_SCHEMA_VERSION == 2
+    assert load_state()["topics"] == [topic]
+
+
 def test_import_preview_is_no_write_and_apply_reencrypts_for_destination(tmp_path, monkeypatch):
     source = tmp_path / "source"
     source_config, source_state, source_history, source_secrets = _seed_source(monkeypatch, source)

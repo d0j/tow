@@ -1071,7 +1071,7 @@ def _update_client_selection(
 
 
 def _selection_plan(
-    row: dict[str, Any], metadata: Any, policy: dict[str, str], selection_title: str, *, old: str
+    row: dict[str, Any], metadata: Any, policy: dict[str, Any], selection_title: str, *, old: str
 ) -> Any | None:
     """The file selection, or None while a watched range is entirely in the future (B8)."""
     try:
@@ -1186,21 +1186,34 @@ def _check_revision(work: _TopicCheck) -> None:
         topic["once_done"] = True
 
 
-def _fetch_revision(work: _TopicCheck, policy: dict[str, str]) -> _Fetched | None:
+def _fetch_revision(work: _TopicCheck, policy: dict[str, Any]) -> _Fetched | None:
     """The topic's .torrent; None when the tracker's magnet confirmed the saved revision."""
     run = work.run
+    token = work.topic.get("content_token")
+    if not work.old and token:
+        from tow.content import read
+
+        try:
+            return _Fetched(read(str(token), work.url, work.client_id), None)
+        except TowError as exc:
+            # Retry an expired preparation only with proof of its revision. Fresh metadata
+            # is verified before client operations, never silently replaced by a new "all".
+            if exc.code != "content.expired" or not (work.topic.get("content_hash") or policy["mode"] == "exact"):
+                raise
     if run.apply:
         # Pick up tracker cookies a previous topic's login persisted in this run;
         # the snapshot taken at the start would make every topic log in again.
         run.secrets = load_secrets()
     try:
         blob = work.tracker.fetch_torrent(work.url, run.secrets, run.ua, ignore_cool=run.ignore_cool, persist=run.apply)
-    except Exception as torrent_error:  # noqa: BLE001 - a tracker refusal may fall back to its magnet; else re-raised
+    except Exception as torrent_error:  # a tracker refusal may fall back to its magnet; else re-raised
+        if not work.old and token:
+            raise  # no temporary magnet add before the prepared identity is verified
         return _fetch_by_magnet(work, policy, torrent_error)
     return _Fetched(blob, None)
 
 
-def _fetch_by_magnet(work: _TopicCheck, policy: dict[str, str], torrent_error: Exception) -> _Fetched | None:
+def _fetch_by_magnet(work: _TopicCheck, policy: dict[str, Any], torrent_error: Exception) -> _Fetched | None:
     """The .torrent is unavailable (tracker auth): confirm the saved revision by the tracker's
     magnet, or build the .torrent from that magnet in a client that can; else the error stands."""
     topic, run, tr, client = work.topic, work.run, work.tracker, work.client
@@ -1248,9 +1261,17 @@ def _fetch_by_magnet(work: _TopicCheck, policy: dict[str, str], torrent_error: E
     return _Fetched(blob, magnet_hash)
 
 
-def _plan_selection(work: _TopicCheck, metadata: Any, policy: dict[str, str]) -> Any | None:
+def _plan_selection(work: _TopicCheck, metadata: Any, policy: dict[str, Any]) -> Any | None:
     """The tracker's current title (it names the season), then the file selection for it."""
     topic, run, row = work.topic, work.run, work.row
+    if not work.old and topic.get("content_hash") and topic["content_hash"] != metadata.infohash:
+        raise TowError("selection.preview_changed")
+    if (
+        policy["mode"] == "exact"
+        and (not work.old or topic.get("selection_dirty"))
+        and policy.get("source_hash") != metadata.infohash
+    ):
+        raise TowError("selection.preview_changed")
     if run.apply:
         # The fetch may have logged in again and persisted new cookies; the title
         # request must not go out with the stale ones (and log in yet again).
@@ -1304,7 +1325,7 @@ def _apply_revision(
     h: str,
     migrates: bool,
     plan: Any,
-    policy: dict[str, str],
+    policy: dict[str, Any],
     needs_selection_update: bool,
 ) -> None:
     """Hand the revision (or its new file selection) to the client and record what it confirmed."""
@@ -1382,7 +1403,7 @@ def _hand_to_client(
     dest: str,
     migrates: bool,
     plan: Any,
-    policy: dict[str, str],
+    policy: dict[str, Any],
     needs_selection_update: bool,
 ) -> tuple[str, bool]:
     """Add, reconfigure or just verify the torrent in the client: (the hash the client knows it

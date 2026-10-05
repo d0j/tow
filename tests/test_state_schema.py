@@ -25,7 +25,7 @@ def test_the_version_is_written_first_and_hidden_from_readers():
     save_state({"topics": [{"id": "1"}], "mirrors": {}})
     raw = _raw()
     assert next(iter(raw)) == "schema_version"
-    assert raw["schema_version"] == STATE_SCHEMA_VERSION == 1
+    assert raw["schema_version"] == STATE_SCHEMA_VERSION == 2
     assert load_state() == {"topics": [{"id": "1"}], "mirrors": {}}
 
 

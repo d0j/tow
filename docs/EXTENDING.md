@@ -42,6 +42,10 @@ Every client follows the same read-back contract. Transmission and Deluge use th
    `_set_wanted`, `_stop`, `_start`, `_set_labels`, `_move` and, if the client can, `materialize_magnet`.
 2. Declare optional abilities in `capabilities` (names in `CAPABILITIES`), never by leaving a method out: a client
    without magnet support sets `magnet_metadata: False` and its `materialize_magnet` refuses.
+   Graphical metadata preview is a separate `metadata_preview` capability and `preview_magnet`
+   method. It may use an explicit native peer-metadata API but must never add, change or delete
+   transfer tasks, switch an attached daemon, or fall back to `materialize_magnet`. Keep it out
+   of dry-run; validate both hashes and retain strict v2 metadata/layer validation.
 3. Add a fake server to `tests/test_clients_managed.py`; the shared contract suite runs against it automatically.
 4. Run the full cycle against a real, isolated client instance (its own port and folder, a test torrent): add
    stopped, partial selection, read-back, start, re-add refused, selection change, stop, move, completion time,

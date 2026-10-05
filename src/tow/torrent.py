@@ -192,6 +192,11 @@ def _path(parts: list[bytes]) -> str:
     return value
 
 
+def validate_relative_path(value: str) -> str:
+    """Validate a displayed metadata path without treating its characters as a mask."""
+    return _path([part.encode("utf-8") for part in value.split("/")])
+
+
 def _non_negative_int(value: Any, *, what: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise ValueError(f"torrent {what} is invalid")

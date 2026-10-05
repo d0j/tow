@@ -125,7 +125,14 @@ _CHECK_OWNED_FIELDS = (
 
 # Check-owned markers that the check may also remove (e.g. reconcile ends a client move, an
 # error without a code - a foreign exception - drops the previous error's code).
-_CHECK_CLEARABLE_FIELDS = ("move_pending", "error_notified", "last_error_code", "last_error_params")
+_CHECK_CLEARABLE_FIELDS = (
+    "move_pending",
+    "error_notified",
+    "last_error_code",
+    "last_error_params",
+    "content_token",
+    "content_hash",
+)
 
 
 # Fields the owner edits in the UI (topics_edit, pause, undo; checked against what they store).
@@ -145,6 +152,8 @@ OWNER_FIELDS = (
     "selection_dirty",
     "once_done",
     "move_pending",
+    "content_token",
+    "content_hash",
 )
 _OWNER_WINS = frozenset({"title", "client_id", "selection_dirty", "once_done"})
 
@@ -224,6 +233,8 @@ def store_revision(
         topic["selected_episode_keys"] = list(plan.selected_episode_keys)
         topic["selection_hash"] = h
     topic["selection_dirty"] = False
+    topic.pop("content_token", None)
+    topic.pop("content_hash", None)
     if once:
         topic["once_done"] = True
 

@@ -16,10 +16,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from functools import wraps
+from threading import BoundedSemaphore
 
 from tow.browser_auth import browser_auth
 from tow.check import record_check_failure, run_check
 from tow.config import load_config, save_config
+from tow.content import read as read_content
+from tow.content import selection as content_selection
 from tow.doctor import doctor_report
 from tow.lifecycle import request_restart, service_status, set_autostart
 from tow.log import log_event
@@ -60,6 +63,7 @@ __all__ = [
     "check_restore_point",
     "check_snapshot",
     "cleanup_secret_undo",
+    "content_selection",
     "create_restore_point",
     "delete_restore_point",
     "delete_snapshot",
@@ -76,6 +80,9 @@ __all__ = [
     "next_check_at",
     "night_cleanup_status",
     "persistence_lock",
+    "prepare_content",
+    "prepare_magnet_content",
+    "read_content",
     "record_check_failure",
     "recover_store_transaction",
     "release_status",
@@ -100,6 +107,80 @@ __all__ = [
 # Failed sign-ins and password checks, per address and in total: one budget for the sign-in
 # page and the password card (a test gets a fresh one).
 login_throttle = LoginThrottle()
+# A closed/edited browser form cannot cancel a running native RPC. Bound active workers
+# independently of browser buttons; cache writes still hold only their own short lock.
+_MAGNET_PREVIEWS = BoundedSemaphore(2)
+
+
+def prepare_content(url: str, client_id: str, blob: bytes | None, allow_limited: bool) -> dict[str, object]:
+    from tow import content
+    from tow.clients.factory import client_configuration
+    from tow.errors import TowError
+    from tow.guess import canon_watch_url
+    from tow.trackers import load_trackers, match_tracker, presets
+
+    cfg = load_config()
+    url = canon_watch_url(url.strip())
+    client = client_configuration(cfg, client_id or None)
+    if not client.get("enabled", True):
+        raise TowError("web.topics.client_disabled")
+    tracker = match_tracker(load_trackers(cfg), url)
+    if tracker is None:
+        raise TowError("check.no_tracker")
+    if blob is None:
+        limited = tracker.spec.get("download_limit", presets.daily_limited(tracker.name))
+        if limited and not allow_limited:
+            raise TowError("content.limited")
+        # An explicit preparation is a normal tracker action, not dry-run: sign-in and
+        # mirror state must work just as they do during a normal check.
+        blob = tracker.fetch_torrent(url, load_secrets(), str(cfg.get("user_agent") or "TOW"), persist=True)
+    return content.prepare(blob, url, str(client["id"]))
+
+
+def prepare_magnet_content(url: str, client_id: str) -> dict[str, object]:
+    """Explicit peer-metadata action, separate from tracker downloads and check/dry-run.
+
+    Do not call materialize_magnet here: some adapters implement it by adding a task.
+    Only a declared native preview operation is eligible.
+    """
+    from tow import content
+    from tow.clients.factory import client_configuration, from_secrets
+    from tow.errors import TowError
+    from tow.guess import canon_watch_url
+    from tow.torrent import parse_magnet_hashes, parse_torrent_metadata
+    from tow.trackers import load_trackers, match_tracker
+
+    cfg = load_config()
+    url = canon_watch_url(url.strip())
+    configuration = client_configuration(cfg, client_id or None)
+    if not configuration.get("enabled", True):
+        raise TowError("web.topics.client_disabled")
+    tracker = match_tracker(load_trackers(cfg), url)
+    if tracker is None:
+        raise TowError("check.no_tracker")
+    secrets = load_secrets()
+    adapter = from_secrets(cfg, secrets, str(configuration["id"]))
+    if not adapter.capabilities.get("metadata_preview", False):
+        raise TowError("content.magnet_unsupported")
+    if not _MAGNET_PREVIEWS.acquire(blocking=False):
+        raise TowError("content.magnet_busy")
+    try:
+        magnet, identity = tracker.fetch_magnet(url, secrets, str(cfg.get("user_agent") or "TOW"), persist=True)
+        hashes = parse_magnet_hashes(magnet)
+        if hashes is None or identity.upper() not in hashes[0] | hashes[1]:
+            raise TowError("content.magnet_failed")
+        blob = adapter.preview_magnet(magnet)
+        metadata = parse_torrent_metadata(blob)
+        btih, btmh = hashes
+        if (btih and metadata.hash_v1 not in btih) or (btmh and metadata.hash_v2 not in btmh):
+            raise TowError("content.magnet_failed")
+        return content.prepare(blob, url, str(configuration["id"]))
+    except TowError:
+        raise
+    except Exception as exc:
+        raise TowError("content.magnet_failed") from exc
+    finally:
+        _MAGNET_PREVIEWS.release()
 
 
 def locked_state_mutation[**P, R](function: Callable[P, R]) -> Callable[P, R]:

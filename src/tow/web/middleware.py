@@ -23,15 +23,17 @@ from tow import access, i18n
 from tow.auth import AuthConfigurationError
 from tow.bind import origin_matches_request
 from tow.bundle import MAX_BUNDLE_BYTES
+from tow.torrent import MAX_TORRENT_BYTES
 from tow.web import _context, services, site_store
 
 _PORTABLE_UPLOAD_REQUEST_LIMIT = MAX_BUNDLE_BYTES + 2 * 1024 * 1024
 _PUBLIC_PATHS = {"/favicon.ico", "/healthz", "/login"}
 _SITE_HTTP_LOCK = asyncio.Lock()
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
-# Writes that do not take the site lock: signing in only checks the password (its throttle is
-# atomic on its own), and must work while a long change holds the lock.
-_UNSERIALIZED_WRITES = frozenset({"/login"})
+# Signing in has its own atomic throttle. Content previews never change topics or transfer
+# tasks; explicit native magnet retrieval may contact peers. Cache commits use their own
+# short persistence_lock, not a lock held during tracker/client I/O.
+_UNSERIALIZED_WRITES = frozenset({"/login", "/content/prepare", "/content/resolve", "/content/snapshot"})
 
 
 def _is_public_path(path: str) -> bool:
@@ -110,14 +112,18 @@ def _refusal(request: Request, cfg: dict[str, Any]) -> Response | None:
         return Response("untrusted host", status_code=403)
     if not access.network_open(cfg) and not access.is_local(request):
         return Response("LAN access is disabled", status_code=403)
-    if request.method == "POST" and request.url.path == "/settings/portable/import":
+    upload_limits = {
+        "/settings/portable/import": _PORTABLE_UPLOAD_REQUEST_LIMIT,
+        "/content/prepare": MAX_TORRENT_BYTES + 1024 * 1024,
+    }
+    if request.method == "POST" and request.url.path in upload_limits:
         try:
             content_length = int(request.headers.get("content-length") or "")
         except ValueError:
             return Response("content length required", status_code=411)
         if content_length <= 0:
             return Response("content length required", status_code=411)
-        if content_length > _PORTABLE_UPLOAD_REQUEST_LIMIT:
+        if content_length > upload_limits[request.url.path]:
             return Response("upload too large", status_code=413)
     if request.method in _WRITE_METHODS:
         origin = request.headers.get("origin")

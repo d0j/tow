@@ -28,6 +28,7 @@ from tow.errors import TowError
 from tow.log import EXPORT_EVENT_KEYS, export_event_projection, log_event, read_events
 from tow.paths import config_path, data_dir, download_history_path, secrets_path, state_path
 from tow.store import (
+    STATE_SCHEMA_VERSION,
     SecretStoreError,
     StateVersionError,
     StoreCorruptionError,
@@ -303,6 +304,13 @@ def _validate_tracker_settings(trackers: dict[str, Any]) -> None:
             _validate_field(tracker, key, int, label=label)
 
 
+def _has_exact_policy(value: Any) -> bool:
+    """Include saved undo data, not just the currently visible topics."""
+    if isinstance(value, dict):
+        return value.get("mode") == "exact" or any(_has_exact_policy(item) for item in value.values())
+    return isinstance(value, list) and any(_has_exact_policy(item) for item in value)
+
+
 def _validate_state_schema(data: dict[str, Any]) -> None:
     _validate_tree(data, label="state.json")
     topics = data.get("topics")
@@ -310,9 +318,11 @@ def _validate_state_schema(data: dict[str, Any]) -> None:
     if not isinstance(topics, list) or not isinstance(mirrors, dict):
         raise ExportImportError("state.json has an unsupported schema")
     try:
-        state_schema_version(data)  # a newer TOW's state is never imported into this one
+        version = state_schema_version(data)  # a newer TOW's state is never imported into this one
     except StateVersionError as exc:
         raise ExportImportError(f"state.json: {exc}") from exc
+    if version < 2 and _has_exact_policy(data):
+        raise ExportImportError("state.json exact selections require schema 2")
     for index, topic in enumerate(topics):
         _validate_state_topic(index, topic)
     for name, mirror in mirrors.items():
@@ -344,6 +354,8 @@ def _validate_state_topic(index: int, topic: Any) -> None:
         "tracker_title",
         "tracking_mode",
         "selection_hash",
+        "content_token",
+        "content_hash",
     ):
         _validate_field(topic, key, str, label=label)
     for key in (
@@ -366,6 +378,13 @@ def _validate_state_topic(index: int, topic: Any) -> None:
             raise ExportImportError(f"{label}.selection has an invalid type")
         for key in ("mode", "value"):
             _validate_field(selection, key, str, label=f"{label}.selection")
+        if selection.get("mode") == "exact":
+            from tow.selection import policy_from_topic
+
+            try:
+                policy_from_topic(topic)
+            except ValueError as exc:
+                raise ExportImportError(f"{label}.selection has an invalid exact file selection") from exc
 
 
 def _validate_state_mirror(name: Any, mirror: Any) -> None:
@@ -603,7 +622,9 @@ def _build_export_members(*, include_log: bool) -> dict[str, bytes]:
     config_file = config_path()
     config_bytes = _utf8_config(_read_limited(config_file, label="config.yaml"))
     config_data = _parse_mapping(config_bytes, label="config.yaml")
-    state_data = load_state()
+    # load_state intentionally hides the format header from callers. An archive must
+    # restore it, or an old reader could accept newer fields after importing it.
+    state_data = {"schema_version": STATE_SCHEMA_VERSION, **load_state()}
     history_data = load_json_for_export(download_history_path(), {"schema_version": 1, "topics": {}})
     secrets_data = load_secrets()
     _refuse_plaintext_secrets(config_data, state_data, history_data)

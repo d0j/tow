@@ -12,6 +12,14 @@ NODE = shutil.which("node")
 
 @pytest.mark.allow_system
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_content_picker_boundaries_and_async_selection():
+    script = Path(__file__).parent / "js" / "content_picker.mjs"
+    result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=30, check=True)
+    assert all(json.loads(result.stdout.strip()).values())
+
+
+@pytest.mark.allow_system
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_update_reload_follows_loaded_document_and_preserves_operation():
     script = Path(__file__).parent / "js" / "update_page_version.mjs"
     result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=30, check=True)
