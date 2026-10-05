@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.23.0] — 2026-10-05
+
 ### Added
 
 - Graphical torrent-content selection in add and edit forms: collapsible folders,
@@ -29,6 +31,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Content API errors render catalog messages separately from unexpected exceptions;
   storage and parsing diagnostics never become public exception text. Adversarial
   cache tokens are rejected before any filesystem access.
+
+### Compatibility
+
+- Existing episode and file-pattern rules remain supported. State writes now use
+  schema 2: code-only downgrade to an older schema is refused. Keep the verified
+  pre-update copy for restoring matching data and code together.
 
 ## [1.22.58] — 2026-10-05
 
