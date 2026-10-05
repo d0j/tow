@@ -77,6 +77,30 @@ def test_tracker_menu_has_labelled_opener_and_is_hidden_before_enhancement():
     assert picker.select_one("#tracker-menu").has_attr("hidden")
 
 
+@pytest.mark.parametrize("name", [0, 123, False, None])
+def test_yaml_scalar_site_names_are_displayed_as_text_without_changing_config(name):
+    config = load_config()
+    config["trackers"][name] = deepcopy(config["trackers"]["rutor"])
+    save_config(config)
+    page = BeautifulSoup(TestClient(app).get("/").text, "html.parser")
+    values = [choice["data-choice-value"] for choice in page.select("#tracker-menu [role=menuitemradio]")]
+    assert str(name) in values
+    assert values == sorted(set(values))
+    assert name in load_config()["trackers"]
+
+
+def test_empty_site_name_and_scalar_text_collisions_do_not_duplicate_all_or_choices():
+    config = load_config()
+    for name in ("", 123, "123"):
+        config["trackers"][name] = deepcopy(config["trackers"]["rutor"])
+    save_config(config)
+    page = BeautifulSoup(TestClient(app).get("/").text, "html.parser")
+    values = [choice["data-choice-value"] for choice in page.select("#tracker-menu [role=menuitemradio]")]
+    assert values.count("") == 1
+    assert values.count("123") == 1
+    assert len(page.select('#tracker-menu [aria-checked="true"]')) == 1
+
+
 def test_tracker_url_restoration_and_reset_use_the_same_menu_value():
     js = (STATIC / "app.js").read_text(encoding="utf-8")
     assert '[...trackerSelect.options].some((option) => option.value === tracker) ? tracker : ""' in js

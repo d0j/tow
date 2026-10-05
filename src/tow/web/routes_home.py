@@ -48,7 +48,12 @@ def index(request: Request) -> Response:
         return RedirectResponse("/setup", status_code=303)
     state = _context.state()
     rows = topic_rows(state)
-    tracker_options = sorted(set(cfg.get("trackers") or {}) | {row["tracker"] for row in rows if row.get("tracker")})
+    # YAML accepts scalar keys; HTML/URL filter values are always text. Preserve
+    # these legacy names without sorting mixed types or duplicating the All choice.
+    tracker_options = sorted(
+        {str(name) for name in cfg.get("trackers") or {} if str(name)}
+        | {str(row["tracker"]) for row in rows if row.get("tracker")}
+    )
     client_options = [row for row in client_configurations(cfg) if row.get("enabled", True)]
     return TEMPLATES.TemplateResponse(
         request,
