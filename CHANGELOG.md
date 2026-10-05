@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.23.3] — 2026-10-06
+
 ### Fixed
 
 - Settings distinguish the global timer from individual topic timers. The hint
