@@ -31,6 +31,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Content API errors render catalog messages separately from unexpected exceptions;
   storage and parsing diagnostics never become public exception text. Adversarial
   cache tokens are rejected before any filesystem access.
+- Portable exports preserve the state-format version, including exact choices kept
+  only in undo. Older readers refuse new-format archives before destination writes;
+  unversioned exact selections are rejected rather than imported without a guard.
 
 ### Compatibility
 
