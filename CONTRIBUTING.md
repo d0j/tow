@@ -33,6 +33,10 @@ pwsh scripts/gate.ps1 -Staged    # only what the next commit contains
 The hooks run it for you: **pre-commit** runs `-Staged`, **pre-push** requires the full gate on exactly the content
 being pushed. CI runs the same gate on Windows, Linux and macOS.
 
+Linux checks and installer smoke tests run on both Ubuntu 24.04 and 26.04. The legacy
+`ubuntu-latest` check name is retained for branch protection, but its runner is explicitly
+`ubuntu-24.04`; GitHub's future migration of the floating label cannot remove older-LTS coverage.
+
 ## Tests
 
 - `uv run --frozen pytest -q` for a quick run; the gate runs the suite in random order (the seed is printed) with

@@ -311,6 +311,35 @@ def test_the_release_workflow_tests_everything_before_it_uploads():
     assert "edit" not in publish.split()
 
 
+@pytest.mark.parametrize(
+    ("workflow", "job_id"), [("ci", "gate"), ("ci", "install"), ("release", "gate"), ("release", "posix")]
+)
+def test_linux_runners_keep_both_lts_versions_without_renaming_required_checks(workflow, job_id):
+    import yaml
+
+    flow = yaml.safe_load((ROOT / ".github" / "workflows" / f"{workflow}.yml").read_text(encoding="utf-8"))
+    job = flow["jobs"][job_id]
+    matrix = job["strategy"]["matrix"]
+    overrides = {row["os"]: row["runner"] for row in matrix.get("include", [])}
+    assert overrides == {"ubuntu-latest": "ubuntu-24.04"}
+    assert len(matrix["os"]) == len(set(matrix["os"]))
+    actual = {overrides.get(label, label) for label in matrix["os"]}
+    expected = {"ubuntu-24.04", "ubuntu-26.04", "macos-latest"}
+    if job_id == "gate":
+        expected.add("windows-latest")
+    assert actual == expected
+    assert job["runs-on"] == "${{ matrix.runner || matrix.os }}"
+    prefix = "gate" if job_id == "gate" else "install.sh"
+    assert job["name"] == f"{prefix} (${{{{ matrix.os }}}})"
+
+
+def test_release_archive_and_publish_use_a_pinned_linux_runner():
+    import yaml
+
+    jobs = yaml.safe_load((ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"))["jobs"]
+    assert jobs["source"]["runs-on"] == jobs["publish"]["runs-on"] == "ubuntu-24.04"
+
+
 def test_the_smoke_scripts_never_use_the_live_port():
     for name in ("bundle-smoke.ps1", "install-smoke.sh"):
         text = (ROOT / "scripts" / name).read_text(encoding="utf-8")
