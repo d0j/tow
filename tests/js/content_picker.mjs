@@ -31,7 +31,8 @@ const files = [
 ];
 function setup(saved = null, existing = []) {
   const root = new Element(); root.isPicker = true; root.dataset.existing = JSON.stringify(existing);
-  const fields = Object.fromEntries(["selection_mode", "selection_value", "content_token", "selection_indices", "url", "client_id"].map((key) => [key, new Element()]));
+  const fields = Object.fromEntries(["selection_mode", "selection_value", "content_token", "selection_indices", "url", "client_id", "title", "tracking_mode"].map((key) => [key, new Element()]));
+  fields.tracking_mode.value = "watch";
   fields.selection_mode.value = "exact"; fields.url.value = "https://tracker.example/topic/1"; fields.client_id.value = "main";
   if (saved) { fields.content_token.value = saved.token; fields.selection_indices.value = "[1]"; }
   fields.selection_value.closest = () => new Element();
@@ -53,7 +54,7 @@ function setup(saved = null, existing = []) {
     window: { setTimeout, clearTimeout },
     fetch: (url, options) => new Promise((resolve) => requests.push({ url, options, respond: (data, ok = true) => resolve({ ok, json: async () => data }) })),
   });
-  return { fields, controls, requests, form };
+  return { fields, controls, requests, form, root };
 }
 const find = (tree, name) => tree.querySelectorAll("*").find((n) => n.attributes["aria-label"] === name);
 const reply = async (request, data) => { request.respond(data); await tick(); };
@@ -155,4 +156,52 @@ assert.equal(f.controls.results.hidden, true);
 assert.equal(f.fields.content_token.value, "");
 assert.equal(submitAllowed(f.form), true, "late cancelled response cannot restore the refresh guard");
 
-console.log(JSON.stringify({ safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true }));
+const g = setup();
+g.root.dataset.topicId = "fixture";
+g.fields.title.value = "Show Season 2";
+g.controls.load.fire("click"); await reply(g.requests[0], snapshot);
+g.fields.selection_mode.value = "episodes"; g.fields.selection_value.value = "S02E01";
+g.fields.selection_mode.fire("change");
+assert.equal(g.requests[1].options.body.get("topic_id"), "fixture");
+assert.equal(g.requests[1].options.body.get("title"), "Show Season 2");
+assert.equal(g.requests[1].options.body.get("tracking_mode"), "watch");
+await reply(g.requests[1], { indices: [1] });
+g.fields.tracking_mode.value = "once"; g.fields.tracking_mode.fire("change");
+const staleOnce = g.requests.at(-1);
+g.fields.tracking_mode.value = "watch"; g.fields.tracking_mode.fire("change");
+const pendingWatch = g.requests.at(-1);
+const waitingForResponse = g.controls.status.textContent;
+await reply(staleOnce, { indices: [0] });
+assert.equal(g.controls.status.textContent, waitingForResponse, "late lifecycle reply cannot replace the current preview");
+await reply(pendingWatch, { indices: [], waiting: "Waiting for future episodes" });
+assert.equal(g.controls.status.textContent, "Waiting for future episodes");
+g.controls.search.value = "Extras"; g.controls.search.fire("input");
+assert.equal(g.controls.status.textContent, "Waiting for future episodes", "search preserves waiting status");
+g.controls.more.fire("click");
+assert.equal(g.controls.status.textContent, "Waiting for future episodes", "paging preserves waiting status");
+g.fields.selection_value.value = "invalid"; g.fields.selection_mode.fire("change");
+g.requests.at(-1).respond({ error: "Rule invalid" }, false); await tick();
+g.controls.prev.fire("click");
+assert.equal(g.controls.status.textContent, "Rule invalid", "paging preserves rule errors");
+g.controls.search.value = "B.mkv"; g.controls.search.fire("input");
+assert.equal(g.controls.status.textContent, "Rule invalid", "search preserves rule errors");
+g.fields.selection_value.value = "S02E01"; g.fields.selection_mode.fire("change");
+g.controls.search.fire("input");
+assert.equal(g.controls.status.textContent, "content.js.rule_loading", "search preserves pending status");
+await reply(g.requests.at(-1), { indices: [1] });
+assert.equal(g.controls.status.textContent, "content.js.rule", "successful retry clears the old error");
+g.fields.selection_mode.value = "exact"; g.fields.selection_mode.fire("change");
+assert.equal(g.controls.status.textContent, "content.js.count", "manual mode drops the old rule status");
+g.fields.selection_mode.value = "episodes"; g.fields.selection_mode.fire("change");
+await reply(g.requests.at(-1), { indices: [1] });
+g.fields.tracking_mode.value = "once"; g.fields.tracking_mode.fire("change");
+const staleTitle = g.requests.at(-1);
+g.fields.title.value = "Show Season 3"; g.fields.title.fire("input");
+await reply(staleTitle, { indices: [0] });
+await new Promise((resolve) => setTimeout(resolve, 210));
+assert.equal(g.requests.at(-1).options.body.get("title"), "Show Season 3", "editing the title refreshes rule context");
+g.form.fire("reset");
+await reply(g.requests.at(-1), { indices: [1] });
+assert.equal(g.controls.results.hidden, true);
+
+console.log(JSON.stringify({ safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true, ruleContext: true }));

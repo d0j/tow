@@ -36,7 +36,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest, ubuntu-26.04, macos-latest]
-    runs-on: ${{ matrix.os }}
+        include:
+          # Keep the protected check name stable, but pin the older LTS runner.
+          - os: ubuntu-latest
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner || matrix.os }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -56,7 +60,7 @@ jobs:
 
   source:
     name: source archive
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Download GitHub's source archive of the tag
@@ -134,7 +138,10 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, ubuntu-26.04, macos-latest]
-    runs-on: ${{ matrix.os }}
+        include:
+          - os: ubuntu-latest
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner || matrix.os }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -150,7 +157,7 @@ jobs:
   publish:
     name: upload to the release
     needs: [gate, source, windows, posix]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write

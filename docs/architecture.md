@@ -107,6 +107,22 @@ flowchart TD
 | `tow.paths` | Every location, derived from one install root. |
 | `tow.i18n`, `tow.errors` | Language catalogs; typed errors (`TowError(key, **params)`) rendered in the reader's language. |
 
+Rule previews use the applying check's season parser and selection engine. They read saved
+tracker titles only for the same topic source and client; otherwise the current form title
+provides context. Future watch ranges are waiting, not failures, while once ranges remain
+strict. Preview refreshes do not fetch trackers or mutate clients, and stale title/lifecycle
+responses are discarded. An applying check still obtains the current tracker title independently.
+
+Episode rules build a per-call index of available numbers and season maxima. Repeated or
+overlapping requests are matched once per distinct label; waiting checks use those maxima,
+not another scan of all files. The original first ten diagnostic labels, including repeats,
+remain in input order. Subtitle season context still contributes to ambiguity. The index is
+not a persistent cache and does not change saved policies, file priorities or history identities.
+
+File masks are translated with the standard `fnmatch.translate` API and prepared once
+per distinct case-folded rule per call. They still match the full relative path or
+basename; flat paths are not tested twice. Validation and stored expressions are unchanged.
+
 ## Data layout
 
 ```text

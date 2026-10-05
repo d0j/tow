@@ -22,19 +22,24 @@ class EpisodeLabel:
 
 
 def parse_expected_count(title: str) -> dict[str, Any] | None:
-    text = str(title or "")
+    # Titles have no whitespace-sensitive syntax. Collapse runs once so the
+    # hint parser cannot redistribute an untrusted run between optional parts.
+    text = " ".join(str(title or "").split())
     candidates: list[tuple[int, bool, int]] = []
+    non_episode_following = re.compile(
+        r"(?i)\s*+(?:[-–—]?\s*+[xх]\s*+)?(?:сезон(?:ов|ы|а)?|seasons?|parts?|vol(?:ume)?s?\.?|том(?:ов|а|ы)?|част(?:ь|и|ей)|фильм(?:ов|а|ы)?|movie)\b"
+    )
+    film_title = re.search(r"(?i)\b(?:фильм|movie|film)\b", text) is not None
     previous_count_end = 0
     for match in re.finditer(
-        r"(?i)(?P<current>\d{1,4}(?:[xх]\d{1,4})?(?:\s*[-–—]\s*\d{1,4})?)"
-        r"\s*(?P<episode_word>сери(?:я|и|й)|эпизод(?:ы|а|ов)?|episodes?|eps?)?"
-        r"\s*(?:\bиз\b|\bof\b)\s*(?P<total>\d{1,4})\b",
+        r"(?i)(?P<current>\d{1,4}(?:[xх]\d{1,4})?(?:\s*+[-–—]\s*+\d{1,4})?)"
+        r"\s*+(?P<episode_word>сери(?:я|и|й)|эпизод(?:ы|а|ов)?|episodes?|eps?)?"
+        r"\s*+(?:\bиз\b|\bof\b)\s*+(?P<total>\d{1,4})\b",
         text,
     ):
         clause = re.split(r"[\[\](),;/|]", text[previous_count_end : match.start()])[-1]
         previous_count_end = match.end()
         clause = f"{clause}{match.group('current')}"
-        following = re.split(r"[\[\](),;/|]", text[match.end() :])[0]
         explicit_episode = bool(
             match.group("episode_word")
             or re.search(r"(?i)\b(?:сери(?:я|и|й)|эпизод(?:ы|а|ов)?|episodes?|eps?)\b", clause)
@@ -47,10 +52,9 @@ def parse_expected_count(title: str) -> dict[str, Any] | None:
                 is not None
             )
         )
-        if re.match(
-            r"(?i)\s*(?:[-–—]?\s*[xх]\s*)?(?:сезон(?:ов|ы|а)?|seasons?|parts?|vol(?:ume)?s?\.?|том(?:ов|а|ы)?|част(?:ь|и|ей)|фильм(?:ов|а|ы)?|movie)\b",
-            following,
-        ):
+        # Inspect only this position, not a copied and split full suffix for
+        # every candidate. Repeated count clauses must remain bounded too.
+        if non_episode_following.match(text, match.end()):
             continue
         if not explicit_episode and (
             re.search(
@@ -60,7 +64,7 @@ def parse_expected_count(title: str) -> dict[str, Any] | None:
             or re.search(r"(?i)(?:^|[^\w])s\d{1,2}\b", clause)
         ):
             continue
-        if not explicit_episode and re.search(r"(?i)\b(?:фильм|movie|film)\b", text):
+        if not explicit_episode and film_title:
             continue
         total = int(match.group("total"))
         numbers = [int(value) for value in re.findall(r"\d{1,4}", match.group("current"))]
@@ -139,7 +143,7 @@ def expected_for_topic(topic: Mapping[str, Any]) -> dict[str, Any] | None:
 
 def parse_season_hint(title: str) -> int | None:
     """Extract a season only from explicit or corroborated serial title syntax."""
-    text = str(title or "")
+    text = " ".join(str(title or "").split())
     if re.search(
         r"(?i)\bs\d{1,2}e\d{1,4}\s*[-–—~]\s*s\d{1,2}e\d{1,4}\b"
         r"|\bs\d{1,2}\s*(?:[-–—,+/&]|\band\b|\bи\b|\bto\b|\bпо\b|\s+)\s*s\d{1,2}\b"

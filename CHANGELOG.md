@@ -5,6 +5,36 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.23.2] — 2026-10-06
+
+### Fixed
+
+- File-rule previews use the same season context as checks, including seasonless
+  episode names. Saved tracker titles apply only to the same source and client;
+  new and edited titles refresh previews without a tracker or client request.
+  Future watched episodes are shown as waiting, while a one-time selection still
+  refuses unavailable episodes. Late title/lifecycle replies cannot replace the preview.
+- Selection and waiting messages use readable episode labels such as `S02E15`,
+  not internal history identity keys. Durable file and episode identities are unchanged.
+- File-rule result counts remain grammatical for a single selected file.
+- Searching and paging in prepared files retain rule validation, waiting and
+  pending messages. Long whitespace runs in untrusted episode titles no longer
+  cause expensive backtracking during preview or progress calculations.
+  Repeated count clauses no longer repeatedly scan the entire remaining title.
+- CI and release installer checks retain explicit Ubuntu 24.04 and 26.04 coverage
+  when GitHub changes `ubuntu-latest`, without renaming protected checks.
+- Snapshot link-safety tests no longer mistake a missing destination folder for
+  unavailable symlink permissions. The full gate reports skipped tests and their reasons.
+- Large repeated or overlapping episode rules no longer rescan all available
+  episodes for every requested number. Future ranges retain waiting semantics,
+  ambiguous seasons remain refused, and diagnostic order and saved rules are unchanged.
+- Large file-mask rules prepare each distinct matcher once per request and avoid
+  matching the same path twice. Wildcard, basename, case-folding and saved-rule
+  semantics are unchanged; no persistent cache or new dependency is added.
+- Update the locked Starlette dependency to 1.7.0, which fixes deprecated AnyIO
+  imports in the web test client. Deprecation warnings now fail tests instead of
+  being hidden; a fresh-interpreter import regression checks the runtime and client.
+
 ## [1.23.1] — 2026-10-05
 
 ### Fixed

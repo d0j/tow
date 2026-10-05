@@ -49,6 +49,20 @@ def test_zero_match_and_missing_episode_fail_closed():
         resolve_selection(FILES, normalize_policy("episodes", "S01E99"))
 
 
+@pytest.mark.parametrize(("rule", "label"), [("S01E99", "S01E99"), ("1x99", "S01E99"), ("99", "99")])
+def test_future_selection_messages_use_human_labels_not_internal_identity_keys(rule, label):
+    with pytest.raises(SelectionPendingError) as caught:
+        resolve_selection(FILES, normalize_policy("episodes", rule))
+    assert caught.value.params["episodes"] == label
+
+
+def test_missing_episode_message_uses_human_season_label():
+    rows = (TorrentFile(0, "Show.S01E01.mkv", 1), TorrentFile(1, "Show.S01E03.mkv", 1))
+    with raises_code("selection.absent", ValueError) as caught:
+        resolve_selection(rows, normalize_policy("episodes", "S01E02"))
+    assert caught.value.params["episodes"] == "S01E02"
+
+
 def test_bare_episode_is_rejected_when_multiple_seasons_are_ambiguous():
     files = (*FILES, TorrentFile(5, "Show.S02E01.mkv", 100))
     with raises_code("selection.ambiguous", ValueError):

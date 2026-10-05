@@ -1,6 +1,6 @@
 [project]
 name = "tow"
-version = "1.23.1"
+version = "1.23.2"
 description = "Torrent topic watcher: follows forum tracker topics that replace their torrent in place and hands each new revision to your torrent client."
 readme = "README.md"
 license = "MIT"
@@ -101,7 +101,7 @@ markers = [
 ]
 pythonpath = ["src"]
 filterwarnings = [
-    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+    "error::DeprecationWarning",
 ]
 
 # Branch coverage of the full gate (pytest-cov comes in with `uv run --with`, see scripts/gate.ps1).

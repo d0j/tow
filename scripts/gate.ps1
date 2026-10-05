@@ -135,12 +135,12 @@ try {
         Invoke-Tool --with $PytestCov python -c 'import pytest_cov' 2>$null
         if ($LASTEXITCODE -eq 0) {
             Step 'pytest (random order, branch coverage, threshold in pyproject)' {
-                Invoke-Tool --with $PytestCov pytest -q -p no:cacheprovider --test-order random --cov --cov-report=
+                Invoke-Tool --with $PytestCov pytest -q -ra -p no:cacheprovider --test-order random --cov --cov-report=
             }
         }
         else {
             Skip 'coverage' "$PytestCov is not available offline"
-            Step 'pytest (random order)' { Invoke-Tool pytest -q -p no:cacheprovider --test-order random }
+            Step 'pytest (random order)' { Invoke-Tool pytest -q -ra -p no:cacheprovider --test-order random }
         }
         Test-Wheel
     }
