@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.23.1] — 2026-10-05
+
 ### Fixed
 
 - An existing manual file selection cannot silently revert to its saved policy
