@@ -101,7 +101,7 @@ markers = [
 ]
 pythonpath = ["src"]
 filterwarnings = [
-    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+    "error::DeprecationWarning",
 ]
 
 # Branch coverage of the full gate (pytest-cov comes in with `uv run --with`, see scripts/gate.ps1).

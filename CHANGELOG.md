@@ -31,6 +31,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Large file-mask rules prepare each distinct matcher once per request and avoid
   matching the same path twice. Wildcard, basename, case-folding and saved-rule
   semantics are unchanged; no persistent cache or new dependency is added.
+- Update the locked Starlette dependency to 1.7.0, which fixes deprecated AnyIO
+  imports in the web test client. Deprecation warnings now fail tests instead of
+  being hidden; a fresh-interpreter import regression checks the runtime and client.
 
 ## [1.23.1] — 2026-10-05
 
