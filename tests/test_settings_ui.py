@@ -41,6 +41,16 @@ def test_settings_explains_global_and_individual_timers(language, custom_minutes
         assert "Every watched topic is checked" not in interval
 
 
+def test_mobile_settings_anchor_keeps_clear_of_the_two_row_header():
+    from pathlib import Path
+
+    css = (Path(__file__).parents[1] / "src" / "tow" / "static" / "app.css").read_text(encoding="utf-8")
+    mobile_blocks = re.findall(r"@media \(max-width: 720px\) \{(.*?)\n\}", css, re.DOTALL)
+    assert any(
+        "header.app" in block and ".settings-section { scroll-margin-top: 5.5rem; }" in block for block in mobile_blocks
+    )
+
+
 def test_settings_ui_is_sectioned_and_explains_actions():
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
 

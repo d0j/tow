@@ -17,6 +17,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Header controls and status indicators use separate mobile grid cells, so long
   client names and the Undo button cannot overlap navigation. Full names remain
   available in tooltips; shared action sizes are unchanged.
+- Linked settings sections scroll clear of the taller mobile header.
 
 ## [1.23.2] — 2026-10-06
 
