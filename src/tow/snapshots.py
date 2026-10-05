@@ -35,7 +35,7 @@ from tow import __version__
 from tow.config import interval_sec_of, load_config
 from tow.diagnostic_json import check_epochs, check_types, encode_object, read_object
 from tow.i18n import t
-from tow.log import log_event, log_path, owner_language
+from tow.log import locked_log_path, log_event, log_path, owner_language
 from tow.paths import config_path, data_dir, download_history_path, state_path
 from tow.store import (
     SecretStoreError,
@@ -437,6 +437,49 @@ def snapshot_path(name: str) -> Path:
     return path
 
 
+def _copy_snapshot_member(source: Path, destination: Path, name: str) -> dict[str, Any] | None:
+    """Copy/hash the same bounded blocks; a missing source is distinct from an unsafe one."""
+    lang = owner_language()
+    try:
+        if not _ordinary_file(source, missing=True):
+            return None
+        digest = hashlib.sha256()
+        seen = 0
+        with source.open("rb") as reader:
+            before = os.fstat(reader.fileno())
+            size = before.st_size
+            if not stat.S_ISREG(before.st_mode) or type(size) is not int or not 0 <= size <= MAX_MEMBER_SIZE:
+                raise ValueError("source is not a regular file with a supported size")
+            if name == "config.yaml" and size > MAX_INPUT_BYTES:
+                raise SnapshotError(str(YamlLimitError("yaml_limits.size")))
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with destination.open("xb") as writer:
+                while block := reader.read(min(_READ_CHUNK_BYTES, size - seen + 1)):
+                    seen += len(block)
+                    if seen > size:
+                        raise ValueError("source grew while reading")
+                    if writer.write(block) != len(block):
+                        raise SnapshotError(t("backup.snapshot.write_incomplete", lang, name=name))
+                    digest.update(block)
+                after = os.fstat(reader.fileno())
+                if seen != size or after.st_size != size or after.st_mtime_ns != before.st_mtime_ns:
+                    raise ValueError("source changed while reading")
+                writer.flush()
+                os.fsync(writer.fileno())
+        return {"sha256": digest.hexdigest(), "size": seen}
+    except ValueError as exc:
+        raise SnapshotError(t("backup.snapshot.source_changed", lang, name=name)) from exc
+
+
+def _write_snapshot_manifest(path: Path, manifest: dict[str, Any]) -> None:
+    content = _manifest_bytes(manifest)
+    with path.open("xb") as writer:
+        if writer.write(content) != len(content):
+            raise SnapshotError(t("backup.snapshot.write_incomplete", owner_language(), name="MANIFEST.json"))
+        writer.flush()
+        os.fsync(writer.fileno())
+
+
 def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
     cfg = load_config()
     root = backup_root(cfg)
@@ -458,20 +501,16 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
         partial_created = True
         with persistence_lock():  # a consistent cut: no check or edit writes meanwhile
             for name, source in _members():
-                try:
-                    content = source.read_bytes() if source.is_file() else None
-                except FileNotFoundError:
-                    content = None
-                if content is None:
+                guard = locked_log_path() if name == "tow.jsonl" else contextlib.nullcontext(source)
+                with guard as stable_source:
+                    meta = _copy_snapshot_member(stable_source, partial / name, name)
+                if meta is None:
                     if name == "config.yaml" or name in previous_members:
                         raise SnapshotError(t("backup.snapshot.source_missing", owner_language(), name=name))
                     if name not in _OPTIONAL_MEMBERS:
                         missing.append(name)  # said in the result, the log and the MANIFEST
                     continue
-                destination = partial / name
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_bytes(content)
-                files[name] = {"sha256": hashlib.sha256(content).hexdigest(), "size": len(content)}
+                files[name] = meta
         manifest = {
             "format": FORMAT,
             "created_at": datetime.now(UTC).isoformat(),
@@ -480,7 +519,7 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
             "missing": missing,
         }
         manifest["signature"] = _signature(manifest, key)
-        (partial / "MANIFEST.json").write_bytes(_manifest_bytes(manifest))
+        _write_snapshot_manifest(partial / "MANIFEST.json", manifest)
         _rename_with_retry(partial, target)
     except SnapshotError:
         if partial_created:

@@ -310,6 +310,13 @@ def _log_file_lock() -> Iterator[None]:
             locks.unlock(handle)
 
 
+@contextmanager
+def locked_log_path() -> Iterator[Path]:
+    """A stable event-log file while a backup reads it: no append or rotation."""
+    with _log_file_lock():
+        yield log_path()
+
+
 def _rotate_if_needed(path: Path) -> None:
     try:
         if not path.is_file() or path.stat().st_size < MAX_BYTES:

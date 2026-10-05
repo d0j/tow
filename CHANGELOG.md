@@ -3,6 +3,18 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.55] — 2026-10-05
+
+### Fixed
+
+- Night-copy creation copies and hashes files in bounded blocks instead of holding
+  whole files in memory. Sources must be regular files and stay unchanged during
+  reading; the event log is locked against append/rotation while copied. Each copied
+  file and the signed description are flushed and synced before publication. Short
+  writes and I/O failures keep the previous copies; real read-back still precedes
+  retention. Snapshot formats and payload-size compatibility are unchanged. Applied
+  restore still retains its full verified plans in memory.
+
 ## [1.22.54] — 2026-10-05
 
 ### Changed

@@ -77,6 +77,8 @@
       "unsafe_path": "unsafe path in the copy: {name}",
       "file_missing": "file missing in the copy: {name}",
       "source_missing": "a file present in an earlier night copy is now missing: {name}; older copies were kept",
+      "source_changed": "cannot copy {name}: it is not a regular file or changed while being read; older copies were kept",
+      "write_incomplete": "{name} was not written completely; the new night copy was not published and older copies were kept",
       "file_damaged": "file damaged in the copy: {name}",
       "file_unusable": "cannot read {name}: damaged data or an unsupported format or data version. Existing data and older copies are kept.",
       "secrets_unusable": "cannot read {name} with the local master key: damaged encrypted data or a different key. Existing data and older copies are kept.",
