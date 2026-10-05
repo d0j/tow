@@ -467,6 +467,32 @@ def test_header_icons_share_one_32px_rule_in_and_out_of_nav(client):
     assert 'href="/settings" class="ico on"' in client.get("/settings").text
 
 
+@pytest.mark.parametrize("path", ["/", "/sites", "/settings"])
+@pytest.mark.parametrize("language", ["ru", "en"])
+@pytest.mark.parametrize("with_undo", [False, True])
+def test_header_separates_controls_from_status_with_full_client_label(client, monkeypatch, path, language, with_undo):
+    from bs4 import BeautifulSoup
+
+    from tow.clock import iso_now
+
+    label = "qBittorrent (" + "fixture" * 16 + ")"
+    monkeypatch.setattr("tow.web.templating._default_client_label", lambda: label)
+    _set_language(language)
+    if with_undo:
+        _seed(_topic("t1"), undo={"kind": "topic_add", "id": "t1", "ts": iso_now()})
+    page = BeautifulSoup(client.get(path).text, "html.parser")
+    header = page.select_one("header.app")
+    controls = header.select_one(".hdr-controls")
+    assert controls is not None
+    assert controls.select_one('a[href="/settings"]') is not None
+    assert bool(controls.select_one("#undo-form")) is with_undo
+    assert not controls.select(".hdr-svc, .hdr-clock")
+    client_label = header.select_one(".hdr-svc > span")
+    assert client_label.get_text() == label
+    assert label in client_label["title"]
+    assert header.select_one(".hdr-clock").parent == controls.parent
+
+
 def test_row_icons_are_32px_on_touch_screens():
     coarse = CSS.split("@media (pointer: coarse) {", 1)[1].split("}", 1)[0]
     assert ".row-ico { width: 2rem; height: 2rem;" in coarse
@@ -606,7 +632,12 @@ def test_countdown_is_compact_with_accessible_meaning(client):
 def test_countdown_is_not_hidden_on_a_phone():
     phone = CSS.split("@media (max-width: 480px) {", 1)[1].split("\n}\n", 1)[0]
     assert ".hdr-clock { display: none; }" not in phone
-    assert ".hdr-clock { position: absolute;" in phone
+    assert ".hdr-clock { position: absolute;" not in phone
+    assert 'grid-template-areas: "nav nav right" "sites services clock"' in CSS
+    assert ".hdr-clock { grid-area: clock;" in CSS
+    assert ".hdr-controls { grid-area: right;" in CSS
+    assert ".hdr-right { display: contents; }" in CSS
+    assert "text-overflow: ellipsis;" in _rule(".hdr-svc > span")
 
 
 # --- L6: backups panel ----------------------------------------------------------------------

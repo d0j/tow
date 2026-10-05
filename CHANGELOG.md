@@ -12,6 +12,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   scheduling behaviour is unchanged.
 - Long mirror addresses stay within the screen without hiding the selected-mirror
   badge. The full address remains available in the button tooltip.
+- Header controls and status indicators use separate mobile grid cells, so long
+  client names and the Undo button cannot overlap navigation. Full names remain
+  available in tooltips; shared action sizes are unchanged.
 
 ## [1.23.2] — 2026-10-06
 

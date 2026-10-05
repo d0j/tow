@@ -107,7 +107,7 @@ def test_settings_ui_is_sectioned_and_explains_actions():
     assert "--btn-h: 1.625rem;" in css  # the owner wants small 26 px buttons everywhere
     assert "min-height: 2.25rem" not in css
     assert "height: var(--field-h)" in css
-    assert 'grid-template-areas: "nav right" "sites sites"' in css
+    assert 'grid-template-areas: "nav nav right" "sites services clock"' in css
     assert 'input[type="file"]::file-selector-button' in css
     service = page.split('id="acc-service"', 1)[1].split('id="acc-transfer"', 1)[0]
     assert "data-auto-submit-control" in service

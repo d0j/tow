@@ -132,7 +132,9 @@ header.app .ico svg { display: block; }
 header.app .ico.on, header.app .ico:hover, header.app .ico:focus-visible {
   background: var(--panel2); color: var(--nav-fg-hi); text-decoration: none; filter: none;
 }
-.hdr-right { display: flex; align-items: center; flex-wrap: nowrap; gap: .4rem; justify-self: end; }
+.hdr-right { display: flex; align-items: center; flex-wrap: nowrap; gap: .4rem; justify-self: end; min-width: 0; max-width: 100%; }
+.hdr-controls { display: flex; align-items: center; gap: inherit; flex: 0 0 auto; }
+.hdr-controls > * { flex: 0 0 auto; }
 .hdr-sites {
   justify-self: center; display: flex; align-items: center; flex-wrap: nowrap; gap: .7rem;
 }
@@ -152,8 +154,10 @@ header.app .ico.on, header.app .ico:hover, header.app .ico:focus-visible {
 .hdr-svc {
   display: flex; align-items: center; gap: .35rem;
   padding-left: .6rem; margin-right: .15rem;
-  border-left: 1px solid var(--line);
+  border-left: 1px solid var(--line); min-width: 0;
 }
+.hdr-svc > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hdr-svc .trk-ico, .hdr-right > .hdr-clock { flex: 0 0 auto; }
 .hdr-search { position: relative; flex: 0 0 auto; }
 .hdr-search > summary {
   list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
@@ -696,12 +700,14 @@ details.help[open] > summary { color: var(--acc); border-color: var(--acc2); }
 .settings-accordion .settings-log-body { padding: .85rem .9rem 1rem; }
 @media (max-width: 720px) {
   .row-two, .row-three, .settings-grid { grid-template-columns: 1fr; }
-  header.app { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "nav right" "sites sites"; row-gap: .1rem; }
+  header.app { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; grid-template-areas: "nav nav right" "sites services clock"; row-gap: .1rem; }
   header.app nav { grid-area: nav; }
   .hdr-sites { grid-area: sites; min-width: 0; max-width: 100%; justify-self: stretch; overflow-x: auto; justify-content: flex-start; }
-  .hdr-right { grid-area: right; }
+  .hdr-right { display: contents; }
+  .hdr-controls { grid-area: right; justify-self: end; }
+  .hdr-svc { grid-area: services; padding-left: 0; margin-right: 0; border-left: 0; }
+  .hdr-clock { grid-area: clock; justify-self: end; }
   .hdr-sites .trk { flex: 0 0 auto; }
-  .hdr-right { min-width: 0; }
   .list-head { display: none; }
   .list-head, details.row-edit > summary,
   .list-head.sites, details.row-edit.sites > summary {
@@ -958,12 +964,10 @@ details.row-edit.is-paused > summary [data-hl] { font-style: italic; }
 button:disabled:not(.spinning) { cursor: not-allowed; }
 .undo-ico { display: none; }
 @media (max-width: 480px) {
-  /* a phone: the right group must not run under the section icons (the overdue banner says it all) */
-  /* L5: the countdown moves to the end of the second header row (the sites row). */
-  .hdr-clock { position: absolute; right: .7rem; bottom: .3rem; line-height: 1; }
-  .hdr-sites { padding-right: 6.5rem; }
+  /* Statuses and countdown occupy their own grid cells below the navigation. */
+  .hdr-clock { line-height: 1; }
   .hdr-right { gap: .25rem; }
-  .hdr-svc { gap: .2rem; padding-left: .35rem; margin-right: 0; }
+  .hdr-svc { gap: .2rem; }
   /* No room for every header icon on a phone: the Guide and Diagnostics stay links in Settings. */
   header.app .hdr-doctor, header.app .hdr-help { display: none; }
   /* "Undo" shows as an arrow (its text stays for screen readers and in the tooltip). */
