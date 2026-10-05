@@ -5,6 +5,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- Settings distinguish the global timer from individual topic timers. The hint
+  explains which topics use the global interval and where to set an override;
+  scheduling behaviour is unchanged.
+
 ## [1.23.2] — 2026-10-06
 
 ### Fixed

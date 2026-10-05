@@ -1412,9 +1412,9 @@
     "intervals": {
       "q": "intervals check minutes undo message",
       "title": "Checks",
-      "check_topics": "Check topics every",
+      "check_topics": "Global timer",
       "show_undo": "Show “Undo” for",
-      "check_hint": "Every watched topic is checked every {interval}.",
+      "check_hint": "Active topics without their own timer are checked every {interval}. Set an individual timer when adding or editing a topic.",
       "undo_hint": "How long the Undo button stays after a change."
     },
     "access": {
