@@ -792,8 +792,7 @@ def restore_snapshot(path: Path, *, apply: bool = False) -> dict[str, Any]:
     with persistence_lock():
         before_interval = _interval()
         plan = _restore_plan(contents)  # everything merged and checked before the first write
-        safety = _begin_restore(plan, snapshot=path.name)
-        cleanup_pending = _apply_restore(plan, safety)
+        safety, cleanup_pending = _apply_restore(plan, snapshot=path.name)
     result.update({"applied": True, "safety_copy": str(safety)})
     if cleanup_pending:
         result["cleanup_warning"] = t("backup.snapshot.restore_cleanup_warning", owner_language())
@@ -1137,31 +1136,53 @@ def _prune_safety_copies(keep: int) -> tuple[list[str], bool]:
     return removed, pending
 
 
-def _apply_restore(plan: list[tuple[str, Path, bytes | None]], safety: Path) -> bool:
-    try:
-        for name, target, content in plan:
-            if content is None:
-                target.unlink(missing_ok=True)
-                continue
-            atomic_write_bytes(target, content)
-            if target.read_bytes() != content:
-                raise SnapshotError(t("backup.snapshot.read_back_failed", owner_language(), name=name))
-        _finish(safety, "committed")
-    except Exception as exc:
+def _apply_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str) -> tuple[Path, bool]:
+    """Under the data lock, hold one log barrier from safety capture through the final outcome."""
+    failure: Exception | None = None
+    rollback_failure: Exception | None = None
+    with locked_log_path():
+        safety = _begin_restore(plan, snapshot=snapshot)
         try:
-            _roll_back(safety)
-        except Exception as rollback_exc:
-            log_event("backup_restore_failed", error=_reason(exc), rollback="failed", how="manual")
+            for name, target, content in plan:
+                if content is None:
+                    target.unlink(missing_ok=True)
+                    continue
+                atomic_write_bytes(target, content)
+                if target.read_bytes() != content:
+                    raise SnapshotError(t("backup.snapshot.read_back_failed", owner_language(), name=name))
+            _finish(safety, "committed")
+        except Exception as exc:  # noqa: BLE001 - every transaction failure needs rollback before unlock
+            failure = exc
+            try:
+                _roll_back_locked(safety)
+            except Exception as exc:  # noqa: BLE001 - retain the marker and report any failed rollback
+                rollback_failure = exc
+    # The OS log lock is not reentrant. Cleanup and audit events run only after its release.
+    if failure is not None:
+        log_event(
+            "backup_restore_failed",
+            error=_reason(failure),
+            rollback="failed" if rollback_failure else "done",
+            how="manual",
+        )
+        if rollback_failure is not None:
             raise SnapshotError(
                 t("backup.snapshot.rollback_failed", owner_language(), path=str(safety))
-            ) from rollback_exc
-        log_event("backup_restore_failed", error=_reason(exc), rollback="done", how="manual")
-        raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=_reason(exc))) from exc
+            ) from rollback_failure
+        _tidy_safety_copies()
+        raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=_reason(failure))) from failure
     # Cleanup is outside the transaction: its failure must not undo a committed restore.
-    return _cleanup_safety_copies()[1]
+    return safety, _cleanup_safety_copies()[1]
 
 
 def _roll_back(safety: Path) -> None:
+    """Recover under data-before-log ordering; append/rotation wait for the final read-back."""
+    with locked_log_path():
+        _roll_back_locked(safety)
+    _tidy_safety_copies()
+
+
+def _roll_back_locked(safety: Path) -> None:
     """Put back every file the journal saved (config.yaml first: it says where restore points live)."""
     try:
         _journal_bytes(_read_journal(safety), "rolled_back")  # legacy final metadata fits before any live write
@@ -1176,7 +1197,6 @@ def _roll_back(safety: Path) -> None:
             if target.read_bytes() != content:
                 raise SnapshotError(t("backup.snapshot.read_back_failed", owner_language(), name=name))
     _finish(safety, "rolled_back")
-    _tidy_safety_copies()
 
 
 class _MarkerGone(Exception):
