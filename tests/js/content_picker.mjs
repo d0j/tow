@@ -29,8 +29,8 @@ const files = [
   { id: 1, path: "Season 1/B.mkv", size: "200" },
   ...Array.from({ length: 19998 }, (_, n) => ({ id: n + 2, path: `Extras/note-${n}.txt`, size: "0" })),
 ];
-function setup(saved = null) {
-  const root = new Element(); root.isPicker = true; root.dataset.existing = "[]";
+function setup(saved = null, existing = []) {
+  const root = new Element(); root.isPicker = true; root.dataset.existing = JSON.stringify(existing);
   const fields = Object.fromEntries(["selection_mode", "selection_value", "content_token", "selection_indices", "url", "client_id"].map((key) => [key, new Element()]));
   fields.selection_mode.value = "exact"; fields.url.value = "https://tracker.example/topic/1"; fields.client_id.value = "main";
   if (saved) { fields.content_token.value = saved.token; fields.selection_indices.value = "[1]"; }
@@ -58,6 +58,11 @@ function setup(saved = null) {
 const find = (tree, name) => tree.querySelectorAll("*").find((n) => n.attributes["aria-label"] === name);
 const reply = async (request, data) => { request.respond(data); await tick(); };
 const snapshot = { token: "a".repeat(32), files };
+const submitAllowed = (form) => {
+  let prevented = false;
+  for (const fn of form.listeners.submit) fn({ preventDefault: () => { prevented = true; }, stopImmediatePropagation() {} });
+  return !prevented;
+};
 
 const a = setup();
 assert.equal(a.requests.length, 0, "no automatic tracker access");
@@ -125,4 +130,29 @@ assert.equal(e.fields.content_token.value, "", "cancel prevents a late native re
 assert.equal(e.controls.status.textContent, "");
 assert.equal(e.controls.results.hidden, true);
 
-console.log(JSON.stringify({ safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true }));
+const f = setup(null, [files[0]]);
+assert.equal(submitAllowed(f.form), true, "unchanged existing choice needs no metadata request");
+f.controls.load.fire("click");
+await reply(f.requests[0], snapshot);
+f.controls.none.fire("click");
+f.controls.search.value = "B.mkv"; f.controls.search.fire("input");
+file = find(f.controls.tree, "Season 1/B.mkv"); file.checked = true; file.fire("change");
+assert.equal(f.fields.selection_indices.value, "[1]");
+f.controls.load.fire("click");
+assert.equal(submitAllowed(f.form), false, "refresh must not silently save the old existing choice");
+f.requests[1].respond({ error: "metadata unavailable" }, false); await tick();
+assert.equal(submitAllowed(f.form), false, "failed refresh must not silently save the old existing choice");
+f.controls.load.fire("click");
+await reply(f.requests[2], snapshot);
+assert.equal(f.fields.selection_indices.value, "[1]", "retry retains the user's intended choice");
+assert.equal(submitAllowed(f.form), true);
+f.controls.load.fire("click");
+f.form.fire("reset");
+f.fields.content_token.value = ""; f.fields.selection_indices.value = "";
+assert.equal(submitAllowed(f.form), true, "cancel restores unchanged existing-policy submission");
+await reply(f.requests[3], snapshot);
+assert.equal(f.controls.results.hidden, true);
+assert.equal(f.fields.content_token.value, "");
+assert.equal(submitAllowed(f.form), true, "late cancelled response cannot restore the refresh guard");
+
+console.log(JSON.stringify({ safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true }));

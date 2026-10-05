@@ -31,6 +31,7 @@
     try { existing = JSON.parse(root.dataset.existing || "[]"); } catch { /* Server remains authoritative. */ }
     const originalExisting = existing;
     let manualWanted = existing, previousMode = mode.value;
+    let preparationAttempted = false;
     const rememberManual = () => {
       if (snapshot && manual()) manualWanted = snapshot.files.filter((row) => selected.has(row.id));
     };
@@ -182,6 +183,7 @@
       controller = new AbortController();
       const epoch = ++generation, origin = source();
       ruleGeneration++;
+      preparationAttempted = true;
       rememberManual();
       const savedToken = token.value, savedIndices = indices.value;
       token.value = ""; indices.value = ""; snapshot = null;
@@ -237,6 +239,7 @@
       controller?.abort(); window.clearTimeout(ruleTimer);
       snapshot = null; selected.clear();
       existing = originalExisting; manualWanted = originalExisting;
+      preparationAttempted = false;
       results.hidden = true; status.textContent = "";
       loadButton.disabled = false; magnet.disabled = false; limited.disabled = false; limited.hidden = true;
       window.setTimeout(() => { previousMode = mode.value; showExpression(); }, 0);
@@ -270,7 +273,10 @@
       }
     });
     form.addEventListener("submit", (event) => {
-      if (manual() && (!snapshot || selected.size === 0) && !(existing.length && !token.value && !indices.value)) {
+      // Only an untouched edit may reuse the saved policy. A pending or failed
+      // refresh has cleared its token, not confirmed the user's new selection.
+      const unchangedExisting = !preparationAttempted && existing.length && !token.value && !indices.value;
+      if (manual() && (!snapshot || selected.size === 0) && !unchangedExisting) {
         event.preventDefault(); event.stopImmediatePropagation();
         status.textContent = t("content.js.choose");
         loadButton.focus();
