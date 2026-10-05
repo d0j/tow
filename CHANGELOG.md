@@ -23,6 +23,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   Repeated count clauses no longer repeatedly scan the entire remaining title.
 - CI and release installer checks retain explicit Ubuntu 24.04 and 26.04 coverage
   when GitHub changes `ubuntu-latest`, without renaming protected checks.
+- Snapshot link-safety tests no longer mistake a missing destination folder for
+  unavailable symlink permissions. The full gate reports skipped tests and their reasons.
 
 ## [1.23.1] — 2026-10-05
 

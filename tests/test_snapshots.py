@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import re
@@ -53,10 +54,16 @@ def test_snapshot_selection_refuses_a_link_to_another_directory(backup, tmp_path
     target = tmp_path / "elsewhere"
     target.mkdir()
     (target / "MANIFEST.json").write_text("{}", encoding="utf-8")
+    backup.mkdir(parents=True, exist_ok=True)
     link = backup / "tow-linked"
     try:
         link.symlink_to(target, target_is_directory=True)
-    except OSError:
+    except OSError as exc:
+        if (
+            exc.errno not in {errno.EPERM, errno.EACCES, errno.ENOSYS, errno.ENOTSUP}
+            and getattr(exc, "winerror", None) != 1314
+        ):
+            raise
         pytest.skip("creating directory symlinks requires permission on this system")
 
     with pytest.raises(SnapshotError, match=_says("backup.snapshot.unknown")):
@@ -74,6 +81,18 @@ def test_snapshot_selection_refuses_a_junction(backup, monkeypatch):
     with pytest.raises(SnapshotError, match=_says("backup.snapshot.unknown")):
         snapshot_path(candidate.name)
     assert candidate.name not in {row["name"] for row in list_snapshots()}
+
+
+@pytest.mark.parametrize("error_code", [errno.ENOENT, errno.EIO])
+def test_snapshot_link_probe_does_not_mask_setup_or_io_errors(backup, tmp_path, monkeypatch, error_code):
+    def failed_link(path, target, **kwargs):
+        assert path.parent.is_dir()
+        assert target.is_dir()
+        raise OSError(error_code, "synthetic link failure")
+
+    monkeypatch.setattr(Path, "symlink_to", failed_link)
+    with pytest.raises(OSError, match="synthetic link failure"):
+        test_snapshot_selection_refuses_a_link_to_another_directory(backup, tmp_path)
 
 
 def test_restore_drill_brings_everything_back(backup):
