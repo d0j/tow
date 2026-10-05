@@ -1011,7 +1011,7 @@ def _stub_export(monkeypatch) -> None:
     monkeypatch.setattr(restore_points, "verify_bundle", lambda *_args: None)
 
 
-def test_list_is_newest_first_and_skips_damaged_entries():
+def test_list_is_newest_first_retains_empty_for_deletion_and_skips_invalid_entries():
     assert list_restore_points() == []  # no directory yet
 
     _fake_point("20260101T000000Z", "00000001")
@@ -1025,14 +1025,17 @@ def test_list_is_newest_first_and_skips_damaged_entries():
     points = list_restore_points()
 
     assert [point["id"] for point in points] == [
+        "20260401T000000Z-00000004",
         "20260301T000000Z-00000003",
         "20260201T000000Z-00000002",
         "20260101T000000Z-00000001",
     ]
-    assert points[1] == {
+    assert points[0]["bytes"] == 0  # visible for deletion, never usable for restoration
+    assert points[2] == {
         "id": "20260201T000000Z-00000002",
         "created_at": "2026-02-01T00:00:00+00:00",
         "bytes": 5,
+        "revision": restore_points.copy_revision(restore_points.point_path("20260201T000000Z-00000002")),
     }
 
 

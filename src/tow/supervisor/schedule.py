@@ -62,6 +62,7 @@ class Schedule:
     backup_at: tuple[int, int] = DEFAULT_BACKUP_TIME
     zone: tzinfo | None = None
     last: dict[str, float] = field(default_factory=dict)  # this process's last start of each job
+    backup_enabled: bool = True
     _corrected: dict[str, tuple[float, float]] = field(default_factory=dict, init=False, repr=False)
 
     def _clamp(self, ts: float, now: float, *, source: str) -> float:
@@ -132,6 +133,8 @@ class Schedule:
             "progress": self._every_due_at("progress", PROGRESS_EVERY_SEC, PROGRESS_FIRST_DELAY_SEC, now),
             "watchdog": self._every_due_at("watchdog", WATCHDOG_EVERY_SEC, WATCHDOG_FIRST_DELAY_SEC, now),
         }
+        if not self.backup_enabled:
+            due_at.pop("backup")
         return [(name, now - at) for name, at in due_at.items() if at <= now]
 
     def started(self, name: str, now: float) -> None:
@@ -144,12 +147,15 @@ class Schedule:
 
     def next_due(self, now: float, **facts: float) -> dict[str, float]:
         """When each job is due next (for status.json and Settings)."""
-        return {
+        result = {
             "check": self.check_due_at(now, facts.get("last_scheduled_check", 0.0)),
             "backup": self.backup_due_at(now, facts.get("last_backup_ok", 0.0), facts.get("last_backup_attempt", 0.0)),
             "progress": self._every_due_at("progress", PROGRESS_EVERY_SEC, PROGRESS_FIRST_DELAY_SEC, now),
             "watchdog": self._every_due_at("watchdog", WATCHDOG_EVERY_SEC, WATCHDOG_FIRST_DELAY_SEC, now),
         }
+        if not self.backup_enabled:
+            result.pop("backup")
+        return result
 
 
 @dataclass

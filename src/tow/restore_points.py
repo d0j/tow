@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from tow.backup_actions import copy_revision
 from tow.bundle import ExportImportError, export_bundle, import_bundle, rollback_import, verify_bundle
 from tow.config import load_config
 from tow.diagnostic_json import encode_object, read_object
@@ -33,6 +34,7 @@ EXPORT_FAILED = "export_failed"
 MASTER_KEY = "master_key"
 UNKNOWN_POINT = "unknown_point"  # unknown, unsafe or missing restore point
 CANNOT_READ = "cannot_read"
+DELETE_FAILED = "delete_failed"
 
 
 class RestorePointError(RuntimeError):
@@ -186,12 +188,15 @@ def _point_view(path: Path) -> dict[str, Any] | None:
         created = datetime.strptime(match.group("stamp"), "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
     except OSError, ValueError:
         return None
-    if size <= 0:
+    try:
+        revision = copy_revision(path)
+    except OSError, ValueError:
         return None
     return {
         "id": path.stem,
         "created_at": created.isoformat(),
         "bytes": size,
+        "revision": revision,
     }
 
 
@@ -216,7 +221,7 @@ def _prune(*, protected: set[str]) -> None:
     keep = 0
     for point in points:
         point_id = str(point["id"])
-        if point_id in protected:
+        if point_id in protected or point["bytes"] <= 0:
             continue
         path = point_path(point_id)
         try:
@@ -262,7 +267,7 @@ def _create_restore_point(*, protected: set[str] | None = None) -> dict[str, Any
     try:
         export_bundle(path, _passphrase(), include_log=False, overwrite=False)
         view = _point_view(path)
-        if view is None:
+        if view is None or view["bytes"] <= 0:
             raise RestorePointError(t("backup.restore_point.read_back_failed", owner_language()), kind=CREATE_FAILED)
     except (ExportImportError, OSError, RestorePointError) as exc:
         # The exporter owns its failed writes. An existing or concurrently created
@@ -285,6 +290,45 @@ def _create_restore_point(*, protected: set[str] | None = None) -> dict[str, Any
 def restore_from_point(point_id: str) -> dict[str, Any]:
     with persistence_lock():
         return _restore_from_point(point_id)
+
+
+def check_restore_point(point_id: str) -> dict[str, Any]:
+    with persistence_lock():
+        try:
+            return import_bundle(point_path(point_id), _passphrase(), apply=False)
+        except ExportImportError as exc:
+            raise RestorePointError(
+                t("backup.restore_point.validation_failed", owner_language()), kind=INVALID_FILE
+            ) from exc
+
+
+def restore_point_delete_view(point_id: str) -> dict[str, Any]:
+    with persistence_lock():
+        view = _point_view(point_path(point_id, must_exist=False))
+        if view is None:
+            raise RestorePointError(t("backup.restore_point.unknown", owner_language()), kind=UNKNOWN_POINT)
+        return view
+
+
+def delete_restore_point(point_id: str, revision: str) -> dict[str, Any]:
+    """Explicit deletion also permits a damaged archive, never a link or another name."""
+    with persistence_lock():
+        path = point_path(point_id, must_exist=False)
+        before = cleanup_status()
+        try:
+            if not revision or copy_revision(path) != revision:
+                raise RestorePointError(t("web.backup.delete_stale", owner_language()), kind=DELETE_FAILED)
+            path.unlink()
+            try:
+                path.lstat()
+            except FileNotFoundError:
+                if type(before["pending"]) is bool:
+                    _record_cleanup(before["pending"], path.parent)
+                return {"ok": True, "deleted": point_id}
+            # Do not retry: a replacement is not the selected copy.
+        except OSError, ValueError:
+            pass
+        raise RestorePointError(t("web.backup.delete_failed", owner_language()), kind=DELETE_FAILED)
 
 
 def _restore_from_point(point_id: str) -> dict[str, Any]:
@@ -391,12 +435,15 @@ def _restore_bundle(
 __all__ = [
     "RestorePointError",
     "check_portable_bundle",
+    "check_restore_point",
     "cleanup_pending",
     "cleanup_status",
     "create_restore_point",
+    "delete_restore_point",
     "export_portable_bundle",
     "list_restore_points",
     "restore_from_point",
+    "restore_point_delete_view",
     "restore_points_dir",
     "restore_portable_bundle",
 ]

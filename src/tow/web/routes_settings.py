@@ -104,6 +104,7 @@ def settings_page(request: Request) -> Response:
             "access_local": access.is_local(request),
             "service": service_view(),
             "restore_points": restore_points,
+            "restore_points_size": format_bytes(sum(point["bytes"] for point in restore_points)),
             "restore_points_error": restore_points_error,
             "backups": backup_view(cfg, request),
             "language_setting": _language_setting(cfg),

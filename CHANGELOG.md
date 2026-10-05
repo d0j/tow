@@ -3,6 +3,24 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.57] — 2026-10-05
+
+### Added
+
+- Night copies and manual restore points offer matching Check, Restore and Delete
+  actions. Deletion requires a dated confirmation page, also without JavaScript;
+  changed copies or locations require a fresh confirmation. Only the selected copy
+  is removed, with absence read-back and an audit result; other copies and live data
+  are preserved. Existing cleanup warnings are retained. All night copies are shown,
+  not just the newest seven. Manual deletion can remove a damaged regular archive;
+  night deletion requires owned signed metadata and refuses foreign files and links.
+- Backup lists are collapsed with counts and total sizes. Night-copy retention has a
+  numeric days field (default seven), an automatic-copy switch and legacy count-policy
+  compatibility. Disabled scheduling does not produce stale-backup or false recovery
+  alerts; manual actions still work. Cleanup follows a verified new copy, preserving
+  that copy and future-dated history. Free-space preflight reserves room before writing;
+  an optional config size budget can shorten history without deleting the new copy.
+
 ## [1.22.56] — 2026-10-05
 
 ### Fixed

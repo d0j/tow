@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from tow import __version__
-from tow.config import interval_sec_of, port_of
+from tow.config import as_bool, interval_sec_of, port_of
 from tow.supervisor import layout
 from tow.supervisor.schedule import Schedule, WakeDetector, parse_backup_time
 
@@ -160,6 +160,7 @@ class Supervisor:
         from tow.clock import local_zone
 
         self.schedule.interval_sec = interval_sec_of(cfg)
+        self.schedule.backup_enabled = as_bool(cfg.get("backup_enabled"), True)
         try:
             self.schedule.backup_at = parse_backup_time(cfg.get("backup_time"))
         except ValueError as exc:
@@ -481,6 +482,15 @@ class Supervisor:
                 return
 
     def _start_job(self, name: str, wall: float, mono: float) -> None:
+        if name == "backup":
+            # A switch made after the periodic config refresh must still prevent launch.
+            try:
+                self.schedule.backup_enabled = as_bool(self.deps.load_config().get("backup_enabled"), True)
+            except Exception as exc:  # noqa: BLE001 - do not launch an automatic write with unreadable settings
+                self.schedule.backup_enabled = False
+                LOG.warning("backup settings not read: %s", type(exc).__name__)
+            if not self.schedule.backup_enabled:
+                return
         self.schedule.started(name, wall)
         persisted_key = {"check": "check_started_at", "backup": "backup_attempt_at"}.get(name)
         if persisted_key:

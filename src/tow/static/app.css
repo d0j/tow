@@ -279,7 +279,7 @@ button.ico, button.row-ico, button.flash-x { min-height: 0; }
   margin-top: .55rem;
 }
 .edit-actions .danger { margin-left: auto; }
-button.ghost.danger { background: transparent; border-color: var(--line); color: var(--bad); }
+button.ghost.danger, .btn.ghost.danger { background: transparent; border-color: var(--line); color: var(--bad); }
 .notifier-steps { margin: .2rem 0 .6rem; }
 .client-add { margin-top: .9rem; }
 .backup-folder { padding-top: .2rem; }
@@ -797,6 +797,15 @@ details.help[open] > summary { color: var(--acc); border-color: var(--acc2); }
 .restore-point-row > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: .5rem; min-width: 0; }
 .restore-point-row b { font-size: 13px; font-weight: 600; }
 .restore-point-row span { color: var(--mut); font-size: 12px; }
+.restore-point-row .backup-copy-actions { align-items: center; justify-content: flex-end; gap: .35rem; margin: 0; }
+.backup-delete-confirm h2 { font-size: .95rem; }
+.backup-inventory, .backup-location { min-width: 0; border: 1px solid var(--line); border-radius: 6px; }
+.backup-inventory > summary, .backup-location > summary { padding: .35rem .5rem; font-size: 12.5px; cursor: pointer; }
+.backup-location > form { padding: .5rem; }
+.backup-inventory > .restore-point-list { padding: .35rem; max-height: 20rem; overflow-y: auto; overscroll-behavior: contain; }
+.backup-retention-form { display: grid; grid-template-columns: minmax(0, 12rem) auto; align-items: end; justify-content: start; gap: .35rem .5rem; }
+.backup-retention-form input { width: 100%; }
+.backup-retention-form > .field-hint { grid-column: 1 / -1; margin: 0; }
 .settings-page-compact .settings-empty { margin: .55rem 0 0; padding: .55rem .65rem; }
 .settings-page-compact .technical-details .command-list { margin-top: .5rem; }
 /* L6: backups are three cards: night copies, copies made by hand, a TOW file. */
@@ -831,6 +840,7 @@ details.help[open] > summary { color: var(--acc); border-color: var(--acc2); }
   .settings-page-compact .command-row { grid-template-columns: 1fr; gap: .24rem; }
   .settings-page-compact .copy-command { width: 100%; }
   .restore-point-row { grid-template-columns: 1fr; }
+  .restore-point-row .backup-copy-actions { justify-content: flex-start; }
   .settings-page-compact .settings-actions { align-items: center; }
   .settings-page-compact .settings-actions button,
   .settings-page-compact .service-restart button,

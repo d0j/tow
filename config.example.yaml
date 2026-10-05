@@ -38,6 +38,9 @@ interval_sec: 3600
 # absolute one may be another drive. The master key is never copied - keep it offline yourself.
 # backup_dir: backup/night
 # backup_keep: 14
+# backup_days: 7               # new installs: seven days; overrides a legacy backup_keep
+# backup_enabled: true         # false disables scheduled copies, not manual actions
+# backup_max_mib: 0            # optional night-copy budget; 0 = no size limit
 # backup_time: "03:30"
 # Where restore points (Settings -> Backups) are kept; default data/restore-points.
 # restore_points_dir: D:\TOW-restore-points

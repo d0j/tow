@@ -32,6 +32,8 @@ from typing import Any
 import yaml
 
 from tow import __version__
+from tow.backup_actions import copy_revision
+from tow.backup_retention import MIB, copy_time, retained_copies, retention_settings
 from tow.config import interval_sec_of, load_config
 from tow.diagnostic_json import check_epochs, check_types, encode_object, read_object
 from tow.i18n import t
@@ -404,7 +406,7 @@ def create_snapshot(*, keep: int | None = None, how: str = "auto") -> dict[str, 
     return result
 
 
-def list_snapshots(limit: int = 10) -> list[dict[str, Any]]:
+def list_snapshots(limit: int | None = 10) -> list[dict[str, Any]]:
     """Newest night copies first: name, time, size (no verification)."""
     try:
         root = backup_root()
@@ -412,7 +414,7 @@ def list_snapshots(limit: int = 10) -> list[dict[str, Any]]:
     except SnapshotError, OSError:
         return []
     rows = []
-    for folder in reversed(folders[-limit:]):
+    for folder in reversed(folders if limit is None else folders[-limit:]):
         try:
             manifest = _read_manifest(folder)
             created = datetime.fromisoformat(str(manifest.get("created_at")))
@@ -420,7 +422,15 @@ def list_snapshots(limit: int = 10) -> list[dict[str, Any]]:
             size = sum(_member_size(name, meta) for name, meta in manifest["files"].items())
         except SnapshotError, OSError, ValueError, TypeError, AttributeError, OverflowError:
             continue
-        rows.append({"name": folder.name, "created_ts": created_ts, "bytes": size, "version": manifest.get("version")})
+        rows.append(
+            {
+                "name": folder.name,
+                "created_ts": created_ts,
+                "created_at": created.isoformat(),
+                "bytes": size,
+                "version": manifest.get("version"),
+            }
+        )
     return rows
 
 
@@ -435,6 +445,52 @@ def snapshot_path(name: str) -> Path:
     if not (path / "MANIFEST.json").is_file():
         raise SnapshotError(t("backup.snapshot.unknown", owner_language()))
     return path
+
+
+def check_snapshot(name: str) -> dict[str, Any]:
+    with persistence_lock():
+        return verify_snapshot(snapshot_path(name))
+
+
+def snapshot_delete_view(name: str) -> dict[str, Any]:
+    with persistence_lock():
+        try:
+            path = snapshot_path(name)
+            manifest = _owned_manifest(path, _signing_key())
+            fixed = {member for member, _target in _fixed_members()}
+            if manifest is None or any(
+                member not in fixed and _POINT_MEMBER.fullmatch(member) is None for member in manifest["files"]
+            ):
+                raise ValueError("copy ownership could not be verified")
+            if not _owned_tree(path, {"MANIFEST.json", *manifest["files"]}):
+                raise ValueError("copy contains foreign files")
+            return {"name": name, "created_at": manifest["created_at"], "revision": copy_revision(path)}
+        except (OSError, ValueError, KeyError) as exc:
+            raise SnapshotError(t("web.backup.delete_failed", owner_language())) from exc
+
+
+def delete_snapshot(name: str, revision: str) -> dict[str, Any]:
+    with persistence_lock():
+        view = snapshot_delete_view(name)
+        if not revision or view["revision"] != revision:
+            raise SnapshotError(t("web.backup.delete_stale", owner_language()))
+        path = snapshot_path(name)
+        manifest = _owned_manifest(path, _signing_key())
+        if manifest is None:
+            raise SnapshotError(t("web.backup.delete_failed", owner_language()))
+        before = _cleanup_status(cfg=None)
+        removed = _remove_copy(path, path.parent, "MANIFEST.json", {"MANIFEST.json", *manifest["files"]})
+        # Rebind a known observation; explicit deletion never clears an earlier warning.
+        if not removed or type(before["pending"]) is bool:
+            with contextlib.suppress(OSError, ValueError, UnicodeError):
+                _record(
+                    last_cleanup_pending=not removed or before["pending"],
+                    location=str(path.parent.resolve()),
+                    cleanup_inventory=_cleanup_inventory(path.parent),
+                )
+        if not removed:
+            raise SnapshotError(t("web.backup.delete_failed", owner_language()))
+        return {"ok": True, "deleted": name}
 
 
 def _copy_snapshot_member(source: Path, destination: Path, name: str) -> dict[str, Any] | None:
@@ -483,7 +539,10 @@ def _write_snapshot_manifest(path: Path, manifest: dict[str, Any]) -> None:
 def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
     cfg = load_config()
     root = backup_root(cfg)
-    keep = int(keep or cfg.get("backup_keep") or KEEP_DEFAULT)
+    policy = retention_settings(cfg)
+    if keep:
+        policy.update(mode="count", keep=max(1, keep))
+    keep = int(policy["keep"])
     stamp = datetime.now(UTC).astimezone().strftime("%Y%m%d-%H%M%S")
     target = root / f"{_PREFIX}{stamp}"
     partial = root / f".{_PREFIX}{stamp}.partial"
@@ -497,10 +556,12 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
     previous_members = _previous_members(root, key)
     partial_created = False
     try:
+        members = _members()
+        _check_copy_space(root, members)
         partial.mkdir(parents=True, exist_ok=False)
         partial_created = True
         with persistence_lock():  # a consistent cut: no check or edit writes meanwhile
-            for name, source in _members():
+            for name, source in members:
                 guard = locked_log_path() if name == "tow.jsonl" else contextlib.nullcontext(source)
                 with guard as stable_source:
                     meta = _copy_snapshot_member(stable_source, partial / name, name)
@@ -536,7 +597,7 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
     except SnapshotError as exc:
         raise SnapshotError(t("backup.snapshot.unverified", owner_language(), name=target.name, reason=exc)) from exc
     # Never the copy just verified, even when the clock went back and it does not sort last.
-    pruned, cleanup_pending = _prune_night_copies(root, target, keep, key)
+    pruned, cleanup_pending = _prune_night_copies(root, target, keep, key, policy=policy)
     size = sum(item["size"] for item in files.values())
     log_event(
         "backup_created",
@@ -562,28 +623,67 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
     return result
 
 
-def _prune_night_copies(root: Path, target: Path, keep: int, key: bytes) -> tuple[list[str], bool]:
+def _check_copy_space(root: Path, members: list[tuple[str, Path]]) -> None:
+    """Keep room for a complete new copy; never erase the old one to make space."""
+    size = 0
+    for name, source in members:
+        try:
+            if _ordinary_file(source, missing=True):
+                size += source.stat().st_size
+        except ValueError as exc:
+            raise SnapshotError(t("backup.snapshot.source_changed", owner_language(), name=name)) from exc
+    existing = root
+    while not existing.exists() and existing != existing.parent:
+        existing = existing.parent
+    required = size + MAX_MANIFEST_BYTES + max(32 * MIB, size // 20)
+    if shutil.disk_usage(existing).free < required:
+        raise SnapshotError(t("backup.snapshot.no_space", owner_language()))
+
+
+def _copy_disk_bytes(folder: Path) -> int:
+    # Ownership and ordinary-tree checks precede this; no links or foreign directories.
+    total = 0
+    for member in folder.iterdir():
+        if member.name == "restore-points":
+            total += sum(point.stat().st_size for point in member.iterdir())
+        else:
+            total += member.stat().st_size
+    return total
+
+
+def _prune_night_copies(
+    root: Path, target: Path, keep: int, key: bytes, *, policy: dict[str, Any] | None = None
+) -> tuple[list[str], bool]:
     removed: list[str] = []
     pending = False
     try:
         others = []
+        entries = []
         fixed = {name for name, _path in _fixed_members()}
         for folder in _snapshots(root):
-            if folder == target:
-                continue
             manifest = _owned_manifest(folder, key)
             if manifest is None or any(
                 name not in fixed and _POINT_MEMBER.fullmatch(name) is None for name in manifest["files"]
             ):
                 continue
             if _owned_tree(folder, {"MANIFEST.json", *manifest["files"]}):
-                others.append((folder, {"MANIFEST.json", *manifest["files"]}))
-        for folder, expected in others[: max(0, len(others) - (keep - 1))] if keep > 0 else []:
+                created = copy_time(str(manifest["created_at"]))
+                entries.append((folder.name, created, _copy_disk_bytes(folder)))
+                if folder != target:
+                    others.append((folder, {"MANIFEST.json", *manifest["files"]}))
+        chosen = policy or {**retention_settings({"backup_keep": keep}), "keep": max(1, keep)}
+        anchor = next((when for name, when, _size in entries if name == target.name), None)
+        if anchor is None:
+            return [], True  # the verified new copy no longer proves ownership; retain older copies
+        retained, pending = retained_copies(entries, newest=target.name, now=anchor, policy=chosen)
+        for folder, expected in others:
+            if folder.name in retained:
+                continue
             if _remove_copy(folder, root, "MANIFEST.json", expected):
                 removed.append(folder.name)
             else:
                 pending = True
-    except OSError, ValueError, SnapshotError:
+    except OSError, ValueError, TypeError, KeyError, OverflowError, SnapshotError:
         pending = True  # the new verified copy is usable even when cleanup cannot be checked
     return removed, pending
 
