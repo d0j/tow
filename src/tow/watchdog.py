@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from tow import i18n
-from tow.config import interval_sec_of, load_config, port_of
+from tow.config import as_bool, interval_sec_of, load_config, port_of
 from tow.diagnostic_json import check_epochs, check_types, encode_object, epoch, read_object
 from tow.i18n import t
 from tow.log import log_event
@@ -273,6 +273,12 @@ def _backups(p: _Pass, cfg: dict[str, Any]) -> None:
     from tow.snapshots import cleanup_status as night_cleanup_status
     from tow.snapshots import list_snapshots, status, status_failed
 
+    p.report["backup_enabled"] = as_bool(cfg.get("backup_enabled"), True)
+    _cleanup_observation(p, "backup_cleanup", night_cleanup_status(cfg=cfg))
+    _cleanup_observation(p, "restore_point_cleanup", cleanup_status(cfg=cfg))
+    if not p.report["backup_enabled"]:
+        p.report.update(backup_ok=None, backup_watch_since=None)
+        return  # disabled is not a healthy copy and must not emit a recovery message
     st = status()
     last_ok = st.get("last_ok_at")
     if not isinstance(last_ok, (int, float)):
@@ -284,8 +290,6 @@ def _backups(p: _Pass, cfg: dict[str, Any]) -> None:
     failed = status_failed(st)
     stale = p.now() - float(last_ok if last_ok else since) > BACKUP_STALE_SEC
     p.report["backup_ok"] = not failed and not stale
-    _cleanup_observation(p, "backup_cleanup", night_cleanup_status(cfg=cfg))
-    _cleanup_observation(p, "restore_point_cleanup", cleanup_status(cfg=cfg))
     if failed:
         reason = st.get("last_error") or t("watchdog.backup.unknown_reason", p.lang)
         p.backup_why = (
@@ -495,8 +499,9 @@ def run_watchdog(
         "monitoring": report["monitoring_ok"],
         "service": report["service_ok"],
         "checks": report["checks_ok"],
-        "backup": report["backup_ok"],
     }
+    if report["backup_enabled"]:
+        current["backup"] = report["backup_ok"]
     # An unreadable observation keeps the last confirmed result, not a fabricated recovery.
     for key in ("backup_cleanup", "restore_point_cleanup"):
         current[f"{key}_monitoring"] = not report[f"{key}_read_error"]

@@ -9,22 +9,137 @@ import tempfile
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 
 from tow.bundle import MAX_BUNDLE_BYTES
-from tow.clock import machine_now
+from tow.clock import format_ui_timestamp, machine_now
+from tow.config import as_bool
 from tow.log import error_class
 from tow.paths import data_dir
 from tow.restore_points import CREATE_FAILED, INVALID_FILE, ROLLBACK_FAILED, RestorePointError
+from tow.snapshots import SnapshotError
 from tow.store import StoreCorruptionError
 from tow.web import services
+from tow.web.templating import TEMPLATES
 from tow.web.text import format_bytes, t
 from tow.web.views import flash_redirect
 
 router = APIRouter()
+
+
+@router.post("/settings/backup/automatic")
+@services.locked_state_mutation
+def settings_backup_automatic(enabled: str = Form("")) -> Response:
+    cfg = services.load_config()
+    cfg["backup_enabled"] = as_bool(enabled)
+    services.save_config(cfg)
+    services.log_event("settings_backup_automatic", enabled=cfg["backup_enabled"], how="manual")
+    return _backup_redirect("web.backup.automatic_on" if cfg["backup_enabled"] else "web.backup.automatic_off")
+
+
+@router.post("/settings/backup/retention")
+@services.locked_state_mutation
+def settings_backup_retention(days: str = Form("")) -> Response:
+    try:
+        age = int(days)
+        if not 1 <= age <= 3650:
+            raise ValueError("invalid retention settings")
+    except ValueError:
+        return _backup_redirect("web.backup.retention_invalid", "err")
+    cfg = services.load_config()
+    cfg["backup_days"] = age
+    services.save_config(cfg)
+    services.log_event("settings_backup_retention", days=age, how="manual")
+    return _backup_redirect("web.backup.retention_saved")
+
+
+@router.post("/settings/backup/night/{name}/check")
+def settings_night_check(name: str) -> Response:
+    try:
+        result = services.check_snapshot(name)
+    except (SnapshotError, OSError) as exc:
+        services.log_event("settings_backup_check_fail", copy_kind="night", error=error_class(exc), how="manual")
+        return _backup_redirect("web.backup.check_failed", "err")
+    services.log_event("settings_backup_checked", copy_kind="night", how="manual")
+    if not result.get("signed"):
+        return _backup_redirect("backup.snapshot.unsigned", "warn")
+    return _backup_redirect("web.backup.checked")
+
+
+@router.post("/settings/restore-points/{point_id}/check")
+def settings_point_check(point_id: str) -> Response:
+    try:
+        services.check_restore_point(point_id)
+    except (RestorePointError, OSError) as exc:
+        services.log_event(
+            "settings_backup_check_fail", copy_kind="restore_point", error=error_class(exc), how="manual"
+        )
+        return _backup_redirect("web.backup.check_failed", "err")
+    services.log_event("settings_backup_checked", copy_kind="restore_point", how="manual")
+    return _backup_redirect("web.backup.checked")
+
+
+def _delete_confirmation(request: Request, kind: str, identifier: str) -> Response:
+    try:
+        view = (
+            services.snapshot_delete_view(identifier)
+            if kind == "night"
+            else services.restore_point_delete_view(identifier)
+        )
+        created = format_ui_timestamp(str(view["created_at"]))
+    except SnapshotError, RestorePointError, OSError, ValueError:
+        return _backup_redirect("web.backup.delete_failed", "err")
+    return TEMPLATES.TemplateResponse(
+        request,
+        "backup_delete.html",
+        {
+            "title": t("settings.backups.delete_title"),
+            "copy_title": t("settings.backups.night_title" if kind == "night" else "settings.backups.manual_title"),
+            "created": created,
+            "revision": view["revision"],
+            "action": request.url.path,
+        },
+    )
+
+
+@router.get("/settings/backup/night/{name}/delete")
+def settings_night_delete_confirmation(request: Request, name: str) -> Response:
+    return _delete_confirmation(request, "night", name)
+
+
+@router.get("/settings/restore-points/{point_id}/delete")
+def settings_point_delete_confirmation(request: Request, point_id: str) -> Response:
+    return _delete_confirmation(request, "restore_point", point_id)
+
+
+def _delete_copy(kind: str, identifier: str, revision: str) -> Response:
+    try:
+        result = (
+            services.delete_snapshot(identifier, revision)
+            if kind == "night"
+            else services.delete_restore_point(identifier, revision)
+        )
+    except (SnapshotError, RestorePointError, OSError) as exc:
+        services.log_event("settings_backup_delete_fail", copy_kind=kind, error=error_class(exc), how="manual")
+        error = t("web.backup.delete_failed") if isinstance(exc, OSError) else str(exc)
+        return _backup_redirect(t("web.backup.delete_error", error=error), "err")
+    recorded = services.log_event("settings_backup_deleted", copy_kind=kind, copy_id=result["deleted"], how="manual")
+    return _backup_redirect(
+        "web.backup.deleted" if recorded else "web.backup.deleted_audit_missing", "ok" if recorded else "warn"
+    )
+
+
+@router.post("/settings/backup/night/{name}/delete")
+def settings_night_delete(name: str, revision: str = Form("")) -> Response:
+    return _delete_copy("night", name, revision)
+
+
+@router.post("/settings/restore-points/{point_id}/delete")
+def settings_point_delete(point_id: str, revision: str = Form("")) -> Response:
+    return _delete_copy("restore_point", point_id, revision)
 
 
 def _backup_redirect(message: Any, kind: str = "ok", /, **params: Any) -> RedirectResponse:

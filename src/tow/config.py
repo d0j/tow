@@ -210,6 +210,13 @@ def _validate(data: dict[str, Any]) -> None:
         _bool_field(data, key)
     if data.get("backup_keep") is not None:
         _int_field(data, "backup_keep", 1, 365)
+    _bool_field(data, "backup_enabled")
+    for key, lower, upper in (
+        ("backup_days", 1, 3650),
+        ("backup_max_mib", 0, 1048576),
+    ):
+        if data.get(key) is not None:
+            _int_field(data, key, lower, upper)
     if data.get("backup_time") is not None:
         try:
             parse_backup_time(data["backup_time"])

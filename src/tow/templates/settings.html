@@ -449,19 +449,47 @@
             <form method="post" action="/settings/backup/now" data-return-target="acc-transfer" class="settings-actions backup-make">
               <button type="submit">{{ t('settings.backups.make_now') }}</button>
             </form>
+            <form method="post" action="/settings/backup/automatic" class="compact-form immediate-form" data-return-target="acc-transfer" data-auto-submit>
+              <label class="check-field" for="backup-automatic">
+                <input id="backup-automatic" type="checkbox" name="enabled" value="1"{% if backups.automatic %} checked{% endif %} aria-describedby="backup-automatic-hint" data-auto-submit-control>
+                <span>{{ t('settings.backups.automatic') }}</span>
+                <p id="backup-automatic-hint" data-auto-submit-status>{{ t('settings.backups.automatic_hint') }}</p>
+              </label>
+              <noscript><button type="submit">{{ t('settings.common.save') }}</button></noscript>
+            </form>
+            <form method="post" action="/settings/backup/retention" data-return-target="acc-transfer" class="settings-form compact-form backup-retention-form">
+              <div>
+                <label for="backup-days">{{ t('settings.backups.retention_days_label') }}</label>
+                <input id="backup-days" type="number" name="days" value="{{ backups.retention.days }}" min="1" max="3650" required aria-describedby="backup-days-hint">
+              </div>
+              <button type="submit">{{ t('settings.common.save') }}</button>
+              <p class="field-hint" id="backup-days-hint">{{ t('settings.backups.retention_note') }}{% if backups.retention.mode == 'count' %} {{ t('settings.backups.retention_legacy', count=backups.retention.keep) }}{% endif %}</p>
+            </form>
             {% if backups.snapshots %}
+            <details class="backup-inventory">
+            <summary>{{ t('settings.backups.saved_count', n=backups.snapshots|length) }} · {{ backups.total_size }}</summary>
             <div class="restore-point-list" aria-label="{{ t('settings.backups.night_title') }}">
               {% for snap in backups.snapshots %}
               <div class="restore-point-row">
                 <div><b>{{ snap.at }}</b><span>{{ snap.size }}</span></div>
-                <form method="post" action="/settings/backup/night/{{ snap.name }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.night_restore_confirm', at=snap.at) }}">
-                  <button class="danger" type="submit">{{ t('settings.common.restore') }}</button>
-                </form>
+                <div class="settings-actions backup-copy-actions">
+                  <form method="post" action="/settings/backup/night/{{ snap.name }}/check" data-return-target="acc-transfer">
+                    <button class="ghost" type="submit">{{ t('settings.common.check') }}</button>
+                  </form>
+                  <form method="post" action="/settings/backup/night/{{ snap.name }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.night_restore_confirm', at=snap.at) }}">
+                    <button class="danger" type="submit">{{ t('settings.common.restore') }}</button>
+                  </form>
+                  <a class="btn ghost danger" href="/settings/backup/night/{{ snap.name }}/delete">{{ t('settings.common.delete') }}</a>
+                </div>
               </div>
               {% endfor %}
             </div>
+            </details>
             {% endif %}
-            {{ folder_form(backups.folders.night, t('settings.backups.folders_hint')) }}
+            <details class="backup-location">
+              <summary>{{ t('settings.backups.folder', title=backups.folders.night.title) }}</summary>
+              {{ folder_form(backups.folders.night, t('settings.backups.folders_hint')) }}
+            </details>
           </article>
 
           <article class="integration-card backup-card" id="backup-manual" aria-labelledby="backup-manual-title">
@@ -477,18 +505,30 @@
             {% if restore_points_error %}
             <p class="notice error" role="alert">{{ t('settings.backups.list_error') }}</p>
             {% elif restore_points %}
+            <details class="backup-inventory">
+            <summary>{{ t('settings.backups.saved_count', n=restore_points|length) }} · {{ restore_points_size }}</summary>
             <div class="restore-point-list" aria-label="{{ t('settings.backups.manual_list') }}">
               {% for point in restore_points %}
               <div class="restore-point-row">
-                <div><b>{{ point.created_label }}</b><span>{{ point.size_label }}</span></div>
-                <form method="post" action="/settings/restore-points/{{ point.id }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.manual_restore_confirm') }}">
-                  <button class="danger" type="submit">{{ t('settings.common.restore') }}</button>
-                </form>
+                <div><b>{{ point.created_label }}</b><span>{{ point.size_label }}</span>{% if not point.bytes %}<span class="pill warn">{{ t('settings.backups.empty_archive') }}</span>{% endif %}</div>
+                <div class="settings-actions backup-copy-actions">
+                  <form method="post" action="/settings/restore-points/{{ point.id }}/check" data-return-target="acc-transfer">
+                    <button class="ghost" type="submit"{% if not point.bytes %} disabled{% endif %}>{{ t('settings.common.check') }}</button>
+                  </form>
+                  <form method="post" action="/settings/restore-points/{{ point.id }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.manual_restore_confirm') }}">
+                    <button class="danger" type="submit"{% if not point.bytes %} disabled{% endif %}>{{ t('settings.common.restore') }}</button>
+                  </form>
+                  <a class="btn ghost danger" href="/settings/restore-points/{{ point.id }}/delete">{{ t('settings.common.delete') }}</a>
+                </div>
               </div>
               {% endfor %}
             </div>
+            </details>
             {% endif %}
-            {{ folder_form(backups.folders.manual, '') }}
+            <details class="backup-location">
+              <summary>{{ t('settings.backups.folder', title=backups.folders.manual.title) }}</summary>
+              {{ folder_form(backups.folders.manual, '') }}
+            </details>
           </article>
 
           <article class="integration-card backup-card portable-transfer" id="backup-file" aria-labelledby="backup-file-title">

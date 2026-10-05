@@ -27,13 +27,17 @@ from tow.ratelimit import LoginThrottle
 from tow.releases import release_status
 from tow.restore_points import (
     check_portable_bundle,
+    check_restore_point,
     create_restore_point,
+    delete_restore_point,
     export_portable_bundle,
     list_restore_points,
     restore_from_point,
+    restore_point_delete_view,
     restore_portable_bundle,
 )
 from tow.restore_points import cleanup_status as restore_point_cleanup_status
+from tow.snapshots import check_snapshot, delete_snapshot, snapshot_delete_view
 from tow.snapshots import cleanup_status as night_cleanup_status
 from tow.store import (
     load_download_history,
@@ -53,8 +57,12 @@ from tow.web_update import status as web_update_status
 __all__ = [
     "browser_auth",
     "check_portable_bundle",
+    "check_restore_point",
+    "check_snapshot",
     "cleanup_secret_undo",
     "create_restore_point",
+    "delete_restore_point",
+    "delete_snapshot",
     "doctor_report",
     "export_portable_bundle",
     "list_restore_points",
@@ -74,6 +82,7 @@ __all__ = [
     "request_restart",
     "restore_from_point",
     "restore_point_cleanup_status",
+    "restore_point_delete_view",
     "restore_portable_bundle",
     "run_check",
     "save_config",
@@ -81,6 +90,7 @@ __all__ = [
     "save_state",
     "service_status",
     "set_autostart",
+    "snapshot_delete_view",
     "start_web_update",
     "web_update_log",
     "web_update_status",

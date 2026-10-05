@@ -417,6 +417,8 @@ def topic_progress_summary(topic: Mapping[str, Any], history: Mapping[str, Any])
 
 def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
     """Night copies: folder, last result, the newest copies; folders of both kinds of copies."""
+    from tow.backup_retention import retention_settings
+    from tow.config import as_bool
     from tow.locations import LOCATIONS, free_bytes, is_default, resolve
     from tow.pulse import clock
     from tow.snapshots import list_snapshots, status, status_failed
@@ -436,17 +438,22 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
             "free": format_bytes(free) if free is not None else "",
         }
     st = status()
+    copies = list_snapshots(limit=None)
     snapshots = [
-        {"name": row["name"], "at": clock(row["created_ts"]), "size": format_bytes(row["bytes"])}
-        for row in list_snapshots(limit=7)
+        {"name": row["name"], "at": format_ui_timestamp(str(row["created_at"])), "size": format_bytes(row["bytes"])}
+        for row in copies
     ]
     last_ok = st.get("last_ok_at")
     failed_at = st.get("last_error_at")
     cleanup = services.restore_point_cleanup_status(cfg=cfg)
     night_cleanup = services.night_cleanup_status(cfg=cfg)
+    retention = retention_settings(cfg)
     return {
         "folders": folders,
         "snapshots": snapshots,
+        "total_size": format_bytes(sum(row["bytes"] for row in copies)),
+        "automatic": as_bool(cfg.get("backup_enabled"), True),
+        "retention": retention,
         "last_ok": clock(last_ok) if isinstance(last_ok, (int, float)) else (snapshots[0]["at"] if snapshots else ""),
         "failed": status_failed(st),
         "read_error": st.get("read_error") is True,

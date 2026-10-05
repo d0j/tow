@@ -413,6 +413,8 @@ HISTORY_GROUPS = {
             "watchdog_alert",
             "client_stop_failed",
             "backup_cleanup_pending",
+            "settings_backup_check_fail",
+            "settings_backup_delete_fail",
         }
     ),
     "changes": frozenset(
@@ -431,6 +433,9 @@ HISTORY_GROUPS = {
             "settings_restore_point_applied",
             "settings_portable_restore",
             "settings_update_started",
+            "settings_backup_deleted",
+            "settings_backup_retention",
+            "settings_backup_automatic",
         }
     ),
     "notifications": frozenset({"bot_delivery_succeeded", "bot_delivery_failed"}),
@@ -551,7 +556,7 @@ def format_event(rec: Mapping[str, Any], *, title_index: Mapping[str, str] | Non
         bits.append(t("log.how.manual", lang))
     elif how == "auto":
         bits.append(t("log.how.auto", lang))
-    if kind == "backup_cleanup_pending":
+    if kind == "backup_cleanup_pending" or kind.startswith("settings_backup_"):
         cleanup_key = {
             "night": "log.cleanup.night",
             "safety": "log.cleanup.safety",

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 id="page-title">{{ t('settings.backups.delete_title') }}</h1>
+<section class="card backup-delete-confirm" aria-labelledby="copy-title">
+  <h2 id="copy-title">{{ copy_title }} · {{ created }}</h2>
+  <p>{{ t('settings.backups.delete_warning') }}</p>
+  <form method="post" action="{{ action }}" class="settings-actions">
+    <input type="hidden" name="revision" value="{{ revision }}">
+    <a class="btn ghost" href="/settings?open=transfer#acc-transfer">{{ t('settings.common.cancel') }}</a>
+    <button type="submit" class="danger">{{ t('settings.common.delete') }}</button>
+  </form>
+</section>
+{% endblock %}

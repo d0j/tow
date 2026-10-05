@@ -140,6 +140,23 @@ decisions; unreadable dates fail closed without modifying the journal.
 
 ## Recovery
 
+Backup lists are compact, closed by default, and offer Check, Restore and Delete for
+both kinds. Deletion has a dated server confirmation (also without JavaScript) and
+is bound to the copy's location and regular-file metadata. A changed selection is
+refused. Only the selected copy is removed and absence is read back; it is not undoable.
+Signed night-copy metadata and the owned tree prevent deletion of foreign files or links.
+Explicit manual deletion can remove a damaged ordinary archive without decrypting it.
+Deleting one copy rebinds a known cleanup observation without clearing previous warnings.
+
+New night-copy policies default to `backup_days: 7`. Existing explicit `backup_keep`
+count policies remain supported until days are saved. Retention follows a verified new
+copy; that copy is always protected. Age uses signed creation time relative to the new
+copy, and future-dated copies are kept after a clock correction. An optional
+`backup_max_mib` can shorten history, but never removes the new copy or foreign data.
+Insufficient room for the full new copy plus a reserve refuses creation before pruning.
+`backup_enabled: false` removes scheduled backup jobs and stale-copy alerts, not
+manual actions or cleanup monitoring. Already running jobs finish normally.
+
 Night-copy creation reads regular sources in bounded blocks and hashes the same bytes
 it writes to exclusive prepared files. Opened descriptors, complete byte counts and
 modification times are checked; a disappearing or changing source cannot publish a
