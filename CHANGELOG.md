@@ -17,6 +17,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Selection and waiting messages use readable episode labels such as `S02E15`,
   not internal history identity keys. Durable file and episode identities are unchanged.
 - File-rule result counts remain grammatical for a single selected file.
+- Searching and paging in prepared files retain rule validation, waiting and
+  pending messages. Long whitespace runs in untrusted episode titles no longer
+  cause expensive backtracking during preview or progress calculations.
+  Repeated count clauses no longer repeatedly scan the entire remaining title.
 
 ## [1.23.1] — 2026-10-05
 

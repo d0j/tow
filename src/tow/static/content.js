@@ -26,7 +26,7 @@
     let snapshot = null, selected = new Set(), generation = 0, ruleGeneration = 0, page = 0;
     let nodes = [], expanded = new Set();
     const PAGE_SIZE = 200;
-    let controller = null, ruleTimer = null;
+    let controller = null, ruleTimer = null, ruleNotice = "";
     let existing = [];
     try { existing = JSON.parse(root.dataset.existing || "[]"); } catch { /* Server remains authoritative. */ }
     const originalExisting = existing;
@@ -69,7 +69,8 @@
       if (!snapshot) return;
       const chosen = snapshot.files.filter((row) => selected.has(row.id));
       const size = humanSize(chosen.reduce((sum, row) => sum + rowSize(row), 0n));
-      status.textContent = t(manual() ? "content.js.count" : "content.js.rule", { count: chosen.length, size });
+      const summary = !manual() && ruleNotice || t(manual() ? "content.js.count" : "content.js.rule", { count: chosen.length, size });
+      if (status.textContent !== summary) status.textContent = summary;
       indices.value = manual() ? JSON.stringify([...selected]) : "";
     };
     const checkbox = (name, checked, mixed, update, key) => {
@@ -155,6 +156,7 @@
       if (!snapshot || manual()) { render(); return; }
       const epoch = ++ruleGeneration, current = snapshot, kind = mode.value, value = expression.value;
       const title = field("title").value, lifecycle = field("tracking_mode").value;
+      ruleNotice = t("content.js.rule_loading");
       selected.clear();
       render();
       const body = new FormData();
@@ -167,10 +169,13 @@
           || title !== field("title").value || lifecycle !== field("tracking_mode").value) return;
         if (!response.ok) throw new Error(data.error);
         selected = new Set(data.indices);
+        ruleNotice = data.waiting || "";
         render();
-        if (data.waiting) status.textContent = data.waiting;
       } catch (error) {
-        if (epoch === ruleGeneration && current === snapshot) status.textContent = error.message || t("content.js.failed");
+        if (epoch === ruleGeneration && current === snapshot) {
+          ruleNotice = error.message || t("content.js.failed");
+          status.textContent = ruleNotice;
+        }
       }
     };
     const invalidate = () => {
@@ -178,6 +183,7 @@
       controller?.abort();
       snapshot = null; selected.clear(); existing = [];
       manualWanted = [];
+      ruleNotice = "";
       token.value = ""; indices.value = "";
       results.hidden = true; loadButton.disabled = false; magnet.disabled = false; limited.disabled = false;
       status.textContent = t("content.js.stale");
@@ -188,6 +194,7 @@
       const epoch = ++generation, origin = source();
       ruleGeneration++;
       preparationAttempted = true;
+      ruleNotice = "";
       rememberManual();
       const savedToken = token.value, savedIndices = indices.value;
       token.value = ""; indices.value = ""; snapshot = null;
@@ -244,12 +251,14 @@
       snapshot = null; selected.clear();
       existing = originalExisting; manualWanted = originalExisting;
       preparationAttempted = false;
+      ruleNotice = "";
       results.hidden = true; status.textContent = "";
       loadButton.disabled = false; magnet.disabled = false; limited.disabled = false; limited.hidden = true;
       window.setTimeout(() => { previousMode = mode.value; showExpression(); }, 0);
     });
     mode.addEventListener("change", () => {
       ruleGeneration++;
+      ruleNotice = "";
       showExpression();
       if (previousMode === "exact" && snapshot) manualWanted = snapshot.files.filter((row) => selected.has(row.id));
       previousMode = mode.value;
