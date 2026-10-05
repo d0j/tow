@@ -140,6 +140,14 @@ decisions; unreadable dates fail closed without modifying the journal.
 
 ## Recovery
 
+Night-copy creation reads regular sources in bounded blocks and hashes the same bytes
+it writes to exclusive prepared files. Opened descriptors, complete byte counts and
+modification times are checked; a disappearing or changing source cannot publish a
+successful copy. The event-log lock prevents concurrent append/rotation while copied.
+Payload files and the bounded signed manifest are flushed/fsynced before the directory
+is published. Destination read-back and semantic validation still precede retention;
+this does not bound semantic JSON parsing or applied-restore plans, or change copy formats.
+
 Night-copy verification and preview first stream-check every member's signed hash, then
 read and re-check one semantic store at a time before parsing it. Opaque logs and nested
 archives are not retained. Regular-file and opened-descriptor checks refuse special files,
