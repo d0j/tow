@@ -5,6 +5,14 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.23.1] — 2026-10-05
+
+### Fixed
+
+- An existing manual file selection cannot silently revert to its saved policy
+  when Save is pressed during a metadata refresh or after it fails. Retry retains
+  the intended files; Cancel restores the unchanged selection and ignores late replies.
+
 ## [1.23.0] — 2026-10-05
 
 ### Added
