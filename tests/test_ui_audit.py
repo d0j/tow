@@ -551,16 +551,17 @@ def test_the_full_error_is_in_the_opened_row_not_only_in_tooltips(client):
 # --- L5: the countdown says what it counts and stays on phones ---------------------------------
 
 
-def test_countdown_has_a_visible_label(client):
+def test_countdown_is_compact_with_accessible_meaning(client):
     _set_language("en")
     page = client.get("/").text
     clock = re.search(r'<span class="hdr-clock[^>]*id="next-check".*?</span></span>', page, re.DOTALL)
     assert clock is not None
-    assert '<span class="clock-k" data-clock-label>Next check in</span>' in clock.group(0)
+    assert "data-clock-label" not in clock.group(0)
+    assert 'aria-label="Global check timer"' in clock.group(0)
     assert '<span class="clock-v" data-clock-value>' in clock.group(0)
     js = (Path(__file__).parents[1] / "src" / "tow" / "static" / "app.js").read_text(encoding="utf-8")
     assert "clock.textContent =" not in js  # the label is not overwritten by the value
-    assert 't("js.clock.label_state")' in js
+    assert "00:00:00" in js
 
 
 def test_countdown_is_not_hidden_on_a_phone():

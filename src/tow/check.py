@@ -597,6 +597,7 @@ def run_check(
     how: str = "auto",
     progress_only: bool = False,
     wait: bool = True,
+    scheduled_scope: str = "",
 ) -> dict[str, Any]:
     """Run one check; applying checks never overlap (scheduled, progress, web, CLI).
 
@@ -608,13 +609,27 @@ def run_check(
     edits in the web UI, the watchdog and the night copy are not held up by network time;
     edits made meanwhile are kept (``merge_check_results``).
     """
+    if scheduled_scope not in {"", "global", "timer"} or (progress_only and scheduled_scope):
+        raise ValueError("invalid scheduled check scope")
     if not apply:
         return _run_check(
-            apply=False, notify=notify, ids=ids, ignore_cool=ignore_cool, how=how, progress_only=progress_only
+            apply=False,
+            notify=notify,
+            ids=ids,
+            ignore_cool=ignore_cool,
+            how=how,
+            progress_only=progress_only,
+            scheduled_scope=scheduled_scope,
         )
     with check_run_lock(wait=wait):
         return _run_check(
-            apply=True, notify=notify, ids=ids, ignore_cool=ignore_cool, how=how, progress_only=progress_only
+            apply=True,
+            notify=notify,
+            ids=ids,
+            ignore_cool=ignore_cool,
+            how=how,
+            progress_only=progress_only,
+            scheduled_scope=scheduled_scope,
         )
 
 
@@ -1850,6 +1865,7 @@ def _run_check(
     ignore_cool: bool = False,
     how: str = "auto",
     progress_only: bool = False,
+    scheduled_scope: str = "",
 ) -> dict[str, Any]:
     cfg = load_config()
     secrets = load_secrets()
@@ -1888,13 +1904,23 @@ def _run_check(
         default_client_id=pool.default_id,
     )
     pool.open_default(secrets)
-    want = {str(x) for x in ids} if ids else None
+    want = {str(x) for x in ids} if ids is not None else None
+    if scheduled_scope:
+        from tow.supervisor import layout
+        from tow.topic_timers import batch_ids, interval_of
+
+        selected = (
+            set(batch_ids(state, layout.read_json(layout.schedule_path())))
+            if scheduled_scope == "timer"
+            else {str(topic.get("id")) for topic in topics_of(state) if interval_of(topic) is None}
+        )
+        want = selected if want is None else want & selected
     # A site that said "download limit for today" is left alone until the next local day: the
     # limit is kept in the state, so the next scheduled runs do not ask it again. A manual
     # check (the owner pressed the button) still tries.
     today = _today()
     limited_today = {str(name) for name, day in as_dict(state.get("daily_limit")).items() if day == today}
-    quota: set[str] = set(limited_today) if how == "auto" else set()
+    quota: set[str] = set(limited_today) if how in {"auto", "timer"} else set()
     run = _CheckRun(
         apply=apply,
         notify=notify,

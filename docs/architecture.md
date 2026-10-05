@@ -46,6 +46,19 @@ flowchart TD
 - The schedule is the supervisor's own: checks every `interval_sec` after its last scheduled start
   (`data/run/schedule.json`), the night copy once per local day (a copy older than the latest slot is due; DST
   neither skips nor repeats a night). The watchdog duty only reports.
+- Individual tracker timers override the global cadence for their topic (`check_interval_min`,
+  empty/null inherits; 1–10080 minutes). Changing the interval starts a new policy revision
+  from save time; unrelated edits, manual checks and progress passes do not shift it.
+  `schedule.json` holds revision-bound `timer_attempts` and the single dispatched `timer_batch`.
+  The supervisor coalesces overdue topics into one child job, persists its scheduled start
+  before spawning, and never launches without a durable reservation. Global jobs exclude
+  custom topics; the timer child re-reads pause, once completion, deletion and policy revision
+  after acquiring the shared check lock. Failure still consumes a scheduled attempt, not
+  an every-tick retry. Old reservations cannot delay a changed policy; clock corrections use
+  the same once-pinned anchors as other jobs. Global watchdog timestamps stay separate.
+  Home shows clocks and digits only; tooltips distinguish waiting, checking, pause and unknown
+  scheduler state. One shared visible-page poll refreshes custom deadlines, with server time
+  and a monotonic browser clock. It stops polling while the page is hidden.
 - Small diagnostic JSON records are bounded to 1 MiB and the store's nesting limit before
   use. Dates must be finite, non-negative and displayable. Reading does not rewrite or quarantine
   them; an unreadable backup/watchdog record is an observation error, not success or an outage.

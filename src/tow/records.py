@@ -39,6 +39,9 @@ class Topic(TypedDict, total=False):
     client_id: str
     selection: Selection
     tracking_mode: str  # watch | once
+    check_interval_min: int | None
+    check_timer_revision: str
+    check_timer_set_at_ts: float
     paused: bool
     move_pending: MovePending
     # what the check found

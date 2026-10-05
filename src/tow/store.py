@@ -898,6 +898,13 @@ def _validate_state_container(value: Any) -> None:
     valid = isinstance(topics, list) and all(isinstance(topic, dict) for topic in topics)
     if not valid or not isinstance(value.get("mirrors", {}), dict):
         raise ValueError("state JSON has malformed containers")
+    from tow.topic_timers import interval_of
+
+    for topic in topics:
+        try:
+            interval_of(topic)
+        except TowError as exc:
+            raise ValueError("invalid topic check interval") from exc
 
 
 def _validate_history_container(value: Any) -> None:

@@ -26,7 +26,17 @@ from tow.undo.records import (
 )
 
 # Topic fields the edit form changes; undoing an edit restores exactly these.
-TOPIC_EDIT_FIELDS = ("title", "url", "client_id", "selection", "tracking_mode", "save_path")
+TOPIC_EDIT_FIELDS = (
+    "title",
+    "url",
+    "client_id",
+    "selection",
+    "tracking_mode",
+    "save_path",
+    "check_interval_min",
+    "check_timer_revision",
+    "check_timer_set_at_ts",
+)
 
 
 def _short_title(record: dict[str, Any]) -> str:

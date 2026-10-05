@@ -3,6 +3,18 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.58] — 2026-10-05
+
+### Added
+
+- Optional numeric per-topic tracker intervals, set when adding or editing a watch.
+  Empty inherits the global interval; personal timers replace it and show a compact
+  clock countdown on Home. Manual checks and client-progress passes do not move
+  either automatic cadence. Durable, policy-bound batches coalesce missed checks,
+  honor pause/once completion and tracker limits, and reuse the serialized check pipeline.
+  Changed policies invalidate stale batches; undo restores the previous timer.
+  The global countdown displays only digits, with accessible tooltip explanations.
+
 ## [1.22.57] — 2026-10-05
 
 ### Added

@@ -87,20 +87,27 @@ def _stop(child: Any) -> bool:
     return gone
 
 
-def _facts() -> dict[str, float]:
+def _facts() -> dict[str, Any]:
     from tow.diagnostic_json import epoch
     from tow.snapshots import list_snapshots
     from tow.snapshots import status as backup_status
     from tow.store import load_state
+    from tow.topic_timers import active_policies, all_policies
 
-    health = load_state().get("health") or {}
+    state = load_state()
+    health = state.get("health") or {}
     # The attempt time on purpose: failed checks are not retried every second.
     last_check = (epoch(health.get("auto_at_ts")) or 0.0) if isinstance(health, dict) else 0.0
     last_ok = epoch(backup_status().get("last_ok_at")) or 0.0
     if not last_ok:
         newest = list_snapshots(limit=1)
         last_ok = (epoch(newest[0]["created_ts"]) or 0.0) if newest else 0.0
-    return {"last_scheduled_check": last_check, "last_backup_ok": last_ok}
+    return {
+        "last_scheduled_check": last_check,
+        "last_backup_ok": last_ok,
+        "topic_timers": active_policies(state),
+        "timer_policies": all_policies(state),
+    }
 
 
 def _expire_undo() -> None:

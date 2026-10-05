@@ -556,6 +556,8 @@ def format_event(rec: Mapping[str, Any], *, title_index: Mapping[str, str] | Non
         bits.append(t("log.how.manual", lang))
     elif how == "auto":
         bits.append(t("log.how.auto", lang))
+    elif how == "timer":
+        bits.append(t("log.how.timer", lang))
     if kind == "backup_cleanup_pending" or kind.startswith("settings_backup_"):
         cleanup_key = {
             "night": "log.cleanup.night",

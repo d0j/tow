@@ -309,7 +309,7 @@ def test_jobs_run_one_at_a_time_with_the_tasks_arguments(tmp_path):
     world, sup = make(tmp_path, facts={"last_scheduled_check": 0, "last_backup_ok": T0})
     run_for(sup, world.clock, 130)
     check = world.jobs()[0]
-    assert check.argv == ["py", "-m", "tow", "check", "--apply", "--notify", "--json"]
+    assert check.argv == ["py", "-m", "tow", "check", "--apply", "--notify", "--global-only", "--json"]
     assert world.passes == [None]  # the watchdog duty at one minute, in-process
 
     run_for(sup, world.clock, 300)  # progress is due at five minutes, the check still runs

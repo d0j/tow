@@ -211,12 +211,10 @@ if (undoForm) {
 
 const clock = document.getElementById("next-check");
 if (clock) {
-  // L5: a visible label says what is counted ("next check in" / "check:" when overdue).
+  // Compact countdown; its meaning and failures stay in the accessible tooltip.
   const clockValue = clock.querySelector?.("[data-clock-value]") || clock;
-  const clockLabel = clock.querySelector?.("[data-clock-label]") || null;
-  const showClock = (value, counting) => {
+  const showClock = (value) => {
     clockValue.textContent = value;
-    if (clockLabel) clockLabel.textContent = counting ? t("js.clock.label_next") : t("js.clock.label_state");
   };
   let last = Number(clock.dataset.last) * 1000;
   let iv = Number(clock.dataset.interval) * 1000;
@@ -290,26 +288,99 @@ if (clock) {
   const tick = () => {
     if (!last) {
       // Not checked yet is grey (unknown), not red: nothing has failed.
-      showClock(t("js.clock.no_data"), false);
+      showClock("—");
       clock.classList.toggle("bad", !checkOk);
       clock.title = t("js.clock.never_checked");
       return;
     }
     const left = last + iv - Date.now();
     if (left <= 0) {
-      showClock(checkOk ? t("js.clock.overdue") : t("js.clock.failed"), false);
+      showClock("00:00:00");
       clock.classList.add("bad");
       clock.title = checkError ? t("js.clock.last_attempt", { error: errorText(checkError) }) : t("js.clock.overdue_title");
       ensurePoll();
       return;
     }
     clock.classList.toggle("bad", !checkOk);
-    showClock(fmt(left), true);
+    showClock(fmt(left));
     clock.title = checkOk ? t("js.clock.until_next") : (checkError ? t("js.clock.last_attempt", { error: errorText(checkError) }) : t("js.clock.last_attempt_failed"));
     if (!checkOk) ensurePoll();
   };
   tick();
   setInterval(tick, 1000);
+}
+
+// One shared poll for every personal timer, paused while the page is hidden. Dates come
+// from the supervisor, not a browser-side reset after a check or a page reload.
+const topicTimerNodes = Array.from(document.querySelectorAll("[data-topic-timer]"));
+if (topicTimerNodes.length) {
+  let serverNow = Number(topicTimerNodes[0].dataset.timerNow) * 1000;
+  let sampledAt = performance.now();
+  let timerPoll = 0;
+  let inFlight = false;
+  let failedPolls = 0;
+  const phaseKeys = {
+    scheduled: "js.timer.scheduled", paused: "js.timer.paused", done: "js.timer.done",
+    stopped: "js.timer.stopped", waiting: "js.timer.waiting", queued: "js.timer.queued", running: "js.timer.running",
+  };
+  const tickTimers = () => {
+    const now = serverNow + performance.now() - sampledAt;
+    for (const node of topicTimerNodes) {
+      if (!node.isConnected) continue;
+      const state = node.dataset.timerState;
+      const at = Number(node.dataset.timerAt) * 1000;
+      const seconds = Math.max(0, Math.ceil((at - now) / 1000));
+      const p = (n) => String(n).padStart(2, "0");
+      const text = state === "scheduled" ? `${p(Math.floor(seconds / 3600))}:${p(Math.floor(seconds % 3600 / 60))}:${p(seconds % 60)}` : ["queued", "running"].includes(state) ? "00:00:00" : "—";
+      const value = node.querySelector("[data-timer-value]");
+      if (value.textContent !== text) value.textContent = text;
+      const phase = state === "scheduled" && !seconds ? "queued" : state;
+      node.title = `${t("js.timer.title", { minutes: node.dataset.timerMinutes })} · ${t(phaseKeys[phase] || phaseKeys.waiting)}`;
+      node.setAttribute("aria-label", `${node.title} · ${text}`);
+    }
+  };
+  const pollTimers = async () => {
+    if (document.hidden || inFlight) return;
+    inFlight = true;
+    try {
+      const response = await fetch("/health.json", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok || !data.ok || !Number.isFinite(data.now_ts)) throw new Error("timer status unavailable");
+      failedPolls = 0;
+      serverNow = data.now_ts * 1000;
+      sampledAt = performance.now();
+      for (const node of topicTimerNodes) {
+        const item = data.topic_timers?.[node.dataset.topicTimer];
+        if (!item) { node.remove(); continue; }
+        node.dataset.timerState = item.state;
+        node.dataset.timerAt = item.next_at;
+        node.dataset.timerMinutes = item.minutes;
+      }
+      tickTimers();
+    } catch {
+      // No response does not create a new deadline or report a successful check.
+      failedPolls += 1;
+      for (const node of topicTimerNodes) {
+        if (!["paused", "done"].includes(node.dataset.timerState)) node.dataset.timerState = "stopped";
+      }
+      tickTimers();
+    } finally {
+      inFlight = false;
+      if (!document.hidden && topicTimerNodes.some((node) => node.isConnected)) {
+        const urgent = topicTimerNodes.some((node) => node.isConnected && (["queued", "running", "waiting"].includes(node.dataset.timerState) || (node.dataset.timerState === "scheduled" && Number(node.dataset.timerAt) <= serverNow / 1000)));
+        const delay = failedPolls ? Math.min(5000 * 2 ** Math.min(failedPolls - 1, 4), 60000) : urgent ? 5000 : 30000;
+        timerPoll = window.setTimeout(pollTimers, delay);
+      }
+    }
+  };
+  document.addEventListener("visibilitychange", () => {
+    window.clearTimeout(timerPoll);
+    timerPoll = 0;
+    if (!document.hidden) pollTimers();
+  });
+  tickTimers();
+  setInterval(() => { if (!document.hidden) tickTimers(); }, 1000);
+  pollTimers();
 }
 
 // H2: a refused add comes back with the form open: show the reason below the sticky header

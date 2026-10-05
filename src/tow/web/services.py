@@ -48,7 +48,7 @@ from tow.store import (
     save_state,
 )
 from tow.store_transaction import recover as recover_store_transaction
-from tow.supervisor.layout import next_check_at
+from tow.supervisor.layout import next_check_at, topic_timer_status
 from tow.undo import cleanup as cleanup_secret_undo
 from tow.web_update import log_tail as web_update_log
 from tow.web_update import start as start_web_update
@@ -92,6 +92,7 @@ __all__ = [
     "set_autostart",
     "snapshot_delete_view",
     "start_web_update",
+    "topic_timer_status",
     "web_update_log",
     "web_update_status",
 ]

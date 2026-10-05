@@ -25,8 +25,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta, tzinfo
+from typing import Any
 
 from tow.config import DEFAULT_BACKUP_TIME, parse_backup_time
+from tow.topic_timers import reserved_at
 
 __all__ = ["DEFAULT_BACKUP_TIME", "Schedule", "WakeDetector", "local_day", "local_slot", "parse_backup_time"]
 
@@ -63,6 +65,8 @@ class Schedule:
     zone: tzinfo | None = None
     last: dict[str, float] = field(default_factory=dict)  # this process's last start of each job
     backup_enabled: bool = True
+    topic_timers: dict[str, dict[str, Any]] = field(default_factory=dict)
+    timer_attempts: dict[str, Any] = field(default_factory=dict)
     _corrected: dict[str, tuple[float, float]] = field(default_factory=dict, init=False, repr=False)
 
     def _clamp(self, ts: float, now: float, *, source: str) -> float:
@@ -87,6 +91,20 @@ class Schedule:
         if not last:
             return self._clamp(self.started_at, now, source="startup") + CHECK_FIRST_DELAY_SEC
         return last + self.interval_sec
+
+    def timer_due(self, now: float) -> dict[str, float]:
+        live_sources = {f"timer:{tid}:{item['revision']}" for tid, item in self.topic_timers.items()}
+        for source in list(self._corrected):
+            if source.startswith("timer:") and source not in live_sources:
+                self._corrected.pop(source)
+        result = {}
+        for tid, item in self.topic_timers.items():
+            # A revision-bound attempt happened after the policy, even when wall time
+            # moved backwards. max(set_at, attempt) would repeat the expired anchor.
+            last = reserved_at(item, self.timer_attempts.get(tid)) or item["set_at"]
+            anchor = self._clamp(last or self.started_at, now, source=f"timer:{tid}:{item['revision']}")
+            result[tid] = anchor + item["minutes"] * 60
+        return result
 
     def _every_due_at(self, name: str, every: float, first_delay: float, now: float) -> float:
         last = self._clamp(self.last.get(name, 0.0), now, source=f"{name}:own")
@@ -135,6 +153,9 @@ class Schedule:
         }
         if not self.backup_enabled:
             due_at.pop("backup")
+        timers = self.timer_due(now)
+        if timers:
+            due_at["timer"] = min(timers.values())
         return [(name, now - at) for name, at in due_at.items() if at <= now]
 
     def started(self, name: str, now: float) -> None:
@@ -155,6 +176,9 @@ class Schedule:
         }
         if not self.backup_enabled:
             result.pop("backup")
+        timers = self.timer_due(now)
+        if timers:
+            result["timer"] = min(timers.values())
         return result
 
 

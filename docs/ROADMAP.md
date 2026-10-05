@@ -18,7 +18,7 @@ These hold in every release:
 
 | Area | State |
 |---|---|
-| Watching | Topics with watch or once; episodes and file patterns; transactional add with read-back for qBittorrent, Transmission and Deluge; replacing a seeding revision on request. |
+| Watching | Topics with watch or once; episodes and file patterns; global or numeric personal tracker intervals with row countdowns; transactional add with read-back for qBittorrent, Transmission and Deluge; replacing a seeding revision on request. |
 | Sites | Eight presets, one module per site; any similar site by hand; mirrors with fallback and cooldown; daily limits; password and browser sign-in. |
 | Notifications | Telegram, Discord, WhatsApp, ntfy; grouping, quiet hours, digest, a persistent outbox; watchdog alerts with the reason for downtime. |
 | Safety | One-step undo of any change; journaled multi-file writes recovered by any process; night copies (signed), restore points, `.towx` transfer; data version guard. |

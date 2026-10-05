@@ -8,7 +8,7 @@ from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse, Response
 
 from tow import __version__
-from tow.web import services
+from tow.web import _context, services
 from tow.web.templating import header_health
 from tow.web.text import t
 from tow.web_update import WebUpdateError
@@ -75,7 +75,14 @@ def healthz() -> dict[str, Any]:
 
 @router.get("/health.json", response_model=None)
 def health_json() -> dict[str, Any]:
-    return {"ok": True, **header_health()}
+    import time
+
+    return {
+        "ok": True,
+        **header_health(),
+        "now_ts": time.time(),
+        "topic_timers": services.topic_timer_status(_context.state()),
+    }
 
 
 @router.get("/favicon.ico")

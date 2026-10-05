@@ -55,9 +55,10 @@ STOP_JOB_WAIT_SEC = 10 * 60
 STOP_RETRY_SEC = 10.0
 FACTS_EVERY_SEC = 60.0
 
-JOB_TIMEOUT_SEC = {"check": 3600.0, "progress": 600.0, "backup": 1800.0}
+JOB_TIMEOUT_SEC = {"check": 3600.0, "timer": 3600.0, "progress": 600.0, "backup": 1800.0}
 JOB_ARGS = {
-    "check": ["check", "--apply", "--notify", "--json"],
+    "check": ["check", "--apply", "--notify", "--global-only", "--json"],
+    "timer": ["check", "--apply", "--notify", "--timer-only", "--json"],
     "progress": ["check", "--apply", "--notify", "--progress-only", "--json"],
     "backup": ["backup", "--json"],
 }
@@ -84,7 +85,7 @@ class Deps:
     watchdog_pass: Callable[[float | None], Any]
     send: Callable[[str], bool]
     load_config: Callable[[], dict[str, Any]]
-    facts: Callable[[], dict[str, float]]  # last_scheduled_check, last_backup_ok
+    facts: Callable[[], dict[str, Any]]  # last_scheduled_check, last_backup_ok, topic_timers
     crash_line: Callable[[float], str] = field(default=lambda _since: "")
     now: Callable[[], float] = time.time
     monotonic: Callable[[], float] = time.monotonic
@@ -144,13 +145,15 @@ class Supervisor:
         self.stopping: dict[str, Any] | None = None
         self.stop_deadline = 0.0
         self.finished = False
-        self._facts: dict[str, float] = {}
+        self._facts: dict[str, Any] = {}
         self._facts_at = -1e18
         self._config_at = deps.monotonic()
         self._status_written: dict[str, Any] | None = None
         self._watchdog_thread: Any = None
         self._schedule_file = layout.schedule_path()
         self._persisted = layout.read_json(self._schedule_file)
+        attempts = self._persisted.get("timer_attempts")
+        self.schedule.timer_attempts = attempts if isinstance(attempts, dict) else {}
         self._control_dir = layout.control_dir()  # polled every second: resolved once
         self._status_file = layout.status_path()
 
@@ -178,6 +181,7 @@ class Supervisor:
             self._facts_at = mono
             try:
                 self._facts = self.deps.facts()
+                self.schedule.topic_timers = dict(self._facts.get("topic_timers") or {})
             except Exception as exc:  # noqa: BLE001 - the supervisor loop never dies on a state read (logged)
                 LOG.warning("state not read: %s", type(exc).__name__)
 
@@ -482,6 +486,8 @@ class Supervisor:
                 return
 
     def _start_job(self, name: str, wall: float, mono: float) -> None:
+        if name == "timer" and not self._reserve_timers(wall):
+            return
         if name == "backup":
             # A switch made after the periodic config refresh must still prevent launch.
             try:
@@ -506,6 +512,35 @@ class Supervisor:
             return
         self.job = _Job(name, child, mono, wall)
         LOG.info("%s started (pid %s)", name, child.pid)
+
+    def _reserve_timers(self, wall: float) -> bool:
+        """Persist one coalesced batch before spawn; changed policies are re-read in the child."""
+        try:
+            self._facts = self.deps.facts()
+            self.schedule.topic_timers = dict(self._facts.get("topic_timers") or {})
+            batch = {
+                tid: {**self.schedule.topic_timers[tid], "started_at": wall}
+                for tid, at in self.schedule.timer_due(wall).items()
+                if at <= wall
+            }
+            if not batch:
+                return False
+            attempts = {
+                tid: record
+                for tid, record in self.schedule.timer_attempts.items()
+                if tid in self._facts.get("timer_policies", self.schedule.topic_timers)
+            }
+            attempts.update(batch)
+            persisted = {**self._persisted, "timer_attempts": attempts, "timer_batch": batch}
+            layout.write_json(self._schedule_file, persisted)
+        except Exception as exc:  # noqa: BLE001 - no launch without durable facts; retry the observation later
+            LOG.warning("individual timers not reserved: %s", type(exc).__name__)
+            self.schedule.topic_timers = {}
+            self._facts_at = self.deps.monotonic()
+            return False
+        self._persisted = persisted
+        self.schedule.timer_attempts = attempts
+        return True
 
     def _finish_job(self, wall: float, mono: float, *, stopped: bool) -> bool:
         job = self.job
@@ -585,6 +620,10 @@ class Supervisor:
             else None,
             "jobs": self.jobs_done,
             "next": {name: _now_iso(ts) for name, ts in next_due.items()},
+            "topic_timers": {
+                tid: {"at": _now_iso(at), "revision": self.schedule.topic_timers[tid]["revision"]}
+                for tid, at in self.schedule.timer_due(wall).items()
+            },
             "woke_at": _now_iso(self.wake.woke_at) if self.wake.woke_at else None,
         }
 

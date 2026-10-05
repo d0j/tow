@@ -10,7 +10,7 @@
 {# The draft comes only from the server's own record of a refused add (?add=<token>), never
    from values in the link. #}
 {% set draft = add_draft or {} %}
-{% set bad_field = ({'no_site': 'topic-url', 'folder': 'topic-save-path', 'client': 'topic-client', 'selection': 'topic-selection-value'}.get(draft.get('kind'), 'topic-url')) if draft.get('error') else '' %}
+{% set bad_field = ({'no_site': 'topic-url', 'folder': 'topic-save-path', 'client': 'topic-client', 'selection': 'topic-selection-value', 'timer': 'topic-check-interval'}.get(draft.get('kind'), 'topic-url')) if draft.get('error') else '' %}
 <details class="add card" id="new"{% if draft.get('error') %} open{% endif %}>
   <summary>+</summary>
   <form class="row new-topic-form" method="post" action="/topics/add" aria-labelledby="add-topic-title">
@@ -55,6 +55,9 @@
     <label for="topic-selection-value">{{ t('home.add.selection') }}</label>
     <textarea id="topic-selection-value" name="selection_value" rows="2" placeholder="{{ t('home.add.selection_placeholder') }}"{{ invalid('topic-selection-value', bad_field) }}>{{ draft.get('selection_value', '') }}</textarea>
     <p class="sub">{{ t('home.add.selection_hint') }}</p>
+    <label for="topic-check-interval">{{ t('timer.field') }}</label>
+    <input id="topic-check-interval" name="check_interval_min" type="number" min="1" max="10080" step="1" placeholder="{{ t('timer.global_placeholder') }}" value="{{ draft.get('check_interval_min', '') }}" aria-describedby="topic-check-interval-hint"{{ invalid('topic-check-interval', bad_field) }}>
+    <p id="topic-check-interval-hint" class="field-hint">{{ t('timer.hint') }}</p>
     <p class="sub">{{ t('home.add.check_hint') }}</p>
     <p class="field-hint busy-note" data-busy-note role="status" hidden>{{ t('home.add.checking_note') }}</p>
     <div class="actions">
@@ -102,6 +105,7 @@
 <svg class="sprite" aria-hidden="true" focusable="false">
   <symbol id="i-globe" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8.2"/><path d="M3.5 12h17M12 3.8c2.4 2.6 2.4 13.8 0 16.4M12 3.8c-2.4 2.6-2.4 13.8 0 16.4"/></g></symbol>
   <symbol id="i-pause" viewBox="0 0 24 24"><g fill="currentColor"><rect x="7" y="5" width="3.2" height="14" rx=".4"/><rect x="13.8" y="5" width="3.2" height="14" rx=".4"/></g></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></g></symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5.5v13l11-6.5z"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2-5.1"/><path d="M19.5 5v5h-5"/></g></symbol>
   <symbol id="i-sort-added" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4v16m-3-3 3 3 3-3M12 6h9M12 12h6M12 18h3"/></g></symbol>
@@ -187,7 +191,7 @@
   <details class="row-edit{% if topic.last_changed %} is-new{% endif %}{% if topic.paused %} is-paused{% endif %}">
     <summary>
       <span class="dot lg {{ torrent_tone }}" title="{{ torrent_label }}"></span><span class="sr-only">{{ torrent_label }}</span>
-      <span class="clip" title="{{ topic.tracker_title or topic.title }}" data-hl>{{ topic.series }}</span>
+      <span class="topic-name"><span class="clip" title="{{ topic.tracker_title or topic.title }}" data-hl>{{ topic.series }}</span>{% if topic.timer %}<span class="topic-timer" data-topic-timer="{{ topic.id }}" data-timer-at="{{ topic.timer.next_at }}" data-timer-now="{{ topic.timer.now }}" data-timer-state="{{ topic.timer.state }}" data-timer-minutes="{{ topic.timer.minutes }}" title="{{ t('timer.title', minutes=topic.timer.minutes) }}" aria-label="{{ t('timer.title', minutes=topic.timer.minutes) }}"><svg width="13" height="13" aria-hidden="true"><use href="#i-clock"/></svg><span data-timer-value>—</span><noscript>{{ t('timer.every', minutes=topic.timer.minutes) }}</noscript></span>{% endif %}</span>
       <span class="topic-tracker" data-label="{{ t('home.row.site') }}">{{ topic.tracker }}</span>
       <span class="mono topic-path" data-label="{{ t('home.row.folder') }}"><span class="clip-start" title="{{ topic.save_path or '' }}"><bdi>{{ topic.save_path or "—" }}</bdi></span></span>
       <span class="clip addition topic-event" data-label="{{ t('home.row.event') }}" title="{{ topic.last_event_at or t('home.topic.no_events') }}">
