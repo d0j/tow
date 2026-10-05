@@ -24,6 +24,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   Deluge responses are size-bounded, strictly decoded and verified against both magnet hashes.
 - Cancelling an edit discards prepared file-picker state and ignores late metadata replies.
 
+### Fixed
+
+- Content API errors render catalog messages separately from unexpected exceptions;
+  storage and parsing diagnostics never become public exception text. Adversarial
+  cache tokens are rejected before any filesystem access.
+
 ## [1.22.58] — 2026-10-05
 
 ### Added

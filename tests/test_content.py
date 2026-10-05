@@ -444,3 +444,68 @@ def test_metadata_storage_fault_has_safe_error(monkeypatch):
     assert response.status_code == 400
     assert response.json()["code"] == "content.unavailable"
     assert "private path" not in response.text
+
+
+@pytest.mark.parametrize("endpoint", ["snapshot", "prepare", "resolve"])
+@pytest.mark.parametrize("kind", [OSError, ValueError, RuntimeError])
+def test_every_content_boundary_hides_unexpected_exception_text(monkeypatch, endpoint, kind):
+    def fail(*_args):
+        raise kind("private path and tracker credential")
+
+    monkeypatch.setattr(services, "read_content", fail)
+    monkeypatch.setattr(services, "prepare_content", fail)
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    response = client.post(
+        f"/content/{endpoint}",
+        data={"url": URL, "client_id": "main", "token": "a" * 32, "mode": "all"},
+    )
+    assert response.status_code == 400
+    assert response.json()["code"] == "content.unavailable"
+    assert "private path" not in response.text
+    assert "credential" not in response.text
+    assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.parametrize("endpoint", ["snapshot", "prepare", "resolve"])
+def test_content_errors_render_catalog_instead_of_exception_string(monkeypatch, endpoint):
+    class DiagnosticError(TowError):
+        def __str__(self):
+            return "private diagnostic traceback"
+
+    def fail(*_args):
+        raise DiagnosticError("content.changed")
+
+    monkeypatch.setattr(services, "read_content", fail)
+    monkeypatch.setattr(services, "prepare_content", fail)
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    response = client.post(
+        f"/content/{endpoint}",
+        data={"url": URL, "client_id": "main", "token": "a" * 32, "mode": "all"},
+    )
+    assert response.status_code == 400
+    assert response.json()["code"] == "content.changed"
+    assert response.json()["error"] == TowError("content.changed").text()
+    assert "private diagnostic" not in response.text
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "",
+        "../" + "a" * 32,
+        "a" * 32 + "/..",
+        "a" * 32 + "\\..",
+        "/" + "a" * 31,
+        "A" * 32,
+        "a" * 31,
+        "a" * 33,
+        "a" * 31 + "\n",
+        "a" * 31 + "\x00",
+        "%2e%2e%2f",
+    ],
+)
+def test_untrusted_cache_tokens_are_refused_before_any_path_access(monkeypatch, token):
+    monkeypatch.setattr(content, "_folder", lambda **_kwargs: pytest.fail("invalid token accessed cache"))
+    with pytest.raises(TowError) as error:
+        content.read(token, URL, "main")
+    assert error.value.code == "content.expired"

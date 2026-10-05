@@ -16,6 +16,16 @@ from tow.web import services
 router = APIRouter()
 
 
+def _error_response(error: TowError | None = None) -> JSONResponse:
+    """Render catalog data only; never stringify an exception at the HTTP boundary."""
+    public = error if error is not None else TowError("content.unavailable")
+    return JSONResponse(
+        {"error": public.text(), "code": public.code},
+        status_code=400,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @router.post("/content/snapshot")
 def content_snapshot(token: str = Form(), url: str = Form(), client_id: str = Form()) -> JSONResponse:
     """Restore a refused form without a second tracker request or a client operation."""
@@ -25,9 +35,10 @@ def content_snapshot(token: str = Form(), url: str = Form(), client_id: str = Fo
 
         blob = services.read_content(token, canon_watch_url(url.strip()), client_id)
         return JSONResponse(describe(blob, token), headers={"Cache-Control": "no-store"})
-    except (ValueError, RuntimeError, OSError) as exc:
-        message = str(exc) if isinstance(exc, TowError) else str(TowError("content.unavailable"))
-        return JSONResponse({"error": message}, status_code=400, headers={"Cache-Control": "no-store"})
+    except TowError as exc:
+        return _error_response(exc)
+    except ValueError, RuntimeError, OSError:
+        return _error_response()
 
 
 @router.post("/content/prepare")
@@ -56,13 +67,10 @@ async def content_prepare(
         else:
             result = await run_in_threadpool(services.prepare_content, url, client_id, blob, allow_limited)
         return JSONResponse(result, headers={"Cache-Control": "no-store"})
-    except (ValueError, RuntimeError, OSError) as exc:
-        message = str(exc) if isinstance(exc, TowError) else str(TowError("content.unavailable"))
-        return JSONResponse(
-            {"error": message, "code": exc.code if isinstance(exc, TowError) else "content.unavailable"},
-            status_code=400,
-            headers={"Cache-Control": "no-store"},
-        )
+    except TowError as exc:
+        return _error_response(exc)
+    except ValueError, RuntimeError, OSError:
+        return _error_response()
 
 
 @router.post("/content/resolve")
@@ -79,6 +87,7 @@ def content_resolve(
         metadata = parse_torrent_metadata(services.read_content(token, canon_watch_url(url.strip()), client_id))
         plan = resolve_selection(metadata.files, normalize_policy(mode, value))
         return JSONResponse({"indices": list(plan.selected_indices)}, headers={"Cache-Control": "no-store"})
-    except (ValueError, RuntimeError, OSError) as exc:
-        message = str(exc) if isinstance(exc, TowError) else str(TowError("content.unavailable"))
-        return JSONResponse({"error": message}, status_code=400, headers={"Cache-Control": "no-store"})
+    except TowError as exc:
+        return _error_response(exc)
+    except ValueError, RuntimeError, OSError:
+        return _error_response()
