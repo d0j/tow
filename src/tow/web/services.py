@@ -63,6 +63,7 @@ __all__ = [
     "check_restore_point",
     "check_snapshot",
     "cleanup_secret_undo",
+    "content_context_title",
     "content_selection",
     "create_restore_point",
     "delete_restore_point",
@@ -110,6 +111,27 @@ login_throttle = LoginThrottle()
 # A closed/edited browser form cannot cancel a running native RPC. Bound active workers
 # independently of browser buttons; cache writes still hold only their own short lock.
 _MAGNET_PREVIEWS = BoundedSemaphore(2)
+
+
+def content_context_title(topic_id: str, url: str, client_id: str, title: str) -> str:
+    """Use saved tracker context only for the same topic source and client.
+
+    A new or changed source uses the form title. This is a read-only preview;
+    the applying check still obtains the current tracker title independently.
+    """
+    from tow.errors import TowError
+    from tow.guess import canon_watch_url
+
+    if not topic_id:
+        return title
+    topic = next(
+        (item for item in load_state(quarantine=False).get("topics", []) if str(item.get("id")) == topic_id), None
+    )
+    if topic is None:
+        raise TowError("content.changed")
+    if canon_watch_url(str(topic.get("url") or "")) != url or (topic.get("client_id") or client_id) != client_id:
+        return title
+    return str(topic.get("tracker_title") or title.strip() or topic.get("title") or "")
 
 
 def prepare_content(url: str, client_id: str, blob: bytes | None, allow_limited: bool) -> dict[str, object]:

@@ -8,8 +8,9 @@ from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
+from tow.episodes import parse_season_hint
 from tow.errors import TowError
-from tow.selection import normalize_policy, resolve_selection
+from tow.selection import SelectionPendingError, normalize_policy, resolve_selection
 from tow.torrent import MAX_TORRENT_BYTES, parse_torrent_metadata
 from tow.web import services
 
@@ -80,12 +81,29 @@ def content_resolve(
     client_id: str = Form(),
     mode: str = Form(),
     value: str = Form(""),
+    topic_id: str = Form(""),
+    title: str = Form(""),
+    tracking_mode: str = Form("watch"),
 ) -> JSONResponse:
     try:
         from tow.guess import canon_watch_url
 
-        metadata = parse_torrent_metadata(services.read_content(token, canon_watch_url(url.strip()), client_id))
-        plan = resolve_selection(metadata.files, normalize_policy(mode, value))
+        url = canon_watch_url(url.strip())
+        metadata = parse_torrent_metadata(services.read_content(token, url, client_id))
+        context = services.content_context_title(topic_id, url, client_id, title)
+        policy = normalize_policy(mode, value, tracking_mode)
+        try:
+            plan = resolve_selection(metadata.files, policy, preferred_season=parse_season_hint(context))
+        except SelectionPendingError as pending:
+            if policy["tracking_mode"] != "watch":
+                raise
+            return JSONResponse(
+                {
+                    "indices": [],
+                    "waiting": TowError("check.waiting_episodes", pending=pending.params.get("episodes", "")).text(),
+                },
+                headers={"Cache-Control": "no-store"},
+            )
         return JSONResponse({"indices": list(plan.selected_indices)}, headers={"Cache-Control": "no-store"})
     except TowError as exc:
         return _error_response(exc)

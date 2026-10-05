@@ -154,17 +154,21 @@
     const resolveRule = async () => {
       if (!snapshot || manual()) { render(); return; }
       const epoch = ++ruleGeneration, current = snapshot, kind = mode.value, value = expression.value;
+      const title = field("title").value, lifecycle = field("tracking_mode").value;
       selected.clear();
       render();
       const body = new FormData();
-      Object.entries({ token: current.token, url: field("url").value, client_id: field("client_id").value, mode: kind, value }).forEach(([key, item]) => body.set(key, item));
+      Object.entries({ token: current.token, url: field("url").value, client_id: field("client_id").value, mode: kind, value,
+        topic_id: root.dataset.topicId || "", title, tracking_mode: lifecycle }).forEach(([key, item]) => body.set(key, item));
       try {
         const response = await fetch("/content/resolve", { method: "POST", body });
         const data = await response.json();
-        if (epoch !== ruleGeneration || current !== snapshot || kind !== mode.value || value !== expression.value) return;
+        if (epoch !== ruleGeneration || current !== snapshot || kind !== mode.value || value !== expression.value
+          || title !== field("title").value || lifecycle !== field("tracking_mode").value) return;
         if (!response.ok) throw new Error(data.error);
         selected = new Set(data.indices);
         render();
+        if (data.waiting) status.textContent = data.waiting;
       } catch (error) {
         if (epoch === ruleGeneration && current === snapshot) status.textContent = error.message || t("content.js.failed");
       }
@@ -260,6 +264,12 @@
       window.clearTimeout(ruleTimer);
       ruleTimer = window.setTimeout(resolveRule, 200);
     });
+    field("title").addEventListener("input", () => {
+      ruleGeneration++;
+      window.clearTimeout(ruleTimer);
+      if (!manual()) ruleTimer = window.setTimeout(resolveRule, 200);
+    });
+    field("tracking_mode").addEventListener("change", () => { ruleGeneration++; if (!manual()) resolveRule(); });
     search.addEventListener("input", () => { page = 0; render(); });
     more.addEventListener("click", () => { page++; render(); tree.scrollTop = 0; });
     previous.addEventListener("click", () => { page--; render(); tree.scrollTop = 0; });

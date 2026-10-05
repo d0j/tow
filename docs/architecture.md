@@ -107,6 +107,12 @@ flowchart TD
 | `tow.paths` | Every location, derived from one install root. |
 | `tow.i18n`, `tow.errors` | Language catalogs; typed errors (`TowError(key, **params)`) rendered in the reader's language. |
 
+Rule previews use the applying check's season parser and selection engine. They read saved
+tracker titles only for the same topic source and client; otherwise the current form title
+provides context. Future watch ranges are waiting, not failures, while once ranges remain
+strict. Preview refreshes do not fetch trackers or mutate clients, and stale title/lifecycle
+responses are discarded. An applying check still obtains the current tracker title independently.
+
 ## Data layout
 
 ```text

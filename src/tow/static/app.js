@@ -461,7 +461,10 @@ if (topicUrl) {
       const r = await fetch("/topics/guess-title", { method: "POST", body });
       const j = await r.json();
       if (sequence !== guessSequence || titleEl.value.trim() !== cur) return;
-      if (j.ok && j.title) titleEl.value = j.title;
+      if (j.ok && j.title) {
+        titleEl.value = j.title;
+        titleEl.dispatchEvent(new Event("input", { bubbles: true }));
+      }
     } catch {
       const msg = document.getElementById("guess-msg");
       if (msg && sequence === guessSequence) msg.textContent = t("js.guess.failed");

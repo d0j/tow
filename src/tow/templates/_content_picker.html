@@ -1,4 +1,4 @@
-<section class="content-picker" data-content-picker data-existing="{{ content_existing(topic)|tojson|forceescape }}">
+<section class="content-picker" data-content-picker data-topic-id="{{ topic.id if topic else '' }}" data-existing="{{ content_existing(topic)|tojson|forceescape }}">
   <div class="actions">
     <strong>{{ t('content.title') }}</strong>
     <button type="button" class="ghost" data-content-help aria-label="{{ t('content.help_label') }}" aria-expanded="false" aria-controls="content-help-{{ topic.id if topic else 'new' }}">?</button>

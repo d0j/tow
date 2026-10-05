@@ -5,6 +5,14 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- File-rule previews use the same season context as checks, including seasonless
+  episode names. Saved tracker titles apply only to the same source and client;
+  new and edited titles refresh previews without a tracker or client request.
+  Future watched episodes are shown as waiting, while a one-time selection still
+  refuses unavailable episodes. Late title/lifecycle replies cannot replace the preview.
+
 ## [1.23.1] — 2026-10-05
 
 ### Fixed
