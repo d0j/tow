@@ -7,6 +7,50 @@ from fastapi.testclient import TestClient
 from tow.web import app
 
 
+@pytest.mark.parametrize("language", ["ru", "en"])
+@pytest.mark.parametrize("custom_minutes", [None, 30])
+def test_settings_explains_global_and_individual_timers(language, custom_minutes):
+    from tow.config import load_config, save_config
+    from tow.store import load_state, save_state
+
+    cfg = load_config()
+    cfg.update(language=language, interval_sec=7200)
+    save_config(cfg)
+    state = load_state()
+    state["topics"] = [
+        {
+            "id": "fixture",
+            "url": "https://tracker.example/topic/1234567",
+            "save_path": "D:/TV",
+            "check_interval_min": custom_minutes,
+        }
+    ]
+    save_state(state)
+
+    page = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text
+    interval = page.split('id="acc-intervals"', 1)[1].split('id="acc-access"', 1)[0]
+    if language == "ru":
+        assert '<label for="interval_min">Общий таймер</label>' in interval
+        assert "Активные раздачи без своего таймера проверяются раз в 2 ч." in interval
+        assert "Свой таймер задаётся при добавлении или редактировании раздачи." in interval
+        assert "Каждая раздача проверяется" not in interval
+    else:
+        assert '<label for="interval_min">Global timer</label>' in interval
+        assert "Active topics without their own timer are checked every 2 h." in interval
+        assert "Set an individual timer when adding or editing a topic." in interval
+        assert "Every watched topic is checked" not in interval
+
+
+def test_mobile_settings_anchor_keeps_clear_of_the_two_row_header():
+    from pathlib import Path
+
+    css = (Path(__file__).parents[1] / "src" / "tow" / "static" / "app.css").read_text(encoding="utf-8")
+    mobile_blocks = re.findall(r"@media \(max-width: 720px\) \{(.*?)\n\}", css, re.DOTALL)
+    assert any(
+        "header.app" in block and ".settings-section { scroll-margin-top: 5.5rem; }" in block for block in mobile_blocks
+    )
+
+
 def test_settings_ui_is_sectioned_and_explains_actions():
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
 
@@ -73,7 +117,7 @@ def test_settings_ui_is_sectioned_and_explains_actions():
     assert "--btn-h: 1.625rem;" in css  # the owner wants small 26 px buttons everywhere
     assert "min-height: 2.25rem" not in css
     assert "height: var(--field-h)" in css
-    assert 'grid-template-areas: "nav right" "sites sites"' in css
+    assert 'grid-template-areas: "nav nav right" "sites services clock"' in css
     assert 'input[type="file"]::file-selector-button' in css
     service = page.split('id="acc-service"', 1)[1].split('id="acc-transfer"', 1)[0]
     assert "data-auto-submit-control" in service

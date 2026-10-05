@@ -117,13 +117,16 @@ none is connected.
 
 | Check | When | What it does |
 |---|---|---|
-| Scheduled | Every 12 hours by default (Settings → Checks, 15 min – 24 h) | Every watched topic: downloads the `.torrent`, adds a new revision. |
+| Global timer | Every hour by default (Settings → Checks, 15 min – 24 h) | Active topics without an individual timer: checks the tracker and adds a changed torrent revision to the selected client. |
+| Individual timer | Set minutes when adding or editing a topic, 1 min – 7 days | Overrides the global timer for that topic. A clock and countdown appear in its Home row. |
 | Progress | Every 30 minutes | Only asks the client about downloads; no requests to sites. |
-| Check all | ↻ in the header (asks to confirm) | The scheduled check, now, in the background. |
+| Check all | ↻ in the header (asks to confirm) | Checks active topics now in the background, including those with individual timers; does not reset their countdowns. |
 | One topic | ↻ in the row | That topic only; ignores the one-hour mirror pause. |
 
 A check missed while the computer slept or was off runs right after it wakes. Manual checks send notifications the
 same way as scheduled ones. **Pause** in a row skips the topic in scheduled checks; the row's check still works.
+An empty individual timer uses the global interval. Saving a different individual interval starts a new countdown;
+manual checks and progress observations do not reset it.
 
 ## Sites, mirrors and sign-in
 

@@ -1614,7 +1614,7 @@ def test_header_dots_follow_health():
     assert 'title="qBit"' not in t or "hdr-svc" in t
     assert "hdr-sites" in t
     assert "hdr-svc" in t
-    assert 'title="Связи нет"' in t
+    assert 'title="qBittorrent: Связи нет"' in t
     # No messenger connected: the header says so (it used to call it "бот молчит").
     assert 'class="trk trk-ico mut" href="/settings?open=bots" title="уведомления: не подключены"' in t
     assert 'title="kinozal"' in t

@@ -48,13 +48,14 @@
   </div>
   <div class="hdr-right">
     <div class="hdr-svc" aria-label="{{ t('base.header.services') }}">
-      <span class="trk {{ h.qbit_tone }}" title="{{ h.qbit }}">{{ h.client_label }}</span>
+      <span class="trk {{ h.qbit_tone }}" title="{{ h.client_label }}: {{ h.qbit }}">{{ h.client_label }}</span>
       {% set bell = 'mut' if h.bot_ok is none else ('ok' if h.bot_ok else 'bad') %}
       <a class="trk trk-ico {{ bell }}" href="/settings?open=bots" title="{{ h.bot }}" aria-label="{{ h.bot }}">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
       </a>
     </div>
     <span class="hdr-clock{% if not h.check_ok %} bad{% endif %}" id="next-check" data-last="{{ h.next_from_ts }}" data-interval="{{ h.interval_sec }}" data-check-ok="{{ '1' if h.check_ok else '0' }}" data-error="{{ h.check_error }}" title="{{ t('timer.global_title') }}" aria-label="{{ t('timer.global_title') }}"><span class="clock-v" data-clock-value>—</span></span>
+    <div class="hdr-controls">
     {#- The undo of the action whose message is shown sits in that message (9); the header
         keeps it only for a later page while it lasts. -#}
     {% set undo_in_flash = flash and undo_just_made() and can_undo() %}
@@ -97,6 +98,7 @@
         <path d="M12 3.6v2.3M12 18.1v2.3M4.8 6.2l1.7 1.7M17.5 16.1l1.7 1.7M3.6 12h2.3M18.1 12h2.3M4.8 17.8l1.7-1.7M17.5 7.9l1.7-1.7"/>
       </svg>
     </a>
+    </div>
   </div>
 </header>
   <div class="app-version" data-page-version="{{ h.ver }}">
