@@ -333,6 +333,10 @@ code, .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
   padding: .32rem .7rem;
 }
 .clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.topic-name { display: flex; align-items: center; flex-wrap: wrap; gap: .2rem .4rem; min-width: 0; }
+.topic-name > .clip { flex: 1 1 8rem; }
+.topic-timer { display: inline-flex; align-items: center; gap: .2rem; flex-shrink: 0; color: var(--mut); font-size: 11px; font-variant-numeric: tabular-nums; }
+.topic-timer [data-timer-value] { font-family: ui-monospace, Consolas, monospace; }
 .addition { display: flex; flex-direction: column; line-height: 1.25; }
 .addition small { font-size: 10px; overflow: hidden; text-overflow: ellipsis; }
 .progress-cell { min-width: 0; }
@@ -704,7 +708,7 @@ details.help[open] > summary { color: var(--acc); border-color: var(--acc2); }
   /* Labels come from the language catalog (data-label), never from this file. One size for
      every label (12 px) and every value (13 px); the status dot sits in line with the name. */
   details.row-edit:not(.sites) > summary { grid-template-columns: auto minmax(0, 1fr); column-gap: .55rem; }
-  details.row-edit:not(.sites) > summary > :not(.dot):not([data-hl]) { grid-column: 1 / -1; }
+  details.row-edit:not(.sites) > summary > :not(.dot):not([data-hl]):not(.topic-name) { grid-column: 1 / -1; }
   details.row-edit:not(.sites) > summary > [data-label] { font-size: 13px; }
   details.row-edit:not(.sites) [data-label]::before {
     content: attr(data-label); color: var(--mut); margin-right: .3em; flex: 0 0 auto;
@@ -955,7 +959,7 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
   /* a phone: the right group must not run under the section icons (the overdue banner says it all) */
   /* L5: the countdown moves to the end of the second header row (the sites row). */
   .hdr-clock { position: absolute; right: .7rem; bottom: .3rem; line-height: 1; }
-  .hdr-sites { padding-right: 9.5rem; }
+  .hdr-sites { padding-right: 6.5rem; }
   .hdr-right { gap: .25rem; }
   .hdr-svc { gap: .2rem; padding-left: .35rem; margin-right: 0; }
   /* No room for every header icon on a phone: the Guide and Diagnostics stay links in Settings. */
@@ -971,6 +975,7 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 }
 @media (max-width: 720px) {
   /* The row icons sit top right: the topic name (Home) and the site name (Sites) keep clear. */
+  details.row-edit > summary > .topic-name,
   details.row-edit > summary > [data-hl],
   details.row-edit.sites > summary > :first-child { padding-right: 7rem; }
 }

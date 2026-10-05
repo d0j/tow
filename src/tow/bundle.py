@@ -24,6 +24,7 @@ import yaml
 from tow import __version__
 from tow.clock import iso_now
 from tow.config import ConfigError, validated
+from tow.errors import TowError
 from tow.log import EXPORT_EVENT_KEYS, export_event_projection, log_event, read_events
 from tow.paths import config_path, data_dir, download_history_path, secrets_path, state_path
 from tow.store import (
@@ -327,6 +328,12 @@ def _validate_state_topic(index: int, topic: Any) -> None:
     if not isinstance(topic, dict):
         raise ExportImportError(f"state.json topic {index} has an invalid type")
     label = f"state.json.topic[{index}]"
+    from tow.topic_timers import interval_of
+
+    try:
+        interval_of(topic)
+    except (TowError, ValueError) as exc:
+        raise ExportImportError(f"{label}.check_interval_min is invalid") from exc
     for key in (
         "id",
         "title",

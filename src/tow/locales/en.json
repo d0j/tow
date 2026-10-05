@@ -7,6 +7,15 @@
     "decimal": ".",
     "datetime_short": "%Y-%m-%d %H:%M"
   },
+  "timer": {
+    "field": "Personal check interval, minutes",
+    "global_placeholder": "Global interval",
+    "hint": "Empty uses the global interval in Settings. A number replaces it with this topic's own timer. Manual checks do not shift the timer. Site limits and pause still apply.",
+    "invalid_minutes": "Enter a whole number of minutes from 1 to {maximum}, or leave empty for the global interval.",
+    "title": "Personal timer: every {minutes} min",
+    "every": "{minutes} min",
+    "global_title": "Global check timer"
+  },
   "yaml_limits": {
     "size": "The YAML settings file is too large (maximum 16 MiB). Processing was stopped.",
     "nodes": "The YAML settings expand to too many items (maximum 100,000). Simplify repeated references. Processing was stopped.",
@@ -794,6 +803,16 @@
     }
   },
   "js": {
+    "timer": {
+      "title": "Personal timer: every {minutes} min",
+      "scheduled": "Next automatic check",
+      "paused": "Timer paused",
+      "done": "One-time watch complete",
+      "stopped": "Scheduler stopped or status unavailable",
+      "waiting": "Waiting for the updated schedule",
+      "queued": "Waiting for a check; another job or a site limit may delay it",
+      "running": "Individual check in progress"
+    },
     "releases": {
       "badge": "New {version}",
       "unknown_build": "A stable release was found, but this build's version cannot be compared.",
@@ -846,16 +865,11 @@
     },
     "clock": {
       "secrets_migration_required": "secrets need to be migrated",
-      "no_data": "none yet",
       "never_checked": "No check has run yet",
-      "overdue": "overdue",
-      "failed": "check failed",
       "last_attempt": "Last attempt: {error}",
       "overdue_title": "The last check is overdue",
       "until_next": "Until the next check",
-      "last_attempt_failed": "The last attempt failed",
-      "label_next": "Next check in",
-      "label_state": "Check:"
+      "last_attempt_failed": "The last attempt failed"
     },
     "guess": {
       "failed": "could not fill it in automatically",
@@ -918,6 +932,7 @@
       "restore_point": "restore point archives"
     },
     "how": {
+      "timer": "Personal timer",
       "manual": "manual",
       "auto": "auto"
     },

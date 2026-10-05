@@ -308,7 +308,7 @@ def test_facts_come_from_the_state_and_the_night_copies():
     from tow.supervisor import _facts
 
     save_state({"topics": [], "health": {"auto_at_ts": 1234}})
-    assert _facts() == {"last_scheduled_check": 1234.0, "last_backup_ok": 0.0}
+    assert _facts() == {"last_scheduled_check": 1234.0, "last_backup_ok": 0.0, "topic_timers": {}, "timer_policies": {}}
     _record(last_ok_at=99.5)
     assert _facts()["last_backup_ok"] == 99.5
 

@@ -8,7 +8,7 @@ import heapq
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from tow import undo
@@ -20,6 +20,7 @@ from tow.folders import paths_equal, recent_save_roots, remember_save_root, reso
 from tow.log import error_fields
 from tow.selection import normalize_policy
 from tow.store import CheckBusyError, SecretStoreError
+from tow.topic_timers import parse_interval, set_interval
 from tow.trackers import load_trackers, match_tracker
 from tow.web import _context, services
 from tow.web.templating import TEMPLATES
@@ -38,6 +39,13 @@ from tow.web.views import (
 )
 
 router = APIRouter()
+
+
+async def _interval_form(request: Request) -> str | None:
+    # FastAPI treats an empty optional Form value like omission. An empty field
+    # intentionally restores the global timer; older callers omitting it keep theirs.
+    form = await request.form()
+    return str(form["check_interval_min"]) if "check_interval_min" in form else None
 
 
 def _save_path_refusal(dest: str, *, current: str = "") -> str | None:
@@ -131,7 +139,16 @@ def topics_edit_page(request: Request, tid: str) -> Response:
     )
 
 
-_DRAFT_FIELDS = ("url", "title", "save_path", "client_id", "selection_mode", "selection_value", "tracking_mode")
+_DRAFT_FIELDS = (
+    "url",
+    "title",
+    "save_path",
+    "client_id",
+    "selection_mode",
+    "selection_value",
+    "tracking_mode",
+    "check_interval_min",
+)
 
 
 def _add_refused(problem: str, draft: dict[str, str], kind: str = "") -> RedirectResponse:
@@ -150,6 +167,7 @@ def topics_add(
     selection_mode: str = Form("all"),
     selection_value: str = Form(""),
     tracking_mode: str = Form("watch"),
+    check_interval_min: str = Form(""),
 ) -> Response:
     from tow.clients.factory import client_configuration
     from tow.title import guess_topic_title, title_is_placeholder
@@ -165,7 +183,12 @@ def topics_add(
         "selection_mode": selection_mode,
         "selection_value": selection_value,
         "tracking_mode": tracking_mode,
+        "check_interval_min": check_interval_min,
     }
+    try:
+        interval = parse_interval(check_interval_min)
+    except TowError as exc:
+        return _add_refused(str(exc), draft, "timer")
     url = canon_watch_url(url)
     state = services.load_state()
     cfg = services.load_config()
@@ -209,6 +232,7 @@ def topics_add(
         "selection": {"mode": policy["mode"], "value": policy["value"]},
         "tracking_mode": policy["tracking_mode"],
     }
+    set_interval(new, interval)
     with services.persistence_lock():
         state = services.load_state()
         topics = state.setdefault("topics", [])
@@ -229,6 +253,7 @@ def topics_add(
         selection_mode=policy["mode"],
         selection_value=policy["value"],
         tracking_mode=policy["tracking_mode"],
+        check_interval_min=interval,
         how="manual",
     )
     try:
@@ -381,6 +406,7 @@ def topics_edit(
     selection_mode: str = Form("all"),
     selection_value: str = Form(""),
     tracking_mode: str = Form("watch"),
+    check_interval_min: str | None = Depends(_interval_form),
 ) -> Response:
     state = services.load_state()
     moved, moved_kind = "", "ok"
@@ -388,6 +414,11 @@ def topics_edit(
         if str(topic.get("id")) != tid:
             continue
         candidate = copy.deepcopy(topic)
+        try:
+            if check_interval_min is not None:
+                set_interval(candidate, parse_interval(check_interval_min))
+        except TowError as exc:
+            return flash_redirect("/", exc, "err")
         try:
             policy = normalize_policy(selection_mode, selection_value, tracking_mode)
         except ValueError as exc:
@@ -449,6 +480,7 @@ def topics_edit(
             selection_value=policy["value"],
             tracking_mode=policy["tracking_mode"],
             selection_changed=selection_changed,
+            check_interval_min=topic.get("check_interval_min"),
             how="manual",
         )
         moved = ""

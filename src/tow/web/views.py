@@ -353,6 +353,7 @@ _ERROR_WORDS = (
 def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
     trs = load_trackers(_context.config())
     history = services.load_download_history()
+    timers = services.topic_timer_status(dict(state))
     rows = []
     for topic in state.get("topics") or []:
         url = topic.get("url") or ""
@@ -371,6 +372,7 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
         rows.append(
             {
                 **topic,
+                "timer": timers.get(str(topic.get("id")), {}),
                 "last_error": last_error,
                 "replaces_revision": blocked_by_previous_revision(topic),
                 "tracker": tr.name if tr else t("web.site_unknown"),

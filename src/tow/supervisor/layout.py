@@ -197,6 +197,45 @@ def _epoch(value: Any) -> float:
     return epoch(value) or 0.0
 
 
+def topic_timer_status(state: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Read the supervisor's actual plan; never invent a deadline when it is stopped."""
+    import time
+
+    from tow.topic_timers import policy
+
+    now = time.time()
+    report = status()
+    planned = report.get("topic_timers")
+    planned = planned if isinstance(planned, dict) else {}
+    batch = read_json(schedule_path()).get("timer_batch")
+    batch = batch if isinstance(batch, dict) else {}
+    job = report.get("job")
+    timer_running = isinstance(job, dict) and job.get("name") == "timer"
+    result = {}
+    for topic in state.get("topics") or []:
+        item = policy(topic)
+        if item is None:
+            continue
+        tid = str(topic.get("id") or "")
+        entry = planned.get(tid)
+        next_at = 0.0
+        if isinstance(entry, dict) and entry.get("revision") == item["revision"]:
+            with suppress(ValueError, OverflowError, OSError, TypeError):
+                next_at = _epoch(datetime.fromisoformat(str(entry.get("at"))).timestamp())
+        if topic.get("paused"):
+            phase = "paused"
+        elif topic.get("once_done"):
+            phase = "done"
+        elif not report:
+            phase = "stopped"
+        elif timer_running and isinstance(batch.get(tid), dict) and batch[tid].get("revision") == item["revision"]:
+            phase = "running"
+        else:
+            phase = "scheduled" if next_at > now else "queued" if next_at else "waiting"
+        result[tid] = {"minutes": item["minutes"], "state": phase, "next_at": next_at if report else 0, "now": now}
+    return result
+
+
 def next_check_at(interval_sec: int, health: dict[str, Any] | None = None) -> float | None:
     """When the next scheduled check starts (epoch seconds), or None when nothing says so.
 
