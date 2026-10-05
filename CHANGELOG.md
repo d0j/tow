@@ -3,6 +3,18 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.22.56] — 2026-10-05
+
+### Fixed
+
+- Night restore holds one event-log barrier from its before-restore copy through
+  verified application or rollback. Readers, append and rotation cannot interleave
+  with replacement. Log writers take the data lock first, so an interrupted restore
+  is recovered before a new event is accepted, including the gap after a crash.
+  Recovery and failure events are written outside the non-reentrant OS log lock;
+  blocked recovery returns a failed append without aborting the operation being logged.
+  Backup formats and payload-size compatibility are unchanged.
+
 ## [1.22.55] — 2026-10-05
 
 ### Fixed
