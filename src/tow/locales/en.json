@@ -1325,7 +1325,7 @@
       "loading": "Getting metadata; no media download is started…",
       "magnet_loading": "Getting metadata through the selected client's peer network; no media download is started…",
       "count": "Selected: {count} files · {size}",
-      "rule": "Matched: {count} files · {size}",
+      "rule": "Files matched: {count} · {size}",
       "page": "Page {page} of {pages}",
       "expand": "Expand or collapse {name}",
       "empty": "No files match the search.",

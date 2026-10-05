@@ -16,6 +16,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   refuses unavailable episodes. Late title/lifecycle replies cannot replace the preview.
 - Selection and waiting messages use readable episode labels such as `S02E15`,
   not internal history identity keys. Durable file and episode identities are unchanged.
+- File-rule result counts remain grammatical for a single selected file.
 
 ## [1.23.1] — 2026-10-05
 
