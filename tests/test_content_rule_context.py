@@ -72,6 +72,8 @@ def test_future_episode_preview_matches_watch_and_once_semantics(lifecycle):
         assert response.status_code == 200
         assert response.json()["indices"] == []
         assert response.json()["waiting"]
+        assert "S02E03" in response.json()["waiting"]
+        assert "episode:" not in response.json()["waiting"]
         row = {}
         assert (
             _selection_plan(
@@ -83,6 +85,8 @@ def test_future_episode_preview_matches_watch_and_once_semantics(lifecycle):
     else:
         assert response.status_code == 400
         assert response.json()["code"] == "selection.not_out_yet"
+        assert "S02E03" in response.json()["error"]
+        assert "episode:" not in response.json()["error"]
     assert load_state()["topics"] == []
 
 

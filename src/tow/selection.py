@@ -212,7 +212,7 @@ def _resolve_episode_keys(value: str, files: Iterable[TorrentFile], preferred_se
                 # are simply not selected (watch topics grow into the range).
                 if label.key in available:
                     wanted.add(label.key)
-                requested.append(label.key)
+                requested.append(f"S{label.season:02d}E{label.episode:02d}")
     if not wanted:
         if all(_is_ahead(label, available.values()) for label in requested_labels):
             raise SelectionPendingError("selection.not_out_yet", episodes=", ".join(requested[:10]))

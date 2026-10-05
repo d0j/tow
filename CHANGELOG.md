@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.23.2] — 2026-10-05
+
 ### Fixed
 
 - File-rule previews use the same season context as checks, including seasonless
@@ -12,6 +14,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   new and edited titles refresh previews without a tracker or client request.
   Future watched episodes are shown as waiting, while a one-time selection still
   refuses unavailable episodes. Late title/lifecycle replies cannot replace the preview.
+- Selection and waiting messages use readable episode labels such as `S02E15`,
+  not internal history identity keys. Durable file and episode identities are unchanged.
 
 ## [1.23.1] — 2026-10-05
 
