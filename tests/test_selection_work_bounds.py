@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 import subprocess
 import sys
 from pathlib import Path
@@ -59,6 +60,52 @@ print('ok')
     assert result.stdout.strip() == "ok"
 
 
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "*.MKV",
+        "*.mkv,*.MKV,*.mkv",
+        "Season*/*",
+        "*S??E[0-9][!x]*.*",
+        "*.srt",
+        "*[[]*",
+        "*straße*",
+        "*日本語*",
+        "missing*",
+    ],
+)
+def test_prepared_file_matchers_preserve_path_basename_and_wildcard_semantics(expression):
+    paths = (
+        "Show.S01E01.mkv",
+        "Season 2/Show.S02E03.MKV",
+        "Season 2/Show.S02E03.srt",
+        "Extras/[interview].mp4",
+        "Straße.mkv",
+        "日本語.txt",
+        ".hidden.bin",
+    )
+    files = tuple(TorrentFile(i, path, 1) for i, path in enumerate(paths))
+    patterns = [pattern.casefold() for pattern in expression.split(",")]
+    expected = tuple(
+        row.index
+        for row in files
+        if any(
+            fnmatch.fnmatchcase(row.path.casefold(), pattern)
+            or fnmatch.fnmatchcase(row.path.rsplit("/", 1)[-1].casefold(), pattern)
+            for pattern in patterns
+        )
+    )
+    policy = normalize_policy("files", expression)
+    if not expected:
+        with pytest.raises(SelectionError) as caught:
+            resolve_selection(files, policy)
+        assert caught.value.code == "selection.nothing_matched"
+    else:
+        plan = resolve_selection(files, policy)
+        assert plan.selected_indices == expected
+        assert plan.expression == expression
+
+
 def test_repeated_unavailable_rules_keep_the_original_diagnostic_order():
     files = (TorrentFile(0, "Show.S01E07.mkv", 1),)
     with pytest.raises(SelectionPendingError) as caught:
@@ -81,3 +128,36 @@ def test_a_seasonless_video_prevents_guessing_that_another_season_is_in_the_futu
     assert not isinstance(caught.value, SelectionPendingError)
     assert caught.value.code == "selection.absent"
     assert caught.value.params["episodes"] == "S03E01, S03E01"
+
+
+@pytest.mark.allow_system
+@pytest.mark.parametrize("scenario", ["repeated", "distinct"])
+def test_large_file_rules_finish_in_a_bounded_isolated_process(scenario):
+    script = """
+import sys
+from pathlib import Path
+import tow.selection as selection
+from tow.torrent import MAX_FILES, TorrentFile
+
+assert Path(selection.__file__).resolve() == Path(sys.argv[1])
+files = tuple(TorrentFile(i, f'Asset {i:05d}.bin', 1) for i in range(MAX_FILES))
+patterns = ['*never-matches*' if sys.argv[2] == 'repeated' else f'*absent-{i:03d}*' for i in range(500)]
+expression = ','.join(patterns)
+policy = selection.normalize_policy('files', expression)
+assert policy['value'] == expression
+try:
+    selection.resolve_selection(files, policy)
+except selection.SelectionError as error:
+    assert error.code == 'selection.nothing_matched'
+else:
+    raise AssertionError('unmatched masks cannot select files')
+print('ok')
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-B", "-c", script, str(Path(tow.selection.__file__).resolve()), scenario],
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=True,
+    )
+    assert result.stdout.strip() == "ok"

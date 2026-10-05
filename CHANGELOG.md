@@ -28,6 +28,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Large repeated or overlapping episode rules no longer rescan all available
   episodes for every requested number. Future ranges retain waiting semantics,
   ambiguous seasons remain refused, and diagnostic order and saved rules are unchanged.
+- Large file-mask rules prepare each distinct matcher once per request and avoid
+  matching the same path twice. Wildcard, basename, case-folding and saved-rule
+  semantics are unchanged; no persistent cache or new dependency is added.
 
 ## [1.23.1] — 2026-10-05
 

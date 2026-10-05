@@ -310,12 +310,16 @@ def resolve_selection(
             if is_video_file(row.path):
                 episode_keys.update(label.key for label in labels(row))
     elif mode == "files":
-        patterns = _safe_globs(expression)
+        # Keep the rule text and validation unchanged. Prepare each distinct
+        # matcher once instead of looking up fnmatch's cache for every file.
+        matches = tuple(
+            re.compile(fnmatch.translate(pattern)).match for pattern in dict.fromkeys(_safe_globs(expression))
+        )
         selected = []
         for row in selectable:
             path = row.path.casefold()
             base = PurePosixPath(path).name
-            if any(fnmatch.fnmatchcase(path, pattern) or fnmatch.fnmatchcase(base, pattern) for pattern in patterns):
+            if any(match(path) or (base != path and match(base)) for match in matches):
                 selected.append(row)
         selected_coverages = normalize_episode_seasons(
             (labels(row) for row in selected),

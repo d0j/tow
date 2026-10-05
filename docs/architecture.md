@@ -119,6 +119,10 @@ not another scan of all files. The original first ten diagnostic labels, includi
 remain in input order. Subtitle season context still contributes to ambiguity. The index is
 not a persistent cache and does not change saved policies, file priorities or history identities.
 
+File masks are translated with the standard `fnmatch.translate` API and prepared once
+per distinct case-folded rule per call. They still match the full relative path or
+basename; flat paths are not tested twice. Validation and stored expressions are unchanged.
+
 ## Data layout
 
 ```text
