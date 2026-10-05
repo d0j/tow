@@ -36,6 +36,7 @@ async def content_prepare(
     client_id: str = Form(""),
     allow_limited: bool = Form(False),
     torrent: Annotated[UploadFile | None, File()] = None,
+    source: str = Form("torrent"),
 ) -> JSONResponse:
     blob = None
     if torrent is not None:
@@ -48,7 +49,12 @@ async def content_prepare(
                 headers={"Cache-Control": "no-store"},
             )
     try:
-        result = await run_in_threadpool(services.prepare_content, url, client_id, blob, allow_limited)
+        if source not in {"torrent", "magnet"} or (source == "magnet" and blob is not None):
+            raise TowError("content.changed")
+        if source == "magnet":
+            result = await run_in_threadpool(services.prepare_magnet_content, url, client_id)
+        else:
+            result = await run_in_threadpool(services.prepare_content, url, client_id, blob, allow_limited)
         return JSONResponse(result, headers={"Cache-Control": "no-store"})
     except (ValueError, RuntimeError, OSError) as exc:
         message = str(exc) if isinstance(exc, TowError) else str(TowError("content.unavailable"))

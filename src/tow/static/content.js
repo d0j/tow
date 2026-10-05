@@ -22,12 +22,14 @@
     const loadButton = root.querySelector("[data-content-load]");
     const upload = root.querySelector("[data-content-upload]");
     const limited = root.querySelector("[data-content-limited]");
+    const magnet = root.querySelector("[data-content-magnet]");
     let snapshot = null, selected = new Set(), generation = 0, ruleGeneration = 0, page = 0;
     let nodes = [], expanded = new Set();
     const PAGE_SIZE = 200;
     let controller = null, ruleTimer = null;
     let existing = [];
     try { existing = JSON.parse(root.dataset.existing || "[]"); } catch { /* Server remains authoritative. */ }
+    const originalExisting = existing;
     let manualWanted = existing, previousMode = mode.value;
     const rememberManual = () => {
       if (snapshot && manual()) manualWanted = snapshot.files.filter((row) => selected.has(row.id));
@@ -172,10 +174,10 @@
       snapshot = null; selected.clear(); existing = [];
       manualWanted = [];
       token.value = ""; indices.value = "";
-      results.hidden = true; loadButton.disabled = false;
+      results.hidden = true; loadButton.disabled = false; magnet.disabled = false; limited.disabled = false;
       status.textContent = t("content.js.stale");
     };
-    const load = async (allowLimited = false, restore = false) => {
+    const load = async (allowLimited = false, restore = false, fromMagnet = false) => {
       controller?.abort();
       controller = new AbortController();
       const epoch = ++generation, origin = source();
@@ -184,15 +186,16 @@
       const savedToken = token.value, savedIndices = indices.value;
       token.value = ""; indices.value = ""; snapshot = null;
       results.hidden = true;
-      status.textContent = t("content.js.loading");
-      loadButton.disabled = true;
+      status.textContent = t(fromMagnet ? "content.js.magnet_loading" : "content.js.loading");
+      loadButton.disabled = true; magnet.disabled = true; limited.disabled = true;
       limited.hidden = true;
       const body = new FormData();
       body.set("url", field("url").value);
       body.set("client_id", field("client_id").value);
       body.set("allow_limited", String(allowLimited));
+      body.set("source", fromMagnet ? "magnet" : "torrent");
       if (restore) body.set("token", savedToken);
-      else if (upload.files.length) body.set("torrent", upload.files[0]);
+      else if (!fromMagnet && upload.files.length) body.set("torrent", upload.files[0]);
       try {
         const response = await fetch(restore ? "/content/snapshot" : "/content/prepare", { method: "POST", body, signal: controller.signal });
         const data = await response.json();
@@ -216,16 +219,28 @@
       } catch (error) {
         if (epoch === generation && error.name !== "AbortError") status.textContent = error.message || t("content.js.failed");
       } finally {
-        if (epoch === generation) loadButton.disabled = false;
+        if (epoch === generation) { loadButton.disabled = false; magnet.disabled = false; limited.disabled = false; }
       }
     };
     loadButton.addEventListener("click", () => load());
     limited.addEventListener("click", () => load(true));
+    magnet.addEventListener("click", () => load(false, false, true));
     upload.addEventListener("change", () => load());
     field("url").addEventListener("input", invalidate);
     field("client_id").addEventListener("change", invalidate);
     const showExpression = () => expression.closest("[data-content-expression]")?.classList.toggle("content-unused", mode.value === "all" || manual());
     showExpression();
+    form.addEventListener("reset", () => {
+      // Cancel resets the native fields after firing this event. It must also discard
+      // prepared state and invalidate a late response, not revive an abandoned edit.
+      generation++; ruleGeneration++;
+      controller?.abort(); window.clearTimeout(ruleTimer);
+      snapshot = null; selected.clear();
+      existing = originalExisting; manualWanted = originalExisting;
+      results.hidden = true; status.textContent = "";
+      loadButton.disabled = false; magnet.disabled = false; limited.disabled = false; limited.hidden = true;
+      window.setTimeout(() => { previousMode = mode.value; showExpression(); }, 0);
+    });
     mode.addEventListener("change", () => {
       ruleGeneration++;
       showExpression();

@@ -5,6 +5,7 @@ import logging
 import time
 from collections.abc import Mapping, Sequence
 from typing import Any, ClassVar
+from urllib.parse import quote
 
 from qbittorrentapi import Client
 
@@ -62,6 +63,7 @@ class QBittorrentClient:
         "priority_readback": True,
         "start_stop": True,
         "magnet_metadata": True,
+        "metadata_preview": True,
     }
 
     def __init__(self, host: str, port: int, username: str, password: str) -> None:
@@ -164,6 +166,56 @@ class QBittorrentClient:
         if created and resolved:
             self._stop(resolved)
         raise _fail("client.qbittorrent.magnet_timeout")
+
+    def preview_magnet(self, magnet_url: str) -> bytes:
+        """Explicit native metadata retrieval; never add, stop, tag or delete a transfer.
+
+        The Web API has no metadata-only cancel endpoint. On timeout the client's native
+        peer request may continue (upload mode), so never use a normal torrent delete as
+        cleanup: another user may have added that hash meanwhile.
+        """
+        hashes = parse_magnet_hashes(magnet_url)
+        if hashes is None:
+            raise _fail("client.qbittorrent.magnet_invalid")
+        btih, btmh = hashes
+        try:
+            # Export an existing task read-only, even on clients predating fetchMetadata.
+            for identity in sorted(btih | btmh):
+                target = self._resolved_hash(identity)
+                if target is not None:
+                    exported = self._export_magnet(target, btih, btmh)
+                    if exported is not None:
+                        return exported
+            if self.read_only or not self._web_api_at_least((2, 11, 9)):
+                raise _fail("content.magnet_unsupported")
+            # qBittorrent decodes source once more after parsing the POST form. Preserve
+            # escaped tracker query delimiters/passkeys instead of turning them into
+            # magnet parameters. Use the identical source for fetch and save.
+            source = quote(magnet_url, safe="")
+            deadline = time.monotonic() + 45
+            while time.monotonic() < deadline:
+                result = self._c.torrents_fetch_metadata(source=source)
+                # Async responses may contain just info hashes rather than being empty.
+                if isinstance(result, Mapping) and result.get("info"):
+                    # A task another user added during prefetch is not necessarily in
+                    # qBittorrent's metadata cache. Export it without touching its state.
+                    for identity in sorted(btih | btmh):
+                        target = self._resolved_hash(identity)
+                        if target is not None:
+                            exported = self._export_magnet(target, btih, btmh)
+                            if exported is not None:
+                                return exported
+                    content = self._c.torrents_save_metadata(source=source)
+                    metadata = parse_torrent_metadata(content)
+                    if (btih and metadata.hash_v1 not in btih) or (btmh and metadata.hash_v2 not in btmh):
+                        raise _fail("client.qbittorrent.magnet_data_mismatch")
+                    return content
+                time.sleep(0.25)
+        except ClientError:
+            raise
+        except Exception as exc:
+            raise _fail("content.magnet_failed") from exc
+        raise _fail("content.magnet_timeout")
 
     def _magnet_identity(
         self, magnet_url: str, destination: str, expected: str

@@ -28,6 +28,7 @@ CAPABILITIES = (
     "priority_readback",  # the chosen files can be read back
     "start_stop",
     "magnet_metadata",  # materialize_magnet works (else it refuses)
+    "metadata_preview",  # preview_magnet never adds or changes a normal torrent task
 )
 
 
@@ -77,6 +78,8 @@ class TorrentClientAdapter(Protocol):
         save_path: str | None,
         infohash: str,
     ) -> bytes: ...
+
+    def preview_magnet(self, magnet_url: str) -> bytes: ...
 
     def stop_owned_torrent(self, infohash: str) -> dict[str, Any]: ...
 

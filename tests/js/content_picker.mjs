@@ -37,7 +37,7 @@ function setup(saved = null) {
   fields.selection_value.closest = () => new Element();
   const form = new Element(); form.elements = { namedItem: (name) => fields[name] };
   root.closest = () => form;
-  const controls = Object.fromEntries(["status", "results", "tree", "search", "more", "prev", "pages", "page", "load", "upload", "limited", "manual-actions", "all", "none", "help", "help-text"].map((key) => [key, new Element()]));
+  const controls = Object.fromEntries(["status", "results", "tree", "search", "more", "prev", "pages", "page", "load", "upload", "limited", "magnet", "manual-actions", "all", "none", "help", "help-text"].map((key) => [key, new Element()]));
   root.querySelector = (key) => controls[key.replace(/\[data-content-(.*)\]/, "$1")];
   const document = {
     activeElement: null, documentElement: root, body: root,
@@ -106,5 +106,23 @@ c.controls.all.fire("click");
 assert.equal(JSON.parse(c.fields.selection_indices.value).length, 20000);
 c.fields.client_id.value = "other"; c.fields.client_id.fire("change");
 assert.equal(c.fields.content_token.value, "", "client edits invalidate preparation");
+
+const d = setup();
+d.controls.upload.files = [new Blob(["local metadata"])];
+d.controls.magnet.fire("click");
+assert.equal(d.requests.length, 1, "magnet uses one explicit action only");
+assert.equal(d.requests[0].options.body.get("source"), "magnet");
+assert.equal(d.requests[0].options.body.has("torrent"), false, "native request never mixes uploaded metadata");
+assert.equal(d.controls.magnet.disabled, true);
+await reply(d.requests[0], snapshot);
+assert.equal(d.controls.magnet.disabled, false);
+
+const e = setup();
+e.controls.magnet.fire("click");
+e.form.fire("reset");
+await reply(e.requests[0], snapshot);
+assert.equal(e.fields.content_token.value, "", "cancel prevents a late native response from reviving an edit");
+assert.equal(e.controls.status.textContent, "");
+assert.equal(e.controls.results.hidden, true);
 
 console.log(JSON.stringify({ safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true }));

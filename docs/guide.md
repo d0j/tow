@@ -27,7 +27,7 @@ How TOW thinks, what each screen and colour means, and what to do about each mes
 | **Site** | A tracker TOW knows how to read: how to recognise its links, where the `.torrent` is, how to sign in. Known sites come preconfigured. |
 | **Mirror** | Another address of the same site. TOW tries them in order and remembers the one that worked. |
 | **Torrent client** | qBittorrent, Transmission or Deluge with its Web UI turned on. TOW only talks to it; the client downloads. |
-| **Selection** | Which files of the torrent to download: all, episodes by number, or file patterns. |
+| **Selection** | Which files of the torrent to download: all, checked files, episodes by number, or file patterns. |
 
 TOW never downloads, copies or moves media itself. It reads pages, downloads `.torrent` files, and asks your
 client to add, start, stop or move a torrent. It only ever changes torrents it added itself (tagged `tow`).
@@ -60,8 +60,20 @@ If the site is not known yet, add it first on **Sites** — pasting any topic li
 | Choice | Example | Notes |
 |---|---|---|
 | All files | — | The whole torrent. |
+| Choose files | Check files or folders in the contents tree | Literal paths and sizes are retained; new files stay unselected. Missing or resized selected files require review. |
 | Episodes by number | `S01E03-E05, S01E07` · `04x01-03` · `5-8` | Video and its subtitles count as one episode. Use `S01E05` when an episode number exists in several seasons. |
 | Files by pattern | `*.mkv` · `Subs/*.srt` | Glob patterns: `*`, `?` and `[]` are special. A pattern cannot leave the torrent's folder. |
+
+**Get contents** reads tracker metadata, or use a local `.torrent`. A download-limited site asks for
+confirmation first. **From magnet (contacts peers)** uses the selected client's native metadata API:
+qBittorrent 5.2+ or an attached Deluge daemon. Existing qBittorrent torrents can be read on older versions.
+No transfer is added or changed by this preview. qBittorrent's peer-metadata request may continue after
+timeout or closing the form; its Web API cannot cancel it. Unsupported clients need a `.torrent`.
+
+Search hides rows, not selections. Folder checkboxes and **Select all files** include files hidden by
+search; the selected count and size cover the whole torrent. A multi-episode file is downloaded whole;
+v1 torrent pieces can include bytes from adjacent unselected files. Editing stores the choice for the
+next check; cancelling discards the draft. The **?** button explains these rules in the form.
 
 If nothing matches, or the match is unclear, nothing is started. A range of episodes that are not out yet is
 *waiting for episodes*, not an error.

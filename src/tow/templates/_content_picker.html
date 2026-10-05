@@ -3,8 +3,9 @@
     <strong>{{ t('content.title') }}</strong>
     <button type="button" class="ghost" data-content-help aria-label="{{ t('content.help_label') }}" aria-expanded="false" aria-controls="content-help-{{ topic.id if topic else 'new' }}">?</button>
     <button type="button" data-content-load>{{ t('content.load') }}</button>
+    <button type="button" class="ghost" data-content-magnet title="{{ t('content.magnet_hint') }}">{{ t('content.magnet_load') }}</button>
   </div>
-  <p class="field-hint" id="content-help-{{ topic.id if topic else 'new' }}" data-content-help-text hidden>{{ t('content.help') }}</p>
+  <p class="field-hint" id="content-help-{{ topic.id if topic else 'new' }}" data-content-help-text hidden>{{ t('content.help') }} {{ t('content.magnet_hint') }}</p>
   <noscript><p class="field-hint">{{ t('content.no_script') }}</p></noscript>
   {% if topic and topic.selection and topic.selection.mode == 'exact' %}<p class="field-hint">{{ t('content.pending') }}</p>{% endif %}
   <label>{{ t('content.upload') }}<input type="file" accept=".torrent,application/x-bittorrent" data-content-upload></label>

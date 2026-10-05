@@ -30,8 +30,9 @@ _PORTABLE_UPLOAD_REQUEST_LIMIT = MAX_BUNDLE_BYTES + 2 * 1024 * 1024
 _PUBLIC_PATHS = {"/favicon.ico", "/healthz", "/login"}
 _SITE_HTTP_LOCK = asyncio.Lock()
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
-# Signing in has its own atomic throttle. Content previews cannot modify topics or clients;
-# their short cache commit uses persistence_lock, not a lock held during tracker I/O.
+# Signing in has its own atomic throttle. Content previews never change topics or transfer
+# tasks; explicit native magnet retrieval may contact peers. Cache commits use their own
+# short persistence_lock, not a lock held during tracker/client I/O.
 _UNSERIALIZED_WRITES = frozenset({"/login", "/content/prepare", "/content/resolve", "/content/snapshot"})
 
 

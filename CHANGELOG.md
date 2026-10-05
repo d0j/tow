@@ -17,6 +17,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   another tracker request. Expired pending adds may refetch only the proven revision.
   The existing stopped-add, ownership and priority read-back pipeline applies selections.
   State schema 2 prevents older releases from misinterpreting structured selections.
+- Explicit native magnet metadata preview, without adding or changing transfer tasks:
+  qBittorrent Web API 2.11.9+ and Deluge, plus read-only export of existing qBittorrent
+  torrents on older clients. Unsupported clients require a `.torrent`; peer access
+  and qBittorrent's uncancellable metadata request are disclosed before use.
+  Deluge responses are size-bounded, strictly decoded and verified against both magnet hashes.
+- Cancelling an edit discards prepared file-picker state and ignores late metadata replies.
 
 ## [1.22.58] — 2026-10-05
 

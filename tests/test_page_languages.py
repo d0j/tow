@@ -58,7 +58,7 @@ SEEDED = (
 RU_ALLOWED = {
     # products and services
     *("TOW", "Torrent", "Watcher", "qBittorrent", "qBit", "Transmission", "Deluge", "WebUI", "Python"),
-    *("Telegram", "BotFather", "WhatsApp", "Discord", "ntfy", "Tailscale", "Cloudflare", "Magnet"),
+    *("Telegram", "BotFather", "WhatsApp", "Discord", "ntfy", "Tailscale", "Cloudflare", "Magnet", "magnet"),
     *("Google", "Play", "App", "Store", "Droid", "Windows"),
     # client kinds as TOW names them (the "kind" in the card's technical details)
     *("qbittorrent", "transmission", "deluge"),

@@ -539,6 +539,96 @@ def test_deluge_magnet_keeps_the_trackers():
     assert b"javascript" not in content
 
 
+def test_deluge_native_preview_only_reads_attached_daemon_and_prefetches():
+    server = FakeDeluge()
+    server.connected = True
+    server.prefetch = (H, base64.b64encode(bencode(INFO)).decode())
+    assert _deluge(server).preview_magnet(f"magnet:?xt=urn:btih:{H}")
+    assert server.calls == ["auth.login", "web.connected", "core.prefetch_magnet_metadata"]
+    assert not server.torrents
+    assert not server.plugins
+    assert not server.labels
+
+
+def test_deluge_native_preview_never_attaches_to_another_daemon():
+    server = FakeDeluge()
+    with pytest.raises(ClientError) as error:
+        _deluge(server).preview_magnet(f"magnet:?xt=urn:btih:{H}")
+    assert error.value.code == "client.deluge.not_attached_preview"
+    assert server.calls == ["auth.login", "web.connected"]
+
+
+def test_deluge_native_error_cannot_echo_a_tracker_passkey(monkeypatch):
+    server = FakeDeluge()
+    server.connected = True
+    adapter = _deluge(server)
+    monkeypatch.setattr(
+        adapter,
+        "materialize_magnet",
+        lambda *_args: (_ for _ in ()).throw(
+            ClientError("client.managed.rpc_refused", method="prefetch", answer="passkey=private")
+        ),
+    )
+    with pytest.raises(ClientError) as error:
+        adapter.preview_magnet(f"magnet:?xt=urn:btih:{H}")
+    assert error.value.code == "content.magnet_failed"
+    assert "private" not in str(error.value)
+    assert adapter._metadata_preview is False
+
+
+@pytest.mark.parametrize("encoded", ["@@@", "a", "é", 3, ["text"]])
+def test_deluge_metadata_requires_strict_base64(encoded):
+    server = FakeDeluge()
+    server.connected = True
+    server.prefetch = (H, encoded)
+    with pytest.raises(ClientError) as error:
+        _deluge(server).preview_magnet(f"magnet:?xt=urn:btih:{H}")
+    assert error.value.code in {"content.magnet_failed", "content.too_large"}
+    assert server.torrents == {}
+
+
+def test_deluge_metadata_size_is_bounded_before_decoding(monkeypatch):
+    from tow.clients import deluge
+
+    server = FakeDeluge()
+    server.connected = True
+    server.prefetch = (H, base64.b64encode(bencode(INFO)).decode())
+    monkeypatch.setattr(deluge, "MAX_TORRENT_BYTES", 3)
+    monkeypatch.setattr(deluge.base64, "b64decode", lambda *_args, **_kwargs: pytest.fail("oversized decode"))
+    with pytest.raises(ClientError) as error:
+        _deluge(server).preview_magnet(f"magnet:?xt=urn:btih:{H}")
+    assert error.value.code == "content.too_large"
+
+
+def test_deluge_preview_refuses_wrong_v2_hash_in_hybrid_magnet():
+    server = FakeDeluge()
+    server.connected = True
+    server.prefetch = (H, base64.b64encode(bencode(INFO)).decode())
+    with pytest.raises(ClientError) as error:
+        _deluge(server).preview_magnet(f"magnet:?xt=urn:btih:{H}&xt=urn:btmh:1220{'a' * 64}")
+    assert error.value.code == "client.deluge.magnet_data_mismatch"
+
+
+def test_deluge_dry_run_never_prefetches():
+    server = FakeDeluge()
+    adapter = _deluge(server)
+    adapter.read_only = True
+    with pytest.raises(ClientError) as error:
+        adapter.preview_magnet(f"magnet:?xt=urn:btih:{H}")
+    assert error.value.code == "content.magnet_unsupported"
+    assert server.calls == []
+
+
+def test_transmission_refuses_native_preview_without_any_request():
+    server = FakeTransmission()
+    adapter = _transmission(server)
+    assert adapter.capabilities["metadata_preview"] is False
+    with pytest.raises(ClientError) as error:
+        adapter.preview_magnet(f"magnet:?xt=urn:btih:{H}")
+    assert error.value.code == "content.magnet_unsupported"
+    assert server.calls == []
+
+
 class HybridTransmission(FakeTransmission):
     """Lists every torrent under another hash, as clients do for hybrid v1+v2 torrents."""
 

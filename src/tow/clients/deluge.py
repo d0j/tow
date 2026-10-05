@@ -15,7 +15,7 @@ import httpx
 from tow.clients.managed import OWNER, PENDING, ClientError, ManagedClient
 from tow.clients.spec import ClientField, TorrentClientAdapter
 from tow.clients.transmission import base_url
-from tow.torrent import parse_magnet_hashes, parse_torrent_metadata
+from tow.torrent import MAX_TORRENT_BYTES, parse_magnet_hashes, parse_torrent_metadata
 
 KIND = "deluge"
 TITLE = "Deluge"
@@ -66,7 +66,11 @@ class DelugeClient(ManagedClient):
     kind = KIND
     client_kind = KIND
 
-    capabilities: ClassVar[dict[str, bool]] = {**ManagedClient.capabilities, "magnet_metadata": True}
+    capabilities: ClassVar[dict[str, bool]] = {
+        **ManagedClient.capabilities,
+        "magnet_metadata": True,
+        "metadata_preview": True,
+    }
     MAGNET_TIMEOUT = 45
     # A dry run (preview) changes nothing, not even which daemon Deluge Web is attached to.
     read_only = False
@@ -79,6 +83,7 @@ class DelugeClient(ManagedClient):
         self._id = 0
         self._ready = False
         self._labels_ready = False
+        self._metadata_preview = False
 
     def _post(self, method: str, params: list[Any], timeout: float | None = None) -> dict[str, Any]:
         self._id += 1
@@ -114,7 +119,7 @@ class DelugeClient(ManagedClient):
         if not self._raw("auth.login", self._password):
             raise self._fail("client.deluge.bad_password")
         if not self._raw("web.connected"):
-            if self.read_only:
+            if self.read_only or self._metadata_preview:
                 raise self._fail("client.deluge.not_attached_preview")
             hosts = self._raw("web.get_hosts") or []
             online = [
@@ -245,18 +250,43 @@ class DelugeClient(ManagedClient):
             raise self._fail("client.deluge.magnet_hash_mismatch")
         if not btih:
             raise self._fail("client.deluge.magnet_v2_only")
+        if self.read_only:
+            raise self._fail("content.magnet_unsupported")
         result = self._call(
             "core.prefetch_magnet_metadata", magnet_url, self.MAGNET_TIMEOUT, timeout=self.MAGNET_TIMEOUT + 15
         )
         encoded = result[1] if isinstance(result, list) and len(result) == 2 else None
         if not encoded:
             raise self._fail("client.deluge.magnet_timeout", seconds=self.MAGNET_TIMEOUT)
-        info = base64.b64decode(encoded)
+        if not isinstance(encoded, (str, bytes)) or len(encoded) > ((MAX_TORRENT_BYTES + 2) // 3) * 4:
+            raise self._fail("content.too_large")
+        try:
+            info = base64.b64decode(encoded, validate=True)
+        except ValueError as exc:
+            raise self._fail("content.magnet_failed") from exc
         content = _torrent_with_trackers(info, magnet_url)
         metadata = parse_torrent_metadata(content)
-        if metadata.hash_v1 not in btih:
+        if metadata.hash_v1 not in btih or (btmh and metadata.hash_v2 not in btmh):
             raise self._fail("client.deluge.magnet_data_mismatch")
         return content
+
+    def preview_magnet(self, magnet_url: str) -> bytes:
+        hashes = parse_magnet_hashes(magnet_url)
+        if hashes is None:
+            raise self._fail("client.deluge.magnet_invalid")
+        btih, btmh = hashes
+        # Preview must not attach the Web UI to a different daemon or enable Label.
+        self._metadata_preview = True
+        try:
+            return self.materialize_magnet(magnet_url, None, next(iter(btih or btmh)))
+        except ClientError as exc:
+            # A daemon may echo a magnet URI (including a private tracker passkey) in
+            # its error. Keep safe connection/validation codes, not arbitrary RPC text.
+            if exc.code == "client.managed.rpc_refused":
+                raise self._fail("content.magnet_failed") from exc
+            raise
+        finally:
+            self._metadata_preview = False
 
 
 def _bstr(value: bytes) -> bytes:
