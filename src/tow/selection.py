@@ -192,41 +192,65 @@ def _resolve_episode_keys(value: str, files: Iterable[TorrentFile], preferred_se
         if len(rules) != 1:
             raise SelectionError("selection.star_alone")
         return set(available)
+    by_episode: dict[int, set[str]] = {}
+    last_by_season: dict[int | None, int] = {}
+    for label in available.values():
+        by_episode.setdefault(label.episode, set()).add(label.key)
+        last_by_season[label.season] = max(label.episode, last_by_season.get(label.season, 0))
+    last_episode = max(last_by_season.values())
+    last_season = max(season for season in last_by_season if season is not None) if None not in last_by_season else None
     wanted: set[str] = set()
     requested: list[str] = []
-    requested_labels: list[EpisodeLabel] = []
+    seen: set[EpisodeLabel] = set()
+    all_ahead = True
     for rule in rules:
         labels = _episode_range(rule)
         assert labels is not None
-        requested_labels.extend(labels)
         for label in labels:
-            if label.season is None:
-                candidates = [item for item in available.values() if item.episode == label.episode]
-                candidate_seasons = {item.season for item in candidates}
-                if len(candidate_seasons) > 1 or (len(seasons) > 1 and not candidates):
-                    raise SelectionError("selection.ambiguous", episode=label.episode)
-                wanted.update(item.key for item in candidates)
-                requested.append(str(label.episode))
-            else:
-                # Same rule as bare numbers: episodes of the range that are not out yet
-                # are simply not selected (watch topics grow into the range).
-                if label.key in available:
-                    wanted.add(label.key)
-                requested.append(f"S{label.season:02d}E{label.episode:02d}")
+            # Keep the original first ten diagnostic labels, including repeats,
+            # without retaining a string and object for every expanded request.
+            if len(requested) < 10:
+                requested.append(
+                    str(label.episode) if label.season is None else f"S{label.season:02d}E{label.episode:02d}"
+                )
+            if label in seen:
+                continue
+            seen.add(label)
+            wanted.update(_matching_episode_keys(label, available, by_episode, len(seasons) > 1))
+            all_ahead = all_ahead and _is_ahead(label, last_by_season, last_episode, last_season)
     if not wanted:
-        if all(_is_ahead(label, available.values()) for label in requested_labels):
-            raise SelectionPendingError("selection.not_out_yet", episodes=", ".join(requested[:10]))
-        raise SelectionError("selection.absent", episodes=", ".join(requested[:10]))
+        if all_ahead:
+            raise SelectionPendingError("selection.not_out_yet", episodes=", ".join(requested))
+        raise SelectionError("selection.absent", episodes=", ".join(requested))
     return wanted
 
 
-def _is_ahead(label: EpisodeLabel, available: Iterable[EpisodeLabel]) -> bool:
+def _matching_episode_keys(
+    label: EpisodeLabel,
+    available: Mapping[str, EpisodeLabel],
+    by_episode: Mapping[int, set[str]],
+    multiple_seasons: bool,
+) -> set[str]:
+    if label.season is not None:
+        return {label.key} if label.key in available else set()
+    candidates = by_episode.get(label.episode, set())
+    if len(candidates) > 1 or (multiple_seasons and not candidates):
+        raise SelectionError("selection.ambiguous", episode=label.episode)
+    return candidates
+
+
+def _is_ahead(
+    label: EpisodeLabel,
+    last_by_season: Mapping[int | None, int],
+    last_episode: int,
+    last_season: int | None,
+) -> bool:
     """``label`` comes after everything the torrent has (a later episode or season)."""
-    rows = tuple(available)
-    same_season = [item.episode for item in rows if label.season is None or item.season == label.season]
-    if same_season:
-        return label.episode > max(same_season)
-    return label.season is not None and all(item.season is not None and item.season < label.season for item in rows)
+    if label.season is None:
+        return label.episode > last_episode
+    if label.season in last_by_season:
+        return label.episode > last_by_season[label.season]
+    return last_season is not None and label.season > last_season
 
 
 def _safe_globs(value: str) -> list[str]:

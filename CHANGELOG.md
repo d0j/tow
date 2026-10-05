@@ -5,7 +5,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
-## [1.23.2] — 2026-10-05
+## [1.23.2] — 2026-10-06
 
 ### Fixed
 
@@ -25,6 +25,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   when GitHub changes `ubuntu-latest`, without renaming protected checks.
 - Snapshot link-safety tests no longer mistake a missing destination folder for
   unavailable symlink permissions. The full gate reports skipped tests and their reasons.
+- Large repeated or overlapping episode rules no longer rescan all available
+  episodes for every requested number. Future ranges retain waiting semantics,
+  ambiguous seasons remain refused, and diagnostic order and saved rules are unchanged.
 
 ## [1.23.1] — 2026-10-05
 

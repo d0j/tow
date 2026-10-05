@@ -113,6 +113,12 @@ provides context. Future watch ranges are waiting, not failures, while once rang
 strict. Preview refreshes do not fetch trackers or mutate clients, and stale title/lifecycle
 responses are discarded. An applying check still obtains the current tracker title independently.
 
+Episode rules build a per-call index of available numbers and season maxima. Repeated or
+overlapping requests are matched once per distinct label; waiting checks use those maxima,
+not another scan of all files. The original first ten diagnostic labels, including repeats,
+remain in input order. Subtitle season context still contributes to ambiguity. The index is
+not a persistent cache and does not change saved policies, file priorities or history identities.
+
 ## Data layout
 
 ```text
