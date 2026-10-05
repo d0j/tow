@@ -10,6 +10,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Settings distinguish the global timer from individual topic timers. The hint
   explains which topics use the global interval and where to set an override;
   scheduling behaviour is unchanged.
+- Long mirror addresses stay within the screen without hiding the selected-mirror
+  badge. The full address remains available in the button tooltip.
 
 ## [1.23.2] — 2026-10-06
 

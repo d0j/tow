@@ -40,6 +40,43 @@ def client():
 CSS = (Path(__file__).parents[1] / "src" / "tow" / "static" / "app.css").read_text(encoding="utf-8")
 
 
+def test_long_mirror_choice_keeps_the_full_address_and_selected_indicator(client):
+    from bs4 import BeautifulSoup
+
+    from tow.config import load_config, save_config
+
+    host = "https://" + "a" * 63 + "." + "b" * 63 + ".example"
+    cfg = load_config()
+    cfg["trackers"] = {
+        "fixture": {
+            "url_regex": r"^https://tracker\.example/topic/(\d+)",
+            "fetch_hosts": ["https://tracker.example", host],
+            "download_path": "/download/{id}",
+        }
+    }
+    save_config(cfg)
+    state = load_state()
+    state["mirrors"] = {"fixture": {"active": host}}
+    save_state(state)
+
+    page = BeautifulSoup(client.get("/sites").text, "html.parser")
+    choices = page.select(".mirror-pick")
+    assert len(choices) == 2
+    chosen = choices[1]
+    assert chosen.select_one('input[name="host"]')["value"] == host
+    button = chosen.select_one("button")
+    assert button["aria-pressed"] == "true"
+    assert host in button["title"]
+    label = button.select_one(".mirror-label")
+    assert label.get_text() == host.removeprefix("https://")
+    assert button.select_one(".pill").get_text() == "Основное"
+    assert button.select_one(".pill").parent == button
+    assert re.search(r"\.mirror-pick\s*\{[^}]*max-width:\s*100%", CSS)
+    assert re.search(r"\.mirror-pick button\s*\{[^}]*max-width:\s*100%", CSS)
+    assert re.search(r"\.mirror-pick \.mirror-label\s*\{[^}]*min-width:\s*0", CSS)
+    assert re.search(r"\.mirror-pick \.mirror-label\s*\{[^}]*text-overflow:\s*ellipsis", CSS)
+
+
 def test_the_stylesheet_has_no_cyrillic_and_no_words_in_content():
     assert not re.search(r"[А-Яа-яЁё]", CSS)
     values = re.findall(r"(?<![\w-])content\s*:\s*([^;}]+)", CSS)

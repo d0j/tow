@@ -108,7 +108,7 @@
           {% set is_main = (active.get(name) or '').rstrip('/') == h.rstrip('/') %}
           <form method="post" action="/sites/{{ name }}/prefer" class="mirror-pick">
             <input type="hidden" name="host" value="{{ h }}">
-            <button type="submit" class="ghost sm" title="{{ t('sites.make_main') }}" aria-pressed="{{ 'true' if is_main else 'false' }}">{% if p %}<span class="dot {{ 'ok' if p.ok else 'warn' }}" aria-hidden="true"></span><span class="sr-only">{{ t('sites.responds') if p.ok else t('sites.not_responding') }}</span>{% endif %}{{ h.replace('https://','').replace('http://','') }}{% if is_main %} <span class="pill ok">{{ t('sites.main') }}</span>{% endif %}</button>
+            <button type="submit" class="ghost sm" title="{{ t('sites.make_main') }}: {{ h }}" aria-pressed="{{ 'true' if is_main else 'false' }}">{% if p %}<span class="dot {{ 'ok' if p.ok else 'warn' }}" aria-hidden="true"></span><span class="sr-only">{{ t('sites.responds') if p.ok else t('sites.not_responding') }}</span>{% endif %}<span class="mirror-label">{{ h.replace('https://','').replace('http://','') }}</span>{% if is_main %} <span class="pill ok">{{ t('sites.main') }}</span>{% endif %}</button>
           </form>
           {% endfor %}
         </div>

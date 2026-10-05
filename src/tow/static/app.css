@@ -393,12 +393,14 @@ dialog.log-pop .log-box { flex: 1 1 auto; max-height: none; min-height: 0; paddi
 details.row-edit { border-bottom: 1px solid var(--line); }
 details.row-edit > summary { cursor: pointer; list-style: none; }
 details.row-edit > summary::-webkit-details-marker { display: none; }
-.mirror-pick { display: inline-block; margin: .1rem .15rem .1rem 0; }
+.mirror-pick { display: inline-block; max-width: 100%; margin: .1rem .15rem .1rem 0; }
 .mirror-list { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem .8rem; min-width: 0; font-size: 13px; }
 .mirror { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .mirror-choice { margin: .3rem 0 .5rem; }
 .mirror-choice .sub { margin-bottom: .3rem; }
-.mirror-pick button { text-align: left; }
+.mirror-pick button { max-width: 100%; text-align: left; }
+.mirror-pick .mirror-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mirror-pick button > .dot, .mirror-pick button > .pill { flex: 0 0 auto; }
 .edit-panel { padding: .4rem .8rem 1rem; border-top: 1px solid var(--line); background: var(--panel2); }
 .edit-panel .row-three, .edit-panel .row-two { margin-top: .3rem; }
 .full-width { grid-column: 1 / -1; }
