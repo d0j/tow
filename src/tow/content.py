@@ -19,7 +19,7 @@ from tow.errors import TowError
 from tow.paths import tmp_dir
 from tow.selection import normalize_policy
 from tow.store import atomic_create_bytes, master_fernet, persistence_lock
-from tow.torrent import MAX_TORRENT_BYTES, parse_torrent_metadata
+from tow.torrent import MAX_TORRENT_BYTES, TorrentMetadata, parse_torrent_metadata
 
 TTL = 15 * 60
 MAX_CACHE_BYTES = 64 * 1024 * 1024
@@ -135,8 +135,8 @@ def _read(token: str, url: str, client_id: str) -> tuple[bytes, bool]:
         raise TowError("content.expired") from exc
 
 
-def selection(token: str, url: str, client_id: str, indices: object, tracking_mode: str) -> dict[str, Any]:
-    metadata = parse_torrent_metadata(read(token, url, client_id))
+def selection(metadata: TorrentMetadata, indices: object, tracking_mode: str) -> dict[str, Any]:
+    """The browser's chosen ids of a prepared torrent as literal paths and sizes."""
     if not isinstance(indices, list) or not indices or any(type(index) is not int for index in indices):
         raise TowError("selection.exact_invalid")
     wanted = set(indices)

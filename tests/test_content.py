@@ -98,12 +98,12 @@ def test_preparation_is_encrypted_bound_and_does_not_create_topics():
 def test_prepared_selection_rejects_wrong_ids(indices):
     snapshot = content.prepare(blob(), URL, "main")
     with pytest.raises(TowError):
-        content.selection(snapshot["token"], URL, "main", indices, "watch")
+        content.selection(parse_torrent_metadata(content.read(snapshot["token"], URL, "main")), indices, "watch")
 
 
 def test_prepared_selection_uses_server_paths_and_sizes():
     snapshot = content.prepare(blob(), URL, "main")
-    policy = content.selection(snapshot["token"], URL, "main", [0], "watch")
+    policy = content.selection(parse_torrent_metadata(content.read(snapshot["token"], URL, "main")), [0], "watch")
     assert policy["files"] == [{"path": FILES[0].path, "size": 100}]
     assert policy["source_hash"] == snapshot["hash"]
 
@@ -169,7 +169,7 @@ def test_edit_without_new_preparation_preserves_manual_policy():
     from tow.web.routes_topics import _selection_form
 
     original = stored_policy(exact())
-    result = _selection_form("exact", "", "once", "", "", URL, "main", original)
+    result = _selection_form("exact", "", "once", None, "", original)
     assert stored_policy(result) == original
     assert result["tracking_mode"] == "once"
 
@@ -177,9 +177,8 @@ def test_edit_without_new_preparation_preserves_manual_policy():
 def test_manual_form_does_not_accept_paths_from_browser():
     from tow.web.routes_topics import _selection_form
 
-    snapshot = content.prepare(blob(), URL, "main")
     with pytest.raises(TowError):
-        _selection_form("exact", "", "watch", snapshot["token"], json.dumps([{"path": FILES[0].path}]), URL, "main")
+        _selection_form("exact", "", "watch", parse_torrent_metadata(blob()), json.dumps([{"path": FILES[0].path}]))
 
 
 def test_snapshot_restore_is_bound_and_never_fetches_tracker(monkeypatch):
@@ -245,7 +244,7 @@ def test_manual_prepared_add_uses_existing_verified_client_pipeline(monkeypatch,
         "url": URL,
         "save_path": r"M:\TV",
         "client_id": "main",
-        "selection": stored_policy(content.selection(snapshot["token"], URL, "main", [0], "watch")),
+        "selection": stored_policy(content.selection(parse_torrent_metadata(blob()), [0], "watch")),
         "content_token": snapshot["token"],
         "hash": None,
     }
@@ -571,3 +570,28 @@ def test_choose_files_is_offered_without_script_only_to_keep_a_manual_selection(
         select = page.select_one(f"#edit-selection-mode-{tid}")
         assert bool(select.select('option[value="exact"][selected]')) is offered
         assert select["data-exact-option"]
+
+
+def test_add_and_edit_read_the_prepared_torrent_once(monkeypatch):
+    from tow.clients.factory import client_configuration
+    from tow.config import load_config
+    from tow.guess import canon_watch_url
+
+    url = canon_watch_url("http://rutor.info/torrent/1234567/show-a")
+    client_id = str(client_configuration(load_config(), None)["id"])
+    reads = []
+    real = content._read
+    monkeypatch.setattr(content, "_read", lambda *args: reads.append(args) or real(*args))
+    monkeypatch.setattr(services, "run_check", lambda **_kwargs: {"results": []})
+    monkeypatch.setattr("tow.title.guess_topic_title", lambda *_args, **_kwargs: "Show")
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    form = {"url": url, "title": "Show", "save_path": "D:/TV", "selection_mode": "exact", "selection_indices": "[1]"}
+    token = content.prepare(blob(), url, client_id)["token"]
+    client.post("/topics/add", data={**form, "content_token": token}, follow_redirects=False)
+    saved = load_state()["topics"][0]
+    assert saved["content_hash"] == parse_torrent_metadata(blob()).infohash
+    assert saved["selection"]["files"] == [{"path": FILES[1].path, "size": 200}]
+    token = content.prepare(blob(), url, client_id)["token"]
+    client.post(f"/topics/{saved['id']}/edit", data={**form, "content_token": token, "selection_indices": "[0]"})
+    assert load_state()["topics"][0]["selection"]["files"] == [{"path": FILES[0].path, "size": 100}]
+    assert len(reads) == 2, "one decryption per submitted form"
