@@ -173,14 +173,26 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
 
 | Kind | Made | Restore | Holds |
 |---|---|---|---|
-| Night copy | Every night at 03:30, or at start if the last one is older than a day; last 14 kept | Settings → Backups → Nightly backups | settings, topics, history, encrypted passwords |
+| Night copy | Daily schedule (03:30 by default); keep 7 days by default | Settings → Backups → Nightly backups | settings, topics, history, encrypted passwords |
 | Restore point | **Create a backup** in Settings, and automatically before risky changes; last 10 kept | Settings → Backups made by hand | the same |
 | TOW file (`.towx`) | Settings → Backups → TOW file → **Save file** | Same card, **Choose a file** | the same, in one encrypted file |
 | Export | `tow export --output tow.towx` (asks a passphrase, 12+ characters) | `tow import --input tow.towx --apply` | the same, protected by your passphrase |
 
 - None of them contains the master key, downloaded files or the torrent client's own data.
-- Night copies and TOW files are encrypted with the install's **master key** (`keys/master.key`). Restoring them on
-  another computer needs the same key. `tow export` / `tow import` work between installs with different keys.
+- **Night copies are signed, not fully encrypted.** Settings, topics, history and logs remain readable files;
+  saved passwords, tokens and cookies stay encrypted. Keep the backup folder private. TOW files (`.towx`)
+  encrypt the whole copy with the install's **master key** (`keys/master.key`). Checking/restoring a signed
+  night copy or restoring a TOW file on another computer needs the same key. `tow export` / `tow import`
+  work between installs with different keys.
+- **Automatic night copies** can be turned off in Settings → Backups without a restart. Existing copies and
+  manual actions stay available; a copy already running finishes normally. A daily slot missed while the
+  computer was off or asleep is caught up when TOW runs again, not after a fixed 24-hour wait.
+- **Keep night copies, days** accepts a whole number from 1 to 3650; new installations default to 7 days.
+  An existing explicit count-based `backup_keep` policy stays in effect until you save days. Saving the field
+  does not delete copies: retention applies only after a new copy passes verification. The new copy and
+  future-dated copies are protected. An optional size budget can shorten history, but not delete these copies.
+- Both saved-copy lists offer **Check**, **Restore** and **Delete**. Deletion requires confirmation for the
+  dated copy and cannot be undone; it removes only that copy, not current settings, torrents or history.
 - Before any restore TOW checks the copy and saves the current state; network access settings stay as they are.
 - Folders: Settings → Backups → Backup folders. Another drive or a network share (`\\server\share`) is fine.
 

@@ -131,10 +131,15 @@ release's `SHA256SUMS`.
 
 | Backup | Where | Notes |
 |---|---|---|
-| Night copy | `TOW/backup/night/` | daily at 03:30, last 14 |
+| Night copy | `TOW/backup/night/` | daily at 03:30; keep 7 days by default |
 | Restore point | `TOW/data/restore-points/` | before risky changes, last 10 |
 | `.towx` file | where you save it | Settings → Backups; restoring needs the same `master.key` |
 | `tow export` / `tow import` | where you save it | protected by its own passphrase; works across installs |
+
+Settings → Backups lets you change the number of days or turn automatic night copies off,
+and check, restore or delete saved copies. Existing explicit count-based retention is kept until you save days.
+Night copies are signed, not fully encrypted: settings, topics and history remain readable;
+passwords stay encrypted. Keep the backup folder private. [Details](docs/guide.md#backups).
 
 ## Documentation
 
