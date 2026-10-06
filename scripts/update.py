@@ -66,7 +66,7 @@ import sys
 import tarfile
 import time
 import xml.etree.ElementTree as ET
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -240,6 +240,10 @@ def same_path(left: str | Path, right: str | Path) -> bool:
     return norm(left) == norm(right)
 
 
+def _held(_signum: int, _frame: Any) -> None:
+    """An interruption during the switch is let go: the update finishes or rolls back."""
+
+
 def task_info(raw: str | None) -> dict[str, Any] | None:
     """The command and the enabled flag of a task's XML (None: no such task)."""
     if not raw:
@@ -303,6 +307,24 @@ class System:
         code, output = self._run([self.uv, "sync", "--frozen", "--no-dev"], cwd=self.app, env=self.env, timeout=1800)
         if code != 0:
             raise UpdateError(output.strip()[-300:] or f"exit code {code}")
+
+    @contextlib.contextmanager
+    def shielded(self) -> Iterator[None]:
+        """Ctrl+C, Ctrl+Break and a closed terminal wait while the code is switched: the update
+        finishes or rolls back first. A handler, not SIG_IGN, so the programs started meanwhile
+        (uv, tow run) keep the default; a uv cut off by Ctrl+C fails, and that is rolled back."""
+        saved = []
+        for name in ("SIGINT", "SIGBREAK", "SIGHUP"):
+            number = getattr(signal, name, None)
+            if number is not None:
+                with contextlib.suppress(ValueError, OSError):  # not the main thread: nothing to hold
+                    saved.append((number, signal.signal(number, _held)))
+        try:
+            yield
+        finally:
+            for number, handler in saved:
+                with contextlib.suppress(ValueError, OSError, TypeError):
+                    signal.signal(number, handler)
 
     def sleep(self, seconds: float) -> None:
         time.sleep(seconds)
@@ -1055,7 +1077,8 @@ class Update:
         return re.sub(r"\{([a-z_]+)\}", lambda m: str(params.get(m.group(1), m.group(0))), template)
 
     def say(self, key: str, **params: Any) -> None:
-        self._say(self.text(key, **params))
+        with contextlib.suppress(OSError, ValueError):  # a closed terminal must not stop a rollback
+            self._say(self.text(key, **params))
 
     def write_state(self, **fields: Any) -> None:
         self.state.update(fields)
@@ -1336,23 +1359,26 @@ class Update:
             except BaseException:
                 code.discard()  # the code was not switched: an unpacked archive goes
                 raise
-            try:
-                code.switch(target)
+            with self.sys.shielded():
                 try:
-                    self.sys.uv_sync()
-                except UpdateError as exc:
-                    raise UpdateError(self.text("sync_failed", error=exc)) from exc
-                version = self.version()
-                self.write_state(target_version=version)
-                if not self.start_and_check(version):
-                    raise UpdateError(self.text("unhealthy", version=version, seconds=int(self.health_timeout)))
-                if isinstance(code, ArchiveCode):
-                    code.accept_switch()
-                result = "ok"
-            except Exception as exc:  # noqa: BLE001 - a failed step after the switch is rolled back, whatever it was
-                error = str(exc)
-                self.say("failed", error=error, previous=code.short(previous))
-                result = self.roll_back(previous, previous_version)
+                    code.switch(target)
+                    try:
+                        self.sys.uv_sync()
+                    except UpdateError as exc:
+                        raise UpdateError(self.text("sync_failed", error=exc)) from exc
+                    version = self.version()
+                    self.write_state(target_version=version)
+                    if not self.start_and_check(version):
+                        raise UpdateError(self.text("unhealthy", version=version, seconds=int(self.health_timeout)))
+                    if isinstance(code, ArchiveCode):
+                        code.accept_switch()
+                    result = "ok"
+                except BaseException as exc:  # whatever cut the switch off, Ctrl+C too, is rolled back
+                    error = str(exc) or type(exc).__name__
+                    self.say("failed", error=error, previous=code.short(previous))
+                    result = self.roll_back(previous, previous_version)
+                    if not isinstance(exc, Exception):
+                        raise  # after the rollback: an interruption still ends the run
         except Exception as exc:  # noqa: BLE001 - the update boundary: any failure is reported and recorded in update-state.json
             error = str(exc)
             self.say("aborted", error=error)
