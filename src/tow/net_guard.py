@@ -11,6 +11,23 @@ from urllib.parse import urlsplit
 import httpcore
 import httpx
 
+# IPv6 forms that carry an IPv4 address in their last 32 bits: IPv4-compatible (::127.0.0.1) and
+# the NAT64 well-known prefix (64:ff9b::192.168.1.1), which a NAT64 gateway turns into it.
+_EMBEDDED_IPV4 = (ipaddress.IPv6Network("::/96"), ipaddress.IPv6Network("64:ff9b::/96"))
+
+
+def is_public(value: str) -> bool:
+    """``value`` (an IP address, maybe with a %zone) is a public internet address. An IPv6
+    address that carries an IPv4 one (mapped, compatible, NAT64) is judged by that IPv4 address.
+    Raises ValueError for text that is not an address."""
+    address = ipaddress.ip_address(value.split("%", 1)[0])
+    if isinstance(address, ipaddress.IPv6Address):
+        if address.ipv4_mapped is not None:
+            address = address.ipv4_mapped
+        elif any(address in network for network in _EMBEDDED_IPV4) and int(address) & 0xFFFFFFFF:
+            address = ipaddress.IPv4Address(int(address) & 0xFFFFFFFF)
+    return address.is_global
+
 
 def public_addresses(host: str, port: int) -> list[str]:
     """All DNS answers must be global; an absent or mixed answer fails closed."""
@@ -22,7 +39,7 @@ def public_addresses(host: str, port: int) -> list[str]:
     if not addresses:
         raise httpcore.ConnectError("the host has no usable address")
     try:
-        if any(not ipaddress.ip_address(value.split("%", 1)[0]).is_global for value in addresses):
+        if not all(is_public(value) for value in addresses):
             raise httpcore.ConnectError("the host resolves to a non-public address")
     except ValueError as exc:
         raise httpcore.ConnectError("the host has an invalid address") from exc

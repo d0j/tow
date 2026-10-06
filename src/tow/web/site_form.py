@@ -3,13 +3,13 @@ allowed), the site name, paths and regular expressions."""
 
 from __future__ import annotations
 
-import ipaddress
 import re
 import socket
 from urllib.parse import urlparse
 
 from tow.config import as_bool
 from tow.mirrors import origin_key
+from tow.net_guard import is_public
 from tow.trackers.generic import validate_tracker_regex
 from tow.web import services
 from tow.web.text import t
@@ -38,7 +38,7 @@ def internal_host(hostname: str) -> bool:
     if name == "localhost" or name.endswith((".localhost", ".local", ".internal", ".lan", ".home.arpa")):
         return True
     try:
-        return not ipaddress.ip_address(name).is_global
+        return not is_public(name)
     except ValueError:
         pass
     addresses = _resolve_addresses(name)
@@ -46,7 +46,7 @@ def internal_host(hostname: str) -> bool:
         return True  # an unresolved host must not become private after it was saved
     for address in addresses:
         try:
-            if not ipaddress.ip_address(address.split("%", 1)[0]).is_global:
+            if not is_public(address):
                 return True
         except ValueError:
             continue
