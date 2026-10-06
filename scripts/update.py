@@ -73,7 +73,10 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener
 
-APP = Path(__file__).resolve().parents[1]
+HERE = Path(__file__).resolve()
+# <TOW>/app/scripts/update.py, or the copy an archive switch keeps at <TOW>/runtime/update.py: the
+# start files run that copy while a switch is unfinished, when app/scripts may be gone.
+APP = HERE.parents[1] / "app" if HERE.parent.name == "runtime" else HERE.parents[1]
 # Where an install without git gets its releases (the source archive and SHA256SUMS of a tag).
 GITHUB = "https://github.com"
 REPO = "d0j/tow"
@@ -929,7 +932,8 @@ class ArchiveCode:
         del target
         stable = self.work.root / "runtime" / "update.py"
         stable.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(Path(__file__), stable)  # callable even if app/scripts disappears mid-switch
+        if stable.resolve() != HERE:  # not when this is that copy, run by the start files
+            shutil.copy2(HERE, stable)  # callable even if app/scripts disappears mid-switch
         remove_tree(self.prev)  # one previous version is kept
         self.prev.mkdir()
         self.moved_out, self.moved_in = [], []
