@@ -1162,8 +1162,6 @@ def _entry(manifest: dict[str, Any], member: str) -> dict[str, Any]:
         (lambda m: m["targets"].pop(), "target list is invalid"),
         (lambda m: m["targets"].append(dict(m["targets"][0])), "target list is invalid"),
         (lambda m: m["targets"].append("junk"), "malformed import checkpoint target"),
-        (lambda m: _entry(m, "state.json").update(target=""), "import checkpoint target is missing"),
-        (lambda m: _entry(m, "state.json").update(target=__file__), "import checkpoint target mismatch: state.json"),
         (lambda m: _entry(m, "state.json").update(exists="yes"), "exists flag is invalid"),
         (lambda m: _entry(m, "state.json").update(sha256="0" * 64), "checksum mismatch: state.json"),
         (lambda m: _entry(m, "state.json").update(sha256="NOT-HEX"), "checksum mismatch: state.json"),
@@ -1221,6 +1219,49 @@ def test_copied_checkpoint_cannot_be_applied_from_its_new_location(applied):
     with pytest.raises(ExportImportError, match="import transaction checkpoint mismatch"):
         rollback_import(copy, apply=True)
     assert _targets() == applied["after"]
+
+
+def test_recorded_target_path_never_redirects_a_rollback(applied, tmp_path):
+    elsewhere = tmp_path / "elsewhere" / "state.json"
+    _rewrite_json(applied["checkpoint"] / "MANIFEST.json", lambda m: _entry(m, "state.json").update(target=""))
+    _rewrite_json(
+        applied["checkpoint"] / "MANIFEST.json", lambda m: _entry(m, "config.yaml").update(target=str(elsewhere))
+    )
+
+    rollback_import(applied["checkpoint"], apply=True)
+
+    assert _targets() == applied["before"]
+    assert not elsewhere.exists()
+
+
+def test_interrupted_import_recovers_after_the_install_moved(tmp_path, monkeypatch):
+    before = _seed_destination()
+    bundle = _bundle(tmp_path / "in" / "tow.towx")
+
+    def power_loss(*_args, **_kwargs):
+        raise KeyboardInterrupt  # stands in for a crash between the checkpoint and the commit
+
+    with monkeypatch.context() as patch:
+        patch.setattr(tow_bundle, "save_secrets", power_loss)
+        with pytest.raises(KeyboardInterrupt):
+            import_bundle(bundle, PASS, apply=True)
+    checkpoint = next(_checkpoints_root().iterdir())
+    assert _transaction(checkpoint)["status"] == "prepared"
+    # The install moves (another drive letter, a renamed folder): every recorded path is stale.
+    moved = tmp_path / "moved install"
+    shutil.copytree(data_dir(), moved / "data", ignore=shutil.ignore_patterns("*.lock"))
+    shutil.copy2(config_path(), moved / "config.yaml")
+    monkeypatch.setenv("TOW_HOME", str(moved / "data"))
+    monkeypatch.setenv("TOW_CONFIG", str(moved / "config.yaml"))
+
+    save_state({"topics": [{"id": "after-move"}], "mirrors": {}})
+
+    moved_checkpoint = _checkpoints_root() / checkpoint.name
+    assert _transaction(moved_checkpoint)["status"] == "rolled_back"
+    assert json.loads(state_path().read_text(encoding="utf-8"))["topics"] == [{"id": "after-move"}]
+    assert config_path().read_bytes() == before["config"]
+    assert load_secrets() == {"qbittorrent": {"password": "old-secret"}}
+    assert prune_import_checkpoints(keep=0) == 1
 
 
 def test_rollback_refuses_a_target_replaced_by_a_directory(applied):
