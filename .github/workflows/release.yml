@@ -8,7 +8,8 @@ name: release
 #   install.sh            curl -LsSf .../releases/latest/download/install.sh | sh
 #   tow-source.tar.gz     GitHub's source archive of the tag (what install.sh and updates use)
 #   SHA256SUMS            the SHA-256 of every file above
-# Nothing is uploaded unless the bundle and both installers passed on the runners.
+# Nothing is uploaded unless the bundle, both installers and the update of the latest published
+# release to this tag (scripts/update-smoke.py) passed on the runners.
 
 on:
   push:
@@ -130,9 +131,44 @@ jobs:
       - name: Install, start with the start file, check, stop, uninstall
         run: sh scripts/install-smoke.sh "$PWD/tow-source.tar.gz" 18877
 
+  # The same job as in installers.yml: the latest published release is updated to this tag's
+  # source archive by the real updater, once to a broken copy that must roll back.
+  update:
+    name: update (${{ matrix.os }})
+    needs: [gate, source]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: source
+      - name: The previous release's files
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view --json tagName --jq '"previous release: " + .tagName'
+          if [ "$RUNNER_OS" = Windows ]; then set -- TOW-windows-x64.zip; else set -- install.sh tow-source.tar.gz; fi
+          for name in SHA256SUMS "$@"; do
+            gh release download --dir "$RUNNER_TEMP/previous" --pattern "$name"
+          done
+      - name: Update it to this tag (a broken copy rolls back), with the old and the new updater
+        shell: bash
+        run: uv run --no-project python scripts/update-smoke.py --previous "$RUNNER_TEMP/previous" --source tow-source.tar.gz
+
   publish:
     name: upload to the release
-    needs: [gate, source, windows, posix]
+    needs: [gate, source, windows, posix, update]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

@@ -688,6 +688,14 @@ Built so far (this workstream):
 - CI (`.github/workflows/ci.yml`): the full gate runs on Windows, Ubuntu and macOS for every push
   and pull request, and all three must pass (green since 1.21.0); the dependency audit runs on one
   of them (uv.lock is the same everywhere).
+- Installers (`.github/workflows/installers.yml`): on pull requests that touch `scripts/`,
+  `install/`, the updater or the dependencies, weekly and by hand, the Windows bundle is built from
+  the commit and tested as on a tag (below), and `scripts/update-smoke.py` updates the latest
+  published release (the bundle on Windows, install.sh on Ubuntu) to the commit's source archive
+  with the real updater (`--source`/`--sums`): a broken copy that changes `data/` and cannot start
+  must be rolled back (code, data, version), then the update itself must answer as the new
+  version with `data/`, the key and `config.yaml` kept; the same once more with the new updater,
+  and once with the copy it leaves in `runtime/update.py`.
 - Releases (`.github/workflows/release.yml`, 1.22): a `v*` tag (or a dispatch with a tag) takes
   GitHub's source archive of the tag (its version must be the tag's); Windows builds the bundle
   from it and runs `scripts/bundle-smoke.ps1 -Offline` (unpacked into a path with a space and
@@ -696,7 +704,8 @@ Built so far (this workstream):
   unchanged) and `scripts/install-smoke.ps1` (`install.ps1` on Windows PowerShell 5.1 with
   uninstall, a reinstall around the data and purge); Ubuntu and
   macOS run `scripts/install-smoke.sh` (install.sh from the archive, the start and stop files,
-  uninstall, purge, nothing outside). Only then the `publish` job (the only one with
+  uninstall, purge, nothing outside); the update test above runs against the tag. Only then the
+  `publish` job (the only one with
   `contents: write`) creates the release if it is missing (notes from CHANGELOG.md; existing
   notes are never changed) and uploads `TOW-windows-x64.zip`, `install.ps1`, `install.sh`,
   `tow-source.tar.gz` and `SHA256SUMS` with `gh`.
