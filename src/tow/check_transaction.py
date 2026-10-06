@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import stat
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
@@ -10,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from tow.paths import data_dir, download_history_path, state_path
+from tow.platform import is_link_like
 from tow.store import atomic_write_bytes, decode_json_bytes, persistence_lock
 
 _FORMAT = "tow-check-transaction/v1"
@@ -32,15 +32,12 @@ def _root() -> Path:
 
 
 def _is_link(path: Path) -> bool:
-    if path.is_symlink():
-        return True
     try:
-        attributes = getattr(path.lstat(), "st_file_attributes", 0)
+        return is_link_like(path.lstat())
     except FileNotFoundError:
         return False
     except OSError as exc:
         raise CheckTransactionError(f"cannot inspect check path: {path.name}") from exc
-    return bool(attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
 
 
 def _marker(root: Path) -> Path:

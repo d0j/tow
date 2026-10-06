@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import logging
 import re
-import stat
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,6 +15,7 @@ from tow.diagnostic_json import encode_object, read_object
 from tow.i18n import t
 from tow.log import log_event, owner_language
 from tow.paths import data_dir
+from tow.platform import is_link_like, is_plain_file
 from tow.store import SecretStoreError, atomic_write_text, derive_local_secret, persistence_lock
 
 RESTORE_POINT_LIMIT = 10
@@ -105,7 +105,7 @@ def cleanup_status(*, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
             info = path.lstat()
         except FileNotFoundError:
             return result  # no observation yet, or an observation that disappeared
-        if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        if not is_plain_file(info):
             raise ValueError("cleanup record is not a regular file")
         state = read_object(path)
         if type(state.get("cleanup_pending")) is not bool or not isinstance(state.get("location"), str):
@@ -161,12 +161,11 @@ def _portable_passphrase() -> str:
         raise RestorePointError(t("backup.restore_point.master_key", owner_language()), kind=MASTER_KEY) from exc
 
 
-def _is_reparse_point(path: Path) -> bool:
+def _is_link(path: Path) -> bool:
     try:
-        attributes = getattr(path.lstat(), "st_file_attributes", 0)  # Windows only
+        return is_link_like(path.lstat())
     except OSError:
         return False
-    return bool(attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
 
 
 def point_path(point_id: str, *, must_exist: bool = True, cfg: dict[str, Any] | None = None) -> Path:
@@ -174,7 +173,7 @@ def point_path(point_id: str, *, must_exist: bool = True, cfg: dict[str, Any] | 
         raise RestorePointError(t("backup.restore_point.unknown", owner_language()), kind=UNKNOWN_POINT)
     root = restore_points_dir(cfg=cfg).resolve()
     path = root / f"{point_id}.towx"
-    if path.parent.resolve() != root or path.is_symlink() or _is_reparse_point(path):
+    if path.parent.resolve() != root or _is_link(path):
         raise RestorePointError(t("backup.restore_point.unsafe", owner_language()), kind=UNKNOWN_POINT)
     if must_exist and (not path.is_file() or path.stat().st_size <= 0):
         raise RestorePointError(t("backup.restore_point.missing", owner_language()), kind=UNKNOWN_POINT)
@@ -183,7 +182,7 @@ def point_path(point_id: str, *, must_exist: bool = True, cfg: dict[str, Any] | 
 
 def _point_view(path: Path) -> dict[str, Any] | None:
     match = _ID_RE.fullmatch(path.stem)
-    if match is None or path.suffix != ".towx" or path.is_symlink() or _is_reparse_point(path) or not path.is_file():
+    if match is None or path.suffix != ".towx" or _is_link(path) or not path.is_file():
         return None
     try:
         size = path.stat().st_size
@@ -204,7 +203,7 @@ def _point_view(path: Path) -> dict[str, Any] | None:
 
 def list_restore_points() -> list[dict[str, Any]]:
     root = restore_points_dir()
-    if not root.is_dir() or root.is_symlink() or _is_reparse_point(root):
+    if not root.is_dir() or _is_link(root):
         return []
     points = []
     try:
@@ -255,7 +254,7 @@ def _create_restore_point(*, protected: set[str] | None = None) -> dict[str, Any
         raise RestorePointError(
             t("backup.restore_point.cannot_create_dir", owner_language()), kind=CREATE_FAILED
         ) from exc
-    if root.is_symlink() or _is_reparse_point(root):
+    if _is_link(root):
         raise RestorePointError(t("backup.restore_point.unsafe_dir", owner_language()), kind=CREATE_FAILED)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     point_id = f"{stamp}-{uuid.uuid4().hex[:8]}"

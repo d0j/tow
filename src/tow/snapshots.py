@@ -39,6 +39,7 @@ from tow.diagnostic_json import check_epochs, check_types, encode_object, read_o
 from tow.i18n import t
 from tow.log import locked_log_path, log_event, log_path, owner_language
 from tow.paths import config_path, data_dir, download_history_path, state_path
+from tow.platform import is_plain_dir, is_plain_file
 from tow.store import (
     SecretStoreError,
     StateVersionError,
@@ -96,7 +97,7 @@ def status() -> dict[str, Any]:
     """Last success and last failure of a night copy (for the watchdog and Settings)."""
     try:
         info = status_path().lstat()
-        if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        if not is_plain_file(info):
             raise ValueError("backup record is not a regular file")
         value = read_object(status_path())
         check_epochs(value, ("last_ok_at", "last_error_at"))
@@ -1172,7 +1173,7 @@ def _ordinary_directory(path: Path, *, missing: bool = False) -> bool:
         if missing:
             return False
         raise
-    if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+    if not is_plain_dir(info):
         raise ValueError("night-copy restore directory is unsafe")
     return True
 
@@ -1184,7 +1185,7 @@ def _ordinary_file(path: Path, *, missing: bool = False) -> bool:
         if missing:
             return False
         raise
-    if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+    if not is_plain_file(info):
         raise ValueError("night-copy restore file is unsafe")
     return True
 

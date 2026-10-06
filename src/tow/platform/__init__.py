@@ -11,6 +11,7 @@ Every probe fails soft: an unknown fact is ``None`` / ``[]`` / ``False``, never 
 from __future__ import annotations
 
 import os
+import stat
 import sys
 import threading
 from collections.abc import Iterable, Iterator, Sequence
@@ -139,6 +140,24 @@ def use(backend: Backend) -> Iterator[Backend]:
         _injected = previous
 
 
+def is_link_like(info: os.stat_result) -> bool:
+    """``info`` (from ``lstat``) is a symbolic link, or on Windows any reparse point (a junction,
+    a mount point): an entry that may lead somewhere else, never followed or trusted as data."""
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    )
+
+
+def is_plain_file(info: os.stat_result) -> bool:
+    """``info`` (from ``lstat``) is a regular file and not a link of any kind."""
+    return stat.S_ISREG(info.st_mode) and not is_link_like(info)
+
+
+def is_plain_dir(info: os.stat_result) -> bool:
+    """``info`` (from ``lstat``) is a directory and not a link, junction or mount point."""
+    return stat.S_ISDIR(info.st_mode) and not is_link_like(info)
+
+
 PRIVATE_UMASK = 0o077
 
 
@@ -186,6 +205,9 @@ __all__ = [
     "Backend",
     "backend_for",
     "current",
+    "is_link_like",
+    "is_plain_dir",
+    "is_plain_file",
     "is_windows",
     "private_folders",
     "set_backend",

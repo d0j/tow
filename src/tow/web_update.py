@@ -6,7 +6,6 @@ import json
 import math
 import os
 import re
-import stat
 import sys
 import time
 import uuid
@@ -38,9 +37,7 @@ def _safe_file(path: Path) -> bool:
         info = path.lstat()
     except OSError:
         return False
-    return stat.S_ISREG(info.st_mode) and not (
-        getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
-    )
+    return platform.is_plain_file(info)
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -126,8 +123,7 @@ def _lease_active(job_id: str) -> bool:
     try:
         info = folder.lstat()
         if (
-            not stat.S_ISDIR(info.st_mode)
-            or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+            not platform.is_plain_dir(info)
             or folder.resolve() != _job_file().parent.resolve() / job_id
             or not _safe_file(path)
             or path.stat().st_size != 1
