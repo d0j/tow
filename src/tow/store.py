@@ -20,7 +20,7 @@ from tow.errors import TowError
 
 if TYPE_CHECKING:
     from cryptography.fernet import Fernet
-from tow.paths import data_dir, download_history_path, key_file, legacy_key_file, secrets_path
+from tow.paths import data_dir, download_history_path, explicit_key_file, key_file, legacy_key_file, secrets_path
 from tow.paths import state_path as state_path  # noqa: PLC0414 - re-exported: the web package imports it from here
 from tow.platform import current as current_platform
 from tow.platform import locks
@@ -407,22 +407,10 @@ def secret_undo_path() -> Path:
 
 def _explicit_key_file() -> Path | None:
     """TOW_MASTER_KEY_FILE (a relative path is inside the data folder), or None."""
-    value = os.environ.get("TOW_MASTER_KEY_FILE", "").strip()
-    if not value:
-        return None
-    path = Path(value)
-    if path.is_absolute():
-        return path
-    if path.anchor:
-        raise InvalidMasterKeyPathError("store.key_path_outside_data")
     try:
-        base = data_dir().resolve()
-        resolved = (base / path).resolve()
-    except (OSError, RuntimeError) as exc:
+        return explicit_key_file()
+    except ValueError as exc:
         raise InvalidMasterKeyPathError("store.key_path_outside_data") from exc
-    if not resolved.is_relative_to(base):
-        raise InvalidMasterKeyPathError("store.key_path_outside_data")
-    return resolved
 
 
 def _install_key_file() -> Path | None:

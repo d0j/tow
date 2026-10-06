@@ -78,12 +78,11 @@ class Install:
 
     @classmethod
     def current(cls) -> Install:
-        from tow.paths import repo_root
+        from tow.paths import repo_root, user_home
+        from tow.platform import user_id, user_name
         from tow.supervisor.layout import install_root
 
-        uid = os.getuid() if hasattr(os, "getuid") else 0
-        user = os.environ.get("USER") or os.environ.get("USERNAME") or ""
-        return cls(root=install_root(), app=repo_root(), home=Path.home(), user=user, uid=uid)
+        return cls(root=install_root(), app=repo_root(), home=user_home(), user=user_name(), uid=user_id())
 
     @property
     def is_runtime(self) -> bool:

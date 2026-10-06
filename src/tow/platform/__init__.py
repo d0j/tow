@@ -140,6 +140,17 @@ def use(backend: Backend) -> Iterator[Backend]:
         _injected = previous
 
 
+def user_id() -> int:
+    """This account's numeric user id on Linux and macOS (launchd's ``gui/<uid>``); 0 on Windows."""
+    getuid = getattr(os, "getuid", None)
+    return int(getuid()) if getuid is not None else 0
+
+
+def user_name() -> str:
+    """This account's login name as the session says it (``USER``, Windows ``USERNAME``); "" unknown."""
+    return os.environ.get("USER") or os.environ.get("USERNAME") or ""
+
+
 def is_link_like(info: os.stat_result) -> bool:
     """``info`` (from ``lstat``) is a symbolic link, or on Windows any reparse point (a junction,
     a mount point): an entry that may lead somewhere else, never followed or trusted as data."""
@@ -214,4 +225,6 @@ __all__ = [
     "this_os",
     "use",
     "use_private_files",
+    "user_id",
+    "user_name",
 ]

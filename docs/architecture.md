@@ -295,6 +295,8 @@ Stable names other modules build on.
 | `data_dir()` | `TOW_HOME`, else `<root>/data` | yes |
 | `config_path()` | `TOW_CONFIG`, else `<root>/config.yaml` (must exist) | no |
 | `keys_dir()` / `key_file()` | `<root>/keys` / `<root>/keys/master.key` | no |
+| `explicit_key_file()` | `TOW_MASTER_KEY_FILE`: absolute as given, relative inside `<data>` (else refused) | no |
+| `user_home()` | the owner's home folder: only the autostart entry is written there, on request | no |
 | `tmp_dir()` | `<data>/tmp` | yes |
 | `logs_dir()` | `<data>/logs` | yes |
 | `run_dir()` | `<data>/run` (pid, lock, `control/`) | yes |
@@ -335,3 +337,4 @@ Stable names other modules build on.
   regular file or folder and no link, or one that is a link or a Windows reparse point (junction,
   mount point). Every such check goes through them; only `update_worker.py` and
   `scripts/update.py` keep their own copy (standard library only).
+- `user_id()`, `user_name()` — this account's numeric id (POSIX; 0 on Windows) and login name.
