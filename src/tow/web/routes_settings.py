@@ -5,8 +5,11 @@ interval and help. The messengers are in ``routes_notifiers``, copies of the dat
 from __future__ import annotations
 
 import copy
+import ipaddress
+import re
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -352,9 +355,13 @@ def settings_client(
     undo_secrets = copy.deepcopy(s)
     old_sec = interval_sec_of(cfg)
     try:
-        port_number = int(port or spec.default_port)
+        port_number = int(port.strip() or spec.default_port)
     except ValueError:
+        port_number = 0
+    if not 1 <= port_number <= 65535:
         return flash_redirect("/settings?open=clients", "web.settings.bad_port", "err")
+    if host.strip() and not _client_host_ok(host.strip()):
+        return flash_redirect("/settings?open=clients", "web.settings.bad_client_host", "err")
     q = client_secret_block(cfg, s, str(configuration["id"]), ensure=True)
     endpoint_changed = (str(q.get("host") or "").strip(), q.get("port"), str(q.get("username") or "").strip()) != (
         host.strip(),
@@ -378,6 +385,32 @@ def settings_client(
         return refused
     services.log_event("settings_client", client_id=configuration["id"], client_kind=selected_kind, how="manual")
     return flash_redirect("/settings?open=clients", "web.common.saved", "ok")
+
+
+_HOST_LABEL = re.compile(r"(?!-)[a-z0-9_-]{1,63}(?<!-)")
+_CLIENT_PATH = re.compile(r"(/[A-Za-z0-9._~%+-]+)*/?")
+
+
+def _client_host_ok(value: str) -> bool:
+    """A client's Web UI address: a computer name or an IP address, optionally with http(s)://,
+    a port and a path (a client behind a proxy) - never markup, spaces or ``..``."""
+    try:
+        parsed = urlparse(value if "://" in value else f"http://{value}")
+        name = parsed.hostname or ""
+        _ = parsed.port  # a port that is not a number raises
+        ascii_name = name.encode("idna").decode("ascii")
+    except UnicodeError, ValueError:
+        return False
+    if parsed.scheme not in {"http", "https"} or parsed.username or parsed.password or parsed.query:
+        return False
+    if parsed.fragment or ".." in parsed.path.split("/") or not _CLIENT_PATH.fullmatch(parsed.path):
+        return False
+    try:
+        ipaddress.ip_address(name)
+    except ValueError:
+        labels = ascii_name.rstrip(".").split(".")
+        return len(ascii_name) <= 253 and all(_HOST_LABEL.fullmatch(label) for label in labels)
+    return True
 
 
 @router.post("/settings/client/ping")
@@ -420,15 +453,12 @@ def settings_interval(interval_min: str = Form("60"), flash_ttl_min: str = Form(
     old_sec = interval_sec_of(cfg_before)
     old_ttl_sec = flash_ttl(cfg_before.get("flash_ttl_sec"))
     try:
-        requested = int(interval_min)
+        requested, requested_ttl = int(interval_min.strip()), int(flash_ttl_min.strip())
     except ValueError:
-        requested = 60
+        # Nothing is guessed: "abc" or "1.5" is refused, not silently replaced by a default.
+        return flash_redirect("/settings?open=intervals", "web.settings.bad_minutes", "err")
     minutes = max(INTERVAL_MIN_MINUTES, min(INTERVAL_MAX_MINUTES, requested))
     new_sec = minutes * 60
-    try:
-        requested_ttl = int(flash_ttl_min)
-    except ValueError:
-        requested_ttl = 1
     ttl_min = max(1, min(30, requested_ttl))
     # D3: a clamped value is said, not silently replaced.
     clamped = []
@@ -440,6 +470,9 @@ def settings_interval(interval_min: str = Form("60"), flash_ttl_min: str = Form(
         clamped.append(t("web.settings.clamped_messages", minutes=ttl_min))
     clamp_note = t("web.settings.clamp_note", items=", ".join(clamped)) if clamped else ""
     if new_sec == old_sec and ttl_min * 60 == old_ttl_sec:
+        if clamped:  # 5000 minutes is 1440, which it already was: say so, not only "no changes"
+            kept = t("web.settings.clamp_kept", items=", ".join(clamped))
+            return flash_redirect("/settings?open=intervals", t("web.common.no_changes") + kept, "warn")
         return flash_redirect("/settings?open=intervals", "web.common.no_changes", "ok")
     state = services.load_state()
     undo_secrets = copy.deepcopy(services.load_secrets())
