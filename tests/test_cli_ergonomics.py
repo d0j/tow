@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+from datetime import datetime
 
 import pytest
 
@@ -98,6 +99,19 @@ def test_status_is_one_line_and_json(monkeypatch, capsys):
     assert data["running"] is False
     assert data["autostart"] is True
     assert data["client"] == "qBittorrent"
+
+
+def test_status_writes_the_last_and_the_next_check_the_same_way(monkeypatch, capsys):
+    from tow.i18n import format_datetime
+    from tow.store import save_state
+
+    monkeypatch.setattr("tow.autostart.backend", lambda: type("B", (), {"status": lambda self: {"on": True}})())
+    save_state({"topics": [], "health": {"at": "2026-10-06 22:30:56", "at_ts": 1, "check_ok": True}})
+    assert cli.main(["status"]) == 0
+    line = capsys.readouterr().out
+
+    assert "2026-10-06 22:30:56" not in line
+    assert format_datetime(datetime.fromisoformat("2026-10-06T22:30:56")) in line
 
 
 def test_access_on_asks_for_a_password_when_none_is_set(monkeypatch, capsys):

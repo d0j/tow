@@ -17,7 +17,7 @@
     "global_title": "Global check timer"
   },
   "yaml_limits": {
-    "size": "The YAML settings file is too large (maximum 16 MiB). Processing was stopped.",
+    "size": "The YAML settings file is too large (maximum 16 MB). Processing was stopped.",
     "nodes": "The YAML settings expand to too many items (maximum 100,000). Simplify repeated references. Processing was stopped.",
     "text": "The YAML settings expand to too much text (maximum 16,777,216 characters). Simplify repeated references. Processing was stopped.",
     "depth": "The YAML settings are nested too deeply (maximum 32 levels, including references). Processing was stopped.",
@@ -77,7 +77,7 @@
       "unknown": "unknown night copy",
       "cannot_write": "cannot write the night copy: {reason}",
       "manifest_unreadable": "the copy's file list (MANIFEST.json) is missing or unreadable",
-      "manifest_too_large": "the copy's file list (MANIFEST.json) exceeds 1 MiB",
+      "manifest_too_large": "the copy's file list (MANIFEST.json) exceeds 1 MB",
       "record_size": "restore metadata exceeds the permitted size",
       "record_type": "restore metadata must be a regular file, not a link or special file",
       "record_changed": "restore metadata changed while it was being read",
@@ -337,7 +337,7 @@
       "serve": "serve the web page alone (tow run does it together with the schedule)",
       "serve_host": "the address to listen on (default: bind in config.yaml)",
       "serve_port": "the port (default: port in config.yaml, 8787)",
-      "serve_log": "write the web server's log to this file (rotated, 5 MiB x 3)",
+      "serve_log": "write the web server's log to this file (rotated, 5 MB x 3)",
       "access": "network access from other devices: on, off or status",
       "access_long": "Network access from a phone or a laptop, for a computer without a screen. \"on\" needs a password: it is asked here when none is set (or with --password). The change takes effect after `tow restart`.",
       "access_action": "on: open TOW to the home network (with the password); off: this computer only; status: what is set",
@@ -661,7 +661,7 @@
     "search_label": "Search the history",
     "search_placeholder": "topic, site, file…",
     "empty": "Nothing found.",
-    "note": "Shows up to 300 latest events from the log (5 files of 5 MiB).",
+    "note": "Shows up to 300 latest events from the log (5 files of 5 MB).",
     "no_events": "No events yet. Checks, downloads and changes appear here."
   },
   "home": {
@@ -1345,7 +1345,7 @@
     "js": {
       "loading": "Getting metadata; no media download is started…",
       "magnet_loading": "Getting metadata through the selected client's peer network; no media download is started…",
-      "count": "Selected: {count} files · {size}",
+      "count": "Files selected: {count} · {size}",
       "rule": "Files matched: {count} · {size}",
       "rule_loading": "Checking the rule…",
       "page": "Page {page} of {pages}",
@@ -1532,7 +1532,7 @@
       "automatic_hint": "Applies without restarting TOW. Turning this off keeps existing copies and manual actions; an already running copy finishes normally.",
       "retention_days_label": "Keep night copies, days",
       "retention_note": "Older night copies are removed only after a new copy passes verification. The new copy, the three newest earlier copies (whatever their age) and copies with future dates are kept. Default: 7 days. Free space for a complete copy and a reserve is checked before writing.",
-      "retention_legacy": "Currently the legacy rule keeps {count} copies. Saving this field switches to retention by days.",
+      "retention_legacy": "Currently the legacy rule applies (copies kept: {count}). Saving this field switches to retention by days.",
       "delete_warning": "Only this backup will be permanently deleted. Current settings, torrents, history and other backups stay unchanged. This cannot be undone.",
       "manual_restore_confirm": "Restore the settings and history from this backup? TOW saves its current state automatically before replacing it.",
       "manual_empty": "No saved backups.",
