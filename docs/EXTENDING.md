@@ -40,6 +40,8 @@ Every client follows the same read-back contract. Transmission and Deluge use th
 
 1. Subclass `ManagedClient` and implement only the primitives: `ping`, `inspect_torrent`, `_add_stopped`,
    `_set_wanted`, `_stop`, `_start`, `_set_labels`, `_move` and, if the client can, `materialize_magnet`.
+   Override `_owner_tags` with a query that reads only the torrent's labels: the owner mark is re-read
+   before every mutation, and the default reads the whole torrent through `inspect_torrent`.
 2. Declare optional abilities in `capabilities` (names in `CAPABILITIES`), never by leaving a method out: a client
    without magnet support sets `magnet_metadata: False` and its `materialize_magnet` refuses.
    Graphical metadata preview is a separate `metadata_preview` capability and `preview_magnet`

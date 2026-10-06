@@ -128,6 +128,25 @@ def test_foreign_torrent_mutations_are_refused(monkeypatch, operation):
     assert api.calls == []
 
 
+def test_ownership_checks_read_one_row_without_the_file_list(monkeypatch):
+    api = _SelectionAPI()
+    api.present = True
+    api.state = "downloading"
+    api.tags = "tow"
+    file_lists = []
+    real_files = api.torrents_files
+    monkeypatch.setattr(api, "torrents_files", lambda **kwargs: file_lists.append(1) or real_files(**kwargs))
+    api.torrents_set_location = lambda **_kwargs: api.calls.append("move")
+    monkeypatch.setattr(qbittorrent, "Client", lambda **_kwargs: api)
+    client = qbittorrent.QBittorrentClient("http://qbit", 8080, "user", "password")
+    infohash = parse_torrent_metadata(TORRENT).client_hash
+    assert client.set_location(infohash, "E:/moved") == "ok"
+    assert file_lists == [], "an ownership check must not read the whole file list"
+    client.configure_torrent_selection(TORRENT, infohash, [1])
+    # Selection read-backs only: before, after the priorities, and the start confirmation.
+    assert len(file_lists) <= 5, len(file_lists)
+
+
 def test_partial_readback_cannot_confirm_skipped_files(monkeypatch):
     api = _SelectionAPI()
     api.present = True

@@ -54,6 +54,10 @@ _FIELDS = [
 _STATES = {1: "checkingDL", 2: "checkingDL", 3: "queuedDL", 4: "downloading", 5: "queuedUP", 6: "uploading"}
 
 
+def _labels(row: dict[str, Any]) -> list[str]:
+    return sorted({str(label) for label in row.get("labels") or [] if str(label).strip()})
+
+
 def base_url(host: str, port: int) -> str:
     host = host.strip().rstrip("/")
     if "://" not in host:
@@ -127,13 +131,17 @@ class TransmissionClient(ManagedClient):
             raise self._fail("client.transmission.too_old", version=str(info.get("version")))
         return f"{info.get('version')} rpc {rpc}"
 
-    def _get(self, infohash: str) -> dict[str, Any] | None:
-        rows = self._rpc("torrent-get", ids=[infohash.lower()], fields=_FIELDS).get("torrents") or []
+    def _get(self, infohash: str, fields: list[str] = _FIELDS) -> dict[str, Any] | None:
+        rows = self._rpc("torrent-get", ids=[infohash.lower()], fields=fields).get("torrents") or []
         wanted = infohash.casefold()
         for row in rows:
             if str(row.get("hashString") or "").casefold() == wanted:
                 return cast(dict[str, Any], row)
         return None
+
+    def _owner_tags(self, infohash: str) -> list[str] | None:
+        row = self._get(infohash, ["hashString", "labels"])
+        return None if row is None else _labels(row)
 
     def inspect_torrent(self, infohash: str) -> dict[str, Any] | None:
         row = self._get(infohash)
@@ -178,7 +186,7 @@ class TransmissionClient(ManagedClient):
             "save_path": save_path,
             "content_path": f"{save_path.rstrip('/\\')}/{row.get('name')}" if save_path else None,
             "state": state,
-            "tags": sorted({str(label) for label in row.get("labels") or [] if str(label).strip()}),
+            "tags": _labels(row),
             "files": files,
         }
 
