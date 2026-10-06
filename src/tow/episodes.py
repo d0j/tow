@@ -449,10 +449,75 @@ def _bracketed_stem(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, ...] 
     return None
 
 
+def _mixed_season_part(text: str, start: int, end: int | None) -> str | None:
+    """A complete explicit member; None means descriptive text, empty means unsafe."""
+    if end is not None:
+        raw = text[start:end]
+        # A range across seasons needs an unknown season endpoint. Do not
+        # invent all intervening episodes or silently keep just the first.
+        if re.search(r"[-–—~]\s*$", raw):
+            return ""
+        part = raw.rstrip(" ._&+,\t\r\n")
+        if _EXPLICIT_MARKERS.fullmatch(part):
+            return part
+        return "" if _EXPLICIT_MARKER_SHAPE.fullmatch(part) else None
+    match = _EXPLICIT_MARKERS.match(text, start)
+    if not match or (match.end() < len(text) and text[match.end()].isalnum()):
+        return ""
+    return match.group()
+
+
+def _mixed_season_labels(core: str, path: PurePosixPath) -> tuple[EpisodeLabel, ...]:
+    if any(int(number) == 0 for number in re.findall(r"\d+", core)):
+        return ()
+    head = re.match(r"s\d+e", core)
+    if not head:
+        return ()
+    # The chunk has one season. Repeated full heads are explicit occurrences,
+    # including lists with '&' and ranges with different zero padding.
+    core = head.group() + core[head.end() :].replace(head.group(), "e")
+    span = re.fullmatch(r"s\d+e(\d+)[-–—~]\s*e?(\d+)", core)
+    if span and (int(span.group(2)) < int(span.group(1)) or int(span.group(2)) - int(span.group(1)) > 1000):
+        return ()
+    for parse in (_compact_sequence, _repeated_episodes, _season_episode_range):
+        coverage = parse(core, path)
+        if coverage is not None:
+            return coverage
+    return ()
+
+
+def _mixed_seasons(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, ...] | None:
+    """Declared season/episode groups, not a range between unknown seasons."""
+    heads = tuple(re.finditer(r"(?i)s(\d++)e\d++", text))
+    seasons = tuple(head.group(1).lstrip("0") or "0" for head in heads)
+    if len(set(seasons)) < 2:
+        return None
+    starts = [head.start() for index, head in enumerate(heads) if not index or seasons[index] != seasons[index - 1]]
+    labels: dict[EpisodeLabel, None] = {}
+    seen: set[str] = set()
+    for index, start in enumerate(starts):
+        part = _mixed_season_part(text, start, starts[index + 1] if index + 1 < len(starts) else None)
+        if part is None:
+            return None
+        if not part:
+            return ()
+        core = re.sub(r"(?i)v\d+$", "", part).casefold()
+        core = re.sub(r"s0*(\d++)e", r"s\1e", core)
+        if core in seen:
+            continue
+        seen.add(core)
+        coverage = _mixed_season_labels(core, path)
+        if not coverage:
+            return ()
+        labels.update((label, None) for label in coverage)
+    return tuple(labels)
+
+
 # Tried in order; the first parser that recognises the name decides (an empty
 # tuple means "recognised, but not an episode").
 _COVERAGE_PARSERS: tuple[Callable[[str, PurePosixPath], tuple[EpisodeLabel, ...] | None], ...] = (
     _fractional_special,
+    _mixed_seasons,
     _compact_sequence,
     _repeated_episodes,
     _season_episode_range,
@@ -476,10 +541,15 @@ _EXPLICIT_MARKER_HEAD = r"s\d{1,2}+[ ._-]*+(?:e|[xх]e?)\d{1,4}+"
 _EXPLICIT_MARKERS = re.compile(
     r"(?i)" + _EXPLICIT_MARKER_HEAD + r"(?:"
     r"[ ._]*+(?:e|[xх]e?)\d{1,4}+"
-    r"|[ ._]++"
+    r"|[ ._]*+"
     + _EXPLICIT_MARKER_HEAD
     + r"|\s*+[-–—~&+,]\s*+(?:(?:s\d{1,2}+[ ._-]*+)?(?:e|[xх]e?)\d{1,4}+|\d{1,4}+(?!\w))"
     r")*+(?:v\d++)?"
+)
+# Recognize a wholly numeric declaration that exceeds the accepted widths,
+# without converting its untrusted integers or mistaking it for a title.
+_EXPLICIT_MARKER_SHAPE = re.compile(
+    _EXPLICIT_MARKERS.pattern.replace(r"\d{1,2}+", r"\d++").replace(r"\d{1,4}+", r"\d++")
 )
 
 
@@ -514,22 +584,30 @@ def parse_episode_coverage(name: str) -> tuple[EpisodeLabel, ...]:
     return ()
 
 
+def _single_season(coverage: tuple[EpisodeLabel, ...]) -> bool:
+    return bool(coverage) and all(label.season == coverage[0].season for label in coverage)
+
+
 def resolve_episode_coverages(names: Iterable[str]) -> tuple[tuple[EpisodeLabel, ...], ...]:
     """Parse a file set and collapse overlapping pseudo-ranges from dual numbering."""
     coverages = tuple(_coverage_with_folder_season(name) for name in names)
     nonempty = [coverage for coverage in coverages if coverage]
-    if len(nonempty) == 1 and len(nonempty[0]) > 30:
+    if len(nonempty) == 1 and len(nonempty[0]) > 30 and _single_season(nonempty[0]):
         # With no neighbouring filenames the syntax is irreducibly ambiguous.
         # Prefer under-counting to selecting dozens of false episode members.
         return tuple((coverage[0],) if len(coverage) > 30 else coverage for coverage in coverages)
     first_keys = {coverage[0].key for coverage in coverages if coverage}
     coverages = tuple(
         (coverage[0],)
-        if len(coverage) > 1 and sum(label.key in first_keys for label in coverage[1:]) >= 2
+        if len(coverage) > 1
+        and _single_season(coverage)
+        and sum(label.key in first_keys for label in coverage[1:]) >= 2
         else coverage
         for coverage in coverages
     )
-    expanded = [coverage for coverage in coverages if len(coverage) > 1]
+    # Explicit groups from different seasons cannot be one season's absolute
+    # numbering alias. Keep those declared memberships out of this heuristic.
+    expanded = [coverage for coverage in coverages if len(coverage) > 1 and _single_season(coverage)]
     if len(expanded) < 2:
         return coverages
     memberships = sum(len(coverage) for coverage in expanded)
@@ -543,7 +621,9 @@ def resolve_episode_coverages(names: Iterable[str]) -> tuple[tuple[EpisodeLabel,
         and unique
         and overlap >= min(len(coverage) for coverage in expanded) / 2
     ):
-        return tuple((coverage[0],) if len(coverage) > 1 else coverage for coverage in coverages)
+        return tuple(
+            (coverage[0],) if len(coverage) > 1 and _single_season(coverage) else coverage for coverage in coverages
+        )
     return coverages
 
 

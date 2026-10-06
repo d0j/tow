@@ -9,6 +9,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Explicit multi-season episode groups in one file are retained in selection,
+  progress and history instead of losing later seasons. Large or overlapping
+  mixed groups are not treated as one season's absolute-number alias. Ambiguous
+  cross-season ranges and invalid members remain file-level evidence; completing
+  or repairing one file does not emit duplicate episode notifications.
 - Attached episode markers and hybrid `S01x08` / `S01xE08` names now share the
   existing single-episode, list and range parsing, including internal separators
   such as `S01_E08` / `S01.E08` without losing the season. Selection and progress use
