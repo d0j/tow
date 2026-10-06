@@ -511,8 +511,8 @@ state and history bytes with their live-store parsers: finite numbers, bounded n
 supported state versions and readable containers. Both encrypted stores must have their
 expected format and cipher, decrypt with the local master key, and contain a readable object;
 settings undo must contain its secrets object. Validation never quarantines or rewrites source
-files. A hash-correct but unusable new copy is recorded as a failure and cannot prune older
-copies. Missing optional stores and valid legacy containers remain supported. This follows
+files. A new copy that does not read back or is hash-correct but unusable is recorded as a failure,
+removed (never listed or counted for retention) and cannot prune older copies. Missing optional stores and valid legacy containers remain supported. This follows
 the separation of cryptographic verification and archive consistency checks described in
 [Borg's check documentation](https://borgbackup.readthedocs.io/en/stable/usage/check.html),
 with application-format checks supplied by TOW's own readers.

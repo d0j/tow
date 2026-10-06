@@ -231,7 +231,8 @@ def test_a_copy_that_does_not_read_back_prunes_nothing(backup, monkeypatch):
         t("backup.snapshot.unverified", "ru", name="tow-20261001-000003", reason="")[:20]
     )
     kept = sorted(p.name for p in backup.iterdir())
-    assert kept[:3] == ["tow-20261001-000000", "tow-20261001-000001", "tow-20261001-000002"]  # all good ones stay
+    # All good ones stay; the copy that did not read back is neither listed nor left behind.
+    assert kept == ["tow-20261001-000000", "tow-20261001-000001", "tow-20261001-000002"]
     from tow.snapshots import status
 
     assert status()["last_error"] == str(failed.value)

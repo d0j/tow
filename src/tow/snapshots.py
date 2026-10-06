@@ -616,6 +616,11 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
     try:
         verify_snapshot(target)  # read every file back from the copies folder before deleting any older copy
     except SnapshotError as exc:
+        # Never listed, restored or counted for retention: back to a partial folder, removed
+        # now (or by the next copy when the folder cannot be read right now).
+        with contextlib.suppress(OSError):
+            _rename_with_retry(target, partial)
+            _remove_stale_partials(root, key)
         raise SnapshotError(t("backup.snapshot.unverified", owner_language(), name=target.name, reason=exc)) from exc
     # Never the copy just verified, even when the clock went back and it does not sort last.
     pruned, cleanup_pending = _prune_night_copies(root, target, keep, key, policy=policy)
