@@ -136,10 +136,12 @@ Move or copy the whole folder: the start file prepares it again in the new place
 | Stop | `Stop TOW.cmd` | `Stop TOW.command` | `~/TOW/stop-tow` |
 | Start with the computer | `app\scripts\tow.cmd autostart on` | `~/TOW/app/scripts/tow autostart on` | the same |
 | Update to the latest release | `Update TOW.cmd` | `Update TOW.command` | `~/TOW/update-tow` |
-| Go back to an earlier release | `"Update TOW.cmd" v1.22.0` in a terminal | `~/TOW/update-tow v1.22.0` | the same |
+| Go back to an earlier release | `"Update TOW.cmd" v1.23.0` in a terminal | `~/TOW/update-tow v1.23.0` | the same |
 
 An update stops TOW, keeps a copy of your data and settings in `backup/`, puts in the new version, starts it and
-checks it. If anything fails, the previous version comes back by itself. It needs the internet.
+checks it. If anything fails, the previous version comes back by itself. It needs the internet. It goes back
+only to a version that can read your data: not before v1.23.0 once v1.23 has run (it says so and changes
+nothing).
 
 ## Back up the master key
 

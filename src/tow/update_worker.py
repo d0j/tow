@@ -1,7 +1,7 @@
 """Detached update runner, copied outside app; standard library only, Python 3.11+.
 
-The original updater performs installation, snapshot and rollback work. This runner
-records phases and refuses a target that cannot understand the current state schema.
+The original updater performs installation, snapshot and rollback work (and refuses a
+target that cannot read the current state). This runner records its phases.
 """
 
 from __future__ import annotations
@@ -107,27 +107,6 @@ def write_job(path: Path, job: dict[str, Any]) -> None:
             temporary.unlink()
 
 
-def schema_preflight(work: Any, error: Any) -> None:
-    if work.code.kind == "git":
-        source = work.sys.git("show", f"{work.state['target']}:src/tow/store.py")
-    else:
-        source = (work.code.new / "src" / "tow" / "store.py").read_text(encoding="utf-8")
-    match = re.search(r"^STATE_SCHEMA_VERSION\s*=\s*([0-9]+)\s*$", source, re.MULTILINE)
-    if match is None:
-        raise error("target state schema cannot be verified")
-    state_path = work.root / "data" / "state.json"
-    try:
-        with state_path.open("rb") as handle:
-            state = _decode_object(handle.read())
-    except FileNotFoundError:
-        return
-    except (OSError, ValueError, TypeError, RecursionError) as exc:
-        raise error("current data cannot be verified") from exc
-    schema = state.get("schema_version", 0)
-    if type(schema) is not int or schema < 0 or schema > int(match[1]):
-        raise error("target version cannot read current data")
-
-
 def _handoff_expired(job: dict[str, Any]) -> bool:
     started = job.get("started_at")
     if started is None:
@@ -213,7 +192,6 @@ def _run(app: Path, job_path: Path, job: dict[str, Any], version: str, updater: 
     job.update(pid=os.getpid(), status="preparing")
     write_job(job_path, job)
     seen: dict[str, Any] = {}
-    checked = False
     rolling_back = False
 
     def phase(name: str) -> None:
@@ -245,10 +223,6 @@ def _run(app: Path, job_path: Path, job: dict[str, Any], version: str, updater: 
         original = getattr(cls, method)
 
         def wrapped(self: Any, *args: Any, _original: Any = original, _label: str = label, **kwargs: Any) -> Any:
-            nonlocal checked
-            if _label == "stopping" and not checked:
-                schema_preflight(self, updater.UpdateError)
-                checked = True
             phase(_label)
             return _original(self, *args, **kwargs)
 

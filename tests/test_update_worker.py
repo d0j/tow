@@ -95,9 +95,6 @@ def test_detached_runner_uses_real_update_and_rollback_on_throwaway_git(
             super().__init__(app, **scenario)
 
     updater.System = Machine
-    # These synthetic tagged projects intentionally contain no TOW modules. Schema
-    # rejection is independently tested with real source strings in test_web_update.
-    monkeypatch.setattr(update_worker, "schema_preflight", lambda *_args: None)
     path = git_install["root"] / "worker-job.json"
     job_id = "a" * 32
     job = {"id": job_id, "status": "queued", "target": "1.21.0"}
@@ -220,16 +217,22 @@ def test_worker_never_runs_a_job_that_was_replaced(tmp_path):
     assert update_worker.run(tmp_path, path, "requested", "1.22.21", None) == 2
 
 
-def test_schema_missing_is_a_refusal_before_stop(tmp_path):
-    from types import SimpleNamespace
+def test_a_target_that_cannot_read_the_data_is_refused_before_stop(git_install, monkeypatch):
+    # The check ran on the first stop(), which can be a recovery's: there it failed with an
+    # OSError or a KeyError and the job showed a generic "failed". update.py now refuses it.
+    updater = _load()
 
-    work = SimpleNamespace(
-        code=SimpleNamespace(kind="git"),
-        state={"target": "synthetic"},
-        sys=SimpleNamespace(git=lambda *_args: "# no schema declaration\n"),
-    )
-    with pytest.raises(RuntimeError, match="cannot be verified"):
-        update_worker.schema_preflight(work, RuntimeError)
+    class Machine(Fake):
+        pass
+
+    updater.System = Machine
+    (git_install["data"] / "state.json").write_text('{"schema_version": 5}', encoding="utf-8")
+    path = git_install["root"] / "worker-job.json"
+    job_id = "e" * 32
+    path.write_text(json.dumps({"id": job_id, "status": "queued", "target": "1.21.0"}))
+    assert update_worker.run(git_install["app"], path, job_id, "1.21.0", updater) == 2
+    assert json.loads(path.read_text())["status"] == "refused"
+    assert not (git_install["root"] / "update-state.json").exists()  # nothing was stopped
 
 
 def test_progress_failure_cannot_prevent_automatic_rollback(git_install, monkeypatch):
@@ -239,7 +242,6 @@ def test_progress_failure_cannot_prevent_automatic_rollback(git_install, monkeyp
         pass
 
     updater.System = Machine
-    monkeypatch.setattr(update_worker, "schema_preflight", lambda *_args: None)
     path = git_install["root"] / "worker-job.json"
     job_id = "b" * 32
     path.write_text(json.dumps({"id": job_id, "status": "queued", "target": "1.21.0"}))
@@ -262,7 +264,6 @@ def test_failure_after_health_check_is_not_reported_as_success(git_install, monk
         pass
 
     updater.System = Machine
-    monkeypatch.setattr(update_worker, "schema_preflight", lambda *_args: None)
 
     def fail_cleanup(_work):
         raise OSError("synthetic cleanup failure")

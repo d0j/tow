@@ -120,7 +120,7 @@ closes network access.
 | | Windows zip or `install.ps1` | `install.sh` | git clone |
 |---|---|---|---|
 | Update to the latest release | double-click `Update TOW.cmd` | `~/TOW/update-tow` · macOS: `Update TOW.command` | `.\scripts\deploy.ps1 -Ref v1.22.0` · `tow update --ref v1.22.0` prints the command |
-| Go back | `Update TOW.cmd v1.22.0` (v1.22.0 or newer) | `update-tow v1.22.0` (v1.22.0 or newer) | the same with the older tag (v1.18.0 or newer) |
+| Go back | `Update TOW.cmd v1.23.0` (v1.23.0 or newer once v1.23 ran: older ones cannot read its data) | `update-tow v1.23.0` (the same) | the same with the older tag (v1.18.0 or newer; v1.23.0 or newer once v1.23 ran) |
 | After moving the folder | `Start TOW.cmd` prepares it again; then `tow autostart on` if you use it | the start file does it too; then `tow autostart on` | `tow stop`, `tow setup`, `tow autostart on` |
 | Restore a night copy | `tow restore-snapshot --path <copy> --apply` | the same | the same |
 | Remove | [docs/install.md](docs/install.md#remove-tow) | the same | the same |

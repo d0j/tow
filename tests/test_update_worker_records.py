@@ -161,49 +161,6 @@ def test_huge_handoff_timestamp_does_not_overflow_or_install(tmp_path, monkeypat
     assert json.loads(path.read_bytes())["error"] == "releases.interrupted"
 
 
-@pytest.mark.parametrize(
-    "content",
-    [
-        b"not-json",
-        b"[]",
-        b"\xff",
-        b'{"schema_version":1,"extra":NaN}',
-        b'{"schema_version":1,"extra":1e9999}',
-        b'{"schema_version":1,"extra":' + b"[" * 2000 + b"0" + b"]" * 2000 + b"}",
-        b'{"schema_version":1,"extra":' + b"[" * 129 + b"0" + b"]" * 129 + b"}",
-    ],
-    ids=["syntax", "container", "encoding", "nan", "overflow", "recursion", "nesting"],
-)
-def test_schema_preflight_translates_corrupt_state_before_stopping(tmp_path, content):
-    state = tmp_path / "data" / "state.json"
-    state.parent.mkdir()
-    state.write_bytes(content)
-    work = SimpleNamespace(
-        root=tmp_path,
-        code=SimpleNamespace(kind="git"),
-        state={"target": "synthetic"},
-        sys=SimpleNamespace(git=lambda *args: "STATE_SCHEMA_VERSION = 1\n"),
-    )
-    with pytest.raises(RuntimeError, match="current data cannot be verified"):
-        update_worker.schema_preflight(work, RuntimeError)
-    assert state.read_bytes() == content
-
-
-def test_schema_preflight_does_not_cap_valid_torrent_state_to_job_size(tmp_path):
-    state = tmp_path / "data" / "state.json"
-    state.parent.mkdir()
-    before = json.dumps({"schema_version": 1, "topics": [{"synthetic": "x" * 100000}]}).encode()
-    state.write_bytes(before)
-    work = SimpleNamespace(
-        root=tmp_path,
-        code=SimpleNamespace(kind="git"),
-        state={"target": "synthetic"},
-        sys=SimpleNamespace(git=lambda *args: "STATE_SCHEMA_VERSION = 1\n"),
-    )
-    update_worker.schema_preflight(work, RuntimeError)
-    assert state.read_bytes() == before
-
-
 @pytest.mark.parametrize("method", ["fsync", "replace"])
 def test_failed_atomic_publish_keeps_previous_record_and_removes_only_its_temp(tmp_path, monkeypatch, method):
     path = tmp_path / "job.json"

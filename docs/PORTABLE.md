@@ -373,7 +373,10 @@ before the update does the same).
    tracked files and an install that still runs the five Windows tasks of 1.17 (update it to
    v1.20.0 and run `tow autostart migrate --apply` there first); `git fetch --tags --prune
    origin`; resolve the ref; refuse a target older than **v1.18.0** — the minimum rollback target
-   of the supervised-service layout (older versions have no `tow run`).
+   of the supervised-service layout (older versions have no `tow run`) — and a target that cannot
+   read `data/state.json`: its `STATE_SCHEMA_VERSION` (none: v1.18–v1.20, format 1) is lower than
+   the file's `schema_version` (v1.22 reads format 1, v1.23 writes 2), or the file cannot be
+   verified. Both before TOW stops.
 2. Stop TOW: the stop request, and wait (it lets a running job finish); only if it does not stop
    within `--wait-minutes` is it stopped forcibly — the supervisor's process tree, and its web
    server and job from `status.json` (on Linux and macOS they have their own sessions), each only
