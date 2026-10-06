@@ -504,6 +504,14 @@ def sddl_others(sddl: str, user: str) -> bool | None:
     return any(ace[0] in _ALLOW_ACES and ace[5] not in _PRIVATE_TRUSTEES and ace[5] != user for ace in aces)
 
 
+def elevated() -> bool:
+    """This process runs with the Administrators group enabled (an elevated session)."""
+    try:
+        return bool(_dll("shell32").IsUserAnAdmin())
+    except AttributeError, OSError:
+        return False
+
+
 def folder_shared(path: Path) -> bool | None:
     """Other accounts of this computer may open ``path`` (None: unknown)."""
     user, sddl = user_sid(), folder_security(path)
@@ -515,9 +523,11 @@ def folder_shared(path: Path) -> bool | None:
 def make_private(path: Path) -> bool:
     """Only this account, SYSTEM and Administrators may open ``path``: the inherited permissions
     (``Authenticated Users: modify`` of a drive root) are replaced, the change goes on to what
-    the folder holds. Only a folder this account owns is changed. True when read back private."""
+    the folder holds. Only a folder this account owns is changed (an elevated process creates
+    folders owned by Administrators: those too, while elevated). True when read back private."""
     user, sddl = user_sid(), folder_security(path)
-    if user is None or sddl is None or sddl_owner(sddl) != user:
+    owner = sddl_owner(sddl) if sddl is not None else None
+    if user is None or owner is None or not (owner == user or (owner in {"BA", _ADMINISTRATORS_SID} and elevated())):
         return False
     icacls = ntpath.join(os.environ.get("SYSTEMROOT") or r"C:\Windows", "System32", "icacls.exe")
     grants = [f"*{sid}:(OI)(CI)F" for sid in (user, _SYSTEM_SID, _ADMINISTRATORS_SID)]
