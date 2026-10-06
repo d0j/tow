@@ -201,8 +201,10 @@ def prepare_magnet_content(url: str, client_id: str) -> dict[str, object]:
     """
     from tow import content
     from tow.clients.factory import from_secrets
+    from tow.config import as_bool
     from tow.errors import TowError
-    from tow.torrent import parse_magnet_hashes, parse_torrent_metadata
+    from tow.net_guard import tracker_address
+    from tow.torrent import parse_magnet_hashes, parse_torrent_metadata, preview_magnet
 
     cfg, url, client_id, tracker = _content_source(url, client_id)
     secrets = load_secrets()
@@ -216,7 +218,13 @@ def prepare_magnet_content(url: str, client_id: str) -> dict[str, object]:
         hashes = parse_magnet_hashes(magnet)
         if hashes is None or identity.upper() not in hashes[0] | hashes[1]:
             raise TowError("content.magnet_failed")
-        blob = adapter.preview_magnet(magnet)
+        # The page's link reaches the client only as its hashes and public trackers: a tr= or
+        # x.pe= pointing into the home network would make the client knock there for us.
+        public_only = not as_bool(cfg.get("allow_private_tracker_hosts"))
+        preview = preview_magnet(magnet, lambda tracker_url: tracker_address(tracker_url, public_only=public_only))
+        if preview is None:
+            raise TowError("content.magnet_failed")
+        blob = adapter.preview_magnet(preview)
         metadata = parse_torrent_metadata(blob)
         btih, btmh = hashes
         if (btih and metadata.hash_v1 not in btih) or (btmh and metadata.hash_v2 not in btmh):
