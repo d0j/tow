@@ -29,7 +29,7 @@ const files = [
   { id: 1, path: "Season 1/B.mkv", size: "200" },
   ...Array.from({ length: 19998 }, (_, n) => ({ id: n + 2, path: `Extras/note-${n}.txt`, size: "0" })),
 ];
-function setup(saved = null, existing = []) {
+function setup(saved = null, existing = [], before = () => {}) {
   const root = new Element(); root.isPicker = true; root.dataset.existing = JSON.stringify(existing);
   const fields = Object.fromEntries(["selection_mode", "selection_value", "content_token", "selection_indices", "url", "client_id", "title", "tracking_mode"].map((key) => [key, new Element()]));
   fields.tracking_mode.value = "watch";
@@ -55,8 +55,9 @@ function setup(saved = null, existing = []) {
   };
   root.querySelectorAll = () => [];
   const requests = [];
+  before(fields);
   vm.runInNewContext(fs.readFileSync(new URL("../../src/tow/static/content.js", import.meta.url), "utf8"), {
-    document, Element, FormData, AbortController,
+    document, Element, FormData, AbortController, Option: class { constructor(text, value) { Object.assign(this, { text, value }); } },
     MutationObserver: class { observe() {} },
     window: { setTimeout, clearTimeout, confirm: () => controls.limited.approved === true },
     fetch: (url, options) => new Promise((resolve) => requests.push({ url, options, respond: (data, ok = true, status = ok ? 200 : 400, type = "application/json") => resolve({
@@ -280,4 +281,17 @@ plain.fields.selection_mode.fire("change");
 await reply(plain.requests.at(-1), "authentication required", false, 401, "text/plain; charset=utf-8");
 assert.equal(plain.controls.status.textContent, "content.js.session", "rule previews read refusals the same way");
 
-console.log(JSON.stringify({ plainTextRefusals: true, localFileFollowsLink: true, cancelRestoresHidden: true, safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true, ruleContext: true, cacheLabel: true, explicitFresh: true, quotaConsent: true }));
+// "Choose files" works only with this script, so the script offers it (after "all files").
+const select = (values) => (fields) => {
+  fields.selection_mode.value = values[0];
+  fields.selection_mode.dataset.exactOption = "Choose files";
+  fields.selection_mode.options = values.map((value) => ({ value }));
+  fields.selection_mode.add = (option, index) => fields.selection_mode.options.splice(index, 0, option);
+};
+const offered = setup(null, [], select(["all", "episodes", "files"]));
+assert.deepEqual(offered.fields.selection_mode.options.map((option) => option.value), ["all", "exact", "episodes", "files"]);
+assert.equal(offered.fields.selection_mode.options[1].text, "Choose files");
+const kept = setup(null, [files[0]], select(["all", "exact", "episodes", "files"]));
+assert.equal(kept.fields.selection_mode.options.filter((option) => option.value === "exact").length, 1, "an existing option is not repeated");
+
+console.log(JSON.stringify({ exactNeedsScript: true, plainTextRefusals: true, localFileFollowsLink: true, cancelRestoresHidden: true, safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true, ruleContext: true, cacheLabel: true, explicitFresh: true, quotaConsent: true }));
