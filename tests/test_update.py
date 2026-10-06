@@ -8,11 +8,13 @@ and an install that still runs the five Windows tasks of 1.17 (refused).
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -573,6 +575,135 @@ def test_another_folders_tow_serve_does_not_block_an_update(install):
 
 
 # --- texts, versions and the CLI ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize("encoding", ["cp1251", "cp1252", "ascii", "utf-8"])
+@pytest.mark.parametrize("result", [0, 1, 2])
+def test_cli_output_is_utf8_without_changing_arguments_or_result(tmp_path, monkeypatch, encoding, result):
+    text = "Обновление: папка 日本語 📁 — готово\n"
+    buffers = [io.BytesIO(), io.BytesIO()]
+    streams = [io.TextIOWrapper(buffer, encoding=encoding, newline="\n", write_through=True) for buffer in buffers]
+    system = object()
+    calls = []
+
+    def machine(app, *, uv):
+        calls.append((app, uv))
+        return system
+
+    def run_update(ref, **options):
+        calls.append((ref, options))
+        work = object.__new__(updater.Update)
+        work.texts = {"fixture": "{folder}"}
+        work._say = print
+        work.say("fixture", folder=text.rstrip("\n"))
+        print(text, end="", file=sys.stderr)
+        return result
+
+    monkeypatch.setattr(updater, "System", machine)
+    monkeypatch.setattr(updater, "update", run_update)
+    with monkeypatch.context() as stdio:
+        stdio.setattr(sys, "stdout", streams[0])
+        stdio.setattr(sys, "stderr", streams[1])
+        assert (
+            updater.main(
+                [
+                    "--ref",
+                    "v1.23.5",
+                    "--health-timeout",
+                    "120",
+                    "--wait-minutes",
+                    "7",
+                    "--keep",
+                    "123",
+                    "--uv",
+                    "fixture-uv",
+                    "--source",
+                    str(tmp_path / "source.tar.gz"),
+                    "--sums",
+                    str(tmp_path / "SHA256SUMS"),
+                ]
+            )
+            == result
+        )
+    assert calls == [
+        (updater.APP, "fixture-uv"),
+        (
+            "v1.23.5",
+            {
+                "system": system,
+                "health_timeout": 120.0,
+                "wait_minutes": 7.0,
+                "keep": 123,
+                "source": (tmp_path / "source.tar.gz").resolve(),
+                "sums": (tmp_path / "SHA256SUMS").resolve(),
+            },
+        ),
+    ]
+    for stream, buffer in zip(streams, buffers, strict=True):
+        stream.flush()
+        assert buffer.getvalue().decode("utf-8") == text
+        assert stream.write_through
+
+
+def test_cli_configures_error_output_before_argument_validation(monkeypatch):
+    buffer = io.BytesIO()
+    stream = io.TextIOWrapper(buffer, encoding="ascii", newline="\n", write_through=True)
+    monkeypatch.setattr(sys, "argv", ["更新📁.py"])
+    monkeypatch.setattr(updater, "System", lambda *_args, **_kwargs: pytest.fail("not a valid request"))
+    with monkeypatch.context() as stdio:
+        stdio.setattr(sys, "stderr", stream)
+        with pytest.raises(SystemExit) as caught:
+            updater.main([])
+    assert caught.value.code == 2
+    stream.flush()
+    assert "更新📁.py" in buffer.getvalue().decode("utf-8")
+
+
+def test_cli_retains_unencodable_path_diagnostics_without_crashing(monkeypatch):
+    buffer = io.BytesIO()
+    stream = io.TextIOWrapper(buffer, encoding="ascii", newline="\n", write_through=True)
+    monkeypatch.setattr(updater, "System", lambda *_args, **_kwargs: None)
+
+    def run_update(*_args, **_kwargs):
+        print("fixture-\udcff")
+        return 2
+
+    monkeypatch.setattr(updater, "update", run_update)
+    with monkeypatch.context() as stdio:
+        stdio.setattr(sys, "stdout", stream)
+        assert updater.main(["--ref", "v1.23.5"]) == 2
+    stream.flush()
+    assert buffer.getvalue() == b"fixture-\\udcff\n"
+
+
+@pytest.mark.parametrize("stream", [None, io.StringIO()])
+def test_cli_accepts_replaced_or_missing_streams(monkeypatch, stream):
+    monkeypatch.setattr(updater, "System", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(updater, "update", lambda *_args, **_kwargs: 2)
+    with monkeypatch.context() as stdio:
+        stdio.setattr(sys, "stdout", stream)
+        stdio.setattr(sys, "stderr", stream)
+        assert updater.main(["--ref", "v1.23.5"]) == 2
+
+
+@pytest.mark.parametrize("error", [AttributeError, OSError, ValueError])
+def test_cli_output_setup_failure_does_not_skip_other_stream(monkeypatch, error):
+    calls = []
+
+    def unavailable(**_kwargs):
+        calls.append("unavailable")
+        raise error("diagnostic stream unavailable")
+
+    def available(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(updater, "System", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(updater, "update", lambda *_args, **_kwargs: 2)
+    with monkeypatch.context() as stdio:
+        stdio.setattr(sys, "stdout", SimpleNamespace(reconfigure=unavailable))
+        stdio.setattr(sys, "stderr", SimpleNamespace(reconfigure=available))
+        assert updater.main(["--ref", "v1.23.5"]) == 2
+    assert calls == ["unavailable", {"encoding": "utf-8", "errors": "backslashreplace"}]
 
 
 def test_the_texts_match_the_english_catalog():

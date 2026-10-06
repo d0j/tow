@@ -1427,7 +1427,17 @@ def update(ref: str, *, system: System | None = None, app: Path = APP, **options
         handle.close()
 
 
+def _utf8_output() -> None:
+    # Pipes on Windows use the ANSI codepage; -I also ignores PYTHONIOENCODING.
+    # Configure both diagnostic streams before parsing or touching the install.
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            with contextlib.suppress(AttributeError, OSError, ValueError):
+                stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _utf8_output()
     if sys.version_info < (3, 11):  # noqa: UP036 - deploy.ps1 may fall back to any Python 3
         print(f"update.py needs Python 3.11 or newer (this is {sys.version.split()[0]})")
         return 2
