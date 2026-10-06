@@ -693,7 +693,8 @@ Built so far (this workstream):
   from it and runs `scripts/bundle-smoke.ps1 -Offline` (unpacked into a path with a space and
   Cyrillic letters, `Start TOW.cmd` with every proxy pointing at a closed port, `/healthz`,
   `tow status`, a second start, `Stop TOW.cmd`, uv's and Python's places outside the folder
-  unchanged) and `install.ps1` on Windows PowerShell 5.1 with uninstall and purge; Ubuntu and
+  unchanged) and `scripts/install-smoke.ps1` (`install.ps1` on Windows PowerShell 5.1 with
+  uninstall, a reinstall around the data and purge); Ubuntu and
   macOS run `scripts/install-smoke.sh` (install.sh from the archive, the start and stop files,
   uninstall, purge, nothing outside). Only then the `publish` job (the only one with
   `contents: write`) creates the release if it is missing (notes from CHANGELOG.md; existing

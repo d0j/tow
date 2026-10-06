@@ -98,33 +98,9 @@ jobs:
       - name: Unpack, start offline, stop, move with its existing environment, start offline again
         shell: pwsh
         run: ./scripts/bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Offline -Move
-      - name: install.ps1 on Windows PowerShell 5.1, then uninstall
+      - name: install.ps1 on Windows PowerShell 5.1, uninstall, reinstall around the data, purge
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $zip = (Resolve-Path dist/TOW-windows-x64.zip).Path
-          $sums = Join-Path $env:RUNNER_TEMP 'SHA256SUMS'
-          "$((Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant())  TOW-windows-x64.zip" | Set-Content -Encoding ascii $sums
-          Get-ChildItem env: | Where-Object { $_.Name -like 'UV_*' } | ForEach-Object { Remove-Item "env:$($_.Name)" }
-          $env:TOW_INSTALL_SOURCE = $zip; $env:TOW_INSTALL_SUMS = $sums; $env:TOW_NO_BROWSER = '1'
-          $dir = Join-Path $env:RUNNER_TEMP 'TOW install test'
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File install/install.ps1 -Dir $dir -Port 18878
-          if ($LASTEXITCODE) { throw "install.ps1 exited with $LASTEXITCODE" }
-          $health = Invoke-RestMethod -Uri http://127.0.0.1:18878/healthz -NoProxy
-          if (-not $health.ok) { throw '/healthz does not answer' }
-          & (Join-Path $dir 'app\scripts\tow.cmd') status
-          # Uninstall keeping the data, install again around it (same key), then purge what is left.
-          pwsh -NoProfile -File install/install.ps1 -Dir $dir -Uninstall -Yes
-          if (Test-Path -LiteralPath (Join-Path $dir 'app')) { throw 'the uninstall left app' }
-          $key = (Get-FileHash (Join-Path $dir 'keys\master.key')).Hash
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File install/install.ps1 -Dir $dir -Port 18878
-          if ($LASTEXITCODE) { throw "the reinstall exited with $LASTEXITCODE" }
-          if ((Get-FileHash (Join-Path $dir 'keys\master.key')).Hash -ne $key) { throw 'the reinstall replaced keys\master.key' }
-          $health = Invoke-RestMethod -Uri http://127.0.0.1:18878/healthz -NoProxy
-          if (-not $health.ok) { throw '/healthz does not answer after the reinstall' }
-          pwsh -NoProfile -File install/install.ps1 -Dir $dir -Uninstall -Yes
-          pwsh -NoProfile -File install/install.ps1 -Dir $dir -Uninstall -Yes -Purge
-          if (Test-Path -LiteralPath $dir) { throw "-Purge left $dir" }
+        run: ./scripts/install-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Port 18878
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows

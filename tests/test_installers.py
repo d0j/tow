@@ -302,6 +302,37 @@ def _runs(job):
     return "\n".join(step.get("run", "") for step in job["steps"])
 
 
+@pytest.mark.parametrize("name", ["ci", "release", "installers"])
+def test_every_workflow_pins_its_actions_and_only_reads_by_default(name):
+    text, flow = _workflow(name)
+    # Every action pinned to a commit (the repository requires it); checkout and setup-uv to the
+    # very ones CI uses.
+    uses = re.findall(r"uses: (\S+)", text)
+    assert uses
+    assert all(re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", use) for use in uses), uses
+    ci_pins = set(re.findall(r"uses: (\S+@[0-9a-f]{40})", _workflow("ci")[0]))
+    assert {use for use in uses if use.startswith(("actions/checkout@", "astral-sh/setup-uv@"))} <= ci_pins
+    assert flow["permissions"] == {"contents": "read"}
+    assert "persist-credentials: false" in text
+    for job_id, job in flow["jobs"].items():
+        if job_id not in ("source", "publish"):
+            assert "permissions" not in job, job_id
+
+
+def test_installers_run_the_release_smokes_before_a_tag():
+    _text, flow = _workflow("installers")
+    _release_text, release = _workflow("release")
+    triggers = flow[True]  # YAML 1.1 reads the key `on` as True
+    paths = triggers["pull_request"]["paths"]
+    for path in ("scripts/**", "install/**", "src/tow/update*", "src/tow/web_update.py"):
+        assert path in paths
+    assert triggers["schedule"]
+    assert "workflow_dispatch" in triggers
+    # The same smokes as the release (after the step that makes the source archive).
+    tail = [step.get("run") for step in flow["jobs"]["windows"]["steps"][-3:]]
+    assert tail == [step.get("run") for step in release["jobs"]["windows"]["steps"][-4:-1]]
+
+
 def test_ci_keeps_the_required_check_names_and_audits_once():
     _text, flow = _workflow("ci")
     jobs = flow["jobs"]
@@ -347,8 +378,7 @@ def test_the_release_workflow_tests_everything_before_it_uploads():
     windows = "\n".join(step.get("run", "") for step in jobs["windows"]["steps"])
     assert "scripts/build-bundle.py --out dist --source tow-source.tar.gz" in windows
     assert "bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Offline" in windows
-    assert "powershell.exe -NoProfile -ExecutionPolicy Bypass -File install/install.ps1" in windows  # 5.1
-    assert "-Uninstall -Yes -Purge" in windows
+    assert "install-smoke.ps1 -Zip dist/TOW-windows-x64.zip" in windows
     posix_runners = ["ubuntu-latest", "ubuntu-26.04", "macos-latest"]
     assert jobs["posix"]["strategy"]["matrix"]["os"] == posix_runners
     assert ci_jobs["install"]["strategy"]["matrix"]["os"] == posix_runners
@@ -358,6 +388,30 @@ def test_the_release_workflow_tests_everything_before_it_uploads():
     assert "gh release view" in publish  # created only when missing: existing notes stay
     assert "gh release upload" in publish
     assert "edit" not in publish.split()
+
+
+def test_the_windows_installer_smoke_covers_powershell_5_and_the_data():
+    text = (ROOT / "scripts" / "install-smoke.ps1").read_text(encoding="utf-8")
+    assert "powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer" in text  # 5.1
+    assert "-Uninstall -Yes -Purge" in text
+    assert "the reinstall replaced keys\\master.key" in text
+
+
+@pytest.mark.allow_system
+@pytest.mark.parametrize("name", ["bundle-smoke.ps1", "install-smoke.ps1"])
+def test_the_windows_smoke_scripts_parse(name):
+    program = shutil.which("pwsh")
+    if program is None:
+        pytest.skip("no pwsh on this machine")
+    script = (
+        "$errors = $null; "
+        f"[void][System.Management.Automation.Language.Parser]::ParseFile('{ROOT / 'scripts' / name}', [ref]$null,"
+        " [ref]$errors); $errors | ForEach-Object { $_.ToString() }; if ($errors) { exit 1 }"
+    )
+    done = subprocess.run(
+        [program, "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True, check=False
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
 
 
 @pytest.mark.parametrize(
@@ -390,7 +444,7 @@ def test_release_archive_and_publish_use_a_pinned_linux_runner():
 
 
 def test_the_smoke_scripts_never_use_the_live_port():
-    for name in ("bundle-smoke.ps1", "install-smoke.sh"):
+    for name in ("bundle-smoke.ps1", "install-smoke.sh", "install-smoke.ps1"):
         text = (ROOT / "scripts" / name).read_text(encoding="utf-8")
         assert "never on 8787" in text
         assert "TOW_NO_BROWSER" in text
