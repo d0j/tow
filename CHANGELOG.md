@@ -5,6 +5,14 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.23.6] — 2026-10-06
+
+### Fixed
+
+- Console updates write UTF-8 diagnostics even when output is redirected on
+  Windows with a legacy system encoding. Non-Latin folder names cannot abort
+  an update solely while reporting its progress; exit codes remain unchanged.
+
 ## [1.23.5] — 2026-10-06
 
 ### Fixed
