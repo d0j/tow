@@ -686,7 +686,8 @@ Built so far (this workstream):
   never reach the runner's home.
 - mypy is clean with `--platform linux` and `--platform darwin` too.
 - CI (`.github/workflows/ci.yml`): the full gate runs on Windows, Ubuntu and macOS for every push
-  and pull request, and all three must pass (green since 1.21.0).
+  and pull request, and all three must pass (green since 1.21.0); the dependency audit runs on one
+  of them (uv.lock is the same everywhere).
 - Releases (`.github/workflows/release.yml`, 1.22): a `v*` tag (or a dispatch with a tag) takes
   GitHub's source archive of the tag (its version must be the tag's); Windows builds the bundle
   from it and runs `scripts/bundle-smoke.ps1 -Offline` (unpacked into a path with a space and

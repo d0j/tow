@@ -21,9 +21,11 @@ jobs:
       matrix:
         os: [windows-latest, ubuntu-latest, ubuntu-26.04, macos-latest]
         include:
-          # Keep the protected check name stable, but pin the older LTS runner.
+          # Keep the protected check name stable, but pin the older LTS runner. The dependency
+          # audit reads uv.lock, the same on every OS: it runs here only.
           - os: ubuntu-latest
             runner: ubuntu-24.04
+            audit: true
     runs-on: ${{ matrix.runner || matrix.os }}
     timeout-minutes: 30
     steps:
@@ -38,9 +40,9 @@ jobs:
         run: uv python install --no-bin --no-registry
       - name: Sync locked environment
         run: uv sync --frozen
-      - name: Quality gate (with dependency audit)
+      - name: Quality gate${{ matrix.audit && ' (with dependency audit)' || '' }}
         shell: pwsh
-        run: ./scripts/gate.ps1 -Audit
+        run: ./scripts/gate.ps1 ${{ matrix.audit && '-Audit' || '' }}
 
   # The install.sh check the release runs on a tag, here on every commit: a broken check is found
   # before a tag, not by a release that cannot publish. The archive is git's own of this commit,

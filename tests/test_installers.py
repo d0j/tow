@@ -291,6 +291,36 @@ def test_install_ps1_refuses_foreign_data_folder_even_with_purge(tmp_path):
 # --- the release workflow ----------------------------------------------------------------------
 
 
+def _workflow(name):
+    import yaml
+
+    text = (ROOT / ".github" / "workflows" / f"{name}.yml").read_text(encoding="utf-8")
+    return text, yaml.safe_load(text)
+
+
+def _runs(job):
+    return "\n".join(step.get("run", "") for step in job["steps"])
+
+
+def test_ci_keeps_the_required_check_names_and_audits_once():
+    _text, flow = _workflow("ci")
+    jobs = flow["jobs"]
+    # Branch protection requires these names: gate (<os>) x4 and install.sh (<os>) x3.
+    assert jobs["gate"]["name"] == "gate (${{ matrix.os }})"
+    assert jobs["install"]["name"] == "install.sh (${{ matrix.os }})"
+    assert jobs["gate"]["strategy"]["matrix"]["os"] == [
+        "windows-latest",
+        "ubuntu-latest",
+        "ubuntu-26.04",
+        "macos-latest",
+    ]
+    assert jobs["install"]["strategy"]["matrix"]["os"] == ["ubuntu-latest", "ubuntu-26.04", "macos-latest"]
+    # uv.lock is the same on every OS: pip-audit runs on one runner only.
+    audited = [row["os"] for row in jobs["gate"]["strategy"]["matrix"]["include"] if row.get("audit")]
+    assert audited == ["ubuntu-latest"]
+    assert "${{ matrix.audit && '-Audit' || '' }}" in _runs(jobs["gate"])
+
+
 def test_the_release_workflow_tests_everything_before_it_uploads():
     import yaml
 
