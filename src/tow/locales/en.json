@@ -1892,7 +1892,8 @@
     },
     "site_form": {
       "mirror_invalid": "Mirrors: each line is a site address starting with http:// or https://, without a path or password",
-      "internal_off": "Mirrors: TOW does not fetch sites from this computer or the home network",
+      "internal_off": "Mirrors: the address points to this computer or the home network, and TOW does not fetch sites there",
+      "unresolved": "{hosts} cannot be reached now: the name is not found in DNS (a typo, or your provider blocks it). TOW tries again at each check.",
       "mirrors_repeat": "Mirrors: the same address is listed twice",
       "name_invalid": "Name: Latin letters, digits and _ only (not “new” or “guess”)",
       "path_invalid": "{label}: a path on the site starting with / is needed",
