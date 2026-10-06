@@ -11,28 +11,6 @@ from tow.i18n import t
 from tow.log import owner_language
 from tow.platform import posix, windows
 
-_DRIVE = re.compile(r"^([A-Za-z]:)\\+([^\\]+)")
-
-
-def save_root(path: str) -> str:
-    """D:\\TV\\Show\\S01 → D:\\TV, /srv/media/Show → /srv/media. Not the full path."""
-    raw = (path or "").strip().strip('"')
-    if raw.startswith("/") and not _windows_shaped(raw):
-        parts = [part for part in raw.split("/") if part]
-        return "/" + "/".join(parts[:2])
-    raw = raw.replace("/", "\\")
-    if not raw:
-        return ""
-    if raw.startswith("\\\\"):
-        parts = [p for p in raw.split("\\") if p]
-        if len(parts) >= 2:
-            return "\\\\" + parts[0] + "\\" + parts[1]
-        return raw.rstrip("\\")
-    m = _DRIVE.match(raw)
-    if m:
-        return f"{m.group(1)}\\{m.group(2)}"
-    return raw.rstrip("\\")
-
 
 def _root_key(root: str) -> str:
     """How two save roots compare when the list is de-duplicated: a Windows path ignores case
@@ -201,11 +179,6 @@ def protected_kind(path: str) -> str | None:
     if _ambiguous_component(path) is not None:
         return "windows"
     return _protected_by(path)
-
-
-def is_protected_folder(path: str) -> bool:
-    """Windows, program, AppData or POSIX system folders - as typed or as this PC resolves the path."""
-    return _ambiguous_component(path) is not None or _protected_by(path) is not None
 
 
 def _protected_by(path: str) -> str | None:

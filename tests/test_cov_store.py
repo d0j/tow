@@ -38,7 +38,6 @@ from tow.store import (
     load_state,
     migrate_legacy_secrets,
     persistence_lock,
-    register_recovery_hook,
     save_download_history,
     save_json,
     save_secret_undo,
@@ -369,16 +368,13 @@ def test_lock_state_inherited_from_another_process_is_discarded():
 
 
 def test_recovery_hooks_run_once_per_outermost_lock_and_never_recursively(monkeypatch):
-    monkeypatch.setattr(store, "_RECOVERY_HOOKS", [])
     calls: list[str] = []
 
     def hook():
         calls.append("hook")
         store._run_recovery_hooks()  # a hook that re-enters recovery must not recurse
 
-    register_recovery_hook(hook)
-    register_recovery_hook(hook)
-    assert [hook] == store._RECOVERY_HOOKS
+    monkeypatch.setattr(store, "_recovery_steps", lambda: [hook])
 
     with persistence_lock(), persistence_lock():
         pass
@@ -412,38 +408,25 @@ def test_recovery_never_depends_on_what_the_process_imported(monkeypatch):
     assert ran == [module for module, _name, _marker in store.RECOVERY_STEPS]
 
 
-def test_every_recovery_step_exists_and_no_module_registers_one_on_import():
-    import ast
+def test_every_recovery_step_exists():
     import importlib
 
+    # The store imports each step itself; nothing registers one on import (there is no way to).
     for module, name, _marker in store.RECOVERY_STEPS:
         assert callable(getattr(importlib.import_module(module), name)), (module, name)
-    src = Path(store.__file__).parent
-    registering = sorted(
-        str(path.relative_to(src))
-        for path in src.rglob("*.py")
-        if path.name != "store.py"
-        and any(
-            isinstance(node, ast.Name) and node.id == "register_recovery_hook"
-            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-        )
-    )
-    assert registering == []
 
 
 def test_failing_recovery_hook_blocks_the_writer_but_releases_the_lock(monkeypatch):
-    monkeypatch.setattr(store, "_RECOVERY_HOOKS", [])
-
     def broken():
         raise RuntimeError("journal unrecoverable")
 
-    register_recovery_hook(broken)
+    monkeypatch.setattr(store, "_recovery_steps", lambda: [broken])
     with pytest.raises(RuntimeError, match="journal unrecoverable"):
         save_state({"topics": [{"id": "must-not-land"}]})
     assert not state_path().exists()
 
     calls: list[int] = []
-    monkeypatch.setattr(store, "_RECOVERY_HOOKS", [lambda: calls.append(1)])
+    monkeypatch.setattr(store, "_recovery_steps", lambda: [lambda: calls.append(1)])
     save_state({"topics": [{"id": "later"}]})
     assert calls == [1]
     assert load_state()["topics"] == [{"id": "later"}]

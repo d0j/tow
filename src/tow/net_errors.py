@@ -79,10 +79,6 @@ def reason(raw: str) -> str | None:
     return None
 
 
-def is_technical(text: str) -> bool:
-    return any(marker in str(text or "") for marker in _MARKERS)
-
-
 def humanize(text: str, lang: str | None = None) -> str:
     """``text`` with its technical part said in words ("torrent client: connection refused");
     a text without one comes back unchanged."""

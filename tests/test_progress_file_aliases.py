@@ -6,7 +6,7 @@ import pytest
 
 from tow import bundle
 from tow.check_steps import merge_check_results, store_revision
-from tow.progress import _file_rule_plan, _selection_fingerprint
+from tow.progress import _file_rule_evidence, _selection_fingerprint
 from tow.selection import SelectionError, normalize_file_aliases, normalize_policy, resolve_selection
 from tow.torrent import MAX_FILES, TorrentFile, windows_path_key
 
@@ -25,7 +25,7 @@ def topic_for(pattern, files):
 
 
 def plan_for(topic, rows):
-    return _file_rule_plan(topic, rows, 1, content_path="/srv/media/ShowRoot", save_path="/srv/media")
+    return _file_rule_evidence(topic, rows, 1, content_path="/srv/media/ShowRoot", save_path="/srv/media")[0]
 
 
 @pytest.mark.parametrize("prefix", ["", "ShowRoot/"])

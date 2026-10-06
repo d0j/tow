@@ -15,10 +15,10 @@ from helpers import reaped
 from tow.bundle import (
     ExportImportError,
     _atomic_write,
-    _contains_secret_keys,
     _json_bytes,
     _parse_mapping,
     _read_bundle,
+    _secret_key_path,
     _validate_config_schema,
     _validate_history_schema,
     _validate_state_schema,
@@ -60,8 +60,8 @@ def _import_worker(bundle: str, home: str, config: str, key: str, started, resul
 
 
 def test_cookie_name_metadata_is_not_treated_as_plaintext_secret():
-    assert _contains_secret_keys({"cookie_names": ["uid", "pass"]}) is False
-    assert _contains_secret_keys({"telegram": {"token": "plaintext"}}) is True
+    assert _secret_key_path({"cookie_names": ["uid", "pass"]}) is None
+    assert _secret_key_path({"telegram": {"token": "plaintext"}}) is not None
 
 
 @pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
@@ -135,12 +135,12 @@ def test_import_rejects_non_finite_optional_events():
     ],
 )
 def test_tow_metadata_and_empty_slots_are_not_plaintext_secrets(metadata):
-    assert _contains_secret_keys(metadata) is False
+    assert _secret_key_path(metadata) is None
 
 
 @pytest.mark.parametrize("leak", [{"qbit_password": "x"}, {"site": {"api_key": "x"}}, {"a": [{"cookies": {"k": "v"}}]}])
 def test_real_secret_fields_are_still_refused(leak):
-    assert _contains_secret_keys(leak) is True
+    assert _secret_key_path(leak) is not None
 
 
 @pytest.mark.parametrize(
@@ -731,7 +731,7 @@ def test_import_rollback_compensates_after_late_restore_failure(tmp_path, monkey
 def test_login_form_is_valid_non_secret_config_metadata():
     from tow.bundle import (
         ExportImportError,
-        _contains_secret_keys,
+        _secret_key_path,
         _validate_config_schema,
     )
 
@@ -743,7 +743,7 @@ def test_login_form_is_valid_non_secret_config_metadata():
         }
     }
     _validate_config_schema(config)
-    assert not _contains_secret_keys(config)
+    assert _secret_key_path(config) is None
     with pytest.raises(ExportImportError, match="login_form"):
         _validate_config_schema({"trackers": {"x": {"login_form": {"password": "leak"}}}})
 

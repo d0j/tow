@@ -190,14 +190,6 @@ RECOVERY_STEPS: tuple[tuple[str, str, str | None], ...] = (
     # a restore from a night copy (a check never needs the night-copy code otherwise)
     ("tow.snapshots", "recover_interrupted_restore", ".tow-night-restore.json"),
 )
-# More steps for this process only (tests): run after the built-in ones.
-_RECOVERY_HOOKS: list[Callable[[], None]] = []
-
-
-def register_recovery_hook(hook: Callable[[], None]) -> None:
-    """Also run ``hook`` each time this process takes the persistence lock (outermost level)."""
-    if hook not in _RECOVERY_HOOKS:
-        _RECOVERY_HOOKS.append(hook)
 
 
 def _recovery_steps() -> list[Callable[[], None]]:
@@ -211,7 +203,7 @@ def _recovery_steps() -> list[Callable[[], None]]:
             except OSError:
                 pass  # an unreadable marker is not absent; let its recovery hook refuse safely
         steps.append(getattr(importlib.import_module(module), name))
-    return [*steps, *_RECOVERY_HOOKS]
+    return steps
 
 
 def _run_recovery_hooks() -> None:

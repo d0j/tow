@@ -33,7 +33,6 @@ def test_standalone_folder_policy_rejects_namespace_before_filesystem_lookup(pre
     monkeypatch.setattr(folders, "_real_path", lambda _p: pytest.fail("namespace filesystem lookup"))
     path = prefix + "C:/Windows/tow-fixture"
     assert folders.protected_kind(path) == "windows"
-    assert folders.is_protected_folder(path)
     assert folders.save_path_policy_problem(path) is not None
 
 

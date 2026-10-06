@@ -6,7 +6,7 @@ import logging
 import pkgutil
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
-from typing import Any, ClassVar, Protocol, get_protocol_members, runtime_checkable
+from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from tow import i18n
 
@@ -84,11 +84,6 @@ class TorrentClientAdapter(Protocol):
     def stop_owned_torrent(self, infohash: str) -> dict[str, Any]: ...
 
     def set_location(self, infohash: str, save_path: str) -> str: ...
-
-
-def adapter_problems(adapter: object) -> list[str]:
-    """The members of the contract ``adapter`` lacks (empty: it is a complete client)."""
-    return sorted(name for name in get_protocol_members(TorrentClientAdapter) if not hasattr(adapter, name))
 
 
 def ui_language() -> str:

@@ -115,11 +115,10 @@ def test_the_bundle_check_and_the_loader_share_one_schema():
 
 
 def test_the_interval_and_the_port_have_one_default():
-    from tow.config import DEFAULTS, interval_minutes, interval_sec_of, port_of
+    from tow.config import DEFAULTS, interval_sec_of, port_of
 
     assert (interval_sec_of({}), port_of({})) == (DEFAULTS["interval_sec"], DEFAULTS["port"]) == (3600, 8787)
     assert (interval_sec_of({"interval_sec": 900}), port_of({"port": 9100})) == (900, 9100)
-    assert interval_minutes(None) == 60
     loaded = load_config()
     assert (interval_sec_of(loaded), port_of(loaded)) == (loaded["interval_sec"], loaded["port"])
 

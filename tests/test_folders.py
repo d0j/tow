@@ -4,22 +4,19 @@ import pytest
 
 from tow import platform
 from tow.folders import (
-    is_protected_folder,
     paths_equal,
+    protected_kind,
     recent_save_roots,
     remember_save_root,
-    save_root,
     seen_from_here,
 )
 from tow.platform.posix import PosixBackend
 from tow.platform.windows import WindowsBackend
 
 
-def test_save_root_top_level_only():
-    assert save_root(r"M:\TV\Show\S01") == r"M:\TV"
-    assert save_root(r"M:\anime") == r"M:\anime"
-    assert save_root(r"m:/films/x") == r"m:\films"
-    assert save_root("") == ""
+def is_protected_folder(path: str) -> bool:
+    """Any kind of protected folder: what the folder checks refuse."""
+    return protected_kind(path) is not None
 
 
 def test_remember_last_10_newest_first():
@@ -51,12 +48,6 @@ def test_recent_from_topics_if_empty():
         ]
     }
     assert recent_save_roots(st) == [r"M:\TV\x", r"M:\old\show"]
-
-
-def test_posix_save_root_keeps_the_first_two_folders():
-    assert save_root("/srv/media/Show/S01") == "/srv/media"
-    assert save_root("/downloads") == "/downloads"
-    assert save_root("//nas/media/x") == r"\\nas\media"  # a share, however it is typed
 
 
 @pytest.mark.parametrize(
