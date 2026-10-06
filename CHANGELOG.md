@@ -5,6 +5,76 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Added
+
+- **Sign out on this device**: a button in the header of a phone or laptop signed in over the network.
+- Home says when a filter matches no topic and offers to show them all.
+- The guide has an Updates section: updating from the page, what is kept, going back, a cut-off update.
+
+### Changed
+
+- Commands typed in a terminal answer in the language of Settings → Language, or with automatic, in the
+  operating system's language.
+- `tow doctor` writes its findings in words and exits with 2 for any finding, a missing torrent client included.
+- One word per thing in both languages: Russian says «пароли и токены» and «доступ по сети», the Home column is
+  "Topic", and Home and Diagnostics name sites by their title (NNM-Club, Rutor) as the Sites page does.
+- Sizes use one unit system (KB, MB) and dates the language's format everywhere, the update card included; the
+  file picker says "Files selected: 1".
+- Updating to `latest` when it is already installed changes nothing; a `latest` older than the installed version is
+  refused. A target version that cannot read your data is refused before TOW stops.
+- Night copies: the three newest earlier copies are always kept, however old, so a computer that was off for a
+  long time keeps some history. Restoring a night copy keeps History as it is.
+- Backup messages name the contents in words, say why a folder or file was refused, and tell apart a file that
+  is not a TOW backup, needs another master key, is too large or is damaged.
+- Checking a Transmission or Deluge client words a failure like qBittorrent's; Get started shows the same client
+  state as the header; Diagnostics say in words that a mirror's address is not found.
+- On a phone Home rows wrap instead of being cut off, and the version badge no longer covers text.
+- A removed topic shows one reason on Home; History shows a resumed topic or site as resumed.
+- A saved `config.yaml` names the commented reference that explains every setting.
+
+### Fixed
+
+- An update interrupted with Ctrl+C or a closed terminal while it switches the code is rolled back first.
+- `tow run`, `tow start` and the start files refuse to start over an update cut off mid-switch and say to run the
+  update again; that run puts the previous version back first, which now works from `Update TOW.cmd` and
+  `update-tow` too. If undoing fails, it says so and starts TOW again.
+- Undoing a cut-off update never puts the old snapshot over data changed later; it names the file and the
+  `--discard-newer-data` option instead.
+- `update.py` started with Python 3.10 says which Python it needs.
+- Night copies: a copy that fails its check is removed at once, folders a killed copy left are removed by the next
+  one, and every failed copy is recorded (Back up now no longer ends in a server error).
+- Restoring a night copy: a restore that fails before it starts leaves nothing behind, a copy can replace a broken
+  `config.yaml`, and a copy deleted by hand no longer breaks cleanup monitoring.
+- Creating a restore point decrypts only the old points it removes, so it is much faster.
+- An import interrupted before the install was moved (another drive letter) recovers instead of blocking saves.
+- A legacy night copy with long `1:2:3…` numbers or impossible values is refused quickly instead of hanging or
+  failing with a server error.
+- Forms: saving the edit of a topic deleted meanwhile is refused; a pasted topic link keeps fields typed by hand;
+  an invalid client address, port or check interval is refused.
+- Sites: a link pattern without a number group or a path without `{id}` is refused; a site or ntfy address that
+  does not resolve now is saved with a warning instead of being taken for a home address.
+- A local `.torrent` only previews the contents: the first check still gets the torrent from the site. A chosen
+  file and an abandoned preparation are dropped when the link changes or the form is cancelled.
+- The content picker shows readable messages for an expired sign-in or a too large file, and "Choose files" is
+  offered without JavaScript only where it works.
+- The sign-in page and the CLI show the password reset command with the right path in an installed TOW.
+- A manual release check no longer holds up saves in other tabs; Home with many topics stays responsive.
+
+### Security
+
+- Windows: `keys\` and `data\` are closed to other accounts at every start, also when an administrator session
+  created them; `tow doctor` names a folder that stays open, and `install.ps1` closes them before the first start.
+- A magnet preview gives the client only the info-hash and public trackers.
+- Passkeys in magnet and `udp://` tracker addresses no longer reach logs, rows or messages.
+- Only web addresses reach the sign-in browser; settings and imports accept only http(s) site addresses, and
+  names that could change a page address are refused.
+- IPv6 forms of local and home-network addresses are recognised as such.
+- A password reminder that is the password with other punctuation is refused.
+- The update log shows the install folder as `<TOW>`.
+- Backup folders refuse Windows device names, streams and administrative shares.
+- A messenger's answer is read up to 1 MB.
+- `install.sh` runs nothing until it has been downloaded completely.
+
 ## [1.23.11] — 2026-10-06
 
 ### Changed
