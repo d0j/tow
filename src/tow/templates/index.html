@@ -37,10 +37,10 @@
     <div class="row row-two">
       <div>
         <label for="topic-selection-mode">{{ t('home.add.what') }}</label>
-        <select id="topic-selection-mode" name="selection_mode">
+        <select id="topic-selection-mode" name="selection_mode" data-exact-option="{{ t('content.manual') }}">
           {% set mode = draft.get('selection_mode', 'all') %}
           <option value="all"{% if mode == 'all' %} selected{% endif %}>{{ t('home.add.mode_all') }}</option>
-          <option value="exact"{% if mode == 'exact' %} selected{% endif %}>{{ t('content.manual') }}</option>
+          {% if mode == 'exact' %}<option value="exact" selected>{{ t('content.manual') }}</option>{% endif %}
           <option value="episodes"{% if mode == 'episodes' %} selected{% endif %}>{{ t('home.add.mode_episodes') }}</option>
           <option value="files"{% if mode == 'files' %} selected{% endif %}>{{ t('home.add.mode_files') }}</option>
         </select>

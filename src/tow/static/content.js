@@ -11,6 +11,11 @@
     if (!form) return;
     const field = (name) => form.elements.namedItem(name);
     const mode = field("selection_mode"), expression = field("selection_value");
+    // Choosing files needs this script: the page offers it without one only to keep an existing
+    // manual selection, so the option is added here, after "all files".
+    if (mode.dataset.exactOption && ![...mode.options].some((option) => option.value === "exact")) {
+      mode.add(new Option(mode.dataset.exactOption, "exact"), 1);
+    }
     const token = field("content_token"), indices = field("selection_indices");
     const status = root.querySelector("[data-content-status]");
     const results = root.querySelector("[data-content-results]");

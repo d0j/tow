@@ -551,3 +551,23 @@ def test_untrusted_cache_tokens_are_refused_before_any_path_access(monkeypatch, 
     with pytest.raises(TowError) as error:
         content.read(token, URL, "main")
     assert error.value.code == "content.expired"
+
+
+def test_choose_files_is_offered_without_script_only_to_keep_a_manual_selection():
+    from bs4 import BeautifulSoup
+
+    from tow.i18n import t
+
+    def row(tid, **extra):
+        return {"id": tid, "title": "Show", "url": URL + tid, "save_path": "D:/TV", "hash": None, **extra}
+
+    save_state({"topics": [row("manual", selection=stored_policy(exact())), row("plain")]})
+    client = TestClient(app)
+    add = BeautifulSoup(client.get("/").text, "html.parser").select_one("#topic-selection-mode")
+    assert add["data-exact-option"] == t("content.manual")
+    assert not add.select('option[value="exact"]'), "without a script the add form cannot choose files"
+    for tid, offered in (("manual", True), ("plain", False)):
+        page = BeautifulSoup(client.get(f"/topics/{tid}/edit").text, "html.parser")
+        select = page.select_one(f"#edit-selection-mode-{tid}")
+        assert bool(select.select('option[value="exact"][selected]')) is offered
+        assert select["data-exact-option"]
