@@ -13,10 +13,11 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from tow.folders import is_windows_device_path, protected_kind
+from tow.folders import is_windows_device_path, protected_kind, windows_name_problem
 from tow.i18n import t
 from tow.log import owner_language
 from tow.paths import config_path, data_dir
+from tow.platform import is_windows
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,8 @@ def problem(value: str, location: Location) -> str | None:
         return t("locations.bad_chars", owner_language())
     if _DRIVE_RELATIVE.match(raw):
         return t("locations.drive_relative", owner_language())
+    if is_windows() and (kind := windows_name_problem(raw)) is not None:
+        return t(_WINDOWS_NAME_TEXT[kind], owner_language())
     if ".." in Path(raw.replace("\\", "/")).parts:
         return t("locations.dotdot", owner_language())
     if _of_another_system(raw):
@@ -106,6 +109,11 @@ def _of_another_system(raw: str) -> bool:
     return looks_absolute and not Path(raw).expanduser().is_absolute()
 
 
+_WINDOWS_NAME_TEXT = {
+    "device": "locations.windows_device",
+    "stream": "locations.windows_stream",
+    "admin_share": "locations.windows_admin_share",
+}
 _ABSOLUTE = re.compile(r"^(?:[A-Za-z]:[\\/]|\\\\|//|/)")
 _DRIVE_RELATIVE = re.compile(r"^[A-Za-z]:(?![\\/])")
 

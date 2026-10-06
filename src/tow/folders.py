@@ -84,6 +84,32 @@ def is_windows_device_path(path: str) -> bool:
     return path.replace("/", "\\").startswith(("\\\\?\\", "\\\\.\\"))
 
 
+# Names Windows opens as a device in any folder and with any extension: NUL, backup\COM1.log.
+_DEVICE_NAME = re.compile(
+    r"(?:con|prn|aux|nul|clock\$|conin\$|conout\$|com[0-9¹²³]|lpt[0-9¹²³])(?:\s*\..*)?", re.IGNORECASE
+)
+# \\host\C$, \\host\ADMIN$: the whole disk or Windows itself through the administrative shares.
+_ADMIN_SHARE = re.compile(r"^[\\/]{2}[^\\/]+[\\/]+(?:[a-z]|admin|ipc|print)\$(?:[\\/]|$)", re.IGNORECASE)
+
+
+def windows_name_problem(path: str) -> str | None:
+    """What makes ``path`` something else than a plain folder on Windows: ``device`` (a device
+    name as one of its folders), ``stream`` (``folder:stream``, an alternate data stream) or
+    ``admin_share`` (``\\\\host\\C$``); None for a plain path. Linux and macOS read the same
+    names as ordinary folders: the caller asks only for a folder Windows will open."""
+    if _ADMIN_SHARE.match(path):
+        return "admin_share"
+    parts = [part for part in re.split(r"[\\/]+", path) if part]
+    if _DRIVE_ABSOLUTE.match(path) or re.fullmatch(r"[A-Za-z]:", parts[0] if parts else ""):
+        parts = parts[1:]  # the drive's colon is not a stream
+    for part in parts:
+        if ":" in part:
+            return "stream"
+        if _DEVICE_NAME.fullmatch(part.rstrip(" .")):
+            return "device"
+    return None
+
+
 def _protected_roots_by_kind() -> tuple[tuple[str, list[str], bool], ...]:
     """("windows" | "system", roots, fold case): this system's protected folders (tow.platform)
     and the other systems' defaults - a client on another machine may run either.

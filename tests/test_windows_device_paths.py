@@ -103,6 +103,46 @@ def test_ordinary_client_paths_remain_accepted(path):
     assert folders.save_path_problem(path, allow_unc=True) is None
 
 
+@pytest.mark.parametrize(
+    ("raw", "kind"),
+    [
+        ("NUL", "device"),
+        ("CON.txt", "device"),
+        (r"backup\COM1.log", "device"),
+        ("backup/LPT1.", "device"),
+        ("COM¹", "device"),
+        ("conin$", "device"),
+        ("night:ads", "stream"),
+        (r"D:\copies\night::$INDEX_ALLOCATION", "stream"),
+        (r"\\localhost\C$\Windows\Temp", "admin_share"),
+        ("//127.0.0.1/c$/Users/x", "admin_share"),
+        (r"\\server\ADMIN$\x", "admin_share"),
+    ],
+)
+@pytest.mark.parametrize("location", [locations.NIGHT, locations.MANUAL])
+def test_backup_folder_refuses_windows_devices_streams_and_admin_shares(raw, kind, location, monkeypatch):
+    from tow import platform
+    from tow.platform.windows import WindowsBackend
+
+    monkeypatch.setattr(locations, "check_writable", lambda *_a: pytest.fail("write probe of a device"))
+    with platform.use(WindowsBackend()):
+        assert locations.problem(raw, location) == t(f"locations.windows_{kind}")
+        with pytest.raises(locations.LocationError):
+            locations.resolve_checked(raw, location)
+
+
+@pytest.mark.parametrize(
+    "raw", ["copies", r"D:\Backups\TOW", r"\\nas\share\tow", r"\\nas\backups$\tow", "console", "com10", "nul-copies"]
+)
+def test_plain_backup_folders_stay_accepted_on_windows(raw):
+    from tow import platform
+    from tow.platform.windows import WindowsBackend
+
+    assert folders.windows_name_problem(raw) is None
+    with platform.use(WindowsBackend()):
+        assert locations.problem(raw, locations.MANUAL) in (None, t("locations.other_system"))
+
+
 def test_relative_backup_folder_remains_relative_to_install():
     assert locations.problem("copies", locations.MANUAL) is None
     assert locations.resolve_checked("copies", locations.MANUAL) == locations.install_dir() / "copies"
