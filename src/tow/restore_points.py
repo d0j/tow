@@ -217,20 +217,14 @@ def list_restore_points() -> list[dict[str, Any]]:
 
 
 def _prune(*, protected: set[str]) -> None:
-    points = list_restore_points()
-    keep = 0
-    for point in points:
-        point_id = str(point["id"])
-        if point_id in protected or point["bytes"] <= 0:
-            continue
-        path = point_path(point_id)
+    """Counted by name (newest first); only a point about to be removed is decrypted and checked."""
+    points = [point for point in list_restore_points() if str(point["id"]) not in protected and point["bytes"] > 0]
+    for point in points[max(0, RESTORE_POINT_LIMIT - len(protected)) :]:
+        path = point_path(str(point["id"]))
         try:
             verify_bundle(path, _passphrase())
         except ExportImportError:
             continue  # a foreign, unreadable or damaged copy is never ours to remove
-        keep += 1
-        if keep <= RESTORE_POINT_LIMIT - len(protected):
-            continue
         try:
             path.unlink()
             try:
