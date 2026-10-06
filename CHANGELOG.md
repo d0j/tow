@@ -5,6 +5,13 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- History diagnostics count actual blobs, retain historical path aliases, and refuse
+  incomplete reads, shallow history, changed refs or exceeded budgets. Candidate
+  matches require review; author addresses and native Git details are not printed.
+  Batch reads replace one process per object, with bounded pattern matching.
+
 ## [1.23.9] — 2026-10-06
 
 ### Fixed

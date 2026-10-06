@@ -76,6 +76,35 @@ By contributing you agree that your contribution is licensed under the [MIT Lice
 
 ## Publishing a release
 
+Before a public-history audit, use a separate complete clone containing only the
+public refs you intend to inspect (not a development checkout with private backups):
+
+```sh
+uv run --frozen python scripts/history-scan.py --repo /path/to/public-clone
+```
+
+The diagnostic reads local blobs reachable from all refs and HEAD, including binary
+content, and checks all names in historical raw diffs. It does not fetch missing
+objects, apply filters, honour replacement objects, rewrite refs or inspect untracked
+files. Metadata logs disable signature verification, mailmaps and display settings;
+the diagnostic does not launch the configured signature verifier or map author names.
+Unreachable/reflog-only objects and arbitrary secret formats are outside its
+claim. Exit codes: **0** complete with no pattern candidates; **1** complete with
+candidates requiring review (including synthetic test data); **2** incomplete or
+refused. A complete scan is not proof that every possible secret is absent.
+
+The default per-blob memory budget is 5,000,000 bytes. Larger objects are listed and
+make the result incomplete; increase `--max-blob-bytes` explicitly to inspect them.
+Pattern operations have a two-second limit and use the existing locked `regex`
+dependency in compatibility mode. Git metadata/reader deadlines are 120 seconds.
+Exceeded budgets or native failures never become a clean result; raw matches,
+author email addresses and native error details are not printed. Path hints are
+redacted and escaped; match totals count each blob once, even when it has aliases.
+
+Git 2.36 or later is needed for `cat-file --batch-command`; an unsupported command
+is an incomplete scan, not an empty history. Protocol reference:
+[Git batch output](https://git-scm.com/docs/git-cat-file#_batch_output).
+
 Merge the gated release commit through a pull request, fetch `origin/main`, and create an annotated
 `vX.Y.Z` tag on that commit (matching `pyproject.toml`). Publish it with:
 
