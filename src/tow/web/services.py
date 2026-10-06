@@ -151,6 +151,7 @@ def prepare_content(
     tracker = match_tracker(load_trackers(cfg), url)
     if tracker is None:
         raise TowError("check.no_tracker")
+    local = blob is not None
     cached = False
     if blob is None and not fresh and not allow_limited:
         blob = torrent_cache.read(url)
@@ -162,9 +163,11 @@ def prepare_content(
         # An explicit preparation is a normal tracker action, not dry-run: sign-in and
         # mirror state must work just as they do during a normal check.
         blob = tracker.fetch_torrent(url, load_secrets(), str(cfg.get("user_agent") or "TOW"), persist=True)
-    result = content.prepare(blob, url, str(client["id"]))
+    # A local file is not evidence of the topic: it only previews contents, is never saved as
+    # the topic's metadata and never becomes its revision (content.site_revision).
+    result = content.prepare(blob, url, str(client["id"]), from_site=not local)
     result["cached"] = cached
-    if not cached:
+    if not cached and not local:
         try:
             torrent_cache.remember(blob, url)
         except TowError, OSError, ValueError, RuntimeError:
@@ -221,7 +224,7 @@ def prepare_magnet_content(url: str, client_id: str) -> dict[str, object]:
             raise TowError("content.magnet_failed")
         from tow import torrent_cache
 
-        result = content.prepare(blob, url, str(configuration["id"]))
+        result = content.prepare(blob, url, str(configuration["id"]), from_site=True)
         try:
             torrent_cache.remember(blob, url)
         except TowError, OSError, ValueError, RuntimeError:

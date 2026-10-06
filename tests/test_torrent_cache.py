@@ -403,8 +403,9 @@ def test_saved_contents_use_no_tracker_quota_and_fresh_request_requires_consent(
 
 def test_cache_write_failure_does_not_lose_prepared_selection(monkeypatch):
     wire_tracker(monkeypatch)
+    watch()
     monkeypatch.setattr(torrent_cache, "remember", lambda *_args: (_ for _ in ()).throw(OSError("private path")))
-    result = services.prepare_content(URL, "main", blob(), False)
+    result = services.prepare_fresh_content(URL, "main", True)
     assert result["cache_failed"] is True
     assert services.read_content(result["token"], URL, "main") == blob()
 

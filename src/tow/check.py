@@ -1217,10 +1217,12 @@ def _fetch_revision(work: _TopicCheck, policy: dict[str, Any]) -> _Fetched | Non
     run = work.run
     token = work.topic.get("content_token")
     if not work.old and token:
-        from tow.content import read
+        from tow.content import site_revision
 
         try:
-            return _Fetched(read(str(token), work.url, work.client_id), None)
+            prepared = site_revision(str(token), work.url, work.client_id)
+            if prepared is not None:
+                return _Fetched(prepared, None)
         except TowError as exc:
             # Retry an expired preparation only with proof of its revision. Fresh metadata
             # is verified before client operations, never silently replaced by a new "all".

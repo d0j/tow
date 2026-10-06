@@ -238,7 +238,7 @@ def test_manual_prepared_add_uses_existing_verified_client_pipeline(monkeypatch,
     client = Client()
     tracker = _wire_fake_check(monkeypatch, client)
     monkeypatch.setattr(check, "parse_torrent_metadata", parse_torrent_metadata)
-    snapshot = content.prepare(blob(), URL, "main")
+    snapshot = content.prepare(blob(), URL, "main", from_site=True)
     topic = {
         "id": "prepared",
         "title": "Show",
@@ -267,6 +267,45 @@ def test_manual_prepared_add_uses_existing_verified_client_pipeline(monkeypatch,
     else:
         assert saved["hash"] is None
         assert saved["content_token"] == snapshot["token"]
+
+
+def _other_topic_blob():
+    return blob().replace(b"4:Show", b"4:Else")
+
+
+@pytest.mark.parametrize("matches", [True, False])
+def test_local_file_is_only_a_preview_never_the_first_revision(monkeypatch, matches):
+    """A local .torrent chosen for another topic cannot be added or saved as this one."""
+    from test_check_contract import FakeClient, _wire_fake_check
+
+    from tow import check, torrent_cache
+
+    client = FakeClient()
+    tracker = _wire_fake_check(monkeypatch, client)
+    monkeypatch.setattr(check, "parse_torrent_metadata", parse_torrent_metadata)
+    site = blob() if matches else _other_topic_blob()
+    monkeypatch.setattr(tracker, "fetch_torrent", lambda *_args, **_kwargs: site)
+    save_state({"topics": [{"id": "new", "title": "Show", "url": URL, "save_path": r"M:\TV", "hash": None}]})
+    monkeypatch.setattr(services, "load_config", lambda: {"clients": [{"id": "main", "kind": "fake", "default": True}]})
+    monkeypatch.setattr("tow.trackers.load_trackers", lambda _cfg: [tracker])
+    monkeypatch.setattr("tow.trackers.match_tracker", lambda *_args: tracker)
+    monkeypatch.setattr(tracker, "spec", {}, raising=False)
+    snapshot = services.prepare_content(URL, "main", blob(), False)
+    assert torrent_cache.read(URL) is None, "a local file is not saved as the topic's metadata"
+    assert content.site_revision(snapshot["token"], URL, "main") is None
+    state = load_state()
+    state["topics"][0].update(content_token=snapshot["token"], content_hash=snapshot["hash"])
+    save_state(state)
+    row = check.run_check(apply=True, notify=False, how="test")["results"][0]
+    assert torrent_cache.read(URL) == site, "only the site's own bytes are saved"
+    if matches:
+        assert row["ok"] is True, row
+        assert client.add_calls == 1
+    else:
+        assert row["ok"] is False
+        assert row["error_record"]["code"] == "selection.preview_changed"
+        assert client.add_calls == 0
+        assert load_state()["topics"][0]["hash"] is None
 
 
 def test_manual_dirty_revision_change_refuses_before_client_mutation(monkeypatch):
