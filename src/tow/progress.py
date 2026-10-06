@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import re
 import stat
@@ -27,6 +29,8 @@ from tow.i18n import t
 from tow.jsonish import as_dict
 from tow.log import owner_language
 from tow.records import DownloadHistory, HistoryItem, HistoryRecord, Topic
+from tow.selection import SelectionPlan, policy_from_topic, resolve_selection
+from tow.torrent import TorrentFile
 
 
 def _get(value: Any, key: str, default: Any = None) -> Any:
@@ -453,17 +457,60 @@ def _season_relative_expected(
     return None
 
 
+def _selection_is_current(topic: Topic) -> bool:
+    return (
+        not topic.get("selection_dirty")
+        and topic.get("selection_verified") is not False
+        and (
+            not topic.get("selection_hash")
+            or str(topic.get("selection_hash")).casefold() == str(topic.get("hash") or "").casefold()
+        )
+    )
+
+
+def _file_rule_plan(
+    topic: Topic, prepared_all: list[tuple[Any, str, int | None, bool]], preferred_season: int | None
+) -> SelectionPlan | None:
+    """Re-read literal/mask membership, not client priorities or stale episode caches."""
+    mode = str(as_dict(topic.get("selection")).get("mode") or "all")
+    if not prepared_all or mode not in {"files", "exact"} or not _selection_is_current(topic):
+        return None
+    rows = tuple(
+        TorrentFile(index, rel, size if size is not None else 0)
+        for index, (_row, rel, size, _selected) in enumerate(prepared_all)
+        if (mode != "exact" or size is not None) and (size is None or 0 <= size <= 2**63 - 1)
+    )
+    return resolve_selection(rows, policy_from_topic(topic), preferred_season=preferred_season)
+
+
+def _file_rule_fingerprint(topic: Topic) -> str | None:
+    mode = str(as_dict(topic.get("selection")).get("mode") or "all")
+    if mode not in {"files", "exact"} or not _selection_is_current(topic):
+        return None
+    keys = [str(value) for value in topic.get("selected_episode_keys") or []]
+    context = [
+        str(topic.get("hash") or "").casefold(),
+        str(topic.get("client_id") or ""),
+        policy_from_topic(topic),
+        _preferred_season(topic, keys),
+    ]
+    return hashlib.sha256(json.dumps(context, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
 def _expected_from_observed(
     topic: Topic,
     expected: dict[str, Any] | None,
     observed_episode_keys: list[str],
     selected_episode_keys: list[str],
 ) -> dict[str, Any] | None:
-    """Count the episodes actually present when nothing better is known (or the known
-    total is too small); a partial selection is exact by definition."""
-    partial_selection = str(as_dict(topic.get("selection")).get("mode") or "all") != "all"
+    """Count current evidence without turning an unconfirmed rule into a known target."""
+    mode = str(as_dict(topic.get("selection")).get("mode") or "all")
+    partial_selection = mode != "all"
+    uncertain_selection = partial_selection and (
+        not _selection_is_current(topic) or (mode == "episodes" and not selected_episode_keys)
+    )
     if observed_episode_keys and (
-        (partial_selection and not selected_episode_keys)
+        uncertain_selection
         or expected is None
         or (not partial_selection and int(expected.get("total") or 0) < len(observed_episode_keys))
         or (
@@ -477,8 +524,8 @@ def _expected_from_observed(
             "kind": "episodes",
             "total": len(observed_episode_keys),
             "keys": observed_episode_keys,
-            "source": "selection" if partial_selection else "files",
-            "confidence": "exact" if partial_selection else "current",
+            "source": "selection" if partial_selection and not uncertain_selection else "files",
+            "confidence": "exact" if partial_selection and not uncertain_selection else "current",
         }
     return None
 
@@ -705,6 +752,10 @@ def _open_record(topic: Topic, history: DownloadHistory) -> tuple[HistoryRecord,
     record.setdefault("items", {})
     _repair_synthetic_baseline_completion(record)
     expected = expected_for_topic(topic)
+    previous = record.get("expected")
+    fingerprint = _file_rule_fingerprint(topic)
+    if fingerprint and previous and previous.get("selection_fingerprint") == fingerprint:
+        expected = previous
     if expected:
         record["expected"] = expected
     else:
@@ -721,6 +772,25 @@ def _selected_files(
 ) -> tuple[list[tuple[tuple[Any, str, int | None], tuple[Any, ...]]], dict[str, Any] | None]:
     """The selected client files with the episodes each covers, and the expectation corrected
     by what the files show (season-relative numbering, a count from the files)."""
+    file_plan = _file_rule_plan(topic, prepared_all, preferred_season)
+    if file_plan is not None:
+        wanted = set(file_plan.selected_indices)
+        prepared_all = [
+            (row, rel, size, selected and index in wanted)
+            for index, (row, rel, size, selected) in enumerate(prepared_all)
+        ]
+        if file_plan.selected_episode_keys:
+            expected = record["expected"] = {
+                "kind": "episodes",
+                "total": len(file_plan.selected_episode_keys),
+                "keys": list(file_plan.selected_episode_keys),
+                "source": "selection",
+                "confidence": "exact",
+                "selection_fingerprint": _file_rule_fingerprint(topic),
+            }
+        else:
+            expected = None
+            record.pop("expected", None)
     all_coverages = normalize_episode_seasons(
         resolve_episode_coverages(rel for _row, rel, _size, _selected in prepared_all),
         preferred_season,

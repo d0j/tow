@@ -9,6 +9,14 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Pending, unconfirmed or other-revision file rules no longer become completed
+  targets from old client selections. Current literal and mask rules are replayed
+  read-only against metadata so newly recognized memberships are counted and
+  unrelated client files cannot complete a selected target. Changed exact file
+  identities are refused; no client priorities or saved policies are rewritten.
+  Temporarily missing metadata keeps the last recomputed target only for the
+  same verified rule, torrent, client and season context, without shrinking it
+  to an older episode cache or creating completion events.
 - Explicit multi-season episode groups in one file are retained in selection,
   progress and history instead of losing later seasons. Large or overlapping
   mixed groups are not treated as one season's absolute-number alias. Ambiguous
