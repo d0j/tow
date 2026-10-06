@@ -405,6 +405,7 @@ HISTORY_GROUPS = {
     "errors": frozenset(
         {
             "check_fail",
+            "content_cache_failed",
             "client_add_failed",
             "reconcile_failed",
             "check_blocked",

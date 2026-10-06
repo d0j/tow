@@ -65,6 +65,7 @@ FLASH_TTL_MAX_SEC = 3600
 DEFAULTS: dict[str, Any] = {
     "bind": "127.0.0.1",
     "allow_lan": False,
+    "check_updates": True,
     "port": 8787,
     "interval_sec": 3600,
     "flash_ttl_sec": 60,
@@ -156,6 +157,8 @@ def validated(raw: dict[str, Any]) -> dict[str, Any]:
     for key, value in defaults().items():
         data.setdefault(key, value)
     data["allow_lan"] = as_bool(data.get("allow_lan"))
+    _bool_field(data, "check_updates")
+    data["check_updates"] = as_bool(data.get("check_updates"))
     for key in OBSOLETE_KEYS:  # read from an older file and ignored; the next save leaves them out
         data.pop(key, None)
     _validate(data)

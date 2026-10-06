@@ -43,9 +43,12 @@
   const check = document.querySelector("[data-release-check]");
   const notes = document.querySelector("[data-release-notes]");
   const command = document.querySelector("[data-release-command]");
+  const notice = document.querySelector("[data-release-notice]");
+  const history = document.querySelector("[data-update-history]");
   const install = document.querySelector("[data-release-install]");
   const progress = document.querySelector("[data-update-progress]");
   const support = document.querySelector("[data-update-support]");
+  const unavailable = document.querySelector("[data-update-unavailable]");
   const rollback = document.querySelector("[data-update-rollback]");
   const input = document.querySelector("[data-update-version]");
   const apply = document.querySelector("[data-update-apply]");
@@ -79,9 +82,13 @@
       command.textContent = command.textContent.replace(/--ref\s+\S+$/, "--ref v" + data.latest);
     }
     controls();
-    badge.hidden = !available;
+    badge.hidden = !available || Boolean(notice);
     badge.textContent = available ? t("js.releases.badge", { version: data.latest }) : "";
     badge.title = available ? t("js.releases.available", { version: data.latest }) : "";
+    if (notice) {
+      notice.hidden = !available;
+      notice.textContent = available ? t("js.releases.available", { version: data.latest }) : "";
+    }
     positionOverlay();
     if (notes && /^https:\/\/github\.com\/d0j\/tow\/releases(?:\/tag\/v\d+\.\d+\.\d+)?$/.test(data.url || "")) {
       notes.href = data.url;
@@ -92,6 +99,8 @@
       if (available && !data.ok) status.textContent += " · " + t("js.releases.stale");
       const checked = dateLabel(data.checked_at, "js.releases.checked");
       if (checked) status.textContent += " · " + checked;
+      if (data.checks_enabled === false) status.textContent =
+        (data.latest ? status.textContent + " · " : "") + t("js.releases.disabled");
     }
   };
   const refresh = async (manual = false) => {
@@ -155,6 +164,10 @@
       if (rollback) rollback.hidden = !supported;
       if (support) support.textContent = !supported && typeof job.message === "string" ? job.message :
         t(supported ? "js.releases.supported" : "js.releases.unsupported");
+      if (unavailable) {
+        unavailable.hidden = supported;
+        unavailable.textContent = typeof job.message === "string" ? job.message : t("js.releases.unsupported");
+      }
       rollbackVersion = job.rollback_version || "";
       if (previous) {
         previous.hidden = !rollbackVersion;
@@ -188,6 +201,11 @@
         for (const label of [dateLabel(job.started_at, "js.releases.started"), dateLabel(job.finished_at, "js.releases.finished")]) {
           if (label) progress.textContent += " · " + label;
         }
+        if (history) {
+          history.textContent = progress.textContent;
+          history.hidden = !job.id;
+          if (job.status === "ok" && !updating && !needsReload && !replaced && !job.backup_cleanup_pending) progress.hidden = true;
+        }
       }
       if (reload) reload.hidden = !needsReload;
       controls();
@@ -204,6 +222,7 @@
         supported = false;
         controls();
         if (support) support.textContent = t("js.releases.status_unavailable");
+        if (unavailable) { unavailable.hidden = false; unavailable.textContent = t("js.releases.status_unavailable"); }
       }
       schedulePoll();
     } finally {

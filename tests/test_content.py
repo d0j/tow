@@ -256,6 +256,9 @@ def test_manual_prepared_add_uses_existing_verified_client_pipeline(monkeypatch,
     assert tracker.fetch_calls == 0
     assert client.add_calls == int(apply)
     saved = load_state()["topics"][0]
+    from tow import torrent_cache
+
+    assert torrent_cache.read(URL) == (blob() if apply else None)
     if apply:
         assert client.selected_indices == (0,)
         assert saved["hash"] == snapshot["hash"]

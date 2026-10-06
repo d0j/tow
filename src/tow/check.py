@@ -821,6 +821,8 @@ def _confirm_matching_magnet(
     except Exception as exc:  # noqa: BLE001 - no magnet: the .torrent's own error stands
         _LOG.warning("magnet not read for %s: %s", tr.name, type(exc).__name__)
         magnet_url = ""
+    if run.apply and magnet_url:
+        _observe_cached_magnet(url, magnet_url, topic)
     if not _magnet_matches_saved_hash(magnet_url, old, topic_client):
         return False
     saved_selection_ready = bool(
@@ -1143,9 +1145,19 @@ def _check_revision(work: _TopicCheck) -> None:
     if fetched is None:
         return  # the tracker's magnet confirmed the revision the topic already has
     metadata = parse_torrent_metadata(fetched.blob)
-    h, hash_alias_migration = resolve_client_hash(metadata, old, work.client, row)
     if fetched.magnet_hash is not None:
         verify_magnet_metadata(metadata, fetched.magnet_hash)
+    if run.apply:
+        from tow import torrent_cache
+
+        try:
+            torrent_cache.remember(fetched.blob, work.url)
+        except (TowError, OSError, ValueError, RuntimeError) as cache_exc:
+            # Optional retention cannot turn a confirmed client result into a failure.
+            log_event(
+                "content_cache_failed", topic=topic.get("id"), code=getattr(cache_exc, "code", "content.unavailable")
+            )
+    h, hash_alias_migration = resolve_client_hash(metadata, old, work.client, row)
     if getattr(metadata, "hash_v1", None):
         row["source_hash_v1"] = metadata.hash_v1
     if getattr(metadata, "hash_v2", None):
@@ -1258,6 +1270,7 @@ def _fetch_by_magnet(work: _TopicCheck, policy: dict[str, Any], torrent_error: E
         ignore_cool=run.ignore_cool,
         persist=run.apply,
     )
+    _observe_cached_magnet(work.url, magnet_url, topic)
     run.record(
         "tracker_magnet_found",
         component="tracker",
@@ -1273,6 +1286,15 @@ def _fetch_by_magnet(work: _TopicCheck, policy: dict[str, Any], torrent_error: E
     work.row["source"] = "magnet"
     work.row["fallback_reason"] = "tracker_auth"
     return _Fetched(blob, magnet_hash)
+
+
+def _observe_cached_magnet(url: str, magnet: str, topic: Topic) -> None:
+    from tow import torrent_cache
+
+    try:
+        torrent_cache.observe_magnet(url, magnet)
+    except (TowError, OSError, ValueError, RuntimeError) as exc:
+        log_event("content_cache_failed", topic=topic.get("id"), code=getattr(exc, "code", "content.unavailable"))
 
 
 def _plan_selection(work: _TopicCheck, metadata: Any, policy: dict[str, Any]) -> Any | None:

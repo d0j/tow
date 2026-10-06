@@ -161,7 +161,10 @@ def js_texts() -> dict[str, str]:
 
 
 def content_texts() -> dict[str, str]:
-    return i18n.texts_with_prefix("content.js.")
+    return {
+        **i18n.texts_with_prefix("content.js."),
+        **{key: t(key) for key in ("content.cached_hint", "content.cache_failed", "content.limited_confirm")},
+    }
 
 
 def content_existing(topic: dict[str, Any] | None) -> list[dict[str, str]]:
