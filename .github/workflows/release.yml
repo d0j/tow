@@ -2,7 +2,8 @@ name: release
 
 # A release tag (vX.Y.Z) builds and tests what the README links to, then uploads it to the
 # GitHub release of that tag (created from CHANGELOG.md when it does not exist yet; existing
-# notes are never changed):
+# notes are never changed). The release stays a draft until every file below is uploaded and
+# read back; the files of a public release are never replaced:
 #   TOW-windows-x64.zip   the Windows bundle (scripts/build-bundle.py)
 #   install.ps1           irm .../releases/latest/download/install.ps1 | iex
 #   install.sh            curl -LsSf .../releases/latest/download/install.sh | sh
@@ -208,18 +209,38 @@ jobs:
           sha256sum TOW-windows-x64.zip install.ps1 install.sh tow-source.tar.gz > SHA256SUMS
           cat SHA256SUMS
           ls -l
-      - name: Create the release if it does not exist, upload the assets
+      - name: Draft the release, upload and read back every asset, then publish it
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           version=${TAG#v}
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
+          expected="SHA256SUMS TOW-windows-x64.zip install.ps1 install.sh tow-source.tar.gz"
+          names() { gh release view "$TAG" --json assets --jq '[.assets[].name] | sort | join(" ")'; }
+          readback() {
+            rm -rf readback
+            gh release download "$TAG" --dir readback
+            (cd readback && sha256sum -c SHA256SUMS)
+          }
+          if draft=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            echo "the release of $TAG exists (draft: $draft)"
+          else
             # Notes: what to download (EN, RU), then the tag's section of both changelogs.
             python3 scripts/release-notes.py "$TAG" "$GITHUB_REPOSITORY" > notes.md
             prerelease=
             case $TAG in *-*) prerelease=--prerelease ;; esac
-            gh release create "$TAG" --verify-tag --title "TOW $version" --notes-file notes.md $prerelease
+            gh release create "$TAG" --draft --verify-tag --title "TOW $version" --notes-file notes.md $prerelease
+            draft=true
+          fi
+          if [ "$draft" != true ]; then
+            # Public already: its files are never replaced (a re-run would change their hashes).
+            if [ "$(names)" = "$expected" ]; then
+              readback
+              echo "the release of $TAG is public and complete; nothing was changed"
+              exit 0
+            fi
+            [ -z "$(names)" ] || { echo "the public release of $TAG has only: $(names)" >&2; exit 1; }
+            gh release edit "$TAG" --draft=true  # public without files: a draft until they are all there
           fi
           # A label says what each file is for (shown instead of the file name; links keep the name).
           gh release upload "$TAG" --clobber \
@@ -228,4 +249,11 @@ jobs:
             "assets/install.sh#Linux and macOS installer: install.sh - run it with the curl line in the notes" \
             "assets/tow-source.tar.gz#Source archive: tow-source.tar.gz - used by install.sh and updates" \
             "assets/SHA256SUMS#Checksums: SHA256SUMS - SHA-256 of the files above"
-          gh release view "$TAG" --json assets --jq '.assets[].name'
+          [ "$(names)" = "$expected" ] || { echo "the draft of $TAG has: $(names)" >&2; exit 1; }
+          readback
+          cmp readback/SHA256SUMS assets/SHA256SUMS
+          latest=true
+          case $TAG in *-*) latest=false ;; esac
+          gh release edit "$TAG" --draft=false --latest=$latest
+          [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = false ] || { echo "$TAG is still a draft" >&2; exit 1; }
+          gh release view "$TAG" --json url,assets --jq '.url, .assets[].name'
