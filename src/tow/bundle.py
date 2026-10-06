@@ -85,7 +85,15 @@ _DRIVE_PATH = re.compile(r"^[A-Za-z]:[\\/]")
 
 
 class ExportImportError(RuntimeError):
-    """Raised when a portable TOW export/import cannot be handled safely."""
+    """Raised when a portable TOW export/import cannot be handled safely.
+
+    ``reason`` is what the owner is told about a file that does not pass: ``not_tow`` (not a TOW
+    backup at all), ``other_key`` (cannot be decrypted: another master key, or damaged),
+    ``too_large``, or ``damaged`` (anything else); the message stays technical, for the log."""
+
+    def __init__(self, message: str = "", *, reason: str = "damaged") -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 def _json_bytes(data: Any) -> bytes:
@@ -103,11 +111,11 @@ def _read_limited(path: Path, *, label: str) -> bytes:
     try:
         size = path.stat().st_size
         if size > MAX_BUNDLE_BYTES:
-            raise ExportImportError(f"{label} is too large")
+            raise ExportImportError(f"{label} is too large", reason="too_large")
         with path.open("rb") as handle:
             content = handle.read(MAX_BUNDLE_BYTES + 1)
         if len(content) > MAX_BUNDLE_BYTES:
-            raise ExportImportError(f"{label} is too large")
+            raise ExportImportError(f"{label} is too large", reason="too_large")
         return content
     except ExportImportError:
         raise
@@ -476,12 +484,12 @@ def _encrypt_outer(payload: bytes, passphrase: str, salt: bytes | None = None) -
 
 def _decrypt_outer(outer: dict[str, Any], passphrase: str) -> bytes:
     if not isinstance(outer, dict) or outer.get("format") != FORMAT:
-        raise ExportImportError("unsupported export bundle format")
+        raise ExportImportError("unsupported export bundle format", reason="not_tow")
     if outer.get("cipher") != "fernet":
-        raise ExportImportError("unsupported export bundle cipher")
+        raise ExportImportError("unsupported export bundle cipher", reason="not_tow")
     kdf = outer.get("kdf")
     if not isinstance(kdf, dict) or kdf.get("name") != KDF_NAME:
-        raise ExportImportError("unsupported export bundle KDF")
+        raise ExportImportError("unsupported export bundle KDF", reason="not_tow")
     try:
         iterations = int(kdf.get("iterations") or 0)  # 0 is rejected by the range check below
         salt = base64.urlsafe_b64decode(str(kdf.get("salt") or "").encode("ascii"))
@@ -500,7 +508,9 @@ def _decrypt_outer(outer: dict[str, Any], passphrase: str) -> bytes:
     except ExportImportError:
         raise
     except (InvalidToken, TypeError, ValueError, UnicodeError, binascii.Error) as exc:
-        raise ExportImportError("cannot decrypt export bundle; wrong passphrase or corrupted bundle") from exc
+        raise ExportImportError(
+            "cannot decrypt export bundle; wrong passphrase or corrupted bundle", reason="other_key"
+        ) from exc
 
 
 def _zip_payload(members: dict[str, bytes]) -> bytes:
@@ -1146,9 +1156,11 @@ def _read_bundle(path: Path, passphrase: str) -> dict[str, Any]:
     try:
         raw = _read_limited(Path(path), label="export bundle")
         outer = json.loads(raw.decode("utf-8"))
+        _validate_tree(outer, label="export bundle envelope")
     except (UnicodeError, ValueError, RecursionError) as exc:
-        raise ExportImportError("invalid export bundle envelope") from exc
-    _validate_tree(outer, label="export bundle envelope")
+        raise ExportImportError("invalid export bundle envelope", reason="not_tow") from exc
+    except ExportImportError as exc:
+        raise ExportImportError(str(exc), reason="not_tow") from exc
     return _validated_payload(_decrypt_outer(outer, passphrase))
 
 

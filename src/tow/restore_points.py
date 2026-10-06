@@ -39,9 +39,27 @@ DELETE_FAILED = "delete_failed"
 class RestorePointError(RuntimeError):
     """Raised when a server-local restore point cannot be handled safely; ``kind`` says what failed."""
 
-    def __init__(self, message: str = "", *, kind: str = RESTORE_FAILED) -> None:
+    def __init__(self, message: str = "", *, kind: str = RESTORE_FAILED, reason: str = "") -> None:
         super().__init__(message)
         self.kind = kind
+        self.reason = reason  # why a file did not pass the check, in the owner's words ("" unknown)
+
+
+# Why a file did not pass the check (tow.bundle.ExportImportError.reason), in the owner's words.
+_INVALID_REASONS = {
+    "not_tow": "backup.restore_point.reason_not_tow",
+    "other_key": "backup.restore_point.reason_other_key",
+    "too_large": "backup.restore_point.reason_too_large",
+    "empty": "backup.restore_point.reason_empty",
+    "damaged": "backup.restore_point.reason_damaged",
+}
+
+
+def invalid_file(message_key: str, reason: str) -> RestorePointError:
+    """A file or point that did not pass the check: ``message_key`` and why, both translated."""
+    lang = owner_language()
+    because = t(_INVALID_REASONS.get(reason, _INVALID_REASONS["damaged"]), lang)
+    return RestorePointError(t(message_key, lang), kind=INVALID_FILE, reason=because)
 
 
 def _is_rollback_failure(exc: BaseException) -> bool:
@@ -275,9 +293,7 @@ def check_restore_point(point_id: str) -> dict[str, Any]:
         try:
             return import_bundle(point_path(point_id), _passphrase(), apply=False)
         except ExportImportError as exc:
-            raise RestorePointError(
-                t("backup.restore_point.validation_failed", owner_language()), kind=INVALID_FILE
-            ) from exc
+            raise invalid_file("backup.restore_point.validation_failed", exc.reason) from exc
 
 
 def restore_point_delete_view(point_id: str) -> dict[str, Any]:
@@ -329,13 +345,9 @@ def check_portable_bundle(path: Path) -> dict[str, Any]:
         try:
             result = import_bundle(Path(path), _portable_passphrase(), apply=False)
         except ExportImportError as exc:
-            raise RestorePointError(
-                t("backup.restore_point.portable_invalid", owner_language()), kind=INVALID_FILE
-            ) from exc
+            raise invalid_file("backup.restore_point.portable_invalid", exc.reason) from exc
         if not result.get("ok") or not result.get("preview"):
-            raise RestorePointError(
-                t("backup.restore_point.portable_check_failed", owner_language()), kind=INVALID_FILE
-            )
+            raise invalid_file("backup.restore_point.portable_check_failed", "damaged")
         return result
 
 
@@ -361,11 +373,9 @@ def _restore_bundle(
             preserve_secret_keys={"lan_auth"},
         )
     except ExportImportError as exc:
-        raise RestorePointError(
-            t("backup.restore_point.validation_failed", owner_language()), kind=INVALID_FILE
-        ) from exc
+        raise invalid_file("backup.restore_point.validation_failed", exc.reason) from exc
     if not preview.get("ok") or not preview.get("preview"):
-        raise RestorePointError(t("backup.restore_point.validation_failed", owner_language()), kind=INVALID_FILE)
+        raise invalid_file("backup.restore_point.validation_failed", "damaged")
     safety_point = create_restore_point(protected=protected)
     try:
         applied = import_bundle(

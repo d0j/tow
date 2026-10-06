@@ -128,7 +128,12 @@
       "no_checkpoint": "restore applied without an import checkpoint",
       "lan_access_failed": "could not keep the network access settings",
       "rollback_failed": "restore failed, and undoing it failed too",
-      "data_kept": "restore failed; current data was kept"
+      "data_kept": "restore failed; current data was kept",
+      "reason_not_tow": "it is not a TOW backup file",
+      "reason_other_key": "it cannot be decrypted: it was made with another master key, or it is damaged",
+      "reason_too_large": "it is too large",
+      "reason_empty": "it is empty",
+      "reason_damaged": "its contents are damaged or come from an unsupported version"
     }
   },
   "releases": {
@@ -934,7 +939,10 @@
     "night_outside_data": "night copies must be outside the TOW data folder",
     "no_rights": "no permission to write to this folder",
     "drive_unavailable": "the drive or network folder is unavailable",
-    "folder_unavailable": "the folder is unavailable: {error}",
+    "folder_unavailable": "the folder cannot be created or written to",
+    "bad_name": "the folder name has characters this system does not allow (such as < > : \" | ? *)",
+    "name_too_long": "the folder path is too long",
+    "no_space": "there is no free space on the disk",
     "protected_system": "copies are not put into system folders (/etc, /usr, /System …) or the folders programs start from",
     "other_system": "this is a path of another system (D:\\… or \\\\server\\… on Linux and macOS, /mnt/… on Windows): give a folder of this computer",
     "other_system_config": "{key}: {value} in config.yaml is a folder of another system (for {title}); TOW does not create it inside its folder. Choose a folder of this computer in Settings (or remove {key} from config.yaml for the default one)"
@@ -1969,6 +1977,7 @@
       "retention_invalid": "Enter a whole number of days from 1 to 3650. Settings were not changed.",
       "checked": "The backup passed the check; current data is unchanged.",
       "check_failed": "The backup could not be verified. Check its integrity and folder access; current data is unchanged.",
+      "check_failed_reason": "The backup did not pass the check: {reason}. Current data is unchanged.",
       "deleted": "The selected backup was deleted. Current data and other backups are unchanged.",
       "deleted_audit_missing": "The selected backup was deleted, but the event could not be recorded. Check log-folder access.",
       "delete_failed": "Deletion was not confirmed. Refresh the list and check folder access. Foreign files and unsigned night copies are not removed automatically.",
@@ -1984,7 +1993,13 @@
       "copy_made": "copy made: {name} ({size})",
       "restore_failed": "not restored: {error}",
       "restored": "restored from {name}; the previous state is saved in {path}",
-      "copy_missing": "; not in the copy because they do not exist yet: {names}"
+      "copy_missing": "; not in the copy because they do not exist yet: {names}",
+      "member_state": "the list of topics",
+      "member_history": "the download history",
+      "member_secrets": "passwords and tokens",
+      "member_log": "the event log",
+      "member_config": "the settings",
+      "member_restore_point": "a backup made with the button"
     },
     "settings": {
       "no_such_client": "no such client",
@@ -2009,6 +2024,7 @@
       "restored_file": "restored from the file; LAN access kept",
       "rollback_critical": "critical rollback error; data may have changed",
       "file_invalid": "the file did not pass the check; data unchanged",
+      "file_invalid_reason": "the file did not pass the check: {reason}; data unchanged",
       "safety_point_failed": "the file is fine; could not create a safety point; data unchanged",
       "file_unreadable": "could not read the file; data unchanged",
       "file_stage_failed": "could not prepare the backup file; check folder permissions and free disk space; data unchanged",

@@ -486,7 +486,8 @@ def test_browser_copy_needs_its_original_key_and_preserves_a_different_install(
     ]
     before = {path: path.read_bytes() for path in members}
 
-    assert t("web.settings.file_invalid", language) in _upload(client, exported, operation)
+    reason = t("backup.restore_point.reason_other_key", language)
+    assert t("web.settings.file_invalid_reason", language, reason=reason) in _upload(client, exported, operation)
     assert {path: path.read_bytes() for path in members} == before
     assert not (destination / "data" / "restore-points").exists()
 
@@ -575,13 +576,21 @@ def test_import_engine_rollback_failure_is_critical_too(monkeypatch, tmp_path, l
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-@pytest.mark.parametrize("content", [b"not a bundle", b""])
-def test_bad_file_says_invalid_in_every_language(monkeypatch, tmp_path, language, content):
+@pytest.mark.parametrize(
+    ("content", "why"),
+    [
+        (b"not a bundle", "reason_not_tow"),
+        (b'{"format": "something-else"}', "reason_not_tow"),
+        (b"", "reason_empty"),
+    ],
+)
+def test_bad_file_says_invalid_and_why_in_every_language(monkeypatch, tmp_path, language, content, why):
     _seed(monkeypatch, tmp_path, language)
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    reason = t(f"backup.restore_point.{why}", language)
 
     for operation in ("check", "restore"):
-        assert t("web.settings.file_invalid", language) in _upload(client, content, operation)
+        assert t("web.settings.file_invalid_reason", language, reason=reason) in _upload(client, content, operation)
     assert load_state()["topics"] == [{"id": "before"}]
 
 
