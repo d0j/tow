@@ -214,6 +214,8 @@ cannot be restored. `tow keys status` shows which key file is in use (never the 
   network can lock you out.
 - **Forgot the password?** On the computer running TOW set a new one without the old one: Settings → Network access
   → Password, or `tow password`. Other devices then sign in again.
+- The sign-out button in the header (shown only on a device signed in over the network) ends this device's
+  session.
 - **Sign out everywhere** (Settings → Network access) ends every network session; the password stays.
 - The reminder you set is visible to anyone who opens the sign-in page — never write the password into it.
 - Requests from public internet addresses are always refused. See [Headless server](../README.md#remote-access)

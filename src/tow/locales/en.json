@@ -206,7 +206,8 @@
       "confirm": "Check all topics and add what is found to the torrent client?"
     },
     "flash": {},
-    "close": "Close"
+    "close": "Close",
+    "sign_out": "Sign out on this device"
   },
   "browser_auth": {
     "starting": "starting the sign-in",
