@@ -4,10 +4,11 @@ import base64
 import hashlib
 import re
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass
 from itertools import pairwise
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, parse_qsl, quote, urlsplit
 
 MAX_TORRENT_BYTES = 32 * 1024 * 1024
 MAX_BENCODE_DEPTH = 64
@@ -49,6 +50,18 @@ def parse_magnet_hashes(value: str) -> tuple[frozenset[str], frozenset[str]] | N
     if len(btih) > 1 or len(btmh) > 1 or not (btih or btmh):
         return None
     return frozenset(btih), frozenset(btmh)
+
+
+def preview_magnet(value: str, keep_tracker: Callable[[str], bool]) -> str | None:
+    """``value`` rebuilt for a metadata preview: its info-hashes (xt) and only the trackers
+    (tr) ``keep_tracker`` accepts. Peer addresses (x.pe), web seeds and everything else a
+    tracker page put into the link are left out: the client would connect to them blindly."""
+    if parse_magnet_hashes(value) is None:
+        return None
+    params = parse_qsl(urlsplit(value).query)
+    parts = [f"xt={quote(xt, safe=':')}" for key, xt in params if key == "xt"]
+    parts += [f"tr={quote(tr, safe='')}" for key, tr in params if key == "tr" and keep_tracker(tr)]
+    return "magnet:?" + "&".join(parts)
 
 
 @dataclass(frozen=True, slots=True)

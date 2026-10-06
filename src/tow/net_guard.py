@@ -6,6 +6,7 @@ import ipaddress
 import socket
 from collections.abc import Iterable
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpcore
 import httpx
@@ -26,6 +27,26 @@ def public_addresses(host: str, port: int) -> list[str]:
     except ValueError as exc:
         raise httpcore.ConnectError("the host has an invalid address") from exc
     return addresses
+
+
+_TRACKER_SCHEMES = {"http": 80, "https": 443, "udp": 80}
+
+
+def tracker_address(url: str, *, public_only: bool = True) -> bool:
+    """An http(s) or udp announce address a client may be told about. With ``public_only``
+    its host must resolve to public addresses only (as for site requests); an unresolvable
+    host or a LAN, loopback or link-local one is refused."""
+    try:
+        parsed = urlsplit(url)
+        scheme = parsed.scheme.lower()
+        if scheme not in _TRACKER_SCHEMES or not parsed.hostname:
+            return False
+        port = parsed.port or _TRACKER_SCHEMES[scheme]
+        if public_only:
+            public_addresses(parsed.hostname, port)
+    except ValueError, httpcore.ConnectError:
+        return False
+    return True
 
 
 class PublicOnlyBackend(httpcore.SyncBackend):

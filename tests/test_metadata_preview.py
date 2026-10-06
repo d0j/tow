@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from helpers import make_torrent
 
-from tow import content, trackers
+from tow import content, net_guard, trackers
 from tow.clients import factory, qbittorrent
 from tow.clients.managed import ClientError
 from tow.errors import TowError
@@ -187,7 +187,50 @@ def service_fixture(monkeypatch, *, capable=True, enabled=True, data=TORRENT):
     monkeypatch.setattr(trackers, "load_trackers", lambda *_args: {})
     monkeypatch.setattr(trackers, "match_tracker", lambda *_args: tracker)
     monkeypatch.setattr(factory, "from_secrets", lambda *_args: adapter)
+    monkeypatch.setattr(net_guard, "public_addresses", _fake_dns)
     return calls, adapter, tracker
+
+
+def _fake_dns(host, _port):
+    """tracker.example is public, lan.example a home-network name; no real lookup."""
+    import httpcore
+
+    answers = {"tracker.example": ["203.0.113.5"], "lan.example": ["192.168.1.20"]}
+    if host not in answers or answers[host][0].startswith("192.168."):
+        raise httpcore.ConnectError("not public")
+    return answers[host]
+
+
+def test_preview_passes_only_the_hashes_and_public_trackers_to_the_client(monkeypatch):
+    calls, _, tracker = service_fixture(monkeypatch)
+    page_magnet = (
+        f"magnet:?xt=urn:btih:{META.hash_v1}&dn=Show+A&x.pe=192.168.1.1:80"
+        "&tr=http%3A%2F%2F192.168.1.1%2Fcgi-bin%2Freboot&tr=http%3A%2F%2Flan.example%2Fx"
+        "&tr=udp%3A%2F%2Ftracker.example%3A6969%2Fannounce&tr=file%3A%2F%2F%2Fetc&ws=http%3A%2F%2F10.0.0.1%2F"
+        "&tr=http%3A%2F%2Funknown.example%2Fa"
+    )
+    tracker.fetch_magnet = lambda *_args, **_kwargs: (page_magnet, META.hash_v1)
+
+    services.prepare_magnet_content(URL, "main")
+
+    [preview] = [magnet for kind, magnet in calls if kind == "preview"]
+    assert preview == f"magnet:?xt=urn:btih:{META.hash_v1}&tr=udp%3A%2F%2Ftracker.example%3A6969%2Fannounce"
+
+
+def test_a_lan_tracker_is_kept_when_the_owner_allows_private_tracker_hosts(monkeypatch):
+    calls, _, tracker = service_fixture(monkeypatch)
+    monkeypatch.setattr(
+        services,
+        "load_config",
+        lambda: {"clients": [{"id": "main", "enabled": True}], "allow_private_tracker_hosts": True},
+    )
+    lan = f"magnet:?xt=urn:btih:{META.hash_v1}&tr=http%3A%2F%2F192.168.1.1%2Fannounce&x.pe=192.168.1.1:80"
+    tracker.fetch_magnet = lambda *_args, **_kwargs: (lan, META.hash_v1)
+
+    services.prepare_magnet_content(URL, "main")
+
+    [preview] = [magnet for kind, magnet in calls if kind == "preview"]
+    assert preview == f"magnet:?xt=urn:btih:{META.hash_v1}&tr=http%3A%2F%2F192.168.1.1%2Fannounce"
 
 
 def test_explicit_native_service_stores_bound_metadata_without_quota_download(monkeypatch):
