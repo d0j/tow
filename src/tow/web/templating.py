@@ -14,7 +14,7 @@ from typing import Any
 
 from fastapi.templating import Jinja2Templates
 
-from tow import __version__, access, i18n, platform, undo
+from tow import __version__, access, i18n, paths, platform, undo
 from tow.auth import password_hint
 from tow.clients.factory import client_name
 from tow.config import interval_sec_of, port_of
@@ -197,7 +197,7 @@ def configure(templates: Jinja2Templates = TEMPLATES) -> None:
     env["static_version"] = STATIC_VERSION
     env["undo_label"] = undo_label
     # Commands, paths and examples the pages show, as this system writes them (tow.platform).
-    env["os_launcher"] = lambda: "scripts\\tow.cmd" if platform.is_windows() else "scripts/tow"
+    env["os_launcher"] = lambda: paths.launcher(windows=platform.is_windows())
     env["os_sep"] = lambda: "\\" if platform.is_windows() else "/"
     env["os_example_folder"] = lambda: "D:\\TV" if platform.is_windows() else "/srv/media"
     env["can_undo"] = can_undo

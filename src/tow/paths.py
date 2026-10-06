@@ -118,6 +118,17 @@ def legacy_key_file() -> Path:
     return data_dir() / "master.key"
 
 
+def launcher(*, windows: bool) -> str:
+    """The launcher as typed in the install folder: ``app\\scripts\\tow.cmd`` (``app/scripts/tow``)
+    in a runtime install, ``scripts\\tow.cmd`` in a development checkout. Relative, so a page
+    shown on the network does not reveal where the install lives."""
+    try:
+        parts = repo_root().relative_to(root()).parts
+    except RuntimeError, ValueError:
+        parts = ()
+    return ("\\" if windows else "/").join((*parts, "scripts", "tow.cmd" if windows else "tow"))
+
+
 def lan_auth_token_file() -> Path:
     """``<data>/lan-auth.token``: the optional external access key (tow.auth reads it when
     neither TOW_LAN_AUTH_TOKEN nor TOW_LAN_AUTH_TOKEN_FILE is set)."""

@@ -44,9 +44,9 @@ EXIT_INTERRUPTED = 130
 
 def _launcher() -> str:
     """The launcher of this install as this system writes it (``tow setup`` is its command)."""
-    from tow import platform
+    from tow import paths, platform
 
-    return "scripts\\tow.cmd" if platform.is_windows() else "scripts/tow"
+    return paths.launcher(windows=platform.is_windows())
 
 
 def _utf8_console() -> None:
