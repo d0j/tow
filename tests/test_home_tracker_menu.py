@@ -125,6 +125,16 @@ def test_a_filter_that_matches_nothing_says_so_and_offers_a_reset():
     assert "listEmpty.hidden = !(narrowed && !shown)" in js
 
 
+def test_on_a_phone_rows_wrap_and_the_version_does_not_float_over_text():
+    css = (STATIC / "app.css").read_text(encoding="utf-8")
+    phone = css[css.index("The row icons sit top right") :]
+    phone = phone[: phone.index("\n}\n")]
+    assert ".topic-path .clip-start { white-space: normal;" in phone
+    assert ".topic-event.clip, .topic-event .row-error { white-space: normal;" in phone
+    assert "body > .app-version { position: absolute; }" in phone
+    assert "body { position: relative; padding-bottom:" in phone
+
+
 def test_large_lists_scroll_and_long_names_do_not_resize_the_toolbar():
     css = (STATIC / "app.css").read_text(encoding="utf-8")
     assert ".tracker-toggle { max-width: 10rem; }" in css
