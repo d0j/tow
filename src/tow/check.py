@@ -17,6 +17,7 @@ from tow.check_steps import (
     owner_fields,
     reconcile_notification,
     resolve_client_hash,
+    store_file_aliases,
     store_revision,
     verify_magnet_metadata,
 )
@@ -1186,6 +1187,17 @@ def _check_revision(work: _TopicCheck) -> None:
         if client is None or not _confirm_client_add(client, h, str(topic.get("save_path") or "")):
             raise TowError("check.once_unconfirmed")
         topic["once_done"] = True
+
+    if (
+        h == old
+        and not needs_selection_update
+        and topic.get("selection_verified") is True
+        and str(topic.get("selection_hash") or "").upper() == h
+    ):
+        # The hash binds these original names to the already-confirmed rule.
+        # Refresh legacy/corrupt caches without any client mutation. A preview
+        # changes only its in-memory copy; the applying commit remains journaled.
+        store_file_aliases(topic, h, metadata.files, mode=plan.mode)
 
 
 def _fetch_revision(work: _TopicCheck, policy: dict[str, Any]) -> _Fetched | None:

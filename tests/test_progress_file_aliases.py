@@ -176,16 +176,20 @@ def test_import_refuses_malformed_alias_metadata(value):
         bundle._validate_state_topic(0, {"file_aliases": value})
 
 
-def test_alias_context_is_in_the_expected_target_fingerprint():
+@pytest.mark.parametrize("mode", ["all", "files"])
+def test_alias_context_is_in_the_expected_target_fingerprint(mode):
     topic = topic_for("*.mkv", [{"path": "Show?.S01E01.mkv", "size": 1}])
+    topic["selection"] = normalize_policy(mode, "*.mkv")
     before = _selection_fingerprint(topic)
     topic["file_aliases"]["files"][0]["size"] = 2
     assert _selection_fingerprint(topic) != before
 
 
-def test_alias_order_and_hash_case_do_not_change_the_same_metadata_context():
+@pytest.mark.parametrize("mode", ["all", "files"])
+def test_alias_order_and_hash_case_do_not_change_the_same_metadata_context(mode):
     files = [{"path": "Show?.S01E01.mkv", "size": 1}, {"path": "Show?.S01E02.mkv", "size": 1}]
     topic = topic_for("*.mkv", files)
+    topic["selection"] = normalize_policy(mode, "*.mkv")
     before = _selection_fingerprint(topic)
     topic["file_aliases"] = {"hash": HASH.upper(), "files": list(reversed(files))}
     assert _selection_fingerprint(topic) == before
@@ -294,7 +298,8 @@ def test_legacy_names_cannot_hide_a_damaged_or_incomplete_selection(flags):
     assert error.value.code == "selection.file_map_changed"
 
 
-def test_original_names_define_episode_events_while_disk_and_history_keep_native_names(tmp_path):
+@pytest.mark.parametrize("mode", ["all", "episodes", "files", "exact"])
+def test_original_names_define_episode_events_while_disk_and_history_keep_native_names(tmp_path, mode):
     from test_progress_client_layout import Client
 
     from tow.progress import reconcile_topic
@@ -305,6 +310,9 @@ def test_original_names_define_episode_events_while_disk_and_history_keep_native
     target.parent.mkdir(parents=True)
     target.write_bytes(b"x")
     topic = topic_for("*.mkv", [{"path": original, "size": 1}])
+    topic["selection"] = normalize_policy(
+        mode, "S01E01" if mode == "episodes" else "*.mkv", files=[{"path": original, "size": 1}], source_hash=HASH
+    )
     topic.update(save_path=str(tmp_path), selected_episode_keys=["episode:s01e01"])
     info = {
         "save_path": str(tmp_path),
@@ -354,3 +362,39 @@ def test_unverified_revision_cannot_publish_original_names():
         files=(TorrentFile(0, "Show?.mkv", 1),),
     )
     assert "file_aliases" not in topic
+
+
+@pytest.mark.parametrize("mode", ["all", "episodes", "files"])
+def test_refresh_repairs_old_native_episode_labels_without_reannouncing_completion(tmp_path, mode):
+    from test_progress_client_layout import Client
+
+    from tow.progress import reconcile_topic
+
+    original = "ShowA.S01E01|S02E01.mkv"
+    native = "ShowRoot/" + windows_path_key(original)
+    target = tmp_path / native
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"x")
+    topic = topic_for("*.mkv", [{"path": original, "size": 1}])
+    aliases = topic.pop("file_aliases")
+    topic["selection"] = normalize_policy(mode, "S01E01" if mode == "episodes" else "*.mkv")
+    topic.update(save_path=str(tmp_path), selected_episode_keys=["episode:s01e01", "episode:s02e01"])
+    info = {
+        "save_path": str(tmp_path),
+        "content_path": str(tmp_path / "ShowRoot"),
+        "files": [{"name": native, "size": 1, "priority": 1, "progress": 0.5}],
+    }
+    history = {"topics": {}}
+    reconcile_topic(topic, Client(info), history, "2026-09-10T20:00:00+00:00")
+    info["files"][0]["progress"] = 1.0
+    old = reconcile_topic(topic, Client(info), history, "2026-09-10T21:00:00+00:00")
+    assert old["events"] == ["episode_completed"]
+    before = deepcopy(history["topics"]["test"]["last_event"])
+    topic["file_aliases"] = aliases
+    fixed = reconcile_topic(topic, Client(info), history, "2026-09-10T22:00:00+00:00")
+    assert fixed["events"] == []
+    record = history["topics"]["test"]
+    assert record["last_event"]["at"] == before["at"]
+    assert "S02" not in record["last_event"]["label"]
+    assert {item["relative_path"] for item in record["items"].values()} == {native}
+    assert {key for item in record["items"].values() for key in item["episode_keys"]} == {"episode:s01e01"}

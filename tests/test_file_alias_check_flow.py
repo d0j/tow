@@ -34,11 +34,16 @@ class Client(FakeClient):
         }
 
 
-def prepare(monkeypatch, tmp_path, *, add_error=None):
+def prepare(monkeypatch, tmp_path, *, add_error=None, selection_mode="files"):
     file = tmp_path / NATIVE
     file.parent.mkdir(parents=True)
     file.write_bytes(b"x")
-    policy = normalize_policy("files", "Season|1/*.mkv")
+    policy = normalize_policy(
+        selection_mode,
+        "S01E01" if selection_mode == "episodes" else "Season|1/*.mkv",
+        files=[{"path": CANONICAL, "size": 1}],
+        source_hash=HASH.upper(),
+    )
     save_state(
         {
             "topics": [
@@ -58,7 +63,7 @@ def prepare(monkeypatch, tmp_path, *, add_error=None):
         check,
         "parse_torrent_metadata",
         lambda _blob: SimpleNamespace(
-            infohash=HASH, client_hash=HASH, name="ShowRoot", files=(TorrentFile(0, CANONICAL, 1),)
+            infohash=HASH.upper(), client_hash=HASH.upper(), name="ShowRoot", files=(TorrentFile(0, CANONICAL, 1),)
         ),
     )
     monkeypatch.setattr(check, "reconcile_topic", reconcile_topic)
@@ -117,3 +122,69 @@ def test_aliases_survive_portable_export_preview_and_restore_on_synthetic_stores
     bundle.import_bundle(archive, "synthetic-passphrase", apply=True)
     restored = load_state()["topics"][0]
     assert restored["file_aliases"] == topic["file_aliases"]
+
+
+@pytest.mark.parametrize("cache", ["absent", "truncated", "other_hash", "malformed"])
+@pytest.mark.parametrize("mode", ["all", "episodes", "files", "exact"])
+def test_unchanged_verified_revision_refreshes_original_names_without_client_mutation(
+    monkeypatch, tmp_path, cache, mode
+):
+    client, tracker = prepare(monkeypatch, tmp_path, selection_mode=mode)
+    assert check.run_check(apply=True, notify=False, how="test")["results"][0]["ok"] is True
+    state = load_state()
+    topic = state["topics"][0]
+    topic.pop("file_aliases")
+    if cache == "truncated":
+        topic.update(selected_files_truncated=True, selected_file_count=201)
+    elif cache == "other_hash":
+        topic["file_aliases"] = {"hash": "b" * 40, "files": []}
+    elif cache == "malformed":
+        topic["file_aliases"] = None
+    save_state(state)
+    before = deepcopy(load_state())
+    preview = check.run_check(apply=False, notify=False, how="test")
+    assert preview["results"][0]["ok"] is True
+    assert load_state() == before
+    result = check.run_check(apply=True, notify=False, how="test")
+    assert result["results"][0]["ok"] is True
+    assert result["results"][0]["changed"] is False
+    refreshed = load_state()["topics"][0]
+    assert refreshed["file_aliases"] == {"hash": refreshed["hash"], "files": [{"path": CANONICAL, "size": 1}]}
+    assert client.add_calls == 1
+    assert client.configure_calls == 0
+    assert tracker.fetch_calls == 3
+    summary = load_download_history()["topics"]["test"]["summary"]
+    assert summary["completed"] == 1
+    assert summary["expected"] == (5 if mode == "all" else 1)
+    assert summary["is_complete"] is (mode != "all")
+
+
+def test_unchanged_unverified_revision_cannot_backfill_trusted_names(monkeypatch, tmp_path):
+    client, _tracker = prepare(monkeypatch, tmp_path)
+    assert check.run_check(apply=True, notify=False, how="test")["results"][0]["ok"] is True
+    state = load_state()
+    topic = state["topics"][0]
+    topic.pop("file_aliases")
+    topic["selection_verified"] = False
+    save_state(state)
+    check.run_check(apply=True, notify=False, how="test")
+    assert "file_aliases" not in load_state()["topics"][0]
+    assert client.add_calls == 1
+    assert client.configure_calls == 0
+
+
+@pytest.mark.parametrize("flag", ["paused", "once_done"])
+def test_alias_migration_does_not_resume_paused_or_finished_once_tracker_checks(monkeypatch, tmp_path, flag):
+    client, tracker = prepare(monkeypatch, tmp_path)
+    assert check.run_check(apply=True, notify=False, how="test")["results"][0]["ok"] is True
+    state = load_state()
+    topic = state["topics"][0]
+    topic.pop("file_aliases")
+    topic[flag] = True
+    save_state(state)
+    check.run_check(apply=True, notify=False, how="test")
+    assert "file_aliases" not in load_state()["topics"][0]
+    assert load_state()["topics"][0][flag] is True
+    assert tracker.fetch_calls == 1
+    assert client.add_calls == 1
+    assert client.configure_calls == 0

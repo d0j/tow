@@ -236,20 +236,25 @@ def store_revision(
         topic["selected_episode_keys"] = list(plan.selected_episode_keys)
         topic["selection_hash"] = h
         if files is not None:
-            aliases = [
-                {"path": row.path, "size": row.size}
-                for row in files
-                if not row.is_pad and windows_path_key(row.path) != row.path.casefold()
-            ]
-            if aliases or plan.mode == "files":
-                topic["file_aliases"] = {"hash": h, "files": aliases}
-            else:
-                topic.pop("file_aliases", None)
+            store_file_aliases(topic, h, files, mode=plan.mode)
     topic["selection_dirty"] = False
     topic.pop("content_token", None)
     topic.pop("content_hash", None)
     if once:
         topic["once_done"] = True
+
+
+def store_file_aliases(topic: Topic, h: str, files: Iterable[TorrentFile], *, mode: str) -> None:
+    """Original names of validated metadata, independent of client priorities or UI previews."""
+    aliases = [
+        {"path": row.path, "size": row.size}
+        for row in files
+        if not row.is_pad and windows_path_key(row.path) != row.path.casefold()
+    ]
+    if aliases or mode == "files":
+        topic["file_aliases"] = {"hash": h, "files": aliases}
+    else:
+        topic.pop("file_aliases", None)
 
 
 def mark_reconcile_failure(row: dict[str, Any], exc: Exception) -> None:

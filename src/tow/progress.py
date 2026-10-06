@@ -554,7 +554,9 @@ def _file_rule_evidence(
 ) -> tuple[SelectionPlan | None, dict[int, str]]:
     """Canonical rule and episode names, separate from native disk/history paths."""
     mode = str(as_dict(topic.get("selection")).get("mode") or "all")
-    if not prepared_all or mode not in {"files", "exact"} or not _selection_is_current(topic):
+    if not prepared_all or not _selection_is_current(topic):
+        return None, {}
+    if mode not in {"files", "exact"} and (mode not in {"all", "episodes"} or "file_aliases" not in topic):
         return None, {}
     root = _client_content_root(content_path, save_path)
     native_rows = tuple(
@@ -564,7 +566,7 @@ def _file_rule_evidence(
     )
     policy = policy_from_topic(topic)
     canonical: dict[int, str] = {}
-    if mode == "files" and "file_aliases" in topic:
+    if mode in {"all", "episodes", "files"} and "file_aliases" in topic:
         aliases = _current_file_aliases(topic)
         sources = tuple(TorrentFile(index, item["path"], item["size"]) for index, item in enumerate(aliases["files"]))
         mapping = map_files(
@@ -577,6 +579,8 @@ def _file_rule_evidence(
     elif mode == "files" and (legacy_paths := _legacy_alias_paths(topic)) is not None:
         rows = _legacy_mask_rows(legacy_paths, native_rows, prepared_all, root)
         return resolve_selection(rows, policy, preferred_season=preferred_season), {row.index: row.path for row in rows}
+    if mode not in {"files", "exact"}:
+        return None, canonical
     if mode == "exact":
         wanted = tuple(TorrentFile(index, item["path"], item["size"]) for index, item in enumerate(policy["files"]))
         mapping = map_files(
@@ -620,10 +624,10 @@ def _selection_fingerprint(topic: Topic) -> str | None:
     ]
     if mode == "all":
         context.append(expected_for_topic(topic))
-    elif mode == "files":
+    if mode in {"all", "files"}:
         if "file_aliases" in topic:
             context.append(_current_file_aliases(topic))
-        elif (legacy_paths := _legacy_alias_paths(topic)) is not None:
+        elif mode == "files" and (legacy_paths := _legacy_alias_paths(topic)) is not None:
             context.append(legacy_paths)
     return hashlib.sha256(json.dumps(context, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
@@ -949,8 +953,10 @@ def _selected_files(
         observed_episode_keys = sorted(
             {
                 label.key
-                for (_row, rel, _size, _selected), coverage in zip(prepared_all, all_coverages, strict=True)
-                if is_video_file(rel)
+                for (_row, _rel, _size, _selected), name, coverage in zip(
+                    prepared_all, names, all_coverages, strict=True
+                )
+                if is_video_file(name)
                 for label in coverage
             }
         )
