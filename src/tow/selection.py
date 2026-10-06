@@ -31,6 +31,7 @@ class SelectionPendingError(SelectionError):
 
 MAX_RULE_TEXT = 8192
 MAX_RULES = 500
+_MAX_CLASS_CHAR_CACHE = 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,9 +266,10 @@ def _safe_globs(value: str) -> list[str]:
     return [pattern.replace("\\", "/").casefold() for pattern in globs]
 
 
-def _mandatory_parts(pattern: str) -> tuple[str, ...]:
-    """Distinct fixed runs, including literal single-character classes."""
+def _mask_parts(pattern: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Necessary fixed runs and whole classes; fnmatch owns their semantics."""
     parts: list[str] = []
+    classes: list[str] = []
     literal: list[str] = []
     cursor = 0
     while cursor < len(pattern):
@@ -292,6 +294,7 @@ def _mandatory_parts(pattern: str) -> tuple[str, ...]:
                 literal.append(body)
                 cursor = end + 1
                 continue
+            classes.append(pattern[cursor : end + 1])
         elif char not in "*?":
             literal.append(char)
             cursor += 1
@@ -300,39 +303,131 @@ def _mandatory_parts(pattern: str) -> tuple[str, ...]:
         literal.clear()
         cursor = end + 1
     parts.append("".join(literal))
-    return tuple(dict.fromkeys(part for part in parts if part))
+    return tuple(dict.fromkeys(part for part in parts if part)), tuple(dict.fromkeys(classes))
+
+
+def _literal_union(literals: Iterable[str]) -> str:
+    """An escaped, prefix-factored union with longest-first terminal branches."""
+    nodes: list[dict[str, int]] = [{}]
+    terminals: set[int] = set()
+    for literal in literals:
+        node = 0
+        for char in literal:
+            if char not in nodes[node]:
+                nodes[node][char] = len(nodes)
+                nodes.append({})
+            node = nodes[node][char]
+        terminals.add(node)
+    rendered = [""] * len(nodes)
+    # Every child follows its parent. Render backwards without recursing over
+    # potentially long text; single-child chains add no nested regex groups.
+    for node in range(len(nodes) - 1, -1, -1):
+        choices = [re.escape(char) + rendered[child] for char, child in nodes[node].items()]
+        text = choices[0] if len(choices) == 1 else "(?:" + "|".join(choices) + ")" if choices else ""
+        if node in terminals and text:
+            text = "(?:" + text + ")?"
+        rendered[node] = text
+    return rendered[0]
+
+
+def _class_filter(classes: Iterable[str]) -> Callable[[set[str]], bool]:
+    """At least one path character must match this necessary class union."""
+    match = re.compile("|".join(fnmatch.translate(part) for part in classes)).match
+    cache: dict[str, bool] = {}
+
+    def possible(characters: set[str]) -> bool:
+        for char in characters:
+            present = cache.get(char)
+            if present is None:
+                present = bool(match(char))
+                # Bound preparation state, not accepted Unicode characters.
+                if len(cache) < _MAX_CLASS_CHAR_CACHE:
+                    cache[char] = present
+            if present:
+                return True
+        return False
+
+    return possible
+
+
+def _class_filters(rows: Iterable[tuple[str, ...]]) -> tuple[Callable[[set[str]], bool], ...]:
+    classes = tuple(rows)
+    counts = Counter(part for parts in classes for part in parts)
+    choices: list[tuple[str, ...]] = []
+    for part, count in counts.items():
+        if count == len(classes):
+            choices.append((part,))
+            if len(choices) == 8:
+                break
+    # Each rule needs its own class at this position. Their union is weaker,
+    # but still necessary even when no whole class is shared by all rules.
+    minimum = min((len(parts) for parts in classes), default=0)
+    for position in range(min(minimum, 8)):
+        if len(choices) == 8:
+            break
+        union = tuple(sorted({parts[position] for parts in classes}))
+        if union not in choices:
+            choices.append(union)
+    return tuple(_class_filter(parts) for parts in choices)
 
 
 def _file_mask_matcher(patterns: Iterable[str]) -> Callable[[str], bool]:
-    """Reject missing mandatory literals before exact stdlib glob matching."""
-    guarded: list[str] = []
+    """Only exact stdlib globs can accept; filters locate candidate groups."""
+    groups: dict[str, list[str]] = {}
     unguarded: list[str] = []
-    literals: dict[str, None] = {}
-    fixed = {pattern: _mandatory_parts(pattern) for pattern in dict.fromkeys(patterns)}
-    frequencies = Counter(part for parts in fixed.values() for part in parts)
-    guarded_count = sum(bool(parts) for parts in fixed.values())
+    specs = {pattern: _mask_parts(pattern) for pattern in dict.fromkeys(patterns)}
+    frequencies = Counter(part for parts, _ in specs.values() for part in parts)
+    guarded_count = sum(bool(parts) for parts, _ in specs.values())
     # Shared title text should not hide a missing rule-specific piece. Every
     # guarded glob also needs these common pieces; cap checks, not accepted rules.
     common = sorted((part for part, count in frequencies.items() if count == guarded_count), key=len, reverse=True)[:8]
-    for pattern, parts in fixed.items():
+    class_checks = _class_filters(classes for _, classes in specs.values())
+    for pattern, (parts, _) in specs.items():
         # Only fixed text is a necessary condition; fnmatch still decides the
         # exact match, including class membership, ranges and malformed syntax.
         literal = min(parts, key=lambda part: (frequencies[part], -len(part))) if parts else ""
         if literal:
-            guarded.append(fnmatch.translate(pattern))
-            literals[literal] = None
+            groups.setdefault(literal, []).append(fnmatch.translate(pattern))
         else:
             unguarded.append(fnmatch.translate(pattern))
-    literal_search = re.compile("|".join(re.escape(literal) for literal in literals)).search if literals else None
-    guarded_match = re.compile("|".join(guarded)).match if guarded else None
+    # A zero-width lookahead retains overlapping hits. Greedy terminals return
+    # the longest literal at each position; its shorter prefixes remain candidates.
+    literal_filter = re.compile("(?=(" + _literal_union(groups) + "))") if groups else None
+    prefixes = {literal: tuple(other for other in groups if literal.startswith(other)) for literal in groups}
     unguarded_match = re.compile("|".join(unguarded)).match if unguarded else None
+    compiled: dict[str, re.Pattern[str]] = {}
+
+    def try_literal(path: str, literal: str, seen: set[str]) -> bool:
+        for required in prefixes[literal]:
+            if required in seen:
+                continue
+            seen.add(required)
+            exact = compiled.get(required)
+            if exact is None:
+                exact = re.compile("|".join(groups[required]))
+                compiled[required] = exact
+            if exact.match(path):
+                return True
+        return False
 
     def matches(path: str) -> bool:
+        if class_checks:
+            characters = set(path)
+            if any(not check(characters) for check in class_checks):
+                return False
         if unguarded_match and unguarded_match(path):
             return True
-        if not (literal_search and literal_search(path)) or any(part not in path for part in common):
+        if literal_filter is None or any(part not in path for part in common):
             return False
-        return bool(guarded_match and guarded_match(path))
+        first = literal_filter.search(path)
+        if first is None:
+            return False
+        seen: set[str] = set()
+        if try_literal(path, first.group(1), seen):
+            return True
+        if len(seen) == len(groups):
+            return False
+        return any(try_literal(path, literal, seen) for literal in set(literal_filter.findall(path)))
 
     return matches
 
