@@ -811,6 +811,24 @@ def test_active_topic_rejects_url_change(monkeypatch):
     assert load_state()["topics"][0]["url"].endswith("/101/show")
 
 
+def test_edit_of_a_deleted_topic_saves_nothing_and_says_so():
+    from helpers import flash_kind
+
+    from tow.paths import state_path
+    from tow.web.text import t
+
+    save_state({"topics": [{"id": "kept", "title": "Show", "url": "http://rutor.info/torrent/101/show"}]})
+    before = state_path().read_bytes()
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    response = client.post(
+        "/topics/gone/edit", data={"title": "Show", "save_path": r"M:\anime"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert flash_of(response.headers["location"]) == t("web.topics.not_found")
+    assert flash_kind(response.headers["location"]) == "err"
+    assert state_path().read_bytes() == before
+
+
 def test_undo_selection_edit_marks_old_policy_for_client_reapply():
     old_topic = {
         "id": "topic-undo-selection",
