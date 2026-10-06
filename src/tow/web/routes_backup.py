@@ -18,7 +18,7 @@ from tow.bundle import MAX_BUNDLE_BYTES
 from tow.clock import format_ui_timestamp, machine_now
 from tow.config import as_bool
 from tow.log import error_class
-from tow.paths import data_dir
+from tow.paths import tmp_dir
 from tow.restore_points import CREATE_FAILED, INVALID_FILE, ROLLBACK_FAILED, RestorePointError, invalid_file
 from tow.snapshots import SnapshotError
 from tow.store import StoreCorruptionError
@@ -281,7 +281,7 @@ def settings_restore_point_apply(point_id: str) -> Response:
 def settings_portable_export() -> Response:
     temp_dir: Path | None = None
     try:
-        temp_dir = Path(tempfile.mkdtemp(prefix="tow-browser-export-", dir=data_dir()))
+        temp_dir = Path(tempfile.mkdtemp(prefix="tow-browser-export-", dir=tmp_dir()))
         output = temp_dir / "tow-backup.towx"
         services.export_portable_bundle(output)
         services.log_event("settings_portable_export", how="manual")
@@ -312,7 +312,7 @@ async def settings_portable_import(
     temp_dir: Path | None = None
     total = 0
     try:
-        temp_dir = Path(tempfile.mkdtemp(prefix="tow-browser-import-", dir=data_dir()))
+        temp_dir = Path(tempfile.mkdtemp(prefix="tow-browser-import-", dir=tmp_dir()))
         upload_path = temp_dir / "uploaded.towx"
         with upload_path.open("xb") as handle:
             while chunk := await backup_file.read(1024 * 1024):
