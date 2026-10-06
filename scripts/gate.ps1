@@ -145,9 +145,15 @@ try {
         Test-Wheel
     }
     if ($Audit) {
-        $requirements = Join-Path ([IO.Path]::GetTempPath()) 'tow-requirements.txt'
-        Step 'export locked requirements' { uv export --frozen --no-dev --no-hashes --no-emit-project --format requirements-txt -o $requirements }
-        Step 'pip-audit' { uvx pip-audit --strict -r $requirements --progress-spinner off }
+        # Reserve a file per invocation: concurrent worktrees must audit their own lock.
+        $requirements = [IO.Path]::GetTempFileName()
+        try {
+            Step 'export locked requirements' { uv export --frozen --no-dev --no-hashes --no-emit-project --format requirements-txt -o $requirements }
+            Step 'pip-audit' { uvx pip-audit --strict -r $requirements --progress-spinner off }
+        }
+        finally {
+            Remove-Item -LiteralPath $requirements -Force -ErrorAction SilentlyContinue
+        }
     }
     if ($treeBefore -and $treeBefore -eq (Get-WorkingTree)) { Save-PassedTree $treeBefore }
 }

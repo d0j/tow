@@ -7,6 +7,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Dependency audits use a reserved temporary file per gate invocation, so parallel
+  worktrees cannot overwrite another audit's requirements; files are cleaned after failures too.
 - History diagnostics count actual blobs, retain historical path aliases, and refuse
   incomplete reads, shallow history, changed refs or exceeded budgets. Candidate
   matches require review; author addresses and native Git details are not printed.
