@@ -457,6 +457,20 @@ def test_update_log_is_bounded_and_redacted(install):
     assert "synthetic-secret" not in text
 
 
+def test_update_log_never_shows_the_install_folder(install):
+    # The folder names the owner's account (C:\Users\<name>\TOW); the page is read over the LAN too.
+    root = install[0]
+    result = web_update.start("1.22.21")
+    folder = root / "runtime" / "web-update" / result["id"]
+    lines = [f"backing up {root}\\data", f"stopping {root.as_posix()}/app/scripts/tow", "done"]
+    (folder / "update.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    text = web_update.log_tail()
+    assert str(root) not in text
+    assert root.as_posix() not in text
+    assert "backing up <TOW>\\data" in text
+    assert "stopping <TOW>/app/scripts/tow" in text
+
+
 def test_reading_log_cannot_select_an_arbitrary_path(install):
     path = install[0] / "runtime" / "web-update" / "job.json"
     path.parent.mkdir(parents=True)
