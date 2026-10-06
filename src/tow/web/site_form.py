@@ -6,6 +6,7 @@ from __future__ import annotations
 import ipaddress
 import re
 import socket
+import string
 from urllib.parse import urlparse
 
 from tow.config import as_bool
@@ -127,7 +128,9 @@ def valid_site_name(value: str) -> str:
     return name
 
 
-def valid_tracker_path(value: str, *, label: str) -> str:
+def valid_tracker_path(value: str, *, label: str, needs_id: bool = False) -> str:
+    """A path on the site; the download and topic paths (``needs_id``) carry the number as
+    ``{id}`` and no other ``{field}``, which a fetch could not fill."""
     path = value.strip()
     if not path:
         return ""
@@ -141,11 +144,20 @@ def valid_tracker_path(value: str, *, label: str) -> str:
         or parsed.fragment
     ):
         raise ValueError(t("web.site_form.path_invalid", label=label))
+    if needs_id:
+        try:
+            fields = {field for _text, field, _spec, _conv in string.Formatter().parse(path) if field is not None}
+        except ValueError:
+            fields = set()
+        if fields != {"id"}:
+            raise ValueError(t("web.site_form.path_no_id", label=label))
     return path
 
 
 def validate_tracker_regexes(url_regex: str, download_href_regex: str) -> None:
     for label, value in (("url", url_regex), ("download", download_href_regex)):
-        if value:
-            # Same rules as at fetch time: compiles, bounded length, no catastrophic backtracking.
-            validate_tracker_regex(value, label=label)
+        # Same rules as at fetch time: compiles, bounded length, no catastrophic backtracking;
+        # and a group in brackets, where the topic (or download) number is taken from.
+        if value and validate_tracker_regex(value, label=label).groups < 1:
+            what = t("tracker.regex_label_download" if label == "download" else "tracker.regex_label_url")
+            raise ValueError(t("web.site_form.regex_no_group", what=what))

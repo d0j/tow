@@ -224,7 +224,9 @@ def sites_new(
         ("topic_path", topic_path, "", "sites.topic_path"),
     ):
         try:
-            paths[field] = valid_tracker_path(typed or str((guessed or {}).get(field) or default), label=t(label))
+            paths[field] = valid_tracker_path(
+                typed or str((guessed or {}).get(field) or default), label=t(label), needs_id=field != "login_path"
+            )
         except ValueError as exc:
             return refused(exc, field)
     dl, lp, tp = paths["download_path"], paths["login_path"], paths["topic_path"]
@@ -370,10 +372,12 @@ def sites_save(
         spec["url_regex"] = url_regex.strip()
     try:
         new_download_path = (
-            valid_tracker_path(download_path, label=t("sites.download_path")) if download_path.strip() else ""
+            valid_tracker_path(download_path, label=t("sites.download_path"), needs_id=True)
+            if download_path.strip()
+            else ""
         )
         new_login_path = valid_tracker_path(login_path, label=t("sites.login_path"))
-        new_topic_path = valid_tracker_path(topic_path, label=t("sites.topic_path"))
+        new_topic_path = valid_tracker_path(topic_path, label=t("sites.topic_path"), needs_id=True)
     except ValueError as exc:
         return flash_redirect("/sites", exc, "err")
     if new_download_path:

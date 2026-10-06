@@ -1,5 +1,6 @@
 """Site settings guards: no internal tracker hosts, no catastrophic regexes."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from tow.web.site_form import (
     unresolved_hosts,
     unresolved_note,
     valid_site_hosts,
+    valid_tracker_path,
     validate_tracker_regexes,
 )
 
@@ -132,3 +134,17 @@ def test_every_template_tracker_regex_passes_the_guard():
         for key in ("url_regex", "download_href_regex"):
             if spec.get(key):
                 validate_tracker_regex(spec[key])
+
+
+@pytest.mark.parametrize(("pattern", "href"), [(r"^https://tracker\.example/t/\d+$", ""), ("", r"dl\.php\?id=\d+")])
+def test_a_pattern_without_a_group_for_the_number_is_refused(pattern, href):
+    with pytest.raises(ValueError, match=re.escape(r"(\d+)")):
+        validate_tracker_regexes(pattern, href)
+
+
+@pytest.mark.parametrize("path", ["/download/", "/download/{name}", "/dl/{id}/{x}", "/dl/{"])
+def test_a_download_path_without_the_number_is_refused(path):
+    with pytest.raises(ValueError, match=r"\{id\}"):
+        valid_tracker_path(path, label="Download path", needs_id=True)
+    assert valid_tracker_path("/download/{id}", label="Download path", needs_id=True) == "/download/{id}"
+    assert valid_tracker_path("/login.php", label="Login path") == "/login.php"
