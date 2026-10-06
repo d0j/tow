@@ -64,7 +64,6 @@ FORMAT = "tow-snapshot-v2"  # a signed MANIFEST
 UNSIGNED_FORMAT = "tow-snapshot-v1"  # copies made before 1.17: checked, never restored automatically
 _SIGNATURE_PURPOSE = "night-copies"
 _POINT_MEMBER = re.compile(r"restore-points/(?P<id>[A-Za-z0-9-]{1,64})\.towx")
-KEEP_DEFAULT = 14
 MAX_MANIFEST_BYTES = 1024 * 1024
 MAX_MEMBER_SIZE = 2**63 - 1
 _READ_CHUNK_BYTES = 1024 * 1024
@@ -397,10 +396,10 @@ def _previous_members(root: Path, key: bytes) -> set[str]:
     return present
 
 
-def create_snapshot(*, keep: int | None = None, how: str = "auto") -> dict[str, Any]:
+def create_snapshot(*, how: str = "auto") -> dict[str, Any]:
     try:
         with persistence_lock():  # creation, read-back and pruning cannot race another copy
-            result = _create_snapshot(keep=keep, how=how)
+            result = _create_snapshot(how=how)
             location = Path(result["snapshot"]).parent
             fields: dict[str, Any] = {"location": str(location), "cleanup_inventory": None, "cleanup_names": None}
             # A diagnostic failure cannot invalidate a verified copy. A missing binding
@@ -557,13 +556,11 @@ def _write_snapshot_manifest(path: Path, manifest: dict[str, Any]) -> None:
         os.fsync(writer.fileno())
 
 
-def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
+def _create_snapshot(*, how: str) -> dict[str, Any]:
+    """Called with the data lock held: the copy is a consistent cut, no check or edit writes meanwhile."""
     cfg = load_config()
     root = backup_root(cfg)
     policy = retention_settings(cfg)
-    if keep:
-        policy.update(mode="count", keep=max(1, keep))
-    keep = int(policy["keep"])
     stamp = datetime.now(UTC).astimezone().strftime("%Y%m%d-%H%M%S")
     target = root / f"{_PREFIX}{stamp}"
     partial = root / f".{_PREFIX}{stamp}.partial"
@@ -583,18 +580,17 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
         partial.mkdir(parents=True, exist_ok=False)
         partial_created = True
         _write_snapshot_manifest(partial / _PARTIAL_PROOF, _partial_proof(partial.name, key))
-        with persistence_lock():  # a consistent cut: no check or edit writes meanwhile
-            for name, source in members:
-                guard = locked_log_path() if name == "tow.jsonl" else contextlib.nullcontext(source)
-                with guard as stable_source:
-                    meta = _copy_snapshot_member(stable_source, partial / name, name)
-                if meta is None:
-                    if name == "config.yaml" or name in previous_members:
-                        raise SnapshotError(t("backup.snapshot.source_missing", owner_language(), name=name))
-                    if name not in _OPTIONAL_MEMBERS:
-                        missing.append(name)  # said in the result, the log and the MANIFEST
-                    continue
-                files[name] = meta
+        for name, source in members:
+            guard = locked_log_path() if name == "tow.jsonl" else contextlib.nullcontext(source)
+            with guard as stable_source:
+                meta = _copy_snapshot_member(stable_source, partial / name, name)
+            if meta is None:
+                if name == "config.yaml" or name in previous_members:
+                    raise SnapshotError(t("backup.snapshot.source_missing", owner_language(), name=name))
+                if name not in _OPTIONAL_MEMBERS:
+                    missing.append(name)  # said in the result, the log and the MANIFEST
+                continue
+            files[name] = meta
         manifest = {
             "format": FORMAT,
             "created_at": datetime.now(UTC).isoformat(),
@@ -626,7 +622,7 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
             _remove_stale_partials(root, key)
         raise SnapshotError(t("backup.snapshot.unverified", owner_language(), name=target.name, reason=exc)) from exc
     # Never the copy just verified, even when the clock went back and it does not sort last.
-    pruned, cleanup_pending = _prune_night_copies(root, target, keep, key, policy=policy)
+    pruned, cleanup_pending = _prune_night_copies(root, target, key, policy)
     cleanup_pending = cleanup_pending or stale_pending
     size = sum(item["size"] for item in files.values())
     log_event(
@@ -727,9 +723,7 @@ def _copy_disk_bytes(folder: Path) -> int:
     return total
 
 
-def _prune_night_copies(
-    root: Path, target: Path, keep: int, key: bytes, *, policy: dict[str, Any] | None = None
-) -> tuple[list[str], bool]:
+def _prune_night_copies(root: Path, target: Path, key: bytes, policy: dict[str, Any]) -> tuple[list[str], bool]:
     removed: list[str] = []
     pending = False
     try:
@@ -747,11 +741,10 @@ def _prune_night_copies(
                 entries.append((folder.name, created, _copy_disk_bytes(folder)))
                 if folder != target:
                     others.append((folder, {"MANIFEST.json", *manifest["files"]}))
-        chosen = policy or {**retention_settings({"backup_keep": keep}), "keep": max(1, keep)}
         anchor = next((when for name, when, _size in entries if name == target.name), None)
         if anchor is None:
             return [], True  # the verified new copy no longer proves ownership; retain older copies
-        retained, pending = retained_copies(entries, newest=target.name, now=anchor, policy=chosen)
+        retained, pending = retained_copies(entries, newest=target.name, now=anchor, policy=policy)
         for folder, expected in others:
             if folder.name in retained:
                 continue
@@ -800,8 +793,6 @@ def _remove_copy(folder: Path, parent: Path, marker: str, expected: set[str]) ->
                 continue
             if child.name == "restore-points":
                 _ordinary_directory(child)
-                if not _owned_tree(folder, expected):
-                    return False
                 shutil.rmtree(child)
             else:
                 if child.name not in expected:
@@ -1295,17 +1286,13 @@ def _marked_safety() -> str | None:
     return name if isinstance(name, str) and _SAFETY_NAME.fullmatch(name) else ""
 
 
-def _tidy_safety_copies(keep: int = SAFETY_KEEP) -> list[str]:
+def _cleanup_safety_copies(keep: int = SAFETY_KEEP) -> tuple[list[str], bool]:
     """Finished before-restore copies: without the settings undo, the newest ``keep`` only.
 
     Never the one a marker names, never one whose journal still says ``prepared`` (a restore
     that is not finished needs every file). Best effort: a file held right now goes next time.
-    Returns the names of the folders removed.
+    Returns the names of the folders removed and whether cleanup is still pending.
     """
-    return _cleanup_safety_copies(keep)[0]
-
-
-def _cleanup_safety_copies(keep: int = SAFETY_KEEP) -> tuple[list[str], bool]:
     removed, pending = _prune_safety_copies(keep)
     if pending:
         log_event("backup_cleanup_pending", copy_kind="safety", how="auto")
@@ -1376,7 +1363,7 @@ def _apply_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str,
                 t("backup.snapshot.rollback_failed", owner_language(), path=str(safety))
             ) from rollback_failure
         log_event("backup_restore_failed", error=_reason(failure), rollback="done", how="manual")
-        _tidy_safety_copies()
+        _cleanup_safety_copies()
         raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=_reason(failure))) from failure
     # Cleanup is outside the transaction: its failure must not undo a committed restore.
     return safety, _cleanup_safety_copies()[1]
@@ -1384,7 +1371,7 @@ def _apply_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str,
 
 def _roll_back(safety: Path) -> None:
     _roll_back_files(safety)
-    _tidy_safety_copies()
+    _cleanup_safety_copies()
 
 
 def _roll_back_files(safety: Path) -> None:

@@ -75,7 +75,7 @@ def test_unreadable_old_safety_copy_is_not_pruned():
     journal.write_bytes(b"{broken")
     foreign = safety / "keep.txt"
     foreign.write_bytes(b"do not erase")
-    assert snapshots._tidy_safety_copies(keep=0) == []
+    assert snapshots._cleanup_safety_copies(keep=0)[0] == []
     assert foreign.read_bytes() == b"do not erase"
 
 
@@ -118,7 +118,7 @@ def test_finished_safety_copy_with_foreign_file_is_not_pruned():
     safety.mkdir()
     snapshots._write_journal(safety, {"format": snapshots._JOURNAL_FORMAT, "entries": []}, "committed")
     (safety / "keep.txt").write_bytes(b"not owned")
-    assert snapshots._tidy_safety_copies(keep=0) == []
+    assert snapshots._cleanup_safety_copies(keep=0)[0] == []
     assert (safety / "keep.txt").read_bytes() == b"not owned"
 
 

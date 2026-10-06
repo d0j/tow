@@ -50,6 +50,15 @@ def backup(tmp_path_factory, monkeypatch):
     return root
 
 
+def create_keeping_one() -> dict:
+    """A copy made under the legacy count policy that keeps the new copy only."""
+    cfg = load_config()
+    cfg["backup_keep"] = 1
+    cfg.pop("backup_days", None)
+    save_config(cfg)
+    return create_snapshot()
+
+
 def test_snapshot_selection_refuses_a_link_to_another_directory(backup, tmp_path):
     target = tmp_path / "elsewhere"
     target.mkdir()
@@ -480,7 +489,7 @@ def test_foreign_or_damaged_copy_is_never_pruned(backup, monkeypatch):
     manifest["signature"] = "не подпись"
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
-    newest = Path(create_snapshot(keep=1)["snapshot"])
+    newest = Path(create_keeping_one()["snapshot"])
 
     assert newest.is_dir()
     assert original.is_dir()
@@ -495,7 +504,7 @@ def test_unsigned_legacy_copy_is_kept_by_automatic_pruning(backup, monkeypatch):
     manifest["format"] = "tow-snapshot-v1"
     manifest.pop("signature")
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-    create_snapshot(keep=1)
+    create_keeping_one()
     assert verify_snapshot(legacy)["signed"] is False
 
 

@@ -112,7 +112,7 @@ def test_unreadable_live_source_never_prunes_the_previous_usable_copy(point, nam
     good_manifest = (point / "MANIFEST.json").read_bytes()
     previous_status = snapshots.status()
     with pytest.raises(snapshots.SnapshotError):
-        snapshots.create_snapshot(keep=1)
+        snapshots.create_snapshot()
     assert _read_live() == before
     assert (point / "MANIFEST.json").read_bytes() == good_manifest
     assert snapshots.verify_snapshot(point)["signed"]
@@ -200,7 +200,7 @@ def test_decryptable_undo_must_contain_a_settings_mapping(point, surface):
         _replace(point, "secrets-undo.enc", content)
     before = _read_live()
     with pytest.raises(snapshots.SnapshotError):
-        snapshots.create_snapshot(keep=1) if surface == "create" else _inspect(point, surface)
+        snapshots.create_snapshot() if surface == "create" else _inspect(point, surface)
     assert _read_live() == before
     assert point.is_dir()
 
@@ -212,7 +212,7 @@ def test_bad_encrypted_source_keeps_the_previous_verified_copy(point, name, case
     source.write_bytes(_bad_encrypted(name, case))
     before = _read_live()
     with pytest.raises(snapshots.SnapshotError):
-        snapshots.create_snapshot(keep=1)
+        snapshots.create_snapshot()
     assert _read_live() == before
     assert snapshots.verify_snapshot(point)["signed"]
 
@@ -463,10 +463,10 @@ def test_next_healthy_copy_clears_failure_and_can_prune_normally(point):
     content = state_path().read_bytes()
     state_path().write_bytes(b"{broken")
     with pytest.raises(snapshots.SnapshotError):
-        snapshots.create_snapshot(keep=1)
+        snapshots.create_snapshot()
     assert snapshots.status()["last_error"]
     state_path().write_bytes(content)
-    newest = Path(snapshots.create_snapshot(keep=1)["snapshot"])
+    newest = Path(snapshots.create_snapshot()["snapshot"])
     assert newest != point
     assert not point.exists()
     assert snapshots.verify_snapshot(newest)["signed"]
