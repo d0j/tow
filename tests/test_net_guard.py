@@ -8,7 +8,7 @@ import httpcore
 import httpx
 import pytest
 
-from tow.net_guard import PublicOnlyBackend, PublicOnlyTransport, public_addresses
+from tow.net_guard import PublicOnlyBackend, PublicOnlyTransport, is_public, public_addresses
 
 
 def _answers(*addresses: str):
@@ -47,6 +47,37 @@ def test_missing_private_and_mixed_answers_fail_closed(monkeypatch, addresses):
     monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers(*addresses))
     with pytest.raises(httpcore.ConnectError):
         public_addresses("tracker.example", 443)
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "::127.0.0.1",
+        "::192.168.1.20",
+        "::ffff:10.0.0.2",
+        "64:ff9b::127.0.0.1",
+        "64:ff9b::c0a8:114",
+        "64:ff9b::100.64.0.1",
+    ],
+)
+def test_ipv6_forms_of_a_private_ipv4_address_fail_closed(monkeypatch, address):
+    # IPv4-compatible and NAT64 addresses count as "global" for ipaddress; their IPv4 part is not.
+    assert is_public(address) is False
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers(address))
+    with pytest.raises(httpcore.ConnectError):
+        public_addresses("tracker.example", 443)
+
+
+@pytest.mark.parametrize("address", ["93.184.216.34", "64:ff9b::93.184.216.34", "2606:4700::1111"])
+def test_public_addresses_stay_public_in_every_form(address):
+    assert is_public(address) is True
+
+
+def test_a_site_address_in_an_ipv6_form_of_the_home_network_is_internal():
+    from tow.web.site_form import internal_host
+
+    assert internal_host("[::192.168.1.1]") is True
+    assert internal_host("[64:ff9b::7f00:1]") is True
 
 
 def test_dns_error_fails_closed(monkeypatch):
