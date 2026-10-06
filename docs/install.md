@@ -139,7 +139,8 @@ Move or copy the whole folder: the start file prepares it again in the new place
 | Go back to an earlier release | `"Update TOW.cmd" v1.23.0` in a terminal | `~/TOW/update-tow v1.23.0` | the same |
 
 An update stops TOW, keeps a copy of your data and settings in `backup/`, puts in the new version, starts it and
-checks it. If anything fails, the previous version comes back by itself. It needs the internet. It goes back
+checks it. If anything fails, the previous version comes back by itself. It needs the internet. When TOW is
+already the latest release, it says so and does nothing. It goes back
 only to a version that can read your data: not before v1.23.0 once v1.23 has run (it says so and changes
 nothing).
 
