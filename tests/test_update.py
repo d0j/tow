@@ -651,6 +651,7 @@ def test_cli_output_is_utf8_without_changing_arguments_or_result(tmp_path, monke
                 "keep": 123,
                 "source": (tmp_path / "source.tar.gz").resolve(),
                 "sums": (tmp_path / "SHA256SUMS").resolve(),
+                "discard_newer_data": False,
             },
         ),
     ]

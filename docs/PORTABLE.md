@@ -434,9 +434,13 @@ same steps, with the code from the release instead of git.
 - `--source FILE` (and `--sums FILE`) take a local archive instead of a download.
 
 An update that finds such a record undoes the cut-off one first (stop TOW, move the recorded
-entries back, put back the snapshot if data changed, start and check the previous version); if
-that fails, the run ends there with `recovery_failed` (exit code 1, the record stays for the next
-try) and TOW is started again unless its code is half moved.
+entries back, put back the snapshot if data changed, start and check the previous version). The
+record says until when TOW ran under the update (`data_until`: the switch, a health check and
+the stop after it); data or config changed later is never replaced unasked: the run is refused
+before anything changes and names the file and the command with `--discard-newer-data` that
+puts the snapshot back anyway. If undoing fails, the run ends there with `recovery_failed` (exit
+code 1, the record stays for the next try) and TOW is started again unless its code is half
+moved.
 
 `<TOW>/update-state.json` records the run (`in_progress` → `ok` / `rolled_back` / `failed`, or
 `recovered` / `recovery_failed` for undoing a cut-off switch, ref,
