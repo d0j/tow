@@ -55,7 +55,8 @@ tracker degradation from a client or TOW failure before changing state.
   branch and HEAD.
 - One logical change per commit, with a message that says what changed and why (the `commit-msg` hook checks its
   form); the gate passes before every commit. User-visible changes also get a line in `CHANGELOG.md` and
-  `CHANGELOG.ru.md`, and a change to `README.md` or `docs/` the same change in `README.ru.md` or `docs/ru/`.
+  `CHANGELOG.ru.md`, and a change to `README.md` or a guide with a Russian twin in `docs/ru/` the same change in
+  `README.ru.md` or that twin.
 - A release is a commit `release: vX.Y.Z - <summary>` (version in `pyproject.toml`, both changelogs) merged through
   a pull request, then an annotated tag `vX.Y.Z` with the message `TOW X.Y.Z` on that merge on `origin/main`,
   published with `uv run --frozen python scripts/publish-release.py vX.Y.Z`.
