@@ -23,7 +23,7 @@ import yaml
 
 from tow import __version__
 from tow.clock import iso_now
-from tow.config import ConfigError, validated
+from tow.config import ConfigError, validated, web_address
 from tow.errors import TowError
 from tow.log import EXPORT_EVENT_KEYS, export_event_projection, log_event, read_events
 from tow.paths import config_path, data_dir, download_history_path, secrets_path, state_path
@@ -358,6 +358,8 @@ def _validate_state_topic(index: int, topic: Any) -> None:
         "content_hash",
     ):
         _validate_field(topic, key, str, label=label)
+    if topic.get("url") and not web_address(topic["url"]):  # a javascript: link would be one click away
+        raise ExportImportError(f"{label}.url must be an http:// or https:// address")
     for key in (
         "paused",
         "once_done",
@@ -397,8 +399,8 @@ def _validate_state_topic(index: int, topic: Any) -> None:
 def _validate_state_mirror(name: Any, mirror: Any) -> None:
     if not isinstance(name, str) or not isinstance(mirror, dict):
         raise ExportImportError("state.json mirror entry has an invalid type")
-    if "active" in mirror and mirror["active"] is not None and not isinstance(mirror["active"], str):
-        raise ExportImportError(f"state.json mirror {name}.active has an invalid type")
+    if mirror.get("active") not in (None, "") and not web_address(mirror["active"]):
+        raise ExportImportError(f"state.json mirror {name}.active must be an http:// or https:// address")
     if "frozen" in mirror and not isinstance(mirror["frozen"], bool):
         raise ExportImportError(f"state.json mirror {name}.frozen has an invalid type")
     for field in ("fail", "cool"):

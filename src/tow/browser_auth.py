@@ -202,6 +202,7 @@ class BrowserAuthManager:
                 "--new-window",
                 "--start-maximized",
                 *launch.get("args", []),
+                "--",  # the end of the switches: the address is never read as one
                 start_url,
             ]
             # Its own process group / session: stopping it reaches every child it starts.

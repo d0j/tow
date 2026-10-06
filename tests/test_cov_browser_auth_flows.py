@@ -164,7 +164,7 @@ def test_a_session_signs_in_confirms_and_cleans_up(monkeypatch, launched):
     args = launched.started[0]
     assert args[0] == "msedge.exe"
     assert "--remote-debugging-port=9333" in args
-    assert args[-1] == "https://nnmclub.to/forum/login.php"
+    assert args[-2:] == ["--", "https://nnmclub.to/forum/login.php"]  # never read as a switch
     profile_arg = next(a for a in args if a.startswith("--user-data-dir="))
     assert not Path(profile_arg.split("=", 1)[1]).parent.exists()  # the profile is gone
     assert launched.stopped == [4242]

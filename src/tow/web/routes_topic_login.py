@@ -228,7 +228,10 @@ def _browser_auth_callback(
 def _browser_start_url(tracker: GenericHttpTracker, topic_url: str) -> str:
     hosts: list[str] = list(tracker.spec.get("login_hosts") or tracker.spec.get("fetch_hosts") or [])
     login_path = str(tracker.spec.get("login_path") or "")
-    if not hosts or not login_path or origin_key(hosts[0]) != origin_key(topic_url):
+    # Only an http(s) site: origin_key is None for anything else, and two Nones are no match (a
+    # "host" like --gpu-launcher=… would reach the browser as a command-line switch).
+    origin = origin_key(hosts[0]) if hosts else None
+    if origin is None or not login_path or origin != origin_key(topic_url):
         raise ValueError(t("web.browser_auth.no_safe_login_url"))
     topic = urlparse(topic_url)
     login = urlparse(login_path)
