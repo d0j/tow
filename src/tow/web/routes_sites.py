@@ -479,6 +479,9 @@ _DOCTOR_REASONS = (
     ("getaddrinfo", "doctor.reason.no_address"),
     ("name or service not known", "doctor.reason.no_address"),
     ("11001", "doctor.reason.no_address"),
+    ("could not be resolved", "doctor.reason.no_address"),  # tow.net_guard: the name is not in DNS
+    ("no usable address", "doctor.reason.no_address"),
+    ("non-public address", "doctor.reason.home_address"),
     ("cloudflare", "doctor.reason.cloudflare"),
     ("redirect", "doctor.reason.redirect"),
     ("certificate", "doctor.reason.certificate"),

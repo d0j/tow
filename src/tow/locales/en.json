@@ -550,6 +550,7 @@
       "refused": "connection refused",
       "timeout": "no answer in time",
       "no_address": "address not found",
+      "home_address": "the address points to this computer or the home network",
       "cloudflare": "stopped by a Cloudflare check",
       "redirect": "redirects to another address",
       "certificate": "certificate problem",
