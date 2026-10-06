@@ -489,6 +489,7 @@ if (topicUrl) {
 const fromUrl = document.getElementById("from-url");
 if (fromUrl) {
   let guessSequence = 0;
+  const autoFilled = new Map();
   const fill = async () => {
     const url = fromUrl.value.trim();
     const msg = document.getElementById("guess-msg");
@@ -504,9 +505,18 @@ if (fromUrl) {
       if (msg) msg.textContent = j.error || t("js.guess.not_understood");
       return;
     }
+    // Only empty fields, or ones an earlier link filled, take the guess: what the owner typed
+    // stays, and the message says it was kept.
+    let kept = 0;
     const set = (id, v) => {
       const el = document.getElementById(id);
-      if (el && v != null && v !== "") el.value = v;
+      if (!el || v == null || v === "" || el.value === v) return;
+      if (el.value.trim() !== "" && el.value !== autoFilled.get(id)) {
+        kept += 1;
+        return;
+      }
+      el.value = v;
+      autoFilled.set(id, v);
     };
     set("site-name", j.name);
     set("site-regex", j.url_regex);
@@ -514,12 +524,17 @@ if (fromUrl) {
     set("site-dl", j.download_path);
     set("site-login-path", j.login_path || "");
     set("site-topic-path", j.topic_path || "");
-    document.getElementById("site-page-dl").checked = Boolean(j.page_download);
+    const pageDl = document.getElementById("site-page-dl");
+    if (pageDl && pageDl.checked === Boolean(autoFilled.get("site-page-dl"))) {
+      pageDl.checked = Boolean(j.page_download);
+      autoFilled.set("site-page-dl", pageDl.checked);
+    }
     set("site-href-rx", j.download_href_regex || "");
     if (msg) {
-      msg.textContent = j.exists
+      msg.textContent = (j.exists
         ? t("js.guess.exists", { name: j.name }) + (j.need_login ? ` — ${t("js.guess.can_save_login")}` : "")
-        : t("js.guess.filled", { name: j.name }) + (j.need_login ? ` — ${t("js.guess.need_login")}` : "");
+        : t("js.guess.filled", { name: j.name }) + (j.need_login ? ` — ${t("js.guess.need_login")}` : ""))
+        + (kept ? ` ${t("js.guess.kept_typed")}` : "");
     }
     } catch {
       if (msg && sequence === guessSequence) msg.textContent = t("js.guess.failed");
