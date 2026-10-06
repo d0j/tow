@@ -266,7 +266,18 @@ def _run(app: Path, job_path: Path, job: dict[str, Any], version: str, updater: 
     return code
 
 
+def _utf8_output() -> None:
+    # Isolated Python ignores PYTHONIOENCODING. Every worker mode writes the same
+    # UTF-8 log, even when Windows initially gives a redirected stream an ANSI codec.
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            # An unavailable diagnostic stream must not prevent recovery.
+            with contextlib.suppress(AttributeError, OSError, ValueError):
+                stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def main() -> int:
+    _utf8_output()
     args = sys.argv[1:]
     mode = args.pop(0) if args and args[0] in {"--handoff", "--after-parent", "--broker-child"} else ""
     try:
