@@ -5,6 +5,15 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.23.9] — 2026-10-06
+
+### Fixed
+
+- Reject torrent metadata where a real file is also another file's directory,
+  including case, Unicode and portable filename collisions. Such paths could hide
+  files in graphical selection. Preparation and checks explain the conflict without
+  exposing filenames; client tasks and existing preparations are left unchanged.
+
 ## [1.23.8] — 2026-10-06
 
 ### Fixed

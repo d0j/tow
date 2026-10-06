@@ -107,6 +107,13 @@ flowchart TD
 | `tow.paths` | Every location, derived from one install root. |
 | `tow.i18n`, `tow.errors` | Language catalogs; typed errors (`TowError(key, **params)`) rendered in the reader's language. |
 
+Torrent metadata rejects real file/directory conflicts after portable path normalization,
+as well as duplicate file paths. Padding entries remain virtual. Sorting normalized
+paths with a trailing separator detects ancestors independently of input order in
+O(n log n); a name like `A-` cannot hide the conflict between `A` and `A/B`.
+TOW cannot safely map client-side automatic renames back to a saved selection, so it
+refuses conflicting metadata before preparing a tree or changing client tasks.
+
 Rule previews use the applying check's season parser and selection engine. They read saved
 tracker titles only for the same topic source and client; otherwise the current form title
 provides context. Future watch ranges are waiting, not failures, while once ranges remain

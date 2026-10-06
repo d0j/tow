@@ -5,6 +5,7 @@ import hashlib
 import re
 import unicodedata
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -68,6 +69,10 @@ class TorrentMetadata:
     files: tuple[TorrentFile, ...]
     is_multi: bool
     meta_version: int | None
+
+
+class TorrentPathConflictError(ValueError):
+    """A real file would also have to be a directory on the client filesystem."""
 
 
 class _Decoder:
@@ -289,7 +294,7 @@ def _v2_files(info: dict[bytes, Any]) -> tuple[list[TorrentFile], bool]:
         if len(parts) > MAX_PATH_DEPTH:
             raise ValueError("torrent path depth is invalid")
         if b"" in node and len(node) != 1:
-            raise ValueError("v2 torrent path is both a file and a directory")
+            raise TorrentPathConflictError("v2 torrent path is both a file and a directory")
         for key, value in node.items():
             if key == b"":
                 if not parts or not isinstance(value, dict):
@@ -424,7 +429,7 @@ def _validate_v2_piece_layers(root: dict[bytes, Any], file_tree: Any, piece_leng
 
 
 def _validate_unique_paths(files: list[TorrentFile]) -> None:
-    """No two real files may land on the same path on disk (case- and Windows-insensitive)."""
+    """Real files cannot share a disk path or act as directories for other files."""
     seen: set[str] = set()
     for file in files:
         if file.is_pad:
@@ -435,6 +440,11 @@ def _validate_unique_paths(files: list[TorrentFile]) -> None:
         seen.add(key)
     if not any(not file.is_pad for file in files):
         raise ValueError("torrent contains only padding files")
+    # The separator makes descendants adjacent to their ancestor after sorting;
+    # sorting bare names could put an unrelated "A-" between "A" and "A/B".
+    ordered = sorted(key + "/" for key in seen)
+    if any(child.startswith(parent) for parent, child in pairwise(ordered)):
+        raise TorrentPathConflictError("torrent contains file/directory path conflicts")
 
 
 def parse_torrent_metadata(torrent: bytes) -> TorrentMetadata:
