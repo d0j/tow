@@ -323,15 +323,68 @@ def test_a_switch_cut_off_halfway_is_undone_exactly(install, github, monkeypatch
     assert leftovers(install) == []
 
 
+class Crash(BaseException):
+    """A hard kill (the power went, the process was ended): nothing after it runs."""
+
+
+def killed(monkeypatch) -> None:
+    """A Crash ends the process: not even the rollback runs."""
+
+    def gone(*_args: Any) -> str:
+        raise Crash()
+
+    monkeypatch.setattr(updater.Update, "roll_back", gone)
+
+
+@pytest.mark.parametrize("interruption", [KeyboardInterrupt, SystemExit])
+def test_ctrl_c_during_uv_sync_rolls_the_code_back_before_it_ends_the_run(install, github, interruption):
+    # Before: only Exception was caught, so Ctrl+C (or closing the window) left app/ with the new
+    # code, no environment and the switch record; TOW started from it on the next start.
+    github.release("v1.23.0", tarball("1.23.0"))
+    machine = Machine(install["app"], github)
+    real = machine.uv_sync
+
+    def interrupted() -> None:
+        real()
+        if machine.syncs == 1:
+            raise interruption()
+
+    machine.uv_sync = interrupted  # type: ignore[method-assign]
+
+    lines: list[str] = []
+    with pytest.raises(interruption):
+        updater.update("v1.23.0", system=machine, app=machine.app, say=lines.append, health_timeout=5)
+
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+    assert not (install["root"] / ".update-switch.json").exists()
+    assert leftovers(install) == []
+    assert state(install)["status"] == "rolled_back"
+    assert machine.calls[-1] == "spawn tow run 1.22.0"
+
+
+def test_ctrl_c_waits_while_the_code_is_switched(install, github):
+    import signal
+
+    github.release("v1.23.0", tarball("1.23.0"))
+    machine = Machine(install["app"], github)
+    real = machine.uv_sync
+
+    def pressed() -> None:
+        signal.raise_signal(signal.SIGINT)  # the owner presses Ctrl+C in the update's window
+        real()
+
+    machine.uv_sync = pressed  # type: ignore[method-assign]
+    code, lines = run(machine, "v1.23.0")
+    assert code == 0, lines
+    assert signal.getsignal(signal.SIGINT) is signal.default_int_handler  # given back afterwards
+
+
 @pytest.mark.parametrize("cut_after", [2, 4, 7])
 def test_a_hard_crash_in_the_archive_switch_is_recovered_on_next_run(install, github, monkeypatch, cut_after):
     github.release("v1.23.0", tarball("1.23.0"))
     machine = Machine(install["app"], github)
     real = updater.os.replace
     count = 0
-
-    class Crash(BaseException):
-        pass
 
     def cut(source, destination):
         nonlocal count
@@ -343,6 +396,7 @@ def test_a_hard_crash_in_the_archive_switch_is_recovered_on_next_run(install, gi
         return result
 
     monkeypatch.setattr(updater.os, "replace", cut)
+    killed(monkeypatch)
     with pytest.raises(Crash):
         run(machine, "v1.23.0")
     monkeypatch.setattr(updater.os, "replace", real)
@@ -363,9 +417,6 @@ def test_a_crash_after_new_code_changes_data_restores_the_snapshot_too(install, 
     github.release("v1.23.0", tarball("1.23.0"))
     original = updater.Update.start_and_check
 
-    class Crash(BaseException):
-        pass
-
     def start_then_crash(work, version):
         result = original(work, version)
         if version == "1.23.0":
@@ -375,6 +426,7 @@ def test_a_crash_after_new_code_changes_data_restores_the_snapshot_too(install, 
         return result
 
     monkeypatch.setattr(updater.Update, "start_and_check", start_then_crash)
+    killed(monkeypatch)
     with pytest.raises(Crash):
         run(Machine(install["app"], github), "v1.23.0")
     monkeypatch.setattr(updater.Update, "start_and_check", original)
@@ -418,9 +470,6 @@ def test_a_damaged_update_snapshot_blocks_crash_recovery(install, github, monkey
     github.release("v1.23.0", tarball("1.23.0"))
     real = updater.os.replace
 
-    class Crash(BaseException):
-        pass
-
     def cut(source, destination):
         result = real(source, destination)
         if Path(source).parent.name == "app" and Path(source).name == "pyproject.toml":
@@ -428,6 +477,7 @@ def test_a_damaged_update_snapshot_blocks_crash_recovery(install, github, monkey
         return result
 
     monkeypatch.setattr(updater.os, "replace", cut)
+    killed(monkeypatch)
     with pytest.raises(Crash):
         run(Machine(install["app"], github), "v1.23.0")
     monkeypatch.setattr(updater.os, "replace", real)
