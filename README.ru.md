@@ -124,7 +124,7 @@ TOW слушает `127.0.0.1:8787`. На самом компьютере пар
 | | Архив для Windows или `install.ps1` | `install.sh` | клон git |
 |---|---|---|---|
 | Обновить до последнего выпуска | дважды щёлкните `Update TOW.cmd` | `~/TOW/update-tow` · macOS: `Update TOW.command` | `.\scripts\deploy.ps1 -Ref v1.22.0` · `tow update --ref v1.22.0` покажет команду |
-| Вернуться | `Update TOW.cmd v1.22.0` (не раньше v1.22.0) | `update-tow v1.22.0` (не раньше v1.22.0) | то же с прежним тегом (не раньше v1.18.0) |
+| Вернуться | `Update TOW.cmd v1.23.0` (после запуска v1.23 — не раньше v1.23.0: старые версии не читают её данные) | `update-tow v1.23.0` (так же) | то же с прежним тегом (не раньше v1.18.0; после запуска v1.23 — не раньше v1.23.0) |
 | После переноса папки | `Start TOW.cmd` всё подготовит заново; затем `tow autostart on`, если он нужен | файл запуска сделает то же; затем `tow autostart on` | `tow stop`, `tow setup`, `tow autostart on` |
 | Восстановить ночную копию | `tow restore-snapshot --path <копия> --apply` | так же | так же |
 | Удалить | [docs/ru/install.md](docs/ru/install.md#как-удалить-tow) | так же | так же |

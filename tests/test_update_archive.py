@@ -231,6 +231,97 @@ def test_a_download_that_fails_says_where(install, github):
     assert "HTTP 500" in lines[-1]
 
 
+def test_going_back_to_a_version_that_cannot_read_the_data_is_refused_before_tow_stops(install, github):
+    # v1.22 reads state format 1; v1.23 writes 2. Before, only the web worker checked this (on its
+    # first stop()); "Update TOW.cmd" v1.22.0 put a version in place that cannot read the data.
+    (install["root"] / "data" / "state.json").write_text('{"schema_version": 2, "topics": {}}', encoding="utf-8")
+    github.release("v1.22.5", tarball("1.22.5", extra={"src/tow/store.py": b"STATE_SCHEMA_VERSION = 1\n"}))
+    machine = Machine(install["app"], github)
+
+    code, lines = run(machine, "v1.22.5")
+
+    assert code == 2
+    assert machine.calls == []  # TOW was never stopped
+    assert "v1.22.5 cannot read this install's data (state.json format 2; it reads up to 1)" in lines[-1]
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+    assert leftovers(install) == []
+    assert not (install["root"] / "update-state.json").exists()
+
+
+def _target(install, store: bytes | None) -> Any:
+    """The update with an unpacked target in app.new (its src/tow/store.py, if any)."""
+    if store is not None:
+        folder = install["root"] / "app.new" / "src" / "tow"
+        folder.mkdir(parents=True)
+        (folder / "store.py").write_bytes(store)
+    return updater.Update(updater.System(install["app"]), "v1.30.0", say=lambda _line: None)
+
+
+@pytest.mark.parametrize(
+    ("store", "schema", "readable"),
+    [
+        (b"STATE_SCHEMA_VERSION = 2\n", 2, True),
+        (b"STATE_SCHEMA_VERSION = 2\n", 3, False),
+        (b"# v1.18-v1.20 declare no format; they read 1\n", 1, True),
+        (None, 2, False),
+    ],
+)
+def test_the_target_must_declare_a_state_format_the_data_has(install, store, schema, readable):
+    (install["root"] / "data" / "state.json").write_text(json.dumps({"schema_version": schema}), encoding="utf-8")
+    work = _target(install, store)
+    if readable:
+        work.refuse_unreadable_data("v1.30.0")
+    else:
+        with pytest.raises(updater.UpdateError, match="cannot read this install's data"):
+            work.refuse_unreadable_data("v1.30.0")
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        b"not-json",
+        b"[]",
+        b"\xff",
+        b'{"schema_version":1,"extra":NaN}',
+        b'{"schema_version":1,"extra":1e9999}',
+        b'{"schema_version":1,"extra":' + b"[" * 2000 + b"0" + b"]" * 2000 + b"}",
+        b'{"schema_version":1,"extra":' + b"[" * 129 + b"0" + b"]" * 129 + b"}",
+        b'{"schema_version":true}',
+        b'{"schema_version":-1}',
+        b'{"schema_version":"1"}',
+        b'{"schema_version":null}',
+    ],
+    ids=[
+        "syntax",
+        "container",
+        "encoding",
+        "nan",
+        "overflow",
+        "recursion",
+        "nesting",
+        "bool",
+        "negative",
+        "text",
+        "null",
+    ],
+)
+def test_data_that_cannot_be_verified_is_refused_and_left_alone(install, content):
+    state_file = install["root"] / "data" / "state.json"
+    state_file.write_bytes(content)
+    with pytest.raises(updater.UpdateError, match="cannot be read"):
+        _target(install, b"STATE_SCHEMA_VERSION = 2\n").refuse_unreadable_data("v1.30.0")
+    assert state_file.read_bytes() == content
+
+
+def test_a_large_valid_state_and_no_state_are_fine(install):
+    state_file = install["root"] / "data" / "state.json"
+    state_file.write_text(json.dumps({"schema_version": 2, "topics": [{"x": "y" * 100000}]}), encoding="utf-8")
+    work = _target(install, b"STATE_SCHEMA_VERSION = 2\n")
+    work.refuse_unreadable_data("v1.30.0")
+    state_file.unlink()
+    work.refuse_unreadable_data("v1.30.0")
+
+
 @pytest.mark.parametrize(
     "entry",
     [

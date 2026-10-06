@@ -433,29 +433,6 @@ def test_worker_is_still_python_311_compatible():
     ast.parse(Path(locks.__file__).read_text(), feature_version=(3, 11))
 
 
-@pytest.mark.parametrize("schema", [True, -1, 2, "1", None])
-def test_target_schema_preflight_refuses_incompatible_data(tmp_path, schema):
-    (tmp_path / "data").mkdir()
-    (tmp_path / "data" / "state.json").write_text(json.dumps({"schema_version": schema}))
-    work = SimpleNamespace(
-        root=tmp_path,
-        code=SimpleNamespace(kind="git"),
-        state={"target": "synthetic"},
-        sys=SimpleNamespace(git=lambda *_args: "STATE_SCHEMA_VERSION = 1\n"),
-    )
-    with pytest.raises(RuntimeError, match="cannot read"):
-        update_worker.schema_preflight(work, RuntimeError)
-
-
-def test_archive_target_schema_is_checked_without_touching_live_data(tmp_path):
-    source = tmp_path / "app.new" / "src" / "tow"
-    source.mkdir(parents=True)
-    (source / "store.py").write_text("STATE_SCHEMA_VERSION = 1\n")
-    work = SimpleNamespace(root=tmp_path, code=SimpleNamespace(kind="archive", new=tmp_path / "app.new"))
-    update_worker.schema_preflight(work, RuntimeError)
-    assert not (tmp_path / "data").exists()
-
-
 def test_windows_updater_never_falls_back_into_the_parent_job(monkeypatch):
     from tow.platform.windows import WindowsBackend
 

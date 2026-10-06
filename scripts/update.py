@@ -27,7 +27,8 @@ Steps (each one checked; nothing is reported as done without its read-back):
 1. one update at a time (``<TOW>/.update.lock``); refuse local edits of the code and an install
    that still runs the five Windows tasks of 1.17 (it switches with v1.20.0 first); fetch (or
    download and unpack the archive); refuse a target older than v1.18.0 (no ``tow run`` to
-   start; v1.22.0 for an archive install);
+   start; v1.22.0 for an archive install) and one that cannot read data/state.json (its
+   ``STATE_SCHEMA_VERSION`` is lower than the file's format: v1.22 after v1.23 ran);
 2. stop TOW: ``tow run`` gets the stop request (it lets a running check finish); only if it does
    not stop in time is it stopped forcibly, with its web server and job (status.json). With
    autostart on Linux or macOS the OS manager stops it too (``systemctl --user stop``,
@@ -54,6 +55,7 @@ import argparse
 import contextlib
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -149,6 +151,14 @@ TEXTS = {
     ),
     "archive_ref": "an install without git updates to a release tag (for example v1.22.0) or latest, not to {ref}",
     "switch_failed": "the code could not be switched ({error}): close programs and windows that use files in {app}",
+    "data_newer": (
+        "{ref} cannot read this install's data (state.json format {found}; it reads up to {known}): go back no"
+        " further than the version that wrote it; nothing was updated"
+    ),
+    "data_unverified": (
+        "this install's data/state.json cannot be read ({error}), so it is not known whether {ref} can read it;"
+        " nothing was updated"
+    ),
     "recovering": "an earlier update was cut off while it replaced the code: putting back TOW {version} first",
     "recovery_failed": "the cut-off update could not be undone: {error}; run the update again to retry",
     "newer_data": (
@@ -781,6 +791,10 @@ class GitCode:
     def short(self, value: str) -> str:
         return value[:7]
 
+    def target_text(self, target: str, relative: str) -> str | None:
+        code, output = self.sys._run(["git", "-C", str(self.sys.app), "show", f"{target}:{relative}"])
+        return output if code == 0 else None
+
     def switch(self, target: str) -> None:
         self.sys.git("checkout", "--quiet", "--detach", target)
 
@@ -892,6 +906,14 @@ class ArchiveCode:
 
     def short(self, value: str) -> str:
         return value
+
+    def target_text(self, target: str, relative: str) -> str | None:
+        """A file of the unpacked target (``app.new``, after ``prepare``)."""
+        del target
+        try:
+            return (self.new / relative).read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            return None
 
     # -- the archive ---------------------------------------------------------------------------
 
@@ -1011,6 +1033,32 @@ class ArchiveCode:
     def discard(self) -> None:
         for leftover in (self.new, self.downloads):
             remove_tree(leftover)
+
+
+def _finite(text: str) -> float:
+    number = float(text)
+    if not math.isfinite(number):
+        raise ValueError("non-finite JSON number")
+    return number
+
+
+def state_format(raw: bytes) -> int:
+    """The format (``schema_version``) of a state.json, read as tow.store reads it: an object,
+    finite numbers, at most 128 levels deep; ValueError/TypeError/RecursionError otherwise."""
+    value = json.loads(raw.decode("utf-8"), parse_float=_finite, parse_constant=_finite)
+    if not isinstance(value, dict):
+        raise TypeError("state.json is not an object")
+    stack: list[tuple[Any, int]] = [(value, 0)]
+    while stack:
+        item, depth = stack.pop()
+        if depth > 128:
+            raise ValueError("state.json nesting exceeds limit")
+        children = item.values() if isinstance(item, dict) else item if isinstance(item, list) else ()
+        stack.extend((child, depth + 1) for child in children)
+    found = value.get("schema_version", 0)
+    if type(found) is not int or found < 0:
+        raise ValueError("invalid state format")
+    return found
 
 
 def _project_version(pyproject: Path) -> str:
@@ -1405,6 +1453,22 @@ class Update:
         if match and version is not None and version < MINIMUM_TARGET:
             raise UpdateError(self.text("too_old", ref=self.ref, version=match.group(1)))
 
+    def refuse_unreadable_data(self, target: str) -> None:
+        """The target must read this install's state.json: an older TOW cannot read a newer state
+        format (v1.22 reads format 1, v1.23 writes 2), so going back that far is refused here,
+        before TOW stops. No declared format: v1.18-v1.20, which read format 1."""
+        source = self.code.target_text(target, "src/tow/store.py") or ""
+        match = re.search(r"^STATE_SCHEMA_VERSION\s*=\s*([0-9]+)\s*$", source, re.MULTILINE)
+        known = int(match[1]) if match else 1
+        try:
+            found = state_format((self.root / "data" / "state.json").read_bytes())
+        except FileNotFoundError:
+            return
+        except (OSError, ValueError, TypeError, RecursionError) as exc:
+            raise UpdateError(self.text("data_unverified", ref=self.ref, error=exc)) from exc
+        if found > known:
+            raise UpdateError(self.text("data_newer", ref=self.ref, found=found, known=known))
+
     def run(self) -> int:
         self.check_install()
         if not self.recover_archive():
@@ -1415,6 +1479,7 @@ class Update:
         previous_version = self.version()
         try:
             target = code.prepare(self.ref)  # fetch, or download and unpack: TOW still runs
+            self.refuse_unreadable_data(target)
         except BaseException:
             code.discard()
             raise
