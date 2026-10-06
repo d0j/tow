@@ -2282,6 +2282,14 @@ def test_error_line_is_short_and_falls_back_to_the_message():
     assert _error_line("", "error") == ""
 
 
+def test_a_removed_topic_gives_one_reason_not_a_transport_error():
+    from tow.web.views import _error_line
+
+    line = _error_line("example: no mirror answered: the site answered with error 404", "gone")
+
+    assert line == "Раздача удалена с сайта"
+
+
 def _row_summaries(page: str) -> list[str]:
     return re.findall(r'<details class="row-edit[^"]*"[^>]*>\s*<summary>(.*?)</summary>', page, flags=re.DOTALL)
 
