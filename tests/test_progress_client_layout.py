@@ -5,11 +5,16 @@ from typing import ClassVar
 
 import pytest
 
-from tow.progress import _file_rule_plan, reconcile_topic
+from tow.progress import _file_rule_evidence, reconcile_topic
 from tow.selection import SelectionError, normalize_policy
 
 HASH = "a" * 40
 CANONICAL = "Season 1/ShowA.S01E01.mkv"
+
+
+def _file_rule_plan(*args, **kwargs):
+    """The plan a progress pass re-reads for literal/mask membership."""
+    return _file_rule_evidence(*args, **kwargs)[0]
 
 
 class Client:

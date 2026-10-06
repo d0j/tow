@@ -535,10 +535,6 @@ def infohash_v2(torrent: bytes) -> str:
     return value
 
 
-def torrent_files(torrent: bytes) -> tuple[TorrentFile, ...]:
-    return parse_torrent_metadata(torrent).files
-
-
 def looks_like_torrent(data: bytes) -> bool:
     """Structural check only: a bencoded dict with an ``info`` dict.
 

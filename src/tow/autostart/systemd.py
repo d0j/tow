@@ -126,9 +126,6 @@ class SystemdUser:
 
     # --- reading ------------------------------------------------------------------------------
 
-    def systemd_available(self) -> bool:
-        return self.run(["systemctl", "--user", "show-environment"]).ok
-
     def systemd_booted(self) -> bool:
         return self.systemd_runtime.is_dir()
 

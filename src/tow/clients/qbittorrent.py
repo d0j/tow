@@ -350,11 +350,6 @@ class QBittorrentClient:
             raise _fail(visibility_error)
         raise _fail(ownership_error)
 
-    @staticmethod
-    def _normalize_path(value: object) -> str:
-        # The client may store `a: b` as `a_ b` on Windows; compare the sanitized spelling.
-        return files.normalize_path(value)
-
     @classmethod
     def _padding_like_name(cls, value: object) -> bool:
         return files.padding_like(value)

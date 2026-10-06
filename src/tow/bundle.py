@@ -180,10 +180,6 @@ def _secret_segments(value: Any, seen: set[int]) -> list[str | int] | None:
     return None
 
 
-def _contains_secret_keys(value: Any) -> bool:
-    return _secret_key_path(value) is not None
-
-
 def _refuse_plaintext_secrets(config_data: Any, state_data: Any, history_data: Any) -> None:
     for label, data in (
         ("config.yaml", config_data),

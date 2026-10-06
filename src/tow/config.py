@@ -98,12 +98,6 @@ def port_of(cfg: Mapping[str, Any]) -> int:
     return int(cfg.get("port") or DEFAULTS["port"])
 
 
-def interval_minutes(interval_sec: int | None) -> int:
-    """The check interval in whole minutes, within what the UI and the scheduler accept."""
-    seconds = int(interval_sec or DEFAULTS["interval_sec"])
-    return max(INTERVAL_MIN_MINUTES, min(INTERVAL_MAX_MINUTES, round(seconds / 60)))
-
-
 DEFAULT_BACKUP_TIME = (3, 30)
 
 

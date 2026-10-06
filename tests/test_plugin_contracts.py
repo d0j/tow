@@ -17,9 +17,14 @@ import pytest
 import tow.clients
 import tow.notifiers
 from tow.clients import spec
-from tow.clients.spec import CAPABILITIES, TorrentClientAdapter, adapter_problems
+from tow.clients.spec import CAPABILITIES, TorrentClientAdapter
 from tow.notifiers import registry
 from tow.notifiers.base import Field, notifier_problems
+
+
+def adapter_problems(adapter: object) -> list[str]:
+    """The members of the client contract ``adapter`` lacks (empty: it is a complete client)."""
+    return sorted(name for name in get_protocol_members(TorrentClientAdapter) if not hasattr(adapter, name))
 
 
 def _client_classes():

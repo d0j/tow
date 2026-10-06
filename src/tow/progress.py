@@ -599,18 +599,6 @@ def _file_rule_evidence(
     return resolve_selection(rows, policy, preferred_season=preferred_season), {row.index: row.path for row in rows}
 
 
-def _file_rule_plan(
-    topic: Topic,
-    prepared_all: list[tuple[Any, str, int | None, bool]],
-    preferred_season: int | None,
-    *,
-    content_path: str = "",
-    save_path: str = "",
-) -> SelectionPlan | None:
-    """Re-read literal/mask membership, not client priorities or stale episode caches."""
-    return _file_rule_evidence(topic, prepared_all, preferred_season, content_path=content_path, save_path=save_path)[0]
-
-
 def _selection_fingerprint(topic: Topic) -> str | None:
     mode = str(as_dict(topic.get("selection")).get("mode") or "all")
     if mode not in {"all", "files", "exact"} or not _selection_is_current(topic):
