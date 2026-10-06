@@ -262,3 +262,18 @@ def test_the_reset_command_is_written_the_way_this_system_runs_it():
         assert launcher() == "scripts/tow"
         assert TEMPLATES.env.globals["os_sep"]() == "/"
         assert TEMPLATES.env.globals["os_example_folder"]() == "/srv/media"
+
+
+def test_in_a_runtime_install_the_reset_command_names_the_app_folder(monkeypatch, tmp_path):
+    from tow import paths, platform
+    from tow.platform.posix import PosixBackend
+    from tow.platform.windows import WindowsBackend
+    from tow.web.templating import TEMPLATES
+
+    monkeypatch.setenv("TOW_ROOT", str(tmp_path))
+    monkeypatch.setattr(paths, "repo_root", lambda: tmp_path / "app")
+    launcher = TEMPLATES.env.globals["os_launcher"]
+    with platform.use(WindowsBackend()):
+        assert launcher() == "app\\scripts\\tow.cmd"
+    with platform.use(PosixBackend("linux")):
+        assert launcher() == "app/scripts/tow"
