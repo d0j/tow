@@ -1661,7 +1661,6 @@
     "not_runtime": "{app} is not a runtime install (config.yaml and data/ next to it); development checkouts are not updated",
     "local_edits": "the code in {app} has local changes; nothing was updated",
     "busy": "another update is running ({lock})",
-    "five_tasks": "this install still runs the five Windows tasks of 1.17 (TOW-serve, TOW-check, ...): update it to v1.20.0 first and run `tow autostart migrate --apply` there; nothing was updated",
     "too_old": "{ref} is TOW {version}: an install managed by `tow run` goes no further back than v1.18.0 (older versions have no `tow run`); nothing was updated",
     "start": "TOW update: {previous} -> {target} ({ref}) in {root}",
     "stopping": "stopping TOW...",

@@ -369,10 +369,8 @@ PATH, `UV_PYTHON_INSTALL_DIR`, `UV_PYTHON_BIN_DIR`, `UV_CACHE_DIR` under `<TOW>/
 outside `runtime/` gets it there on its first update, which needs the network; `tow setup`
 before the update does the same).
 
-1. One update at a time (`<TOW>/.update.lock`); refuse a development checkout, local edits of
-   tracked files and an install that still runs the five Windows tasks of 1.17 (update it to
-   v1.20.0 and run `tow autostart migrate --apply` there first); `git fetch --tags --prune
-   origin`; resolve the ref; refuse a target older than **v1.18.0** — the minimum rollback target
+1. One update at a time (`<TOW>/.update.lock`); refuse a development checkout and local edits of
+   tracked files; `git fetch --tags --prune origin`; resolve the ref; refuse a target older than **v1.18.0** — the minimum rollback target
    of the supervised-service layout (older versions have no `tow run`) — and a target that cannot
    read `data/state.json`: its `STATE_SCHEMA_VERSION` (none: v1.18–v1.20, format 1) is lower than
    the file's `schema_version` (v1.22 reads format 1, v1.23 writes 2), or the file cannot be
@@ -734,9 +732,9 @@ migrate` only points to v1.20.0). Consequences:
   back to the five tasks, deploy v1.20.0 first and follow that version's PORTABLE.md
   (`tow autostart off`, `tow install-task`, `schtasks /Run /TN TOW-serve`, then
   `deploy.ps1 -Ref v1.17.1`).
-- **An install that still runs the five tasks** cannot update to 1.21 or later directly:
-  `update.py` refuses it (`schtasks /Query /TN TOW-serve` names this install's `tow-serve.cmd`).
-  Take the steps above with v1.20.0 first.
+- **An install that still runs the five tasks** takes the steps above with v1.20.0 first: 1.21
+  and later have no `tow-serve.cmd` for the TOW-serve task to start, so an update of such an
+  install to them fails its health check and is rolled back.
 - `app\tow-local.cmd` is no longer read by the launchers (discovery finds the same folders); a
   leftover file is ignored — delete it.
 - If Python is not inside `runtime/` yet, run `tow stop` and `tow setup` before the first update

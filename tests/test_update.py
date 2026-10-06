@@ -1,8 +1,7 @@
 """scripts/update.py on a throwaway install: real git on a temp clone, everything else faked.
 
 The port of scripts/test-deploy.ps1: success, a new version that does not answer (rollback with
-the data put back), a rollback step that fails, local edits, a second update at the same time,
-and an install that still runs the five Windows tasks of 1.17 (refused).
+the data put back), a rollback step that fails, local edits and a second update at the same time.
 """
 
 from __future__ import annotations
@@ -75,7 +74,7 @@ def origin(tmp_path_factory) -> Path:
     git(origin, "commit", "-q", "-am", "two")
     git(origin, "tag", "v1.21.0")
     (origin / "pyproject.toml").write_text('[project]\nname = "tow"\nversion = "1.17.1"\n', encoding="utf-8")
-    git(origin, "commit", "-q", "-am", "the five tasks")
+    git(origin, "commit", "-q", "-am", "before tow run")
     git(origin, "tag", "v1.17.1")
     return origin
 
@@ -117,7 +116,7 @@ def install(tmp_path, origin, monkeypatch) -> dict[str, Any]:
 
 
 class Fake(updater.System):
-    """The machine: tow run, uv and the web server (and, refused, the five tasks of 1.17)."""
+    """The machine: tow run, uv and the web server."""
 
     def __init__(self, app: Path, *, windows: bool = False, **scenario: Any):
         super().__init__(app)
@@ -128,7 +127,6 @@ class Fake(updater.System):
         self.supervisor = scenario.get("supervisor", True)
         self.up = self.supervisor
         self.syncs = 0
-        self.tasks: dict[str, dict[str, Any]] = scenario.get("tasks", {})
         self.t = 0.0
 
     def head_version(self) -> str:
@@ -208,13 +206,6 @@ class Fake(updater.System):
             (self.app.parent / "data" / "state.json").write_text('{"topics": [], "schema": 2}', encoding="utf-8")
             (self.app.parent / "data" / "new-index.json").write_text("{}", encoding="utf-8")
             (self.app.parent / "config.yaml").write_text("port: 18999\nnew_key: 1\n", encoding="utf-8")
-
-    # the five Windows tasks of 1.17 (only to be refused)
-    def task_xml(self, name: str):
-        if name not in self.tasks:
-            return None
-        command = self.app / "scripts" / self.tasks[name]
-        return f"<Task><Actions><Exec><Command>{command}</Command></Exec></Actions></Task>"
 
 
 def run(fake: Fake, ref: str = "v1.21.0", **options) -> tuple[int, list[str]]:
@@ -560,33 +551,6 @@ def test_deploy_gives_the_new_version_as_long_as_update_does():
     match = regex.search(r"\$HealthTimeoutSec = (\d+)", deploy)
     assert match is not None
     assert int(match.group(1)) == 90 == updater.Update.__init__.__kwdefaults__["health_timeout"]
-
-
-# --- the five Windows tasks of 1.17 ---------------------------------------------------------------
-
-
-def test_an_install_that_still_runs_the_five_tasks_is_refused(install):
-    # 1.21 has no five-task layout: such an install switches with v1.20.0 first.
-    fake = Fake(install["app"], windows=True, supervisor=False, tasks={"TOW-serve": "tow-serve.cmd"})
-    fake.up = True
-    before = head(install)
-
-    code, lines = run(fake)
-
-    assert code == 2
-    assert head(install) == before
-    assert fake.calls == []  # nothing stopped, nothing synced
-    assert "v1.20.0" in lines[-1]
-    assert "tow autostart migrate --apply" in lines[-1]
-    assert not (install["root"] / "update-state.json").exists()
-    assert not (install["root"] / "deploy-state.json").exists()
-
-
-def test_another_folders_tow_serve_does_not_block_an_update(install):
-    fake = Fake(install["app"], windows=True, tasks={})
-    fake.tasks["TOW-serve"] = "../../Other/app/scripts/tow-serve.cmd"
-    code, lines = run(fake)
-    assert code == 0, lines
 
 
 # --- texts, versions and the CLI ---------------------------------------------------------------
