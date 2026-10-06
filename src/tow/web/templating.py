@@ -152,6 +152,12 @@ def login_help() -> dict[str, str]:
     return {"hint": password_hint(record), "machine": socket.gethostname(), "url": f"http://127.0.0.1:{port}"}
 
 
+def site_title(name: object) -> str:
+    """How pages name a site: its settings' title ("NNM-Club"), as on Sites; else its key."""
+    trackers = {str(key): value for key, value in as_dict(_context.config().get("trackers")).items()}
+    return str(as_dict(trackers.get(str(name))).get("title") or name)
+
+
 def network_session(request: Request) -> bool:
     """This page was opened from another device with a session: there is something to sign out
     of (this computer needs no password, so it has none)."""
@@ -213,4 +219,5 @@ def configure(templates: Jinja2Templates = TEMPLATES) -> None:
     env["flash_ttl_sec"] = flash_ttl_sec
     env["login_help"] = login_help
     env["network_session"] = network_session
+    env["site_title"] = site_title
     env["client_name"] = client_name

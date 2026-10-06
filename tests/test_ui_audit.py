@@ -446,7 +446,7 @@ def test_row_buttons_have_distinct_names(client):
     site_labels = re.findall(r'class="row-ico[^"]*"[^>]*aria-label="([^"]+)"', sites)
     assert site_labels
     assert len(set(site_labels)) == len(site_labels)
-    assert "Проверить зеркала сайта rutor" in site_labels
+    assert "Проверить зеркала сайта Rutor" in site_labels
 
 
 # --- M8: header and row tap targets -----------------------------------------------------------

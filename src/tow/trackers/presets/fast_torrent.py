@@ -8,7 +8,7 @@ PRESET = SitePreset(
     name="fast_torrent",
     brands=("fast-?torrent",),
     spec={
-        "title": "fast_torrent",
+        "title": "Fast-Torrent",
         "url_regex": r"^https?://(?:www\.)?fast\-torrent\.ru/download/torrent/(\d+)(?:/.*)?",
         "login_hosts": ["http://fast-torrent.ru"],
         "fetch_hosts": ["http://fast-torrent.ru"],

@@ -22,7 +22,7 @@
     {% for p in report.probes %}
       <tr>
         <td class="cell-dot"><span class="dot {{ 'ok' if p.ok else 'warn' }}" aria-hidden="true"></span></td>
-        <td data-label="{{ t('doctor.th_site') }}">{{ p.tracker }}</td>
+        <td data-label="{{ t('doctor.th_site') }}">{{ site_title(p.tracker) }}</td>
         <td class="mono" data-label="{{ t('doctor.th_mirror') }}">{{ p.host }}</td>
         <td data-label="{{ t('doctor.th_status') }}"><span class="pill {{ 'ok' if p.ok else 'warn' }} pill-wrap"{% if not p.ok and p.error %} title="{{ p.error }}"{% endif %}>{{ p.text }}</span></td>
       </tr>

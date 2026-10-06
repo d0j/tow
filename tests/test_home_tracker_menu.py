@@ -29,7 +29,7 @@ def test_menu_includes_all_configured_sites_even_without_topics(language, count)
     assert [choice["data-choice-value"] for choice in choices] == ["", *sorted(names)]
     assert choices[0]["aria-checked"] == "true"
     assert all(choice["aria-checked"] == "false" for choice in choices[1:])
-    assert choices[0].get_text(strip=True) == ("Все трекеры" if language == "ru" else "All trackers")
+    assert choices[0].get_text(strip=True) == ("Все сайты" if language == "ru" else "All sites")
     assert [option["value"] for option in page.select("#list-tracker option")] == ["", *sorted(names)]
     assert page.select_one("[data-tracker-chips]") is None
     assert len(page.select("[data-filter]")) == 4
@@ -51,10 +51,24 @@ def test_menu_deduplicates_sites_and_retains_unknown_watched_site():
     assert {row["data-tracker"] for row in page.select(".row-wrap")} <= set(values)
 
 
+def test_sites_are_named_by_their_title_as_on_the_sites_page():
+    config = load_config()
+    config["trackers"] = {"nnmclub": deepcopy(config["trackers"]["nnmclub"]), "my_site": {"url_regex": r"x/(\d+)"}}
+    save_config(config)
+    page = BeautifulSoup(TestClient(app).get("/").text, "html.parser")
+    choices = page.select("#tracker-menu [role=menuitemradio]")
+    assert [(c["data-choice-value"], c.get_text(strip=True)) for c in choices[1:]] == [
+        ("my_site", "my_site"),
+        ("nnmclub", "NNM-Club"),
+    ]
+
+
 def test_long_and_markup_site_names_are_text_not_html():
     config = load_config()
     name = '<img src=x onerror="alert(1)"> &' + "very-long-site-name-" * 30
-    config["trackers"] = {name: deepcopy(config["trackers"]["rutor"])}
+    spec = deepcopy(config["trackers"]["rutor"])
+    spec.pop("title", None)  # a site of the owner's: named by its key
+    config["trackers"] = {name: spec}
     save_config(config)
     page = BeautifulSoup(TestClient(app).get("/").text, "html.parser")
     choice = page.select("#tracker-menu [role=menuitemradio]")[1]

@@ -128,7 +128,7 @@
   <label class="sr-only" for="list-tracker">{{ t('home.tools.site') }}</label>
   <select id="list-tracker">
     <option value="">{{ t('home.tools.all_sites') }}</option>
-    {% for name in tracker_options %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+    {% for name in tracker_options %}<option value="{{ name }}">{{ site_title(name) }}</option>{% endfor %}
   </select>
   <div class="tracker-picker" id="tracker-picker" hidden>
     <button type="button" class="ghost tracker-toggle" id="tracker-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="tracker-menu" aria-label="{{ t('home.tools.site') }}" data-menu-label="{{ t('home.tools.site') }}">
@@ -138,8 +138,8 @@
     </button>
     <div class="sort-menu tracker-menu" id="tracker-menu" role="menu" aria-label="{{ t('home.tools.site') }}" hidden>
       {% for name in [''] + tracker_options %}
-      <button type="button" class="ghost sort-option tracker-option" role="menuitemradio" aria-checked="{{ 'true' if not name else 'false' }}" tabindex="-1" data-choice-value="{{ name }}" title="{{ name or t('home.tools.all_sites') }}">
-        <span>{{ name or t('home.tools.all_sites') }}</span>
+      <button type="button" class="ghost sort-option tracker-option" role="menuitemradio" aria-checked="{{ 'true' if not name else 'false' }}" tabindex="-1" data-choice-value="{{ name }}" title="{{ site_title(name) if name else t('home.tools.all_sites') }}">
+        <span>{{ site_title(name) if name else t('home.tools.all_sites') }}</span>
         <svg class="sort-selected" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>
       </button>
       {% endfor %}
@@ -188,7 +188,7 @@
     <summary>
       <span class="dot lg {{ torrent_tone }}" title="{{ torrent_label }}"></span><span class="sr-only">{{ torrent_label }}</span>
       <span class="topic-name"><span class="clip" title="{{ topic.tracker_title or topic.title }}" data-hl>{{ topic.series }}</span>{% if topic.timer %}<span class="topic-timer" data-topic-timer="{{ topic.id }}" data-timer-at="{{ topic.timer.next_at }}" data-timer-now="{{ topic.timer.now }}" data-timer-state="{{ topic.timer.state }}" data-timer-minutes="{{ topic.timer.minutes }}" title="{{ t('timer.title', minutes=topic.timer.minutes) }}" aria-label="{{ t('timer.title', minutes=topic.timer.minutes) }}"><svg width="13" height="13" aria-hidden="true"><use href="#i-clock"/></svg><span data-timer-value>—</span><noscript>{{ t('timer.every', minutes=topic.timer.minutes) }}</noscript></span>{% endif %}</span>
-      <span class="topic-tracker" data-label="{{ t('home.row.site') }}">{{ topic.tracker }}</span>
+      <span class="topic-tracker" data-label="{{ t('home.row.site') }}">{{ site_title(topic.tracker) if topic.tracker else '' }}</span>
       <span class="mono topic-path" data-label="{{ t('home.row.folder') }}"><span class="clip-start" title="{{ topic.save_path or '' }}"><bdi>{{ topic.save_path or "—" }}</bdi></span></span>
       <span class="clip addition topic-event" data-label="{{ t('home.row.event') }}" title="{{ topic.last_event_at or t('home.topic.no_events') }}">
         {%- if topic.error_line %}<span class="row-error {{ 'bad' if torrent_tone == 'bad' else 'warn' }}" title="{{ topic.last_error_human or topic.last_error }}">{{ topic.error_line }}<span class="sr-only"> {{ t('home.row.full_error') }}</span></span>{% elif topic.last_event_label %}<b>{{ topic.last_event_label }}</b><small class="mut"> · {{ topic.last_event_at }}</small>{% else %}<span class="mut">—</span>{% endif -%}
