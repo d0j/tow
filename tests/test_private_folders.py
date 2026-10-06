@@ -91,6 +91,18 @@ def test_a_folder_of_another_account_is_never_changed(fake_windows):
     assert calls == []
 
 
+@pytest.mark.parametrize(("is_elevated", "changed"), [(True, True), (False, False)])
+def test_a_folder_owned_by_administrators_is_changed_only_by_an_elevated_process(
+    fake_windows, monkeypatch, is_elevated, changed
+):
+    # An elevated session creates folders owned by Administrators, not by the account itself.
+    folder, acl, calls = fake_windows
+    acl["sddl"] = DRIVE_ROOT.replace(f"O:{USER}", "O:BA")
+    monkeypatch.setattr(windows, "elevated", lambda: is_elevated)
+    assert windows.make_private(folder) is changed
+    assert bool(calls) is changed
+
+
 def test_a_change_that_does_not_read_back_private_is_a_failure(fake_windows, monkeypatch):
     folder, _acl, calls = fake_windows
     monkeypatch.setattr(windows, "_run", lambda args, timeout=20: calls.append(list(args)) or "")
