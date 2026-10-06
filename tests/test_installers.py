@@ -357,38 +357,32 @@ def test_ci_keeps_the_required_check_names_and_audits_once():
 
 
 def test_the_release_workflow_tests_everything_before_it_uploads():
-    import yaml
-
-    workflows = ROOT / ".github" / "workflows"
-    text = (workflows / "release.yml").read_text(encoding="utf-8")
-    flow = yaml.safe_load(text)
+    _text, flow = _workflow("release")
     jobs = flow["jobs"]
-    # Every action pinned to a commit; checkout and setup-uv to the very ones CI uses.
-    uses = re.findall(r"uses: (\S+)", text)
-    assert uses
-    assert all(re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", use) for use in uses), uses
-    ci_text = (workflows / "ci.yml").read_text(encoding="utf-8")
-    ci_pins = set(re.findall(r"uses: (\S+@[0-9a-f]{40})", ci_text))
-    assert {use for use in uses if use.startswith(("actions/checkout@", "astral-sh/setup-uv@"))} <= ci_pins
+    # The gate is not run again: the tag must be on origin/main and its commit must have passed ci.
+    assert "gate" not in jobs
+    assert jobs["source"]["permissions"] == {"contents": "read", "actions": "read"}
+    source = _runs(jobs["source"])
+    assert 'git merge-base --is-ancestor "$commit" refs/remotes/origin/main' in source
+    assert '[ "$message" = "TOW ${TAG#v}" ]' in source
+    assert "actions/workflows/ci.yml/runs?head_sha=$COMMIT" in source
+    assert "completed/success" in source
+    assert jobs["source"]["steps"][0]["with"]["fetch-depth"] == 0
     # Write access only where the release is touched, and only after every test passed.
-    assert flow["permissions"] == {"contents": "read"}
     writers = [name for name, job in jobs.items() if job.get("permissions", {}).get("contents") == "write"]
     assert writers == ["publish"]
-    assert set(jobs["publish"]["needs"]) == {"gate", "source", "windows", "posix", "update"}
-    assert "scripts/update-smoke.py --previous" in _runs(jobs["update"])
-    ci_jobs = yaml.safe_load(ci_text)["jobs"]
-    gate_runners = {"windows-latest", "ubuntu-latest", "ubuntu-26.04", "macos-latest"}
-    assert set(jobs["gate"]["strategy"]["matrix"]["os"]) == gate_runners
-    assert set(ci_jobs["gate"]["strategy"]["matrix"]["os"]) == gate_runners
-    windows = "\n".join(step.get("run", "") for step in jobs["windows"]["steps"])
+    assert jobs["publish"]["permissions"] == {"contents": "write"}
+    assert set(jobs["publish"]["needs"]) == {"source", "windows", "posix", "update"}
+    for job_id in ("windows", "posix", "update"):
+        assert jobs[job_id]["needs"] == ["source"]
+    windows = _runs(jobs["windows"])
     assert "scripts/build-bundle.py --out dist --source tow-source.tar.gz" in windows
     assert "bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Offline" in windows
     assert "install-smoke.ps1 -Zip dist/TOW-windows-x64.zip" in windows
-    posix_runners = ["ubuntu-latest", "ubuntu-26.04", "macos-latest"]
-    assert jobs["posix"]["strategy"]["matrix"]["os"] == posix_runners
-    assert ci_jobs["install"]["strategy"]["matrix"]["os"] == posix_runners
+    assert jobs["posix"]["strategy"]["matrix"]["os"] == ["ubuntu-latest", "ubuntu-26.04", "macos-latest"]
     assert "scripts/install-smoke.sh" in jobs["posix"]["steps"][-1]["run"]
-    publish = "\n".join(step.get("run", "") for step in jobs["publish"]["steps"])
+    assert "scripts/update-smoke.py --previous" in _runs(jobs["update"])
+    publish = _runs(jobs["publish"])
     assert "sha256sum TOW-windows-x64.zip install.ps1 install.sh tow-source.tar.gz > SHA256SUMS" in publish
     assert "gh release view" in publish  # created only when missing: existing notes stay
     assert "gh release upload" in publish
@@ -419,9 +413,7 @@ def test_the_windows_smoke_scripts_parse(name):
     assert done.returncode == 0, done.stdout + done.stderr
 
 
-@pytest.mark.parametrize(
-    ("workflow", "job_id"), [("ci", "gate"), ("ci", "install"), ("release", "gate"), ("release", "posix")]
-)
+@pytest.mark.parametrize(("workflow", "job_id"), [("ci", "gate"), ("ci", "install"), ("release", "posix")])
 def test_linux_runners_keep_both_lts_versions_without_renaming_required_checks(workflow, job_id):
     import yaml
 
