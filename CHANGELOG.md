@@ -9,6 +9,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- File-rule progress understands the client's reported torrent root without
+  confusing it with a metadata-relative path. Literal selections use the shared
+  path-and-size mapping, including portable filename sanitization; ambiguous or
+  changed identities still fail closed. Native history paths, file priorities
+  and saved rules remain unchanged.
 - The guide distinguishes individual topic timers from the global clock and
   supervised web-server recovery from the reporting-only watchdog. It no longer
   promises that the watchdog restarts a stopped TOW service.

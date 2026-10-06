@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from tow.clients.files import map_files, normalize_path
 from tow.clients.spec import TorrentClientAdapter
 from tow.clock import iso_from_epoch, parse_timestamp
 from tow.episodes import (
@@ -29,7 +30,7 @@ from tow.i18n import t
 from tow.jsonish import as_dict
 from tow.log import owner_language
 from tow.records import DownloadHistory, HistoryItem, HistoryRecord, Topic
-from tow.selection import SelectionPlan, policy_from_topic, resolve_selection
+from tow.selection import SelectionError, SelectionPlan, policy_from_topic, resolve_selection
 from tow.torrent import TorrentFile
 
 
@@ -468,19 +469,57 @@ def _selection_is_current(topic: Topic) -> bool:
     )
 
 
+def _client_content_root(content_path: str, save_path: str) -> str:
+    """Only a direct child reported by the client is a root, never a path suffix guess.
+
+    Work lexically: the client may be remote or use a different OS's path syntax.
+    A single-file content path is harmless: no file has that name as a directory.
+    """
+    content = content_path.replace("\\", "/").rstrip("/")
+    if any(part in {".", ".."} for part in content.split("/")):
+        return ""
+    parent, separator, name = content.rpartition("/")
+    if not separator or not name or not paths_equal(parent or "/", save_path):
+        return ""
+    return name
+
+
 def _file_rule_plan(
-    topic: Topic, prepared_all: list[tuple[Any, str, int | None, bool]], preferred_season: int | None
+    topic: Topic,
+    prepared_all: list[tuple[Any, str, int | None, bool]],
+    preferred_season: int | None,
+    *,
+    content_path: str = "",
+    save_path: str = "",
 ) -> SelectionPlan | None:
     """Re-read literal/mask membership, not client priorities or stale episode caches."""
     mode = str(as_dict(topic.get("selection")).get("mode") or "all")
     if not prepared_all or mode not in {"files", "exact"} or not _selection_is_current(topic):
         return None
-    rows = tuple(
+    root = _client_content_root(content_path, save_path)
+    native_rows = tuple(
         TorrentFile(index, rel, size if size is not None else 0)
         for index, (_row, rel, size, _selected) in enumerate(prepared_all)
         if (mode != "exact" or size is not None) and (size is None or 0 <= size <= 2**63 - 1)
     )
-    return resolve_selection(rows, policy_from_topic(topic), preferred_season=preferred_season)
+    policy = policy_from_topic(topic)
+    canonical: dict[int, str] = {}
+    if mode == "exact":
+        wanted = tuple(TorrentFile(index, item["path"], item["size"]) for index, item in enumerate(policy["files"]))
+        mapping = map_files(
+            wanted,
+            [{"index": row.index, "name": row.path, "size": row.size} for row in native_rows],
+            root,
+            fail=lambda _path: SelectionError("selection.exact_changed"),
+        )
+        canonical = {mapping[row.index]: row.path for row in wanted}
+
+    def relative(path: str) -> str:
+        first, separator, rest = path.partition("/")
+        return rest if root and separator and normalize_path(first) == normalize_path(root) else path
+
+    rows = tuple(TorrentFile(row.index, canonical.get(row.index, relative(row.path)), row.size) for row in native_rows)
+    return resolve_selection(rows, policy, preferred_season=preferred_season)
 
 
 def _selection_fingerprint(topic: Topic) -> str | None:
@@ -771,10 +810,13 @@ def _selected_files(
     expected: dict[str, Any] | None,
     prepared_all: list[tuple[Any, str, int | None, bool]],
     preferred_season: int | None,
+    *,
+    content_path: str = "",
+    save_path: str = "",
 ) -> tuple[list[tuple[tuple[Any, str, int | None], tuple[Any, ...]]], dict[str, Any] | None]:
     """The selected client files with the episodes each covers, and the expectation corrected
     by what the files show (season-relative numbering, a count from the files)."""
-    file_plan = _file_rule_plan(topic, prepared_all, preferred_season)
+    file_plan = _file_rule_plan(topic, prepared_all, preferred_season, content_path=content_path, save_path=save_path)
     if file_plan is not None:
         wanted = set(file_plan.selected_indices)
         prepared_all = [
@@ -1033,7 +1075,15 @@ def reconcile_topic(
     selected_episode_keys = [str(value) for value in topic.get("selected_episode_keys") or []]
     preferred_season = _preferred_season(topic, selected_episode_keys)
     prepared_all = _client_files(files, evidence_save_path, evidence_base)
-    prepared, expected = _selected_files(topic, record, expected, prepared_all, preferred_season)
+    prepared, expected = _selected_files(
+        topic,
+        record,
+        expected,
+        prepared_all,
+        preferred_season,
+        content_path=str(_get(info, "content_path", "") or ""),
+        save_path=evidence_save_path,
+    )
     work = _ReconcilePass(
         topic=topic,
         client=client_adapter,
