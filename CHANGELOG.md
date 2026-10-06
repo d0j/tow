@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.23.10] — 2026-10-06
+
 ### Fixed
 
 - Early web refusals carry the same security headers as normal responses. HTTP
