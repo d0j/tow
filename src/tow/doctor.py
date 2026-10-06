@@ -175,7 +175,9 @@ def _summarize(report: dict[str, Any]) -> None:
     for probe in report.get("probes") or []:
         name = str(probe.get("tracker"))
         by_tracker[name] = by_tracker.get(name, False) or bool(probe.get("ok"))
-    qbit_ok = not str(report.get("qbit") or "").startswith("FAIL")
+    # A client that did not answer, or (not asked) was never set up, is a finding: not "all good".
+    qbit = report.get("qbit")
+    qbit_ok = report.get("qbit_host_set") is not False if qbit is None else not str(qbit).startswith("FAIL")
     report["ok"] = qbit_ok and all(by_tracker.values())
     report["degraded"] = sorted(
         f"{probe.get('tracker')} {probe.get('host')}" for probe in report.get("probes") or [] if not probe.get("ok")
@@ -188,14 +190,26 @@ def doctor_text(report: dict[str, Any] | None = None) -> str:
     lang = owner_language()
     degraded = r.get("degraded") or []
     verdict = t("doctor_report.yes", lang) if r.get("ok") else t("doctor_report.no", lang)
+
+    def yes_no(value: object) -> str:
+        return t("doctor_report.yes_plain" if value else "doctor_report.no_plain", lang)
+
+    raw_ping = r.get("qbit")
+    if raw_ping is None:
+        ping = t("doctor_report.not_asked", lang)
+    elif str(raw_ping).startswith("FAIL"):
+        ping = t("doctor_report.answer_no", lang, reason=str(raw_ping).removeprefix("FAIL").strip())
+    else:
+        ping = t("doctor_report.answer_yes", lang, version=raw_ping)
+    sites = ", ".join(str(name) for name in r.get("trackers") or []) or "—"
     lines = [
         t("doctor_report.ok", lang, value=verdict)
         + (t("doctor_report.degraded", lang, count=len(degraded)) if degraded else ""),
         t("doctor_report.python", lang, value=r.get("python")),
-        t("doctor_report.trackers", lang, value=r.get("trackers")),
-        t("doctor_report.qbit_host_set", lang, value=r.get("qbit_host_set")),
-        t("doctor_report.qbit_ping", lang, value=r.get("qbit")),
-        t("doctor_report.messengers", lang, value=r.get("notify_set")),
+        t("doctor_report.trackers", lang, value=sites),
+        t("doctor_report.qbit_host_set", lang, value=yes_no(r.get("qbit_host_set"))),
+        t("doctor_report.qbit_ping", lang, value=ping),
+        t("doctor_report.messengers", lang, value=yes_no(r.get("notify_set"))),
         t("doctor_report.topics", lang, value=r.get("topics")),
     ]
     if r.get("open_folders"):

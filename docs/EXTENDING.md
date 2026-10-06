@@ -98,7 +98,9 @@ with a made-up topic id.
 
 **Today:** English (reference and fallback) and Russian. The language follows the browser (`Accept-Language`,
 RFC 4647 matching: `zh-Hant-TW` → `zh-Hant` → `zh`) or is chosen in Settings → Language. Messenger messages and
-background jobs use the chosen language, or in automatic mode the one the owner's browser last used.
+background jobs use the chosen language, or in automatic mode the one the owner's browser last used. A command
+typed in a terminal (`tow status`, `tow stop`, `tow doctor`…) uses the chosen language, or in automatic mode the
+operating system's (Windows display language; `LC_ALL`/`LC_MESSAGES`/`LANG` on Linux and macOS).
 
 One language is one file, `src/tow/locales/<code>.json` (regional: `pt-BR.json`; case does not matter), with nested
 sections and `_meta`:

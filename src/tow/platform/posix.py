@@ -465,6 +465,15 @@ class PosixBackend:
             return False
         return _common.open_url(url)
 
+    def ui_language(self) -> str | None:
+        """The terminal's language from the locale variables ("ru_RU.UTF-8" -> "ru-RU"), or None
+        ("C" and "POSIX" name no language)."""
+        for name in ("LC_ALL", "LC_MESSAGES", "LANG"):
+            value = os.environ.get(name, "").split(".", 1)[0].split("@", 1)[0].strip()
+            if value and value not in {"C", "POSIX"}:
+                return value.replace("_", "-")
+        return None
+
     # --- browsers and folders -------------------------------------------------------------------
 
     def browser_executables(self) -> list[str]:

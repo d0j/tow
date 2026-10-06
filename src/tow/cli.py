@@ -12,25 +12,6 @@ from typing import Any, NoReturn
 
 from tow import __version__
 
-
-def secrets_ok() -> bool:
-    from tow.clients.factory import client_configurations, client_secret_block
-    from tow.config import load_config
-    from tow.store import SecretStoreError, load_secrets
-
-    try:
-        cfg = load_config()
-        secrets = load_secrets()
-        for configuration in client_configurations(cfg):
-            if configuration.get("enabled", True) and client_secret_block(cfg, secrets, str(configuration["id"])).get(
-                "host"
-            ):
-                return True
-    except SecretStoreError, TypeError, ValueError:
-        return False
-    return False
-
-
 # The export file protects every secret with this passphrase alone (PBKDF2): a short one
 # is guessable offline, so the CLI refuses it.
 MIN_EXPORT_PASSPHRASE = 12
@@ -414,9 +395,9 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
         print(text)
-    if not secrets_ok():
-        return 3
-    return 0 if report.get("ok") else 2
+    # The diagnostics ran: a finding (no client set up, a client or site not answering) is
+    # "done in part", never "cannot run" (an unreadable config or secret store is that).
+    return EXIT_OK if report.get("ok") else EXIT_PARTIAL
 
 
 def _cmd_check(args: argparse.Namespace) -> int:
@@ -811,12 +792,24 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
 _LAYOUT_COMMANDS = frozenset({"run", "start", "stop", "restart", "autostart"})
 
 
-def _use_message_language() -> None:
-    """Texts a scheduled task writes (messages, recorded errors) use the owner's language."""
+# What `tow run` starts as its children: their texts go to messages and logs, not to a person.
+_BACKGROUND_COMMANDS = frozenset({"run", "serve", "check", "watchdog", "backup"})
+
+
+def _use_language(argv: list[str] | None) -> None:
+    """A command typed in a terminal speaks the language chosen in config.yaml, or with ``auto``
+    the system's; texts a scheduled task writes (messages, recorded errors) use the owner's
+    message language (the browser's with ``auto``)."""
     from tow import i18n
 
+    words = [word for word in (sys.argv[1:] if argv is None else argv) if not word.startswith("-")]
     try:
-        i18n.use(i18n.message_language())
+        interactive = sys.stdout.isatty()
+    except AttributeError, ValueError:
+        interactive = False
+    background = bool(words) and words[0] in _BACKGROUND_COMMANDS and not interactive
+    try:
+        i18n.use(i18n.message_language() if background else i18n.terminal_language())
     except Exception:  # noqa: BLE001 - a broken config is reported by the command itself
         i18n.use(i18n.DEFAULT)
 
@@ -829,7 +822,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _main(argv: list[str] | None) -> int:
-    _use_message_language()  # first: `tow --help` is in the owner's language too
+    _use_language(argv)  # first: `tow --help` is in the owner's language too
     args = _build_parser().parse_args(argv)
     command = _COMMANDS.get(args.cmd)
     if command is None:

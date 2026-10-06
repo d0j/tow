@@ -675,15 +675,6 @@ def test_unowned_magnet_add_never_stops_a_possibly_foreign_torrent(qbit):
 # --------------------------------------------------------------------------- CLI
 
 
-def test_secrets_ok_is_false_without_a_client_host_or_with_blocked_secrets():
-    from tow.paths import secrets_path
-
-    assert cli.secrets_ok() is False  # template config, no secrets at all
-
-    secrets_path().write_text(json.dumps({"qbittorrent": {"host": "http://qbit"}}), encoding="utf-8")
-    assert cli.secrets_ok() is False  # legacy plaintext must be migrated first
-
-
 def test_human_output_of_a_scalar_is_the_text_itself():
     assert cli._human("plain text") == "plain text"
     assert cli._human(3) == "3"
@@ -801,17 +792,43 @@ def test_import_rollback_of_missing_checkpoint_is_a_guarded_error(capsys, tmp_pa
     assert "Traceback" not in result["error"]
 
 
-@pytest.mark.parametrize(
-    ("report_ok", "secrets_fine", "code"),
-    [(True, True, 0), (False, True, 2), (True, False, 3), (False, False, 3)],
-)
-def test_doctor_exit_codes(monkeypatch, capsys, report_ok, secrets_fine, code):
+@pytest.mark.parametrize(("report_ok", "code"), [(True, 0), (False, 2)])
+def test_doctor_exit_codes(monkeypatch, capsys, report_ok, code):
+    # The diagnostics ran: a finding is "done in part" (2), never "cannot run" (3).
     monkeypatch.setattr("tow.doctor.doctor_report", lambda probe: {"ok": report_ok, "probe": probe})
     monkeypatch.setattr("tow.doctor.doctor_text", lambda report: "line one\nline two")
-    monkeypatch.setattr(cli, "secrets_ok", lambda: secrets_fine)
 
     assert cli.main(["doctor"]) == code
     assert capsys.readouterr().out.strip() == "line one\nline two"
+
+
+def test_doctor_text_is_words_and_counts_a_missing_client(monkeypatch):
+    from tow import doctor
+
+    report = {
+        "python": "3.14.0",
+        "trackers": ["rutor", "nnmclub"],
+        "qbit_host_set": False,
+        "qbit": "FAIL no address given",
+        "notify_set": False,
+        "topics": 2,
+        "probes": [],
+    }
+    doctor._summarize(report)
+    text = doctor.doctor_text(report)
+
+    assert report["ok"] is False
+    assert "всё в порядке: НЕТ" in text
+    assert "сайты: rutor, nnmclub" in text
+    assert "адрес торрент-клиента указан: нет" in text
+    assert "торрент-клиент отвечает: нет — no address given" in text
+    assert "мессенджеры: нет" in text
+    for raw in ("['", "False", "FAIL"):
+        assert raw not in text
+    report.update(qbit_host_set=True, qbit=None)
+    doctor._summarize(report)
+    assert report["ok"] is True
+    assert "торрент-клиент отвечает: не спрашивали" in doctor.doctor_text(report)
 
 
 def test_doctor_json_and_notify(monkeypatch, capsys):
@@ -819,7 +836,6 @@ def test_doctor_json_and_notify(monkeypatch, capsys):
     monkeypatch.setattr("tow.doctor.doctor_report", lambda probe: {"ok": True, "checks": ["a"]})
     monkeypatch.setattr("tow.doctor.doctor_text", lambda report: "line one\nline two")
     monkeypatch.setattr("tow.notify.send", lambda secrets, text: sent.append(text) or True)
-    monkeypatch.setattr(cli, "secrets_ok", lambda: True)
 
     assert cli.main(["doctor", "--json", "--notify"]) == 0
     assert json.loads(capsys.readouterr().out) == {"ok": True, "checks": ["a"]}

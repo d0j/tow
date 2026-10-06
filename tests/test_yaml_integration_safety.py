@@ -89,7 +89,7 @@ def test_cli_bad_yaml_has_a_localized_message_not_a_traceback_or_private_values(
     monkeypatch.delenv("TOW_DEBUG", raising=False)
     config_path().write_bytes(b"private-marker: &loop [*loop]\n")
     monkeypatch.setattr(i18n, "_CURRENT", i18n.ContextVar("test_language", default=None))
-    monkeypatch.setattr(cli, "_use_message_language", lambda: i18n.use(language))
+    monkeypatch.setattr(cli, "_use_language", lambda _argv: i18n.use(language))
     assert cli.main(["doctor", "--json"]) == cli.EXIT_CANNOT_RUN
     output = capsys.readouterr()
     assert i18n.translate("yaml_limits.references", language) in output.out

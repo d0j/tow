@@ -101,6 +101,34 @@ def test_status_is_one_line_and_json(monkeypatch, capsys):
     assert data["client"] == "qBittorrent"
 
 
+@pytest.mark.parametrize(
+    ("configured", "system", "expected"),
+    [("auto", "ru_RU.UTF-8", "ru"), ("auto", "C", "en"), ("en", "ru_RU.UTF-8", "en")],
+)
+def test_a_typed_command_speaks_the_configured_or_the_system_language(
+    monkeypatch, capsys, configured, system, expected
+):
+    # The browser last asked for English; a terminal follows config.yaml, else the system.
+    from tow import i18n, platform
+    from tow.config import load_config, save_config
+    from tow.platform.posix import PosixBackend
+
+    cfg = load_config()
+    cfg["language"] = configured
+    save_config(cfg)
+    i18n.remember_browser_language("en" if expected == "ru" else "ru")
+    for name in ("LC_ALL", "LC_MESSAGES"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("LANG", system)
+    monkeypatch.setattr("tow.autostart.backend", lambda: type("B", (), {"status": lambda self: {"on": True}})())
+
+    with platform.use(PosixBackend("linux")):
+        assert cli.main(["status"]) == 0
+    line = capsys.readouterr().out
+
+    assert i18n.translate("cli.status.stopped", expected) in line
+
+
 def test_status_writes_the_last_and_the_next_check_the_same_way(monkeypatch, capsys):
     from tow.i18n import format_datetime
     from tow.store import save_state

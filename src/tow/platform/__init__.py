@@ -75,6 +75,8 @@ class Backend(Protocol):
 
     def open_url(self, url: str) -> bool: ...
 
+    def ui_language(self) -> str | None: ...
+
 
 def this_os() -> str:
     """``windows``, ``macos`` or ``linux`` (any other POSIX system is treated as Linux)."""

@@ -1,15 +1,8 @@
 import pytest
 
 from tow import cli
-from tow.cli import main, secrets_ok
+from tow.cli import main
 from tow.i18n import t
-
-
-def test_secrets_ok_accepts_registry_client(monkeypatch):
-    monkeypatch.setattr("tow.config.load_config", lambda: {"clients": {"main": {"kind": "qbittorrent"}}})
-    monkeypatch.setattr("tow.store.load_secrets", lambda: {"clients": {"main": {"host": "http://qbit"}}})
-
-    assert secrets_ok() is True
 
 
 def test_import_monitorrent_requires_explicit_db():
