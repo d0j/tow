@@ -67,8 +67,10 @@ flowchart TD
   Losing its record retains the watchdog's last confirmed result and raises a separate
   observation alert. Readability recovery does not confirm cleanup; a folder change cannot
   resolve an old folder's warning. Missing records on a fresh install are not failures.
-  A digest of archive or committed copy names binds a result to its inventory independently of wall-clock
-  order. A new archive without a new monitoring write makes the old result unknown;
+  The archive or committed copy names (and their digest) bind a result to its inventory independently of
+  wall-clock order. A new archive (for night copies: one signed by this install) without a new monitoring
+  write makes the old result unknown; a copy deleted by hand or a foreign folder does not. Results recorded
+  with the digest alone still need the exact inventory;
   an unbound legacy warning is retained, but unbound success needs a fresh observation.
   Readable legacy metadata is not a folder-access outage during migration. Once a bound
   result has been observed for a folder, losing its binding is an observation error.

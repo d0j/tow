@@ -339,6 +339,18 @@ def test_new_archive_with_backward_clock_invalidates_old_result(tmp_path):
 
 
 @pytest.mark.parametrize("pending", [True, False])
+def test_a_point_deleted_by_hand_keeps_the_observation(tmp_path, pending):
+    _seed()
+    first = restore_points.create_restore_point()
+    restore_points.create_restore_point()
+    restore_points._record_cleanup(pending, tmp_path / "restore-points")
+    restore_points.point_path(first["id"]).unlink()  # in the file manager, not through TOW
+
+    assert restore_points.cleanup_status()["pending"] is pending
+    assert restore_points.cleanup_status()["read_error"] is False
+
+
+@pytest.mark.parametrize("pending", [True, False])
 def test_legacy_unbound_record_cannot_confirm_completed_cleanup(tmp_path, pending):
     _seed()
     folder = tmp_path / "restore-points"

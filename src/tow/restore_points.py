@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import logging
 import re
 import stat
@@ -10,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from tow.backup_actions import copy_revision
+from tow.backup_actions import added_names, cleanup_names, copy_revision, inventory_digest
 from tow.bundle import ExportImportError, export_bundle, import_bundle, rollback_import, verify_bundle
 from tow.config import load_config
 from tow.diagnostic_json import encode_object, read_object
@@ -72,22 +71,9 @@ def _passphrase() -> str:
         raise RestorePointError(t("backup.restore_point.master_key", owner_language()), kind=MASTER_KEY) from exc
 
 
-def _cleanup_inventory(location: Path) -> str:
-    """Bind an observation to archive names without reading or trusting their media."""
-    digest = hashlib.sha256()
-    try:
-        info = location.lstat()
-    except FileNotFoundError:
-        return digest.hexdigest()
-    if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
-        raise ValueError("cleanup folder is not a regular directory")
-    names = sorted(
-        path.name for path in location.iterdir() if path.suffix == ".towx" and _ID_RE.fullmatch(path.stem) is not None
-    )
-    for name in names:
-        digest.update(name.encode("utf-8"))
-        digest.update(b"\0")
-    return digest.hexdigest()
+def _point_names(location: Path) -> list[str]:
+    """Archive names, without reading or trusting their contents."""
+    return cleanup_names(location, lambda name: name.endswith(".towx") and _ID_RE.fullmatch(name[:-5]) is not None)
 
 
 def cleanup_status(*, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -114,12 +100,13 @@ def cleanup_status(*, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
             raise ValueError("invalid cleanup inventory")
         if state["location"] == result["location"]:
             if "inventory" not in state:
-                _cleanup_inventory(location)  # legacy format cannot hide a real folder-access failure
+                _point_names(location)  # legacy format cannot hide a real folder-access failure
                 result["legacy"] = True
                 if state["cleanup_pending"]:
                     result["pending"] = True  # retain a legacy warning, not legacy success
                 return result
-            if state["inventory"] != _cleanup_inventory(location):
+            # A point deleted by hand is no change; a new archive is not proven by its name alone.
+            if added_names(state.get("names"), state["inventory"], _point_names(location)):
                 raise ValueError("cleanup observation belongs to an earlier inventory")
             result["pending"] = state["cleanup_pending"]
     except OSError, ValueError, TypeError, UnicodeError, RecursionError, RestorePointError:
@@ -137,13 +124,15 @@ def _record_cleanup(pending: bool, location: Path) -> None:
         raise TypeError("cleanup observation must be boolean")
     # A monitoring write must not invalidate an already verified archive.
     with contextlib.suppress(OSError, ValueError, TypeError, UnicodeError, RecursionError):
+        names = _point_names(location)
         atomic_write_text(
             data_dir() / "restore-point-status.json",
             encode_object(
                 {
                     "cleanup_pending": pending,
                     "location": str(location.resolve()),
-                    "inventory": _cleanup_inventory(location),
+                    "inventory": inventory_digest(names),
+                    "names": names,
                 }
             ),
         )
