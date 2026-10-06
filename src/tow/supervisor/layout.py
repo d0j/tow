@@ -173,6 +173,27 @@ def busy() -> bool:
     return port_open(port)
 
 
+def interrupted_update() -> bool:
+    """An update was cut off while it switched the code: ``app/`` may hold half of the new one.
+
+    scripts/update.py keeps ``.update-switch.json`` in the install while it switches an archive
+    install and holds ``.update.lock`` while it runs; it starts TOW itself then. A record without
+    that lock was left by an update that did not finish (an accepted record is finished code).
+    """
+    root = install_root()
+    record = root / ".update-switch.json"
+    if not record.exists() or read_json(record).get("phase") == "accepted":
+        return False
+    try:
+        with (root / ".update.lock").open("r+b") as handle:
+            if not locks.lock(handle, wait=False):
+                return False  # the update runs: it starts TOW and checks it
+            locks.unlock(handle)
+    except OSError:
+        pass  # no lock file (or none to open): no update holds it
+    return True
+
+
 def running() -> dict[str, Any] | None:
     """The running supervisor of this install (its pid file), or None when none runs.
 

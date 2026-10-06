@@ -6,6 +6,9 @@ rem internet. Then `tow start`: TOW in the background, its page in the browser (
 rem no browser). No labels: this file has LF line endings (see tow-env.cmd).
 setlocal
 call "%~dp0tow-env.cmd"
+rem An update cut off while it replaced the code leaves its record: app\ may hold half of the new code.
+if exist "%TOW_ROOT%\.update-switch.json" echo TOW was not started: an update was cut off while it replaced the code in "%TOW_ROOT%". Run "Update TOW.cmd" there again: it puts the previous version back first.
+if exist "%TOW_ROOT%\.update-switch.json" exit /b 3
 set "TOW_READY="
 set "TOW_PREPARED="
 set "TOW_HERE=%TOW_ROOT%"

@@ -185,7 +185,80 @@ def test_a_failed_start_names_the_log(monkeypatch, capsys, state):
     assert "run.log" in capsys.readouterr().out
 
 
+# --- an update cut off while it switched the code ------------------------------------------------
+
+
+def _switch_record(phase: str = "switching") -> Path:
+    record = layout.install_root() / ".update-switch.json"
+    record.write_text(f'{{"format": "tow-update-switch/v1", "phase": "{phase}", "old": [], "new": []}}')
+    return record
+
+
+@pytest.mark.parametrize("command", ["run", "start"])
+def test_an_interrupted_update_is_not_started_over(monkeypatch, capsys, command):
+    # Before: Start TOW, autostart and `tow run` ran the half-switched code of an update that was
+    # cut off; only the next update noticed the record.
+    monkeypatch.setattr("tow.supervisor.run_supervisor", lambda: pytest.fail("half-switched code started"))
+    monkeypatch.setattr(starter, "start", lambda *_a, **_k: pytest.fail("half-switched code started"))
+    _switch_record()
+    assert cli.main([command]) == cli.EXIT_CANNOT_RUN
+    out = capsys.readouterr().out
+    assert "Update TOW" in out  # in the owner's language: what to run
+    assert str(layout.install_root()) in out
+
+
+def test_the_update_itself_starts_tow_while_it_holds_its_lock(monkeypatch):
+    from tow.platform import locks
+    from tow.store import init_lock_file
+
+    monkeypatch.setattr("tow.supervisor.run_supervisor", lambda: 0)
+    _switch_record()
+    with (layout.install_root() / ".update.lock").open("a+b") as handle:
+        init_lock_file(handle)
+        assert locks.lock(handle, wait=False)
+        try:
+            assert cli.main(["run"]) == 0  # the updater's own start of the new version (health check)
+        finally:
+            locks.unlock(handle)
+    assert cli.main(["run"]) == cli.EXIT_CANNOT_RUN  # the updater is gone, its record is not
+    _switch_record("accepted")  # the switch was finished; only the record's removal was cut off
+    assert cli.main(["run"]) == 0
+
+
 # --- the start scripts ---------------------------------------------------------------------------
+
+
+def test_the_start_scripts_refuse_an_interrupted_update_before_preparing_anything():
+    windows = (ROOT / "scripts" / "tow-start.cmd").read_text(encoding="utf-8")
+    refusal = windows.index('if exist "%TOW_ROOT%\\.update-switch.json" exit /b 3')
+    assert windows.index('call "%~dp0tow-env.cmd"') < refusal < windows.index("tow-setup.cmd")
+    posix = (ROOT / "scripts" / "tow-start").read_text(encoding="utf-8")
+    refusal = posix.index('if [ -f "$root/.update-switch.json" ]; then')
+    assert refusal < posix.index("exit 3") < posix.index('"$scripts/tow" setup')
+
+
+@pytest.mark.allow_system  # the platform's start script in a temp install; it ends before setup or uv
+def test_the_start_script_refuses_an_interrupted_update(tmp_path):
+    import shutil
+    import subprocess
+
+    root = tmp_path / "TOW"
+    shutil.copytree(ROOT / "scripts", root / "app" / "scripts")
+    (root / "data").mkdir()
+    (root / "config.yaml").write_text("port: 18999\n", encoding="utf-8")
+    (root / ".update-switch.json").write_text("{}", encoding="utf-8")
+    env = {key: value for key, value in os.environ.items() if not key.startswith(("TOW_", "UV_"))}
+    if os.name == "nt":
+        system = os.environ.get("SYSTEMROOT", r"C:\Windows")
+        env["PATH"] = os.path.join(system, "System32")  # no uv, no Python: a missed refusal fails at once
+        argv = ["cmd.exe", "/d", "/c", str(root / "app" / "scripts" / "tow-start.cmd")]
+    else:
+        env["PATH"] = "/usr/bin:/bin"
+        argv = ["/bin/sh", str(root / "app" / "scripts" / "tow-start")]
+    done = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=60, check=False)
+    assert done.returncode == 3, done.stdout + done.stderr
+    assert "update was cut off" in done.stdout + done.stderr
+    assert not (root / "app" / ".venv").exists()
 
 
 def test_the_windows_start_script_prepares_offline_first_then_online():
