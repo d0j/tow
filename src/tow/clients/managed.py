@@ -118,7 +118,12 @@ class ManagedClient:
             time.sleep(self.PAUSE)
 
     def _fail(self, code: str, /, **params: Any) -> ClientError:
-        return ClientError(code, prefix=self.title, **params)
+        # A client's own answer can quote a magnet or announce address with the owner's passkey:
+        # the error goes to the log, the Home row and the messengers.
+        from tow.log import scrub_text
+
+        clean = {key: scrub_text(value) if isinstance(value, str) else value for key, value in params.items()}
+        return ClientError(code, prefix=self.title, **clean)
 
     @staticmethod
     def _tags(info: dict[str, Any] | None) -> set[str]:
