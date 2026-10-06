@@ -1,64 +1,18 @@
 from __future__ import annotations
 
 import fnmatch
+import json
 import random
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+import selection_work_probe
 
 import tow.selection
 from tow.selection import SelectionError, SelectionPendingError, normalize_policy, resolve_selection
 from tow.torrent import TorrentFile
-
-
-@pytest.mark.allow_system
-@pytest.mark.parametrize("scenario", ["repeated", "overlapping", "future", "metadata-limit"])
-def test_large_episode_rules_finish_in_a_bounded_isolated_process(scenario):
-    # A deadline terminates only this read-only probe, not a client or service.
-    # No network, files, state or media operations; use the locked interpreter.
-    script = """
-import sys
-from pathlib import Path
-import tow.selection as selection
-from tow.torrent import MAX_FILES, TorrentFile
-
-assert Path(selection.__file__).resolve() == Path(sys.argv[1])
-files = tuple(TorrentFile(i, f'Show.S01E{i+1:04d}.mkv', 1) for i in range(1000))
-scenario = sys.argv[2]
-if scenario == 'metadata-limit':
-    files = tuple(TorrentFile(i, f'Copy {i//1000}/Show.S01E{i%1000+1:04d}.mkv', 1) for i in range(MAX_FILES))
-if scenario in {'repeated', 'metadata-limit'}:
-    expression = ','.join(['1-1000'] * 300)
-elif scenario == 'overlapping':
-    expression = ','.join(f'{n}-{n+600}' for n in range(1, 451))
-else:
-    expression = ','.join(['S01E2000-E3000'] * 300)
-policy = selection.normalize_policy('episodes', expression)
-if scenario == 'future':
-    try:
-        selection.resolve_selection(files, policy)
-    except selection.SelectionPendingError as error:
-        assert error.code == 'selection.not_out_yet'
-        assert error.params['episodes'] == ', '.join(f'S01E{n}' for n in range(2000, 2010))
-    else:
-        raise AssertionError('future episodes cannot be selected yet')
-else:
-    plan = selection.resolve_selection(files, policy)
-    assert plan.selected_indices == tuple(range(len(files)))
-    assert len(plan.selected_episode_keys) == 1000
-    assert plan.expression == expression
-print('ok')
-"""
-    result = subprocess.run(
-        [sys.executable, "-I", "-B", "-c", script, str(Path(tow.selection.__file__).resolve()), scenario],
-        capture_output=True,
-        text=True,
-        timeout=5,
-        check=True,
-    )
-    assert result.stdout.strip() == "ok"
 
 
 @pytest.mark.parametrize(
@@ -482,123 +436,40 @@ def test_a_seasonless_video_prevents_guessing_that_another_season_is_in_the_futu
     assert caught.value.params["episodes"] == "S03E01, S03E01"
 
 
-@pytest.mark.allow_system
-@pytest.mark.parametrize("scenario", ["repeated", "distinct"])
-def test_large_file_rules_finish_in_a_bounded_isolated_process(scenario):
-    script = """
-import sys
-from pathlib import Path
-import tow.selection as selection
-from tow.torrent import MAX_FILES, TorrentFile
+# The large scenarios run in one isolated interpreter (tests/selection_work_probe.py): read-only,
+# no network, files, state or client. Each is bounded by the work it took, counted as the calls
+# tow.selection made - the same on a busy or an idle machine. Measured: at most 1.1 million for
+# episode rules, 1.5 million for file masks; a matcher that tried each of 500 masks on each of
+# 20,000 files makes ten million or more. The deadline only stops a probe that hangs.
+WORK_BUDGET = {"episodes": 2_500_000, "files": 4_000_000, "paths": 4_000_000}
+PROBE_DEADLINE_SEC = 600
 
-assert Path(selection.__file__).resolve() == Path(sys.argv[1])
-files = tuple(TorrentFile(i, f'Asset {i:05d}.bin', 1) for i in range(MAX_FILES))
-patterns = ['*never-matches*' if sys.argv[2] == 'repeated' else f'*absent-{i:03d}*' for i in range(500)]
-expression = ','.join(patterns)
-policy = selection.normalize_policy('files', expression)
-assert policy['value'] == expression
-try:
-    selection.resolve_selection(files, policy)
-except selection.SelectionError as error:
-    assert error.code == 'selection.nothing_matched'
-else:
-    raise AssertionError('unmatched masks cannot select files')
-print('ok')
-"""
-    result = subprocess.run(
-        [sys.executable, "-I", "-B", "-c", script, str(Path(tow.selection.__file__).resolve()), scenario],
-        capture_output=True,
-        text=True,
-        timeout=5,
-        check=True,
-    )
-    assert result.stdout.strip() == "ok"
+
+@pytest.fixture(scope="module")
+def probe_results() -> dict[str, dict]:
+    probe = Path(__file__).with_name("selection_work_probe.py")
+    selection_file = str(Path(tow.selection.__file__).resolve())
+    try:
+        result = subprocess.run(
+            [sys.executable, "-I", "-B", str(probe), selection_file],
+            capture_output=True,
+            text=True,
+            timeout=PROBE_DEADLINE_SEC,
+            check=False,
+        )
+        output, failure = result.stdout, result.stderr.strip() if result.returncode else ""
+    except subprocess.TimeoutExpired as exc:
+        output = exc.stdout.decode() if isinstance(exc.stdout, bytes) else exc.stdout or ""
+        failure = f"the probe did not finish within {PROBE_DEADLINE_SEC} s"
+    results = {row["name"]: row for row in map(json.loads, output.splitlines())}
+    for name in selection_work_probe.SCENARIOS:
+        results.setdefault(name, {"ok": False, "error": failure or "not run", "calls": None})
+    return results
 
 
 @pytest.mark.allow_system
-@pytest.mark.parametrize("scenario", ["long", "nested", "deep"])
-@pytest.mark.parametrize(
-    "kind",
-    [
-        "literal",
-        "prefix",
-        "suffix",
-        "middle",
-        "malformed",
-        "present",
-        "sparse",
-        "sparse-middle",
-        "multi-class",
-        "ordering",
-        "no-fixed",
-        "distinct-classes",
-        "positive-last",
-    ],
-)
-def test_parsed_large_torrents_with_long_paths_finish_file_selection(scenario, kind):
-    script = """
-import sys
-from pathlib import Path
-import tow.selection as selection
-from tow.torrent import MAX_FILES, MAX_TORRENT_BYTES, parse_torrent_metadata
-
-assert Path(selection.__file__).resolve() == Path(sys.argv[1])
-def encode(value):
-    if isinstance(value, bytes):
-        return str(len(value)).encode() + b':' + value
-    if isinstance(value, int):
-        return b'i' + str(value).encode() + b'e'
-    if isinstance(value, list):
-        return b'l' + b''.join(encode(item) for item in value) + b'e'
-    return b'd' + b''.join(encode(key) + encode(value[key]) for key in sorted(value)) + b'e'
-
-entries = []
-scenario, kind = sys.argv[2:4]
-file_count = 7000 if scenario == 'deep' else MAX_FILES
-for index in range(file_count):
-    extra = ('z000' if kind.startswith('sparse') or kind in {'multi-class', 'ordering'}
-             else '[' if kind == 'positive-last' else '')
-    base = 'a' * 240 + extra + f'{index:05d}.bin'
-    path = [base.encode()]
-    if scenario == 'nested':
-        path = [b'b' * 200, b'c' * 200, *path]
-    elif scenario == 'deep':
-        path = [b'b' * 250 for _ in range(15)] + path
-    entries.append({b'length': 1, b'path': path})
-torrent = encode({b'info': {b'name': b'Fixture', b'piece length': 16384,
-                           b'pieces': b'x' * (20 * ((file_count + 16383) // 16384)), b'files': entries}})
-assert len(torrent) < MAX_TORRENT_BYTES
-metadata = parse_torrent_metadata(torrent)
-assert len(metadata.files) == file_count
-templates = {'literal': '*absent-{index:03d}*', 'prefix': '*z{index:03d}*[.]bin',
-             'suffix': '*[a]z{index:03d}*', 'middle': '*[a]z{index:03d}[b]*',
-             'malformed': '*z{index:03d}[', 'present': '*aaaaaaaa*z{index:03d}*',
-             'sparse': '*aaaaaa*z{index:03d}*x*', 'sparse-middle': '*[a]z{index:03d}[b]*',
-             'multi-class': '*[ab]z{index:03d}[bc]*', 'ordering': '*z{index:03d}*aaaaaa*'}
-if kind == 'distinct-classes':
-    patterns = [f'*[a{chr(0x1000 + index)}][x{chr(0x1200 + index)}]*' for index in range(500)]
-elif kind == 'no-fixed':
-    patterns = [f'*[a{chr(0x1000 + index)}][xy]*' for index in range(500)]
-elif kind == 'positive-last':
-    patterns = [f'*absent-{index:03d}*' for index in range(499)] + ['*[[]*']
-else:
-    patterns = [templates[kind].format(index=index) for index in range(500)]
-expression = ','.join(patterns)
-policy = selection.normalize_policy('files', expression)
-try:
-    plan = selection.resolve_selection(metadata.files, policy)
-except selection.SelectionError as error:
-    assert kind != 'positive-last' and error.code == 'selection.nothing_matched'
-else:
-    assert kind == 'positive-last' and plan.selected_indices == tuple(range(file_count))
-assert policy['value'] == expression
-print('ok')
-"""
-    result = subprocess.run(
-        [sys.executable, "-I", "-B", "-c", script, str(Path(tow.selection.__file__).resolve()), scenario, kind],
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=True,
-    )
-    assert result.stdout.strip() == "ok"
+@pytest.mark.parametrize("name", list(selection_work_probe.SCENARIOS))
+def test_large_rules_and_torrents_finish_within_a_counted_work_bound(probe_results, name):
+    result = probe_results[name]
+    assert result["ok"], result["error"]
+    assert result["calls"] <= WORK_BUDGET[name.split("-", 1)[0]], result["calls"]
