@@ -245,7 +245,21 @@ def log_tail() -> str:
             content = handle.read(16000)
     except OSError as exc:
         raise WebUpdateError("releases.job_unreadable") from exc
-    return scrub_text(content.decode("utf-8", "replace"))
+    return _without_install_path(scrub_text(content.decode("utf-8", "replace")))
+
+
+INSTALL_PLACEHOLDER = "<TOW>"
+
+
+def _without_install_path(text: str) -> str:
+    """The install folder as <TOW>: the page is also read from other devices of the network,
+    and the folder usually names the account (C:\\Users\\<name>\\TOW)."""
+    install = root()
+    forms = {str(install), str(install.resolve()), install.as_posix(), install.resolve().as_posix()}
+    flags = re.IGNORECASE if platform.is_windows() else 0
+    for form in sorted((form.rstrip("\\/") for form in forms if len(form) > 3), key=len, reverse=True):
+        text = re.sub(re.escape(form), INSTALL_PLACEHOLDER, text, flags=flags)
+    return text
 
 
 def start(version: str) -> dict[str, Any]:
