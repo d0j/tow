@@ -159,6 +159,11 @@ TEXTS = {
         "this install's data/state.json cannot be read ({error}), so it is not known whether {ref} can read it;"
         " nothing was updated"
     ),
+    "up_to_date": "TOW {version} is the latest release: nothing to update",
+    "latest_older": (
+        "the latest release, {ref}, is older than the installed TOW {version}; nothing was updated (to go back to it,"
+        " name it: --ref {ref})"
+    ),
     "recovering": "an earlier update was cut off while it replaced the code: putting back TOW {version} first",
     "recovery_failed": "the cut-off update could not be undone: {error}; run the update again to retry",
     "newer_data": (
@@ -965,7 +970,8 @@ class ArchiveCode:
                 return archive
         raise UpdateError(self.work.text("checksum" if found else "no_release", ref=tag, url=urls[0]))
 
-    def prepare(self, ref: str) -> str:
+    def prepare(self, ref: str) -> str | None:
+        """The release tag, unpacked into app.new; None: ``latest`` is the installed version."""
         if ref == "latest":
             try:
                 ref = self.sys.latest_tag()
@@ -973,6 +979,12 @@ class ArchiveCode:
                 raise UpdateError(
                     self.work.text("download_failed", url=f"{self.sys.github}/{self.sys.repo}", error=exc)
                 ) from exc
+            # Only a release named by its tag installs again, or goes back.
+            latest, installed = version_tuple(ref), version_tuple(self.work.version())
+            if latest is not None and installed is not None and latest < installed:
+                raise UpdateError(self.work.text("latest_older", ref=ref, version=self.work.version()))
+            if latest is not None and latest == installed:
+                return None
         if version_tuple(ref) is None:
             raise UpdateError(self.work.text("archive_ref", ref=ref))
         self.downloads.mkdir(parents=True, exist_ok=True)
@@ -1479,10 +1491,14 @@ class Update:
         previous_version = self.version()
         try:
             target = code.prepare(self.ref)  # fetch, or download and unpack: TOW still runs
-            self.refuse_unreadable_data(target)
+            if target is not None:
+                self.refuse_unreadable_data(target)
         except BaseException:
             code.discard()
             raise
+        if target is None:
+            self.say("up_to_date", version=previous_version)
+            return 0
         self.say("start", previous=code.short(previous), target=code.short(target), ref=self.ref, root=self.root)
         self.write_state(
             status="in_progress",

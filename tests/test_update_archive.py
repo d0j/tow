@@ -172,6 +172,39 @@ def test_the_latest_release_is_downloaded_checked_and_switched_to(install, githu
         assert os.access(install["app"] / "scripts" / "tow", os.X_OK)  # the launcher stays executable
 
 
+def test_latest_when_it_is_installed_changes_nothing(install, github):
+    # Before: a full stop, snapshot, download, uv sync and restart to the same version.
+    github.latest("v1.22.0")
+    github.release("v1.22.0", tarball("1.22.0"))
+    machine = Machine(install["app"], github)
+
+    code, lines = run(machine)
+
+    assert code == 0
+    assert machine.calls == []  # TOW was never stopped
+    assert lines == ["TOW 1.22.0 is the latest release: nothing to update"]
+    assert github.asked == [f"/{REPO}/releases/latest"]  # nothing downloaded
+    assert not (install["root"] / "update-state.json").exists()
+    assert leftovers(install) == []
+
+
+def test_latest_older_than_the_installed_version_is_refused(install, github):
+    github.latest("v1.21.9")
+    machine = Machine(install["app"], github)
+    code, lines = run(machine)
+    assert code == 2
+    assert machine.calls == []
+    assert "the latest release, v1.21.9, is older than the installed TOW 1.22.0" in lines[-1]
+
+
+def test_a_named_release_installs_again_even_when_it_is_installed(install, github):
+    github.release("v1.22.0", tarball("1.22.0"))
+    machine = Machine(install["app"], github)
+    code, lines = run(machine, "v1.22.0")
+    assert code == 0, lines
+    assert machine.calls == ["stop request", "uv sync 1.22.0", "spawn tow run 1.22.0"]
+
+
 def test_a_changed_github_archive_falls_back_to_the_releases_own_copy(install, github):
     archive = tarball("1.23.0")
     github.release("v1.23.0", tarball("1.23.0", extra={"x": b"regenerated"}), copy=archive)
