@@ -5,6 +5,15 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.23.8] — 2026-10-06
+
+### Fixed
+
+- Large file-mask sets only test exact rule groups whose required text occurs.
+  Similar literals, overlapping hits, classes without fixed text and a matching
+  final rule no longer trigger the reproduced long-path slowdowns. Standard glob
+  semantics, input limits, saved policies and dependencies are unchanged.
+
 ## [1.23.7] — 2026-10-06
 
 ### Fixed

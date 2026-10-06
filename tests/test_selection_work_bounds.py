@@ -127,9 +127,8 @@ def test_distinct_file_masks_compile_bounded_groups_without_changing_the_rule(mo
     plan = resolve_selection(files, normalize_policy("files", expression))
     assert plan.selected_indices == (0, 1)
     assert plan.expression == expression
-    # One literal filter, one exact guarded union, one union without fixed text;
-    # never a Python matcher dispatch for every file/pattern pair.
-    assert len(compiled) == 3
+    # The unguarded rule accepts both files; no absent literal group is compiled.
+    assert len(compiled) == 2
 
 
 @pytest.mark.parametrize(
@@ -215,7 +214,7 @@ def test_literal_filter_never_accepts_a_wrong_exact_match_or_hides_bracket_match
     ],
 )
 def test_mandatory_literals_preserve_singletons_ranges_and_malformed_classes(pattern, literal):
-    assert max(tow.selection._mandatory_parts(pattern), key=len, default="") == literal
+    assert max(tow.selection._mask_parts(pattern)[0], key=len, default="") == literal
 
 
 def test_bracket_literal_guards_preserve_generated_positive_and_negative_matches():
@@ -245,7 +244,7 @@ def test_bracket_literal_guards_preserve_generated_positive_and_negative_matches
         for suffix in runs:
             for boundary in boundaries:
                 pattern = (prefix + boundary + suffix).casefold()
-                parts = tow.selection._mandatory_parts(pattern)
+                parts, _ = tow.selection._mask_parts(pattern)
                 matches = tow.selection._file_mask_matcher((pattern,))
                 for candidate in (pattern, *(prefix + value + suffix for value in values)):
                     path = candidate.casefold()
@@ -263,7 +262,7 @@ def test_single_character_classes_preserve_standard_matches_including_metacharac
     characters = (*(chr(code) for code in range(128)), "日本語", "ß", "İ", "é", "λ")
     for character in characters:
         pattern = ("prefix[" + character + "]suffix").casefold()
-        parts = tow.selection._mandatory_parts(pattern)
+        parts, _ = tow.selection._mask_parts(pattern)
         matches = tow.selection._file_mask_matcher((pattern,))
         for candidate in ("prefix" + value + "suffix" for value in (*characters, "[!]", "[]", "[", "")):
             candidate = candidate.casefold()
@@ -287,7 +286,7 @@ def test_shared_title_and_sparse_literal_hits_do_not_force_exact_union(monkeypat
             exact_calls.append(path)
             return compiled.match(path)
 
-        return SimpleNamespace(match=match, search=compiled.search)
+        return SimpleNamespace(match=match, search=compiled.search, findall=compiled.findall)
 
     monkeypatch.setattr(tow.selection.re, "compile", record)
     template = "*aaaaaa*z{index:03d}*x*" if sparse else "*aaaaaaaa*z{index:03d}*"
@@ -312,7 +311,7 @@ def test_common_literal_checks_are_bounded_and_never_decide_success():
     assert matches(ObservedPath("-".join(parts) + "-Z"))
 
 
-@pytest.mark.parametrize(("last_pattern", "expected_groups"), [("*[[]*", 2), ("[!o]*", 3)])
+@pytest.mark.parametrize(("last_pattern", "expected_groups"), [("*[[]*", 1), ("[!o]*", 2)])
 def test_file_mask_groups_are_bounded_at_the_maximum_rule_count(monkeypatch, last_pattern, expected_groups):
     original = tow.selection.re.compile
     compiled = []
@@ -327,6 +326,136 @@ def test_file_mask_groups_are_bounded_at_the_maximum_rule_count(monkeypatch, las
     assert len(compiled) == expected_groups
     assert not matches("ordinary.bin")
     assert matches("[extra].bin")
+    assert len(compiled) == 2
+
+
+@pytest.mark.parametrize(
+    ("patterns", "path"),
+    [
+        (("abc?", "*ab*"), "abc"),
+        (("*ab?", "*bc"), "abc"),
+        (("*日本語?", "*日本*"), "日本語"),
+        (("*a*wrong*", "*[ab]*"), "a"),
+        (("*[!a]*", "*a[xy]*"), "bbb"),
+        (("*[z-a]*", "*[!z-a]*"), "a"),
+        (("*abc[xy]*", "*bc[de]*"), "abcde"),
+    ],
+)
+def test_group_filter_keeps_shorter_prefixes_overlaps_and_unguarded_matches(patterns, path):
+    assert tow.selection._file_mask_matcher(patterns)(path) == any(fnmatch.fnmatchcase(path, rule) for rule in patterns)
+
+
+def test_candidate_groups_compile_only_on_hits_and_once_per_call(monkeypatch):
+    original = tow.selection.re.compile
+    compiled = []
+
+    def record(pattern, *args, **kwargs):
+        compiled.append(pattern)
+        return original(pattern, *args, **kwargs)
+
+    monkeypatch.setattr(tow.selection.re, "compile", record)
+    patterns = [f"*item-{index:03d}*" for index in range(500)]
+    matches = tow.selection._file_mask_matcher(patterns)
+    assert len(compiled) == 1
+    assert not matches("ordinary.bin")
+    assert len(compiled) == 1
+    for index in range(500):
+        path = f"item-{index:03d}.bin"
+        assert matches(path)
+        assert matches(path)
+        assert len(compiled) == index + 2
+    # Per-call state cannot hide a hit on the next path or share compiled groups
+    # with an unrelated request. Bounds apply to preparation, not accepted inputs.
+    other = tow.selection._file_mask_matcher(("*item-000?",))
+    assert not other("item-000")
+    assert other("item-000x")
+
+
+def test_common_class_filter_is_bounded_and_never_accepts_by_itself(monkeypatch):
+    original = tow.selection.re.compile
+    compiled = []
+
+    def record(pattern, *args, **kwargs):
+        compiled.append(pattern)
+        return original(pattern, *args, **kwargs)
+
+    monkeypatch.setattr(tow.selection.re, "compile", record)
+    pattern = "*" + "*".join(f"[a{chr(0x1000 + index)}]" for index in range(20)) + "*[xy]"
+    matches = tow.selection._file_mask_matcher((pattern,))
+    assert len(compiled) == 9  # eight necessary classes plus the exact union
+    assert not matches("aaaaaaaaaaaaaaaaaaaa")
+    assert matches("a" * 20 + "x")
+
+
+def test_shared_class_permutations_cannot_exceed_the_eight_filter_bound(monkeypatch):
+    original = tow.selection.re.compile
+    compiled = []
+
+    def record(pattern, *args, **kwargs):
+        compiled.append(pattern)
+        return original(pattern, *args, **kwargs)
+
+    monkeypatch.setattr(tow.selection.re, "compile", record)
+    classes = tuple(f"[a{chr(0x1000 + index)}]" for index in range(20))
+    patterns = ("*".join(classes), "*".join(reversed(classes)))
+    matches = tow.selection._file_mask_matcher(patterns)
+    assert len(compiled) == 9
+    assert matches("a" * 20)
+    assert not matches("a" * 19)
+    assert len(compiled) == 9
+
+
+def test_class_character_cache_is_bounded_and_never_hides_new_characters(monkeypatch):
+    from types import SimpleNamespace
+
+    original = tow.selection.re.compile
+    checked = []
+
+    def record(pattern, *args, **kwargs):
+        compiled = original(pattern, *args, **kwargs)
+
+        def match(char):
+            checked.append(char)
+            return compiled.match(char)
+
+        return SimpleNamespace(match=match)
+
+    monkeypatch.setattr(tow.selection.re, "compile", record)
+    check = tow.selection._class_filter(("[xy]",))
+    characters = {chr(0x1000 + index) for index in range(1200)}
+    assert not check(characters)
+    assert len(checked) == 1200
+    assert not check(characters)
+    assert len(checked) == 1200 + 176
+    assert check({"x"})
+    assert not check({"z"})
+    assert check({"y"})
+
+
+@pytest.mark.parametrize("scenario", ["long-literal", "terminal-chain", "branch-chain"])
+def test_maximum_text_prefix_filters_preserve_exact_globs_without_recursion(scenario):
+    patterns = (
+        ("a" * 8192,)
+        if scenario == "long-literal"
+        else tuple("a" * size + ("b" if scenario == "branch-chain" else "") for size in range(1, 125))
+    )
+    policy = normalize_policy("files", ",".join(patterns))
+    assert len(policy["value"]) <= 8192
+    matches = tow.selection._file_mask_matcher(patterns)
+    for path in ("a" * 8192, "a" * 125, "a" * 124 + "b", "a" * 123 + "b", "ordinary"):
+        assert matches(path) == any(fnmatch.fnmatchcase(path, rule) for rule in patterns)
+
+
+def test_literal_prefix_union_retains_longest_and_overlapping_metacharacter_hits():
+    literals = ("ab", "abc", "bc", "b[", "[", "|", ".", "日本", "日本語", "\n")
+    compiled = tow.selection.re.compile("(?=(" + tow.selection._literal_union(literals) + "))")
+    for path in ("abc", "b[|.", "日本語\n日本", "ordinary"):
+        expected = [
+            (position, max((part for part in literals if path.startswith(part, position)), key=len))
+            for position in range(len(path))
+            if any(path.startswith(part, position) for part in literals)
+        ]
+        assert [(match.start(), match.group(1)) for match in compiled.finditer(path)] == expected
 
 
 def test_repeated_unavailable_rules_keep_the_original_diagnostic_order():
@@ -389,7 +518,22 @@ print('ok')
 @pytest.mark.allow_system
 @pytest.mark.parametrize("scenario", ["long", "nested", "deep"])
 @pytest.mark.parametrize(
-    "kind", ["literal", "prefix", "suffix", "middle", "malformed", "present", "sparse", "sparse-middle"]
+    "kind",
+    [
+        "literal",
+        "prefix",
+        "suffix",
+        "middle",
+        "malformed",
+        "present",
+        "sparse",
+        "sparse-middle",
+        "multi-class",
+        "ordering",
+        "no-fixed",
+        "distinct-classes",
+        "positive-last",
+    ],
 )
 def test_parsed_large_torrents_with_long_paths_finish_file_selection(scenario, kind):
     script = """
@@ -412,7 +556,9 @@ entries = []
 scenario, kind = sys.argv[2:4]
 file_count = 7000 if scenario == 'deep' else MAX_FILES
 for index in range(file_count):
-    base = 'a' * 240 + ('z000' if kind.startswith('sparse') else '') + f'{index:05d}.bin'
+    extra = ('z000' if kind.startswith('sparse') or kind in {'multi-class', 'ordering'}
+             else '[' if kind == 'positive-last' else '')
+    base = 'a' * 240 + extra + f'{index:05d}.bin'
     path = [base.encode()]
     if scenario == 'nested':
         path = [b'b' * 200, b'c' * 200, *path]
@@ -427,15 +573,24 @@ assert len(metadata.files) == file_count
 templates = {'literal': '*absent-{index:03d}*', 'prefix': '*z{index:03d}*[.]bin',
              'suffix': '*[a]z{index:03d}*', 'middle': '*[a]z{index:03d}[b]*',
              'malformed': '*z{index:03d}[', 'present': '*aaaaaaaa*z{index:03d}*',
-             'sparse': '*aaaaaa*z{index:03d}*x*', 'sparse-middle': '*[a]z{index:03d}[b]*'}
-expression = ','.join(templates[kind].format(index=index) for index in range(500))
+             'sparse': '*aaaaaa*z{index:03d}*x*', 'sparse-middle': '*[a]z{index:03d}[b]*',
+             'multi-class': '*[ab]z{index:03d}[bc]*', 'ordering': '*z{index:03d}*aaaaaa*'}
+if kind == 'distinct-classes':
+    patterns = [f'*[a{chr(0x1000 + index)}][x{chr(0x1200 + index)}]*' for index in range(500)]
+elif kind == 'no-fixed':
+    patterns = [f'*[a{chr(0x1000 + index)}][xy]*' for index in range(500)]
+elif kind == 'positive-last':
+    patterns = [f'*absent-{index:03d}*' for index in range(499)] + ['*[[]*']
+else:
+    patterns = [templates[kind].format(index=index) for index in range(500)]
+expression = ','.join(patterns)
 policy = selection.normalize_policy('files', expression)
 try:
-    selection.resolve_selection(metadata.files, policy)
+    plan = selection.resolve_selection(metadata.files, policy)
 except selection.SelectionError as error:
-    assert error.code == 'selection.nothing_matched'
+    assert kind != 'positive-last' and error.code == 'selection.nothing_matched'
 else:
-    raise AssertionError('Absent patterns cannot select files')
+    assert kind == 'positive-last' and plan.selected_indices == tuple(range(file_count))
 assert policy['value'] == expression
 print('ok')
 """
