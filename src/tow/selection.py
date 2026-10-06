@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
+from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -264,15 +265,59 @@ def _safe_globs(value: str) -> list[str]:
     return [pattern.replace("\\", "/").casefold() for pattern in globs]
 
 
+def _mandatory_parts(pattern: str) -> tuple[str, ...]:
+    """Distinct fixed runs, including literal single-character classes."""
+    parts: list[str] = []
+    literal: list[str] = []
+    cursor = 0
+    while cursor < len(pattern):
+        char = pattern[cursor]
+        end = cursor
+        if char == "[":
+            end += 1
+            if pattern[end : end + 1] == "!":
+                end += 1
+            if pattern[end : end + 1] == "]":
+                end += 1
+            end = pattern.find("]", end)
+            if end < 0:
+                # fnmatch treats an unclosed [ as literal, then resumes scanning.
+                literal.append(char)
+                cursor += 1
+                continue
+            body = pattern[cursor + 1 : end]
+            if len(body) == 1:
+                # [x], including [?], [*], [[] and []], is fixed text.
+                # Multi-character, negated and range classes stay with fnmatch.
+                literal.append(body)
+                cursor = end + 1
+                continue
+        elif char not in "*?":
+            literal.append(char)
+            cursor += 1
+            continue
+        parts.append("".join(literal))
+        literal.clear()
+        cursor = end + 1
+    parts.append("".join(literal))
+    return tuple(dict.fromkeys(part for part in parts if part))
+
+
 def _file_mask_matcher(patterns: Iterable[str]) -> Callable[[str], bool]:
     """Reject missing mandatory literals before exact stdlib glob matching."""
     guarded: list[str] = []
     unguarded: list[str] = []
     literals: dict[str, None] = {}
-    for pattern in dict.fromkeys(patterns):
-        # Bracket syntax, including malformed classes, stays entirely with
-        # fnmatch. In a class-free glob only * and ? can vary literal text.
-        literal = "" if "[" in pattern else max(pattern.replace("?", "*").split("*"), key=len)
+    fixed = {pattern: _mandatory_parts(pattern) for pattern in dict.fromkeys(patterns)}
+    frequencies = Counter(part for parts in fixed.values() for part in parts)
+    guarded_count = sum(bool(parts) for parts in fixed.values())
+    # Shared title text should not hide a missing rule-specific piece. Every
+    # guarded glob also needs these common pieces; cap checks, not accepted rules.
+    common = sorted((part for part, count in frequencies.items() if count == guarded_count), key=len, reverse=True)[:8]
+    for pattern, parts in fixed.items():
+        # Only fixed text is a necessary condition; fnmatch still decides the
+        # exact match, including class membership, ranges and malformed syntax.
+        literal = min(parts, key=lambda part: (frequencies[part], -len(part))) if parts else ""
         if literal:
             guarded.append(fnmatch.translate(pattern))
             literals[literal] = None
@@ -285,7 +330,9 @@ def _file_mask_matcher(patterns: Iterable[str]) -> Callable[[str], bool]:
     def matches(path: str) -> bool:
         if unguarded_match and unguarded_match(path):
             return True
-        return bool(literal_search and literal_search(path) and guarded_match and guarded_match(path))
+        if not (literal_search and literal_search(path)) or any(part not in path for part in common):
+            return False
+        return bool(guarded_match and guarded_match(path))
 
     return matches
 

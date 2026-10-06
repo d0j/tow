@@ -5,6 +5,16 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.23.7] — 2026-10-06
+
+### Fixed
+
+- File-mask selection filters impossible bracket rules using fixed text before,
+  after and between character classes, including literal singleton classes.
+  Shared titles and missing common pieces no longer force expensive full matching
+  in large rule sets. Standard `fnmatch`
+  semantics, input limits and saved policies are unchanged.
+
 ## [1.23.6] — 2026-10-06
 
 ### Fixed

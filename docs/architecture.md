@@ -122,11 +122,15 @@ not a persistent cache and does not change saved policies, file priorities or hi
 File masks are translated with the standard `fnmatch.translate` API and prepared once
 per distinct case-folded rule per call. They still match the full relative path or
 basename; flat paths are not tested twice. Validation and stored expressions are unchanged.
-Class-free masks share a mandatory-literal search that rejects impossible candidates
-before their exact union. Masks with bracket syntax or without a mandatory literal
-use a separate exact union, so neither missing nor malformed classes are reinterpreted.
+Fixed text outside wildcards, including single-character bracket classes such as `[?]`,
+provides necessary conditions before the exact union. Unclosed brackets remain literal
+as in `fnmatch`; multi-character, negated and range classes are left to `fnmatch`.
+The filter favours text shared by fewer rules, with
+length breaking ties, so a common title cannot hide missing rule-specific text. Up to
+eight fixed parts required by every guarded rule are also checked; this bounds filter
+overhead, not accepted rules. Patterns without fixed text use a separate exact union.
 There are at most three compiled regexes per call, not one dispatch per file and mask;
-the literal filter never decides a successful match on its own.
+the filters never decide a successful match on their own.
 
 ## Data layout
 
