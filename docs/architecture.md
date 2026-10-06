@@ -33,10 +33,10 @@ flowchart TD
     BROWSER["browser (this PC, or LAN with password)"] --> SERVE
 ```
 
-- **`tow run`** is the single supervisor, not a single-process runtime. It holds `data/run/run.lock` (a second instance exits), starts
-  every job as a child process, one job at a time, each with a time limit, and writes `data/run/status.json` only
-  when something changes. A wall clock that jumps ahead of the monotonic one means the machine slept: overdue jobs
-  run at once.
+- **`tow run`** is the single supervisor, not a single-process runtime. It holds `data/run/run.lock` (a second
+  instance exits), starts every job as a child process, one job at a time, each with a time limit, and writes
+  `data/run/status.json` only when something changes. A wall clock that jumps ahead of the monotonic one means the
+  machine slept: overdue jobs run at once.
 - **`tow serve`** is the web UI. If it exits, or holds its port without answering `/healthz` for a minute, the
   supervisor restarts it after a pause that doubles from 1 s to 5 min. It never outlives the supervisor: stopped
   on every way out of the loop, `--parent-pid` makes it stop when the supervisor is gone, a Windows job object
@@ -46,7 +46,7 @@ flowchart TD
 - The schedule is the supervisor's own: checks every `interval_sec` after its last scheduled start
   (`data/run/schedule.json`), the night copy once per local day (a copy older than the latest slot is due; DST
   neither skips nor repeats a night). The watchdog duty only reports.
-- Individual tracker timers override the global cadence for their topic (`check_interval_min`,
+- Personal tracker timers override the global cadence for their topic (`check_interval_min`,
   empty/null inherits; 1–10080 minutes). Changing the interval starts a new policy revision
   from save time; unrelated edits, manual checks and progress passes do not shift it.
   `schedule.json` holds revision-bound `timer_attempts` and the single dispatched `timer_batch`.
@@ -309,8 +309,8 @@ Stable names other modules build on.
 - A backend has `name` and:
   - `boot_time(now=None)`, `asleep_seconds()`, `logon_time()` — unix times or seconds, `None` when unknown;
   - `shutdown_reasons(since, until)` — shutdown records, oldest first, `[]` when unknown;
-  - `spawn_detached(argv, *, hidden=True, log_path=None, cwd=None, env=None, require_breakaway=False)` → pid (outlives the parent; no
-    console window on Windows; own session on POSIX);
+  - `spawn_detached(argv, *, hidden=True, log_path=None, cwd=None, env=None, require_breakaway=False)` → pid
+    (outlives the parent; no console window on Windows; own session on POSIX);
   - `publish_exclusive(source, destination)` — publish complete prepared bytes without replacing an occupied
     name (Windows rename, POSIX hard link; unsupported destinations fail closed);
   - `popen_options(*, new_group=False, hidden=True)` — the same flags for a `subprocess.Popen` the caller keeps;

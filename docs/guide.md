@@ -13,6 +13,7 @@ How TOW thinks, what each screen and colour means, and what to do about each mes
 - [Notifications](#notifications)
 - [History and undo](#history-and-undo)
 - [Backups](#backups)
+- [Updates](#updates)
 - [Password and network access](#password-and-network-access)
 - [Troubleshooting](#troubleshooting)
 - [Where things are](#where-things-are)
@@ -50,8 +51,9 @@ The clock in the header counts down to the next scheduled check; before the firs
 1. **Home → +**, paste the link to the *topic page* (not a magnet link).
 2. Keep the suggested name, or type your own. Pick the folder where the client should save the files.
 3. Choose **what to download** and whether to **keep watching**.
-4. **Add.** TOW checks the topic at once (the button says “Checking…”, up to a minute): the message “… — added to the torrent client” means the client confirmed
-   it. If the add is refused, the form opens again with everything you typed and the reason above it.
+4. **Add.** TOW checks the topic at once (the button says “Checking…”, up to a minute): the message
+   “… — added to the torrent client” means the client confirmed it. If the add is refused, the form opens again
+   with everything you typed and the reason above it.
 
 If the site is not known yet, add it first on **Sites** — pasting any topic link there fills in the fields.
 
@@ -66,8 +68,9 @@ If the site is not known yet, add it first on **Sites** — pasting any topic li
 
 **Get contents** reads tracker metadata, or use a local `.torrent`. A local file only previews the
 contents: the first check still gets the torrent from the site and refuses a different one, and the
-file is not kept as the topic's saved contents. A download-limited site asks for confirmation first. **From magnet (contacts peers)** uses the selected client's native metadata API:
-qBittorrent 5.2+ or an attached Deluge daemon. Existing qBittorrent torrents can be read on older versions.
+file is not kept as the topic's saved contents. A download-limited site asks for confirmation first.
+**From magnet (contacts peers)** asks the selected client itself for the metadata: qBittorrent 5.2+ or an
+attached Deluge daemon. Existing qBittorrent torrents can be read on older versions.
 No transfer is added or changed by this preview. qBittorrent's peer-metadata request may continue after
 timeout or closing the form; its Web API cannot cancel it. Unsupported clients need a `.torrent`.
 
@@ -118,15 +121,15 @@ none is connected.
 
 | Check | When | What it does |
 |---|---|---|
-| Global timer | Every hour by default (Settings → Checks, 15 min – 24 h) | Active topics without an individual timer: checks the tracker and adds a changed torrent revision to the selected client. |
-| Individual timer | Set minutes when adding or editing a topic, 1 min – 7 days | Overrides the global timer for that topic. A clock and countdown appear in its Home row. |
+| Global timer | Every hour by default (Settings → Checks, 15 min – 24 h) | Active topics without a personal timer: checks the tracker and adds a changed torrent revision to the selected client. |
+| Personal timer | Set minutes when adding or editing a topic, 1 min – 7 days | Overrides the global timer for that topic. A clock and countdown appear in its Home row. |
 | Progress | Every 30 minutes | Only asks the client about downloads; no requests to sites. |
-| Check all | ↻ in the header (asks to confirm) | Checks active topics now in the background, including those with individual timers; does not reset their countdowns. |
+| Check all | ↻ in the header (asks to confirm) | Checks active topics now in the background, including those with personal timers; does not reset their countdowns. |
 | One topic | ↻ in the row | That topic only; ignores the one-hour mirror pause. |
 
 A check missed while the computer slept or was off runs right after it wakes. Manual checks send notifications the
 same way as scheduled ones. **Pause** in a row skips the topic in scheduled checks; the row's check still works.
-An empty individual timer uses the global interval. Saving a different individual interval starts a new countdown;
+An empty personal timer uses the global interval. Saving a different personal interval starts a new countdown;
 manual checks and progress observations do not reset it.
 
 ## Sites, mirrors and sign-in
@@ -203,6 +206,33 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
 does it on its own) and says once to back it up. Without it, saved passwords and tokens cannot be read and copies
 cannot be restored. `tow keys status` shows which key file is in use (never the key itself).
 
+## Updates
+
+Settings → **Version and updates**; the version in the corner of every page opens it.
+
+- **Check for updates** asks GitHub for the latest stable release. With **Check for updates automatically** on, TOW
+  asks by itself at most every 12 hours while a page is open, and Home shows a small notice when a new version is
+  out. Nothing is installed without you, and nothing about your topics or settings is sent.
+- **Update** installs it after you confirm. TOW first saves and checks a `.towx` archive of your data, then stops,
+  takes a snapshot of `data/` and `config.yaml`, switches the code, starts again and checks that the new version
+  answers and reads your data. The page reconnects and shows the result; **Reload page** opens the new interface.
+- **What is kept:** settings, topics, history, saved passwords and tokens, `keys/master.key`, autostart and network
+  access. Downloaded files are never touched.
+- **When the new version fails** to install, start or read the data, the update puts the previous version and data
+  back by itself and says so.
+- **Going back:** **Install another version or roll back** installs an earlier release, 1.22.21 or newer. A version
+  that cannot read the current data (anything before 1.23.0 once 1.23 ran) is refused before TOW stops.
+- **Without the page** (TOW started by systemd or launchd, or a version before 1.22.20) use `Update TOW.cmd`,
+  `update-tow` or the command `tow update --ref <tag>` prints: [README](../README.md#update-and-backups).
+- **When an update is cut off** while it replaces the code (the computer turned off, the updater was killed),
+  TOW does not start: `tow run`, `tow start` and the start files refuse with “TOW was not started: an update was cut
+  off…”. Run the update again: it first puts the previous version back, then installs the release you asked for.
+  If TOW kept running on the new version and changed data after the cut, the update stops instead of overwriting
+  those changes and names the command (`--discard-newer-data`) that puts the snapshot back anyway. Closing the
+  window or Ctrl+C during the switch does not cut it off: the update finishes or rolls back first.
+- **Update log:** **More: history, rollback and log** → **Update log** shows the log of the latest update, with the
+  install folder written as `<TOW>`. If an update did not finish, read it before trying again.
+
 ## Password and network access
 
 - On the computer running TOW, it opens **without a password**.
@@ -218,7 +248,7 @@ cannot be restored. `tow keys status` shows which key file is in use (never the 
   session.
 - **Sign out everywhere** (Settings → Network access) ends every network session; the password stays.
 - The reminder you set is visible to anyone who opens the sign-in page — never write the password into it.
-- Requests from public internet addresses are always refused. See [Headless server](../README.md#remote-access)
+- Requests from public internet addresses are always refused. See [Remote access](../README.md#remote-access)
   for SSH tunnels and the reverse-proxy caveat.
 
 ## Troubleshooting
@@ -244,7 +274,7 @@ The left column is the text TOW shows (on Home, in a row, in a message or on a p
 | Scheduled checks have not run since … | TOW was not running, or checks keep failing. | `tow autostart status`; look at `data/logs/run.log`. |
 | The last scheduled check is blocked: the secrets store is unavailable. · The master key is missing … | The master key is missing or wrong. | `tow keys status`; put back `keys/master.key` from your copy, or `tow keys adopt --from FILE`. |
 | state.json was written by a newer TOW … | You went back to an older version. | Update TOW again, or restore a backup made by this version. |
-| TOW was not started: an update was cut off while it replaced the code … | An update stopped half-way (the window was closed, the computer turned off). | Run the update again (`Update TOW`): it puts the previous version back first. |
+| TOW was not started: an update was cut off while it replaced the code … | An update stopped half-way (the computer turned off, the updater was killed). | Run the update again (`Update TOW`): it puts the previous version back first. |
 | Sign-in from other devices is off — TOW opens only on its own computer. | Network access is off. | Turn it on at the computer running TOW. |
 | No password for other devices is set yet. | Network access is on, but there is no password. | Set it on the computer running TOW: Settings → Network access. |
 
