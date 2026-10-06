@@ -24,6 +24,45 @@ def _set_language(value: str) -> None:
 
 
 @pytest.mark.parametrize(
+    ("language", "interval", "global_timer", "observer", "server_recovery", "old_promise"),
+    [
+        (
+            "en",
+            "21 min",
+            "own timer replaces that interval",
+            "it does not restart TOW",
+            "The running TOW service restarts the web server if it fails",
+            "it starts it again and reports the cause",
+        ),
+        (
+            "ru",
+            "21 мин",
+            "таймер раздачи заменяет для неё общий интервал",
+            "сам TOW не перезапускает",
+            "Работающий сервис TOW перезапускает веб-сервер при сбое",
+            "он запускает его заново и пишет причину",
+        ),
+    ],
+)
+def test_rendered_help_separates_topic_timers_server_recovery_and_watchdog_observation(
+    language, interval, global_timer, observer, server_recovery, old_promise
+):
+    from tow.config import load_config, save_config
+    from tow.web import create_app
+
+    cfg = load_config()
+    cfg.update(language=language, interval_sec=1260)
+    save_config(cfg)
+    response = TestClient(create_app()).get("/settings/help")
+    assert response.status_code == 200
+    assert f"<b>{interval}</b>" in response.text
+    assert global_timer in response.text
+    assert observer in response.text
+    assert server_recovery in response.text
+    assert old_promise not in response.text
+
+
+@pytest.mark.parametrize(
     ("header", "expected"),
     [
         ("ru-RU,ru;q=0.9,en-US;q=0.8", "ru"),

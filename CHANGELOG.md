@@ -9,6 +9,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- The guide distinguishes individual topic timers from the global clock and
+  supervised web-server recovery from the reporting-only watchdog. It no longer
+  promises that the watchdog restarts a stopped TOW service.
 - All-episode progress derives its current target from the full video metadata,
   not just enabled client files. Disabled episodes cannot silently shrink an
   all-files rule or finish an outdated title count. Temporary metadata loss
