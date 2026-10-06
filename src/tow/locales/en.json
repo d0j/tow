@@ -93,7 +93,6 @@
       "secrets_unusable": "cannot read {name} with the local master key: damaged encrypted data or a different key. Existing data and older copies are kept.",
       "cannot_check": "cannot check {name}: {error}",
       "other_key": "{name} was encrypted with another master key; set TOW_MASTER_KEY_FILE to that key first",
-      "cannot_merge_config": "cannot merge the copy's settings",
       "config_not_mapping": "the copy's config.yaml is damaged",
       "no_key": "the master key is not available, so the night copy cannot be signed or checked",
       "no_space": "not enough free space for a complete new copy and a safety reserve; older copies were kept",

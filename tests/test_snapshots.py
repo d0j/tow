@@ -818,6 +818,54 @@ def test_a_broken_live_config_does_not_stop_the_restore_and_stays_local(backup):
     assert load_state()["topics"] == [{"id": "before"}]
 
 
+@pytest.mark.parametrize("points_set", [False, True])
+def test_a_broken_live_config_is_replaced_by_a_copy_with_restore_points(backup, tmp_path, points_set):
+    from tow.paths import config_path
+    from tow.restore_points import create_restore_point, restore_points_dir
+
+    if points_set:
+        cfg = load_config()
+        cfg["restore_points_dir"] = str(tmp_path / "points of the copy")
+        save_config(cfg)
+    point = create_restore_point()
+    snapshot = Path(create_snapshot()["snapshot"])
+    folder = restore_points_dir()
+    (folder / f"{point['id']}.towx").unlink()
+    config_path().write_text("trackers: [unclosed\n", encoding="utf-8")
+
+    assert verify_snapshot(snapshot)["signed"]
+    result = restore_snapshot(snapshot, apply=True)
+
+    assert result["applied"]
+    assert restore_points_dir() == folder  # the copy's own folder (or the default one)
+    assert (folder / f"{point['id']}.towx").is_file()
+    assert load_state()["topics"] == [{"id": "before"}]
+
+
+def test_a_failed_restore_over_a_broken_config_puts_points_back_where_written(backup, tmp_path, monkeypatch):
+    from tow.paths import config_path
+    from tow.restore_points import create_restore_point, restore_points_dir
+    from tow.store import encrypted_secrets_path
+
+    cfg = load_config()
+    cfg["restore_points_dir"] = str(tmp_path / "points of the copy")
+    save_config(cfg)
+    point = create_restore_point()
+    snapshot = Path(create_snapshot()["snapshot"])
+    written = restore_points_dir() / f"{point['id']}.towx"
+    written.unlink()
+    broken = b"trackers: [unclosed\n"
+    config_path().write_bytes(broken)
+    _fail_on(monkeypatch, encrypted_secrets_path(), PermissionError(13, "Access is denied"))
+
+    with pytest.raises(SnapshotError, match="Access is denied"):  # in English: no language setting to read
+        restore_snapshot(snapshot, apply=True)
+
+    assert not written.exists()  # removed again: it did not exist before the restore
+    assert config_path().read_bytes() == broken
+    assert not (data_dir() / ".tow-night-restore.json").exists()
+
+
 def test_a_store_the_copy_did_not_have_is_removed_and_kept_aside(backup):
     from tow.store import save_secret_undo, secret_undo_path
 

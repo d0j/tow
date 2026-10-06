@@ -393,10 +393,10 @@ def test_applied_restore_writes_the_original_verified_bytes_not_a_changed_source
     original = snapshots._restore_plan
     state = (point / "state.json").read_bytes()
 
-    def watched(contents):
+    def watched(contents, *args):
         (point / "state.json").write_bytes(b"changed after verification")
         assert contents["state.json"] == state
-        return original(contents)
+        return original(contents, *args)
 
     monkeypatch.setattr(snapshots, "_restore_plan", watched)
     assert snapshots.restore_snapshot(point, apply=True)["applied"]

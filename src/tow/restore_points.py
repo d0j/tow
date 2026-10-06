@@ -167,10 +167,10 @@ def _is_reparse_point(path: Path) -> bool:
     return bool(attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
 
 
-def point_path(point_id: str, *, must_exist: bool = True) -> Path:
+def point_path(point_id: str, *, must_exist: bool = True, cfg: dict[str, Any] | None = None) -> Path:
     if not isinstance(point_id, str) or _ID_RE.fullmatch(point_id) is None:
         raise RestorePointError(t("backup.restore_point.unknown", owner_language()), kind=UNKNOWN_POINT)
-    root = restore_points_dir().resolve()
+    root = restore_points_dir(cfg=cfg).resolve()
     path = root / f"{point_id}.towx"
     if path.parent.resolve() != root or path.is_symlink() or _is_reparse_point(path):
         raise RestorePointError(t("backup.restore_point.unsafe", owner_language()), kind=UNKNOWN_POINT)

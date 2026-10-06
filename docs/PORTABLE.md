@@ -494,7 +494,8 @@ normalizes only the archived configuration, not the live file. Rollback restores
 even if the original live configuration was unreadable. Live settings themselves remain UTF-8.
 Night-copy verification and preview check the configuration as well as its signature and checksums, before
 restoration writes anything. A broken live configuration can still be replaced by a healthy copy; when its
-local access settings cannot be read, the restored settings are local-only.
+local access settings cannot be read, the restored settings are local-only, and the copy's restore points go to
+the restore points folder the copy's settings name (or the default one).
 
 Since 1.22.41, night-copy `MANIFEST.json` is limited to 1 MiB before JSON decoding. New
 descriptions are encoded into a bounded buffer before publication; an oversized description

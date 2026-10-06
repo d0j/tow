@@ -238,12 +238,26 @@ def _members() -> list[tuple[str, Path]]:
     return members
 
 
-def _member_target(name: str) -> Path:
+def _points_dir_setting(copy_config: bytes | None = None) -> str:
+    """``restore_points_dir`` of the live config.
+
+    A live config that cannot be read (replacing it is often the point of a restore) says
+    nothing: the copy's own setting is used, else the default folder.
+    """
+    try:
+        cfg = load_config()
+    except OSError, UnicodeError, TypeError, ValueError, yaml.YAMLError:
+        cfg = _snapshot_config(copy_config) if copy_config is not None else {}
+    return str(cfg.get("restore_points_dir") or "")
+
+
+def _member_target(name: str, *, points_dir: str | None = None) -> Path:
     """Where member ``name`` of a copy goes, refusing every name TOW does not write itself.
 
     A restore point is accepted only under its real id pattern, and its target must stay
     directly inside the restore points folder (``restore-points/\\Windows\\...`` or
-    ``restore-points//Users/...`` would otherwise escape it).
+    ``restore-points//Users/...`` would otherwise escape it). ``points_dir`` is that
+    folder's setting (by default the live one, see ``_points_dir_setting``).
     """
     fixed = dict(_fixed_members())
     if name in fixed:
@@ -256,12 +270,10 @@ def _member_target(name: str) -> Path:
         raise SnapshotError(t("backup.snapshot.unexpected_file", lang, name=name))
     from tow.restore_points import RestorePointError, point_path, restore_points_dir
 
+    cfg = {"restore_points_dir": _points_dir_setting() if points_dir is None else points_dir}
     try:
-        target = point_path(match.group("id"), must_exist=False)
-        root = restore_points_dir().resolve()
-        inside = target.resolve().parent == root
-    except yaml.YAMLError as exc:  # the live config, which says where restore points live, is broken
-        raise SnapshotError(t("backup.snapshot.cannot_merge_config", lang)) from exc
+        target = point_path(match.group("id"), must_exist=False, cfg=cfg)
+        inside = target.resolve().parent == restore_points_dir(cfg=cfg).resolve()
     except (RestorePointError, OSError) as exc:
         raise SnapshotError(t("backup.snapshot.unsafe_path", lang, name=name)) from exc
     if not inside:
@@ -891,8 +903,9 @@ def restore_snapshot(path: Path, *, apply: bool = False) -> dict[str, Any]:
         return result
     with persistence_lock():
         before_interval = _interval()
-        plan = _restore_plan(contents)  # everything merged and checked before the first write
-        safety, cleanup_pending = _apply_restore(plan, snapshot=path.name)
+        points_dir = _points_dir_setting(contents.get("config.yaml"))
+        plan = _restore_plan(contents, points_dir)  # everything merged and checked before the first write
+        safety, cleanup_pending = _apply_restore(plan, snapshot=path.name, points_dir=points_dir)
     result.update({"applied": True, "safety_copy": str(safety)})
     if cleanup_pending:
         result["cleanup_warning"] = t("backup.snapshot.restore_cleanup_warning", owner_language())
@@ -940,7 +953,7 @@ _UNDO_IN_SAFETY = "secrets-undo.enc"
 _REMOVED_WHEN_ABSENT = ("state.json", "download_history.json", "secrets-undo.enc")
 
 
-def _restore_plan(contents: dict[str, bytes]) -> list[tuple[str, Path, bytes | None]]:
+def _restore_plan(contents: dict[str, bytes], points_dir: str) -> list[tuple[str, Path, bytes | None]]:
     """(member, live target, new bytes or None to remove) - config.yaml last, so that the
     targets of restore points are those of the config in force while the files are written."""
     plan: list[tuple[str, Path, bytes | None]] = []
@@ -949,7 +962,7 @@ def _restore_plan(contents: dict[str, bytes]) -> list[tuple[str, Path, bytes | N
             content = _keep_local_access(content)
         elif name == "secrets.enc":
             content = _keep_local_password(content)
-        plan.append((name, _member_target(name), content))
+        plan.append((name, _member_target(name, points_dir=points_dir), content))
     if "secrets.enc" not in contents and encrypted_secrets_path().is_file():
         plan.append(("secrets.enc", encrypted_secrets_path(), _keep_local_password(None)))
     plan.extend(
@@ -966,7 +979,7 @@ def _reason(exc: BaseException) -> str:
     return str(exc) or type(exc).__name__
 
 
-def _begin_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str) -> Path:
+def _begin_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str, points_dir: str) -> Path:
     """The before-restore copy and its journal, then the marker; nothing live is touched yet."""
     stamp = datetime.now(UTC).astimezone().strftime("%Y%m%d-%H%M%S")
     safety = data_dir() / f"before-restore-{stamp}"
@@ -982,7 +995,9 @@ def _begin_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str)
                 entries.append({"name": name, "existed": True, "sha256": hashlib.sha256(saved).hexdigest()})
             else:
                 entries.append({"name": name, "existed": False})
-        journal = {"format": _JOURNAL_FORMAT, "snapshot": snapshot, "entries": entries}
+        # The restore points folder as set (not resolved): rollback puts points back exactly
+        # where they were written, even when the saved config.yaml cannot be read.
+        journal = {"format": _JOURNAL_FORMAT, "snapshot": snapshot, "entries": entries, "points_dir": points_dir}
         # Every final status must remain writable before publishing a recovery marker.
         for status in ("prepared", "committed", "rolled_back"):
             _journal_bytes(journal, status)
@@ -1067,6 +1082,7 @@ def _validate_restore_journal(journal: dict[str, Any]) -> None:
         or not isinstance(journal.get("status"), str)
         or journal["status"] not in {"prepared", "committed", "rolled_back"}
         or not isinstance(journal.get("entries"), list)
+        or not isinstance(journal.get("points_dir", ""), str)
     ):
         raise ValueError("not a night-copy restore journal")
     names: set[str] = set()
@@ -1112,21 +1128,24 @@ def _ordinary_file(path: Path, *, missing: bool = False) -> bool:
     return True
 
 
-def _rollback_target(name: str, config_bytes: bytes | None) -> Path:
+def _rollback_target(name: str, config_bytes: bytes | None, points_dir: str | None) -> Path:
     fixed = dict(_fixed_members())
-    if name in fixed or config_bytes is None:
-        return _member_target(name)
-    # Point targets belong to the saved config, not to a partially restored one.
-    # Resolve them without temporarily replacing the live config during preflight.
+    if name in fixed:
+        return fixed[name]
+    # Point targets are where the restore wrote them, not those of a partially restored config.
     from tow.locations import MANUAL, resolve_checked
 
-    config = load_yaml(config_bytes)
-    if not isinstance(config, dict):
-        raise TypeError("night-copy restore config is malformed")
+    if points_dir is None:  # a journal of 1.23.11 or earlier: the saved config says where
+        if config_bytes is None:
+            return _member_target(name)
+        config = load_yaml(config_bytes)
+        if not isinstance(config, dict):
+            raise TypeError("night-copy restore config is malformed")
+        points_dir = str(config.get("restore_points_dir") or "")
     match = _POINT_MEMBER.fullmatch(name)
     if match is None or re.fullmatch(r"[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}", match["id"]) is None:
         raise ValueError("night-copy restore point is malformed")
-    root = resolve_checked(str(config.get("restore_points_dir") or ""), MANUAL).resolve()
+    root = resolve_checked(points_dir, MANUAL).resolve()
     return root / f"{match['id']}.towx"
 
 
@@ -1150,7 +1169,7 @@ def _rollback_plan(safety: Path) -> list[tuple[str, Path, bytes | None]]:
             saved[name] = None
     plan = []
     for name, content in saved.items():
-        target = _rollback_target(name, saved.get("config.yaml"))
+        target = _rollback_target(name, saved.get("config.yaml"), journal.get("points_dir"))
         _ordinary_file(target, missing=True)
         if target.parent.exists():
             _ordinary_directory(target.parent)
@@ -1236,12 +1255,12 @@ def _prune_safety_copies(keep: int) -> tuple[list[str], bool]:
     return removed, pending
 
 
-def _apply_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str) -> tuple[Path, bool]:
+def _apply_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str, points_dir: str) -> tuple[Path, bool]:
     """Under the data lock, hold one log barrier from safety capture through the final outcome."""
     failure: Exception | None = None
     rollback_failure: Exception | None = None
     with locked_log_path():
-        safety = _begin_restore(plan, snapshot=snapshot)
+        safety = _begin_restore(plan, snapshot=snapshot, points_dir=points_dir)
         try:
             for name, target, content in plan:
                 if content is None:
