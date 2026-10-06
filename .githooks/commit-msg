@@ -1,0 +1,56 @@
+#!/bin/sh
+# Commit message rules (CONTRIBUTING.md, "Commits and pull requests"):
+#   area: what changed            <- the subject, at most 72 characters
+#                                 <- a blank line
+#   Why: the reason, how it was verified.
+# The area is a lowercase word or words (web, install.sh, restore points) or a file name in
+# capitals (README, AGENTS). Merges, reverts, fixup!/squash!/amend! and release commits
+# (release: vX.Y.Z - <summary>) keep their own form. No message may carry a Co-Authored-By
+# or a "Generated with" line. POSIX sh, so Git for Windows runs it too.
+# Enabled by: git config core.hooksPath .githooks
+
+# What git will record: comment lines and everything below the scissors line are dropped,
+# and so are leading blank lines.
+message=$(awk '
+    { sub(/\r$/, "") }
+    /^# -+ >8 -+$/ { exit }
+    /^#/ { next }
+    !started && /^[[:space:]]*$/ { next }
+    { started = 1; print }
+' "$1")
+
+fail() {
+    echo "commit-msg: $1" >&2
+    echo "commit-msg: the message is kept in .git/COMMIT_EDITMSG (git commit -e -F <that file>)" >&2
+    exit 1
+}
+
+if printf '%s\n' "$message" | grep -qiE 'co-authored-by|generated with'; then
+    fail "remove the Co-Authored-By / \"Generated with\" line: TOW has one author"
+fi
+
+subject=$(printf '%s\n' "$message" | sed -n 1p)
+[ -n "$subject" ] || exit 0  # git itself refuses an empty message
+
+case $subject in
+    "Merge "* | 'Revert "'* | "fixup! "* | "squash! "* | "amend! "*) exit 0 ;;
+esac
+if printf '%s\n' "$subject" | grep -qE '^release: v[0-9]+\.[0-9]+\.[0-9]+ - [^ ]'; then
+    exit 0
+fi
+
+area='([a-z][a-z0-9._/-]*( [a-z0-9._/-]+)*|[A-Z][A-Z0-9._-]*)'
+if ! printf '%s\n' "$subject" | grep -qE "^$area: [^ ]"; then
+    fail "the subject must be \"area: what changed\" (web: ..., install.sh: ..., restore points: ...)"
+fi
+length=$(printf '%s' "$subject" | wc -m | tr -d ' ')
+if [ "$length" -gt 72 ]; then
+    fail "the subject has $length characters; at most 72"
+fi
+if [ -n "$(printf '%s\n' "$message" | sed -n 2p)" ]; then
+    fail "leave the second line blank: the subject, an empty line, then the body"
+fi
+if ! printf '%s\n' "$message" | sed -n '3,$p' | grep -q '[^[:space:]]'; then
+    fail "add a body below the subject: why the change was made and how it was verified"
+fi
+exit 0
