@@ -270,6 +270,8 @@ def _validate_tracker_settings(trackers: dict[str, Any]) -> None:
     for name, tracker in trackers.items():
         if not isinstance(name, str) or not isinstance(tracker, dict):
             raise ExportImportError("config.yaml tracker entry has an invalid type")
+        if not SAFE_ID.fullmatch(name):  # part of /sites/<name>/… addresses
+            raise ExportImportError("config.yaml: a site name may have only letters, digits, - and _ (at most 64)")
         label = f"config.yaml.trackers.{name}"
         for key in (
             "title",
