@@ -78,7 +78,16 @@
   const dateLabel = (value, key) => {
     if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "";
     const date = new Date(value * 1000);
-    return Number.isFinite(date.getTime()) ? t(key, { when: date.toLocaleString(document.documentElement.lang) }) : "";
+    if (!Number.isFinite(date.getTime())) return "";
+    // The language's own pattern (_meta.datetime), as the server writes dates in the page.
+    const two = (number) => String(number).padStart(2, "0");
+    const parts = {
+      Y: String(date.getFullYear()), m: two(date.getMonth() + 1), d: two(date.getDate()),
+      H: two(date.getHours()), M: two(date.getMinutes()), S: two(date.getSeconds()),
+    };
+    const pattern = (typeof I18N === "undefined" ? null : I18N._datetime) || "%Y-%m-%d %H:%M:%S";
+    const when = String(pattern).replace(/%([YmdHMS%])/g, (whole, code) => (code === "%" ? "%" : parts[code]));
+    return t(key, { when });
   };
   const render = (data) => {
     const available = data.available === true && /^\d+\.\d+\.\d+$/.test(data.latest || "");

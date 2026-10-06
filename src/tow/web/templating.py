@@ -169,13 +169,15 @@ def _languages() -> list[dict[str, str]]:
 
 
 def js_texts() -> dict[str, str]:
-    """The ``js.*`` texts of app.js in the current language (base.html hands them over as JSON)."""
-    return i18n.texts_with_prefix("js.")
+    """The ``js.*`` texts of app.js in the current language (base.html hands them over as JSON),
+    and the language's date pattern under ``_datetime`` (not a catalog key)."""
+    return {**i18n.texts_with_prefix("js."), "_datetime": i18n.datetime_pattern()}
 
 
 def content_texts() -> dict[str, str]:
     return {
         **i18n.texts_with_prefix("content.js."),
+        **i18n.texts_with_prefix("web.bytes."),
         **{key: t(key) for key in ("content.cached_hint", "content.cache_failed", "content.limited_confirm")},
     }
 

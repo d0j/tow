@@ -57,6 +57,7 @@ for (const selected of fixtures.values()) {
   Object.assign(globalThis, {
     document,
     t: (key, vars = {}) => `${key}:${JSON.stringify(vars)}`, AbortSignal, Date,
+    I18N: { _datetime: "%d.%m.%Y %H:%M:%S" },
     window: { location: { reload() { reloads++; } }, setTimeout() {}, clearTimeout() {}, setInterval(callback) { hourly = callback; } },
     fetch: async (url, options = {}) => {
       if (options.method === "POST") posts.push(url);
@@ -90,6 +91,8 @@ for (const selected of fixtures.values()) {
   if (scenario.key || scenario.error) {
     assert.ok(progress.textContent.includes("js.releases.started:"));
     assert.ok(progress.textContent.includes("js.releases.finished:"));
+    // The language's own date pattern (_meta.datetime), not the browser's locale format.
+    assert.match(progress.textContent, /"when":"\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}"/);
   }
   if (scenario.error) assert.ok(progress.textContent.includes(scenario.error));
   assert.equal(elements.get("[data-update-log-text]").textContent, "retained operation log");

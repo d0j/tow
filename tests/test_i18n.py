@@ -375,12 +375,30 @@ def test_app_js_texts_are_built_once_per_language():
     i18n.reload()
     first = js_texts()
     assert first
-    assert all(key.startswith("js.") for key in first)
+    assert all(key.startswith("js.") or key == "_datetime" for key in first)
     misses = i18n._prefixed.cache_info().misses
     first["js.extra"] = "a caller's change"
     assert js_texts() == {key: value for key, value in first.items() if key != "js.extra"}
     assert i18n._prefixed.cache_info().misses == misses
     assert i18n.texts_with_prefix("js.", "en") != i18n.texts_with_prefix("js.", "ru")
+
+
+def test_page_scripts_write_dates_and_sizes_like_the_server():
+    from tow.web.templating import content_texts, js_texts
+
+    root = Path(__file__).resolve().parents[1] / "src" / "tow" / "static"
+    _set_language("ru")
+    assert js_texts()["_datetime"] == i18n.datetime_pattern("ru") == "%d.%m.%Y %H:%M:%S"
+    assert content_texts()["web.bytes.gb"] == "{size} ГБ"
+    _set_language("en")
+    assert js_texts()["_datetime"] == i18n.datetime_pattern("en")
+    assert content_texts()["web.bytes.kb"] == "{size} KB"
+    content_js = (root / "content.js").read_text(encoding="utf-8")
+    updates_js = (root / "updates.js").read_text(encoding="utf-8")
+    assert "KiB" not in content_js
+    assert '"web.bytes.gb"' in content_js
+    assert "toLocaleString" not in updates_js
+    assert "I18N._datetime" in updates_js  # tests/js/update_page_version.mjs checks the result
 
 
 def test_bad_language_setting_is_refused():
