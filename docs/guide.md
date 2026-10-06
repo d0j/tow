@@ -239,6 +239,7 @@ The left column is the text TOW shows (on Home, in a row, in a message or on a p
 | Scheduled checks have not run since … | TOW was not running, or checks keep failing. | `tow autostart status`; look at `data/logs/run.log`. |
 | The last scheduled check is blocked: the secrets store is unavailable. · The master key is missing … | The master key is missing or wrong. | `tow keys status`; put back `keys/master.key` from your copy, or `tow keys adopt --from FILE`. |
 | state.json was written by a newer TOW … | You went back to an older version. | Update TOW again, or restore a backup made by this version. |
+| TOW was not started: an update was cut off while it replaced the code … | An update stopped half-way (the window was closed, the computer turned off). | Run the update again (`Update TOW`): it puts the previous version back first. |
 | Sign-in from other devices is off — TOW opens only on its own computer. | Network access is off. | Turn it on at the computer running TOW. |
 | No password for other devices is set yet. | Network access is on, but there is no password. | Set it on the computer running TOW: Settings → Network access. |
 

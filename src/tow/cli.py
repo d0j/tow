@@ -533,10 +533,23 @@ def _cmd_watchdog(args: argparse.Namespace) -> int:
     return 0 if report["service_ok"] and report["checks_ok"] else 2
 
 
+def _interrupted_update() -> bool:
+    """An update cut off mid-switch: the code in app/ may be half new; the update puts it right."""
+    from tow.i18n import t
+    from tow.supervisor import layout
+
+    if not layout.interrupted_update():
+        return False
+    print(t("cli.run.update_interrupted", root=layout.install_root()), flush=True)
+    return True
+
+
 def _cmd_run(_args: argparse.Namespace) -> int:
     from tow.store import check_state_version
     from tow.supervisor import run_supervisor
 
+    if _interrupted_update():
+        return EXIT_CANNOT_RUN
     check_state_version()  # a newer TOW's state.json: refused, never served or rewritten
     _first_run_key()
     return run_supervisor()
@@ -549,6 +562,8 @@ def _cmd_start(args: argparse.Namespace) -> int:
     from tow.i18n import t
     from tow.supervisor import layout, starter
 
+    if _interrupted_update():
+        return EXIT_CANNOT_RUN
     port = port_of(load_config())
     browser = not args.no_browser and os.environ.get("TOW_NO_BROWSER", "").strip().lower() not in ("1", "true", "yes")
     if layout.running() is None:

@@ -284,7 +284,8 @@
       "stop_requested": "TOW was asked to stop.",
       "stopped": "TOW stopped.",
       "still_stopping": "TOW is still stopping (it lets a running check finish first).",
-      "restart_requested": "TOW restarts its web server; the page is back in a few seconds."
+      "restart_requested": "TOW restarts its web server; the page is back in a few seconds.",
+      "update_interrupted": "TOW was not started: an update was cut off while it replaced the code in {root}. Run the update again (\"Update TOW\" in that folder): it puts the previous version back first."
     },
     "start": {
       "starting": "Starting TOW...",
