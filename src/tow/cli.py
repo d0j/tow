@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import contextvars
 import json
 import os
@@ -711,6 +712,12 @@ def _cmd_status(args: argparse.Namespace) -> int:
         _print(view, True)
         return EXIT_OK
     yes_no = {True: t("cli.status.yes"), False: t("cli.status.no"), None: "?"}
+    last_check = view["last_check"]
+    if last_check:  # the check writes "2026-10-06 22:30:56": shown as every other date of TOW
+        from tow.clock import format_ui_timestamp
+
+        with contextlib.suppress(TypeError, ValueError, OverflowError):
+            last_check = format_ui_timestamp(str(last_check))
     client = view["client"] or t("cli.status.none")
     if view["client_ok"] is not None:
         client += " " + (t("cli.status.answers") if view["client_ok"] else t("cli.status.not_answering"))
@@ -720,7 +727,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
         client,
         t("cli.status.sites", n=view["sites"]),
         t("cli.status.topics", n=view["topics"]),
-        t("cli.status.last", at=view["last_check"] or t("cli.status.never"))
+        t("cli.status.last", at=last_check or t("cli.status.never"))
         + ("" if view["last_check_ok"] is not False else " " + t("cli.status.failed")),
         t("cli.status.next", at=view["next_check"] or "—"),
         t("cli.status.autostart", value=yes_no[view["autostart"]]),
