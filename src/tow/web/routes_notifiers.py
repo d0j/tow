@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 
 from tow.config import as_bool, interval_sec_of
 from tow.web import services
-from tow.web.site_form import internal_host
+from tow.web.site_form import internal_host, unresolved_note
 from tow.web.site_store import save_secrets_with_undo
 from tow.web.text import t
 from tow.web.views import flash_redirect
@@ -97,6 +97,9 @@ def _save_notifier(kind: str, form: dict[str, str]) -> RedirectResponse:
     if refused := save_secrets_with_undo(_notifier_target(kind), undo_secrets, s, old_sec, _notifier_scope(kind)):
         return refused
     services.log_event("settings_notifier", integration_id=kind, how="manual")
+    servers = [str(values.get(field) or "") for field in _SERVER_FIELDS.get(kind, ())]
+    if note := unresolved_note([server for server in servers if server]):
+        return _notifier_redirect(f"{t('web.settings.notifier_saved', title=title)}. {note}", kind, "warn")
     return _notifier_redirect(t("web.settings.notifier_saved", title=title), kind)
 
 

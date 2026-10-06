@@ -25,6 +25,7 @@ from tow.undo.snapshots import site_snapshot
 from tow.web import _context, services
 from tow.web.site_form import (
     split_lines,
+    unresolved_note,
     valid_site_hosts,
     valid_site_name,
     valid_tracker_path,
@@ -150,6 +151,13 @@ def _commit_site(
     return None
 
 
+def _saved_location(message: str, hosts: list[str]) -> str:
+    """Back to Sites after a save; a warning names the mirrors whose names do not resolve now."""
+    if note := unresolved_note(hosts):
+        return flash_location("/sites", f"{t(message)}. {note}", "warn")
+    return flash_location("/sites", message)
+
+
 @router.post("/sites/new")
 @services.locked_state_mutation
 def sites_new(
@@ -250,7 +258,7 @@ def sites_new(
         return not_saved
     services.log_event("site_add", tracker=key, how="manual")
     return RedirectResponse(
-        flash_location("/sites", "web.sites.added"),
+        _saved_location("web.sites.added", hosts),
         status_code=303,
         background=BackgroundTask(services.doctor_report, probe=True, names=[key]),
     )
@@ -417,7 +425,7 @@ def sites_save(
     if refused := _commit_site(new_config, new_state, new_secrets, undo_fields, site_snapshot(old_secrets, name)):
         return refused
     services.log_event("site_save", tracker=key, how="manual")
-    return flash_redirect("/sites", "web.common.saved", "ok")
+    return RedirectResponse(_saved_location("web.common.saved", new_hosts), status_code=303)
 
 
 @router.post("/sites/{name}/login")

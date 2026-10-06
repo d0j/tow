@@ -7,7 +7,13 @@ import yaml
 from helpers import raises_code
 
 from tow.trackers.generic import regex_redos_risk, validate_tracker_regex
-from tow.web.site_form import internal_host, valid_site_hosts, validate_tracker_regexes
+from tow.web.site_form import (
+    internal_host,
+    unresolved_hosts,
+    unresolved_note,
+    valid_site_hosts,
+    validate_tracker_regexes,
+)
 
 
 @pytest.mark.parametrize(
@@ -27,18 +33,43 @@ def test_public_hosts_are_not_internal(host, monkeypatch):
 def test_internal_tracker_hosts_are_refused_unless_enabled(monkeypatch):
     monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: ["93.184.216.34"])
     monkeypatch.setattr("tow.web.services.load_config", dict)
-    with pytest.raises(ValueError, match="домашней сети"):
+    with pytest.raises(ValueError, match="домашнюю сеть"):
         valid_site_hosts(["http://127.0.0.1:8080"])
     assert valid_site_hosts(["https://rutor.info/"]) == ["https://rutor.info"]
     monkeypatch.setattr("tow.web.services.load_config", lambda: {"allow_private_tracker_hosts": True})
     assert valid_site_hosts(["http://192.168.1.5:8080"]) == ["http://192.168.1.5:8080"]
 
 
-def test_unresolved_tracker_host_is_not_saved_as_public(monkeypatch):
+def test_an_unresolved_tracker_host_is_named_as_unreachable_not_as_home_network(monkeypatch):
+    # Every fetch checks the DNS answer again (tow.net_guard), so a name that does not resolve
+    # now (a typo, a site the provider blocks) cannot become private later: it is saved, with
+    # a note, instead of being called "this computer or the home network".
     monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: [])
     monkeypatch.setattr("tow.web.services.load_config", dict)
-    with pytest.raises(ValueError, match="домашней сети"):
-        valid_site_hosts(["https://unresolved.example"])
+
+    assert valid_site_hosts(["https://unresolved.example"]) == ["https://unresolved.example"]
+    assert unresolved_hosts(["https://unresolved.example", "https://93.184.216.34"]) == ["unresolved.example"]
+    assert "unresolved.example" in unresolved_note(["https://unresolved.example"])
+    assert unresolved_note(["https://93.184.216.34"]) == ""
+
+
+def test_saving_a_site_whose_mirror_does_not_resolve_warns(monkeypatch):
+    from fastapi.testclient import TestClient
+    from helpers import shown
+
+    from tow.config import load_config, save_config
+    from tow.web import app
+
+    cfg = load_config()
+    cfg.setdefault("trackers", {})["mysite"] = {"url_regex": r"^https://tracker\.example/t/(\d+)$"}
+    save_config(cfg)
+    monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: [])
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+
+    response = client.post("/sites/mysite", data={"fetch_hosts": "https://blocked.example"}, follow_redirects=False)
+
+    assert "blocked.example" in shown(response.headers["location"])
+    assert load_config()["trackers"]["mysite"]["fetch_hosts"] == ["https://blocked.example"]
 
 
 @pytest.mark.parametrize("pattern", ["(a+)+c", "(a*)*", "(a|aa)*c", "(?:x+){2,}", "((ab)*)+"])

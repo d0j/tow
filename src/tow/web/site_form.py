@@ -3,6 +3,7 @@ allowed), the site name, paths and regular expressions."""
 
 from __future__ import annotations
 
+import ipaddress
 import re
 import socket
 from urllib.parse import urlparse
@@ -32,7 +33,10 @@ def internal_host(hostname: str) -> bool:
     """Loopback, private, link-local, CGNAT/Tailscale and other non-public addresses.
 
     A name is judged by what it resolves to: ``127.0.0.1.nip.io`` or a rebinding name must not
-    turn a server-side fetch into a probe of this PC or the home network.
+    turn a server-side fetch into a probe of this PC or the home network. A name that does not
+    resolve now (a typo, or a site the provider's DNS blocks) is not internal: every fetch
+    checks the DNS answer again and connects only to a public address (``tow.net_guard``), so
+    it cannot become a private one after it was saved; ``unresolved_hosts`` names it instead.
     """
     name = hostname.strip("[]").lower()
     if name == "localhost" or name.endswith((".localhost", ".local", ".internal", ".lan", ".home.arpa")):
@@ -41,16 +45,40 @@ def internal_host(hostname: str) -> bool:
         return not is_public(name)
     except ValueError:
         pass
-    addresses = _resolve_addresses(name)
-    if not addresses:
-        return True  # an unresolved host must not become private after it was saved
-    for address in addresses:
+    for address in _resolve_addresses(name):
         try:
             if not is_public(address):
                 return True
         except ValueError:
             continue
     return False
+
+
+def unresolved_hosts(addresses: list[str]) -> list[str]:
+    """Host names among these addresses that do not resolve now: saved, but not reachable yet."""
+    names = []
+    for address in addresses:
+        try:
+            name = (urlparse(address).hostname or "").strip("[]").lower()
+        except ValueError:
+            continue
+        if name and not _is_ip(name) and not _resolve_addresses(name):
+            names.append(name)
+    return list(dict.fromkeys(names))
+
+
+def _is_ip(name: str) -> bool:
+    try:
+        ipaddress.ip_address(name)
+    except ValueError:
+        return False
+    return True
+
+
+def unresolved_note(addresses: list[str]) -> str:
+    """The sentence a save appends for addresses that do not resolve ("" when all do)."""
+    names = unresolved_hosts(addresses)
+    return t("web.site_form.unresolved", hosts=", ".join(names)) if names else ""
 
 
 def valid_site_hosts(hosts: list[str]) -> list[str]:
