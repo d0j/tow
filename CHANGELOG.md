@@ -9,860 +9,540 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Changed
 
-- Reuse encrypted, bounded torrent metadata for live topics when opening their
-  contents. Normal checks still obtain current tracker evidence; a changed magnet
-  invalidates an older copy. Removing the last topic removes only its saved metadata.
-- Version links open a separate compact update panel. Rollback, history and logs
-  stay collapsed; a new release has a compact green notice on Home. Automatic
-  release checks can be turned off immediately without disabling manual checks.
+- Opening the contents of a watched topic reuses its saved, encrypted torrent metadata instead of asking the
+  site again; a changed magnet link makes TOW fetch it anew.
+- The version link opens a compact Version and updates panel with history, rollback and the log folded away.
+  Home shows a small green notice for a new release; automatic release checks can be turned off.
 
 ### Fixed
 
-- A temporarily unreadable metadata cache stays ineligible after new revision
-  evidence, even when access recovers. A confirmed fresh copy re-enables reuse.
+- Saved metadata that could not be read once is not reused after the topic got a new revision.
 
 ## [1.23.10] — 2026-10-06
 
 ### Fixed
 
-- Help-section links keep their heading below the sticky header on desktop and
-  narrow screens, without changing the page layout or button sizes.
-- File masks keep their original metadata names after a client replaces unsupported
-  filename characters. Only affected path/size aliases are stored, including
-  unwanted files, and bound to the confirmed revision. Glob syntax, native disk
-  paths and priorities do not change; malformed or ambiguous mappings are refused.
-  Episode events use original names in all selection modes too. Complete verified legacy selections stay
-  readable; truncated old previews require a normal check, not a guessed complete target.
-  An unchanged verified metadata check refreshes original-name snapshots without
-  adding the torrent again or changing priorities; previews never persist the refresh.
-- File-rule progress understands the client's reported torrent root without
-  confusing it with a metadata-relative path. Literal selections use the shared
-  path-and-size mapping, including portable filename sanitization; ambiguous or
-  changed identities still fail closed. Native history paths, file priorities
-  and saved rules remain unchanged.
-- The guide distinguishes individual topic timers from the global clock and
-  supervised web-server recovery from the reporting-only watchdog. It no longer
-  promises that the watchdog restarts a stopped TOW service.
-- All-episode progress derives its current target from the full video metadata,
-  not just enabled client files. Disabled episodes cannot silently shrink an
-  all-files rule or finish an outdated title count. Temporary metadata loss
-  retains that target for the same verified context; a new tracker total
-  invalidates it. File priorities and completed-history evidence are unchanged.
-  Pending, unconfirmed or other-revision all-files rules cannot declare a
-  completed season from the previous selection.
-- Pending, unconfirmed or other-revision file rules no longer become completed
-  targets from old client selections. Current literal and mask rules are replayed
-  read-only against metadata so newly recognized memberships are counted and
-  unrelated client files cannot complete a selected target. Changed exact file
-  identities are refused; no client priorities or saved policies are rewritten.
-  Temporarily missing metadata keeps the last recomputed target only for the
-  same verified rule, torrent, client and season context, without shrinking it
-  to an older episode cache or creating completion events.
-- Explicit multi-season episode groups in one file are retained in selection,
-  progress and history instead of losing later seasons. Large or overlapping
-  mixed groups are not treated as one season's absolute-number alias. Ambiguous
-  cross-season ranges and invalid members remain file-level evidence; completing
-  or repairing one file does not emit duplicate episode notifications.
-- Attached episode markers and hybrid `S01x08` / `S01xE08` names now share the
-  existing single-episode, list and range parsing, including internal separators
-  such as `S01_E08` / `S01.E08` without losing the season. Selection and progress use
-  the same result without renaming files or re-announcing completed history.
-  Malformed marker suffixes and fractional specials do not become ordinary episodes.
-- Diagnostics refresh local Python, topic counts, connection settings and autostart
-  after updates or edits, without rerunning network probes, writing state or clearing
-  previously observed client/site failures.
-- Early web refusals carry the same security headers as normal responses. HTTP
-  errors are not cached; missing versioned assets no longer get immutable caching.
-  Successful downloads and revalidation keep their cache policy. Network permissions,
-  sign-in redirects and request limits are unchanged.
-- Dependency audits use a reserved temporary file per gate invocation, so parallel
-  worktrees cannot overwrite another audit's requirements; files are cleaned after failures too.
-- History diagnostics count actual blobs, retain historical path aliases, and refuse
-  incomplete reads, shallow history, changed refs or exceeded budgets. Candidate
-  matches require review; author addresses and native Git details are not printed.
-  Batch reads replace one process per object, with bounded pattern matching.
-- Backup documentation reflects seven-day defaults, preserved legacy count policies,
-  scheduling controls and confirmed copy actions. Night folders are signed, not
-  fully encrypted; their readable settings/history and protected secrets are explained.
+- Links into the guide no longer hide their heading under the header.
+- File patterns keep matching the original file names after a client replaces unsupported characters in them.
+- Progress of file rules understands the torrent folder the client reports.
+- With "All files", progress counts every video of the torrent: an episode switched off in the client, or a rule
+  not applied yet, cannot make a season look complete.
+- A file with episodes of several seasons keeps all of them in selection, progress and history.
+- Episode names such as `S01x08`, `S01xE08`, `S01_E08` and `S01.E08` are recognised.
+- Diagnostics show the current Python, topics, connections and autostart after an update or an edit.
+- Error pages carry the same security headers as other pages and are not cached.
+- The guide tells personal topic timers from the global timer, no longer says the watchdog restarts TOW, and
+  describes the seven-day default and what a night copy keeps readable.
 
 ## [1.23.9] — 2026-10-06
 
 ### Fixed
 
-- Reject torrent metadata where a real file is also another file's directory,
-  including case, Unicode and portable filename collisions. Such paths could hide
-  files in graphical selection. Preparation and checks explain the conflict without
-  exposing filenames; client tasks and existing preparations are left unchanged.
+- A torrent where a file is also another file's folder is refused with an explanation: such paths could hide
+  files in the file picker.
 
 ## [1.23.8] — 2026-10-06
 
 ### Fixed
 
-- Large file-mask sets only test exact rule groups whose required text occurs.
-  Similar literals, overlapping hits, classes without fixed text and a matching
-  final rule no longer trigger the reproduced long-path slowdowns. Standard glob
-  semantics, input limits, saved policies and dependencies are unchanged.
+- Large sets of file patterns no longer slow down on long, similar paths.
 
 ## [1.23.7] — 2026-10-06
 
 ### Fixed
 
-- File-mask selection filters impossible bracket rules using fixed text before,
-  after and between character classes, including literal singleton classes.
-  Shared titles and missing common pieces no longer force expensive full matching
-  in large rule sets. Standard `fnmatch`
-  semantics, input limits and saved policies are unchanged.
+- File patterns with brackets no longer slow down large rule sets.
 
 ## [1.23.6] — 2026-10-06
 
 ### Fixed
 
-- Console updates write UTF-8 diagnostics even when output is redirected on
-  Windows with a legacy system encoding. Non-Latin folder names cannot abort
-  an update solely while reporting its progress; exit codes remain unchanged.
+- An update in a Windows terminal with a legacy code page no longer stops when it prints non-Latin folder names.
 
 ## [1.23.5] — 2026-10-06
 
 ### Fixed
 
-- File-mask selection quickly rejects long paths missing required literal text
-  before exact wildcard matching. Bracket rules keep standard `fnmatch` semantics;
-  accepted inputs, selected files and saved policies are unchanged.
+- File patterns skip long paths that cannot match before comparing them in full, which keeps large selections
+  fast.
 
 ## [1.23.4] — 2026-10-06
 
 ### Fixed
 
-- Web update logs remain readable in Russian on Windows with a legacy system
-  encoding. The isolated worker explicitly writes UTF-8 without weakening isolation.
-- File selection combines distinct masks into one matcher so large rule sets avoid
-  repeated Python dispatch. Matching semantics and input limits are unchanged.
+- The web update log is readable in Russian on Windows with a legacy code page.
+- Large sets of file patterns are matched in one pass.
 
 ## [1.23.3] — 2026-10-06
 
 ### Fixed
 
-- Settings distinguish the global timer from individual topic timers. The hint
-  explains which topics use the global interval and where to set an override;
-  scheduling behaviour is unchanged.
-- Long mirror addresses stay within the screen without hiding the selected-mirror
-  badge. The full address remains available in the button tooltip.
-- Header controls and status indicators use separate mobile grid cells, so long
-  client names and the Undo button cannot overlap navigation. Full names remain
-  available in tooltips; shared action sizes are unchanged.
-- Linked settings sections scroll clear of the taller mobile header.
+- Settings tell the global timer from personal topic timers and say where to set one.
+- Long mirror addresses fit the screen without hiding the main-mirror mark.
+- On a phone, header controls and long client names no longer overlap the navigation, and links to Settings
+  sections scroll clear of the header.
 
 ## [1.23.2] — 2026-10-06
 
 ### Fixed
 
-- File-rule previews use the same season context as checks, including seasonless
-  episode names. Saved tracker titles apply only to the same source and client;
-  new and edited titles refresh previews without a tracker or client request.
-  Future watched episodes are shown as waiting, while a one-time selection still
-  refuses unavailable episodes. Late title/lifecycle replies cannot replace the preview.
-- Selection and waiting messages use readable episode labels such as `S02E15`,
-  not internal history identity keys. Durable file and episode identities are unchanged.
-- File-rule result counts remain grammatical for a single selected file.
-- Searching and paging in prepared files retain rule validation, waiting and
-  pending messages. Long whitespace runs in untrusted episode titles no longer
-  cause expensive backtracking during preview or progress calculations.
-  Repeated count clauses no longer repeatedly scan the entire remaining title.
-- CI and release installer checks retain explicit Ubuntu 24.04 and 26.04 coverage
-  when GitHub changes `ubuntu-latest`, without renaming protected checks.
-- Snapshot link-safety tests no longer mistake a missing destination folder for
-  unavailable symlink permissions. The full gate reports skipped tests and their reasons.
-- Large repeated or overlapping episode rules no longer rescan all available
-  episodes for every requested number. Future ranges retain waiting semantics,
-  ambiguous seasons remain refused, and diagnostic order and saved rules are unchanged.
-- Large file-mask rules prepare each distinct matcher once per request and avoid
-  matching the same path twice. Wildcard, basename, case-folding and saved-rule
-  semantics are unchanged; no persistent cache or new dependency is added.
-- Update the locked Starlette dependency to 1.7.0, which fixes deprecated AnyIO
-  imports in the web test client. Deprecation warnings now fail tests instead of
-  being hidden; a fresh-interpreter import regression checks the runtime and client.
+- File-rule previews use the same season as checks, also for episodes without a season number; future episodes
+  are shown as waiting.
+- Selection and waiting messages name episodes as `S02E15`; the file count reads correctly for one file.
+- Searching and paging the file list keep the rule messages; long titles and large or overlapping episode rules
+  no longer slow down previews and progress.
 
 ## [1.23.1] — 2026-10-05
 
 ### Fixed
 
-- An existing manual file selection cannot silently revert to its saved policy
-  when Save is pressed during a metadata refresh or after it fails. Retry retains
-  the intended files; Cancel restores the unchanged selection and ignores late replies.
+- Pressing Save while the contents are fetched again, or after that failed, no longer brings back the old manual
+  selection; Cancel restores the unchanged one.
 
 ## [1.23.0] — 2026-10-05
 
 ### Added
 
-- Graphical torrent-content selection in add and edit forms: collapsible folders,
-  partial folder selection, search that preserves checked files, byte totals and
-  bounded 200-row pages. Exact selections store literal paths and sizes, not masks
-  or client indices; new files remain unselected and changed selected files require review.
-- Explicit metadata preparation from the tracker or a local `.torrent`, with
-  encrypted, source/client-bound temporary snapshots and an explicit confirmation
-  for download-limited sites. Refused forms restore their prepared selection without
-  another tracker request. Expired pending adds may refetch only the proven revision.
-  The existing stopped-add, ownership and priority read-back pipeline applies selections.
-  State schema 2 prevents older releases from misinterpreting structured selections.
-- Explicit native magnet metadata preview, without adding or changing transfer tasks:
-  qBittorrent Web API 2.11.9+ and Deluge, plus read-only export of existing qBittorrent
-  torrents on older clients. Unsupported clients require a `.torrent`; peer access
-  and qBittorrent's uncancellable metadata request are disclosed before use.
-  Deluge responses are size-bounded, strictly decoded and verified against both magnet hashes.
-- Cancelling an edit discards prepared file-picker state and ignores late metadata replies.
+- Choose files in a contents tree when adding or editing a topic: folders, search, sizes, pages of 200 rows. The
+  choice stores paths and sizes; new files stay unchecked, and a changed chosen file asks for review.
+- **Get contents** from the site or a local `.torrent`; a site with a daily limit asks first. A refused form keeps
+  the prepared choice.
+- Preview a magnet link's contents through qBittorrent (Web API 2.11.9+) or Deluge without adding anything; other
+  clients need a `.torrent`.
+- Cancelling an edit discards the prepared choice.
+
+### Changed
+
+- Data is saved in format 2, which versions before 1.23.0 cannot read: to go back, restore the copy made before
+  the update together with the older version. Existing episode and pattern rules keep working.
 
 ### Fixed
 
-- Content API errors render catalog messages separately from unexpected exceptions;
-  storage and parsing diagnostics never become public exception text. Adversarial
-  cache tokens are rejected before any filesystem access.
-- Portable exports preserve the state-format version, including exact choices kept
-  only in undo. Older readers refuse new-format archives before destination writes;
-  unversioned exact selections are rejected rather than imported without a guard.
-
-### Compatibility
-
-- Existing episode and file-pattern rules remain supported. State writes now use
-  schema 2: code-only downgrade to an older schema is refused. Keep the verified
-  pre-update copy for restoring matching data and code together.
+- Content errors are plain messages, never internal details.
+- `.towx` files carry the data format: an older version refuses a newer file before writing anything.
 
 ## [1.22.58] — 2026-10-05
 
 ### Added
 
-- Optional numeric per-topic tracker intervals, set when adding or editing a watch.
-  Empty inherits the global interval; personal timers replace it and show a compact
-  clock countdown on Home. Manual checks and client-progress passes do not move
-  either automatic cadence. Durable, policy-bound batches coalesce missed checks,
-  honor pause/once completion and tracker limits, and reuse the serialized check pipeline.
-  Changed policies invalidate stale batches; undo restores the previous timer.
-  The global countdown displays only digits, with accessible tooltip explanations.
+- A personal check interval per topic, set when adding or editing it; empty uses the global one. Home shows a
+  clock and countdown. Manual checks move neither timer; missed checks are combined; Undo restores the old timer.
 
 ## [1.22.57] — 2026-10-05
 
 ### Added
 
-- Night copies and manual restore points offer matching Check, Restore and Delete
-  actions. Deletion requires a dated confirmation page, also without JavaScript;
-  changed copies or locations require a fresh confirmation. Only the selected copy
-  is removed, with absence read-back and an audit result; other copies and live data
-  are preserved. Existing cleanup warnings are retained. All night copies are shown,
-  not just the newest seven. Manual deletion can remove a damaged regular archive;
-  night deletion requires owned signed metadata and refuses foreign files and links.
-- Backup lists are collapsed with counts and total sizes. Night-copy retention has a
-  numeric days field (default seven), an automatic-copy switch and legacy count-policy
-  compatibility. Disabled scheduling does not produce stale-backup or false recovery
-  alerts; manual actions still work. Cleanup follows a verified new copy, preserving
-  that copy and future-dated history. Free-space preflight reserves room before writing;
-  an optional config size budget can shorten history without deleting the new copy.
+- Night copies and backups made by hand offer the same Check, Restore and Delete. Delete asks to confirm the
+  dated copy, also without JavaScript, and removes only that copy.
+- Backup lists are folded with their count and size, and list every night copy. Night copies are kept by days
+  (7 by default) and can be turned off; older count settings still work. Old copies go only after a new one
+  passes its check, and free space is checked before writing.
 
 ## [1.22.56] — 2026-10-05
 
 ### Fixed
 
-- Night restore holds one event-log barrier from its before-restore copy through
-  verified application or rollback. Readers, append and rotation cannot interleave
-  with replacement. Log writers take the data lock first, so an interrupted restore
-  is recovered before a new event is accepted, including the gap after a crash.
-  Recovery and failure events are written outside the non-reentrant OS log lock;
-  blocked recovery returns a failed append without aborting the operation being logged.
-  Backup formats and payload-size compatibility are unchanged.
+- Restoring a night copy and writing to the event log can no longer interleave, also after a crash mid-restore.
 
 ## [1.22.55] — 2026-10-05
 
 ### Fixed
 
-- Night-copy creation copies and hashes files in bounded blocks instead of holding
-  whole files in memory. Sources must be regular files and stay unchanged during
-  reading; the event log is locked against append/rotation while copied. Each copied
-  file and the signed description are flushed and synced before publication. Short
-  writes and I/O failures keep the previous copies; real read-back still precedes
-  retention. Snapshot formats and payload-size compatibility are unchanged. Applied
-  restore still retains its full verified plans in memory.
+- Night copies are written in blocks instead of whole files in memory and reach the disk before they count; a
+  failed write keeps the earlier copies.
 
 ## [1.22.54] — 2026-10-05
 
 ### Changed
 
-- Home tracker filters use one compact dropdown instead of a row of site buttons.
-  The alphabetic list includes every configured site and sites still represented in
-  watched topics, with an All trackers choice, scrolling for long lists, keyboard
-  navigation and URL persistence. Status filters remain separate.
-  Legacy YAML scalar site names are displayed as text without rewriting configuration.
+- Home filters sites with one dropdown instead of a row of buttons: every site, keyboard use, kept in the address.
 
 ## [1.22.53] — 2026-10-05
 
 ### Changed
 
-- Home filters sit closer to the header and list, with smaller gaps and wrapping on
-  narrow screens. Sorting uses a compact icon button and a menu with labelled icons,
-  a checked choice, keyboard navigation and focus return. Search, tracker and status
-  filters and the selected order still survive reload through the page URL.
+- Home filters sit closer to the list and wrap on narrow screens; sorting is a small icon button with a menu.
+  Search, filters and order survive a reload.
 
 ## [1.22.52] — 2026-10-04
 
 ### Fixed
 
-- Night-restore metadata is bounded before reading and parsing: 64 KiB for the marker,
-  4 MiB for the journal, with regular-file and opened-descriptor checks. Damaged, changed,
-  oversized or linked records keep the recovery files and refuse subsequent writes.
-  Dangling markers are no longer mistaken for absent markers. New journal writes and all
-  final phases are size-checked before a recovery marker is published; legacy rollback
-  checks its final metadata before changing data. These limits do not cap torrent stores.
-- Cleanup proof reads are also bounded before deleting any copy member. Recovery errors
-  explain the metadata problem in the selected language and no longer suggest deleting
-  a marker before the previous data have been verified and recovered.
+- The records of an interrupted night restore are size-checked before reading; a damaged one keeps the recovery
+  files and blocks writes. Its messages are translated and no longer suggest deleting a marker too early.
 
 ## [1.22.51] — 2026-10-04
 
 ### Fixed
 
-- Night-copy verification and restore preview hash large logs and nested archives in bounded
-  blocks instead of retaining all files in memory. Store contents are still validated after
-  every initial hash passes; semantic re-reads are checked again before parsing.
-- Reject links and special files in night-copy manifests and members before reading them;
-  check the opened file's type and size. An unsigned apply is refused before allocating payloads.
-  Applied restores continue writing the exact verified bytes, not re-reading changed sources.
+- Checking a night copy and previewing a restore read large files in blocks; links and special files in a copy
+  are refused before reading.
 
 ## [1.22.50] — 2026-10-04
 
 ### Fixed
 
-- Choose new download folders from any signed-in owner device, not only the TOW computer.
-  Protected system folders, invalid paths and the existing network-share switch remain guarded.
-- The folder arrow shows the last ten used folders without filtering by the current input.
-  Remember full paths, newest first, with keyboard selection and the same picker in topic editing.
-- Cancel a refused topic or site add by returning to the clean page; refreshing no longer
-  reopens the cancelled draft. This also works without JavaScript.
+- New download folders can be chosen from any of your signed-in devices; system folders stay protected.
+- The folder arrow shows the last ten folders used, newest first, also when editing a topic.
+- Cancel after a refused add returns to a clean page, also without JavaScript; reloading no longer brings the
+  draft back.
 
 ## [1.22.49] — 2026-10-04
 
 ### Fixed
 
-- Recognize complete night-copy records from before cleanup monitoring existed. Readable
-  metadata without a cleanup field migrates quietly as unknown, not as a folder-access
-  failure or confirmed completion. Incomplete records, real access errors and lost bound
-  observations still retain their normal warnings.
+- Night-copy results from before cleanup monitoring read as unknown, not as a folder failure.
 
 ## [1.22.48] — 2026-10-04
 
 ### Fixed
 
-- Treat missing, damaged and stale night-copy cleanup records as unknown, not completion.
-  Keep the last confirmed result across watchdog restarts, report observation loss separately
-  and never resolve an old folder's warning when the configured folder changes.
-- Bind new cleanup results to the committed copy inventory under the creation lock. A failed
-  monitoring write cannot confirm an earlier result for newer copies; verified copies remain
-  usable. Legacy warnings are retained, and readable legacy metadata migrates quietly.
-- Show unknown and legacy cleanup results in Backups without hiding existing copies. Reject
-  nonregular night-copy diagnostic records before attempting to open them.
+- A missing or damaged night-copy cleanup record counts as unknown, not as done. The watchdog keeps the last
+  confirmed result, changing the folder no longer clears the old folder's warning, and copies stay listed.
 
 ## [1.22.47] — 2026-10-04
 
 ### Fixed
 
-- Use Python 3.14.8 and uv 0.12.23 in new portable bundles. A commit-pinned official Python
-  download manifest also lets existing uv 0.12 installations discover the new patch without
-  modifying system tools or requiring an intermediate TOW upgrade.
-- Rebuild Windows Python environments after moving a stopped portable installation. A broken
-  old Python launcher is no longer mistaken for a running service; a genuinely running TOW
-  still refuses setup before changing its environment.
-- Require the base Python to be inside the managed directory, not a similarly named sibling.
-- Exercise relocation with an existing environment in Windows, Linux and macOS release smokes:
-  offline rebuild, correct Python/module ownership, preserved settings/key, start and stop.
+- New Windows bundles use Python 3.14.8 and uv 0.12.23; existing installs get the new Python without an
+  intermediate update.
+- Moving a stopped Windows install rebuilds its Python environment instead of taking the old one for a running TOW.
 
 ## [1.22.46] — 2026-10-04
 
 ### Fixed
 
-- Do not report readable legacy restore-point metadata as a folder outage after an update.
-  Keep unbound cleanup success unknown and retain the last confirmed fact; neither migration
-  nor clearing its monitoring alarm fabricates cleanup completion. Once bound metadata has
-  been observed, losing its binding still raises the normal observation warning.
-- Explain the older format in Settings instead of suggesting that the folder is inaccessible.
-  Existing copies remain available for normal verification and restoration.
+- After an update, an older restore-point cleanup record no longer shows as an unreachable folder; Settings
+  explain the older format.
 
 ## [1.22.45] — 2026-10-04
 
 ### Fixed
 
-- Treat missing, damaged or wrongly typed restore-point cleanup observations as unknown,
-  never as completed cleanup. Read diagnostic records within the finite-JSON, nesting and
-  size limits without changing their bytes; refuse non-regular monitoring files.
-- Retain the last confirmed cleanup result across repeated watchdog passes and restarts.
-  Report lost observation and restored reading separately from confirmed cleanup completion;
-  changing the backup folder cannot resolve an old folder's warning. Unknown legacy flags
-  cannot fabricate recovery, and an unreadable night-copy record retains its cleanup warning.
-- Show an unknown cleanup result in the backup summary and manual-copy card while keeping
-  existing restore actions available for their normal verification. A fresh install without
-  copies or a prior observation remains quiet. Diagnostic writes validate before replacement.
-- Bind cleanup observations to the archive-name inventory, not wall-clock ordering. If a
-  later copy is created but its result cannot be recorded, an older valid success becomes
-  unknown instead of silently winning. Legacy unbound success needs a fresh observation;
-  legacy pending warnings remain valid. Reuse the request's configuration for observation.
+- A missing or damaged restore-point cleanup record counts as unknown, not as done. The last confirmed result
+  survives watchdog restarts, and Settings show an unknown result while keeping the restore actions.
 
 ## [1.22.44] — 2026-10-04
 
 ### Fixed
 
-- Apply the job journal's 64 KiB, finite-number and nesting limits in the detached updater,
-  including the initial read, broker entry and lease re-read. Unreadable records are retained
-  without starting installation or escaping with a parser error. Job identifiers cannot select
-  a temporary path; writes validate before an exclusive temporary file, fsync and atomic replace.
-- Require ownership of the worker lease and read back the unchanged queued reservation even
-  to publish a handoff refusal. A late or failed second worker cannot overwrite another worker's
-  job; an unreadable lease never grants permission to publish a terminal result. Refuse a launch
-  target that disagrees with its reservation and handle overflowing handoff dates safely.
-- Verify current state with strict finite JSON and the store's nesting contract before stopping
-  for a web update. Malformed state produces a safe preflight refusal without rewriting data;
-  torrent state is not subject to the small job-size limit. The worker remains standalone and
-  Python 3.11 compatible.
-- Bind every copied-worker entry to the fixed journal next to its own job folder. A foreign
-  journal or identifier is refused before opening the record; relays propagate the derived path,
-  not a command-line-selected filename. Canonicalize the trusted producer's install path;
-  the worker checks supplied names without resolving or inspecting a foreign path. Equivalent
-  absolute paths and install-root aliases remain supported.
-- Validate job dates before status, log and new-update decisions, including terminal records.
-  Overflowing, wrongly typed or undisplayable dates fail closed without rewriting evidence;
-  OS date-conversion failures cannot claim a successful terminal recovery.
+- A web update checks its job record and your data before stopping TOW: a damaged record or state refuses the
+  update safely, and a second updater cannot overwrite another one's job.
 
 ## [1.22.43] — 2026-10-04
 
 ### Fixed
 
-- Bound small service records before JSON decoding, reject excessive nesting, non-finite
-  numbers and invalid dates, and preserve the original files during observation. Damaged
-  backup or watchdog records show an unknown result, not a healthy backup or fabricated outage;
-  settings remain available. Diagnostic writes enforce the same size and JSON limits.
-- Use the latest backup attempt's recorded error, not timestamp ordering, to distinguish
-  success and failure after clock corrections or attempts within the same millisecond.
-  Invalid scheduler timestamps and countdown containers no longer escape into scheduling;
-  unreadable or future-dated update markers do not suppress outage reporting.
-- Pin future-dated scheduler facts once after a backward clock correction. Repeated ticks
-  no longer postpone checks, progress, watchdog duties or failed-copy retries indefinitely;
-  startup delays remain bounded, and a future backup date cannot skip every following night.
+- Damaged backup or watchdog records show an unknown result, not a healthy copy or a false outage.
+- A clock set back no longer hides a failed backup or postpones checks, progress and night copies indefinitely.
 
 ## [1.22.42] — 2026-10-04
 
 ### Fixed
 
-- Check night-copy state, history and both encrypted settings files using the same readers
-  as live data, after signature and checksum verification. Damaged containers, non-finite
-  numbers, excessive nesting, unsupported state versions and unreadable secrets are refused
-  before restore writes or pruning earlier copies. Preview and verification use the same
-  preflight; valid legacy stores remain supported without rewriting their bytes.
+- Checking and restoring a night copy reads its topics, history and encrypted settings like live data; a damaged
+  copy is refused before anything is written or older copies are removed.
 
 ## [1.22.41] — 2026-10-04
 
 ### Fixed
 
-- Refuse drive-relative Windows backup folders such as `D:copies` or `D:` before resolution
-  and write probes, including paths already stored in settings. These depend on a drive's current
-  directory instead of the TOW install. The refusal explains how to use a full drive path or an
-  ordinary install-relative folder; both remain supported on their respective operating systems.
-- Bound night-copy descriptions to 1 MiB before parsing and before publishing a new copy.
-  Invalid file sizes and dates no longer break Settings; verification refuses coerced or
-  unrepresentable sizes. A description exceeding the limit leaves earlier copies untouched.
-  Unrepresentable byte counts show an unknown size rather than an application error.
+- Windows backup folders like `D:copies` or `D:` are refused with an explanation: use a full path or a folder
+  inside the install.
+- An oversized or invalid night-copy description no longer breaks Settings or replaces earlier copies.
 
 ## [1.22.40] — 2026-10-04
 
 ### Fixed
 
-- Reject Windows device namespaces with forward, back or mixed slashes before backup folder
-  resolution, write probes and torrent-client actions. Shared syntax and folder-policy checks apply
-  on every operating system, including configured paths and edits keeping an existing path.
-  Ordinary local folders, relative backup locations and explicitly enabled network shares still work.
+- Windows device paths are refused as backup and download folders, whatever slashes they use; ordinary folders
+  and allowed network shares work as before.
 
 ## [1.22.39] — 2026-10-04
 
 ### Fixed
 
-- Normalize UTF-16 and UTF-32 configurations in portable archives to UTF-8 before import writes,
-  keeping comments, quoting, anchors and line endings. Verify original checksums first and bound both
-  input and converted bytes. Preview, verification and apply agree; malformed Unicode is refused
-  without changing live files. Export normalizes only the archive, and rollback preserves exact prior bytes.
+- Transfer files whose settings are in UTF-16 or UTF-32 are converted to UTF-8 on import, comments kept; broken
+  text is refused without changing anything.
 
 ## [1.22.38] — 2026-10-04
 
 ### Fixed
 
-- Bound serialized YAML by the same UTF-8 byte limit as its reader, including headers, multibyte text,
-  escaped scalars and expanded scalar aliases. Save, night restore and import overrides cannot create
-  an oversized configuration; refusal happens before replacing files or creating a destination directory.
+- Saving settings, restoring a night copy or importing can no longer write a `config.yaml` too large to read.
 
 ## [1.22.37] — 2026-10-04
 
 ### Fixed
 
-- Bound YAML input, expanded nodes, text and depth before constructing aliases or merge mappings, and check
-  programmatic graphs before copying or saving them. Cyclic, oversized and deeply reused references cannot
-  reach recursive configuration, backup or restore operations; ordinary safe anchors and merges remain supported.
-- Check night-copy configuration during verification and preview, before a restore starts writing. Reject
-  non-mapping values such as `false`, `0` and `[]` instead of silently treating them as empty settings.
-- Scan credential-shaped fields iteratively, inspecting shared containers once and building a path only for
-  the actual match. Large JSON histories do not inherit YAML expansion limits; refusals do not expose input values.
+- Oversized or self-referencing YAML is refused before it can slow down settings, backups or restores; ordinary
+  anchors still work.
+- Night-copy settings are checked before a restore writes; `false`, `0` or `[]` no longer pass as empty settings.
 
 ## [1.22.36] — 2026-10-04
 
 ### Fixed
 
-- Retry a briefly busy update-worker lease for at most one second using nonblocking attempts and a monotonic
-  deadline. A status reader no longer aborts the initial handoff; a competing worker is still excluded.
-- Re-read the queued job and check its handoff expiry again after acquiring the lease. Replaced, changed,
-  completed or expired jobs cannot start an installation after the wait.
+- A web update no longer fails to start because a status read briefly held its lock; a job changed or expired
+  meanwhile does not start.
 
 ## [1.22.35] — 2026-10-04
 
 ### Fixed
 
-- Import Monitorrent state and encrypted credentials in one journaled transaction with read-back before commit.
-  Restore the original stores after a write failure, recover interrupted writes on the next data lock, and report
-  failed recovery distinctly without discarding its journal or verified safety archive.
-- Bind newly imported topics to the selected enabled client (`--client ID`, or the current main client), leaving
-  existing topics unchanged. Never copy qBittorrent credentials into another client's secret block, including
-  cross-type shared references; report skipped settings in preview and apply.
-- Preserve partly configured client/tracker logins, passwords, custom ports and notification recipients too,
-  without mixing them with a different imported account. An empty client's default port alone is not a configured login.
-- Read all source queries from one SQLite snapshot. Corrupt, busy and malformed databases no longer look like
-  successful empty imports; errors are localized and do not print private exception details.
+- Monitorrent import writes topics and logins in one step and puts everything back if writing fails.
+- Imported topics go to the chosen client (`--client ID`, or the main one); qBittorrent logins are never copied
+  into another client's settings, and logins, ports and recipients you set up are kept.
+- A damaged, busy or malformed Monitorrent database is reported instead of being imported as empty.
 
 ## [1.22.34] — 2026-10-04
 
 ### Fixed
 
-- Confirm absence after removing an old restore-point archive; held files, unchanged paths and unreadable
-  results leave a cleanup warning while the new verified archive stays usable. Retain foreign and protected copies.
-- Preserve safety-archive cleanup warnings through point/file restores, Monitorrent import and web updates.
-  Show successful restores separately from incomplete cleanup, including simultaneous audit-log warnings.
-- Keep folder-bound cleanup status visible after a page reload, in the collapsed Settings section, archive
-  card, history and localized update progress. The watchdog reports pending cleanup and completion once per
-  state change without turning a working service or verified copy into an outage.
+- Removing an old restore point is confirmed; one that cannot be removed leaves a cleanup warning, and the new
+  point stays usable.
+- Cleanup warnings survive restores, imports and web updates and stay visible after a reload; the watchdog
+  reports them once per change.
 
 ## [1.22.33] — 2026-10-04
 
 ### Fixed
 
-- Report only confirmed removals of old night and safety copies. A held file, partial deletion or unreadable
-  outcome leaves a cleanup warning instead of claiming success; a verified new copy remains usable and a
-  committed restore is not rolled back because cleanup failed.
-- Retain ownership manifests/journals until the final directory removal and preserve them after a held
-  directory so cleanup can be retried. Never sweep up foreign files, links, junctions or unfinished restores.
-- Show pending night-copy cleanup in the collapsed Settings summary and card, localized copy/restore results,
-  CLI output and a labelled history event; clear the night warning after successful cleanup. Messenger
-  alerts report cleanup pending and completion once per change, without calling a usable copy a failure.
+- Old night and safety copies count as removed only once they are gone; otherwise a cleanup warning appears, and
+  a usable copy is never called failed. Foreign files, links and unfinished restores are never removed.
+- Pending night-copy cleanup shows in Settings, command output and History; messengers report it once per change.
 
 ## [1.22.32] — 2026-10-04
 
 ### Fixed
 
-- Bind new web-update jobs to a process-held file lease, not a reusable PID. Long-running updates remain
-  protected; an exited worker releases the lease even after a crash. Interrupted jobs stay visible, and a
-  later verified terminal recovery can unblock them without rewriting the old journal.
-- Check the unique worker script path for older jobs before accepting a live PID as their worker. If process
-  identity cannot be read unambiguously, explain it and keep the reservation rather than risk overlapping writes.
-  Read old-worker identity only once per status request; do not truncate POSIX process arguments.
-- Refuse missing, unreadable or unsupported worker leases before installation; retain the standard-library,
-  Python 3.11-compatible detached runner and copied lock module.
-- Explain the original master-key requirement directly beside the backup-file controls. Browser backups do
-  not contain the key; a different installation's key cannot open them, and a failed check changes no data.
+- A running web update stays protected for as long as it runs and is released when its process ends, even after
+  a crash; an unclear older job is shown with a warning instead of risking two updates at once.
+- Settings explain next to the backup file buttons that restoring needs the original master key.
 
 ## [1.22.31] — 2026-10-04
 
 ### Fixed
 
-- Report backup-file preparation failures in Settings instead of an unexplained server error. Checking and
-  restoring a file now explain unavailable storage or folder permissions without changing the current data.
-- Clean up staged uploads even if closing the uploaded file fails.
-- Report a missing restore audit event without undoing a successfully committed restore. Settings show a
-  warning, and the import result and durable transaction marker no longer claim an unwritten event was recorded.
-- Run browser-script tests by loading the checked-in modules directly, without evaluating source strings;
-  retain the update, rollback, recovery, overlay and countdown checks.
-- Keep the security support policy aligned with the latest stable release rather than an obsolete version line.
+- A backup file that cannot be prepared, checked or restored shows the reason in Settings instead of a server
+  error.
+- A restore whose History entry could not be written is not undone; Settings show a warning.
 
 ## [1.22.30] — 2026-10-04
 
 ### Fixed
 
-- Compare the loaded page's version with the installed version before offering a reload after an update,
-  rollback or recovery. A freshly loaded page no longer asks to reload itself; an older tab retains an
-  explicit reload action without automatically navigating or installing again.
-- Preserve operation dates, failure details and the update log; keep reload hidden during an active operation.
-- Refresh installation status on a manual release check and the existing hourly visible-page check, so
-  updates from another tab can be discovered without additional frequent background polling.
+- After an update, rollback or recovery only an older tab offers to reload; dates, errors and the log stay, and a
+  manual release check also refreshes the update status.
 
 ## [1.22.29] — 2026-10-04
 
 ### Fixed
 
-- Confirm child-process exit before reporting a stop, finishing a timed-out job or replacing the web server.
-  Failed stops retain the tracked process and retry with a pause instead of starting overlapping work.
-- On an abnormal supervisor exit, attempt to stop both the active job and web server before releasing the
-  instance lock. Cleanup failures do not hide the original error or skip the other child.
-- Do not terminate a finished child's possibly reused PID. Describe TOW consistently as one supervised
-  service, not one operating-system process, in Settings, CLI help and current documentation.
-- The activity log describes a queued restart as requested, not completed. Recovery notifications no
-  longer claim the reporting watchdog performs the restart.
+- Stopping TOW, ending a job that ran out of time and restarting the web server wait until the process has really
+  ended; when `tow run` crashes, its web server and job are stopped too.
+- History says a restart was requested, not done, and messages no longer credit the watchdog with a restart.
 
 ## [1.22.28] — 2026-10-04
 
 ### Fixed
 
-- Keep zero-season folders and zero-numbered specials out of ordinary episode selection and completion.
-  They remain downloadable and observable as files; existing misclassified history and its last-event wording
-  are corrected silently on reconciliation without changing completion dates.
-- Validate episode-rule and file-pattern syntax when saving a topic, before recording changes or checking the client.
-  A zero-numbered range cannot silently select only its ordinary episodes.
-- Invalid per-file progress, including booleans, out-of-range fractions and overflowing numbers, cannot confirm
-  a completed episode or emit completion events merely because a full-sized file is present.
+- Season 0 folders and specials numbered 0 stay files, not ordinary episodes; older history is corrected quietly.
+- Episode ranges and file patterns are checked when the topic is saved.
+- Invalid progress from a client can no longer mark an episode complete.
 
 ## [1.22.27] — 2026-10-04
 
 ### Fixed
 
-- Confirm the stop before restoring file priorities after a failed change; do not restore or resume while
-  stopping remains unconfirmed. Shared clients also confirm the restart and report incomplete recovery.
-- Reject malformed or out-of-range progress as proof that a stopped torrent is complete. Preserve valid
-  completed torrents and active queued/checking states across qBittorrent 4/5, Transmission and Deluge.
-- Preserve client error states during ownership confirmation instead of reporting missing ownership.
-  qBittorrent refuses an unsafe result even if the pending marker was successfully removed.
+- After a failed change TOW restores file priorities only once the torrent is confirmed stopped, and resumes it
+  only after that.
+- Malformed progress no longer counts as a complete torrent; client errors stay errors.
 
 ## [1.22.26] — 2026-10-04
 
 ### Fixed
 
-- Recheck torrent ownership before client changes, relocation and failure cleanup. Selection changes in
-  qBittorrent refuse foreign torrents; lost ownership is never reclaimed by clearing the pending marker.
-- Confirm the complete file list, stable file identities and explicit priorities before starting a selection.
-  Missing or malformed flags are unknown, not implied download/skip choices; reordered lists remain supported.
-- Confirm restoration of the previous selection before resuming a failed change. Failed or unsafe rollback
-  stays stopped, preserves the original error and reports the cleanup failure.
+- TOW checks that a torrent is still its own before changing, moving or cleaning it up, and never takes over a
+  foreign one.
+- A file selection starts only after the full file list and priorities are confirmed; a failed change stays
+  stopped and keeps the original error.
 
 ## [1.22.25] — 2026-10-03
 
 ### Fixed
 
-- When installation finishes during a slow update-log read, request the final log after that read completes
-  instead of leaving older progress on screen. Coalesce refresh requests without parallel duplicate reads.
+- The update log shows the final lines when an update finished during a slow read.
 
 ## [1.22.24] — 2026-10-03
 
 ### Fixed
 
-- Match repeated web-update requests to the new operation after a lost response, without showing an older
-  successful result or automatically resending installation. Follow newer operations from another tab.
-- Retry transient update-status failures with disabled installation controls instead of claiming the
-  installation is unsupported. Refresh an open update log through completion and ignore obsolete responses.
-- Reject invalid release-check timestamps instead of displaying an invalid date.
+- Repeating a web update after a lost answer follows the new operation and never installs twice. A short status
+  failure no longer says the install is unsupported, and an invalid check time is not shown as a date.
 
 ## [1.22.23] — 2026-10-03
 
 ### Fixed
 
-- Windows web updates use a local process broker when an outer job forbids detaching. The actual worker verifies
-  independence and waits for its relay to exit before stopping TOW; expired reservations refuse late launches.
-  The environment travels in memory, not through command-line secrets or a new scheduled task.
-- Update results show the specific refusal reason and local start/finish times. A later verified terminal recovery
-  clears a stale failed-job view without deleting its original record or log.
+- Web updates on Windows start even when TOW runs in a restricted process group; a refused update names the
+  reason and shows local start and finish times.
 
 ## [1.22.22] — 2026-10-03
 
 ### Fixed
 
-- Move the installed version and quiet new-release badge into a small floating corner indicator, outside
-  the header layout. It hides while overlapping controls or table cells; the check clock stays in the header.
+- The installed version and the new-release badge moved to a small corner indicator that steps aside for
+  controls.
 
 ## [1.22.21] — 2026-10-03
 
 ### Fixed
 
-- The web updater exits the Windows web-server process tree through an intermediate parent and waits for its
-  actual exit before stopping TOW. Job breakaway alone did not protect it against taskkill /T.
-- Web version selection refuses 1.22.20 and earlier, which lack this safe handoff.
+- A web update on Windows no longer ends together with the web server it stops. The page installs only 1.22.21
+  or newer.
 
 ## [1.22.20] — 2026-10-03
 
 ### Added
 
-- Installed version in the page header and a quiet new-release badge. Settings show release notes and a cached
-  stable-release check; offline discovery never turns into a false “up to date” result or breaks normal pages.
-- Explicit web updates and compatible version selection, with confirmation, a verified encrypted data archive
-  before launch, an independent updater, durable progress, bounded redacted logs and automatic code/data rollback
-  on installation or health failure. Concurrent web changes are refused while updating. Web targets start at
-  1.22.20; newer data schemas and unverified releases are refused. Service-managed POSIX installs use the terminal
-  until independently detached workers are supported. Updates are never installed automatically.
+- The installed version on every page and a quiet badge for a new stable release; offline means "not checked",
+  never "up to date".
+- Update or install another version from Settings after confirming: TOW first saves a checked data archive and
+  rolls code and data back by itself if the new version fails. Nothing installs automatically; installs started
+  by systemd or launchd update from the terminal.
 
 ### Fixed
 
-- A failed restore-point export never deletes an existing file. Rotation only removes decryptable, verified
-  local archives; foreign or damaged files remain. Failure to remove an old copy keeps the new verified point
-  and reports a cleanup warning instead of claiming that saving failed.
-- Export without overwrite publishes a complete archive without clobbering a file created by another writer.
-  Failed read-back never deletes a replacement file. The manual update command uses an explicit release tag
-  in both git and archive installs.
-- Service help distinguishes watchdog notifications from the supervisor's web-server restarts and removes the
-  obsolete five-Windows-task diagnostics description.
+- A failed restore-point export never deletes an existing file; old points are removed only when they are
+  verified as TOW's own.
+- The update command TOW prints names a release tag for every kind of install, and the service help tells
+  watchdog messages from web-server restarts.
 
 ## [1.22.19] — 2026-10-03
 
 ### Fixed
 
-- Night-copy rollback verifies every saved file and destination before changing any live store, uses the verified
-  bytes, and checks each write back. Restore-point destinations are resolved from the saved configuration without
-  replacing the live configuration during preflight. Newly written safety copies are verified before restoration starts.
-- Failed safety-folder reservation never removes another writer's files. Automatic cleanup preserves unreadable,
-  unfinished and foreign-file-containing safety copies and import checkpoints, including links and Windows reparse points.
-- Encrypted secrets and undo snapshots reject non-finite numbers, excessive nesting and lossy JSON conversions before
-  writing. Invalid encrypted or legacy secret JSON produces a controlled error without replacing existing credentials.
-- Import checkpoints are verified before an import starts. An unreadable transaction refuses ordinary writes instead
-  of silently allowing edits over a potentially incomplete import; valid finished copies do not replay an old rollback.
-- Export refuses quarantined download history instead of creating an apparently healthy bundle with empty history.
+- Rolling back a night restore checks every saved file first and writes only verified data.
+- Cleanup never removes another program's files, unfinished copies or links.
+- Damaged saved passwords and tokens give a clear error and are never overwritten.
+- An unreadable import record blocks writes instead of letting edits continue over an unfinished import; export
+  refuses a quarantined download history instead of writing an empty one.
 
 ## [1.22.18] — 2026-10-03
 
 ### Fixed
 
-- Check recovery verifies every backup and target before changing either state or download history, and restores
-  the already verified bytes. Damaged copies cannot overwrite working stores before the error is detected.
-- Malformed recovery fields, parser limits, directories and Windows reparse points fail closed. A failed journal
-  reservation never deletes another writer's files; backup writes are verified before a check can start.
-- Settings and undo recovery also reuse verified backup bytes and preflight every target. Cleanup only removes
-  recognized regular journal files; interrupted preparation or cleanup no longer leaves a permanently blocking journal.
-- Persistent JSON rejects non-finite numbers and reports integer/depth parser limits as storage errors. Writes
-  cannot persist invalid numbers; a transient I/O error during a corruption recheck never quarantines a valid replacement.
-- Malformed state/history containers fail closed instead of becoming empty history or escaping as attribute errors.
-  Read-only checks preserve the source; applying reads retain the corrupt bytes in quarantine, and invalid writes are refused.
+- Recovering an interrupted check, settings save or undo verifies every saved copy before changing anything.
+- Damaged state or history is kept aside, never read as empty.
 
 ## [1.22.17] — 2026-10-03
 
 ### Fixed
 
-- Night copies reject malformed manifests and inconsistent file sizes with a clear error before restoring.
-  Member reads are bounded by the recorded size, including files that grow during verification.
-- Copies created in the same second no longer collide. Creation, verification and pruning are serialized;
-  automatic pruning keeps unsigned, foreign or damaged-manifest folders instead of deleting them.
-- Restore point lists and night copies exclude directories, links and unrelated `.towx` filenames.
-- A failed reservation of a temporary copy folder never removes another writer's files.
-- The release publication helper confirms the configured local mirror's main and annotated tag before
-  publishing to GitHub, so installations that fetch from the mirror can find the release.
+- A damaged night copy is refused with a clear error before restoring; copies made within one second no longer
+  collide, and automatic cleanup keeps foreign or unsigned folders.
+- Restore point lists ignore folders, links and unrelated `.towx` files.
 
 ## [1.22.16] — 2026-10-03
 
 ### Fixed
 
-- Configured backup and restore-point folders now receive the same path checks when used as they do when saved in
-  Settings. A relative master-key filename cannot escape the data folder through `..` or a link; absolute paths for
-  external keys remain supported.
-- Bundle reads enforce the size limit during reading too, even if a file changes after its initial size check.
+- Backup and restore-point folders are checked when used, not only when saved; a relative master-key path
+  cannot leave the data folder.
+- Transfer files are size-checked while they are read.
 
 ## [1.22.15] — 2026-10-03
 
 ### Fixed
 
-- Portable imports now reject non-finite numbers and excessively nested JSON or YAML before changing destination
-  data, including the envelope, manifest, and optional events. Export also refuses non-finite values. Invalid imported
-  history can no longer reach the download-history JSON endpoint or escape as a parser error.
+- Imports refuse invalid numbers and too deeply nested data before changing anything; exports refuse invalid
+  values.
 
 ## [1.22.14] — 2026-10-03
 
 ### Fixed
 
-- Preview clips marked with a separated or bracketed `Sample`, `Trailer`, or `Preview` suffix are excluded from
-  episode coverage, so an unfinished clip cannot block a completed episode's event.
+- Clips marked `Sample`, `Trailer` or `Preview`, also in brackets, no longer block an episode's completion.
 
 ## [1.22.13] — 2026-10-03
 
 ### Fixed
 
-- Sample, trailer, and preview clips explicitly marked in a filename are no longer treated as regular episodes.
-  An unfinished clip cannot block a completed episode or suppress its completion event; episode-only selection
-  does not select the clip. Generic file labels are not reinterpreted as episode labels for client events.
+- Sample, trailer and preview clips are neither counted nor selected as episodes.
 
 ## [1.22.12] — 2026-10-03
 
 ### Fixed
 
-- Numeric filenames in brackets and postposed episode labels no longer treat zero, release years, or common video
-  resolutions as episodes.
-- Non-finite file progress reported by a torrent client no longer becomes a false 100% completion or episode event.
-- Absolute file paths reported by a client are no longer reinterpreted as relative paths during disk verification.
+- Zero, years and video resolutions in file names are not read as episode numbers.
+- Invalid progress from a client is not read as 100 %, and absolute file paths from a client are checked as given.
 
 ## [1.22.11] — 2026-10-03
 
 ### Fixed
 
-- Files explicitly numbered `SxxExx` in an ONA release are now tracked as episodes rather than generic files;
-  OVA bonuses, special folders, and unnumbered ONA files remain excluded. Existing completed files gain episode
-  progress and corrected last-event labels without duplicate notifications.
-- Growing multi-season titles such as `1-31 серии из 52` now retain the known final episode count. Later-starting
-  mixed-season packs remain conservatively counted from their files when cumulative numbering cannot be mapped.
+- Files numbered `SxxExx` in an ONA release count as episodes, without repeated notifications.
+- Growing titles such as `1-31 серии из 52` keep the known total.
 
 ## [1.22.10] — 2026-10-02
 
 ### Fixed
 
-- A partial episode selection saved with an older seasonless key (for example `E14`) now counts a completed
-  season-labelled file (`S03E14`) when the selected files identify exactly one matching season. Conflicting or
-  ambiguous seasons remain uncounted, and reconciliation does not generate a duplicate completion event.
+- A partial episode selection saved without a season (`E14`) counts a finished `S03E14` when the season is clear.
 
 ## [1.22.9] — 2026-10-02
 
 ### Fixed
 
-- Growing torrents keep an explicit season from the original topic title when a newer tracker title has an
-  unknown episode total. Current episode keys, the expected file count, and the existing last-event label are
-  reconciled without inventing another completion event; ambiguous multi-season titles are not guessed.
+- A growing torrent keeps the season of its original title when the new title has an unknown total.
 
 ## [1.22.8] — 2026-10-02
 
 ### Fixed
 
-- Service Settings now shows when the current web server actually started, and labels the older saved restart
-  record as a requested restart. Updating TOW no longer leaves an old request looking like the latest start.
+- Settings show when the web server really started, and call the older record a requested restart.
 
 ## [1.22.7] — 2026-10-02
 
 ### Fixed
 
-- Unexpected errors no longer expose raw URLs, credentials, or exception details through topic forms, service
-  status, command-line output, logs, bot notifications, or the supervisor's job status. Known state-version errors
-  still explain how to recover.
-- Night-copy selection refuses symlinks and Windows junctions that point outside the backup directory.
-- Long episode titles are bounded before notification pattern matching.
+- Unexpected errors no longer show addresses, logins or internal details in forms, status, the terminal, logs or
+  messages.
+- Night-copy selection refuses links that lead outside the backup folder; long episode titles are shortened
+  before notification patterns are matched.
 
 ## [1.22.6] — 2026-10-02
 
 ### Fixed
 
-- History, the log window and Settings show the current topic name for older file and episode events that recorded
-  only a topic ID or torrent hash. Search finds those events by name; ambiguous hashes remain unlabelled.
+- History, the log and Settings show the current topic name for older events that stored only an id or hash.
 
 ## [1.22.5] — 2026-10-02
 
 ### Fixed
 
-- Custom tracker URL and download-link patterns now have match time limits, including bounded repetitions that the
-  input validator cannot reliably classify. Oversized notification titles are limited before pattern matching.
-- A site's Open button uses a responding mirror when the active mirror was explicitly probed as down. Flash
-  redirects refuse external destinations.
+- A site's custom link patterns have a time limit.
+- A site's Open button uses a working mirror when the active one is down; messages after an action never lead
+  to another site.
 
 ## [1.22.4] — 2026-10-02
 
 ### Fixed
 
-- Archive updates extract only validated regular files and directories, rejecting Windows device names, drive
-  prefixes and alternate streams without relying on the host Python's tar extraction filter.
+- Updates from an archive unpack only ordinary files and folders, refusing Windows device names, drive prefixes
+  and streams.
 
 ## [1.22.3] — 2026-10-02
 
 ### Fixed
 
-- Archive updates require the release checksum, cap unpacked size, and recover the old code after a hard process
-  interruption. The release workflow runs the full gate on all three systems before publishing.
-- Installers refuse unmarked foreign folders on removal; failed reinstalls preserve the earlier config exactly.
-- Outbound tracker, notifier and heartbeat connections pin checked public DNS answers unless private hosts are
-  explicitly allowed. A night copy fails visibly if a previously backed-up core file disappears.
-- Settings shows how many notifications were discarded when a recipient's bounded queue overflowed.
+- Updates from an archive require the release checksum, limit the unpacked size and put the old code back after
+  a hard interruption.
+- Installers do not remove folders TOW did not create and keep the earlier config after a failed reinstall.
+- Connections to sites, messengers and the heartbeat use only checked public addresses unless private ones are
+  allowed; a night copy fails visibly when a file of the previous copy has disappeared.
+- Settings show how many notifications were dropped when a recipient's queue overflowed.
 
 ## [1.22.2] — 2026-10-02
 
