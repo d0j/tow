@@ -1,0 +1,54 @@
+name: installers
+
+# What release.yml tests on a tag, before the tag: the Windows bundle built from this commit with
+# its start files, and install.ps1. It runs on pull requests that touch the installers, the
+# updater or what the bundle is built from, once a week (a new runner image or a new release of
+# uv or Python), and by hand. Not a required check: the path filter would leave it pending on
+# other pull requests. install.sh itself is tested on every commit by ci.yml.
+
+on:
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "install/**"
+      - "src/tow/update*"
+      - "src/tow/web_update.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - ".github/workflows/installers.yml"
+      - ".github/workflows/release.yml"
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows bundle
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      # Pinned to full commit SHAs (the tag in the comment); Dependabot proposes updates.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Source archive of this commit
+        shell: bash
+        run: git archive --format=tar.gz --prefix=tow/ -o tow-source.tar.gz HEAD
+      - name: Build the bundle
+        shell: pwsh
+        run: uv run --no-project python scripts/build-bundle.py --out dist --source tow-source.tar.gz
+      - name: Unpack, start offline, stop, move with its existing environment, start offline again
+        shell: pwsh
+        run: ./scripts/bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Offline -Move
+      - name: install.ps1 on Windows PowerShell 5.1, uninstall, reinstall around the data, purge
+        shell: pwsh
+        run: ./scripts/install-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Port 18878
