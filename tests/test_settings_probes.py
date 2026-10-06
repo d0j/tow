@@ -118,6 +118,31 @@ def test_the_client_check_names_a_class_not_the_socket_text(monkeypatch, error, 
     assert "192.168.1.5" not in flash
 
 
+@pytest.mark.parametrize(
+    ("code", "expected"),
+    [
+        ("client.transmission.no_connection", "web.settings.ping_unreachable"),
+        ("client.deluge.no_connection", "web.settings.ping_unreachable"),
+        ("client.deluge.no_web", "web.settings.ping_unreachable"),
+        ("client.transmission.bad_login", "web.settings.ping_login"),
+    ],
+)
+def test_every_client_check_failure_reads_like_qbittorrents(monkeypatch, code, expected):
+    from tow.clients.managed import ClientError
+
+    class Broken:
+        def ping(self):
+            raise ClientError(code, prefix="Transmission", error="ConnectError")
+
+    monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *_a: Broken())
+
+    flash = _flash(_client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False))
+
+    assert flash == t("web.settings.ping_failed", "ru", error=t(expected, "ru"))
+    assert "ConnectError" not in flash
+    assert "ConnectError" not in t(code, "en", error="ConnectError")
+
+
 def test_the_client_check_keeps_tows_own_plain_words(monkeypatch):
     from tow.clients.managed import ClientError
 
