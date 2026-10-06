@@ -1687,7 +1687,9 @@
     "wrong_version": "the archive of {ref} holds TOW {version}; nothing was updated",
     "archive_too_old": "{ref} is TOW {version}: an install without git goes no further back than v1.22.0 (older versions cannot update it again); nothing was updated",
     "archive_ref": "an install without git updates to a release tag (for example v1.22.0) or latest, not to {ref}",
-    "switch_failed": "the code could not be switched ({error}): close programs and windows that use files in {app}"
+    "switch_failed": "the code could not be switched ({error}): close programs and windows that use files in {app}",
+    "recovering": "an earlier update was cut off while it replaced the code: putting back TOW {version} first",
+    "recovery_failed": "the cut-off update could not be undone: {error}; run the update again to retry"
   },
   "watchdog": {
     "cause": {

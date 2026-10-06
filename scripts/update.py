@@ -147,6 +147,8 @@ TEXTS = {
     ),
     "archive_ref": "an install without git updates to a release tag (for example v1.22.0) or latest, not to {ref}",
     "switch_failed": "the code could not be switched ({error}): close programs and windows that use files in {app}",
+    "recovering": "an earlier update was cut off while it replaced the code: putting back TOW {version} first",
+    "recovery_failed": "the cut-off update could not be undone: {error}; run the update again to retry",
 }
 
 
@@ -1111,14 +1113,17 @@ class Update:
                 self.port = int(match.group(1))
         self.code.check()
 
-    def recover_archive(self) -> None:
+    def recover_archive(self) -> bool:
+        """Undo an archive update that was cut off mid-switch: its code, and its data if it changed
+        them. An unusable record or snapshot is refused (UpdateError) before anything changes;
+        False when the undoing itself failed (``recovery_failed``; TOW is started again)."""
         if not isinstance(self.code, ArchiveCode) or not self.code.journal.exists():
-            return
+            return True
         record = self.code._journal()
         if record["phase"] == "accepted":
             self.code.recover_pending()
             self.code.check()
-            return
+            return True
         previous_version = record.get("previous_version")
         if not isinstance(previous_version, str) or not previous_version:
             raise UpdateError("invalid interrupted update record")
@@ -1128,19 +1133,44 @@ class Update:
         snapshot = self.root / "backup" / snapshot_name
         self.manifest = self._load_snapshot(snapshot)
         self.snapshot = snapshot
-        self.stop()
-        try:
-            self.code.recover_pending(finalize=False)
-        except OSError as exc:
-            raise UpdateError(f"interrupted update could not be restored: {exc}") from exc
-        self.restore_snapshot()
-        if not self.start_and_check(previous_version):
-            raise UpdateError(
-                f"interrupted update restored the previous code, but TOW {previous_version} did not start"
-            )
-        self.code.journal.unlink()
-        self.write_state(status="recovered", previous_version=previous_version, finished_at=_now_iso())
+        self.say("recovering", version=previous_version)
+        self.write_state(
+            status="in_progress", ref=self.ref, previous_version=previous_version, started_at=_now_iso(), error=None
+        )
+        with self.sys.shielded():
+            error = self._recover(previous_version)
+        running = bool(self.sys.http_json(f"http://127.0.0.1:{self.port}/healthz"))
+        status = "recovery_failed" if error else "recovered"
+        self.write_state(status=status, error=error, finished_at=_now_iso(), service_running=running)
+        if error:
+            return False
         self.code.check()
+        return True
+
+    def _recover(self, previous_version: str) -> str | None:
+        """Stop TOW, put the previous code and the snapshot back, start it; the error, if any."""
+        assert isinstance(self.code, ArchiveCode)
+        code = "as found"  # -> "mixed" while the entries move -> "previous" once they are back
+        was_running = self.sys.supervisor_running() is not None
+        try:
+            self.stop()
+            code = "mixed"
+            self.code.recover_pending(finalize=False)
+            code = "previous"
+            self.restore_snapshot()
+            code = "started"
+            if not self.start_and_check(previous_version):
+                raise UpdateError(self.text("unhealthy", version=previous_version, seconds=int(self.health_timeout)))
+            self.code.journal.unlink()
+        except Exception as exc:  # noqa: BLE001 - the recovery boundary: recorded, and TOW started again where it can be
+            error = str(exc) or type(exc).__name__
+            self.say("recovery_failed", error=error)
+            if self.stopped and (code == "previous" or (code == "as found" and was_running)):  # never half-moved code
+                with contextlib.suppress(Exception):
+                    self.start_and_check(previous_version if code == "previous" else "")
+            return error
+        self.say("rolled_back")
+        return None
 
     def refuse_old_layout(self) -> None:
         """The five Windows tasks of 1.17 switch to one supervisor in 1.18-1.20, not here."""
@@ -1329,7 +1359,8 @@ class Update:
 
     def run(self) -> int:
         self.check_install()
-        self.recover_archive()
+        if not self.recover_archive():
+            return 1
         self.refuse_old_layout()
         code = self.code
         previous = code.current()
