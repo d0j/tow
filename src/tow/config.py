@@ -198,7 +198,13 @@ def web_address(value: object) -> bool:
     return isinstance(value, str) and origin_key(value) is not None
 
 
-def _site_hosts(name: object, spec: dict[str, Any]) -> None:
+# A site name or a topic id is part of page addresses (/sites/<name>/delete): never "../x".
+SAFE_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def _site_spec(name: object, spec: dict[str, Any]) -> None:
+    if not isinstance(name, str) or not SAFE_ID.fullmatch(name):
+        raise ConfigError("config.yaml: a site name may have only letters, digits, - and _ (at most 64)")
     for key in ("fetch_hosts", "login_hosts"):
         hosts = spec.get(key)
         if hosts is not None and (not isinstance(hosts, list) or not all(web_address(host) for host in hosts)):
@@ -217,7 +223,7 @@ def _validate(data: dict[str, Any]) -> None:
     if not isinstance(trackers, dict) or not all(isinstance(spec, dict) for spec in trackers.values()):
         raise ConfigError("config.yaml: trackers must map each site name to its settings")
     for name, spec in trackers.items():
-        _site_hosts(name, spec)
+        _site_spec(name, spec)
     if not isinstance(data.get("client"), dict):
         raise ConfigError("config.yaml: client must be a mapping (kind, ...)")
     if "clients" in data and not isinstance(data["clients"], (dict, list)):

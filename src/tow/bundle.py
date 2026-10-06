@@ -23,7 +23,7 @@ import yaml
 
 from tow import __version__
 from tow.clock import iso_now
-from tow.config import ConfigError, validated, web_address
+from tow.config import SAFE_ID, ConfigError, validated, web_address
 from tow.errors import TowError
 from tow.log import EXPORT_EVENT_KEYS, export_event_projection, log_event, read_events
 from tow.paths import config_path, data_dir, download_history_path, secrets_path, state_path
@@ -360,6 +360,8 @@ def _validate_state_topic(index: int, topic: Any) -> None:
         _validate_field(topic, key, str, label=label)
     if topic.get("url") and not web_address(topic["url"]):  # a javascript: link would be one click away
         raise ExportImportError(f"{label}.url must be an http:// or https:// address")
+    if "id" in topic and not SAFE_ID.fullmatch(str(topic["id"])):  # part of /topics/<id>/… addresses
+        raise ExportImportError(f"{label}.id may have only letters, digits, - and _ (at most 64)")
     for key in (
         "paused",
         "once_done",
