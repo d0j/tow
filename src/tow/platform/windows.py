@@ -76,6 +76,18 @@ def uptime() -> tuple[float, float] | None:
     return since_boot, awake
 
 
+def ui_language() -> str | None:
+    """The language of this user's Windows display ("ru-RU"), or None."""
+    try:
+        kernel32 = _dll("kernel32")
+        buffer = ctypes.create_unicode_buffer(85)
+        if not kernel32.LCIDToLocaleName(kernel32.GetUserDefaultUILanguage(), buffer, len(buffer), 0):
+            return None
+    except AttributeError, OSError, ValueError:
+        return None
+    return buffer.value or None
+
+
 def logon_time() -> float | None:
     """When the current Windows session signed in (unix time), or None."""
     try:
@@ -634,3 +646,6 @@ class WindowsBackend:
 
     def open_url(self, url: str) -> bool:
         return _common.open_url(url)
+
+    def ui_language(self) -> str | None:
+        return ui_language()

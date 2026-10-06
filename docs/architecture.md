@@ -327,6 +327,7 @@ Stable names other modules build on.
   - `folder_shared(path)` → bool | None: other accounts of this computer may open it;
     `make_private(path)` → bool: only this account (Windows: and SYSTEM, Administrators) keeps
     access, only for a folder this account owns, read back;
-  - `open_url(url)` → bool.
+  - `open_url(url)` → bool;
+  - `ui_language()` → the system's language tag (`ru-RU`) for commands typed in a terminal, `None` when unknown.
 - `private_folders(folders, repair=True)` — the folders that other accounts can still open,
   after making ours private; never raises (start-up and `tow doctor`).

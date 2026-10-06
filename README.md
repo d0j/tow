@@ -100,7 +100,9 @@ Linux and macOS. `tow --help` lists all commands.
 | `tow doctor` | ask the torrent client and the sites now |
 | `tow import-monitorrent --db FILE` | preview migration; `--apply` imports it; `--client ID` selects the destination client |
 
-Exit codes: `0` done · `1` wrong command or option · `2` done in part · `3` cannot run · `130` interrupted.
+Exit codes: `0` done · `1` wrong command or option · `2` done in part (for `tow doctor`: something does not
+answer, or no client is set up) · `3` cannot run · `130` interrupted. Commands answer in the language chosen in
+Settings → Language, or, when it is automatic, in the operating system's language.
 
 ## Remote access
 

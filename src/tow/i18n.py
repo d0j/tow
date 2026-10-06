@@ -452,6 +452,21 @@ def message_language(cfg: dict[str, Any] | None = None) -> str:
     return canonical(_seen_language(_seen_path())) or DEFAULT
 
 
+def terminal_language() -> str:
+    """The language of a command the owner types: the chosen one, or - with ``auto`` - the
+    operating system's (a browser elsewhere does not change what a terminal shows)."""
+    chosen = setting({"language": _configured_language()})
+    if chosen != AUTO:
+        return chosen
+    from tow import platform
+
+    try:
+        system = platform.current().ui_language()
+    except Exception:  # noqa: BLE001 - an unknown system language is the default, never a failure
+        system = None
+    return negotiate(system) if system else DEFAULT
+
+
 def _configured_language() -> str:
     """``language`` from config.yaml, read again only when the file changes (``t()`` outside a
     request asks for it on every call)."""
