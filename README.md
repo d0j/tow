@@ -25,16 +25,18 @@ revision to your torrent client.
 
 ## Features
 
-- **Watch or add once.** All files, chosen episodes (`S01E03-E05`, `04x01-03`) or patterns (`*.mkv`).
+- **Watch or add once.** All files, checked files, chosen episodes (`S01E03-E05`, `04x01-03`) or patterns
+  (`*.mkv`); one check interval for all topics, or a personal one per topic.
 - **Confirmed adds.** The torrent is added stopped, files are selected, the selection is read back, then it starts.
   A failure is reported as a failure.
 - **Mirrors.** Several addresses per site with fallback and cooldown; daily download limits respected; sign-in by
   password or a browser window.
 - **Notifications.** One message per topic per check, quiet hours, a daily digest, a queue that survives restarts.
 - **History and undo.** Every file and revision is recorded; the last change can be undone.
-- **Backups.** Signed night copies, restore points, encrypted `.towx` transfer files.
-- **One folder.** Code, settings, data, key, backups and its own Python. Move it and it keeps working.
-- **Interface** in English and Russian; a new language is one JSON file.
+- **Backups and updates.** Signed night copies, restore points, encrypted `.towx` files; updates from the
+  Settings page that put the previous version back by themselves if anything fails.
+- **One folder, two languages.** Code, settings, data, key, backups and its own Python: move it and it keeps
+  working. English and Russian; a new language is one JSON file.
 - **Moving from Monitorrent?** `tow import-monitorrent` brings over its topics and site logins.
 
 ## Supported
@@ -121,7 +123,9 @@ closes network access.
 
 | | Windows zip or `install.ps1` | `install.sh` | git clone |
 |---|---|---|---|
-| Update to the latest release | double-click `Update TOW.cmd` | `~/TOW/update-tow` · macOS: `Update TOW.command` | `.\scripts\deploy.ps1 -Ref v1.22.0` · `tow update --ref v1.22.0` prints the command |
+| Update from the page (1.22.20 or newer) | Settings → Version and updates → **Check for updates**, **Update** | the same; with autostart through systemd or launchd, use the line below | the same |
+| Update to the latest release | double-click `Update TOW.cmd` | `~/TOW/update-tow` · macOS: `Update TOW.command` | `.\scripts\deploy.ps1 -Ref <tag>` · `tow update --ref <tag>` prints the command |
+| Go back from the page | Settings → Version and updates → **Install another version or roll back** (1.22.21 or newer) | the same | the same |
 | Go back | `Update TOW.cmd v1.23.0` (v1.23.0 or newer once v1.23 ran: older ones cannot read its data) | `update-tow v1.23.0` (the same) | the same with the older tag (v1.18.0 or newer; v1.23.0 or newer once v1.23 ran) |
 | After moving the folder | `Start TOW.cmd` prepares it again; then `tow autostart on` if you use it | the start file does it too; then `tow autostart on` | `tow stop`, `tow setup`, `tow autostart on` |
 | Restore a night copy | `tow restore-snapshot --path <copy> --apply` | the same | the same |
@@ -138,10 +142,9 @@ release's `SHA256SUMS`.
 | `.towx` file | where you save it | Settings → Backups; restoring needs the same `master.key` |
 | `tow export` / `tow import` | where you save it | protected by its own passphrase; works across installs |
 
-Settings → Backups lets you change the number of days or turn automatic night copies off,
-and check, restore or delete saved copies. Existing explicit count-based retention is kept until you save days.
-Night copies are signed, not fully encrypted: settings, topics and history remain readable;
-passwords stay encrypted. Keep the backup folder private. [Details](docs/guide.md#backups).
+Settings → Backups checks, restores and deletes saved copies. Night copies are signed, not encrypted as a whole:
+settings, topics and history stay readable (passwords stay encrypted), so keep the backup folder private.
+[Details](docs/guide.md#backups).
 
 ## Documentation
 
