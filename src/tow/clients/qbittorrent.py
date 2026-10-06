@@ -381,12 +381,12 @@ class QBittorrentClient:
             time.sleep(0.1)
         raise _fail("client.managed.no_files")
 
-    def _require_owned(self, infohash: str) -> dict[str, Any]:
-        info = self.inspect_torrent(infohash)
-        tags = {str(tag).strip().casefold() for tag in (info or {}).get("tags") or []}
+    def _require_owned(self, infohash: str) -> None:
+        """Re-read the owner tag right before every mutation: one torrent row, no file list."""
+        rows = self._c.torrents_info(torrent_hashes=infohash.lower())
+        tags = {tag.casefold() for tag in self._tag_list(rows[0])} if rows else set()
         if "tow" not in tags:
             raise _fail("client.managed.not_owned")
-        return info or {}
 
     def _stop(self, infohash: str) -> None:
         method = getattr(self._c, "torrents_stop", None) or getattr(self._c, "torrents_pause", None)
@@ -704,11 +704,6 @@ class QBittorrentClient:
             }
             for row in files or []
         ]
-        raw_tags = getattr(torrent, "tags", "")
-        if isinstance(raw_tags, str):
-            normalized_tags = sorted({part.strip() for part in raw_tags.split(",") if part.strip()})
-        else:
-            normalized_tags = sorted({str(part).strip() for part in (raw_tags or []) if str(part).strip()})
         return {
             "hash": str(getattr(torrent, "hash", infohash) or infohash),
             "infohash_v1": str(getattr(torrent, "infohash_v1", "") or ""),
@@ -722,9 +717,16 @@ class QBittorrentClient:
             "save_path": getattr(torrent, "save_path", None),
             "content_path": getattr(torrent, "content_path", None),
             "state": str(getattr(torrent, "state", "") or ""),
-            "tags": normalized_tags,
+            "tags": self._tag_list(torrent),
             "files": normalized_files,
         }
+
+    @staticmethod
+    def _tag_list(torrent: Any) -> list[str]:
+        raw_tags = getattr(torrent, "tags", "")
+        if isinstance(raw_tags, str):
+            return sorted({part.strip() for part in raw_tags.split(",") if part.strip()})
+        return sorted({str(part).strip() for part in (raw_tags or []) if str(part).strip()})
 
     def set_location(self, infohash: str, save_path: str) -> str:
         dest = (save_path or "").strip()

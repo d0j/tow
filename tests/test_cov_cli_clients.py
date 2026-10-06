@@ -240,7 +240,8 @@ def test_set_location_refuses_blank_path_and_sends_trimmed_location(qbit):
 
     api.put(HASH, files=SHOW_FILES, tags="tow")
     assert client.set_location(HASH, r"  M:\new  ") == "ok"
-    assert api.calls == ["files", ("set_location", r"M:\new", HASH.lower())]
+    # The ownership check reads the tags alone, not the file list.
+    assert api.calls == [("set_location", r"M:\new", HASH.lower())]
 
 
 def test_from_secrets_requires_host_and_defaults_port(monkeypatch):

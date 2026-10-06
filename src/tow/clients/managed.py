@@ -128,11 +128,18 @@ class ManagedClient:
     def _stopped(info: dict[str, Any] | None) -> bool:
         return str((info or {}).get("state") or "").casefold().startswith(STOPPED_PREFIXES)
 
-    def _require_owned(self, infohash: str) -> dict[str, Any]:
+    def _owner_tags(self, infohash: str) -> list[str] | None:
+        """The torrent's tags, None when it is gone. A client overrides this with a query that
+        skips the file list: it runs before every mutation, also of very large torrents."""
         info = self.inspect_torrent(infohash)
-        if OWNER not in self._tags(info):
+        return None if info is None else [str(tag) for tag in info.get("tags") or []]
+
+    def _require_owned(self, infohash: str) -> list[str]:
+        """Re-read the owner mark right before every mutation; returns the current tags."""
+        tags = self._owner_tags(infohash) or []
+        if OWNER not in self._tags({"tags": tags}):
             raise self._fail("client.managed.not_owned")
-        return info or {}
+        return tags
 
     def _labels_for_add(self) -> list[str]:
         extra = [str(tag).strip() for tag in self.add_tags or () if str(tag).strip()]
@@ -242,8 +249,7 @@ class ManagedClient:
         return verified
 
     def _clear_pending(self, infohash: str) -> dict[str, Any]:
-        info = self._require_owned(infohash)
-        labels = [str(tag) for tag in info.get("tags") or [] if str(tag).strip().casefold() != PENDING]
+        labels = [tag for tag in self._require_owned(infohash) if tag.strip().casefold() != PENDING]
         self._set_labels(infohash, labels)
         return self._wait(
             infohash,

@@ -61,6 +61,12 @@ _STATES = {
 }
 
 
+def _label_tags(row: dict[str, Any]) -> list[str]:
+    """Deluge has one label per torrent: "tow-pending" carries both of TOW's marks."""
+    label = str(row.get("label") or "").strip()
+    return [OWNER, PENDING] if label == PENDING else ([label] if label else [])
+
+
 class DelugeClient(ManagedClient):
     title = "Deluge"
     kind = KIND
@@ -165,6 +171,10 @@ class DelugeClient(ManagedClient):
         version = self._call("daemon.get_version")
         return f"{version} libtorrent {self._call('core.get_libtorrent_version')}"
 
+    def _owner_tags(self, infohash: str) -> list[str] | None:
+        row = self._call("core.get_torrent_status", infohash.lower(), ["hash", "label"])
+        return _label_tags(row) if row and row.get("hash") else None
+
     def inspect_torrent(self, infohash: str) -> dict[str, Any] | None:
         row = self._call("core.get_torrent_status", infohash.lower(), _KEYS)
         if not row or not row.get("hash"):
@@ -191,8 +201,7 @@ class DelugeClient(ManagedClient):
                     "priority": int(priorities[index]) if 0 <= index < len(priorities) else None,
                 }
             )
-        label = str(row.get("label") or "").strip()
-        tags = [OWNER, PENDING] if label == PENDING else ([label] if label else [])
+        tags = _label_tags(row)
         save_path = str(row.get("download_location") or "")
         return {
             "hash": str(row["hash"]),

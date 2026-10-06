@@ -81,7 +81,12 @@ class FakeTransmission:
             result = {"version": "4.1.3", "rpc-version": self.rpc_version}
         elif method == "torrent-get":
             rows = targets if "ids" in args else list(self.torrents.values())
-            result = {"torrents": [self._row(t) for t in rows]}
+            fields = args.get("fields")
+            result = {
+                "torrents": [
+                    {key: value for key, value in self._row(t).items() if fields is None or key in fields} for t in rows
+                ]
+            }
         elif method == "torrent-add":
             torrent = Torrent(
                 base64.b64decode(args["metainfo"]),
@@ -220,7 +225,7 @@ class FakeDeluge:
         t = self.torrents.get(torrent_id)
         if t is None:
             return {}
-        return {
+        row = {
             "hash": t.hash,
             "name": t.name,
             "state": "Downloading" if t.running else "Paused",
@@ -234,6 +239,7 @@ class FakeDeluge:
             "file_progress": [0.0] * len(t.files),
             "label": t.labels[0] if t.labels else "",
         }
+        return {key: value for key, value in row.items() if key in keys}
 
     def m_core_set_torrent_options(self, ids, options):
         for torrent_id in ids:
@@ -320,6 +326,25 @@ def test_selection_change_and_stop(client, tmp_path):
     stopped = adapter.stop_owned_torrent(H)
     assert stopped["state"] == "stoppedDL"
     assert adapter.stop_owned_torrent(H)["state"] == "stoppedDL"  # idempotent
+
+
+def test_ownership_checks_read_tags_without_file_lists(client, tmp_path, monkeypatch):
+    adapter, server = client
+    adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    full_reads = []
+    original = adapter.inspect_torrent
+    monkeypatch.setattr(adapter, "inspect_torrent", lambda infohash: full_reads.append(infohash) or original(infohash))
+    assert adapter.set_location(H, str(tmp_path / "moved")) == "ok"
+    assert full_reads == [], "an ownership check must not read the whole file list"
+    server.torrents[K].labels = ["manual"]
+    with pytest.raises(ClientError):
+        adapter.set_location(H, str(tmp_path / "again"))
+    assert server.torrents[K].path == str(tmp_path / "moved")
+    server.torrents[K].labels = ["tow"]
+    full_reads.clear()
+    adapter.configure_torrent_selection(TORRENT, H, [E01, NFO])
+    # The selection's own read-backs only: before, after the change, and the state polls.
+    assert len(full_reads) <= 5, full_reads
 
 
 def test_location_change(client, tmp_path):
