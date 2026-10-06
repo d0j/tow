@@ -40,6 +40,21 @@ def test_a_new_password_hidden_in_the_reminder_is_refused(hint):
         clean_hint(hint, password="my secret pass")
 
 
+@pytest.mark.parametrize("hint", ["correct horse tow", "Correct.Horse.Tow!", "it is correct_horse_tow", "horse-tow"])
+def test_punctuation_or_a_part_does_not_hide_a_new_password(hint):
+    with pytest.raises(AuthConfigurationError):
+        clean_hint(hint, password="correct-horse-tow")
+
+
+def test_a_reminder_with_other_separators_is_refused_for_the_stored_password():
+    record = lan_password_record("correct-horse-tow")
+
+    for hint in ("correct horse tow", "Correct Horse Tow"):
+        with pytest.raises(AuthConfigurationError):
+            with_hint(record, hint)
+    assert password_hint(with_hint(record, "the stable animal")) == "the stable animal"
+
+
 def test_saving_settings_with_the_prefilled_reminder_changes_nothing():
     record = lan_password_record("old-horse-battery", "лошадь")
     save_secrets({"lan_auth": record})

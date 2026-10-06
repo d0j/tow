@@ -82,29 +82,41 @@ def clean_hint(hint: str, *, password: str = "", record: object = None) -> str:
     """The reminder as stored: one line, short, and never the password itself.
 
     The login page shows it to anyone on the network, so a reminder that contains the
-    new ``password`` (or, when only the reminder changes, matches the stored ``record``
-    as a whole or word by word) is refused.
+    new ``password``, or is a sizeable part of it, is refused; letters and digits are compared
+    without case, punctuation or spaces ("correct horse tow" reveals "correct-horse-tow"). When
+    only the reminder changes, the stored ``record`` is tried with the reminder as a whole, word
+    by word and with its words joined by the usual separators.
     """
     hint = " ".join(str(hint or "").split())
     if len(hint) > MAX_HINT_LENGTH:
         raise AuthConfigurationError("auth.hint_too_long", n=MAX_HINT_LENGTH)
     if not hint:
         return ""
-    revealed = bool(password) and (
-        password.casefold() in hint.casefold() or _squeezed(password) in _squeezed(hint)  # "my pass" in "MYPASS!"
-    )
+    revealed = bool(password) and _reveals(_squeezed(hint), _squeezed(password))
     if not revealed and record is not None:
-        # Only the stored record is known: try the reminder as a whole, without its spaces and
-        # word by word (each try is a full PBKDF2, so only candidates long enough to be it).
-        candidates = {hint, "".join(hint.split()), *hint.split()}
+        # Each try is a full PBKDF2, so only candidates long enough to be the password.
+        words = [word for word in re.split(r"[\W_]+", hint) if word]
+        joined = {sep.join(words) for sep in ("", " ", "-", "_", ".")}
+        candidates = {hint, *hint.split(), *joined, *(c.casefold() for c in joined)}
         revealed = any(len(c) >= _MIN_PASSWORD_LENGTH and lan_password_matches(c, record) for c in candidates)
     if revealed:
         raise AuthConfigurationError("auth.hint_reveals_password")
     return hint
 
 
+_MIN_REVEALING_PART = 4
+
+
+def _reveals(hint: str, password: str) -> bool:
+    """The reminder holds the password, or is itself a sizeable piece of it."""
+    if not hint or not password:
+        return False
+    return password in hint or (len(hint) >= min(_MIN_REVEALING_PART, len(password)) and hint in password)
+
+
 def _squeezed(text: str) -> str:
-    return "".join(text.split()).casefold()
+    """Only the letters and digits, without case: punctuation and spaces do not hide a password."""
+    return "".join(ch for ch in text.casefold() if ch.isalnum())
 
 
 def lan_password_record(password: str, hint: str = "") -> dict[str, str | int]:
