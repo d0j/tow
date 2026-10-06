@@ -67,3 +67,18 @@ def test_home_countdown_polls_with_backoff_and_never_in_a_hidden_tab():
     assert verdict["whileHidden"] == 0
     assert verdict["onShow"] == 1
     assert verdict["pollsAfterRecovery"] == 0
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_countdown_and_personal_timers_share_one_health_poll():
+    # Two independent pollers asked /health.json at 0, 5, 15, 31, 35, 61 and 75 s.
+    script = Path(__file__).parent / "js" / "health_poll.mjs"
+    result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=60, check=True)
+    verdict = json.loads(result.stdout.strip().splitlines()[-1])
+
+    assert verdict["firstMinute"] == [0, 10, 30, 60]
+    assert verdict["timerUpdated"] is True
+    assert verdict["clock"] == "00:00:00"
+    assert verdict["whileHidden"] == 0
+    assert verdict["onShow"] == 1
