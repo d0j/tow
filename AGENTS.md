@@ -1,8 +1,8 @@
 # Rules for contributors
 
-The rules every change to TOW keeps. Read `docs/ROADMAP.md` for the current
-state and `docs/architecture.md` for the structure, then the relevant source, tests and `git log` of the files
-before editing. `CONTRIBUTING.md` has the development setup.
+The rules every change to TOW keeps. Read `docs/ROADMAP.md` for the current state and `docs/architecture.md` for
+the structure, then the relevant source, tests and `git log` of the files before editing. `CONTRIBUTING.md` has the
+development setup, the term table and the release steps.
 
 ## Product boundary
 
@@ -53,9 +53,12 @@ tracker degradation from a client or TOW failure before changing state.
 
 - Git is the change record. Preserve pre-existing worktree changes; before editing, note `git status --short`, the
   branch and HEAD.
-- One logical change per commit, with a message that says what changed and why; the gate passes before every
-  commit. User-visible changes also get a line in `CHANGELOG.md`.
-- Releases are annotated tags (`vX.Y.Z`) with the version bumped in `pyproject.toml`.
+- One logical change per commit, with a message that says what changed and why (the `commit-msg` hook checks its
+  form); the gate passes before every commit. User-visible changes also get a line in `CHANGELOG.md` and
+  `CHANGELOG.ru.md`, and a change to `README.md` or `docs/` the same change in `README.ru.md` or `docs/ru/`.
+- A release is a commit `release: vX.Y.Z - <summary>` (version in `pyproject.toml`, both changelogs) merged through
+  a pull request, then an annotated tag `vX.Y.Z` with the message `TOW X.Y.Z` on that merge on `origin/main`,
+  published with `uv run --frozen python scripts/publish-release.py vX.Y.Z`.
 - When asked to undo changes or go back to a previous version: stop new work, `git revert` the commits in question
   (or redeploy the previous tag to the runtime install), rerun the gate and report. Never rewrite pushed history.
 - If the checkout has a `backup` remote, the post-commit hook mirrors commits whose content passed the full gate.
