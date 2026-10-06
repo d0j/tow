@@ -95,7 +95,7 @@ flowchart TD
 | `tow.clients` | Torrent adapters behind `TorrentClientAdapter`; Transmission and Deluge use `managed.ManagedClient`, while qBittorrent implements the same read-back contract separately. |
 | `tow.notifiers` | One module per messenger behind the `Notifier` protocol; `outbox` is the per-recipient delivery queue; `tow.delivery` groups, delays and digests. |
 | `tow.selection`, `tow.episodes`, `tow.torrent` | Which files to download; episode parsing; bencode and info-hash. |
-| `tow.content` | Encrypted, bounded metadata preparation snapshots; literal file identities for graphical selection, without transfer-task mutations or media retrieval. Explicit native magnet preview is separate from the mutating add fallback and from dry-run. |
+| `tow.content` | Encrypted, bounded metadata preparation snapshots; literal file identities for graphical selection, without transfer-task mutations or media retrieval. Explicit native magnet preview is separate from the mutating add fallback and from dry-run. A local `.torrent` only previews: it never becomes a new topic's first revision or its saved metadata. |
 | `tow.torrent_cache` | One encrypted obtained `.torrent` per live topic URL, bounded to 256 MiB and 2,048 records; shared URLs retain one copy. Reopening contents spends no tracker quota. Normal checks do not use it as revision evidence; a changed magnet invalidates the old copy. The last topic's removal deletes metadata, never client torrents or media. |
 | `tow.store`, `tow.store_transaction`, `tow.site_journal` | State, history, encrypted secrets; the data lock; journaled multi-file writes. |
 | `tow.undo` | One undo engine: a record per change, restored through one transaction. |

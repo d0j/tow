@@ -36,9 +36,18 @@ def _folder(*, create: bool = True) -> Path:
     return folder
 
 
-def prepare(blob: bytes, url: str, client_id: str) -> dict[str, Any]:
+def prepare(blob: bytes, url: str, client_id: str, *, from_site: bool = False) -> dict[str, Any]:
+    """``from_site``: the site provided these bytes (its download, its saved copy, or a magnet
+    preview verified against its magnet). A local file only previews the contents."""
     parse_torrent_metadata(blob)
-    record = json.dumps({"url": url, "client_id": client_id, "blob": base64.b64encode(blob).decode("ascii")}).encode()
+    record = json.dumps(
+        {
+            "url": url,
+            "client_id": client_id,
+            "source": "site" if from_site else "local",
+            "blob": base64.b64encode(blob).decode("ascii"),
+        }
+    ).encode()
     encrypted = master_fernet().encrypt(record)
     if len(encrypted) > MAX_RECORD_BYTES:
         raise TowError("content.too_large")
@@ -84,6 +93,20 @@ def describe(blob: bytes, token: str) -> dict[str, Any]:
 
 
 def read(token: str, url: str, client_id: str) -> bytes:
+    return _read(token, url, client_id)[0]
+
+
+def site_revision(token: str, url: str, client_id: str) -> bytes | None:
+    """A new topic's first revision, when the site itself provided the prepared bytes.
+
+    None for a local file: it was never compared with the topic, so the check obtains the
+    revision from the site and refuses it unless it is the prepared one (``content_hash``).
+    """
+    blob, from_site = _read(token, url, client_id)
+    return blob if from_site else None
+
+
+def _read(token: str, url: str, client_id: str) -> tuple[bytes, bool]:
     if not re.fullmatch(r"[0-9a-f]{32}", token):
         raise TowError("content.expired")
     try:
@@ -107,7 +130,7 @@ def read(token: str, url: str, client_id: str) -> bytes:
         if len(blob) > MAX_TORRENT_BYTES:
             raise TowError("content.too_large")
         parse_torrent_metadata(blob)
-        return blob
+        return blob, record.get("source") == "site"
     except (OSError, InvalidToken, ValueError, KeyError, TypeError) as exc:
         raise TowError("content.expired") from exc
 

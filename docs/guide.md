@@ -64,8 +64,9 @@ If the site is not known yet, add it first on **Sites** — pasting any topic li
 | Episodes by number | `S01E03-E05, S01E07` · `04x01-03` · `5-8` | Video and its subtitles count as one episode. Use `S01E05` when an episode number exists in several seasons. |
 | Files by pattern | `*.mkv` · `Subs/*.srt` | Glob patterns: `*`, `?` and `[]` are special. A pattern cannot leave the torrent's folder. |
 
-**Get contents** reads tracker metadata, or use a local `.torrent`. A download-limited site asks for
-confirmation first. **From magnet (contacts peers)** uses the selected client's native metadata API:
+**Get contents** reads tracker metadata, or use a local `.torrent`. A local file only previews the
+contents: the first check still gets the torrent from the site and refuses a different one, and the
+file is not kept as the topic's saved contents. A download-limited site asks for confirmation first. **From magnet (contacts peers)** uses the selected client's native metadata API:
 qBittorrent 5.2+ or an attached Deluge daemon. Existing qBittorrent torrents can be read on older versions.
 No transfer is added or changed by this preview. qBittorrent's peer-metadata request may continue after
 timeout or closing the form; its Web API cannot cancel it. Unsupported clients need a `.torrent`.
