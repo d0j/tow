@@ -75,7 +75,7 @@
   <h2 id="tracker-credentials-title-{{ credential_prompt.id }}">{{ t('home.auth.title') }}</h2>
   <p class="sub">{{ credential_prompt.title or credential_prompt.url or credential_prompt.id }}</p>
   {% if credential_prompt.browser_auth %}
-  <form method="post" action="/topics/{{ credential_prompt.id }}/tracker-browser-auth" data-browser-auth-start>
+  <form method="post" action="/topics/{{ credential_prompt.id|urlencode }}/tracker-browser-auth" data-browser-auth-start>
     <div class="actions">
       <button type="submit">{{ t('home.auth.start') }}</button>
       <a class="btn ghost" href="/">{{ t('home.cancel') }}</a>
@@ -85,7 +85,7 @@
   <p class="sub" role="status" data-browser-auth-status data-topic-id="{{ credential_prompt.id }}" data-operation-id="{{ credential_prompt.browser_auth_status.operation_id }}">{{ credential_prompt.browser_auth_status.message }}</p>
   {% endif %}
   {% else %}
-  <form method="post" action="/topics/{{ credential_prompt.id }}/tracker-login">
+  <form method="post" action="/topics/{{ credential_prompt.id|urlencode }}/tracker-login">
     <p>{{ t('home.auth.enter') }}</p>
     <label for="tracker-username-{{ credential_prompt.id }}">{{ t('home.auth.username') }}</label>
     <input id="tracker-username-{{ credential_prompt.id }}" name="username" value="{{ credential_prompt.username }}" autocomplete="username" required>
@@ -194,18 +194,18 @@
         {%- if topic.error_line %}<span class="row-error {{ 'bad' if torrent_tone == 'bad' else 'warn' }}" title="{{ topic.last_error_human or topic.last_error }}">{{ topic.error_line }}<span class="sr-only"> {{ t('home.row.full_error') }}</span></span>{% elif topic.last_event_label %}<b>{{ topic.last_event_label }}</b><small class="mut"> · {{ topic.last_event_at }}</small>{% else %}<span class="mut">—</span>{% endif -%}
       </span>
       <span class="progress-cell topic-progress" data-label="{{ t('home.row.progress') }}">
-        {%- if ds.expected %}<a class="download-details progress-link{% if ds.is_complete %} complete{% endif %}" href="/topics/{{ topic.id }}/downloads.json" data-topic-id="{{ topic.id }}" title="{{ t('home.topic.episodes_history') }}">{% if ds.is_complete %}✓ {% endif %}{{ ds.completed }}/{{ ds.expected }}</a>
-        {%- elif ds.completed %}<a class="download-details progress-link" href="/topics/{{ topic.id }}/downloads.json" data-topic-id="{{ topic.id }}" title="{{ t('home.topic.files_history') }}">{{ t('home.topic.files_count', n=ds.completed) }}</a>
+        {%- if ds.expected %}<a class="download-details progress-link{% if ds.is_complete %} complete{% endif %}" href="/topics/{{ topic.id|urlencode }}/downloads.json" data-topic-id="{{ topic.id }}" title="{{ t('home.topic.episodes_history') }}">{% if ds.is_complete %}✓ {% endif %}{{ ds.completed }}/{{ ds.expected }}</a>
+        {%- elif ds.completed %}<a class="download-details progress-link" href="/topics/{{ topic.id|urlencode }}/downloads.json" data-topic-id="{{ topic.id }}" title="{{ t('home.topic.files_history') }}">{{ t('home.topic.files_count', n=ds.completed) }}</a>
         {%- else %}<span class="mut">—</span>{% endif -%}
       </span>
       <span class="row-ops-slot" aria-hidden="true"></span>
     </summary>
-    <div class="edit-panel" data-edit-src="/topics/{{ topic.id }}/edit-panel"><p class="sub"><a href="/topics/{{ topic.id }}/edit">{{ t('home.edit.open') }}</a></p></div>
+    <div class="edit-panel" data-edit-src="/topics/{{ topic.id|urlencode }}/edit-panel"><p class="sub"><a href="/topics/{{ topic.id|urlencode }}/edit">{{ t('home.edit.open') }}</a></p></div>
   </details>
   <span class="row-ops">
     <a class="row-ico {{ tracker_tone }}" href="{{ topic.url }}" target="_blank" rel="noopener" title="{{ tracker_label }}" aria-label="{{ t('home.topic.site_aria_named', name=topic.series, label=tracker_label) }}"><svg width="16" height="16" aria-hidden="true"><use href="#i-globe"/></svg></a>
-    <form method="post" action="/topics/{{ topic.id }}/pause"><button class="row-ico{% if topic.paused %} on{% endif %}" type="submit" title="{{ pause_label }}" aria-label="{{ t('home.topic.resume_named' if topic.paused else 'home.topic.pause_named', name=topic.series) }}"><svg width="16" height="16" aria-hidden="true"><use href="#{{ 'i-play' if topic.paused else 'i-pause' }}"/></svg></button></form>
-    <form method="post" action="/topics/{{ topic.id }}/check"><button class="row-ico" type="submit" title="{{ t('home.topic.check_title') }}" aria-label="{{ t('home.topic.check_named', name=topic.series) }}"><svg width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg></button></form>
+    <form method="post" action="/topics/{{ topic.id|urlencode }}/pause"><button class="row-ico{% if topic.paused %} on{% endif %}" type="submit" title="{{ pause_label }}" aria-label="{{ t('home.topic.resume_named' if topic.paused else 'home.topic.pause_named', name=topic.series) }}"><svg width="16" height="16" aria-hidden="true"><use href="#{{ 'i-play' if topic.paused else 'i-pause' }}"/></svg></button></form>
+    <form method="post" action="/topics/{{ topic.id|urlencode }}/check"><button class="row-ico" type="submit" title="{{ t('home.topic.check_title') }}" aria-label="{{ t('home.topic.check_named', name=topic.series) }}"><svg width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg></button></form>
   </span>
   </div>
   {% else %}

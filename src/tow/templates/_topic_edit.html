@@ -6,13 +6,13 @@
   {% if topic.last_error %}<p class="form-error{% if topic.torrent_tone == 'warn' %} warn{% endif %}" role="note">{% if topic.last_check %}{{ t('home.topic.last_error_at', at=topic.last_check, error=error_words) }}{% else %}{{ t('home.topic.last_error', error=error_words) }}{% endif %}</p>
   {%- if error_words != topic.last_error %}<details class="technical-details raw-error"><summary>{{ t('common.details') }}</summary><code>{{ topic.last_error }}</code></details>{% endif %}{% endif %}
   {% if topic.replaces_revision %}
-  <form method="post" action="/topics/{{ topic.id }}/replace-revision" data-confirm="{{ t('home.topic.replace_confirm') }}">
+  <form method="post" action="/topics/{{ topic.id|urlencode }}/replace-revision" data-confirm="{{ t('home.topic.replace_confirm') }}">
     <button type="submit">{{ t('home.topic.replace') }}</button>
   </form>
   {% endif %}
   {% if topic.selection_dirty %}{% set sel_text = t('home.topic.sel_dirty') %}{% elif topic.selection_verified is sameas false %}{% set sel_text = t('home.topic.sel_unverified') %}{% elif topic.selected_file_count is defined %}{% set sel_text = t('home.topic.sel_count', selected=topic.selected_file_count, total=topic.torrent_file_count or '?') %}{% elif topic.selection and topic.selection.mode != 'all' %}{% set sel_text = t('home.topic.sel_pending') %}{% else %}{% set sel_text = t('home.topic.sel_all') %}{% endif %}
   <p class="sub">{{ t('home.topic.summary', selection=sel_text, mode=t('home.topic.mode_once') if topic.tracking_mode == 'once' else t('home.topic.mode_watch'), done=('; ' ~ t('home.topic.once_done')) if topic.once_done else '') }}</p>
-  <form id="ed-{{ topic.id }}" method="post" action="/topics/{{ topic.id }}/edit" class="row row-three">
+  <form id="ed-{{ topic.id }}" method="post" action="/topics/{{ topic.id|urlencode }}/edit" class="row row-three">
     <div><label for="edit-title-{{ topic.id }}">{{ t('home.edit.name') }}</label><input id="edit-title-{{ topic.id }}" name="title" value="{{ topic.title }}"></div>
     <div><label for="edit-url-{{ topic.id }}">{{ t('home.edit.url') }}</label><input id="edit-url-{{ topic.id }}" name="url" value="{{ topic.url }}"></div>
     <div><label for="edit-path-{{ topic.id }}">{{ t('home.add.folder') }}</label><div class="folder-input"><input id="edit-path-{{ topic.id }}" name="save_path" list="save-roots" value="{{ topic.save_path or '' }}" autocomplete="off"><button type="button" class="ghost ico folder-toggle" data-save-folders aria-label="{{ t('home.add.recent_folders') }}" tabindex="-1" hidden><span aria-hidden="true">▾</span></button></div></div>
@@ -26,10 +26,10 @@
   {% if topic.search_href %}<p class="sub"><a href="{{ topic.search_href }}" target="_blank" rel="noopener">{{ t('home.topic.search_on', site=topic.tracker) }}</a>{% if topic.next_season_href %} · <a href="{{ topic.next_season_href }}" target="_blank" rel="noopener">{{ t('home.topic.next_season') }}</a>{% endif %}</p>{% endif %}
   <p class="sub path-note">{{ t('home.topic.path_note') }}</p>
   {% if (topic.download_summary or {}).is_complete and not topic.paused %}
-  <form id="stop-{{ topic.id }}" method="post" action="/topics/{{ topic.id }}/pause" hidden></form>
+  <form id="stop-{{ topic.id }}" method="post" action="/topics/{{ topic.id|urlencode }}/pause" hidden></form>
   <p class="sub">{{ t('home.topic.season_done', done=topic.download_summary.completed, total=topic.download_summary.expected) }} <button class="ghost sm" type="submit" form="stop-{{ topic.id }}">{{ t('home.topic.stop_watching') }}</button></p>
   {% endif %}
-  <form id="del-{{ topic.id }}" method="post" action="/topics/{{ topic.id }}/delete" data-confirm="{{ t('home.topic.delete_confirm') }}" hidden></form>
+  <form id="del-{{ topic.id }}" method="post" action="/topics/{{ topic.id|urlencode }}/delete" data-confirm="{{ t('home.topic.delete_confirm') }}" hidden></form>
   <div class="edit-actions">
     <button type="submit" form="ed-{{ topic.id }}">{{ t('home.topic.save') }}</button>
     {% if standalone %}<a class="btn ghost" href="/">{{ t('home.cancel') }}</a>{% else %}<button class="ghost" type="button" data-close-details formnovalidate>{{ t('home.cancel') }}</button>{% endif %}

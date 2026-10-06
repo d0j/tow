@@ -106,14 +106,14 @@
           {% set matches = mine | selectattr('host', 'equalto', h) | list %}
           {% set p = matches[0] if matches else none %}
           {% set is_main = (active.get(name) or '').rstrip('/') == h.rstrip('/') %}
-          <form method="post" action="/sites/{{ name }}/prefer" class="mirror-pick">
+          <form method="post" action="/sites/{{ name|urlencode }}/prefer" class="mirror-pick">
             <input type="hidden" name="host" value="{{ h }}">
             <button type="submit" class="ghost sm" title="{{ t('sites.make_main') }}: {{ h }}" aria-pressed="{{ 'true' if is_main else 'false' }}">{% if p %}<span class="dot {{ 'ok' if p.ok else 'warn' }}" aria-hidden="true"></span><span class="sr-only">{{ t('sites.responds') if p.ok else t('sites.not_responding') }}</span>{% endif %}<span class="mirror-label">{{ h.replace('https://','').replace('http://','') }}</span>{% if is_main %} <span class="pill ok">{{ t('sites.main') }}</span>{% endif %}</button>
           </form>
           {% endfor %}
         </div>
         {% endif %}
-        <form id="ed-site-{{ name }}" method="post" action="/sites/{{ name }}" class="row row-two">
+        <form id="ed-site-{{ name }}" method="post" action="/sites/{{ name|urlencode }}" class="row row-two">
           <div><label for="site-new-name-{{ name }}">{{ t('sites.name') }}</label><input id="site-new-name-{{ name }}" name="new_name" value="{{ name }}" pattern="[a-z0-9_]+" required></div>
           <div><label for="site-url-rx-{{ name }}">{{ t('sites.url_regex') }}</label><input id="site-url-rx-{{ name }}" name="url_regex" value="{{ spec.url_regex }}"></div>
           <div class="full-width"><label for="site-hosts-{{ name }}">{{ t('sites.mirrors') }}</label><textarea id="site-hosts-{{ name }}" name="fetch_hosts" rows="3">{{ (spec.fetch_hosts or []) | join('\n') }}</textarea></div>
@@ -132,7 +132,7 @@
             <input id="site-href-rx-{{ name }}" name="download_href_regex" value="{{ spec.download_href_regex or '' }}" placeholder="download\\.php\\?id=(\\d+)">
           </details>
         </form>
-        <form id="del-site-{{ name }}" method="post" action="/sites/{{ name }}/delete" data-confirm="{{ t('sites.delete_confirm') }}" hidden></form>
+        <form id="del-site-{{ name }}" method="post" action="/sites/{{ name|urlencode }}/delete" data-confirm="{{ t('sites.delete_confirm') }}" hidden></form>
         <div class="edit-actions">
           <button type="submit" form="ed-site-{{ name }}">{{ t('sites.save') }}</button>
           <button class="ghost" type="button" data-close-details formnovalidate>{{ t('sites.cancel') }}</button>
@@ -144,7 +144,7 @@
           <a class="row-ico {{ 'ok' if any_ok else ('warn' if mine else 'mut') }}" href="{{ href }}" target="_blank" rel="noopener" title="{{ t('sites.open_named', name=spec.title or name) }}" aria-label="{{ t('sites.open_named', name=spec.title or name) }}">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="8.2"/><path d="M3.5 12h17M12 3.8c2.4 2.6 2.4 13.8 0 16.4M12 3.8c-2.4 2.6-2.4 13.8 0 16.4"/></svg>
           </a>
-          <form method="post" action="/sites/{{ name }}/freeze">
+          <form method="post" action="/sites/{{ name|urlencode }}/freeze">
             <button class="row-ico{% if frozen.get(name) %} on{% endif %}" type="submit" title="{% if frozen.get(name) %}{{ t('sites.unpause') }}{% else %}{{ t('sites.pause') }}{% endif %}" aria-label="{{ t('sites.unpause_named' if frozen.get(name) else 'sites.pause_named', name=spec.title or name) }}">
               {% if frozen.get(name) %}
               <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"></path></svg>
@@ -153,7 +153,7 @@
               {% endif %}
             </button>
           </form>
-          <form method="post" action="/sites/{{ name }}/probe">
+          <form method="post" action="/sites/{{ name|urlencode }}/probe">
             <button class="row-ico" type="submit" title="{{ t('sites.probe') }}" aria-label="{{ t('sites.probe_named', name=spec.title or name) }}">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2-5.1"/><path d="M19.5 5v5h-5"/></svg>
             </button>

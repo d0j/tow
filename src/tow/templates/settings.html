@@ -495,13 +495,13 @@
               <div class="restore-point-row">
                 <div><b>{{ snap.at }}</b><span>{{ snap.size }}</span></div>
                 <div class="settings-actions backup-copy-actions">
-                  <form method="post" action="/settings/backup/night/{{ snap.name }}/check" data-return-target="acc-transfer">
+                  <form method="post" action="/settings/backup/night/{{ snap.name|urlencode }}/check" data-return-target="acc-transfer">
                     <button class="ghost" type="submit">{{ t('settings.common.check') }}</button>
                   </form>
-                  <form method="post" action="/settings/backup/night/{{ snap.name }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.night_restore_confirm', at=snap.at) }}">
+                  <form method="post" action="/settings/backup/night/{{ snap.name|urlencode }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.night_restore_confirm', at=snap.at) }}">
                     <button class="danger" type="submit">{{ t('settings.common.restore') }}</button>
                   </form>
-                  <a class="btn ghost danger" href="/settings/backup/night/{{ snap.name }}/delete">{{ t('settings.common.delete') }}</a>
+                  <a class="btn ghost danger" href="/settings/backup/night/{{ snap.name|urlencode }}/delete">{{ t('settings.common.delete') }}</a>
                 </div>
               </div>
               {% endfor %}
