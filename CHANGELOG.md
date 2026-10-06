@@ -7,6 +7,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Early web refusals carry the same security headers as normal responses. HTTP
+  errors are not cached; missing versioned assets no longer get immutable caching.
+  Successful downloads and revalidation keep their cache policy. Network permissions,
+  sign-in redirects and request limits are unchanged.
 - Dependency audits use a reserved temporary file per gate invocation, so parallel
   worktrees cannot overwrite another audit's requirements; files are cleaned after failures too.
 - History diagnostics count actual blobs, retain historical path aliases, and refuse
