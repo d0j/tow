@@ -349,11 +349,18 @@ def _prefixed(prefix: str, code: str, _version: int) -> tuple[tuple[str, str], .
 # --- dates and numbers ------------------------------------------------------------------------
 
 
+def datetime_pattern(lang: str | None = None, *, short: bool = False) -> str:
+    """The strftime pattern of ``lang``'s ``_meta.datetime`` (``datetime_short`` when ``short``);
+    the page scripts get it too, so a date reads the same in a page and in its live updates."""
+    field, default = ("datetime_short", DATETIME_SHORT_FORMAT) if short else ("datetime", DATETIME_FORMAT)
+    return str(_load(lang or current())[1].get(field) or default)
+
+
 def format_datetime(value: datetime, lang: str | None = None, *, short: bool = False) -> str:
     """A date and time the way ``lang`` writes it (its ``_meta.datetime``: digits only); ``short``:
     day, month and minutes (``_meta.datetime_short``) for a time of this year."""
-    field, default = ("datetime_short", DATETIME_SHORT_FORMAT) if short else ("datetime", DATETIME_FORMAT)
-    pattern = str(_load(lang or current())[1].get(field) or default)
+    default = DATETIME_SHORT_FORMAT if short else DATETIME_FORMAT
+    pattern = datetime_pattern(lang, short=short)
     try:
         return value.strftime(pattern)
     except ValueError:

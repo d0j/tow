@@ -47,12 +47,13 @@
     const source = () => JSON.stringify([field("url").value.trim(), field("client_id").value]);
     const manual = () => mode.value === "exact";
     const rowSize = (row) => BigInt(row.size);
+    // The same units and words as the server's sizes (web.bytes.*): "1,5 ГБ", "1.5 GB".
     const humanSize = (size) => {
-      const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
+      const units = ["web.bytes.b", "web.bytes.kb", "web.bytes.mb", "web.bytes.gb", "web.bytes.tb"];
       let scale = 1n, unit = 0;
       while (unit < units.length - 1 && size >= scale * 1024n) { scale *= 1024n; unit++; }
       const number = Number(size * 10n / scale) / 10;
-      return number.toLocaleString(locale, { maximumFractionDigits: 1 }) + " " + units[unit];
+      return t(units[unit], { size: number.toLocaleString(locale, { maximumFractionDigits: 1 }) });
     };
     const buildTree = () => {
       const top = { children: new Map(), path: "", depth: -1 };
@@ -197,6 +198,8 @@
     const invalidate = () => {
       // Discard the preparation and invalidate a late response. A chosen local file
       // belongs to the link it was chosen for, never to an edited one.
+      // "Changed, get contents again" only when there was something to discard.
+      const discarded = Boolean(snapshot || token.value || controller);
       generation++; ruleGeneration++;
       controller?.abort(); window.clearTimeout(ruleTimer);
       snapshot = null; selected.clear(); existing = [];
@@ -207,7 +210,7 @@
       limited.disabled = false; limited.hidden = true;
       if (fresh) { fresh.hidden = true; fresh.disabled = false; }
       if (cachedHint) cachedHint.hidden = true;
-      status.textContent = t("content.js.stale");
+      status.textContent = discarded ? t("content.js.stale") : "";
     };
     const load = async (allowLimited = false, restore = false, fromMagnet = false, fromTracker = false) => {
       if (allowLimited && !window.confirm(t("content.limited_confirm"))) return;
