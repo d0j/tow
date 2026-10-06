@@ -382,11 +382,29 @@ def test_the_release_workflow_tests_everything_before_it_uploads():
     assert jobs["posix"]["strategy"]["matrix"]["os"] == ["ubuntu-latest", "ubuntu-26.04", "macos-latest"]
     assert "scripts/install-smoke.sh" in jobs["posix"]["steps"][-1]["run"]
     assert "scripts/update-smoke.py --previous" in _runs(jobs["update"])
-    publish = _runs(jobs["publish"])
+
+
+def test_the_release_stays_a_draft_until_every_asset_is_read_back():
+    _text, flow = _workflow("release")
+    publish = _runs(flow["jobs"]["publish"])
     assert "sha256sum TOW-windows-x64.zip install.ps1 install.sh tow-source.tar.gz > SHA256SUMS" in publish
-    assert "gh release view" in publish  # created only when missing: existing notes stay
-    assert "gh release upload" in publish
-    assert "edit" not in publish.split()
+    create = next(line for line in publish.splitlines() if "gh release create" in line)
+    assert "--draft" in create
+    assert "--verify-tag" in create
+    order = [
+        publish.index("gh release upload"),
+        publish.index('[ "$(names)" = "$expected" ] || {'),
+        publish.index("cmp readback/SHA256SUMS assets/SHA256SUMS"),
+        publish.index("--draft=false"),
+    ]
+    assert order == sorted(order)
+    assert "sha256sum -c SHA256SUMS" in publish
+    # A public release's files are never replaced; its notes and title are never edited.
+    assert publish.index("is public and complete") < publish.index("gh release upload")
+    for line in publish.splitlines():
+        if "gh release edit" in line:
+            assert "--notes" not in line
+            assert "--title" not in line
 
 
 def test_the_windows_installer_smoke_covers_powershell_5_and_the_data():

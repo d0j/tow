@@ -706,10 +706,11 @@ Built so far (this workstream):
   uninstall, a reinstall around the data and purge); Ubuntu and
   macOS run `scripts/install-smoke.sh` (install.sh from the archive, the start and stop files,
   uninstall, purge, nothing outside); the update test above runs against the tag. Only then the
-  `publish` job (the only one with
-  `contents: write`) creates the release if it is missing (notes from CHANGELOG.md; existing
-  notes are never changed) and uploads `TOW-windows-x64.zip`, `install.ps1`, `install.sh`,
-  `tow-source.tar.gz` and `SHA256SUMS` with `gh`.
+  `publish` job (the only one with `contents: write`) creates the release as a draft if it is
+  missing (notes from CHANGELOG.md; existing notes are never changed), uploads
+  `TOW-windows-x64.zip`, `install.ps1`, `install.sh`, `tow-source.tar.gz` and `SHA256SUMS` with
+  `gh`, downloads them again and checks them against `SHA256SUMS`, and only then publishes it as
+  the latest release. The files of a public release are never replaced.
 - `tests/test_starter.py` (`tow start` with a fake clock), `tests/test_update_archive.py`
   (update.py without git against a local web server that plays GitHub: checksums, the
   fallback to the release's copy, refusals, rollback of a cut-off switch, one `app.prev`),
