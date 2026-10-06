@@ -1,15 +1,37 @@
-"""Before publishing the repository: scan every blob ever committed for secrets and private
-data. Prints categories, paths and counts only - never the matched values.
+"""Scan local blobs reachable from all refs and HEAD, without retrieving missing objects.
 
-    uv run python scripts/history-scan.py
+Print categories, escaped path hints and author names, not matches or author addresses.
+Exit 0: complete, no candidates; 1: complete, review candidates; 2: incomplete/refused.
+This is a pattern diagnostic, not proof that arbitrary secrets are absent.
+
+    uv run --frozen python scripts/history-scan.py --repo <public-clone>
 """
 
+import argparse
 import collections
+import contextlib
+import json
+import os
 import re
 import subprocess
+import sys
+import threading
 from pathlib import Path
 
-REPO = str(Path(__file__).resolve().parents[1])
+import regex
+
+REPO = Path(__file__).resolve().parents[1]
+MAX_BLOB_BYTES = 5_000_000
+GIT_TIMEOUT = 120
+MATCH_TIMEOUT = 2
+OID = rb"(?:[0-9a-f]{40}|[0-9a-f]{64})"
+HEADER = re.compile(rb"(" + OID + rb") (blob|tree|commit|tag) (0|[1-9][0-9]*)\n")
+RAW_CHANGE = re.compile(rb":[0-7]{6} [0-7]{6} (" + OID + rb") (" + OID + rb") [ACDMTUXB]")
+RISKY_PATH = re.compile(
+    rb"(^|/)(data(?:/|$)|config\.yaml$|secrets(?:\.[^/]*)?$|master\.key$|\.coverage(?:\.[^/]*)?$"
+    rb"|lan-auth(?:\.[^/]*)?$|tow\.jsonl$|state\.json$|download_history(?:\.json)?$)"
+)
+DISPLAY_EMAIL = regex.compile(rb"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", regex.VERSION0)
 PATTERNS = {
     "telegram bot token": re.compile(rb"\b\d{8,10}:[A-Za-z0-9_-]{35}\b"),
     "telegram chat id": re.compile(rb"chat_ids?\W{0,6}-?\d{6,}"),
@@ -20,50 +42,259 @@ PATTERNS = {
     "fernet / master key": re.compile(rb"\b[A-Za-z0-9_-]{43}=(?![A-Za-z0-9])"),
     "private IP": re.compile(rb"\b(?:192\.168|10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b"),
     "user profile path": re.compile(rb"(?i)C:\\\\?Users\\\\?[A-Za-z0-9._-]+"),
-    "email": re.compile(
-        rb"[A-Za-z0-9._%+-]+@(?!users\.noreply\.github\.com|example\.)[A-Za-z0-9.-]+\.[a-z]{2,}"
-    ),
+    "email": re.compile(rb"[A-Za-z0-9._%+-]+@(?!users\.noreply\.github\.com|example\.)[A-Za-z0-9.-]+\.[a-z]{2,}"),
 }
+SEARCH_PATTERNS = {label: regex.compile(pattern.pattern, regex.VERSION0) for label, pattern in PATTERNS.items()}
 
-objects = subprocess.run(
-    ["git", "-C", REPO, "rev-list", "--objects", "--all"], capture_output=True, text=True, check=True
-).stdout
-paths = {}
-for line in objects.splitlines():
-    sha, _, path = line.partition(" ")
-    if path:
-        paths.setdefault(sha, set()).add(path)
-hits = collections.defaultdict(lambda: collections.defaultdict(int))
-risky_paths = set()
-for sha, names in paths.items():
-    kind = subprocess.run(
-        ["git", "-C", REPO, "cat-file", "-t", sha], capture_output=True, text=True, check=False
-    ).stdout.strip()
-    if kind != "blob":
-        continue
-    for name in names:
-        low = name.lower()
-        if re.search(
-            r"(^|/)(data/|config\.yaml$|secrets|master\.key|\.coverage$|lan-auth|tow\.jsonl|state\.json|download_history)",
-            low,
-        ):
-            risky_paths.add(name)
-    blob = subprocess.run(["git", "-C", REPO, "cat-file", "-p", sha], capture_output=True, check=False).stdout
-    if len(blob) > 5_000_000:
-        continue
-    for label, pattern in PATTERNS.items():
-        count = len(pattern.findall(blob))
-        if count:
-            for name in names:
-                hits[label][name] += count
-print("blobs scanned:", sum(1 for _ in paths))
-print("runtime/secret-looking paths ever committed:", sorted(risky_paths) or "none")
-for label, files in hits.items():
-    top = sorted(files.items(), key=lambda kv: -kv[1])[:8]
-    print(f"\n{label}: {sum(files.values())} matches in {len(files)} paths")
-    for name, count in top:
-        print(f"   {count:4} {name}")
-authors = subprocess.run(
-    ["git", "-C", REPO, "log", "--all", "--format=%an <%ae>"], capture_output=True, text=True, check=False
-).stdout
-print("\nauthors:", collections.Counter(authors.splitlines()).most_common())
+
+class ScanError(RuntimeError):
+    """Only fixed diagnostic text may cross the command boundary."""
+
+
+def git_environment():
+    # --repo must not be redirected by inherited repository/namespace/object variables.
+    kept = {"GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM"}
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_") or key in kept}
+    env.update(GIT_NO_REPLACE_OBJECTS="1", GIT_NO_LAZY_FETCH="1", GIT_ALLOW_PROTOCOL="", GIT_OPTIONAL_LOCKS="0")
+    return env
+
+
+def git(repo, *args):
+    if args and args[0] == "log":
+        # Read stored metadata, not signatures, external author maps or display settings.
+        args = (
+            args[0],
+            "--no-show-signature",
+            "--no-use-mailmap",
+            "--no-notes",
+            "--no-decorate",
+            "--no-color",
+            *args[1:],
+        )
+    result = subprocess.run(
+        ["git", "-C", str(repo), *args],
+        capture_output=True,
+        env=git_environment(),
+        timeout=GIT_TIMEOUT,
+        check=False,
+    )
+    if result.returncode:
+        raise ScanError("Git metadata command failed")
+    return result.stdout
+
+
+def historical_paths(repo):
+    # rev-list --objects supplies only one ambiguous name per object. Raw NUL-delimited
+    # diffs preserve every changed name, including deleted aliases and separate merge parents.
+    changes = git(
+        repo,
+        "log",
+        "--all",
+        "--root",
+        "--full-history",
+        "-m",
+        "--raw",
+        "-z",
+        "--format=",
+        "--no-abbrev",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+    ).split(b"\0")
+    paths = collections.defaultdict(set)
+    index = 0
+    while index < len(changes):
+        header = changes[index].lstrip(b"\n")
+        index += 1
+        if not header:
+            continue
+        match = RAW_CHANGE.fullmatch(header)
+        if match is None or index >= len(changes) or not changes[index]:
+            raise ScanError("Git path history is incomplete")
+        name = changes[index]
+        index += 1
+        for oid in match.groups():
+            if oid.strip(b"0"):
+                paths[oid].add(name)
+    return paths
+
+
+class GitBatch:
+    """One owned, deadline-bounded child; no filters, textconv or network fetches."""
+
+    def __init__(self, repo):
+        self.process = subprocess.Popen(
+            ["git", "-C", str(repo), "cat-file", "--batch-command"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=git_environment(),
+        )
+        self.drainer = threading.Thread(target=self.discard_errors, daemon=True)
+        self.timer = threading.Timer(GIT_TIMEOUT, self.abort)
+        self.timer.daemon = True
+        try:
+            self.drainer.start()
+            self.timer.start()
+        except RuntimeError:
+            self.__exit__(RuntimeError, None, None)
+            raise ScanError("Git reader threads could not start") from None
+
+    def abort(self):
+        # Only this reader's child, never a runtime service or a discovered PID.
+        with contextlib.suppress(OSError):
+            self.process.kill()
+
+    def discard_errors(self):
+        # Drain while talking to Git, without retaining or exposing native diagnostics.
+        with contextlib.suppress(OSError, ValueError):
+            while self.process.stderr.read(65536):
+                pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, kind, _value, _traceback):
+        self.timer.cancel()
+        close_failed = False
+        try:
+            self.process.stdin.close()
+        except OSError:
+            close_failed = True
+        if kind is not None or close_failed:
+            self.abort()
+        try:
+            code = self.process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self.abort()
+            self.process.wait(timeout=10)
+            raise ScanError("Git object reader did not finish") from None
+        finally:
+            try:
+                self.process.stdout.close()
+            finally:
+                if self.drainer.ident is not None:
+                    self.drainer.join(timeout=10)
+                if self.timer.ident is not None:
+                    self.timer.join(timeout=10)
+                self.process.stderr.close()
+        if kind is None and (code or close_failed):
+            raise ScanError("Git object reader failed")
+
+    def request(self, command, oid):
+        if re.fullmatch(OID, oid) is None:
+            raise ScanError("Git returned an invalid object identity")
+        self.process.stdin.write(command + b" " + oid + b"\n")
+        self.process.stdin.flush()
+        header = self.process.stdout.readline(256)
+        match = HEADER.fullmatch(header)
+        if match is None or match[1] != oid:
+            raise ScanError("Git object metadata is missing or incomplete")
+        return match[2], int(match[3])
+
+    def read(self, oid, size):
+        if self.request(b"contents", oid) != (b"blob", size):
+            raise ScanError("Git object metadata changed")
+        data = bytearray()
+        while len(data) < size:
+            block = self.process.stdout.read(min(65536, size - len(data)))
+            if not block:
+                raise ScanError("Git object content is incomplete")
+            data.extend(block)
+        if self.process.stdout.read(1) != b"\n":
+            raise ScanError("Git object content terminator is invalid")
+        return bytes(data)
+
+
+def match_count(label, pattern, blob):
+    if label == "email" and b"@" not in blob:
+        return 0
+    try:
+        return sum(1 for _ in pattern.finditer(blob, timeout=MATCH_TIMEOUT))
+    except TimeoutError:
+        raise ScanError("pattern matching budget exceeded") from None
+
+
+def safe_hint(value):
+    try:
+        for pattern in (*SEARCH_PATTERNS.values(), DISPLAY_EMAIL):
+            value = pattern.sub(b"[redacted]", value, timeout=MATCH_TIMEOUT)
+    except TimeoutError:
+        raise ScanError("diagnostic redaction budget exceeded") from None
+    return json.dumps(value.decode("utf-8", "surrogateescape"), ensure_ascii=True)
+
+
+def scan(repo, max_blob_bytes):
+    shallow = git(repo, "rev-parse", "--is-shallow-repository").strip()
+    if shallow != b"false":
+        raise ScanError("shallow or unverified repository history")
+    objects = git(repo, "rev-list", "--objects", "--all", "--no-object-names").splitlines()
+    paths = historical_paths(repo)
+    authors = git(repo, "log", "--all", "--format=%an%x00").split(b"\0")
+    hits, totals = collections.defaultdict(collections.Counter), collections.Counter()
+    risky_paths, skipped = set(), []
+    scanned = 0
+    with GitBatch(repo) as batch:
+        for oid in dict.fromkeys(objects):
+            kind, size = batch.request(b"info", oid)
+            if kind != b"blob":
+                continue
+            names = paths.get(oid, {b"(unnamed blob " + oid[:12] + b")"})
+            risky_paths.update(name for name in names if RISKY_PATH.search(name.lower()))
+            if size > max_blob_bytes:
+                skipped.append((oid, size))
+                continue
+            blob = batch.read(oid, size)
+            scanned += 1
+            for label, pattern in SEARCH_PATTERNS.items():
+                count = match_count(label, pattern, blob)
+                if count:
+                    totals[label] += count
+                    hits[label].update(dict.fromkeys(names, count))
+    current = git(repo, "rev-list", "--objects", "--all", "--no-object-names").splitlines()
+    if set(current) != set(objects):
+        raise ScanError("reachable history changed during the scan; retry on a stable clone")
+    print("blobs scanned:", scanned)
+    print("blobs skipped:", len(skipped))
+    print("runtime/secret-looking paths:", ", ".join(safe_hint(name) for name in sorted(risky_paths)) or "none")
+    for label, files in hits.items():
+        print(f"\n{label}: {totals[label]} matches in {len(files)} historical path hints")
+        for name, count in sorted(files.items(), key=lambda row: (-row[1], row[0]))[:8]:
+            print(f"   {count:4} {safe_hint(name)}")
+    names = collections.Counter(name.strip(b"\n") for name in authors if name.strip(b"\n"))
+    print(
+        "\nauthor names:", ", ".join(f"{safe_hint(name)} ({count})" for name, count in sorted(names.items())) or "none"
+    )
+    for oid, size in skipped:
+        print(f"unscanned blob: {oid.decode('ascii')} ({size} bytes)")
+    if skipped:
+        print("scan incomplete: blob budget exceeded; increase --max-blob-bytes to review these objects")
+        return 2
+    print("scan complete: review required" if hits or risky_paths else "scan complete: no pattern candidates")
+    return 1 if hits or risky_paths else 0
+
+
+def positive_int(value):
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be positive")
+    return parsed
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repo", type=Path, default=REPO)
+    parser.add_argument("--max-blob-bytes", type=positive_int, default=MAX_BLOB_BYTES)
+    args = parser.parse_args(argv)
+    try:
+        return scan(args.repo, args.max_blob_bytes)
+    except ScanError as error:
+        print(f"scan incomplete: {error}", file=sys.stderr)
+    except OSError, subprocess.SubprocessError, UnicodeError, MemoryError:
+        # Native failures may contain private paths, stderr or command data.
+        print("scan incomplete: local Git scan failed", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
