@@ -11,6 +11,9 @@ import hashlib
 import io
 import json
 import os
+import shutil
+import subprocess
+import sys
 import tarfile
 import threading
 import urllib.request
@@ -19,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from test_update import Fake, updater
+from test_update import SCRIPT, Fake, updater
 
 REPO = "d0j/tow"
 
@@ -386,6 +389,29 @@ def test_a_crash_after_new_code_changes_data_restores_the_snapshot_too(install, 
     assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
     assert state(install)["status"] == "recovered"
     assert not (install["root"] / ".update-switch.json").exists()
+
+
+@pytest.mark.allow_system  # this Python runs the copy; a refused tag ends it before TOW is stopped or started
+def test_the_copy_in_runtime_updates_the_install_it_belongs_to(install):
+    # The start files run <TOW>/runtime/update.py while a switch record exists: it must find
+    # <TOW>/app, not take <TOW> for the code (which refused every run as "not a runtime install").
+    root = install["root"]
+    copy = root / "runtime" / "update.py"
+    copy.parent.mkdir()
+    shutil.copy2(SCRIPT, copy)
+    (root / "app.new").mkdir()
+    record = {"format": "tow-update-switch/v1", "phase": "accepted", "old": [], "new": []}
+    (root / ".update-switch.json").write_text(json.dumps(record), encoding="utf-8")
+
+    done = subprocess.run(
+        [sys.executable, str(copy), "--ref", "main"], capture_output=True, text=True, timeout=120, check=False
+    )
+
+    assert done.returncode == 2, done.stdout + done.stderr
+    assert "not to main" in done.stdout
+    assert "not a runtime install" not in done.stdout
+    assert not (root / ".update-switch.json").exists()  # the accepted switch was finished
+    assert leftovers(install) == []
 
 
 def test_a_damaged_update_snapshot_blocks_crash_recovery(install, github, monkeypatch):
