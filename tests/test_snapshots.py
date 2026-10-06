@@ -776,6 +776,79 @@ def test_a_damaged_journal_is_not_dropped_either(backup, monkeypatch):
     assert (data_dir() / ".tow-night-restore.json").exists()
 
 
+def test_a_restore_keeps_the_events_logged_after_the_copy(backup):
+    from tow.log import log_event, read_events
+
+    log_event("client_added", topic="before the copy")
+    snapshot = Path(create_snapshot()["snapshot"])
+    assert (snapshot / "tow.jsonl").is_file()  # copied for the record
+    log_event("client_added", topic="after the copy")
+
+    result = restore_snapshot(snapshot, apply=True)
+
+    topics = [event.get("topic") for event in read_events(limit=50)]
+    assert "after the copy" in topics
+    assert "before the copy" in topics
+    assert not (Path(result["safety_copy"]) / "tow.jsonl").exists()
+
+
+def test_an_event_never_waits_for_the_data_lock(backup):
+    import threading
+
+    from tow.log import log_event
+    from tow.store import persistence_lock
+
+    held, release = threading.Event(), threading.Event()
+
+    def hold():
+        with persistence_lock():
+            held.set()
+            release.wait(10)
+
+    holder = threading.Thread(target=hold)
+    holder.start()
+    try:
+        assert held.wait(10)
+        logged = threading.Thread(target=log_event, args=("synthetic_while_data_locked",))
+        logged.start()
+        logged.join(5)
+        assert not logged.is_alive(), "an event waited for the data lock"
+    finally:
+        release.set()
+        holder.join(10)
+
+
+def test_a_restore_of_an_earlier_version_puts_the_event_log_back(backup, monkeypatch):
+    import tow.snapshots
+    from tow.log import log_path
+    from tow.store import persistence_lock
+
+    safety = _crashed_restore(backup, monkeypatch)
+    journal_path = safety / "RESTORE.json"
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    saved = b'{"kind": "synthetic_before_the_old_restore"}\n'
+    (safety / "tow.jsonl").write_bytes(saved)
+    journal["entries"].append({"name": "tow.jsonl", "existed": True, "sha256": hashlib.sha256(saved).hexdigest()})
+    del journal["points_dir"]  # journals of 1.23.11 and earlier name no restore points folder
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+    log_path().write_bytes(b'{"kind": "synthetic_written_by_the_old_restore"}\n')
+    real_lock, locked = tow.snapshots.locked_log_path, []
+
+    def watched_lock():
+        locked.append(True)
+        return real_lock()
+
+    monkeypatch.setattr(tow.snapshots, "locked_log_path", watched_lock)
+
+    with persistence_lock():
+        pass
+
+    assert log_path().read_bytes().startswith(saved)
+    assert locked == [True]
+    assert load_state()["topics"] == [{"id": "after"}]
+    assert not (data_dir() / ".tow-night-restore.json").exists()
+
+
 def test_old_before_restore_copies_are_pruned_and_keep_no_settings_undo(backup, monkeypatch):
     from tow.snapshots import SAFETY_KEEP
     from tow.store import save_secret_undo

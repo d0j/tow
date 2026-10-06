@@ -243,14 +243,12 @@ These bounds do not limit state/history payloads or remove the full restore's me
 Every multi-file write is journaled; whichever TOW process next takes the data lock (`persistence_lock`) runs the
 registered recovery hooks first, so no process ever reads half-written stores.
 
-Event-log writes also take the data lock before the log lock: a writer after a crash
-must recover a prepared night restore before accepting an event that rollback would
-otherwise erase. A night restore holds the log lock continuously from safety capture
-through verified application or rollback, including the final journal/marker write.
-Crash rollback takes the same log barrier. Readers, append and rotation cannot observe
-or change an unfinished replacement. Audit and cleanup events run outside the OS log
-barrier, which is not reentrant. A recovery refusal makes append return false; diagnostic
-logging must not turn an already-confirmed client operation into a reported client failure.
+A night copy carries the event log for the record, but a restore never puts it back:
+History keeps what happened after the copy was made. Event-log writes therefore take only
+the log lock and never wait for the data lock. Only the rollback of a restore journaled by
+1.23.11 or earlier, which did replace the log, holds the log lock while it puts it back.
+Diagnostic logging must not turn an already-confirmed client operation into a reported
+client failure.
 
 | Journal | Protects | On a crash |
 |---|---|---|

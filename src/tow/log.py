@@ -20,7 +20,7 @@ from tow.net_errors import humanize
 from tow.paths import data_dir
 from tow.platform import locks
 from tow.records import ErrorFields
-from tow.store import init_lock_file, persistence_lock
+from tow.store import init_lock_file
 
 # 5 MiB x (1 + 4 rotated) keeps months of history (1 MiB x 3 kept about ten days).
 MAX_BYTES = 5 * 1024 * 1024
@@ -347,17 +347,16 @@ def log_event(kind: str, **fields: Any) -> bool:
     # must never abort the operation being logged (e.g. after a confirmed client add).
     try:
         path = log_path()
-        # Data first: recover an interrupted restore before an event can be appended
-        # to a log that rollback would replace. Recovery may itself emit an event;
-        # the data lock is reentrant, and no OS log lock has been acquired yet.
-        with persistence_lock(), _log_file_lock():
+        # The log lock alone: no restore replaces the event log, so an event never waits
+        # for the data lock (a night copy, a restore, a long check commit).
+        with _log_file_lock():
             try:
                 _rotate_if_needed(path)
             except OSError as exc:
                 print(f"TOW log rotation skipped: {type(exc).__name__}", file=sys.stderr)
             with path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-    except Exception as exc:  # noqa: BLE001 - unavailable persistence/recovery must not abort the logged operation
+    except Exception as exc:  # noqa: BLE001 - an unwritable log must not abort the logged operation
         print(f"TOW log write failed ({kind}): {type(exc).__name__}", file=sys.stderr)
         return False
     return True
