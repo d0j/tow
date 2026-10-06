@@ -75,6 +75,16 @@ def test_install_sh_checks_every_download_and_never_overwrites():
     assert text.index("trap - EXIT") > text.index('"$dir/app/scripts/tow" setup')
 
 
+def test_install_sh_runs_nothing_until_it_is_read_to_the_end():
+    # curl | sh runs what has arrived: a cut download must not run half an installation.
+    text = SH.read_text(encoding="utf-8")
+    assert text.endswith('\nmain "$@"\n')
+    body = text[: text.index("\nmain() {\n")]
+    commands = [line for line in _code_lines(body) if not line.startswith((" ", "}"))]
+    # Before main: only settings and the two message helpers.
+    assert all(re.match(r"(set -eu|[A-Z_]+=\S+|say\(\) |die\(\) \{)", line) for line in commands), commands
+
+
 def test_install_sh_pins_the_uv_of_the_windows_bundle():
     spec = importlib.util.spec_from_file_location("tow_build_bundle_pins", ROOT / "scripts" / "build-bundle.py")
     assert spec is not None
