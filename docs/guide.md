@@ -190,7 +190,8 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
   computer was off or asleep is caught up when TOW runs again, not after a fixed 24-hour wait.
 - **Keep night copies, days** accepts a whole number from 1 to 3650; new installations default to 7 days.
   An existing explicit count-based `backup_keep` policy stays in effect until you save days. Saving the field
-  does not delete copies: retention applies only after a new copy passes verification. The new copy and
+  does not delete copies: retention applies only after a new copy passes verification. The new copy, the three
+  newest earlier copies (whatever their age, so a computer that was off longer keeps some history) and
   future-dated copies are protected. An optional size budget can shorten history, but not delete these copies.
 - Both saved-copy lists offer **Check**, **Restore** and **Delete**. Deletion requires confirmation for the
   dated copy and cannot be undone; it removes only that copy, not current settings, torrents or history.

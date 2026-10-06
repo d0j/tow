@@ -1518,7 +1518,7 @@
       "automatic": "Automatic night copies",
       "automatic_hint": "Applies without restarting TOW. Turning this off keeps existing copies and manual actions; an already running copy finishes normally.",
       "retention_days_label": "Keep night copies, days",
-      "retention_note": "Older night copies are removed only after a new copy passes verification. The new copy and copies with future dates are kept. Default: 7 days. Free space for a complete copy and a reserve is checked before writing.",
+      "retention_note": "Older night copies are removed only after a new copy passes verification. The new copy, the three newest earlier copies (whatever their age) and copies with future dates are kept. Default: 7 days. Free space for a complete copy and a reserve is checked before writing.",
       "retention_legacy": "Currently the legacy rule keeps {count} copies. Saving this field switches to retention by days.",
       "delete_warning": "Only this backup will be permanently deleted. Current settings, torrents, history and other backups stay unchanged. This cannot be undone.",
       "manual_restore_confirm": "Restore the settings and history from this backup? TOW saves its current state automatically before replacing it.",

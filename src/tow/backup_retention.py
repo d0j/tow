@@ -6,6 +6,9 @@ from datetime import datetime, timedelta
 from typing import Any
 
 MIB = 1024 * 1024
+# Earlier copies kept whatever their age: after a gap longer than the retention (the
+# machine was off, copies failed) the new copy alone would otherwise be all that is left.
+MIN_OLDER_COPIES = 3
 
 
 def copy_time(value: str) -> datetime:
@@ -35,19 +38,20 @@ def retained_copies(
     """Select only; a verified newest copy and future-dated copies are never removed.
 
     Age is measured from the verified new copy in UTC, not from a possibly changed
-    filesystem date. An explicit legacy count override remains compatible.
+    filesystem date; the ``MIN_OLDER_COPIES`` newest earlier copies stay whatever their age.
+    An explicit legacy count override remains compatible.
     A byte budget may reduce historical coverage, but never discards the newest copy.
     """
     ordered = sorted(entries, key=lambda row: (row[1], row[0]), reverse=True)
     future = {name for name, when, _size in ordered if when > now} if policy["mode"] != "count" else set()
     kept = {newest, *future}
-    eligible = [row for row in ordered if row[0] not in future]
+    older = [row for row in ordered if row[0] not in future and row[0] != newest]
     if policy["mode"] == "count":
-        older = [row for row in eligible if row[0] != newest]
         kept.update(row[0] for row in older[: max(0, policy["keep"] - 1)])
     else:
         cutoff = now - timedelta(days=policy["days"])
-        kept.update(name for name, when, _size in eligible if when > cutoff)
+        kept.update(name for name, when, _size in older if when > cutoff)
+        kept.update(row[0] for row in older[:MIN_OLDER_COPIES])
     budget = policy["max_mib"] * MIB
     total = sum(size for name, _when, size in ordered if name in kept)
     if budget:
