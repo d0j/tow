@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from functools import wraps
 from threading import BoundedSemaphore
+from typing import Any
 
 from tow.browser_auth import browser_auth
 from tow.check import record_check_failure, run_check
@@ -132,14 +133,12 @@ def content_context_title(topic_id: str, url: str, client_id: str, title: str) -
     return str(topic.get("tracker_title") or title.strip() or topic.get("title") or "")
 
 
-def prepare_content(
-    url: str, client_id: str, blob: bytes | None, allow_limited: bool, *, fresh: bool = False
-) -> dict[str, object]:
-    from tow import content, torrent_cache
+def _content_source(url: str, client_id: str) -> tuple[dict[str, Any], str, str, Any]:
+    """The configuration, canonical link, enabled client id and site of a preparation."""
     from tow.clients.factory import client_configuration
     from tow.errors import TowError
     from tow.guess import canon_watch_url
-    from tow.trackers import load_trackers, match_tracker, presets
+    from tow.trackers import load_trackers, match_tracker
 
     cfg = load_config()
     url = canon_watch_url(url.strip())
@@ -149,6 +148,17 @@ def prepare_content(
     tracker = match_tracker(load_trackers(cfg), url)
     if tracker is None:
         raise TowError("check.no_tracker")
+    return cfg, url, str(client["id"]), tracker
+
+
+def prepare_content(
+    url: str, client_id: str, blob: bytes | None, allow_limited: bool, *, fresh: bool = False
+) -> dict[str, object]:
+    from tow import content, torrent_cache
+    from tow.errors import TowError
+    from tow.trackers import presets
+
+    cfg, url, client_id, tracker = _content_source(url, client_id)
     local = blob is not None
     cached = False
     if blob is None and not fresh and not allow_limited:
@@ -163,7 +173,7 @@ def prepare_content(
         blob = tracker.fetch_torrent(url, load_secrets(), str(cfg.get("user_agent") or "TOW"), persist=True)
     # A local file is not evidence of the topic: it only previews contents, is never saved as
     # the topic's metadata and never becomes its revision (content.site_revision).
-    result = content.prepare(blob, url, str(client["id"]), from_site=not local)
+    result = content.prepare(blob, url, client_id, from_site=not local)
     result["cached"] = cached
     if not cached and not local:
         try:
@@ -190,22 +200,13 @@ def prepare_magnet_content(url: str, client_id: str) -> dict[str, object]:
     Only a declared native preview operation is eligible.
     """
     from tow import content
-    from tow.clients.factory import client_configuration, from_secrets
+    from tow.clients.factory import from_secrets
     from tow.errors import TowError
-    from tow.guess import canon_watch_url
     from tow.torrent import parse_magnet_hashes, parse_torrent_metadata
-    from tow.trackers import load_trackers, match_tracker
 
-    cfg = load_config()
-    url = canon_watch_url(url.strip())
-    configuration = client_configuration(cfg, client_id or None)
-    if not configuration.get("enabled", True):
-        raise TowError("web.topics.client_disabled")
-    tracker = match_tracker(load_trackers(cfg), url)
-    if tracker is None:
-        raise TowError("check.no_tracker")
+    cfg, url, client_id, tracker = _content_source(url, client_id)
     secrets = load_secrets()
-    adapter = from_secrets(cfg, secrets, str(configuration["id"]))
+    adapter = from_secrets(cfg, secrets, client_id)
     if not adapter.capabilities.get("metadata_preview", False):
         raise TowError("content.magnet_unsupported")
     if not _MAGNET_PREVIEWS.acquire(blocking=False):
@@ -222,7 +223,7 @@ def prepare_magnet_content(url: str, client_id: str) -> dict[str, object]:
             raise TowError("content.magnet_failed")
         from tow import torrent_cache
 
-        result = content.prepare(blob, url, str(configuration["id"]), from_site=True)
+        result = content.prepare(blob, url, client_id, from_site=True)
         try:
             torrent_cache.remember(blob, url)
         except TowError, OSError, ValueError, RuntimeError:
