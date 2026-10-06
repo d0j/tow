@@ -9,6 +9,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Attached episode markers and hybrid `S01x08` / `S01xE08` names now share the
+  existing single-episode, list and range parsing, including internal separators
+  such as `S01_E08` / `S01.E08` without losing the season. Selection and progress use
+  the same result without renaming files or re-announcing completed history.
+  Malformed marker suffixes and fractional specials do not become ordinary episodes.
 - Diagnostics refresh local Python, topic counts, connection settings and autostart
   after updates or edits, without rerunning network probes, writing state or clearing
   previously observed client/site failures.

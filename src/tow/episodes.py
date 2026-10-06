@@ -472,10 +472,41 @@ _COVERAGE_PARSERS: tuple[Callable[[str, PurePosixPath], tuple[EpisodeLabel, ...]
 )
 
 
+_EXPLICIT_MARKER_HEAD = r"s\d{1,2}+[ ._-]*+(?:e|[xх]e?)\d{1,4}+"
+_EXPLICIT_MARKERS = re.compile(
+    r"(?i)" + _EXPLICIT_MARKER_HEAD + r"(?:"
+    r"[ ._]*+(?:e|[xх]e?)\d{1,4}+"
+    r"|[ ._]++"
+    + _EXPLICIT_MARKER_HEAD
+    + r"|\s*+[-–—~&+,]\s*+(?:(?:s\d{1,2}+[ ._-]*+)?(?:e|[xх]e?)\d{1,4}+|\d{1,4}+(?!\w))"
+    r")*+(?:v\d++)?"
+)
+
+
+def _normalize_explicit_markers(text: str) -> str:
+    """Accept attached ``S01E08`` and ``S01x08`` without changing file identities."""
+
+    def canonical(match: re.Match[str]) -> str:
+        # Consume the whole candidate before checking its boundary. A malformed
+        # suffix must not become a truncated episode, or restart a scan at each
+        # member of a long invalid chain. Possessive numeric parts also prevent
+        # five-digit episode numbers from being shortened to four digits.
+        end = match.end()
+        if end < len(text) and text[end].isalnum():
+            return match.group()
+        marker = re.sub(r"(?i)(s\d{1,2})[ ._-]++(?=[exх])", r"\1", match.group())
+        marker = re.sub(r"(?i)[xх]e?", "e", marker)
+        start = match.start()
+        boundary = " " if start and (text[start - 1].isalnum() or text[start - 1] == "_") else ""
+        return boundary + marker
+
+    return _EXPLICIT_MARKERS.sub(canonical, text)
+
+
 def parse_episode_coverage(name: str) -> tuple[EpisodeLabel, ...]:
     """Parse episode coverage from a filename, including compact ranges."""
     path = PurePosixPath(str(name or "").replace("\\", "/"))
-    text = path.name
+    text = _normalize_explicit_markers(path.name)
     for parse in _COVERAGE_PARSERS:
         coverage = parse(text, path)
         if coverage is not None:
