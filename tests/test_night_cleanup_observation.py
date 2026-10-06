@@ -110,7 +110,7 @@ def test_inventory_change_invalidates_record_without_mutating_copies(night, pend
     _check(sent)
     raw = snapshots.status_path().read_bytes()
     with persistence_lock():  # a copy committed without its monitoring write
-        copy = Path(snapshots._create_snapshot(keep=None, how="auto")["snapshot"])
+        copy = Path(snapshots._create_snapshot(how="auto")["snapshot"])
     manifest = (copy / "MANIFEST.json").read_bytes()
     report = _check(sent)
     assert report["backup_cleanup_pending"] is None

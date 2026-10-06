@@ -61,11 +61,11 @@ def test_cleanup_needs_confirmed_absence_and_retries_without_losing_new_copy(mon
     assert made["cleanup_warning"]
     assert victim.read_bytes() == before
     assert restore_points.point_path(made["id"]).is_file()
-    assert restore_points.cleanup_pending() is True
+    assert restore_points.cleanup_status()["pending"] is True
     fault["enabled"] = False
     next_point = restore_points.create_restore_point()
     assert "cleanup_warning" not in next_point
-    assert restore_points.cleanup_pending() is False
+    assert restore_points.cleanup_status()["pending"] is not True
     assert not victim.exists()
     assert [point["id"] for point in restore_points.list_restore_points()] == [next_point["id"]]
 
@@ -96,7 +96,7 @@ def test_real_web_restore_preserves_success_and_reports_safety_copy_cleanup(monk
     assert t("backup.restore_point.restore_cleanup_warning", lang) in flash
     assert flash_kind(response.headers["location"]) == "warn"
     assert load_state()["sentinel"] == "original"
-    assert restore_points.cleanup_pending() is True
+    assert restore_points.cleanup_status()["pending"] is True
     if operation == "point":
         assert restore_points.point_path(selected["id"]).is_file()
 
@@ -201,7 +201,7 @@ def test_failed_copy_does_not_clear_prior_cleanup_warning(monkeypatch):
     monkeypatch.setattr(restore_points, "export_bundle", fail)
     with pytest.raises(restore_points.RestorePointError):
         restore_points.create_restore_point()
-    assert restore_points.cleanup_pending() is True
+    assert restore_points.cleanup_status()["pending"] is True
 
 
 def test_cleanup_status_is_bound_to_folder_and_reads_do_not_write(tmp_path):
@@ -215,10 +215,10 @@ def test_cleanup_status_is_bound_to_folder_and_reads_do_not_write(tmp_path):
     cfg = load_config()
     cfg["restore_points_dir"] = str(tmp_path / "other")
     save_config(cfg)
-    assert restore_points.cleanup_pending() is False
+    assert restore_points.cleanup_status()["pending"] is not True
     cfg.pop("restore_points_dir")
     save_config(cfg)
-    assert restore_points.cleanup_pending() is True
+    assert restore_points.cleanup_status()["pending"] is True
     assert path.read_bytes() == before
 
 
@@ -228,7 +228,7 @@ def test_invalid_monitoring_state_never_grants_delete_permission_or_breaks_setti
 
     _seed()
     (data_dir() / "restore-point-status.json").write_text(content, encoding="utf-8")
-    assert restore_points.cleanup_pending() is False
+    assert restore_points.cleanup_status()["pending"] is not True
     with TestClient(app) as client:
         assert client.get("/settings").status_code == 200
 

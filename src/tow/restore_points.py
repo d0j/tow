@@ -114,11 +114,6 @@ def cleanup_status(*, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     return result
 
 
-def cleanup_pending() -> bool:
-    """Compatibility flag: False includes unknown, and is not proof of completion."""
-    return cleanup_status()["pending"] is True
-
-
 def _record_cleanup(pending: bool, location: Path) -> None:
     if type(pending) is not bool:
         raise TypeError("cleanup observation must be boolean")
@@ -419,7 +414,6 @@ __all__ = [
     "RestorePointError",
     "check_portable_bundle",
     "check_restore_point",
-    "cleanup_pending",
     "cleanup_status",
     "create_restore_point",
     "delete_restore_point",

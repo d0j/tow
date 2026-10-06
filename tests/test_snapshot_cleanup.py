@@ -46,7 +46,7 @@ def test_night_cleanup_failure_preserves_verified_new_copy_and_reports_only_actu
     old = Path(snapshots.create_snapshot()["snapshot"])
     proof = (old / "MANIFEST.json").read_bytes()
     fault = _block_deletion(monkeypatch, old, mode)
-    result = snapshots.create_snapshot(keep=1)
+    result = fixtures.create_keeping_one()
     assert result["ok"] is True
     assert snapshots.verify_snapshot(Path(result["snapshot"]))["signed"] is True
     assert result["pruned"] == []
@@ -58,7 +58,7 @@ def test_night_cleanup_failure_preserves_verified_new_copy_and_reports_only_actu
     assert next(row for row in events if row["kind"] == "backup_created")["pruned"] == 0
     assert any(row["kind"] == "backup_cleanup_pending" for row in history_events(group="errors"))
     fault["value"] = False
-    retry = snapshots.create_snapshot(keep=1)
+    retry = fixtures.create_keeping_one()
     assert old.name in retry["pruned"]
     assert not old.exists()
     assert not retry.get("cleanup_warning")
@@ -90,11 +90,11 @@ def test_safety_cleanup_failure_retains_ownership_proof_for_retry(monkeypatch, m
     old = folders[0]
     proof = (old / snapshots._JOURNAL).read_bytes()
     fault = _block_deletion(monkeypatch, old, mode)
-    assert snapshots._tidy_safety_copies() == []
+    assert snapshots._cleanup_safety_copies()[0] == []
     assert (old / snapshots._JOURNAL).read_bytes() == proof
     assert any(row["kind"] == "backup_cleanup_pending" for row in history_events(group="errors"))
     fault["value"] = False
-    assert snapshots._tidy_safety_copies() == [old.name]
+    assert snapshots._cleanup_safety_copies()[0] == [old.name]
     assert not old.exists()
     assert all(folder.exists() for folder in folders[1:])
 
@@ -148,7 +148,7 @@ def test_signed_night_copy_with_unowned_files_is_not_pruned(backup, monkeypatch,
     foreign = old / extra
     foreign.parent.mkdir(exist_ok=True)
     foreign.write_bytes(b"not owned by TOW")
-    result = snapshots.create_snapshot(keep=1)
+    result = fixtures.create_keeping_one()
     assert result["pruned"] == []
     assert foreign.read_bytes() == b"not owned by TOW"
 
@@ -269,7 +269,7 @@ def test_cleanup_listing_error_does_not_abort_the_new_verified_night_copy(backup
         return real_scan(root)
 
     monkeypatch.setattr(snapshots, "_snapshots", scan)
-    result = snapshots.create_snapshot(keep=1)
+    result = fixtures.create_keeping_one()
     assert result["ok"] is True
     assert result["pruned"] == []
     assert result["cleanup_warning"]
@@ -319,7 +319,7 @@ def test_watchdog_reports_cleanup_and_recovery_once_without_calling_a_verified_c
     save_config(cfg)
     old = Path(snapshots.create_snapshot()["snapshot"])
     fault = _block_deletion(monkeypatch, old, "held")
-    snapshots.create_snapshot(keep=1)
+    fixtures.create_keeping_one()
     now = snapshots.status()["last_ok_at"]
     save_state({"topics": [], "health": {"auto_at_ts": now}})
     sent, pings = [], []
@@ -344,7 +344,7 @@ def test_watchdog_reports_cleanup_and_recovery_once_without_calling_a_verified_c
     check()
     assert len(sent) == 1
     fault["value"] = False
-    snapshots.create_snapshot(keep=1)
+    fixtures.create_keeping_one()
     assert check()["backup_cleanup_pending"] is False
     assert sent == [t("watchdog.alert.backup_cleanup_pending", lang), t("watchdog.alert.backup_cleanup_ok", lang)]
     check()
