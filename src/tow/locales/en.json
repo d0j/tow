@@ -22,7 +22,8 @@
     "text": "The YAML settings expand to too much text (maximum 16,777,216 characters). Simplify repeated references. Processing was stopped.",
     "depth": "The YAML settings are nested too deeply (maximum 32 levels, including references). Processing was stopped.",
     "references": "The YAML settings contain cyclic references, duplicate anchor names or undefined references. Correct them before retrying. Processing was stopped.",
-    "documents": "The settings file must contain only one YAML document. Processing was stopped."
+    "documents": "The settings file must contain only one YAML document. Processing was stopped.",
+    "number": "The YAML settings contain a number or a date that cannot be read (too large or invalid). Processing was stopped."
   },
   "monitorrent": {
     "missing": "The Monitorrent database file was not found.",

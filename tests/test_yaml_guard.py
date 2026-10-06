@@ -59,6 +59,32 @@ def test_unsafe_references_and_multiple_documents_are_refused(loader, source, co
     assert caught.value.params == {}
 
 
+@pytest.mark.parametrize(
+    ("source", "value"),
+    [
+        ("t: 3:30", "3:30"),  # base 60 in YAML 1.1 only: text, as in YAML 1.2
+        ("t: -1:20:30.5", "-1:20:30.5"),
+        pytest.param("t: 1" + ":59" * 64_000, "1" + ":59" * 64_000, id="long-base-60"),
+        ("t: 1_000", 1000),
+        ("t: 0x1F", 31),
+        ("t: 0b101", 5),
+        ("t: 017", 15),
+        ("t: -1.5e+3", -1500.0),
+        ("t: .inf", float("inf")),
+        ("t: '3:30'", "3:30"),
+    ],
+)
+def test_numbers_are_read_without_base_60(source, value):
+    assert guard.load(source)["t"] == value
+
+
+@pytest.mark.parametrize("source", [pytest.param("t: " + "9" * 5000, id="huge-int"), "t: 2026-13-45"])
+def test_an_unreadable_number_or_date_is_a_yaml_refusal(source):
+    with pytest.raises(guard.YamlLimitError) as caught:
+        guard.load(source)
+    assert caught.value.code == "yaml_limits.number"
+
+
 def _doubling(*, merge: bool) -> str:
     lines = ["a0: &a0 {value: x}" if merge else "a0: &a0 [x]"]
     for number in range(1, 12):

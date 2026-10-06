@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import dataclass
@@ -18,7 +19,42 @@ MAX_INPUT_BYTES = 16 * 1024 * 1024
 MAX_EXPANDED_NODES = 100_000
 MAX_EXPANDED_TEXT = 16 * 1024 * 1024
 MAX_DEPTH = 32
-SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+_INT, _FLOAT = "tag:yaml.org,2002:int", "tag:yaml.org,2002:float"
+_BASE_LOADER: type[Any] = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+# The safe loader without YAML 1.1 base-60 numbers (as in YAML 1.2): ``3:30`` stays text, and a
+# long ``1:2:3:...`` scalar cannot cost quadratic time to construct. Other resolvers are unchanged.
+SAFE_LOADER: type[Any] = type(
+    "SafeLoader",
+    (_BASE_LOADER,),
+    {
+        "yaml_implicit_resolvers": {
+            first: [(tag, regexp) for tag, regexp in resolvers if tag not in (_INT, _FLOAT)]
+            for first, resolvers in _BASE_LOADER.yaml_implicit_resolvers.items()
+        }
+    },
+)
+SAFE_LOADER.add_implicit_resolver(
+    _INT,
+    re.compile(
+        r"""^(?:[-+]?0b[0-1_]+
+        |[-+]?0[0-7_]+
+        |[-+]?(?:0|[1-9][0-9_]*)
+        |[-+]?0x[0-9a-fA-F_]+)$""",
+        re.VERBOSE,
+    ),
+    list("-+0123456789"),
+)
+SAFE_LOADER.add_implicit_resolver(
+    _FLOAT,
+    re.compile(
+        r"""^(?:[-+]?(?:[0-9][0-9_]*)\.[0-9_]*(?:[eE][-+][0-9]+)?
+        |\.[0-9][0-9_]*(?:[eE][-+][0-9]+)?
+        |[-+]?\.(?:inf|Inf|INF)
+        |\.(?:nan|NaN|NAN))$""",
+        re.VERBOSE,
+    ),
+    list("-+0123456789."),
+)
 
 
 class YamlLimitError(TowError, yaml.YAMLError):
@@ -197,7 +233,10 @@ def load(data: str | bytes, *, loader: type[Any] | None = None) -> Any:
     _input_size(data)
     selected = loader or SAFE_LOADER
     _preflight(data, selected)
-    value = yaml.load(data, Loader=selected)
+    try:
+        value = yaml.load(data, Loader=selected)
+    except (ValueError, OverflowError) as exc:  # an integer beyond Python's digit limit, an unrepresentable number
+        raise YamlLimitError("yaml_limits.number") from exc
     validate_graph(value)
     return value
 
