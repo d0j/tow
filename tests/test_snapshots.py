@@ -930,6 +930,68 @@ def test_old_before_restore_copies_are_pruned_and_keep_no_settings_undo(backup, 
     assert all((data_dir() / name / "state.json").exists() for name in kept[1:])  # the rest stays
 
 
+@pytest.mark.parametrize("failing", ["state.json", "RESTORE.json", ".tow-night-restore.json"])
+def test_a_restore_that_fails_before_its_marker_leaves_no_before_restore_folder(backup, monkeypatch, failing):
+    import tow.snapshots
+
+    snapshot = _changed_after(create_snapshot())
+    real = tow.snapshots.atomic_write_bytes
+
+    def write(path, content):
+        if path.name == failing and (path.parent.name.startswith("before-restore-") or path.parent == data_dir()):
+            raise OSError(28, "No space left on device")
+        return real(path, content)
+
+    monkeypatch.setattr(tow.snapshots, "atomic_write_bytes", write)
+    with pytest.raises(SnapshotError, match="No space left on device"):
+        restore_snapshot(snapshot, apply=True)
+
+    assert not list(data_dir().glob("before-restore-*"))
+    assert load_state()["topics"] == [{"id": "after"}]
+
+
+def test_a_marker_published_before_an_error_keeps_its_before_restore_folder(backup, monkeypatch):
+    import tow.snapshots
+    from tow.store import persistence_lock
+
+    snapshot = _changed_after(create_snapshot())
+    real = tow.snapshots.atomic_write_bytes
+
+    def write(path, content):
+        real(path, content)
+        if path.name == ".tow-night-restore.json":
+            raise OSError(5, "I/O error")  # published, then the folder sync failed
+
+    monkeypatch.setattr(tow.snapshots, "atomic_write_bytes", write)
+    with pytest.raises(SnapshotError):
+        restore_snapshot(snapshot, apply=True)
+    monkeypatch.setattr(tow.snapshots, "atomic_write_bytes", real)
+
+    assert list(data_dir().glob("before-restore-*"))
+    with persistence_lock():  # recovery still finds every saved file
+        pass
+    assert load_state()["topics"] == [{"id": "after"}]
+    assert not (data_dir() / ".tow-night-restore.json").exists()
+
+
+def test_a_before_restore_folder_without_a_journal_is_removed_without_a_warning(backup):
+    snapshot = Path(create_snapshot()["snapshot"])
+    crashed = data_dir() / "before-restore-20260101-000000"  # a crash before its journal was written
+    crashed.mkdir()
+    (crashed / "state.json").write_text("{}", encoding="utf-8")
+    foreign = data_dir() / "before-restore-20260101-000001"
+    foreign.mkdir()
+    (foreign / "notes.txt").write_text("not a store", encoding="utf-8")
+
+    result = restore_snapshot(snapshot, apply=True)
+
+    assert not crashed.exists()
+    assert (foreign / "notes.txt").exists()  # not a copy of a store: never removed
+    assert "cleanup_warning" in result  # said for the foreign folder only
+    (foreign / "notes.txt").unlink()
+    assert "cleanup_warning" not in restore_snapshot(snapshot, apply=True)
+
+
 def test_a_broken_live_config_does_not_stop_the_restore_and_stays_local(backup):
     from tow.paths import config_path
 

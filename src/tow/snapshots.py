@@ -684,14 +684,7 @@ def _remove_stale_partials(root: Path, key: bytes) -> bool:
         try:
             if not _ordinary_directory(folder, missing=True) or (proof := _partial_owner_proof(folder, key)) is None:
                 continue
-            expected = {proof, "MANIFEST.json", *(name for name, _path in _fixed_members())}
-            if _ordinary_directory(folder / "restore-points", missing=True):
-                expected.update(
-                    member
-                    for point in (folder / "restore-points").iterdir()
-                    if _POINT_MEMBER.fullmatch(member := f"restore-points/{point.name}")
-                )
-            if not _remove_copy(folder, root, proof, expected):
+            if not _remove_copy(folder, root, proof, {proof, "MANIFEST.json", *_copy_members_in(folder)}):
                 pending = True
         except OSError, ValueError:
             pending = True
@@ -1051,8 +1044,10 @@ def _begin_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str,
     if safety.exists():
         safety = data_dir() / f"before-restore-{stamp}-{uuid.uuid4().hex[:6]}"
     entries = []
+    created = False
     try:
         safety.mkdir(parents=True, exist_ok=False)
+        created = True
         for name, target, _content in plan:
             if _ordinary_file(target, missing=True):
                 saved = target.read_bytes()
@@ -1070,9 +1065,11 @@ def _begin_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str,
         _rollback_plan(safety)  # verify every just-written copy before publishing the marker
         marker = _restore_record_bytes({"safety": safety.name}, limit=MAX_RESTORE_MARKER_BYTES)
         atomic_write_bytes(data_dir() / _MARKER, marker)
-    except (OSError, ValueError, TypeError, RecursionError, yaml.YAMLError) as exc:
-        # A failed exclusive mkdir may belong to another writer. Retain partial
-        # copies too: a marker published just before an I/O error still needs them.
+    except (OSError, ValueError, TypeError, RecursionError, yaml.YAMLError, SnapshotError) as exc:
+        # A failed exclusive mkdir may belong to another writer, and a marker published just
+        # before an I/O error still needs the copies. Otherwise nothing refers to the folder.
+        if created and _marked_safety() is None:
+            shutil.rmtree(safety, ignore_errors=True)
         raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=_reason(exc))) from exc
     return safety
 
@@ -1248,6 +1245,31 @@ def _owned_safety(safety: Path, journal: dict[str, Any]) -> bool:
     return _owned_tree(safety, expected)
 
 
+def _copy_members_in(folder: Path) -> set[str]:
+    """The member names a copy of TOW's stores may hold, with the restore points present in it."""
+    names = {name for name, _path in _fixed_members()}
+    if _ordinary_directory(folder / "restore-points", missing=True):
+        names.update(
+            member
+            for point in (folder / "restore-points").iterdir()
+            if _POINT_MEMBER.fullmatch(member := f"restore-points/{point.name}")
+        )
+    return names
+
+
+def _remove_unjournaled(folder: Path) -> bool:
+    """A before-restore folder without a journal holds only copies of stores; nothing refers to it."""
+    try:
+        if not _ordinary_directory(folder, missing=True):
+            return True
+        if not _owned_tree(folder, _copy_members_in(folder)):
+            return False
+        shutil.rmtree(folder)
+    except OSError, ValueError:
+        return False
+    return not folder.exists()
+
+
 def _finish(safety: Path, status: str) -> None:
     """Record the outcome first, then drop the marker: a marker left behind is harmless."""
     _write_journal(safety, _read_journal(safety), status)
@@ -1301,6 +1323,11 @@ def _prune_safety_copies(keep: int) -> tuple[list[str], bool]:
             journal = _read_journal(folder)
             if journal["status"] == "prepared" or not _owned_safety(folder, journal):
                 continue
+        except FileNotFoundError:
+            # No journal: its restore stopped before the marker (so before any live write).
+            if not _remove_unjournaled(folder):
+                pending = True
+            continue
         except OSError, UnicodeError, ValueError, KeyError, TypeError, RecursionError:
             pending = True
             continue  # unreadable is not evidence that a restore has finished
