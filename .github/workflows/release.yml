@@ -8,8 +8,10 @@ name: release
 #   install.sh            curl -LsSf .../releases/latest/download/install.sh | sh
 #   tow-source.tar.gz     GitHub's source archive of the tag (what install.sh and updates use)
 #   SHA256SUMS            the SHA-256 of every file above
-# Nothing is uploaded unless the bundle, both installers and the update of the latest published
-# release to this tag (scripts/update-smoke.py) passed on the runners.
+# The quality gate is not run again: the tag must be an annotated "TOW X.Y.Z" on origin/main
+# whose commit passed the `ci` workflow (its four-OS gate). Nothing is uploaded unless the
+# bundle, both installers and the update of the latest published release to this tag
+# (scripts/update-smoke.py) passed on the runners.
 
 on:
   push:
@@ -31,39 +33,55 @@ env:
   TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
-  gate:
-    name: gate (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest, ubuntu-26.04, macos-latest]
-        include:
-          # Keep the protected check name stable, but pin the older LTS runner.
-          - os: ubuntu-latest
-            runner: ubuntu-24.04
-    runs-on: ${{ matrix.runner || matrix.os }}
-    timeout-minutes: 30
+  source:
+    name: source archive
+    runs-on: ubuntu-24.04
+    # Waits for the ci run of the tagged commit when the tag follows its merge right away.
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.TAG }}
+          fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          enable-cache: true
-      - name: Install Python from .python-version
-        run: uv python install --no-bin --no-registry
-      - name: Sync locked environment
-        run: uv sync --frozen
-      - name: Quality gate (with dependency audit)
-        shell: pwsh
-        run: ./scripts/gate.ps1 -Audit
-
-  source:
-    name: source archive
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
+      - name: The tag is an annotated "TOW X.Y.Z" on origin/main
+        run: |
+          printf '%s\n' "$TAG" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?' || { echo "not a release tag: $TAG" >&2; exit 1; }
+          # The tag object itself (a checkout of a tag may leave only its commit).
+          git fetch --no-tags --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          [ "$(git cat-file -t "refs/tags/$TAG")" = tag ] || { echo "$TAG is not an annotated tag" >&2; exit 1; }
+          message=$(git for-each-ref --format='%(contents:subject)' "refs/tags/$TAG")
+          [ "$message" = "TOW ${TAG#v}" ] || { echo "the message of $TAG is '$message', not 'TOW ${TAG#v}'" >&2; exit 1; }
+          commit=$(git rev-parse "refs/tags/$TAG^{commit}")
+          git merge-base --is-ancestor "$commit" refs/remotes/origin/main || { echo "$TAG ($commit) is not on origin/main" >&2; exit 1; }
+          echo "COMMIT=$commit" >> "$GITHUB_ENV"
+      - name: The ci workflow passed on the tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # A finished successful run is enough; one still running is waited for (a tag pushed
+          # right after the merge); none, or only failed ones, stop the release.
+          for attempt in $(seq 1 90); do
+            verdict=$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$COMMIT&per_page=100" --jq '
+              [.workflow_runs[] | "\(.status)/\(.conclusion)"]
+              | if any(. == "completed/success") then "passed"
+                elif length == 0 then "none"
+                elif all(startswith("completed/")) then "failed"
+                else "running" end')
+            echo "ci on $COMMIT: $verdict"
+            case $verdict in
+              passed) exit 0 ;;
+              failed) echo "ci did not pass on $COMMIT (a cancelled run: re-run it, then this)" >&2; exit 1 ;;
+              none) [ "$attempt" -le 6 ] || { echo "no ci run for $COMMIT: run ci on main before releasing" >&2; exit 1; } ;;
+            esac
+            sleep 30
+          done
+          echo "ci did not finish on $COMMIT in time" >&2
+          exit 1
       - name: Download GitHub's source archive of the tag
         run: |
           curl -fsSL --retry 3 -o tow-source.tar.gz "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG}.tar.gz"
@@ -80,7 +98,7 @@ jobs:
 
   windows:
     name: Windows bundle
-    needs: [gate, source]
+    needs: [source]
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -110,7 +128,7 @@ jobs:
 
   posix:
     name: install.sh (${{ matrix.os }})
-    needs: [gate, source]
+    needs: [source]
     strategy:
       fail-fast: false
       matrix:
@@ -135,7 +153,7 @@ jobs:
   # source archive by the real updater, once to a broken copy that must roll back.
   update:
     name: update (${{ matrix.os }})
-    needs: [gate, source]
+    needs: [source]
     strategy:
       fail-fast: false
       matrix:
@@ -168,7 +186,7 @@ jobs:
 
   publish:
     name: upload to the release
-    needs: [gate, source, windows, posix, update]
+    needs: [source, windows, posix, update]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
