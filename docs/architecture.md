@@ -209,7 +209,8 @@ Deleting one copy rebinds a known cleanup observation without clearing previous 
 New night-copy policies default to `backup_days: 7`. Existing explicit `backup_keep`
 count policies remain supported until days are saved. Retention follows a verified new
 copy; that copy is always protected. Age uses signed creation time relative to the new
-copy, and future-dated copies are kept after a clock correction. An optional
+copy, and future-dated copies are kept after a clock correction. The three newest earlier copies are kept
+whatever their age, so a gap longer than the retention does not leave the new copy alone. An optional
 `backup_max_mib` can shorten history, but never removes the new copy or foreign data.
 Insufficient room for the full new copy plus a reserve refuses creation before pruning.
 `backup_enabled: false` removes scheduled backup jobs and stale-copy alerts, not

@@ -13,7 +13,7 @@ from helpers import flash_of
 from test_supervisor import make
 
 from tow import snapshots
-from tow.backup_retention import MIB, retained_copies, retention_settings
+from tow.backup_retention import MIB, MIN_OLDER_COPIES, retained_copies, retention_settings
 from tow.config import ConfigError, load_config, save_config
 from tow.paths import config_path
 from tow.store import save_state
@@ -41,18 +41,27 @@ def test_empty_optional_yaml_values_use_defaults_and_preserve_real_legacy_count(
     assert retention_settings({"backup_keep": 3, "backup_days": None})["mode"] == "count"
 
 
-@pytest.mark.parametrize("days", [1, 7, 14, 30, 90, 3650])
+@pytest.mark.parametrize("days", [1, 2, 7, 14, 30, 90, 3650])
 def test_age_boundary_keeps_latest_and_only_newer_than_cutoff(days):
-    entries = [(str(n), NOW - timedelta(days=n), MIB) for n in range(days + 2)]
+    entries = [(str(n), NOW - timedelta(days=n), MIB) for n in range(days + 3)]
     kept, pending = retained_copies(entries, newest="0", now=NOW, policy=retention_settings({"backup_days": days}))
-    assert kept == {str(n) for n in range(days)}
+    assert kept == {str(n) for n in range(max(days, 1 + MIN_OLDER_COPIES))}
     assert not pending
 
 
 def test_sparse_offline_history_and_clock_rollback_keep_new_copy_and_future_history():
     entries = [("old", NOW - timedelta(days=50), 1), ("future", NOW + timedelta(days=10), 1), ("new", NOW, 1)]
     kept, pending = retained_copies(entries, newest="new", now=NOW, policy=retention_settings({}))
-    assert kept == {"new", "future"}
+    assert kept == {"new", "future", "old"}  # the only earlier copy: kept whatever its age
+    assert not pending
+
+
+def test_a_gap_longer_than_the_retention_keeps_the_newest_earlier_copies():
+    # The machine was off for ten days: every earlier copy is older than the seven days kept.
+    entries = [(f"old-{n}", NOW - timedelta(days=10 + n), MIB) for n in range(7)]
+    entries.append(("new", NOW, MIB))
+    kept, pending = retained_copies(entries, newest="new", now=NOW, policy=retention_settings({}))
+    assert kept == {"new", "old-0", "old-1", "old-2"}
     assert not pending
 
 
@@ -163,6 +172,9 @@ def test_real_age_cleanup_removes_only_owned_expired_copy_after_verified_replace
     manifest["signature"] = snapshots._signature(manifest, snapshots._signing_key())
     proof.write_text(json.dumps(manifest), encoding="utf-8")
     assert snapshots.verify_snapshot(old)["signed"] is True
+    for _ in range(MIN_OLDER_COPIES):  # newer earlier copies, so the expired one is not among the kept ones
+        snapshots.create_snapshot()
+    assert old.exists()
     new = snapshots.create_snapshot()
     assert not old.exists()
     assert new["pruned"] == [old.name]
