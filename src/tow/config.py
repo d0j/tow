@@ -198,13 +198,20 @@ def web_address(value: object) -> bool:
     return isinstance(value, str) and origin_key(value) is not None
 
 
-# A site name or a topic id is part of page addresses (/sites/<name>/delete): never "../x".
+# A site name or a topic id is part of page addresses (/sites/<name>/delete): an imported one
+# must be a plain id. config.yaml keeps loading older names (YAML scalars such as 123, markup
+# shown as text) as long as they cannot move such an address elsewhere ("../topics/1").
 SAFE_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 
+def path_safe_name(name: object) -> bool:
+    text = str(name)
+    return text not in {".", ".."} and "/" not in text and "\\" not in text
+
+
 def _site_spec(name: object, spec: dict[str, Any]) -> None:
-    if not isinstance(name, str) or not SAFE_ID.fullmatch(name):
-        raise ConfigError("config.yaml: a site name may have only letters, digits, - and _ (at most 64)")
+    if not path_safe_name(name):
+        raise ConfigError("config.yaml: a site name must not contain / or \\ and must not be . or ..")
     for key in ("fetch_hosts", "login_hosts"):
         hosts = spec.get(key)
         if hosts is not None and (not isinstance(hosts, list) or not all(web_address(host) for host in hosts)):

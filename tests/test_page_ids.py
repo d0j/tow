@@ -11,8 +11,8 @@ from tow.bundle import ExportImportError, _validate_config_schema, _validate_sta
 from tow.config import ConfigError, validated
 
 
-@pytest.mark.parametrize("name", ["../topics/1", "a/b", "site name", "", "x" * 65, "сайт"])
-def test_config_and_import_refuse_a_site_name_that_is_not_a_plain_id(name):
+@pytest.mark.parametrize("name", ["../topics/1", "a/b", "a\\b", "..", "."])
+def test_config_and_import_refuse_a_site_name_that_moves_a_page_address(name):
     raw = {"trackers": {name: {"fetch_hosts": ["https://tracker.example"]}}}
     with pytest.raises(ConfigError, match="site name"):
         validated(raw)
@@ -20,9 +20,19 @@ def test_config_and_import_refuse_a_site_name_that_is_not_a_plain_id(name):
         _validate_config_schema(raw)
 
 
+@pytest.mark.parametrize("name", ["site name", "", "x" * 65, "сайт", 123, None])
+def test_an_older_odd_site_name_still_loads_but_is_never_imported(name):
+    raw = {"trackers": {name: {"fetch_hosts": ["https://tracker.example"]}}}
+    assert name in validated(raw)["trackers"]  # legacy config.yaml keeps working
+    with pytest.raises(ExportImportError, match=r"site name|non-string key"):
+        _validate_config_schema(raw)
+
+
 @pytest.mark.parametrize("name", ["nnmclub", "Fast-Torrent_2", "x" * 64])
 def test_plain_site_names_stay_accepted(name):
-    assert name in validated({"trackers": {name: {"fetch_hosts": ["https://tracker.example"]}}})["trackers"]
+    raw = {"trackers": {name: {"fetch_hosts": ["https://tracker.example"]}}}
+    assert name in validated(raw)["trackers"]
+    _validate_config_schema(raw)
 
 
 @pytest.mark.parametrize("topic_id", ["../sites/nnmclub", "a/b", "1 2", "", "x" * 65])
