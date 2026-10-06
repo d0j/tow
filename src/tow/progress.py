@@ -483,9 +483,9 @@ def _file_rule_plan(
     return resolve_selection(rows, policy_from_topic(topic), preferred_season=preferred_season)
 
 
-def _file_rule_fingerprint(topic: Topic) -> str | None:
+def _selection_fingerprint(topic: Topic) -> str | None:
     mode = str(as_dict(topic.get("selection")).get("mode") or "all")
-    if mode not in {"files", "exact"} or not _selection_is_current(topic):
+    if mode not in {"all", "files", "exact"} or not _selection_is_current(topic):
         return None
     keys = [str(value) for value in topic.get("selected_episode_keys") or []]
     context = [
@@ -494,6 +494,8 @@ def _file_rule_fingerprint(topic: Topic) -> str | None:
         policy_from_topic(topic),
         _preferred_season(topic, keys),
     ]
+    if mode == "all":
+        context.append(expected_for_topic(topic))
     return hashlib.sha256(json.dumps(context, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
@@ -751,9 +753,9 @@ def _open_record(topic: Topic, history: DownloadHistory) -> tuple[HistoryRecord,
     initial_baseline = "baseline_at" not in record
     record.setdefault("items", {})
     _repair_synthetic_baseline_completion(record)
-    expected = expected_for_topic(topic)
+    expected = expected_for_topic(topic) if _selection_is_current(topic) else None
     previous = record.get("expected")
-    fingerprint = _file_rule_fingerprint(topic)
+    fingerprint = _selection_fingerprint(topic)
     if fingerprint and previous and previous.get("selection_fingerprint") == fingerprint:
         expected = previous
     if expected:
@@ -786,7 +788,7 @@ def _selected_files(
                 "keys": list(file_plan.selected_episode_keys),
                 "source": "selection",
                 "confidence": "exact",
-                "selection_fingerprint": _file_rule_fingerprint(topic),
+                "selection_fingerprint": _selection_fingerprint(topic),
             }
         else:
             expected = None
@@ -811,6 +813,16 @@ def _selected_files(
         if selected
     ]
     observed_episode_keys = sorted({entry.key for _file, coverage in prepared for entry in coverage})
+    all_mode = str(as_dict(topic.get("selection")).get("mode") or "all") == "all"
+    if all_mode:
+        observed_episode_keys = sorted(
+            {
+                label.key
+                for (_row, rel, _size, _selected), coverage in zip(prepared_all, all_coverages, strict=True)
+                if is_video_file(rel)
+                for label in coverage
+            }
+        )
     season_relative = _season_relative_expected(expected, observed_episode_keys, preferred_season)
     if season_relative is not None:
         expected = record["expected"] = season_relative
@@ -821,6 +833,8 @@ def _selected_files(
     observed = _expected_from_observed(topic, expected, observed_episode_keys, selected_episode_keys)
     if observed is not None:
         expected = record["expected"] = observed
+    if all_mode and observed_episode_keys and expected is not None:
+        expected = record["expected"] = {**expected, "selection_fingerprint": _selection_fingerprint(topic)}
     return prepared, expected
 
 

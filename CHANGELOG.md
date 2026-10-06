@@ -9,6 +9,13 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- All-episode progress derives its current target from the full video metadata,
+  not just enabled client files. Disabled episodes cannot silently shrink an
+  all-files rule or finish an outdated title count. Temporary metadata loss
+  retains that target for the same verified context; a new tracker total
+  invalidates it. File priorities and completed-history evidence are unchanged.
+  Pending, unconfirmed or other-revision all-files rules cannot declare a
+  completed season from the previous selection.
 - Pending, unconfirmed or other-revision file rules no longer become completed
   targets from old client selections. Current literal and mask rules are replayed
   read-only against metadata so newly recognized memberships are counted and
