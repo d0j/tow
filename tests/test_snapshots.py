@@ -677,6 +677,42 @@ def test_an_unsigned_older_copy_can_be_checked_but_is_not_restored(backup):
     assert load_state()["topics"] == [{"id": "current"}]
 
 
+@pytest.mark.parametrize(
+    ("config", "refused"),
+    [
+        pytest.param(b"interval: " + b"1" * 5000 + b"\n", True, id="beyond-the-integer-digit-limit"),
+        pytest.param(b"interval: 1e400000\n", False, id="infinite-float-is-a-value"),
+        pytest.param(b"when: 2026-13-45\n", True, id="impossible-date"),
+        pytest.param(b"interval: 1" + b":59" * 64_000 + b"\n", False, id="long-base-60"),
+    ],
+)
+def test_checking_an_unsigned_copy_with_hostile_settings_is_bounded_and_said(backup, config, refused):
+    import time
+
+    from fastapi.testclient import TestClient
+    from helpers import flash_of
+
+    from tow.web import app
+
+    snapshot = Path(create_snapshot()["snapshot"])
+    (snapshot / "config.yaml").write_bytes(config)
+    manifest = json.loads((snapshot / "MANIFEST.json").read_text(encoding="utf-8"))
+    manifest["format"] = "tow-snapshot-v1"  # unsigned: anyone with access to the folder could plant it
+    manifest.pop("signature")
+    manifest["files"]["config.yaml"] = {"sha256": hashlib.sha256(config).hexdigest(), "size": len(config)}
+    (snapshot / "MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    started = time.monotonic()
+    response = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
+        f"/settings/backup/night/{snapshot.name}/check", follow_redirects=False
+    )
+
+    assert time.monotonic() - started < 2
+    assert response.status_code == 303
+    expected = t("web.backup.check_failed", "ru") if refused else t("backup.snapshot.unsigned", "ru")
+    assert expected in flash_of(response.headers["location"])
+
+
 def test_no_master_key_no_copy(backup, monkeypatch):
     monkeypatch.delenv("TOW_MASTER_KEY")
     monkeypatch.delenv("TOW_MASTER_KEY_FILE", raising=False)

@@ -478,6 +478,10 @@ Since 1.22.37, YAML settings are bounded before object construction, including a
 at that depth. Cyclic, undefined or duplicate anchor names and multiple documents are refused. Ordinary
 safe anchors, merge precedence and UTF-8 settings remain supported. The parsed/programmatic graph is
 checked again before copying, comparison or serialization. These limits apply to YAML, not JSON history.
+YAML 1.1 base-60 numbers are not read (as in YAML 1.2): an unquoted `3:30` stays text, so a long
+`1:2:3:…` value cannot take quadratic time. A number or date that cannot be represented (beyond Python's
+integer digit limit, an impossible date) is refused like the limits above, also when a legacy unsigned
+night copy is checked.
 Since 1.22.38, serialization is streamed into a bounded buffer using the same UTF-8 byte limit, including
 the header and YAML escaping. A short scalar alias may expand during dumping, and Unicode characters
 can occupy several bytes; neither can create a file larger than the reader permits. Save, night restore
