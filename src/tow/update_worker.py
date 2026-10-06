@@ -24,6 +24,8 @@ _LEASE_WAIT = 1.0
 _LEASE_POLL = 0.05
 _JOB_MAX_BYTES = 65536
 _JSON_MAX_DEPTH = 128
+# The phases update.py reports while it works (its outcome comes last).
+_PHASES = frozenset({"stopping", "backup", "installing", "checking", "rolling_back"})
 _STATUSES = frozenset(
     {
         "queued",
@@ -191,13 +193,15 @@ def worker_lease(path: Path, job: dict[str, Any]) -> Iterator[bool]:
 def _run(app: Path, job_path: Path, job: dict[str, Any], version: str, updater: Any) -> int:
     job.update(pid=os.getpid(), status="preparing")
     write_job(job_path, job)
-    seen: dict[str, Any] = {}
+    outcome = "failed"
     rolling_back = False
 
-    def phase(name: str) -> None:
-        nonlocal rolling_back
-        if name == "rolling_back":
-            rolling_back = True
+    def progress(name: str) -> None:
+        nonlocal outcome, rolling_back
+        if name not in _PHASES:
+            outcome = name  # what update-state.json records at the end
+            return
+        rolling_back = rolling_back or name == "rolling_back"
         job["status"] = name
         try:
             write_job(job_path, job)
@@ -206,34 +210,13 @@ def _run(app: Path, job_path: Path, job: dict[str, Any], version: str, updater: 
                 raise
             print("rollback continues despite unavailable progress journal", flush=True)
 
-    original_state = updater.Update.write_state
-
-    def record(work: Any, **fields: Any) -> None:
-        original_state(work, **fields)
-        seen.update(fields)
-
-    updater.Update.write_state = record
-    for cls, method, label in (
-        (updater.Update, "stop", "stopping"),
-        (updater.Update, "take_snapshot", "backup"),
-        (updater.System, "uv_sync", "installing"),
-        (updater.Update, "start_and_check", "checking"),
-        (updater.Update, "roll_back", "rolling_back"),
-    ):
-        original = getattr(cls, method)
-
-        def wrapped(self: Any, *args: Any, _original: Any = original, _label: str = label, **kwargs: Any) -> Any:
-            phase(_label)
-            return _original(self, *args, **kwargs)
-
-        setattr(cls, method, wrapped)
     try:
-        code = int(updater.update(f"v{version}", system=updater.System(app)))
+        code = int(updater.update(f"v{version}", system=updater.System(app), progress=progress))
     except Exception as exc:  # noqa: BLE001 - record unexpected runner failures without claiming success
         print(f"update worker failed: {type(exc).__name__}", flush=True)
         code = 1
-    result = "ok" if code == 0 else ("refused" if code == 2 else str(seen.get("status") or "failed"))
-    if result not in {"ok", "refused", "failed", "rolled_back"} or (code != 0 and result == "ok"):
+    result = "ok" if code == 0 else "refused" if code == 2 else outcome
+    if code != 0 and result not in {"refused", "failed", "rolled_back"}:
         result = "failed"
     job.update(status=result, finished_at=time.time(), error="" if code == 0 else "releases.update_failed")
     write_job(job_path, job)
