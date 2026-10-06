@@ -1,6 +1,6 @@
 [project]
 name = "tow"
-version = "1.23.8"
+version = "1.23.9"
 description = "Torrent topic watcher: follows forum tracker topics that replace their torrent in place and hands each new revision to your torrent client."
 readme = "README.md"
 license = "MIT"

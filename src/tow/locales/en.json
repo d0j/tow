@@ -1308,6 +1308,7 @@
     "magnet_timeout": "Magnet metadata was not received in time. No transfer was added by TOW; qBittorrent may continue its metadata-only peer request. Retry or choose a .torrent file.",
     "limited": "This site limits .torrent downloads. Choose a local .torrent or explicitly request one with the limit-consuming button.",
     "unavailable": "Contents could not be read. Check the link, sign-in or .torrent file.",
+    "path_conflict": "The torrent uses the same path for a file and a folder. File selection cannot be confirmed safely. Use a corrected torrent.",
     "expired": "The preparation expired or is unavailable. Get the contents again before saving.",
     "changed": "The link or torrent client changed. Get the contents again.",
     "full": "The preparation cache is full. Wait for old preparations to expire and retry.",

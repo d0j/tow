@@ -11,7 +11,7 @@ from starlette.concurrency import run_in_threadpool
 from tow.episodes import parse_season_hint
 from tow.errors import TowError
 from tow.selection import SelectionPendingError, normalize_policy, resolve_selection
-from tow.torrent import MAX_TORRENT_BYTES, parse_torrent_metadata
+from tow.torrent import MAX_TORRENT_BYTES, TorrentPathConflictError, parse_torrent_metadata
 from tow.web import services
 
 router = APIRouter()
@@ -68,6 +68,8 @@ async def content_prepare(
         else:
             result = await run_in_threadpool(services.prepare_content, url, client_id, blob, allow_limited)
         return JSONResponse(result, headers={"Cache-Control": "no-store"})
+    except TorrentPathConflictError:
+        return _error_response(TowError("content.path_conflict"))
     except TowError as exc:
         return _error_response(exc)
     except ValueError, RuntimeError, OSError:

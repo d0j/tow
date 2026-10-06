@@ -47,7 +47,7 @@ from tow.store import (
     save_state,
 )
 from tow.title import title_is_placeholder as _title_placeholder
-from tow.torrent import parse_magnet_hashes, parse_torrent_metadata, windows_path_key
+from tow.torrent import TorrentPathConflictError, parse_magnet_hashes, parse_torrent_metadata, windows_path_key
 from tow.trackers import GenericHttpTracker, load_trackers, match_tracker, presets
 
 _LOG = logging.getLogger("tow.check")
@@ -1126,6 +1126,8 @@ def _check_topic(topic: Topic, run: _CheckRun) -> CheckRow:
     work = _TopicCheck(topic, run, tr, url, row, old, client_id, topic_client)
     try:
         _check_revision(work)
+    except TorrentPathConflictError:
+        _topic_failed(work, TowError("content.path_conflict"))
     except Exception as error:  # noqa: BLE001 - any failure of one topic is its result, never the run's end
         _topic_failed(work, error)
     _stamp(topic, row)
