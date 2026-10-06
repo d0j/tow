@@ -499,6 +499,63 @@ def test_two_copies_in_the_same_second_and_an_old_partial_do_not_conflict(backup
     assert (partial / "keep.txt").read_text(encoding="utf-8") == "interrupted copy"
 
 
+@pytest.mark.parametrize("killed_at", ["state.json", "tow.jsonl", "renaming"])
+def test_a_partial_copy_left_by_a_killed_copy_is_removed_by_the_next_one(backup, monkeypatch, killed_at):
+    import tow.snapshots
+    from tow.restore_points import create_restore_point
+
+    create_restore_point()
+    first = Path(create_snapshot()["snapshot"])
+
+    class Killed(BaseException):  # the supervisor's time limit, a power loss: no except clause runs
+        pass
+
+    real_copy, real_rename = tow.snapshots._copy_snapshot_member, tow.snapshots._rename_with_retry
+
+    def copy(source, destination, name):
+        if name == killed_at:
+            raise Killed
+        return real_copy(source, destination, name)
+
+    def rename(source, target):
+        if killed_at == "renaming":
+            raise Killed
+        return real_rename(source, target)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(tow.snapshots, "_copy_snapshot_member", copy)
+        patch.setattr(tow.snapshots, "_rename_with_retry", rename)
+        with pytest.raises(Killed):
+            create_snapshot()
+    (left,) = backup.glob(".tow-*.partial")
+    foreign = backup / ".tow-20200101-000000.partial"  # not ours: no proof of this install
+    foreign.mkdir()
+    (foreign / "state.json").write_text("someone else's", encoding="utf-8")
+
+    result = create_snapshot()
+
+    assert not left.exists()
+    assert (foreign / "state.json").read_text(encoding="utf-8") == "someone else's"
+    assert "cleanup_warning" not in result
+    assert first.exists()
+    assert not (Path(result["snapshot"]) / "PARTIAL.json").exists()
+    assert verify_snapshot(Path(result["snapshot"]))["signed"]
+
+
+def test_a_partial_proof_signed_by_another_key_is_never_removed(backup, monkeypatch):
+    import tow.snapshots
+
+    folder = backup / ".tow-20200101-000000.partial"
+    folder.mkdir(parents=True)
+    proof = tow.snapshots._partial_proof(folder.name, b"another install's key")
+    (folder / "PARTIAL.json").write_text(json.dumps(proof), encoding="utf-8")
+    (folder / "state.json").write_text("{}", encoding="utf-8")
+
+    create_snapshot()
+
+    assert (folder / "state.json").exists()
+
+
 def test_a_failed_partial_reservation_never_removes_another_writers_files(backup, monkeypatch):
     _clock(monkeypatch, ["20261001-000000"])
     partial = backup / ".tow-20261001-000000.partial"

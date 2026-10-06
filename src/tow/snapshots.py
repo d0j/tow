@@ -74,6 +74,10 @@ _OPTIONAL_MEMBERS = frozenset({"secrets-undo.enc"})
 # Copied for the record, never restored: History keeps what happened after the copy was made.
 _NOT_RESTORED = "tow.jsonl"
 _PREFIX = "tow-"
+# A copy being written: ``.tow-<stamp>.partial`` with a signed proof that this install made it.
+_PARTIAL_NAME = re.compile(r"\.tow-[0-9]{8}-[0-9]{6}(?:-[0-9a-f]{6})?\.partial")
+_PARTIAL_PROOF = "PARTIAL.json"
+_PARTIAL_FORMAT = "tow-snapshot-partial-v1"
 # Access settings belong to this machine, not to the copy (as for restore points).
 _ACCESS_KEYS = ("bind", "port", "allow_lan")
 
@@ -567,6 +571,7 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
     files: dict[str, dict[str, Any]] = {}
     missing: list[str] = []
     key = _signing_key()  # no key, no copy: an unsigned copy could never be restored
+    stale_pending = _remove_stale_partials(root, key)
     previous_members = _previous_members(root, key)
     partial_created = False
     try:
@@ -574,6 +579,7 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
         _check_copy_space(root, members)
         partial.mkdir(parents=True, exist_ok=False)
         partial_created = True
+        _write_snapshot_manifest(partial / _PARTIAL_PROOF, _partial_proof(partial.name, key))
         with persistence_lock():  # a consistent cut: no check or edit writes meanwhile
             for name, source in members:
                 guard = locked_log_path() if name == "tow.jsonl" else contextlib.nullcontext(source)
@@ -595,6 +601,7 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
         }
         manifest["signature"] = _signature(manifest, key)
         _write_snapshot_manifest(partial / "MANIFEST.json", manifest)
+        (partial / _PARTIAL_PROOF).unlink()  # from here the signed MANIFEST proves the folder is ours
         _rename_with_retry(partial, target)
     except SnapshotError:
         if partial_created:
@@ -612,6 +619,7 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
         raise SnapshotError(t("backup.snapshot.unverified", owner_language(), name=target.name, reason=exc)) from exc
     # Never the copy just verified, even when the clock went back and it does not sort last.
     pruned, cleanup_pending = _prune_night_copies(root, target, keep, key, policy=policy)
+    cleanup_pending = cleanup_pending or stale_pending
     size = sum(item["size"] for item in files.values())
     log_event(
         "backup_created",
@@ -635,6 +643,59 @@ def _create_snapshot(*, keep: int | None, how: str) -> dict[str, Any]:
         result["cleanup_warning"] = t("backup.snapshot.cleanup_warning", owner_language())
         log_event("backup_cleanup_pending", copy_kind="night", how=how)
     return result
+
+
+def _partial_proof(folder: str, key: bytes) -> dict[str, Any]:
+    proof: dict[str, Any] = {"format": _PARTIAL_FORMAT, "folder": folder}
+    proof["signature"] = _signature(proof, key)
+    return proof
+
+
+def _partial_owner_proof(folder: Path, key: bytes) -> str | None:
+    """The member proving a partial folder is this install's: its signed proof, else a signed MANIFEST."""
+    if _ordinary_file(folder / _PARTIAL_PROOF, missing=True):
+        try:
+            proof = json.loads(_read_metadata_bytes(folder / _PARTIAL_PROOF, limit=MAX_MANIFEST_BYTES))
+        except UnicodeError, ValueError, RecursionError:
+            return None
+        if (
+            isinstance(proof, dict)
+            and proof.get("format") == _PARTIAL_FORMAT
+            and proof.get("folder") == folder.name
+            and _signature_matches(proof, key)
+        ):
+            return _PARTIAL_PROOF
+        return None
+    return "MANIFEST.json" if _owned_manifest(folder, key) is not None else None
+
+
+def _remove_stale_partials(root: Path, key: bytes) -> bool:
+    """Remove the partial folders a crash, a power loss or a killed copy left (data lock held).
+
+    Each is as large as a whole copy. Only one this install signed is removed, never a
+    foreign one or one of a version without the proof. True when one of ours stays.
+    """
+    pending = False
+    try:
+        candidates = [path for path in root.iterdir() if _PARTIAL_NAME.fullmatch(path.name)] if root.is_dir() else []
+    except OSError:
+        return True
+    for folder in candidates:
+        try:
+            if not _ordinary_directory(folder, missing=True) or (proof := _partial_owner_proof(folder, key)) is None:
+                continue
+            expected = {proof, "MANIFEST.json", *(name for name, _path in _fixed_members())}
+            if _ordinary_directory(folder / "restore-points", missing=True):
+                expected.update(
+                    member
+                    for point in (folder / "restore-points").iterdir()
+                    if _POINT_MEMBER.fullmatch(member := f"restore-points/{point.name}")
+                )
+            if not _remove_copy(folder, root, proof, expected):
+                pending = True
+        except OSError, ValueError:
+            pending = True
+    return pending
 
 
 def _check_copy_space(root: Path, members: list[tuple[str, Path]]) -> None:
