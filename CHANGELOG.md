@@ -11,6 +11,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   incomplete reads, shallow history, changed refs or exceeded budgets. Candidate
   matches require review; author addresses and native Git details are not printed.
   Batch reads replace one process per object, with bounded pattern matching.
+- Backup documentation reflects seven-day defaults, preserved legacy count policies,
+  scheduling controls and confirmed copy actions. Night folders are signed, not
+  fully encrypted; their readable settings/history and protected secrets are explained.
 
 ## [1.23.9] — 2026-10-06
 
