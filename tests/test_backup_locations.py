@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import re
 import sys
 from datetime import UTC, datetime
@@ -147,6 +148,27 @@ def test_write_check(tmp_path):
     blocker = tmp_path / "file"
     blocker.write_text("x", encoding="utf-8")
     assert check_writable(blocker / "sub") is not None
+
+
+@pytest.mark.parametrize(
+    ("code", "key"),
+    [
+        (errno.EINVAL, "locations.bad_name"),  # Windows: < > : " | ? * in a folder name
+        (errno.ENAMETOOLONG, "locations.name_too_long"),
+        (errno.ENOSPC, "locations.no_space"),
+        (errno.EIO, "locations.folder_unavailable"),
+    ],
+)
+def test_a_folder_the_system_refuses_is_named_in_the_pages_words(monkeypatch, tmp_path, code, key):
+    def refuse(*_a, **_k):
+        raise OSError(code, "The filename, directory name, or volume label syntax is incorrect")
+
+    monkeypatch.setattr(Path, "mkdir", refuse)
+
+    reason = check_writable(tmp_path / "bad")
+
+    assert reason == t(key, "ru")
+    assert "syntax" not in reason
 
 
 def test_save_check_and_reset_a_folder_from_settings(tmp_path):

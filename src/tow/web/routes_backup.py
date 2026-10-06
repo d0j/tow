@@ -19,7 +19,7 @@ from tow.clock import format_ui_timestamp, machine_now
 from tow.config import as_bool
 from tow.log import error_class
 from tow.paths import data_dir
-from tow.restore_points import CREATE_FAILED, INVALID_FILE, ROLLBACK_FAILED, RestorePointError
+from tow.restore_points import CREATE_FAILED, INVALID_FILE, ROLLBACK_FAILED, RestorePointError, invalid_file
 from tow.snapshots import SnapshotError
 from tow.store import StoreCorruptionError
 from tow.web import services
@@ -77,6 +77,8 @@ def settings_point_check(point_id: str) -> Response:
         services.log_event(
             "settings_backup_check_fail", copy_kind="restore_point", error=error_class(exc), how="manual"
         )
+        if reason := getattr(exc, "reason", ""):
+            return _backup_redirect("web.backup.check_failed_reason", "err", reason=reason)
         return _backup_redirect("web.backup.check_failed", "err")
     services.log_event("settings_backup_checked", copy_kind="restore_point", how="manual")
     return _backup_redirect("web.backup.checked")
@@ -193,6 +195,24 @@ def settings_backup_location(kind: str = Form(""), path: str = Form(""), action:
     return _backup_redirect(t("web.backup.folder_set", title=location.title, path=target, room=room, moved=moved))
 
 
+# What a night copy holds, in the owner's words: the page never names TOW's own files.
+_MEMBER_WORDS = {
+    "state.json": "web.backup.member_state",
+    "download_history.json": "web.backup.member_history",
+    "secrets.enc": "web.backup.member_secrets",
+    "secrets-undo.enc": "web.backup.member_secrets",
+    "tow.jsonl": "web.backup.member_log",
+    "config.yaml": "web.backup.member_config",
+}
+
+
+def _member_words(name: str) -> str:
+    if name.startswith("restore-points/"):
+        return t("web.backup.member_restore_point")
+    key = _MEMBER_WORDS.get(name)
+    return t(key) if key else name
+
+
 @router.post("/settings/backup/now")
 def settings_backup_now() -> Response:
     from tow.snapshots import SnapshotError, create_snapshot
@@ -203,7 +223,8 @@ def settings_backup_now() -> Response:
         return _backup_redirect("web.backup.night_failed", "err", error=exc)
     message = t("web.backup.copy_made", name=result["snapshot"], size=format_bytes(result["bytes"]))
     if result.get("missing"):
-        message += t("web.backup.copy_missing", names=", ".join(result["missing"]))
+        names = ", ".join(dict.fromkeys(_member_words(name) for name in result["missing"]))
+        message += t("web.backup.copy_missing", names=names)
     if result.get("cleanup_warning"):
         message += f" · {t('backup.snapshot.cleanup_warning')}"
     return _backup_redirect(message, "warn" if result.get("missing") or result.get("cleanup_warning") else "ok")
@@ -297,10 +318,10 @@ async def settings_portable_import(
             while chunk := await backup_file.read(1024 * 1024):
                 total += len(chunk)
                 if total > MAX_BUNDLE_BYTES:
-                    raise RestorePointError("uploaded backup is too large", kind=INVALID_FILE)
+                    raise invalid_file("backup.restore_point.portable_invalid", "too_large")
                 handle.write(chunk)
         if total <= 0:
-            raise RestorePointError("uploaded backup is empty", kind=INVALID_FILE)
+            raise invalid_file("backup.restore_point.portable_invalid", "empty")
         if action == "check":
             await run_in_threadpool(services.check_portable_bundle, upload_path)
             services.log_event("settings_portable_check", status="valid", how="manual")
@@ -328,7 +349,8 @@ async def settings_portable_import(
         if failure == ROLLBACK_FAILED:
             flash = t("web.settings.rollback_critical")
         elif failure == INVALID_FILE:
-            flash = t("web.settings.file_invalid")
+            reason = getattr(exc, "reason", "")
+            flash = t("web.settings.file_invalid_reason", reason=reason) if reason else t("web.settings.file_invalid")
         elif failure == CREATE_FAILED:
             flash = t("web.settings.safety_point_failed")
         elif temp_dir is None:

@@ -7,6 +7,7 @@ mapped drive letters reliably, UNC paths always work.
 
 from __future__ import annotations
 
+import errno
 import os
 import re
 import uuid
@@ -130,8 +131,18 @@ def check_writable(path: Path) -> str | None:
     except FileNotFoundError:
         return t("locations.drive_unavailable", owner_language())
     except OSError as exc:
-        return t("locations.folder_unavailable", owner_language(), error=exc.strerror or type(exc).__name__)
+        # In words of the page's language, never the system's own (English) error text.
+        return t(_OS_ERROR_KEYS.get(exc.errno or 0, "locations.folder_unavailable"), owner_language())
     return None
+
+
+# EINVAL is also what Windows says for a name with < > : " | ? * (ERROR_INVALID_NAME).
+_OS_ERROR_KEYS = {
+    errno.EINVAL: "locations.bad_name",
+    errno.ENAMETOOLONG: "locations.name_too_long",
+    errno.ENOSPC: "locations.no_space",
+    errno.EROFS: "locations.no_rights",
+}
 
 
 def free_bytes(path: Path) -> int | None:

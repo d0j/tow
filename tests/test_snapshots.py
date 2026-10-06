@@ -338,7 +338,9 @@ def test_backup_now_says_what_was_not_in_the_copy(backup):
     )
 
     flash = flash_of(response.headers["location"])
-    assert t("web.backup.copy_missing", "ru", names="download_history.json") in flash
+    assert t("web.backup.copy_missing", "ru", names="").rstrip() in flash
+    assert t("web.backup.member_history", "ru") in flash  # in words, not TOW's own file names
+    assert "download_history.json" not in flash
 
 
 def test_backup_dir_defaults_next_to_config_and_must_be_outside_the_data(tmp_path):

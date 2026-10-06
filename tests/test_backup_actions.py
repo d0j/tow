@@ -183,7 +183,11 @@ def test_damaged_copy_check_reports_failure_without_live_changes(copies, categor
     member.write_bytes(b"damaged-synthetic-copy")
     before = _live_bytes()
     response = _client().post(_url(copies, category) + "/check", follow_redirects=False)
-    assert "Не удалось проверить" in flash_of(response.headers["location"])
+    flash = flash_of(response.headers["location"])
+    if category == "night":
+        assert "Не удалось проверить" in flash
+    else:  # a restore point also says why
+        assert "Копия не прошла проверку: это не файл резервной копии TOW" in flash
     assert _live_bytes() == before
 
 
