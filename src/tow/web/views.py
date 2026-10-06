@@ -324,6 +324,11 @@ def _error_line(error: str, cls: str) -> str:
     if not text:
         return ""
     lang = owner_language()
+    if cls == "gone":
+        # Every mirror said 404/410: "removed from the site" is the reason; the transport words
+        # ("no mirror answered: … error 404") contradict it and stay in the tooltip.
+        label = CLS_RU.label(cls, lang, cls)
+        return label[:1].upper() + label[1:]
     detail = text.split(" — ", 1)[1] if " — " in text else text
     for internal, key in _ERROR_WORDS:
         detail = detail.replace(internal, i18n.t(key, lang) if key else "")
