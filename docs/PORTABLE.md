@@ -703,9 +703,9 @@ Built so far (this workstream):
   Cyrillic letters, `Start TOW.cmd` with every proxy pointing at a closed port, `/healthz`,
   `tow status`, a second start, `Stop TOW.cmd`, uv's and Python's places outside the folder
   unchanged) and `scripts/install-smoke.ps1` (`install.ps1` on Windows PowerShell 5.1 with
-  uninstall, a reinstall around the data and purge); Ubuntu and
-  macOS run `scripts/install-smoke.sh` (install.sh from the archive, the start and stop files,
-  uninstall, purge, nothing outside); the update test above runs against the tag. Only then the
+  uninstall, a reinstall around the data and purge); Ubuntu and macOS run
+  `scripts/install-smoke.sh` (install.sh from the archive, the start and stop files, uninstall,
+  purge, nothing outside); the update test above runs against the tag. Only then the
   `publish` job (the only one with `contents: write`) creates the release as a draft if it is
   missing (notes from CHANGELOG.md; existing notes are never changed), uploads
   `TOW-windows-x64.zip`, `install.ps1`, `install.sh`, `tow-source.tar.gz` and `SHA256SUMS` with
