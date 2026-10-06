@@ -18,11 +18,11 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
-import stat
 from pathlib import Path
 from typing import Any
 
 from tow.paths import config_path, secrets_path, state_path
+from tow.platform import is_link_like
 from tow.store import atomic_write_bytes, decode_json_bytes
 
 FORMAT = "tow-site-transaction/v1"
@@ -52,15 +52,12 @@ def digest(content: bytes) -> str:
 
 
 def is_link(path: Path) -> bool:
-    if path.is_symlink():
-        return True
     try:
-        attributes = getattr(path.lstat(), "st_file_attributes", 0)
+        return is_link_like(path.lstat())
     except FileNotFoundError:
         return False
     except OSError as exc:
         raise RuntimeError("site transaction path cannot be inspected") from exc
-    return bool(attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
 
 
 def _own_temporary(name: str) -> bool:

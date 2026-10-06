@@ -331,3 +331,7 @@ Stable names other modules build on.
   - `ui_language()` → the system's language tag (`ru-RU`) for commands typed in a terminal, `None` when unknown.
 - `private_folders(folders, repair=True)` — the folders that other accounts can still open,
   after making ours private; never raises (start-up and `tow doctor`).
+- `is_plain_file(info)`, `is_plain_dir(info)`, `is_link_like(info)` — an `lstat` result that is a
+  regular file or folder and no link, or one that is a link or a Windows reparse point (junction,
+  mount point). Every such check goes through them; only `update_worker.py` and
+  `scripts/update.py` keep their own copy (standard library only).

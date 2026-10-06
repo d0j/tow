@@ -10,6 +10,7 @@ import ctypes
 import json
 import os
 import signal
+import stat
 import struct
 import subprocess
 from types import SimpleNamespace
@@ -59,6 +60,41 @@ def test_a_backend_is_injected_and_put_back():
     finally:
         platform.set_backend(None)
     assert platform.current() is native
+
+
+@pytest.mark.parametrize(
+    ("mode", "attributes", "plain_file", "plain_dir", "link"),
+    [
+        (stat.S_IFREG, 0, True, False, False),
+        (stat.S_IFDIR, 0, False, True, False),
+        (stat.S_IFLNK, 0, False, False, True),
+        (stat.S_IFIFO, 0, False, False, False),
+        # A Windows junction or a file symlink reads as a directory or a file with the reparse bit.
+        (stat.S_IFDIR, stat.FILE_ATTRIBUTE_REPARSE_POINT, False, False, True),
+        (stat.S_IFREG, stat.FILE_ATTRIBUTE_REPARSE_POINT, False, False, True),
+    ],
+)
+def test_links_and_reparse_points_are_never_plain_files_or_folders(mode, attributes, plain_file, plain_dir, link):
+    info = SimpleNamespace(st_mode=mode, st_file_attributes=attributes)
+    assert platform.is_plain_file(info) is plain_file  # type: ignore[arg-type]
+    assert platform.is_plain_dir(info) is plain_dir  # type: ignore[arg-type]
+    assert platform.is_link_like(info) is link  # type: ignore[arg-type]
+    # A POSIX stat result has no attributes at all.
+    assert platform.is_plain_file(SimpleNamespace(st_mode=mode)) is (mode == stat.S_IFREG)  # type: ignore[arg-type]
+
+
+def test_a_real_file_folder_and_link_are_told_apart(tmp_path):
+    (tmp_path / "file").write_text("x", encoding="utf-8")
+    (tmp_path / "folder").mkdir()
+    assert platform.is_plain_file((tmp_path / "file").lstat())
+    assert platform.is_plain_dir((tmp_path / "folder").lstat())
+    assert not platform.is_link_like((tmp_path / "folder").lstat())
+    try:
+        (tmp_path / "link").symlink_to(tmp_path / "file")
+    except OSError:
+        return  # creating links needs a privilege on Windows: the bits are checked above
+    assert platform.is_link_like((tmp_path / "link").lstat())
+    assert not platform.is_plain_file((tmp_path / "link").lstat())
 
 
 @pytest.mark.parametrize(("system", "masked"), [("linux", [0o077]), ("macos", [0o077]), ("windows", [])])

@@ -322,7 +322,7 @@ def test_site_recovery_refuses_reparse_paths_before_any_write(monkeypatch, name)
 
     def reparse(path, *args, **kwargs):
         if path.name == name:
-            return SimpleNamespace(st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT)
+            return SimpleNamespace(st_mode=stat.S_IFREG, st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT)
         return real_lstat(path, *args, **kwargs)
 
     monkeypatch.setattr(Path, "lstat", reparse)

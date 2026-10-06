@@ -8,6 +8,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from tow.platform import is_plain_dir, is_plain_file
+
 
 def cleanup_names(location: Path, candidate: Callable[[str], bool]) -> list[str]:
     """Candidate copy names in a cleanup folder, sorted; no contents read, no link followed.
@@ -18,7 +20,7 @@ def cleanup_names(location: Path, candidate: Callable[[str], bool]) -> list[str]
         info = location.lstat()
     except FileNotFoundError:
         return []
-    if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+    if not is_plain_dir(info):
         raise ValueError("cleanup folder is not a regular directory")
     return sorted(path.name for path in location.iterdir() if candidate(path.name))
 
@@ -57,8 +59,7 @@ def copy_revision(path: Path) -> str:
 
     def add(member: Path, *, directory: bool = False) -> None:
         info = member.lstat()
-        ordinary = stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode)
-        if not ordinary or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        if not (is_plain_dir(info) if directory else is_plain_file(info)):
             raise ValueError("copy is not an ordinary file or directory")
         digest.update(
             repr((str(member), info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)).encode(

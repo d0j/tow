@@ -12,7 +12,6 @@ import math
 import os
 import re
 import shutil
-import stat
 import uuid
 import zipfile
 from collections.abc import Iterable
@@ -27,6 +26,7 @@ from tow.config import SAFE_ID, ConfigError, validated, web_address
 from tow.errors import TowError
 from tow.log import EXPORT_EVENT_KEYS, export_event_projection, log_event, read_events
 from tow.paths import config_path, data_dir, download_history_path, secrets_path, state_path
+from tow.platform import is_plain_dir, is_plain_file
 from tow.store import (
     STATE_SCHEMA_VERSION,
     SecretStoreError,
@@ -954,7 +954,7 @@ def _checkpoint_file(path: Path, *, missing: bool = False) -> bool:
         raise ExportImportError("import checkpoint file is missing") from None
     except OSError as exc:
         raise ExportImportError("import checkpoint file cannot be inspected") from exc
-    if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+    if not is_plain_file(info):
         raise ExportImportError("import checkpoint file is unsafe")
     return True
 
@@ -968,7 +968,7 @@ def _checkpoint_directory(path: Path, *, missing: bool = False) -> bool:
         raise ExportImportError("import checkpoint directory is missing") from None
     except OSError as exc:
         raise ExportImportError("import checkpoint directory cannot be inspected") from exc
-    if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+    if not is_plain_dir(info):
         raise ExportImportError("import checkpoint directory is unsafe")
     return True
 
