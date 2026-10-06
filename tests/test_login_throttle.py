@@ -1,7 +1,6 @@
 """Login throttling: lockout after repeated failures, reset on success."""
 
 import threading
-import time
 
 from fastapi.testclient import TestClient
 from helpers import flash_of, open_network
@@ -93,12 +92,30 @@ def test_many_addresses_share_one_failure_budget():
 
 
 def test_parallel_wrong_passwords_over_http_get_at_most_the_budget(monkeypatch):
+    from tow.web import services
+
     open_network(monkeypatch, token="t" * 32)
+    throttle = services.login_throttle
+    reserve = throttle.attempt
+    decided = [0]
+    changed = threading.Condition()
+
+    def counted_attempt(client):
+        try:
+            return reserve(client)
+        finally:
+            with changed:
+                decided[0] += 1
+                changed.notify_all()
 
     def slow_wrong(_candidate, _expected):
-        time.sleep(0.05)  # the real check (PBKDF2) takes time: every guess is in flight at once
+        # The real check (PBKDF2) takes time: it answers only once the throttle has decided on
+        # every guess, so all of them are in flight at once.
+        with changed:
+            assert changed.wait_for(lambda: decided[0] == 30, timeout=10)
         return False
 
+    monkeypatch.setattr(throttle, "attempt", counted_attempt)
     monkeypatch.setattr("tow.auth.token_matches", slow_wrong)
     start = threading.Barrier(30)
     codes: list[int] = []

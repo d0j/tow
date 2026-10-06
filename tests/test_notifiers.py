@@ -828,32 +828,61 @@ def test_a_check_delivery_is_audited_per_message(http, monkeypatch):
 
 
 def _two_threads_flush(http, monkeypatch):
-    """Thread A is inside a slow send when thread B of the same process flushes the same queue."""
+    """Thread A is inside a slow send when thread B of the same process flushes the same queue.
+
+    A's answer is held until B has either finished or is waiting for the in-process lock, so B
+    always runs while A waits for the messenger - on a busy machine too, without a sleep."""
     import threading
-    import time
 
     set_handler, seen, _ = http
-    inside = threading.Event()
+    inside, release, b_waits_or_done = threading.Event(), threading.Event(), threading.Event()
 
     def slow(_request):
         inside.set()
-        time.sleep(0.3)  # a slow messenger: B runs while A waits for the answer
+        assert release.wait(10)  # a slow messenger: B runs while A waits for the answer
         return httpx.Response(204)
 
     set_handler(slow)
     from tow.notifiers import outbox
     from tow.store import load_state, persistence_lock, save_state
 
+    class _ObservedLock:
+        """The recipient's lock; tells when a caller has to wait for it."""
+
+        def __init__(self, lock):
+            self._lock = lock
+
+        def acquire(self, timeout=-1):
+            if self._lock.acquire(blocking=False):
+                return True
+            b_waits_or_done.set()
+            return self._lock.acquire(timeout=timeout)
+
+        def release(self):
+            self._lock.release()
+
+    local_lock = outbox._local_lock
+    monkeypatch.setattr(outbox, "_local_lock", lambda key: _ObservedLock(local_lock(key)))
+
     with persistence_lock():
         state = load_state()
         outbox.enqueue(state, DISCORD, "серия 1")
         save_state(state)
     results: dict[str, dict] = {}
+
+    def flush_b():
+        try:
+            results["b"] = notifiers.flush_outbox(DISCORD)
+        finally:
+            b_waits_or_done.set()
+
     first = threading.Thread(target=lambda: results.__setitem__("a", notifiers.flush_outbox(DISCORD)))
     first.start()
     assert inside.wait(10)
-    second = threading.Thread(target=lambda: results.__setitem__("b", notifiers.flush_outbox(DISCORD)))
+    second = threading.Thread(target=flush_b)
     second.start()
+    assert b_waits_or_done.wait(10)
+    release.set()
     first.join(10)
     second.join(10)
     return seen, results
