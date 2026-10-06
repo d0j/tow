@@ -121,13 +121,13 @@ def test_distinct_file_masks_compile_bounded_groups_without_changing_the_rule(mo
         compiled.append(pattern)
         return original(pattern, *args, **kwargs)
 
-    expression = "missing*,*.MKV,*[[]*,*.mkv"
+    expression = "missing*,*.MKV,*[[]*,*.mkv,[!a]*"
     files = (TorrentFile(0, "Season 1/Show.mkv", 1), TorrentFile(1, "Extras/[Interview].mp4", 1))
     monkeypatch.setattr(tow.selection.re, "compile", record)
     plan = resolve_selection(files, normalize_policy("files", expression))
     assert plan.selected_indices == (0, 1)
     assert plan.expression == expression
-    # One literal filter, one exact guarded union, one bracket-syntax union;
+    # One literal filter, one exact guarded union, one union without fixed text;
     # never a Python matcher dispatch for every file/pattern pair.
     assert len(compiled) == 3
 
@@ -142,6 +142,10 @@ def test_distinct_file_masks_compile_bounded_groups_without_changing_the_rule(mo
         ("*literal*later*", "?literal?", "literal*", "*later", "**literal**"),
         ("*|*", "*.*", "*straße*", "*日本語*", "*\n*"),
         ("*same*.mkv", "*same*.srt", "*same*.bin", "[!a]*", "*?*?*"),
+        ("alpha[bc]omega", "*[a]middle[b]*", "*[!]tail", "*[]]end*"),
+        ("*[[]literal*", "*head[", "*[z-a]tail*", "*[!z-a]tail*"),
+        ("*a[?*]tail*", "*a[!?*]tail*", "*a[[]tail*", "*[!]]tail*"),
+        ("*Straße[ab]日本語*", "*日本語[ß]tail*", "*[]literal*", "*[][]tail*"),
     ],
 )
 def test_literal_prefilter_matches_standard_globs_on_generated_candidates(patterns):
@@ -182,7 +186,134 @@ def test_literal_filter_never_accepts_a_wrong_exact_match_or_hides_bracket_match
     assert matches("only[a bracket]")
 
 
-def test_file_mask_groups_are_bounded_at_the_maximum_rule_count(monkeypatch):
+@pytest.mark.parametrize(
+    ("pattern", "literal"),
+    [
+        ("*z000*[.]bin", "z000"),
+        ("*[a]z000*", "az000"),
+        ("*[a]middle[b]*", "amiddleb"),
+        ("*head[", "head["),
+        ("*[]literal*", "[]literal"),
+        ("*[!]tail*", "[!]tail"),
+        ("*[]]tail*", "]tail"),
+        ("*[!]]tail*", "tail"),
+        ("*[[]tail*", "[tail"),
+        ("*[?*]tail*", "tail"),
+        ("*[!?*]tail*", "tail"),
+        ("*[z-a]tail*", "tail"),
+        ("*[!z-a]tail*", "tail"),
+        ("*[a&&b]tail*", "tail"),
+        ("*[a--b]tail*", "tail"),
+        ("*[a]*", "a"),
+        ("*[?]tail*", "?tail"),
+        ("*[*]tail*", "*tail"),
+        ("*[-]tail*", "-tail"),
+        ("*[^]tail*", "^tail"),
+        ("*[\\]tail*", "\\tail"),
+        ("*a[bc]tail*", "tail"),
+        ("*?*", ""),
+    ],
+)
+def test_mandatory_literals_preserve_singletons_ranges_and_malformed_classes(pattern, literal):
+    assert max(tow.selection._mandatory_parts(pattern), key=len, default="") == literal
+
+
+def test_bracket_literal_guards_preserve_generated_positive_and_negative_matches():
+    runs = ("", "a", "literal", "tail", "Straße", "日本語", "\n", "]", "[]", "!")
+    boundaries = (
+        "*",
+        "?",
+        "[ab]",
+        "[!a]",
+        "[]]",
+        "[!]]",
+        "[[]",
+        "[z-a]",
+        "[!z-a]",
+        "[?*]",
+        "[!?*]",
+        "[a&&b]",
+        "[a--b]",
+        "[",
+        "[]",
+        "[!]",
+        "[[]]",
+    )
+    values = ("", "a", "b", "]", "[", "?", "*", "!", "x", "日本語", "ß", "\n", "[!]", "[]")
+    comparisons = positive = 0
+    for prefix in runs:
+        for suffix in runs:
+            for boundary in boundaries:
+                pattern = (prefix + boundary + suffix).casefold()
+                parts = tow.selection._mandatory_parts(pattern)
+                matches = tow.selection._file_mask_matcher((pattern,))
+                for candidate in (pattern, *(prefix + value + suffix for value in values)):
+                    path = candidate.casefold()
+                    expected = fnmatch.fnmatchcase(path, pattern)
+                    assert matches(path) == expected, (path, pattern, parts)
+                    if expected:
+                        assert all(part in path for part in parts), (path, pattern, parts)
+                        positive += 1
+                    comparisons += 1
+    assert comparisons == 25500
+    assert positive > 5000
+
+
+def test_single_character_classes_preserve_standard_matches_including_metacharacters():
+    characters = (*(chr(code) for code in range(128)), "日本語", "ß", "İ", "é", "λ")
+    for character in characters:
+        pattern = ("prefix[" + character + "]suffix").casefold()
+        parts = tow.selection._mandatory_parts(pattern)
+        matches = tow.selection._file_mask_matcher((pattern,))
+        for candidate in ("prefix" + value + "suffix" for value in (*characters, "[!]", "[]", "[", "")):
+            candidate = candidate.casefold()
+            expected = fnmatch.fnmatchcase(candidate, pattern)
+            assert matches(candidate) == expected, (candidate, pattern)
+            if expected:
+                assert all(part in candidate for part in parts), (candidate, pattern, parts)
+
+
+@pytest.mark.parametrize("sparse", [False, True])
+def test_shared_title_and_sparse_literal_hits_do_not_force_exact_union(monkeypatch, sparse):
+    from types import SimpleNamespace
+
+    original = tow.selection.re.compile
+    exact_calls = []
+
+    def record(pattern, *args, **kwargs):
+        compiled = original(pattern, *args, **kwargs)
+
+        def match(path):
+            exact_calls.append(path)
+            return compiled.match(path)
+
+        return SimpleNamespace(match=match, search=compiled.search)
+
+    monkeypatch.setattr(tow.selection.re, "compile", record)
+    template = "*aaaaaa*z{index:03d}*x*" if sparse else "*aaaaaaaa*z{index:03d}*"
+    matches = tow.selection._file_mask_matcher(template.format(index=index) for index in range(500))
+    path = "a" * 240 + ("z000" if sparse else "") + "00000.bin"
+    assert not matches(path)
+    assert exact_calls == []
+
+
+def test_common_literal_checks_are_bounded_and_never_decide_success():
+    checks = []
+
+    class ObservedPath(str):
+        def __contains__(self, part):
+            checks.append(part)
+            return super().__contains__(part)
+
+    parts = [f"part{index:02d}" for index in range(20)]
+    matches = tow.selection._file_mask_matcher(("*" + "*".join(parts) + "*Z*",))
+    assert not matches(ObservedPath("-".join(parts)))
+    assert len(checks) == 8
+    assert matches(ObservedPath("-".join(parts) + "-Z"))
+
+
+@pytest.mark.parametrize(("last_pattern", "expected_groups"), [("*[[]*", 2), ("[!o]*", 3)])
+def test_file_mask_groups_are_bounded_at_the_maximum_rule_count(monkeypatch, last_pattern, expected_groups):
     original = tow.selection.re.compile
     compiled = []
 
@@ -191,9 +322,9 @@ def test_file_mask_groups_are_bounded_at_the_maximum_rule_count(monkeypatch):
         return original(pattern, *args, **kwargs)
 
     monkeypatch.setattr(tow.selection.re, "compile", record)
-    patterns = [f"*absent-{index:03d}*" for index in range(499)] + ["*[[]*"]
+    patterns = [f"*absent-{index:03d}*" for index in range(499)] + [last_pattern]
     matches = tow.selection._file_mask_matcher(patterns)
-    assert len(compiled) == 3
+    assert len(compiled) == expected_groups
     assert not matches("ordinary.bin")
     assert matches("[extra].bin")
 
@@ -256,8 +387,11 @@ print('ok')
 
 
 @pytest.mark.allow_system
-@pytest.mark.parametrize("nested", [False, True])
-def test_parsed_large_torrents_with_long_paths_finish_file_selection(nested):
+@pytest.mark.parametrize("scenario", ["long", "nested", "deep"])
+@pytest.mark.parametrize(
+    "kind", ["literal", "prefix", "suffix", "middle", "malformed", "present", "sparse", "sparse-middle"]
+)
+def test_parsed_large_torrents_with_long_paths_finish_file_selection(scenario, kind):
     script = """
 import sys
 from pathlib import Path
@@ -275,17 +409,26 @@ def encode(value):
     return b'd' + b''.join(encode(key) + encode(value[key]) for key in sorted(value)) + b'e'
 
 entries = []
-for index in range(MAX_FILES):
-    path = [('a' * 240 + f'{index:05d}.bin').encode()]
-    if sys.argv[2] == 'True':
+scenario, kind = sys.argv[2:4]
+file_count = 7000 if scenario == 'deep' else MAX_FILES
+for index in range(file_count):
+    base = 'a' * 240 + ('z000' if kind.startswith('sparse') else '') + f'{index:05d}.bin'
+    path = [base.encode()]
+    if scenario == 'nested':
         path = [b'b' * 200, b'c' * 200, *path]
+    elif scenario == 'deep':
+        path = [b'b' * 250 for _ in range(15)] + path
     entries.append({b'length': 1, b'path': path})
 torrent = encode({b'info': {b'name': b'Fixture', b'piece length': 16384,
-                           b'pieces': b'x' * 40, b'files': entries}})
+                           b'pieces': b'x' * (20 * ((file_count + 16383) // 16384)), b'files': entries}})
 assert len(torrent) < MAX_TORRENT_BYTES
 metadata = parse_torrent_metadata(torrent)
-assert len(metadata.files) == MAX_FILES
-expression = ','.join(f'*absent-{index:03d}*' for index in range(500))
+assert len(metadata.files) == file_count
+templates = {'literal': '*absent-{index:03d}*', 'prefix': '*z{index:03d}*[.]bin',
+             'suffix': '*[a]z{index:03d}*', 'middle': '*[a]z{index:03d}[b]*',
+             'malformed': '*z{index:03d}[', 'present': '*aaaaaaaa*z{index:03d}*',
+             'sparse': '*aaaaaa*z{index:03d}*x*', 'sparse-middle': '*[a]z{index:03d}[b]*'}
+expression = ','.join(templates[kind].format(index=index) for index in range(500))
 policy = selection.normalize_policy('files', expression)
 try:
     selection.resolve_selection(metadata.files, policy)
@@ -297,7 +440,7 @@ assert policy['value'] == expression
 print('ok')
 """
     result = subprocess.run(
-        [sys.executable, "-I", "-B", "-c", script, str(Path(tow.selection.__file__).resolve()), str(nested)],
+        [sys.executable, "-I", "-B", "-c", script, str(Path(tow.selection.__file__).resolve()), scenario, kind],
         capture_output=True,
         text=True,
         timeout=10,
