@@ -11,6 +11,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - Web update logs remain readable in Russian on Windows with a legacy system
   encoding. The isolated worker explicitly writes UTF-8 without weakening isolation.
+- File selection combines distinct masks into one matcher so large rule sets avoid
+  repeated Python dispatch. Matching semantics and input limits are unchanged.
 
 ## [1.23.3] — 2026-10-06
 

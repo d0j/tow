@@ -72,6 +72,12 @@ print('ok')
         "*straße*",
         "*日本語*",
         "missing*",
+        "*|*,*.mkv",
+        "*.srt,*[[]*",
+        "[!a]*,*.MKV",
+        "[],[!],*.mkv",
+        "*?*?*,*straße*",
+        "*日本語*,*straße*,*日本語*",
     ],
 )
 def test_prepared_file_matchers_preserve_path_basename_and_wildcard_semantics(expression):
@@ -104,6 +110,23 @@ def test_prepared_file_matchers_preserve_path_basename_and_wildcard_semantics(ex
         plan = resolve_selection(files, policy)
         assert plan.selected_indices == expected
         assert plan.expression == expression
+
+
+def test_distinct_file_masks_compile_one_matcher_without_changing_the_rule(monkeypatch):
+    original = tow.selection.re.compile
+    compiled = []
+
+    def record(pattern, *args, **kwargs):
+        compiled.append(pattern)
+        return original(pattern, *args, **kwargs)
+
+    expression = "missing*,*.MKV,*[[]*,*.mkv"
+    files = (TorrentFile(0, "Season 1/Show.mkv", 1), TorrentFile(1, "Extras/[Interview].mp4", 1))
+    monkeypatch.setattr(tow.selection.re, "compile", record)
+    plan = resolve_selection(files, normalize_policy("files", expression))
+    assert plan.selected_indices == (0, 1)
+    assert plan.expression == expression
+    assert len(compiled) == 1
 
 
 def test_repeated_unavailable_rules_keep_the_original_diagnostic_order():
