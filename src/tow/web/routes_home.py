@@ -12,7 +12,7 @@ from tow.folders import recent_save_roots
 from tow.web import _context
 from tow.web.middleware import is_browser_navigation
 from tow.web.routes_password import first_run
-from tow.web.templating import TEMPLATES
+from tow.web.templating import TEMPLATES, header_health
 from tow.web.text import t
 from tow.web.views import add_draft, attention, credential_prompt, request_flash, topic_rows
 
@@ -32,9 +32,11 @@ def _first_steps(cfg: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
         )
     except RuntimeError, TypeError, ValueError, KeyError:
         client_set = False
-    answers = bool((state.get("health") or {}).get("qbit_ok"))
+    # The same three states as the header's client name (AGENTS.md): green when it answers,
+    # red when it did not, grey until a check or the diagnostics asked it.
+    tone = header_health()["qbit_tone"]
     return {
-        "client": ("ok" if answers else "saved") if client_set else "todo",
+        "client": {"ok": "ok", "bad": "failed"}.get(tone, "saved") if client_set else "todo",
         "messenger": notify_health(secrets, state) is not None,
     }
 

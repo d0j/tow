@@ -796,6 +796,7 @@
       "client_hint": "qBittorrent, Transmission or Deluge: TOW hands new torrents to it.",
       "client_ok": "Connected",
       "client_saved": "Set up, not checked yet",
+      "client_failed": "Set up, not answering",
       "todo": "Not set up",
       "messenger": "Connect a messenger",
       "messenger_hint": "Telegram, Discord, WhatsApp or ntfy: a message when something is added or needs you.",

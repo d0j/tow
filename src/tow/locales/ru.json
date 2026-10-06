@@ -802,6 +802,7 @@
       "client_hint": "qBittorrent, Transmission или Deluge: TOW передаёт ему новые раздачи.",
       "client_ok": "Подключён",
       "client_saved": "Настроен, ещё не проверен",
+      "client_failed": "Настроен, не отвечает",
       "todo": "Не настроен",
       "messenger": "Подключите мессенджер",
       "messenger_hint": "Telegram, Discord, WhatsApp или ntfy: сообщение, когда что-то добавлено или нужна ваша помощь.",
