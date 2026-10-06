@@ -102,7 +102,7 @@ def _site_add():
     _older_settings_undo()
     form = {
         "name": "newsite",
-        "url_regex": "newsite",
+        "url_regex": r"newsite/(\d+)",
         "fetch_hosts": "https://new.example",
         "download_path": "/download/{id}",
         "from_url": "",

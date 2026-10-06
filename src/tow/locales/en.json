@@ -1897,6 +1897,8 @@
       "mirrors_repeat": "Mirrors: the same address is listed twice",
       "name_invalid": "Name: Latin letters, digits and _ only (not “new” or “guess”)",
       "path_invalid": "{label}: a path on the site starting with / is needed",
+      "regex_no_group": "{what}: put the part with the number in brackets, for example (\\d+) — TOW takes the number from there",
+      "path_no_id": "{label}: mark where the number goes with {id}, for example /download/{id}",
       "mirrors_empty": "Mirrors: enter at least one site address, one per line",
       "mirrors_too_many": "Mirrors: at most {limit} addresses"
     },

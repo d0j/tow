@@ -22,7 +22,7 @@ class _Stores:
 
 def _setup(monkeypatch):
     cfg = load_config()
-    cfg["trackers"] = {"rutor": {"title": "rutor", "url_regex": "rutor"}}
+    cfg["trackers"] = {"rutor": {"title": "rutor", "url_regex": r"rutor/(\d+)"}}
     save_config(cfg)
     save_state({"topics": [], "mirrors": {"rutor": {"active": "http://rutor"}}})
     save_secrets({"trackers": {"rutor": {"username": "fixture-user", "password": "fixture-secret"}}})
@@ -84,7 +84,7 @@ def test_readding_deleted_site_invalidates_older_undo(monkeypatch):
         "/sites/new",
         data={
             "name": "rutor",
-            "url_regex": "rutor",
+            "url_regex": r"rutor/(\d+)",
             "fetch_hosts": "https://rutor.example",
             "download_path": "/download/{id}",
             "username": "new-user",
@@ -121,7 +121,7 @@ def test_site_rename_and_undo_reconcile_all_stores(monkeypatch):
         "/sites/rutor",
         data={
             "fetch_hosts": "http://rutor",
-            "url_regex": "rutor",
+            "url_regex": r"rutor/(\d+)",
             "download_path": "/download/{id}",
             "login_path": "",
             "new_name": "rutor_new",
@@ -154,7 +154,7 @@ def test_edit_does_not_expand_login_hosts_to_new_fetch_mirror(monkeypatch):
     cfg["trackers"] = {
         "rutor": {
             "title": "rutor",
-            "url_regex": "rutor",
+            "url_regex": r"rutor/(\d+)",
             "fetch_hosts": ["https://login.example"],
             "login_hosts": ["https://login.example"],
         }
@@ -165,7 +165,7 @@ def test_edit_does_not_expand_login_hosts_to_new_fetch_mirror(monkeypatch):
         "/sites/rutor",
         data={
             "fetch_hosts": "https://login.example\nhttps://new-mirror.example",
-            "url_regex": "rutor",
+            "url_regex": r"rutor/(\d+)",
             "download_path": "/download/{id}",
         },
         follow_redirects=False,
@@ -179,7 +179,7 @@ def test_edit_does_not_expand_login_hosts_to_new_fetch_mirror(monkeypatch):
         "/sites/rutor",
         data={
             "fetch_hosts": "https://new-mirror.example",
-            "url_regex": "rutor",
+            "url_regex": r"rutor/(\d+)",
             "download_path": "/download/{id}",
         },
         follow_redirects=False,
@@ -194,7 +194,7 @@ def test_edit_does_not_expand_login_hosts_to_new_fetch_mirror(monkeypatch):
         data={
             "fetch_hosts": "https://new-mirror.example",
             "login_hosts": "https://new-mirror.example",
-            "url_regex": "rutor",
+            "url_regex": r"rutor/(\d+)",
             "download_path": "/download/{id}",
         },
         follow_redirects=False,
@@ -208,7 +208,7 @@ def test_edit_does_not_expand_login_hosts_to_new_fetch_mirror(monkeypatch):
         data={
             "fetch_hosts": "https://new-mirror.example",
             "login_hosts": "https://new-mirror.example",
-            "url_regex": "rutor",
+            "url_regex": r"rutor/(\d+)",
             "download_path": "/download/{id}",
             "username": "fixture-user",
             "password": "fixture-secret",
@@ -224,7 +224,7 @@ def test_edit_does_not_expand_login_hosts_to_new_fetch_mirror(monkeypatch):
             "fetch_hosts": "https://new-mirror.example",
             "login_hosts_present": "1",
             "login_hosts": "",
-            "url_regex": "rutor",
+            "url_regex": r"rutor/(\d+)",
             "download_path": "/download/{id}",
         },
         follow_redirects=False,

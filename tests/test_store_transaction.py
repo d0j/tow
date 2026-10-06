@@ -63,7 +63,7 @@ def _next_process_takes_the_lock() -> None:
 
 def _seed_site() -> None:
     cfg = load_config()
-    cfg["trackers"] = {"rutor": {"title": "rutor", "url_regex": "rutor", "fetch_hosts": ["http://rutor"]}}
+    cfg["trackers"] = {"rutor": {"title": "rutor", "url_regex": r"rutor/(\d+)", "fetch_hosts": ["http://rutor"]}}
     save_config(cfg)
     save_state({"topics": [], "mirrors": {"rutor": {"active": "http://rutor"}}})
     save_secrets({"trackers": {"rutor": {"username": "fixture-user", "password": "fixture-secret"}}})
