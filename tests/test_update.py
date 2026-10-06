@@ -538,6 +538,21 @@ def test_the_updater_runs_on_python_3_11():
     ast.parse(SCRIPT.read_text(encoding="utf-8"), feature_version=(3, 11))
 
 
+def test_python_3_10_is_told_the_version_it_needs(monkeypatch, capsys):
+    # Loading the script used to fail on Python 3.10 (no datetime.UTC), before main() could say why.
+    import datetime as current
+    from types import ModuleType
+
+    older = ModuleType("datetime")
+    for name in ("datetime", "timezone"):
+        setattr(older, name, getattr(current, name))
+    monkeypatch.setitem(sys.modules, "datetime", older)
+    module = _load()
+    monkeypatch.setattr(module.sys, "version_info", (3, 10, 12))
+    assert module.main(["--ref", "latest"]) == 2
+    assert "update.py needs Python 3.11 or newer" in capsys.readouterr().out
+
+
 def test_deploy_gives_the_new_version_as_long_as_update_does():
     import re as regex
 

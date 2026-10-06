@@ -67,12 +67,14 @@ import tarfile
 import time
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Mapping
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener
 
+# Not `from datetime import UTC`: Python 3.10 has none, and must reach the version check in main().
+UTC = timezone.utc  # noqa: UP017
 HERE = Path(__file__).resolve()
 # <TOW>/app/scripts/update.py, or the copy an archive switch keeps at <TOW>/runtime/update.py: the
 # start files run that copy while a switch is unfinished, when app/scripts may be gone.
