@@ -186,18 +186,41 @@ def _remember_request_language(request: Request, cfg: dict[str, Any]) -> None:
         i18n.remember_browser_language(i18n.for_request(cfg, accept))
 
 
+def _response_headers(request: Request, response: Response) -> Response:
+    """The same policy for dispatched responses and early refusals.
+
+    Only successful static content (including revalidation) can be immutable;
+    missing assets and refused requests must not leave cached failures behind.
+    """
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "same-origin"
+    if response.status_code >= 400:
+        response.headers["Cache-Control"] = "no-store"
+    elif request.url.path.startswith("/static/") and (200 <= response.status_code < 300 or response.status_code == 304):
+        # A versioned URL (?v=<content hash>) never changes: others revalidate.
+        response.headers["Cache-Control"] = (
+            "public, max-age=31536000, immutable" if request.query_params.get("v") else "no-cache"
+        )
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self';"
+        " form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'"
+    )
+    return response
+
+
 async def secure(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     _context.begin()
     # Every file read runs in the thread pool: the event loop serves other requests meanwhile.
     cfg = await run_in_threadpool(_context.config)
     _use_request_language(request, cfg)  # here, not in a worker: it sets this request's language
     if (refused := _refusal(request, cfg)) is not None:
-        return refused
+        return _response_headers(request, refused)
     path = request.url.path
     signed_in = access.is_local(request)  # this PC needs no password
     if not signed_in and access.network_open(cfg) and not _is_public_path(path):
         if (refused := await run_in_threadpool(_session_refusal, request)) is not None:
-            return refused
+            return _response_headers(request, refused)
         signed_in = True
     if signed_in and request.headers.get("accept-language") and is_browser_navigation(request):
         await run_in_threadpool(_remember_request_language, request, cfg)
@@ -223,17 +246,4 @@ async def secure(request: Request, call_next: Callable[[Request], Awaitable[Resp
             response = await dispatch()
     else:
         response = await dispatch()
-    response = _redirect_for_fetch(request, response)
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Referrer-Policy"] = "same-origin"
-    if request.url.path.startswith("/static/"):
-        # A versioned URL (?v=<content hash>) never changes: the browser keeps it; others revalidate.
-        response.headers["Cache-Control"] = (
-            "public, max-age=31536000, immutable" if request.query_params.get("v") else "no-cache"
-        )
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self';"
-        " form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'"
-    )
-    return response
+    return _response_headers(request, _redirect_for_fetch(request, response))
