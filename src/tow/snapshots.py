@@ -421,6 +421,10 @@ def create_snapshot(*, keep: int | None = None, how: str = "auto") -> dict[str, 
     except SnapshotError as exc:
         record_failure(str(exc))
         raise
+    except Exception as exc:  # settings, folder access...: a failed copy too, never a silent one
+        failure = SnapshotError(t("backup.snapshot.cannot_write", owner_language(), reason=_reason(exc)))
+        record_failure(str(failure))
+        raise failure from exc
     return result
 
 
