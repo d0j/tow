@@ -238,6 +238,35 @@ def test_a_copy_that_does_not_read_back_prunes_nothing(backup, monkeypatch):
     assert status()["last_error"] == str(failed.value)
 
 
+def test_any_failure_of_a_copy_is_recorded_and_said(backup, monkeypatch):
+    from fastapi.testclient import TestClient
+    from helpers import flash_of
+
+    from tow.snapshots import status, status_failed
+    from tow.web import app
+
+    create_snapshot()
+    real = Path.iterdir
+
+    def denied(path):
+        if path == backup:
+            raise PermissionError(13, "Permission denied")
+        return real(path)
+
+    monkeypatch.setattr(Path, "iterdir", denied)
+    with pytest.raises(SnapshotError, match="Permission denied") as failed:
+        create_snapshot()
+    assert isinstance(failed.value.__cause__, PermissionError)
+    assert status()["last_error"] == str(failed.value)
+    assert status_failed(status())
+
+    response = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
+        "/settings/backup/now", follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert t("backup.snapshot.cannot_write", "ru", reason="Permission denied") in flash_of(response.headers["location"])
+
+
 def test_the_newest_copy_is_never_pruned_even_when_the_clock_went_back(backup, monkeypatch):
     cfg = load_config()
     cfg["backup_keep"] = 1
