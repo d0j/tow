@@ -61,10 +61,12 @@ async def content_prepare(
                 headers={"Cache-Control": "no-store"},
             )
     try:
-        if source not in {"torrent", "magnet"} or (source == "magnet" and blob is not None):
+        if source not in {"torrent", "fresh", "magnet"} or (source != "torrent" and blob is not None):
             raise TowError("content.changed")
         if source == "magnet":
             result = await run_in_threadpool(services.prepare_magnet_content, url, client_id)
+        elif source == "fresh":
+            result = await run_in_threadpool(services.prepare_fresh_content, url, client_id, allow_limited)
         else:
             result = await run_in_threadpool(services.prepare_content, url, client_id, blob, allow_limited)
         return JSONResponse(result, headers={"Cache-Control": "no-store"})

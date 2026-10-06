@@ -10,6 +10,8 @@ allow_lan: false
 port: 8787
 # How long a message after an action ("Saved") stays on the page, seconds (15..3600).
 flash_ttl_sec: 60
+# Optional release discovery (at most once per 12 hours); manual checks still work when off.
+# check_updates: true
 # Language of the pages and messages: auto (the browser's) or a code such as en, ru.
 # language: auto
 

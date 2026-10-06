@@ -22,6 +22,8 @@
     const loadButton = root.querySelector("[data-content-load]");
     const upload = root.querySelector("[data-content-upload]");
     const limited = root.querySelector("[data-content-limited]");
+    const fresh = root.querySelector("[data-content-fresh]");
+    const cachedHint = root.querySelector("[data-content-cached]");
     const magnet = root.querySelector("[data-content-magnet]");
     let snapshot = null, selected = new Set(), generation = 0, ruleGeneration = 0, page = 0;
     let nodes = [], expanded = new Set();
@@ -186,9 +188,12 @@
       ruleNotice = "";
       token.value = ""; indices.value = "";
       results.hidden = true; loadButton.disabled = false; magnet.disabled = false; limited.disabled = false;
+      if (fresh) fresh.hidden = true;
+      if (cachedHint) cachedHint.hidden = true;
       status.textContent = t("content.js.stale");
     };
-    const load = async (allowLimited = false, restore = false, fromMagnet = false) => {
+    const load = async (allowLimited = false, restore = false, fromMagnet = false, fromTracker = false) => {
+      if (allowLimited && !window.confirm(t("content.limited_confirm"))) return;
       controller?.abort();
       controller = new AbortController();
       const epoch = ++generation, origin = source();
@@ -202,22 +207,30 @@
       status.textContent = t(fromMagnet ? "content.js.magnet_loading" : "content.js.loading");
       loadButton.disabled = true; magnet.disabled = true; limited.disabled = true;
       limited.hidden = true;
+      if (fresh) { fresh.hidden = true; fresh.disabled = true; }
+      if (cachedHint) cachedHint.hidden = true;
       const body = new FormData();
       body.set("url", field("url").value);
       body.set("client_id", field("client_id").value);
       body.set("allow_limited", String(allowLimited));
-      body.set("source", fromMagnet ? "magnet" : "torrent");
+      body.set("source", fromMagnet ? "magnet" : fromTracker ? "fresh" : "torrent");
       if (restore) body.set("token", savedToken);
-      else if (!fromMagnet && upload.files.length) body.set("torrent", upload.files[0]);
+      else if (!fromMagnet && !fromTracker && !allowLimited && upload.files.length) body.set("torrent", upload.files[0]);
       try {
         const response = await fetch(restore ? "/content/snapshot" : "/content/prepare", { method: "POST", body, signal: controller.signal });
         const data = await response.json();
         if (epoch !== generation || origin !== source()) return;
         if (!response.ok) {
           limited.hidden = data.code !== "content.limited";
+          if (fresh) fresh.hidden = !["content.cache_invalid", "content.unavailable"].includes(data.code);
           throw new Error(data.error);
         }
         snapshot = data;
+        if (fresh) fresh.hidden = data.cached !== true;
+        if (cachedHint) {
+          cachedHint.hidden = data.cached !== true && data.cache_failed !== true;
+          cachedHint.textContent = t(data.cache_failed ? "content.cache_failed" : "content.cached_hint");
+        }
         buildTree();
         token.value = data.token;
         const identities = new Set(manualWanted.map((item) => JSON.stringify([item.path, String(item.size)])));
@@ -232,11 +245,15 @@
       } catch (error) {
         if (epoch === generation && error.name !== "AbortError") status.textContent = error.message || t("content.js.failed");
       } finally {
-        if (epoch === generation) { loadButton.disabled = false; magnet.disabled = false; limited.disabled = false; }
+        if (epoch === generation) {
+          loadButton.disabled = false; magnet.disabled = false; limited.disabled = false;
+          if (fresh) fresh.disabled = false;
+        }
       }
     };
     loadButton.addEventListener("click", () => load());
-    limited.addEventListener("click", () => load(true));
+    limited.addEventListener("click", () => load(true, false, false, true));
+    fresh?.addEventListener("click", () => load(false, false, false, true));
     magnet.addEventListener("click", () => load(false, false, true));
     upload.addEventListener("change", () => load());
     field("url").addEventListener("input", invalidate);
@@ -254,6 +271,8 @@
       ruleNotice = "";
       results.hidden = true; status.textContent = "";
       loadButton.disabled = false; magnet.disabled = false; limited.disabled = false; limited.hidden = true;
+      if (fresh) { fresh.hidden = true; fresh.disabled = false; }
+      if (cachedHint) cachedHint.hidden = true;
       window.setTimeout(() => { previousMode = mode.value; showExpression(); }, 0);
     });
     mode.addEventListener("change", () => {

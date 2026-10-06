@@ -98,6 +98,7 @@ def settings_page(request: Request) -> Response:
             "interval_label": _interval_label(interval_sec_of(cfg)),
             "flash_ttl_min": max(1, flash_ttl_sec() // 60),
             "allow_lan": as_bool(cfg.get("allow_lan")),
+            "check_updates": as_bool(cfg.get("check_updates", True)),
             "lan_password_set": access.password_is_set(s),
             "lan_hint": password_hint(s.get("lan_auth")),
             "hint_max": MAX_HINT_LENGTH,
@@ -145,6 +146,15 @@ def _language_setting(cfg: dict[str, Any]) -> dict[str, Any]:
         "current_name": names.get(i18n.current(), i18n.current()),
         "search": " ".join(dict.fromkeys(word.casefold() for word in ["language", *words])),
     }
+
+
+@router.post("/settings/updates")
+@services.locked_state_mutation
+def settings_updates(enabled: str = Form("")) -> Response:
+    cfg = services.load_config()
+    cfg["check_updates"] = as_bool(enabled)
+    services.save_config(cfg)
+    return flash_redirect("/settings?open=updates#acc-updates", "releases.preferences_saved", "ok")
 
 
 @router.post("/settings/language")

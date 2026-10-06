@@ -28,7 +28,20 @@
   border-radius: 999px;
   padding: 0 .45rem;
 }
-.release-panel { border-bottom: 1px solid var(--line); padding-bottom: .65rem; margin-bottom: .65rem; }
+.release-notice {
+  display: block;
+  margin-bottom: .5rem;
+  padding: .3rem .6rem;
+  border: 1px solid var(--ok);
+  border-radius: 6px;
+  color: var(--ok);
+  text-decoration: none;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.release-notice:hover, .release-notice:focus-visible { text-decoration: underline; }
+.release-notice[hidden] { display: none; }
+.release-panel { margin: 0; }
 .release-panel h2 { font-size: 13px; margin: 0 0 .35rem; }
 .release-panel > p { margin: .35rem 0; }
 .release-panel code { white-space: normal; overflow-wrap: anywhere; }

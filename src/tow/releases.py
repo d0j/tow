@@ -89,13 +89,13 @@ class ReleaseChecker:
         self._checked_at: int | None = None
         self._ok = False
 
-    def check(self, *, force: bool = False) -> dict[str, Any]:
+    def check(self, *, force: bool = False, enabled: bool = True) -> dict[str, Any]:
         with self._lock:
             now = time.monotonic()
             due = self._attempt is None or now >= self._next
             if force and self._attempt is not None and now - self._attempt >= MANUAL_INTERVAL:
                 due = True
-            if due:
+            if due and (enabled or force):
                 self._attempt = now
                 try:
                     latest = _fetch_latest()
@@ -116,6 +116,7 @@ class ReleaseChecker:
                 "latest": self._latest,
                 "available": available,
                 "comparable": current is not None,
+                "checks_enabled": enabled,
                 "ok": self._ok,
                 "checked_at": self._checked_at,
                 "url": f"{RELEASES_URL}/tag/v{self._latest}" if self._latest else RELEASES_URL,
@@ -126,4 +127,6 @@ checker = ReleaseChecker()
 
 
 def release_status(*, force: bool = False) -> dict[str, Any]:
-    return checker.check(force=force)
+    from tow.config import as_bool, load_config
+
+    return checker.check(force=force, enabled=as_bool(load_config().get("check_updates", True)))

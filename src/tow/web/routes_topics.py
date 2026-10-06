@@ -378,6 +378,10 @@ def topics_delete(tid: str) -> Response:
     state["topics"] = [item for item in topics if str(item.get("id")) != tid]
     services.save_state(state)
     undo.cleanup()  # the secrets of an undo this one replaced, if their removal was postponed
+    try:
+        services.forget_cached_content(str(gone.get("url") or ""))
+    except TowError, OSError, ValueError, RuntimeError:
+        return flash_redirect("/", "content.cache_delete_failed", "warn")
     return flash_redirect("/", "web.topics.deleted", "ok")
 
 

@@ -291,8 +291,11 @@ registration is taken over (or turned off).
 
 ### Web updates (1.22.20)
 
-Every page shows the installed version. A new stable-release badge opens Settings → Service → Version and
-updates, without a modal or an automatic installation. The shared release cache checks at most every 12 hours
+Every page shows the installed version. Its link opens the separate Settings → Version and updates panel.
+Home shows a compact green notice for a known new stable release, without an automatic installation.
+Rollback, old successful results and logs are collapsed; active operations and failures stay visible.
+The automatic-check checkbox applies immediately (`check_updates: false` disables automatic discovery,
+not manual checks or update-job monitoring). The shared release cache checks at most every 12 hours
 while the interface is open (manual checks are throttled to one per minute; failures back off for an hour).
 No configuration, topics, credentials or diagnostics are sent to GitHub. Offline means “not checked”, not
 “up to date”. Normal pages and health do not wait for release discovery.

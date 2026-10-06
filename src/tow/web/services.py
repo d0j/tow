@@ -134,8 +134,10 @@ def content_context_title(topic_id: str, url: str, client_id: str, title: str) -
     return str(topic.get("tracker_title") or title.strip() or topic.get("title") or "")
 
 
-def prepare_content(url: str, client_id: str, blob: bytes | None, allow_limited: bool) -> dict[str, object]:
-    from tow import content
+def prepare_content(
+    url: str, client_id: str, blob: bytes | None, allow_limited: bool, *, fresh: bool = False
+) -> dict[str, object]:
+    from tow import content, torrent_cache
     from tow.clients.factory import client_configuration
     from tow.errors import TowError
     from tow.guess import canon_watch_url
@@ -149,6 +151,10 @@ def prepare_content(url: str, client_id: str, blob: bytes | None, allow_limited:
     tracker = match_tracker(load_trackers(cfg), url)
     if tracker is None:
         raise TowError("check.no_tracker")
+    cached = False
+    if blob is None and not fresh and not allow_limited:
+        blob = torrent_cache.read(url)
+        cached = blob is not None
     if blob is None:
         limited = tracker.spec.get("download_limit", presets.daily_limited(tracker.name))
         if limited and not allow_limited:
@@ -156,7 +162,24 @@ def prepare_content(url: str, client_id: str, blob: bytes | None, allow_limited:
         # An explicit preparation is a normal tracker action, not dry-run: sign-in and
         # mirror state must work just as they do during a normal check.
         blob = tracker.fetch_torrent(url, load_secrets(), str(cfg.get("user_agent") or "TOW"), persist=True)
-    return content.prepare(blob, url, str(client["id"]))
+    result = content.prepare(blob, url, str(client["id"]))
+    result["cached"] = cached
+    if not cached:
+        try:
+            torrent_cache.remember(blob, url)
+        except TowError, OSError, ValueError, RuntimeError:
+            result["cache_failed"] = True
+    return result
+
+
+def prepare_fresh_content(url: str, client_id: str, allow_limited: bool) -> dict[str, object]:
+    return prepare_content(url, client_id, None, allow_limited, fresh=True)
+
+
+def forget_cached_content(url: str) -> None:
+    from tow import torrent_cache
+
+    torrent_cache.forget_if_unused(url)
 
 
 def prepare_magnet_content(url: str, client_id: str) -> dict[str, object]:
@@ -196,7 +219,14 @@ def prepare_magnet_content(url: str, client_id: str) -> dict[str, object]:
         btih, btmh = hashes
         if (btih and metadata.hash_v1 not in btih) or (btmh and metadata.hash_v2 not in btmh):
             raise TowError("content.magnet_failed")
-        return content.prepare(blob, url, str(configuration["id"]))
+        from tow import torrent_cache
+
+        result = content.prepare(blob, url, str(configuration["id"]))
+        try:
+            torrent_cache.remember(blob, url)
+        except TowError, OSError, ValueError, RuntimeError:
+            result["cache_failed"] = True
+        return result
     except TowError:
         raise
     except Exception as exc:

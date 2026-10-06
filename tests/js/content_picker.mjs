@@ -38,7 +38,7 @@ function setup(saved = null, existing = []) {
   fields.selection_value.closest = () => new Element();
   const form = new Element(); form.elements = { namedItem: (name) => fields[name] };
   root.closest = () => form;
-  const controls = Object.fromEntries(["status", "results", "tree", "search", "more", "prev", "pages", "page", "load", "upload", "limited", "magnet", "manual-actions", "all", "none", "help", "help-text"].map((key) => [key, new Element()]));
+  const controls = Object.fromEntries(["status", "results", "tree", "search", "more", "prev", "pages", "page", "load", "upload", "limited", "fresh", "cached", "magnet", "manual-actions", "all", "none", "help", "help-text"].map((key) => [key, new Element()]));
   root.querySelector = (key) => controls[key.replace(/\[data-content-(.*)\]/, "$1")];
   const document = {
     activeElement: null, documentElement: root, body: root,
@@ -51,13 +51,13 @@ function setup(saved = null, existing = []) {
   vm.runInNewContext(fs.readFileSync(new URL("../../src/tow/static/content.js", import.meta.url), "utf8"), {
     document, Element, FormData, AbortController,
     MutationObserver: class { observe() {} },
-    window: { setTimeout, clearTimeout },
+    window: { setTimeout, clearTimeout, confirm: () => controls.limited.approved === true },
     fetch: (url, options) => new Promise((resolve) => requests.push({ url, options, respond: (data, ok = true) => resolve({ ok, json: async () => data }) })),
   });
   return { fields, controls, requests, form, root };
 }
 const find = (tree, name) => tree.querySelectorAll("*").find((n) => n.attributes["aria-label"] === name);
-const reply = async (request, data) => { request.respond(data); await tick(); };
+const reply = async (request, data, ok = true) => { request.respond(data, ok); await tick(); };
 const snapshot = { token: "a".repeat(32), files };
 const submitAllowed = (form) => {
   let prevented = false;
@@ -204,4 +204,22 @@ g.form.fire("reset");
 await reply(g.requests.at(-1), { indices: [1] });
 assert.equal(g.controls.results.hidden, true);
 
-console.log(JSON.stringify({ safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true, ruleContext: true }));
+
+const cached = setup();
+cached.controls.load.fire("click");
+await reply(cached.requests[0], { ...snapshot, cached: true });
+assert.equal(cached.controls.cached.hidden, false);
+assert.equal(cached.controls.fresh.hidden, false);
+cached.controls.fresh.fire("click");
+assert.equal(cached.requests.at(-1).options.body.get("source"), "fresh");
+await reply(cached.requests.at(-1), { code: "content.limited", error: "Limit warning" }, false);
+const countBeforeConsent = cached.requests.length;
+cached.controls.limited.fire("click");
+assert.equal(cached.requests.length, countBeforeConsent, "declined quota confirmation sends no request");
+cached.controls.limited.approved = true;
+cached.controls.limited.fire("click");
+assert.equal(cached.requests.at(-1).options.body.get("allow_limited"), "true");
+await reply(cached.requests.at(-1), { ...snapshot, cached: false });
+assert.equal(cached.controls.cached.hidden, true);
+assert.equal(cached.controls.fresh.hidden, true);
+console.log(JSON.stringify({ safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true, ruleContext: true, cacheLabel: true, explicitFresh: true, quotaConsent: true }));

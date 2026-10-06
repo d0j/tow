@@ -316,15 +316,23 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc" id="acc-service" data-q="{{ t('settings.service.q') }}">
+    <details class="settings-section settings-accordion acc" id="acc-updates" data-q="{{ t('releases.search') }}">
       <summary>
-        <span id="settings-service-title" class="settings-summary-title">{{ t('settings.service.title') }}</span>
-        <span class="pill {{ 'ok' if service.autostart else 'mut' }}">{{ t('settings.service.autostart_on') if service.autostart else t('settings.service.autostart_off') }}</span>
+        <span class="settings-summary-title">{{ t('releases.title') }}</span>
+        <span class="pill mut">{{ hh.ver }}</span>
       </summary>
       <div class="settings-panel">
         <section id="updates" class="release-panel" aria-labelledby="release-title">
-          <h2 id="release-title">{{ t('releases.title') }}</h2>
-          <p>{{ t('releases.current', version=hh.ver) }}</p>
+          <p id="release-title">{{ t('releases.current', version=hh.ver) }}</p>
+          <form method="post" action="/settings/updates" class="compact-form immediate-form" data-return-target="acc-updates" data-auto-submit>
+            <input type="hidden" name="enabled" value="0">
+            <div class="check-field">
+              <input id="check-updates" name="enabled" value="1" type="checkbox"{% if check_updates %} checked{% endif %} aria-describedby="check-updates-hint" data-auto-submit-control>
+              <label for="check-updates">{{ t('releases.automatic') }}</label>
+              <p id="check-updates-hint" data-auto-submit-status>{{ t('releases.automatic_hint') }}</p>
+            </div>
+            <noscript><button type="submit">{{ t('settings.service.apply') }}</button></noscript>
+          </form>
           <p class="action-hint" data-release-status role="status">{{ t('releases.pending') }}</p>
           <div class="settings-actions">
             <button type="button" class="ghost" data-release-check>{{ t('releases.check') }}</button>
@@ -332,8 +340,12 @@
             <button type="button" data-release-install hidden disabled>{{ t('releases.update_button') }}</button>
           </div>
           <p class="action-hint" data-update-progress role="status" hidden></p>
+          <p class="action-hint" data-update-unavailable role="status" hidden></p>
           <div class="settings-actions"><button type="button" class="ghost" data-update-reload hidden>{{ t('js.releases.reload') }}</button></div>
-          <p class="action-hint" data-update-support></p>
+          <details class="technical-details" data-update-details>
+            <summary>{{ t('releases.details') }}</summary>
+            <p class="action-hint" data-update-history hidden></p>
+            <p class="action-hint" data-update-support></p>
           <details class="technical-details" data-update-rollback hidden>
             <summary>{{ t('releases.rollback_title') }}</summary>
             <p class="action-hint">{{ t('releases.rollback_policy') }}</p>
@@ -353,8 +365,18 @@
             <summary>{{ t('releases.log') }}</summary>
             <pre data-update-log-text>{{ t('releases.log_pending') }}</pre>
           </details>
+          </details>
           <noscript><p class="action-hint">{{ t('releases.no_script') }}</p></noscript>
         </section>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-service" data-q="{{ t('settings.service.q') }}">
+      <summary>
+        <span id="settings-service-title" class="settings-summary-title">{{ t('settings.service.title') }}</span>
+        <span class="pill {{ 'ok' if service.autostart else 'mut' }}">{{ t('settings.service.autostart_on') if service.autostart else t('settings.service.autostart_off') }}</span>
+      </summary>
+      <div class="settings-panel">
         <p class="action-hint">{{ t('settings.service.mode_supervisor') }}</p>
         <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
           <input type="hidden" name="enabled" value="0">

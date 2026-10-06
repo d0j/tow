@@ -129,9 +129,16 @@ def _topic_edited(ctx: Context) -> Restore:
 
 
 def _topic_added(ctx: Context) -> Restore:
+    from tow import torrent_cache
+
     added = str(cast(TopicAdded, ctx.record)["id"])
+    gone = next((topic for topic in ctx.state.get("topics") or [] if str(topic.get("id")) == added), None)
     ctx.state["topics"] = [topic for topic in ctx.state.get("topics") or [] if str(topic.get("id")) != added]
-    return Restore(Outcome("web.undo.topic_add_done"))
+    return Restore(
+        Outcome("web.undo.topic_add_done"),
+        after_commit=(lambda: torrent_cache.forget_if_unused(str(gone.get("url") or ""))) if gone else None,
+        after_commit_failed="content.cache_delete_failed",
+    )
 
 
 # --------------------------------------------------------------------------- sites

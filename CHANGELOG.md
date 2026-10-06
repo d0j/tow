@@ -5,6 +5,15 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Changed
+
+- Reuse encrypted, bounded torrent metadata for live topics when opening their
+  contents. Normal checks still obtain current tracker evidence; a changed magnet
+  invalidates an older copy. Removing the last topic removes only its saved metadata.
+- Version links open a separate compact update panel. Rollback, history and logs
+  stay collapsed; a new release has a compact green notice on Home. Automatic
+  release checks can be turned off immediately without disabling manual checks.
+
 ## [1.23.10] — 2026-10-06
 
 ### Fixed
