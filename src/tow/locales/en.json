@@ -1292,6 +1292,7 @@
     "nothing_matched": "the selection matches no file of the torrent",
     "exact_invalid": "Choose at least one real file from the torrent contents. Reload the contents if the selection is unavailable.",
     "exact_changed": "A selected file disappeared or changed size. Review the new contents; nothing was added.",
+    "file_map_changed": "Torrent file names or sizes cannot be matched to the verified metadata. Check the topic again to refresh it; no client files were changed.",
     "preview_changed": "The torrent revision changed after selection. Load its contents again; nothing was added."
   },
   "content": {

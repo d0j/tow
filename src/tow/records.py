@@ -61,6 +61,7 @@ class Topic(TypedDict, total=False):
     selected_files: list[str]
     selected_files_truncated: bool
     selected_episode_keys: list[str]
+    file_aliases: dict[str, Any]  # original path/size identities whose portable spelling differs, bound to hash
     # the latest result (the Home status colour, AGENTS.md)
     last_ok: bool
     last_ok_at: str

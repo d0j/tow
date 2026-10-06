@@ -30,7 +30,14 @@ from tow.i18n import t
 from tow.jsonish import as_dict
 from tow.log import owner_language
 from tow.records import DownloadHistory, HistoryItem, HistoryRecord, Topic
-from tow.selection import SelectionError, SelectionPlan, policy_from_topic, resolve_selection
+from tow.selection import (
+    SelectionError,
+    SelectionPlan,
+    normalize_exact_files,
+    normalize_file_aliases,
+    policy_from_topic,
+    resolve_selection,
+)
 from tow.torrent import TorrentFile
 
 
@@ -484,18 +491,71 @@ def _client_content_root(content_path: str, save_path: str) -> str:
     return name
 
 
-def _file_rule_plan(
+def _current_file_aliases(topic: Topic) -> dict[str, Any]:
+    aliases = normalize_file_aliases(topic["file_aliases"])
+    if aliases["hash"] != str(topic.get("hash") or "").casefold():
+        raise SelectionError("selection.file_map_changed")
+    return aliases
+
+
+def _legacy_alias_paths(topic: Topic) -> list[str] | None:
+    """Only a complete, explicitly verified old selection is an original-name source."""
+    if topic.get("selection_verified") is not True or not topic.get("selection_hash") or "selected_files" not in topic:
+        return None
+    paths = topic["selected_files"]
+    if (
+        not isinstance(paths, list)
+        or not paths
+        or not all(isinstance(path, str) for path in paths)
+        or topic.get("selected_files_truncated")
+        or type(topic.get("selected_file_count")) is not int
+        or topic.get("selected_file_count") != len(paths)
+    ):
+        raise SelectionError("selection.file_map_changed")
+    return paths
+
+
+def _legacy_mask_rows(
+    paths: list[str],
+    native_rows: tuple[TorrentFile, ...],
+    prepared_all: list[tuple[Any, str, int | None, bool]],
+    root: str,
+) -> tuple[TorrentFile, ...]:
+    lookup: dict[str, list[TorrentFile]] = {}
+    for row in native_rows:
+        if prepared_all[row.index][2] is not None:
+            lookup.setdefault(normalize_path(row.path), []).append(row)
+    sources = []
+    for path in paths:
+        candidates = {
+            row.index: row
+            for spelling in {normalize_path(path), normalize_path(f"{root}/{path}")}
+            for row in lookup.get(spelling, [])
+        }
+        if len(candidates) != 1:
+            raise SelectionError("selection.file_map_changed")
+        row = next(iter(candidates.values()))
+        sources.append(TorrentFile(row.index, path, row.size))
+    # Validate the old names as literal paths, without changing or persisting them.
+    try:
+        normalize_exact_files([{"path": row.path, "size": row.size} for row in sources])
+    except SelectionError as exc:
+        raise SelectionError("selection.file_map_changed") from exc
+    return tuple(sources)
+
+
+def _file_rule_evidence(
     topic: Topic,
     prepared_all: list[tuple[Any, str, int | None, bool]],
     preferred_season: int | None,
     *,
     content_path: str = "",
     save_path: str = "",
-) -> SelectionPlan | None:
-    """Re-read literal/mask membership, not client priorities or stale episode caches."""
+) -> tuple[SelectionPlan | None, dict[int, str]]:
+    """Canonical rule and episode names, separate from native disk/history paths."""
     mode = str(as_dict(topic.get("selection")).get("mode") or "all")
     if not prepared_all or mode not in {"files", "exact"} or not _selection_is_current(topic):
-        return None
+        return None, {}
     root = _client_content_root(content_path, save_path)
     native_rows = tuple(
         TorrentFile(index, rel, size if size is not None else 0)
@@ -504,6 +564,19 @@ def _file_rule_plan(
     )
     policy = policy_from_topic(topic)
     canonical: dict[int, str] = {}
+    if mode == "files" and "file_aliases" in topic:
+        aliases = _current_file_aliases(topic)
+        sources = tuple(TorrentFile(index, item["path"], item["size"]) for index, item in enumerate(aliases["files"]))
+        mapping = map_files(
+            sources,
+            [{"index": row.index, "name": row.path, "size": prepared_all[row.index][2]} for row in native_rows],
+            root,
+            fail=lambda _path: SelectionError("selection.file_map_changed"),
+        )
+        canonical = {mapping[row.index]: row.path for row in sources}
+    elif mode == "files" and (legacy_paths := _legacy_alias_paths(topic)) is not None:
+        rows = _legacy_mask_rows(legacy_paths, native_rows, prepared_all, root)
+        return resolve_selection(rows, policy, preferred_season=preferred_season), {row.index: row.path for row in rows}
     if mode == "exact":
         wanted = tuple(TorrentFile(index, item["path"], item["size"]) for index, item in enumerate(policy["files"]))
         mapping = map_files(
@@ -519,7 +592,19 @@ def _file_rule_plan(
         return rest if root and separator and normalize_path(first) == normalize_path(root) else path
 
     rows = tuple(TorrentFile(row.index, canonical.get(row.index, relative(row.path)), row.size) for row in native_rows)
-    return resolve_selection(rows, policy, preferred_season=preferred_season)
+    return resolve_selection(rows, policy, preferred_season=preferred_season), {row.index: row.path for row in rows}
+
+
+def _file_rule_plan(
+    topic: Topic,
+    prepared_all: list[tuple[Any, str, int | None, bool]],
+    preferred_season: int | None,
+    *,
+    content_path: str = "",
+    save_path: str = "",
+) -> SelectionPlan | None:
+    """Re-read literal/mask membership, not client priorities or stale episode caches."""
+    return _file_rule_evidence(topic, prepared_all, preferred_season, content_path=content_path, save_path=save_path)[0]
 
 
 def _selection_fingerprint(topic: Topic) -> str | None:
@@ -527,7 +612,7 @@ def _selection_fingerprint(topic: Topic) -> str | None:
     if mode not in {"all", "files", "exact"} or not _selection_is_current(topic):
         return None
     keys = [str(value) for value in topic.get("selected_episode_keys") or []]
-    context = [
+    context: list[Any] = [
         str(topic.get("hash") or "").casefold(),
         str(topic.get("client_id") or ""),
         policy_from_topic(topic),
@@ -535,6 +620,11 @@ def _selection_fingerprint(topic: Topic) -> str | None:
     ]
     if mode == "all":
         context.append(expected_for_topic(topic))
+    elif mode == "files":
+        if "file_aliases" in topic:
+            context.append(_current_file_aliases(topic))
+        elif (legacy_paths := _legacy_alias_paths(topic)) is not None:
+            context.append(legacy_paths)
     return hashlib.sha256(json.dumps(context, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
@@ -816,7 +906,9 @@ def _selected_files(
 ) -> tuple[list[tuple[tuple[Any, str, int | None], tuple[Any, ...]]], dict[str, Any] | None]:
     """The selected client files with the episodes each covers, and the expectation corrected
     by what the files show (season-relative numbering, a count from the files)."""
-    file_plan = _file_rule_plan(topic, prepared_all, preferred_season, content_path=content_path, save_path=save_path)
+    file_plan, canonical_paths = _file_rule_evidence(
+        topic, prepared_all, preferred_season, content_path=content_path, save_path=save_path
+    )
     if file_plan is not None:
         wanted = set(file_plan.selected_indices)
         prepared_all = [
@@ -835,23 +927,20 @@ def _selected_files(
         else:
             expected = None
             record.pop("expected", None)
-    all_coverages = normalize_episode_seasons(
-        resolve_episode_coverages(rel for _row, rel, _size, _selected in prepared_all),
-        preferred_season,
-        names=(rel for _row, rel, _size, _selected in prepared_all),
-    )
+    names = tuple(canonical_paths.get(index, rel) for index, (_row, rel, _size, _selected) in enumerate(prepared_all))
+    all_coverages = normalize_episode_seasons(resolve_episode_coverages(names), preferred_season, names=names)
     selected_video_keys = {
         label.key
-        for (_row, rel, _size, selected), coverage in zip(prepared_all, all_coverages, strict=True)
-        if selected and is_video_file(rel)
+        for (_row, _rel, _size, selected), name, coverage in zip(prepared_all, names, all_coverages, strict=True)
+        if selected and is_video_file(name)
         for label in coverage
     }
     prepared = [
         (
             (row, rel, size),
-            coverage if is_video_file(rel) else tuple(label for label in coverage if label.key in selected_video_keys),
+            coverage if is_video_file(name) else tuple(label for label in coverage if label.key in selected_video_keys),
         )
-        for (row, rel, size, selected), coverage in zip(prepared_all, all_coverages, strict=True)
+        for (row, rel, size, selected), name, coverage in zip(prepared_all, names, all_coverages, strict=True)
         if selected
     ]
     observed_episode_keys = sorted({entry.key for _file, coverage in prepared for entry in coverage})

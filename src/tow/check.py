@@ -1390,6 +1390,7 @@ def _apply_revision(
         selection_verified=selection_verified,
         plan=plan,
         once=policy["tracking_mode"] == "once",
+        files=metadata.files,
     )
     if migrates:
         row["hash_identity_from"] = old  # reconcile relabels the history (B7)

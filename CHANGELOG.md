@@ -11,6 +11,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - Help-section links keep their heading below the sticky header on desktop and
   narrow screens, without changing the page layout or button sizes.
+- File masks keep their original metadata names after a client replaces unsupported
+  filename characters. Only affected path/size aliases are stored, including
+  unwanted files, and bound to the confirmed revision. Glob syntax, native disk
+  paths and priorities do not change; malformed or ambiguous mappings are refused.
+  Episode events use original names too. Complete verified legacy selections stay
+  readable; truncated old previews require a normal check, not a guessed complete target.
 - File-rule progress understands the client's reported torrent root without
   confusing it with a metadata-relative path. Literal selections use the shared
   path-and-size mapping, including portable filename sanitization; ambiguous or

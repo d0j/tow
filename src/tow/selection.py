@@ -129,6 +129,22 @@ def stored_policy(policy: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
+def normalize_file_aliases(value: object) -> dict[str, Any]:
+    """A revision-bound original-name snapshot, not a glob or a client-index cache."""
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"hash", "files"}
+        or not isinstance(value["hash"], str)
+        or not re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", value["hash"])
+    ):
+        raise SelectionError("selection.file_map_changed")
+    try:
+        files = [] if value["files"] == [] else normalize_exact_files(value["files"])
+    except SelectionError as exc:
+        raise SelectionError("selection.file_map_changed") from exc
+    return {"hash": value["hash"].casefold(), "files": files}
+
+
 def policy_from_topic(topic: Mapping[str, Any]) -> dict[str, Any]:
     raw = topic.get("selection")
     if not isinstance(raw, dict):

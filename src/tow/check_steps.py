@@ -6,13 +6,14 @@ tested in isolation.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from typing import Any
 
 from tow import errors
 from tow.clients.spec import TorrentClientAdapter
 from tow.log import error_class, scrub_text
 from tow.records import Topic
+from tow.torrent import TorrentFile, windows_path_key
 
 
 def resolve_client_hash(
@@ -126,6 +127,7 @@ _CHECK_OWNED_FIELDS = (
 # Check-owned markers that the check may also remove (e.g. reconcile ends a client move, an
 # error without a code - a foreign exception - drops the previous error's code).
 _CHECK_CLEARABLE_FIELDS = (
+    "file_aliases",
     "move_pending",
     "error_notified",
     "last_error_code",
@@ -218,6 +220,7 @@ def store_revision(
     selection_verified: bool,
     plan: Any,
     once: bool,
+    files: Iterable[TorrentFile] | None = None,
 ) -> None:
     """Record a revision the client has confirmed, with its verified file selection."""
     if keep_previous:
@@ -232,6 +235,16 @@ def store_revision(
         topic["selected_files_truncated"] = len(plan.selected_files) > 200
         topic["selected_episode_keys"] = list(plan.selected_episode_keys)
         topic["selection_hash"] = h
+        if files is not None:
+            aliases = [
+                {"path": row.path, "size": row.size}
+                for row in files
+                if not row.is_pad and windows_path_key(row.path) != row.path.casefold()
+            ]
+            if aliases or plan.mode == "files":
+                topic["file_aliases"] = {"hash": h, "files": aliases}
+            else:
+                topic.pop("file_aliases", None)
     topic["selection_dirty"] = False
     topic.pop("content_token", None)
     topic.pop("content_hash", None)
