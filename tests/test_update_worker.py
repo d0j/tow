@@ -113,15 +113,17 @@ def test_detached_runner_uses_real_update_and_rollback_on_throwaway_git(
         real_write(target, job)
 
     monkeypatch.setattr(update_worker, "write_job", record)
+    methods = dict(vars(updater.Update)), dict(vars(updater.System))
     code = update_worker.run(git_install["app"], path, job_id, "1.21.0", updater)
+    assert (dict(vars(updater.Update)), dict(vars(updater.System))) == methods  # progress comes by callback
     assert code == (0 if result == "ok" else 1)
     assert json.loads(path.read_text())["status"] == result
     assert phases[0] == "preparing"
     assert "backup" in phases
     assert "installing" in phases
-    assert "checking" in phases
+    assert ("checking" in phases) is ("uv_fails_on" not in scenario)  # a failed uv sync starts nothing new
     if result == "rolled_back":
-        assert "rolling_back" in phases
+        assert phases[-2:] == ["rolling_back", "rolled_back"]  # the whole rollback shows as one phase
     assert (git_install["data"] / "state.json").exists()
     if use_lease:
         with (path.parent / job_id / "worker.lock").open("r+b") as handle:

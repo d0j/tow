@@ -1131,6 +1131,7 @@ class Update:
         source: Path | None = None,
         sums: Path | None = None,
         discard_newer_data: bool = False,
+        progress: Callable[[str], None] | None = None,
     ):
         self.sys = system
         self.app = system.app
@@ -1138,6 +1139,10 @@ class Update:
         self.ref = ref
         # Undoing a cut-off update may put its snapshot back over data changed after it.
         self.discard_newer_data = discard_newer_data
+        # Told each phase (stopping, backup, installing, checking, rolling_back) and then the
+        # outcome update-state.json records; the web update's worker shows them. A failure to
+        # record a phase before the rollback ends the update (rolled back), never a rollback.
+        self.progress: Callable[[str], None] = progress or (lambda _name: None)
         self.health_timeout = health_timeout
         self.wait_minutes = wait_minutes
         self.keep = keep
@@ -1159,6 +1164,11 @@ class Update:
     def text(self, key: str, **params: Any) -> str:
         template = self.texts.get(key, key)
         return re.sub(r"\{([a-z_]+)\}", lambda m: str(params.get(m.group(1), m.group(0))), template)
+
+    def report(self, name: str) -> None:
+        """``progress`` for a rollback or an outcome: a caller that cannot record it never stops either."""
+        with contextlib.suppress(Exception):
+            self.progress(name)
 
     def say(self, key: str, **params: Any) -> None:
         with contextlib.suppress(OSError, ValueError):  # a closed terminal must not stop a rollback
@@ -1256,6 +1266,7 @@ class Update:
     def _recover(self, previous_version: str) -> str | None:
         """Stop TOW, put the previous code and the snapshot back, start it; the error, if any."""
         assert isinstance(self.code, ArchiveCode)
+        self.report("rolling_back")
         code = "as found"  # -> "mixed" while the entries move -> "previous" once they are back
         was_running = self.sys.supervisor_running() is not None
         try:
@@ -1514,13 +1525,16 @@ class Update:
         result, error = "failed", None
         try:
             try:
+                self.progress("stopping")
                 self.stop()
+                self.progress("backup")
                 self.take_snapshot(target)
             except BaseException:
                 code.discard()  # the code was not switched: an unpacked archive goes
                 raise
             with self.sys.shielded():
                 try:
+                    self.progress("installing")
                     code.switch(target)
                     try:
                         self.sys.uv_sync()
@@ -1528,6 +1542,7 @@ class Update:
                         raise UpdateError(self.text("sync_failed", error=exc)) from exc
                     version = self.version()
                     self.write_state(target_version=version)
+                    self.progress("checking")
                     if not self.start_and_check(version):
                         raise UpdateError(self.text("unhealthy", version=version, seconds=int(self.health_timeout)))
                     if isinstance(code, ArchiveCode):
@@ -1548,6 +1563,7 @@ class Update:
                     self.start_and_check(previous_version)
             running = bool(self.sys.http_json(f"http://127.0.0.1:{self.port}/healthz"))
             self.write_state(status=result, error=error, finished_at=_now_iso(), service_running=running)
+            self.report(result)
         if result != "ok":
             return 1
         self.prune()
@@ -1555,6 +1571,7 @@ class Update:
         return 0
 
     def roll_back(self, previous: str, previous_version: str) -> str:
+        self.report("rolling_back")
         steps: list[dict[str, Any]] = []
 
         def step(name: str, action: Callable[[], Any]) -> Any:
