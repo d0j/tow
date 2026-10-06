@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from collections.abc import Callable
+from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import JSONResponse
@@ -15,31 +16,38 @@ from tow.torrent import MAX_TORRENT_BYTES, TorrentPathConflictError, parse_torre
 from tow.web import services
 
 router = APIRouter()
+_NO_STORE = {"Cache-Control": "no-store"}
 
 
-def _error_response(error: TowError | None = None) -> JSONResponse:
+def _error_response(error: TowError | None = None, status_code: int = 400) -> JSONResponse:
     """Render catalog data only; never stringify an exception at the HTTP boundary."""
     public = error if error is not None else TowError("content.unavailable")
-    return JSONResponse(
-        {"error": public.text(), "code": public.code},
-        status_code=400,
-        headers={"Cache-Control": "no-store"},
-    )
+    return JSONResponse({"error": public.text(), "code": public.code}, status_code=status_code, headers=_NO_STORE)
 
 
-@router.post("/content/snapshot")
-def content_snapshot(token: str = Form(), url: str = Form(), client_id: str = Form()) -> JSONResponse:
-    """Restore a refused form without a second tracker request or a client operation."""
+async def _answer(work: Callable[[], dict[str, Any]]) -> JSONResponse:
+    """Run ``work`` off the event loop; every failure becomes a catalog message."""
     try:
-        from tow.content import describe
-        from tow.guess import canon_watch_url
-
-        blob = services.read_content(token, canon_watch_url(url.strip()), client_id)
-        return JSONResponse(describe(blob, token), headers={"Cache-Control": "no-store"})
+        return JSONResponse(await run_in_threadpool(work), headers=_NO_STORE)
+    except TorrentPathConflictError:
+        return _error_response(TowError("content.path_conflict"))
     except TowError as exc:
         return _error_response(exc)
     except ValueError, RuntimeError, OSError:
         return _error_response()
+
+
+@router.post("/content/snapshot")
+async def content_snapshot(token: str = Form(), url: str = Form(), client_id: str = Form()) -> JSONResponse:
+    """Restore a refused form without a second tracker request or a client operation."""
+
+    def snapshot() -> dict[str, Any]:
+        from tow.content import describe
+        from tow.guess import canon_watch_url
+
+        return describe(services.read_content(token, canon_watch_url(url.strip()), client_id), token)
+
+    return await _answer(snapshot)
 
 
 @router.post("/content/prepare")
@@ -55,31 +63,22 @@ async def content_prepare(
         blob = await torrent.read(MAX_TORRENT_BYTES + 1)
         await torrent.close()
         if len(blob) > MAX_TORRENT_BYTES:
-            return JSONResponse(
-                {"error": str(TowError("content.too_large")), "code": "content.too_large"},
-                status_code=413,
-                headers={"Cache-Control": "no-store"},
-            )
-    try:
+            return _error_response(TowError("content.too_large"), 413)
+
+    def prepare() -> dict[str, Any]:
         if source not in {"torrent", "fresh", "magnet"} or (source != "torrent" and blob is not None):
             raise TowError("content.changed")
         if source == "magnet":
-            result = await run_in_threadpool(services.prepare_magnet_content, url, client_id)
-        elif source == "fresh":
-            result = await run_in_threadpool(services.prepare_fresh_content, url, client_id, allow_limited)
-        else:
-            result = await run_in_threadpool(services.prepare_content, url, client_id, blob, allow_limited)
-        return JSONResponse(result, headers={"Cache-Control": "no-store"})
-    except TorrentPathConflictError:
-        return _error_response(TowError("content.path_conflict"))
-    except TowError as exc:
-        return _error_response(exc)
-    except ValueError, RuntimeError, OSError:
-        return _error_response()
+            return services.prepare_magnet_content(url, client_id)
+        if source == "fresh":
+            return services.prepare_fresh_content(url, client_id, allow_limited)
+        return services.prepare_content(url, client_id, blob, allow_limited)
+
+    return await _answer(prepare)
 
 
 @router.post("/content/resolve")
-def content_resolve(
+async def content_resolve(
     token: str = Form(),
     url: str = Form(),
     client_id: str = Form(),
@@ -89,27 +88,20 @@ def content_resolve(
     title: str = Form(""),
     tracking_mode: str = Form("watch"),
 ) -> JSONResponse:
-    try:
+    def resolve() -> dict[str, Any]:
         from tow.guess import canon_watch_url
 
-        url = canon_watch_url(url.strip())
-        metadata = parse_torrent_metadata(services.read_content(token, url, client_id))
-        context = services.content_context_title(topic_id, url, client_id, title)
+        link = canon_watch_url(url.strip())
+        metadata = parse_torrent_metadata(services.read_content(token, link, client_id))
+        context = services.content_context_title(topic_id, link, client_id, title)
         policy = normalize_policy(mode, value, tracking_mode)
         try:
             plan = resolve_selection(metadata.files, policy, preferred_season=parse_season_hint(context))
         except SelectionPendingError as pending:
             if policy["tracking_mode"] != "watch":
                 raise
-            return JSONResponse(
-                {
-                    "indices": [],
-                    "waiting": TowError("check.waiting_episodes", pending=pending.params.get("episodes", "")).text(),
-                },
-                headers={"Cache-Control": "no-store"},
-            )
-        return JSONResponse({"indices": list(plan.selected_indices)}, headers={"Cache-Control": "no-store"})
-    except TowError as exc:
-        return _error_response(exc)
-    except ValueError, RuntimeError, OSError:
-        return _error_response()
+            waiting = TowError("check.waiting_episodes", pending=pending.params.get("episodes", "")).text()
+            return {"indices": [], "waiting": waiting}
+        return {"indices": list(plan.selected_indices)}
+
+    return await _answer(resolve)

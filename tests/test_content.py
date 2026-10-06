@@ -478,6 +478,18 @@ def test_metadata_upload_limit_precedes_parsing(monkeypatch):
     assert response.status_code == 413
 
 
+def test_oversized_upload_has_catalog_error(monkeypatch):
+    from tow.web import routes_content
+
+    monkeypatch.setattr(routes_content, "MAX_TORRENT_BYTES", 10)
+    monkeypatch.setattr(services, "prepare_content", lambda *_args: pytest.fail("oversized file reached preparation"))
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    response = client.post("/content/prepare", data={"url": URL}, files={"torrent": ("show.torrent", blob())})
+    assert response.status_code == 413
+    assert response.json() == {"error": TowError("content.too_large").text(), "code": "content.too_large"}
+    assert response.headers["cache-control"] == "no-store"
+
+
 def test_metadata_storage_fault_has_safe_error(monkeypatch):
     monkeypatch.setattr(services, "prepare_content", lambda *_args: (_ for _ in ()).throw(OSError("private path")))
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
