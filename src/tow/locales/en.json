@@ -710,7 +710,9 @@
       "paused": "Paused",
       "site": "Site",
       "all_sites": "All trackers",
-      "order": "Sort"
+      "order": "Sort",
+      "nothing_matches": "Nothing matches the filter.",
+      "show_all": "Show all topics"
     },
     "sort": {
       "added": "As added",

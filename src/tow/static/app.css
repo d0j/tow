@@ -395,6 +395,7 @@ dialog.log-pop::backdrop { background: rgba(0,0,0,.55); }
 dialog.log-pop .log-box { flex: 1 1 auto; max-height: none; min-height: 0; padding: .5rem 1rem 1rem; }
 .list-head { color: var(--mut); font-size: 12px; border-bottom: 1px solid var(--line); }
 .empty-state { padding: 2rem 1rem; text-align: center; }
+.list-empty { margin: 0; padding: 1.25rem 1rem; text-align: center; color: var(--mut); }
 details.row-edit { border-bottom: 1px solid var(--line); }
 details.row-edit > summary { cursor: pointer; list-style: none; }
 details.row-edit > summary::-webkit-details-marker { display: none; }

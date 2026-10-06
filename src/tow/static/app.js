@@ -882,6 +882,9 @@ if (q) {
       chip.setAttribute("aria-pressed", String(chip.dataset.filter === filter));
     });
     const narrowed = tokens.length || filter || tracker;
+    // A filter kept in the address that matches nothing must not leave bare headers.
+    const listEmpty = document.getElementById("list-empty");
+    if (listEmpty) listEmpty.hidden = !(narrowed && !shown);
     if (searchStatus) searchStatus.textContent = narrowed ? (shown ? t("js.search.shown_of", { shown, total: searchable.length }) : t("js.search.nothing")) : t("js.search.shown", { shown });
   };
 
