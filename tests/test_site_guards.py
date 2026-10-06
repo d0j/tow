@@ -136,6 +136,20 @@ def test_every_template_tracker_regex_passes_the_guard():
                 validate_tracker_regex(spec[key])
 
 
+@pytest.mark.parametrize(
+    ("raw", "key"),
+    [
+        ("the host could not be resolved safely", "doctor.reason.no_address"),
+        ("the host resolves to a non-public address", "doctor.reason.home_address"),
+    ],
+)
+def test_diagnostics_name_the_guards_findings_in_words(raw, key):
+    from tow.i18n import t
+    from tow.web.routes_sites import _doctor_reason
+
+    assert _doctor_reason(raw) == t(key, "ru")
+
+
 @pytest.mark.parametrize(("pattern", "href"), [(r"^https://tracker\.example/t/\d+$", ""), ("", r"dl\.php\?id=\d+")])
 def test_a_pattern_without_a_group_for_the_number_is_refused(pattern, href):
     with pytest.raises(ValueError, match=re.escape(r"(\d+)")):
