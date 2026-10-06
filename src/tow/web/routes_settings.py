@@ -439,6 +439,13 @@ def _ping_reason(exc: Exception) -> str:
     from tow.clients.managed import ClientError
 
     if isinstance(exc, ClientError):
+        # Every client says "does not answer" and "login refused" in the same words as
+        # qBittorrent's, not with the network library's class name ("(ConnectError)").
+        kind = exc.code.rpartition(".")[2]
+        if kind in {"no_connection", "no_web"}:
+            return t("web.settings.ping_unreachable")
+        if kind == "bad_login":
+            return t("web.settings.ping_login")
         return str(exc)
     name = type(exc).__name__.casefold()
     if any(word in name for word in ("login", "unauthorized", "forbidden")):
