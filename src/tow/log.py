@@ -94,13 +94,27 @@ def cls_label(cls: str, lang: str | None = None) -> str:
     return CLS_RU.label(cls, lang or owner_language(), cls)
 
 
-_URL_RE = re.compile(r"https?://[^\s'\"<>]+", re.IGNORECASE)
+# Tracker announce addresses carry the owner's passkey (in the query or the path): udp:// as
+# well as http(s)://, and inside a magnet link's tr= values.
+_URL_RE = re.compile(r"(?:https?|udp|wss?)://[^\s'\"<>]+", re.IGNORECASE)
+_MAGNET_RE = re.compile(r"magnet:\?[^\s'\"<>]*", re.IGNORECASE)
+_MAGNET_XT_RE = re.compile(r"(?:^|&)xt=([^&]*)", re.IGNORECASE)
 _SECRET_HEADER_RE = re.compile(r"\b(?:authorization|cookie|set-cookie)\s*[:=][^\r\n]*", re.IGNORECASE)
 _SECRET_VALUE_RE = re.compile(
-    r"\b(password|passphrase|token|secret|api[_-]?key|access[_-]?key|client[_-]?secret)\s*[:=]\s*"
+    r"\b(password|passphrase|passkey|token|secret|api[_-]?key|access[_-]?key|client[_-]?secret|uk|pk)\s*[:=]\s*"
     r"(?:\"[^\"\r\n]*\"|'[^'\r\n]*'|[^\s,;&]+)",
     re.IGNORECASE,
 )
+
+
+def _magnet(match: re.Match[str]) -> str:
+    """A magnet link keeps only its info-hash (xt): trackers (tr=), peers and names go."""
+    raw = match.group(0)
+    stripped = raw.rstrip(".,;:)]}")
+    xt = _MAGNET_XT_RE.search(stripped[len("magnet:?") :])
+    return (f"magnet:?xt={xt.group(1)}" if xt else "magnet:?") + raw[len(stripped) :]
+
+
 _BEARER_RE = re.compile(r"\bbearer\s+[^\s,;]+", re.IGNORECASE)
 
 
@@ -123,7 +137,8 @@ def scrub_text(value: str) -> str:
         except ValueError:
             return "[REDACTED_URL]" + suffix
 
-    cleaned = _URL_RE.sub(replace, value)
+    cleaned = _MAGNET_RE.sub(_magnet, value)
+    cleaned = _URL_RE.sub(replace, cleaned)
     cleaned = _SECRET_HEADER_RE.sub("[REDACTED_HEADER]", cleaned)
     cleaned = _SECRET_VALUE_RE.sub(lambda match: f"{match.group(1)}=***", cleaned)
     return _BEARER_RE.sub("Bearer ***", cleaned)
@@ -264,7 +279,7 @@ def _redact(obj: Any) -> Any:
         out = {}
         for k, v in obj.items():
             lk = str(k).lower()
-            if any(s in lk for s in ("pass", "token", "secret", "cookie", "uid")):
+            if any(s in lk for s in ("pass", "token", "secret", "cookie", "uid")) or lk in {"uk", "pk"}:
                 out[k] = "***"
             else:
                 out[k] = _redact(v)
