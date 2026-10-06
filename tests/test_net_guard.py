@@ -39,6 +39,86 @@ def test_public_only_backend_connects_to_a_checked_numeric_ip(monkeypatch):
     assert connected == [("93.184.216.34", 443)]
 
 
+@pytest.mark.parametrize("failure", [httpcore.ConnectError, httpcore.ConnectTimeout])
+def test_pinned_connect_tries_each_checked_address_in_turn(monkeypatch, failure):
+    connected = []
+    stream = object()
+
+    def connect(_self, host, port, *_args):
+        connected.append(host)
+        if host == "93.184.216.34":
+            raise failure("unreachable")
+        return stream
+
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers("93.184.216.34", "2606:4700::1111"))
+    monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", connect)
+
+    assert PublicOnlyBackend().connect_tcp("tracker.example", 443) is stream
+    assert connected == ["93.184.216.34", "2606:4700::1111"]  # numbers only, never the name again
+
+
+def test_pinned_connect_reports_the_last_failure_when_no_address_answers(monkeypatch):
+    connected = []
+
+    def connect(_self, host, port, *_args):
+        connected.append(host)
+        raise httpcore.ConnectError(f"refused by {host}")
+
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers("93.184.216.34", "2606:4700::1111"))
+    monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", connect)
+
+    with pytest.raises(httpcore.ConnectError, match="refused by 2606:4700::1111"):
+        PublicOnlyBackend().connect_tcp("tracker.example", 443)
+    assert connected == ["93.184.216.34", "2606:4700::1111"]
+
+
+def test_pinned_connect_never_opens_a_socket_for_a_refused_answer(monkeypatch):
+    def connect(*_args, **_kwargs):
+        raise AssertionError("a socket was opened to a checked-out address")
+
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers("93.184.216.34", "192.168.1.20"))
+    monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", connect)
+
+    with pytest.raises(httpcore.ConnectError, match="non-public"):
+        PublicOnlyBackend().connect_tcp("tracker.example", 443)
+
+
+def test_an_answer_that_is_not_an_address_fails_closed(monkeypatch):
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers("not-an-address"))
+    with pytest.raises(httpcore.ConnectError, match="invalid address"):
+        public_addresses("tracker.example", 443)
+
+
+def test_the_transport_refuses_to_run_without_the_checked_backend(monkeypatch):
+    closed = []
+    monkeypatch.setattr(httpx.HTTPTransport, "__init__", lambda self, **_kwargs: setattr(self, "_pool", object()))
+    monkeypatch.setattr(httpx.HTTPTransport, "close", lambda self: closed.append(self))
+
+    with pytest.raises(TypeError, match="public-address policy"):
+        PublicOnlyTransport()
+    assert len(closed) == 1
+
+
+@pytest.mark.parametrize(
+    ("url", "answers", "allowed"),
+    [
+        ("https://tracker.example/announce", ("93.184.216.34",), True),
+        ("udp://tracker.example:6969/announce", ("93.184.216.34",), True),
+        ("http://tracker.example/announce", ("192.168.1.20",), False),
+        ("ftp://tracker.example/announce", ("93.184.216.34",), False),
+        ("https:///announce", ("93.184.216.34",), False),
+        ("https://tracker.example:99999/announce", ("93.184.216.34",), False),
+    ],
+)
+def test_tracker_addresses_follow_the_same_public_only_rule(monkeypatch, url, answers, allowed):
+    from tow.net_guard import tracker_address
+
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers(*answers))
+    assert tracker_address(url) is allowed
+    if not allowed and answers == ("192.168.1.20",):
+        assert tracker_address(url, public_only=False) is True  # a LAN tracker only when asked for
+
+
 @pytest.mark.parametrize(
     "addresses",
     [(), ("127.0.0.1",), ("93.184.216.34", "10.0.0.2"), ("::1", "93.184.216.34")],
