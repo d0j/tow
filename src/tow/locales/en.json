@@ -1350,7 +1350,9 @@
       "choose": "Get contents and choose at least one file before saving.",
       "failed": "Could not get contents. Retry or provide a .torrent file.",
       "stale": "The link or client changed. Get contents again.",
-      "folder": "Select all files in {name}"
+      "folder": "Select all files in {name}",
+      "session": "Your sign-in has expired. Reload the page to sign in again.",
+      "too_large": "The .torrent file is larger than TOW accepts."
     }
   },
   "settings": {

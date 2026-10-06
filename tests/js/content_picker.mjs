@@ -59,12 +59,15 @@ function setup(saved = null, existing = []) {
     document, Element, FormData, AbortController,
     MutationObserver: class { observe() {} },
     window: { setTimeout, clearTimeout, confirm: () => controls.limited.approved === true },
-    fetch: (url, options) => new Promise((resolve) => requests.push({ url, options, respond: (data, ok = true) => resolve({ ok, json: async () => data }) })),
+    fetch: (url, options) => new Promise((resolve) => requests.push({ url, options, respond: (data, ok = true, status = ok ? 200 : 400, type = "application/json") => resolve({
+      ok, status, headers: { get: (name) => name.toLowerCase() === "content-type" ? type : null },
+      json: async () => { if (type !== "application/json") throw new SyntaxError("Unexpected token 'a', \"authentica\"... is not valid JSON"); return data; },
+    }) })),
   });
   return { fields, controls, requests, form, root };
 }
 const find = (tree, name) => tree.querySelectorAll("*").find((n) => n.attributes["aria-label"] === name);
-const reply = async (request, data, ok = true) => { request.respond(data, ok); await tick(); };
+const reply = async (request, ...response) => { request.respond(...response); await tick(); };
 const snapshot = { token: "a".repeat(32), files };
 const submitAllowed = (form) => {
   let prevented = false;
@@ -259,4 +262,22 @@ draft.form.fire("reset");
 assert.equal(draft.fields.content_token.value, snapshot.token, "cancel restores the refused form's preparation");
 assert.equal(draft.fields.selection_indices.value, "[1]");
 
-console.log(JSON.stringify({ localFileFollowsLink: true, cancelRestoresHidden: true, safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true, ruleContext: true, cacheLabel: true, explicitFresh: true, quotaConsent: true }));
+// Plain-text refusals of the request middleware become readable messages, not parser errors.
+const plain = setup();
+plain.controls.load.fire("click");
+await reply(plain.requests[0], "authentication required", false, 401, "text/plain; charset=utf-8");
+assert.equal(plain.controls.status.textContent, "content.js.session", "an expired sign-in asks to reload");
+plain.controls.load.fire("click");
+await reply(plain.requests[1], "upload too large", false, 413, "text/plain; charset=utf-8");
+assert.equal(plain.controls.status.textContent, "content.js.too_large");
+plain.controls.load.fire("click");
+await reply(plain.requests[2], "forbidden", false, 403, "text/plain; charset=utf-8");
+assert.equal(plain.controls.status.textContent, "content.js.failed");
+plain.controls.load.fire("click");
+await reply(plain.requests[3], snapshot);
+plain.fields.selection_mode.value = "files"; plain.fields.selection_value.value = "*.mkv";
+plain.fields.selection_mode.fire("change");
+await reply(plain.requests.at(-1), "authentication required", false, 401, "text/plain; charset=utf-8");
+assert.equal(plain.controls.status.textContent, "content.js.session", "rule previews read refusals the same way");
+
+console.log(JSON.stringify({ plainTextRefusals: true, localFileFollowsLink: true, cancelRestoresHidden: true, safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true, ruleContext: true, cacheLabel: true, explicitFresh: true, quotaConsent: true }));
