@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import vm from "node:vm";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 const events = {};
 const badge = { hidden: true };
@@ -11,12 +12,13 @@ const elements = new Map([["[data-release-badge]", badge], ["[data-release-notic
 let result = { available: true, latest: "99.0.0", ok: true, checks_enabled: true };
 let interval;
 const requests = [];
-vm.runInNewContext(fs.readFileSync(new URL("../../src/tow/static/updates.js", import.meta.url), "utf8"), {
+Object.assign(globalThis, {
   document: { querySelector: (selector) => elements.get(selector), documentElement: { lang: "en" } },
   t: (key, vars = {}) => key + JSON.stringify(vars), AbortSignal, Date,
   window: { setInterval: (callback) => { interval = callback; } },
   fetch: async (url, options) => { requests.push({ url, options }); return { ok: true, json: async () => result }; },
 });
+require("../../src/tow/static/updates.js");
 const flush = async () => { for (let n = 0; n < 6; n++) await new Promise((resolve) => setImmediate(resolve)); };
 await flush();
 assert.equal(notice.hidden, false);
