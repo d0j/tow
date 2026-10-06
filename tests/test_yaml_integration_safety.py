@@ -64,7 +64,7 @@ def test_night_rollback_config_is_guarded_before_resolving_restore_point_targets
 
     monkeypatch.setattr(locations, "resolve_checked", lambda *args: pytest.fail("unsafe graph reached path resolver"))
     with pytest.raises(yaml.YAMLError):
-        snapshots._rollback_target("restore-points/20260101T010101Z-aaaaaaaa.towx", CYCLE)
+        snapshots._rollback_target("restore-points/20260101T010101Z-aaaaaaaa.towx", CYCLE, None)
 
 
 @pytest.mark.parametrize("source", [b"false", b"0", b"''", b"[]"])

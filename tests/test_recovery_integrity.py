@@ -41,7 +41,7 @@ def test_night_rollback_checks_all_backups_before_changing_any_store():
     store.save_download_history({"topics": {"fixture": {"items": {}}}})
     paths = [state_path(), download_history_path()]
     with store.persistence_lock():
-        safety = snapshots._begin_restore([(p.name, p, b"new") for p in paths], snapshot="fixture")
+        safety = snapshots._begin_restore([(p.name, p, b"new") for p in paths], snapshot="fixture", points_dir="")
         for target in paths:
             target.write_bytes(b'{"fixture":"current"}')
         (safety / paths[-1].name).write_bytes(b"damaged backup")
@@ -137,7 +137,7 @@ def test_night_restore_reservation_failure_never_removes_another_writers_files(m
 
     monkeypatch.setattr(Path, "mkdir", reserve)
     with pytest.raises(snapshots.SnapshotError):
-        snapshots._begin_restore([], snapshot="fixture")
+        snapshots._begin_restore([], snapshot="fixture", points_dir="")
     assert (reserved[0] / "keep.txt").read_bytes() == b"another writer"
 
 
@@ -155,7 +155,7 @@ def test_night_restore_verifies_copies_before_publishing_marker(monkeypatch):
 
     monkeypatch.setattr(snapshots, "atomic_write_bytes", corrupt)
     with store.persistence_lock(), pytest.raises(snapshots.SnapshotError):
-        snapshots._begin_restore([("state.json", target, b"new")], snapshot="fixture")
+        snapshots._begin_restore([("state.json", target, b"new")], snapshot="fixture", points_dir="")
     assert target.read_bytes() == before
     assert not (data_dir() / snapshots._MARKER).exists()
 
@@ -166,7 +166,7 @@ def test_night_rollback_uses_verified_bytes_if_a_later_backup_changes(monkeypatc
     paths = [state_path(), download_history_path()]
     saved = [p.read_bytes() for p in paths]
     with store.persistence_lock():
-        safety = snapshots._begin_restore([(p.name, p, b"new") for p in paths], snapshot="fixture")
+        safety = snapshots._begin_restore([(p.name, p, b"new") for p in paths], snapshot="fixture", points_dir="")
         for path in paths:
             path.write_bytes(b'{"fixture":"current"}')
         write = snapshots.atomic_write_bytes
@@ -268,7 +268,7 @@ def test_night_rollback_checks_later_target_before_touching_first_file():
     store.save_download_history({"topics": {}})
     paths = [state_path(), download_history_path()]
     with store.persistence_lock():
-        safety = snapshots._begin_restore([(p.name, p, b"new") for p in paths], snapshot="fixture")
+        safety = snapshots._begin_restore([(p.name, p, b"new") for p in paths], snapshot="fixture", points_dir="")
         paths[0].write_bytes(b'{"fixture":"current"}')
         paths[1].unlink()
         paths[1].mkdir()
@@ -294,6 +294,7 @@ def test_night_rollback_resolves_points_from_saved_config_without_writing_it(tmp
         safety = snapshots._begin_restore(
             [("config.yaml", config_path(), b"new"), (f"restore-points/{point.name}", point, b"new")],
             snapshot="fixture",
+            points_dir=str(old_root),
         )
         import yaml
 

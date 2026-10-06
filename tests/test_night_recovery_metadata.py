@@ -230,7 +230,9 @@ def test_oversized_preparation_never_publishes_marker_or_changes_live_files():
     store.save_state({"topics": [{"id": "before"}]})
     before = state_path().read_bytes()
     with pytest.raises(snapshots.SnapshotError):
-        snapshots._begin_restore([("state.json", state_path(), b"new")], snapshot="x" * (JOURNAL_LIMIT + 1))
+        snapshots._begin_restore(
+            [("state.json", state_path(), b"new")], snapshot="x" * (JOURNAL_LIMIT + 1), points_dir=""
+        )
     assert state_path().read_bytes() == before
     assert not (data_dir() / snapshots._MARKER).exists()
 
@@ -313,7 +315,7 @@ def test_final_phase_budget_is_checked_before_marker_publication(monkeypatch):
     limit = len(snapshots._journal_bytes(journal, "prepared"))
     monkeypatch.setattr(snapshots, "MAX_RESTORE_JOURNAL_BYTES", limit)
     with pytest.raises(snapshots.SnapshotError):
-        snapshots._begin_restore([("state.json", target, b"new")], snapshot="fixture")
+        snapshots._begin_restore([("state.json", target, b"new")], snapshot="fixture", points_dir="")
     assert target.read_bytes() == before
     assert not (data_dir() / snapshots._MARKER).exists()
 
