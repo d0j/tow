@@ -987,6 +987,14 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
   details.row-edit > summary > .topic-name,
   details.row-edit > summary > [data-hl],
   details.row-edit.sites > summary > :first-child { padding-right: 7rem; }
+  /* A phone has the width for one value per line: the whole folder and the whole error wrap
+     instead of being cut off at the right edge. */
+  .topic-path .clip-start { white-space: normal; direction: ltr; text-overflow: clip; overflow-wrap: anywhere; }
+  .topic-event.clip, .topic-event .row-error { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+  /* The version sits at the end of the page instead of floating over text (the floating
+     badge only steps aside for controls; a phone has no free corner for it). */
+  body { position: relative; padding-bottom: 2.2rem; }
+  body > .app-version { position: absolute; }
 }
 @media (max-width: 374px) {
   header.app { padding-inline: .35rem; }
