@@ -64,7 +64,7 @@ RU_ALLOWED = {
     *("qbittorrent", "transmission", "deluge"),
     # site names and titles from config.example.yaml (data)
     *("rutor", "kinozal", "nnmclub", "rutracker", "tapochek", "unionpeer", "fast_torrent", "nnm"),
-    *("Kinozal", "NNM", "Club", "RuTracker", "Tapochek", "UnionPeer"),
+    *("Kinozal", "NNM", "Club", "RuTracker", "Tapochek", "UnionPeer", "Rutor", "Fast"),
     # abbreviations Russian uses as they are
     *("LAN", "URL", "API", "PID"),
     *("CallMeBot", "apikey"),  # the WhatsApp gateway and its word for its key

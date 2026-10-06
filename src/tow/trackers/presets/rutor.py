@@ -26,7 +26,7 @@ def guess(parts: UrlParts) -> dict[str, Any] | None:
         return None
     return parts.spec(
         name="rutor",
-        title="rutor",
+        title="Rutor",
         fetch_hosts="http://rutor.info",
         login_hosts="",
         url_regex=URL_REGEX,
@@ -40,7 +40,7 @@ PRESET = SitePreset(
     brands=("rutor", "new-rutor"),
     search_path="/search/0/0/100/0/{q}",
     spec={
-        "title": "rutor",
+        "title": "Rutor",
         "url_regex": URL_REGEX,
         "login_hosts": [],
         "fetch_hosts": ["http://d.rutor.info", "http://rutor.info", "https://new-rutor.org", "http://rutor.is"],

@@ -43,7 +43,7 @@
   {% set h = header_health() %}
   <div class="hdr-sites" aria-label="{{ t('base.header.sites') }}">
     {% for name, st in h.sites.items() %}
-    <span class="trk {{ st }}" title="{{ name }}">{{ name }}</span>
+    <span class="trk {{ st }}" title="{{ site_title(name) }}">{{ site_title(name) }}</span>
     {% endfor %}
   </div>
   <div class="hdr-right">

@@ -57,7 +57,7 @@ def _seed_rutor(*, probes=None, health=None, topics=None, active=None):
 def test_header_site_chip_is_amber_when_its_mirrors_do_not_answer(client):
     _seed_rutor(probes=[{"tracker": "rutor", "host": "http://rutor.info", "ok": False, "error": "timed out"}])
     page = client.get("/").text
-    assert '<span class="trk warn" title="rutor">rutor</span>' in page
+    assert '<span class="trk warn" title="Rutor">Rutor</span>' in page
     assert 'class="trk bad"' not in page.split('class="hdr-svc"')[0]
 
 
@@ -85,7 +85,7 @@ def test_sites_row_name_globe_and_mirror_dots_are_amber_for_a_refused_mirror(cli
         ]
     )
     page = client.get("/sites").text
-    assert '<span class="trk warn">rutor</span>' in page
+    assert '<span class="trk warn">Rutor</span>' in page
     assert re.search(r'<a class="row-ico warn" href="[^"]*rutor', page)
     assert '<span class="dot warn" aria-hidden="true"></span>' in page
     assert 'class="dot bad"' not in page

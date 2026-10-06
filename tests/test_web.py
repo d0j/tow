@@ -342,9 +342,9 @@ def test_settings_restore_point_routes_report_success(monkeypatch):
     restored = settings_restore_point_apply(point_id)
 
     assert created.status_code == 303
-    assert "точка сохранена" in shown(created.headers["location"])
+    assert "копия создана" in shown(created.headers["location"])
     assert restored.status_code == 303
-    assert "LAN сохранён" in shown(restored.headers["location"])
+    assert "доступ по сети сохранён" in shown(restored.headers["location"])
 
 
 def test_settings_service_status_is_read_only(monkeypatch):
@@ -1635,7 +1635,7 @@ def test_header_dots_follow_health():
     assert 'title="qBittorrent: Связи нет"' in t
     # No messenger connected: the header says so (it used to call it "бот молчит").
     assert 'class="trk trk-ico mut" href="/settings?open=bots" title="уведомления: не подключены"' in t
-    assert 'title="kinozal"' in t
+    assert 'title="Kinozal"' in t
     assert "trk bad" in t
     assert "trk ok" in t
     assert "chip svc" not in t
