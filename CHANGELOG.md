@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.23.11] — 2026-10-06
+
 ### Changed
 
 - Reuse encrypted, bounded torrent metadata for live topics when opening their
@@ -13,6 +15,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Version links open a separate compact update panel. Rollback, history and logs
   stay collapsed; a new release has a compact green notice on Home. Automatic
   release checks can be turned off immediately without disabling manual checks.
+
+### Fixed
+
+- A temporarily unreadable metadata cache stays ineligible after new revision
+  evidence, even when access recovers. A confirmed fresh copy re-enables reuse.
 
 ## [1.23.10] — 2026-10-06
 

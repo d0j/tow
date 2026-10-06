@@ -90,7 +90,7 @@ def _read_record(url: str) -> bytes | None:
 
 def remember(blob: bytes, url: str) -> None:
     """Do not let a failed replacement disguise a proven changed revision as current."""
-    metadata = parse_torrent_metadata(blob)
+    parse_torrent_metadata(blob)
     url = canon_watch_url(url)
     with persistence_lock():
         state = load_state(quarantine=False)
@@ -98,19 +98,18 @@ def remember(blob: bytes, url: str) -> None:
         if not topics:
             return
         try:
-            old = _read_record(url)
-        except TowError as exc:
-            if exc.code != "content.cache_invalid":
-                raise
-            old = None
-        if old == blob:
-            _mark_unavailable(state, topics, False)
-            return
-        try:
-            _remember(blob, url)
+            try:
+                old = _read_record(url)
+            except TowError as exc:
+                if exc.code != "content.cache_invalid":
+                    raise
+                old = None
+            if old != blob:
+                _remember(blob, url)
         except TowError, OSError, RuntimeError, ValueError:
-            if old is not None and parse_torrent_metadata(old).infohash != metadata.infohash:
-                _mark_unavailable(state, topics, True)
+            # Unreadable storage cannot prove that the retained copy matches this
+            # evidence. Persist the refusal before later access can recover.
+            _mark_unavailable(state, topics, True)
             raise
         _mark_unavailable(state, topics, False)
 
@@ -179,15 +178,14 @@ def observe_magnet(url: str, magnet: str) -> None:
         topics = _matching(state, url)
         if not topics:
             return
-        blob = _read_record(url)
-        if blob is None:
-            return
-        metadata = parse_torrent_metadata(blob)
-        v1, v2 = identities
-        if (v1 and metadata.hash_v1 not in v1) or (v2 and metadata.hash_v2 not in v2):
-            try:
-                _path(url).unlink()
-            except OSError:
-                _mark_unavailable(state, topics, True)
-                raise
+        try:
+            blob = _read_record(url)
+            if blob is not None:
+                metadata = parse_torrent_metadata(blob)
+                v1, v2 = identities
+                if (v1 and metadata.hash_v1 not in v1) or (v2 and metadata.hash_v2 not in v2):
+                    _path(url).unlink()
+        except TowError, OSError, RuntimeError, ValueError:
+            _mark_unavailable(state, topics, True)
+            raise
         _mark_unavailable(state, topics, False)

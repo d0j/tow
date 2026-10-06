@@ -268,6 +268,63 @@ def test_unknown_entries_are_not_deleted():
     assert foreign.read_bytes() == b"owner data"
 
 
+@pytest.mark.parametrize("action", ["torrent", "magnet"])
+@pytest.mark.parametrize("fault", ["read_permission", "oversize"])
+def test_unreadable_old_copy_stays_refused_after_storage_recovers(action, fault, monkeypatch):
+    from pathlib import Path
+
+    watch()
+    torrent_cache.remember(blob(), URL)
+    path = torrent_cache._path(URL)
+    changed = blob().replace(b"4:Show", b"4:Else")
+    original = Path.open
+    with monkeypatch.context() as blocked:
+        if fault == "read_permission":
+
+            def refused(item, *args, **kwargs):
+                if item == path:
+                    raise PermissionError("metadata temporarily unreadable")
+                return original(item, *args, **kwargs)
+
+            blocked.setattr(Path, "open", refused)
+        else:
+            blocked.setattr(torrent_cache, "MAX_RECORD_BYTES", 1)
+        operation, args = (
+            (torrent_cache.remember, (changed, URL))
+            if action == "torrent"
+            else (
+                torrent_cache.observe_magnet,
+                (URL, "magnet:?xt=urn:btih:" + parse_torrent_metadata(changed).infohash),
+            )
+        )
+        with pytest.raises((TowError, PermissionError)):
+            operation(*args)
+    assert load_state()["topics"][0]["metadata_cache_unavailable"] is True
+    with pytest.raises(TowError) as error:
+        torrent_cache.read(URL)
+    assert error.value.code == "content.cache_invalid"
+    torrent_cache.remember(changed, URL)
+    assert torrent_cache.read(URL) == changed
+
+
+def test_failed_repair_cannot_allow_a_later_restored_old_record(monkeypatch):
+    watch()
+    torrent_cache.remember(blob(), URL)
+    path = torrent_cache._path(URL)
+    old = path.read_bytes()
+    path.write_bytes(b"damaged")
+    changed = blob().replace(b"4:Show", b"4:Else")
+    with monkeypatch.context() as blocked:
+        blocked.setattr(torrent_cache, "MAX_BYTES", 0)
+        with pytest.raises(TowError):
+            torrent_cache.remember(changed, URL)
+    path.write_bytes(old)
+    with pytest.raises(TowError):
+        torrent_cache.read(URL)
+    torrent_cache.remember(changed, URL)
+    assert torrent_cache.read(URL) == changed
+
+
 def test_changed_magnet_invalidates_old_contents_but_matching_one_keeps_them():
     watch()
     torrent_cache.remember(blob(), URL)
