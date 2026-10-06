@@ -26,7 +26,8 @@ or created for the refused form.
   app/                      the code: a git clone at a release tag, or a release's source archive
   app.prev/                 an archive install's previous code, after an update (one is kept)
   Start TOW.cmd, ...        the start files of the bundle and the installers (§1a)
-  config.yaml               live configuration
+  config.yaml               live configuration (the UI writes it without comments; every setting
+                            is explained in app/config.example.yaml)
   data/                     state, history, secrets.enc, tmp/, browser profiles
   data/logs/                run.log, serve.log, serve-stderr.log, <job>-last.log, launchd.log
   data/run/                 run.lock, run.pid, status.json, schedule.json, control/ (tow run's files)

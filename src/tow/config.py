@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import os
 import re
 import threading
 from collections.abc import Mapping
@@ -270,7 +271,20 @@ def _validate(data: dict[str, Any]) -> None:
         raise ConfigError('config.yaml: quiet_hours must look like "23-8" (hours, local time)')
 
 
-_HEADER = "# TOW config. Settings changed in the web UI are written here; comments are not kept.\n"
+def _header(path: Path) -> str:
+    """The comment a saved config starts with: the UI writes no comments, so it names the
+    commented reference that ships with the code (``app/config.example.yaml`` in an install)."""
+    from tow.paths import repo_root
+
+    reference = repo_root() / "config.example.yaml"
+    try:
+        shown = Path(os.path.relpath(reference, path.parent)).as_posix()
+    except ValueError:  # another drive (TOW_CONFIG elsewhere): the full path
+        shown = str(reference)
+    return (
+        "# TOW config. Settings changed in the web UI are written here, without comments.\n"
+        f"# Every setting, explained and with its default: {shown}\n"
+    )
 
 
 def save_config(data: dict[str, Any]) -> None:
@@ -283,7 +297,7 @@ def save_config(data: dict[str, Any]) -> None:
     out = {key: value for key, value in data.items() if key in present or key not in default or value != default[key]}
     if "clients" in out and out.get("client") == DEFAULTS["client"]:
         out.pop("client")  # the single-client block is replaced by the clients list
-    text = dump_yaml(out, prefix=_HEADER)
+    text = dump_yaml(out, prefix=_header(path))
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(path, text)
 

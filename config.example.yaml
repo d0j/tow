@@ -1,5 +1,6 @@
 # TOW configuration template. Copy to config.yaml (dev checkout) or <runtime>\config.yaml
-# (runtime install, see README). The live config.yaml is written by the UI and is not versioned.
+# (runtime install, see README). The live config.yaml is written by the UI and is not versioned;
+# the UI writes it without these comments, and its first line points back to this file.
 # Every key below is optional: a key left out takes the default shown.
 
 # --- web interface -----------------------------------------------------------------------

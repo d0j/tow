@@ -169,6 +169,21 @@ def test_saving_does_not_write_defaults_the_file_did_not_have():
     assert yaml.safe_load(text) == {"trackers": {}, "interval_sec": 10800}  # no bind/port/client/... added
 
 
+def test_a_saved_config_points_to_the_commented_reference(monkeypatch, tmp_path):
+    from tow import paths
+    from tow.config import load_config, save_config
+    from tow.paths import config_path
+
+    monkeypatch.setenv("TOW_ROOT", str(tmp_path))
+    monkeypatch.setattr(paths, "repo_root", lambda: tmp_path / "app")
+    (tmp_path / "config.yaml").write_text("# a comment the UI cannot keep\ninterval_sec: 7200\n", encoding="utf-8")
+
+    save_config(load_config())
+    text = config_path().read_text(encoding="utf-8")
+
+    assert "Every setting, explained and with its default: app/config.example.yaml" in text.splitlines()[1]
+
+
 def test_a_clients_list_drops_the_single_client_block():
     import yaml
 
