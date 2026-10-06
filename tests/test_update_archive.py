@@ -413,6 +413,70 @@ def test_a_hard_crash_in_the_archive_switch_is_recovered_on_next_run(install, gi
     assert recovered.calls == ["spawn tow run 1.22.0"]
 
 
+def _cut_off_switch(install, github, monkeypatch) -> None:
+    """An update to v1.23.0 killed after it moved the first entries of the code."""
+    github.release("v1.23.0", tarball("1.23.0"))
+    real = updater.os.replace
+
+    def cut(source, destination):
+        result = real(source, destination)
+        if Path(source).parent.name == "app.new":
+            raise Crash()
+        return result
+
+    monkeypatch.setattr(updater.os, "replace", cut)
+    killed(monkeypatch)
+    with pytest.raises(Crash):
+        run(Machine(install["app"], github), "v1.23.0")
+    monkeypatch.setattr(updater.os, "replace", real)
+    assert (install["root"] / ".update-switch.json").exists()
+
+
+def test_a_recovery_whose_previous_version_does_not_answer_is_a_failure_not_a_refusal(install, github, monkeypatch):
+    # Before: exit code 2, "refused before anything changed", while the code had been put back.
+    _cut_off_switch(install, github, monkeypatch)
+    machine = Machine(install["app"], github, supervisor=False, silent_version="1.22.0")
+
+    code, lines = run(machine, "v1.23.0")
+
+    assert code == 1
+    assert machine.calls == ["spawn tow run 1.22.0"]  # recovery only: the update itself never began
+    record = state(install)
+    assert record["status"] == "recovery_failed"
+    assert "did not answer as 1.22.0" in record["error"]
+    assert any(line.startswith("the cut-off update could not be undone") for line in lines)
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+    assert (install["root"] / ".update-switch.json").exists()  # the next run tries again
+
+
+def test_a_recovery_that_cannot_stop_tow_starts_it_again(install, github, monkeypatch):
+    # Before: the stop failed outside run()'s try/finally, and TOW stayed stopped.
+    github.release("v1.23.0", tarball("1.23.0"))
+    original = updater.Update.start_and_check
+
+    def start_then_crash(work, version):
+        result = original(work, version)
+        if version == "1.23.0":
+            raise Crash()  # killed during the health check: the new version keeps running
+        return result
+
+    monkeypatch.setattr(updater.Update, "start_and_check", start_then_crash)
+    killed(monkeypatch)
+    with pytest.raises(Crash):
+        run(Machine(install["app"], github), "v1.23.0")
+    monkeypatch.setattr(updater.Update, "start_and_check", original)
+    machine = Machine(install["app"], github)
+    machine.port_open = lambda port: True  # type: ignore[method-assign]  # never free
+
+    code, lines = run(machine, "v1.23.0")
+
+    assert code == 1
+    assert machine.calls == ["stop request", "spawn tow run 1.23.0"]  # what it found is running again
+    assert state(install)["status"] == "recovery_failed"
+    assert any("port 18999 is still in use" in line for line in lines)
+    assert (install["root"] / ".update-switch.json").exists()
+
+
 def test_a_crash_after_new_code_changes_data_restores_the_snapshot_too(install, github, monkeypatch):
     github.release("v1.23.0", tarball("1.23.0"))
     original = updater.Update.start_and_check

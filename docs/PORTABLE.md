@@ -433,7 +433,13 @@ same steps, with the code from the release instead of git.
   `<TOW>/runtime/update.py --ref <tag>` to recover an interrupted switch.
 - `--source FILE` (and `--sums FILE`) take a local archive instead of a download.
 
-`<TOW>/update-state.json` records the run (`in_progress` → `ok` / `rolled_back` / `failed`, ref,
+An update that finds such a record undoes the cut-off one first (stop TOW, move the recorded
+entries back, put back the snapshot if data changed, start and check the previous version); if
+that fails, the run ends there with `recovery_failed` (exit code 1, the record stays for the next
+try) and TOW is started again unless its code is half moved.
+
+`<TOW>/update-state.json` records the run (`in_progress` → `ok` / `rolled_back` / `failed`, or
+`recovered` / `recovery_failed` for undoing a cut-off switch, ref,
 commits and versions, snapshot, rollback steps, `data_restored`, `service_running`). The watchdog
 holds back for 30 minutes while it says `in_progress`. Texts come from the catalogs (section
 `update`), English when the old checkout has none yet.
