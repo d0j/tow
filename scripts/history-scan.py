@@ -1,6 +1,7 @@
 """Scan local blobs reachable from all refs and HEAD, without retrieving missing objects.
 
-Print categories, escaped path hints and author names, not matches or author addresses.
+Print categories, escaped path hints and author names, not matches or author addresses;
+author/committer e-mails other than GitHub's noreply ones are counted for review.
 Exit 0: complete, no candidates; 1: complete, review candidates; 2: incomplete/refused.
 This is a pattern diagnostic, not proof that arbitrary secrets are absent.
 
@@ -31,6 +32,8 @@ RISKY_PATH = re.compile(
     rb"(^|/)(data(?:/|$)|config\.yaml$|secrets(?:\.[^/]*)?$|master\.key$|\.coverage(?:\.[^/]*)?$"
     rb"|lan-auth(?:\.[^/]*)?$|tow\.jsonl$|state\.json$|download_history(?:\.json)?$)"
 )
+# The only author/committer addresses public history may carry: GitHub's private ones.
+NOREPLY_EMAIL = re.compile(rb"[^@\s]+@users\.noreply\.github\.com|noreply@github\.com", re.IGNORECASE)
 DISPLAY_EMAIL = regex.compile(rb"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", regex.VERSION0)
 PATTERNS = {
     "telegram bot token": re.compile(rb"\b\d{8,10}:[A-Za-z0-9_-]{35}\b"),
@@ -231,6 +234,7 @@ def scan(repo, max_blob_bytes):
     objects = git(repo, "rev-list", "--objects", "--all", "--no-object-names").splitlines()
     paths = historical_paths(repo)
     authors = git(repo, "log", "--all", "--format=%an%x00").split(b"\0")
+    exposed_commits, exposed_addresses = exposed_identities(git(repo, "log", "--all", "--format=%ae%x00%ce"))
     hits, totals = collections.defaultdict(collections.Counter), collections.Counter()
     risky_paths, skipped = set(), []
     scanned = 0
@@ -265,13 +269,32 @@ def scan(repo, max_blob_bytes):
     print(
         "\nauthor names:", ", ".join(f"{safe_hint(name)} ({count})" for name, count in sorted(names.items())) or "none"
     )
+    print(
+        "author/committer e-mails not on GitHub's noreply domain:",
+        f"{exposed_addresses} in {exposed_commits} commits" if exposed_commits else "none",
+    )
     for oid, size in skipped:
         print(f"unscanned blob: {oid.decode('ascii')} ({size} bytes)")
     if skipped:
         print("scan incomplete: blob budget exceeded; increase --max-blob-bytes to review these objects")
         return 2
-    print("scan complete: review required" if hits or risky_paths else "scan complete: no pattern candidates")
-    return 1 if hits or risky_paths else 0
+    review = bool(hits or risky_paths or exposed_commits)
+    print("scan complete: review required" if review else "scan complete: no pattern candidates")
+    return 1 if review else 0
+
+
+def exposed_identities(log):
+    """(commits, distinct addresses) whose author or committer e-mail is not a GitHub noreply
+    address. Only counted: an address is never printed."""
+    commits, addresses = 0, set()
+    for line in log.splitlines():
+        fields = line.split(b"\0")
+        if len(fields) != 2:
+            raise ScanError("Git identity metadata is incomplete")
+        exposed = {email for email in fields if NOREPLY_EMAIL.fullmatch(email) is None}
+        commits += bool(exposed)
+        addresses |= exposed
+    return commits, len(addresses)
 
 
 def positive_int(value):

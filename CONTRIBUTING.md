@@ -89,7 +89,8 @@ objects, apply filters, honour replacement objects, rewrite refs or inspect untr
 files. Metadata logs disable signature verification, mailmaps and display settings;
 the diagnostic does not launch the configured signature verifier or map author names.
 Unreachable/reflog-only objects and arbitrary secret formats are outside its
-claim. Exit codes: **0** complete with no pattern candidates; **1** complete with
+claim. Author and committer e-mails other than GitHub's noreply addresses are
+counted (never printed) and need review too. Exit codes: **0** complete with no pattern candidates; **1** complete with
 candidates requiring review (including synthetic test data); **2** incomplete or
 refused. A complete scan is not proof that every possible secret is absent.
 

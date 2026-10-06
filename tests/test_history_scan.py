@@ -34,7 +34,7 @@ def repository(tmp_path, monkeypatch):
     for key, value in {
         "core.hooksPath": str(hooks),
         "user.name": "Owner",
-        "user.email": "owner@example.invalid",
+        "user.email": "1234567+owner@users.noreply.github.com",
         "commit.gpgsign": "false",
         "tag.gpgsign": "false",
     }.items():
@@ -74,9 +74,38 @@ def test_cli_counts_blobs_not_trees_and_omits_author_address(repository, monkeyp
     code, output = scan(repository, monkeypatch)
     assert code == 0
     assert "blobs scanned: 1" in output
-    assert "owner@example.invalid" not in output
+    assert "1234567+owner@users.noreply.github.com" not in output
     assert "Owner" in output
     assert "scan complete" in output
+
+
+def test_a_real_author_or_committer_address_needs_review_and_is_never_printed(repository, monkeypatch):
+    commit(repository, "ordinary.txt")
+    code, output = scan(repository, monkeypatch)
+    assert code == 0
+    assert "e-mails not on GitHub's noreply domain: none" in output
+    (repository / "second.txt").write_bytes(b"ordinary contents")
+    git(repository, "add", "second.txt")
+    git(repository, "commit", "-m", "synthetic", "--author", "Owner <owner@example.invalid>")
+    (repository / "third.txt").write_bytes(b"ordinary contents")
+    git(repository, "add", "third.txt")
+    git(repository, "-c", "user.email=committer@example.invalid", "commit", "-m", "synthetic")
+    code, output = scan(repository, monkeypatch)
+    assert code == 1
+    assert "e-mails not on GitHub's noreply domain: 2 in 2 commits" in output
+    assert "example.invalid" not in output
+    assert "review required" in output
+
+
+def test_github_web_merges_and_noreply_addresses_are_fine(scanner):
+    log = (
+        b"1+a@users.noreply.github.com\x00noreply@github.com\n"
+        b"B@Users.NoReply.GitHub.com\x00b@users.noreply.github.com\n"
+    )
+    assert scanner.exposed_identities(log) == (0, 0)
+    assert scanner.exposed_identities(b"\x00noreply@github.com\n") == (1, 1)  # an empty address is no noreply one
+    with pytest.raises(scanner.ScanError):
+        scanner.exposed_identities(b"only-one-field\n")
 
 
 def test_matches_are_candidates_not_clean_success_and_never_print_values(repository, monkeypatch):
@@ -196,7 +225,7 @@ def test_real_sha256_repository_is_supported(repository, tmp_path, monkeypatch):
     for key, value in {
         "core.hooksPath": str(tmp_path / "empty-hooks"),
         "user.name": "Owner",
-        "user.email": "owner@example.invalid",
+        "user.email": "1234567+owner@users.noreply.github.com",
         "commit.gpgsign": "false",
     }.items():
         git(sha256, "config", key, value)
@@ -360,8 +389,8 @@ def test_configured_signature_display_does_not_verify_synthetic_signed_history(r
         + tree
         + b"\nparent "
         + parent
-        + b"\nauthor Owner <owner@example.invalid> 1 +0000"
-        + b"\ncommitter Owner <owner@example.invalid> 1 +0000"
+        + b"\nauthor Owner <1234567+owner@users.noreply.github.com> 1 +0000"
+        + b"\ncommitter Owner <1234567+owner@users.noreply.github.com> 1 +0000"
         + b"\ngpgsig -----BEGIN PGP SIGNATURE-----\n fixture\n -----END PGP SIGNATURE-----\n"
         + b"\nsynthetic signature\n"
     )
@@ -377,7 +406,7 @@ def test_configured_signature_display_does_not_verify_synthetic_signed_history(r
     assert code == 0
     assert "blobs scanned: 1" in output
     assert '"Owner" (2)' in output
-    assert "owner@example.invalid" not in output
+    assert "1234567+owner@users.noreply.github.com" not in output
 
 
 def test_pattern_timeout_never_becomes_no_matches(scanner):
