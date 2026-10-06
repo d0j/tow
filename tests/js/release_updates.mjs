@@ -127,7 +127,11 @@ assert.equal(obstructing, false); // same fallback in older browsers
 closed = false; listeners.toggle(); frames.shift()();
 assert.equal(obstructing, true);
 controlRect = { left: 0, right: 20, top: 0, bottom: 20 };
-listeners.mutationObserver(); frames.shift()();
+const text = { nodeType: 3 };
+listeners.mutationObserver([{ type: "childList", addedNodes: [text], removedNodes: [text] }]);
+listeners.mutationObserver([{ type: "attributes", attributeName: "class", oldValue: "bad", target: { getAttribute: () => "bad" } }]);
+assert.equal(frames.length, 0); // a countdown's text or an unchanged class does not measure the page
+listeners.mutationObserver([{ type: "childList", addedNodes: [{ nodeType: 1 }], removedNodes: [] }]); frames.shift()();
 assert.equal(obstructing, false); // dynamic row changes also restore the indicator
 controlRect = { left: 300, right: 320, top: 650, bottom: 690 };
 listeners.scroll(); frames.shift()();

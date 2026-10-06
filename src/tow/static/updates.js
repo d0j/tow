@@ -33,8 +33,13 @@
     if (typeof ResizeObserver !== "undefined") new ResizeObserver(positionOverlay).observe(document.body);
     const main = document.querySelector("main");
     if (main && typeof MutationObserver !== "undefined") {
-      new MutationObserver(positionOverlay).observe(main, {
-        childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "open", "class"],
+      // Countdowns rewrite their text every second; measuring every control for that would
+      // force layout each second. Only added/removed elements and changed visibility count.
+      const moved = (record) => record.type === "attributes" ?
+        record.target.getAttribute(record.attributeName) !== record.oldValue :
+        [...record.addedNodes, ...record.removedNodes].some((node) => node.nodeType === 1);
+      new MutationObserver((records) => { if (records.some(moved)) positionOverlay(); }).observe(main, {
+        childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ["hidden", "open", "class"],
       });
     }
     positionOverlay();
