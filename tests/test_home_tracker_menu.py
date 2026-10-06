@@ -114,6 +114,17 @@ def test_tracker_url_restoration_and_reset_use_the_same_menu_value():
     assert "tools.hidden = originalOrder.length < 2 && !tracker" in js
 
 
+def test_a_filter_that_matches_nothing_says_so_and_offers_a_reset():
+    save_state({"topics": [{"id": "a", "title": "Show A", "url": "https://rutor.info/torrent/1234567"}]})
+    page = BeautifulSoup(TestClient(app).get("/?f=paused").text, "html.parser")
+    empty = page.select_one("#topics #list-empty")
+    assert empty.has_attr("hidden")  # app.js shows it when a filter leaves no row
+    assert empty.select_one("a")["href"] == "/"
+    assert "Под фильтр ничего не подходит" in empty.get_text()
+    js = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert "listEmpty.hidden = !(narrowed && !shown)" in js
+
+
 def test_large_lists_scroll_and_long_names_do_not_resize_the_toolbar():
     css = (STATIC / "app.css").read_text(encoding="utf-8")
     assert ".tracker-toggle { max-width: 10rem; }" in css

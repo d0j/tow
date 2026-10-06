@@ -234,6 +234,7 @@
     </ol>
   </section>
   {% endfor %}
+  {% if topics %}<p class="list-empty" id="list-empty" role="status" hidden>{{ t('home.tools.nothing_matches') }} <a href="/">{{ t('home.tools.show_all') }}</a></p>{% endif %}
 </div>
 
 <dialog class="log-pop" id="download-pop" aria-labelledby="download-title">
