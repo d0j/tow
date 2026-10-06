@@ -40,6 +40,13 @@ function setup(saved = null, existing = []) {
   root.closest = () => form;
   const controls = Object.fromEntries(["status", "results", "tree", "search", "more", "prev", "pages", "page", "load", "upload", "limited", "fresh", "cached", "magnet", "manual-actions", "all", "none", "help", "help-text"].map((key) => [key, new Element()]));
   root.querySelector = (key) => controls[key.replace(/\[data-content-(.*)\]/, "$1")];
+  // A file input: clearing its value (the only value a script may set) drops the chosen file.
+  let chosen = [];
+  Object.defineProperty(controls.upload, "files", { get: () => chosen, set: (list) => { chosen = list; } });
+  Object.defineProperty(controls.upload, "value", {
+    get: () => chosen.length ? "C:\\fakepath\\local.torrent" : "",
+    set: (value) => { if (value === "") chosen = []; },
+  });
   const document = {
     activeElement: null, documentElement: root, body: root,
     getElementById: () => ({ textContent: "{}" }),
@@ -222,4 +229,34 @@ assert.equal(cached.requests.at(-1).options.body.get("allow_limited"), "true");
 await reply(cached.requests.at(-1), { ...snapshot, cached: false });
 assert.equal(cached.controls.cached.hidden, true);
 assert.equal(cached.controls.fresh.hidden, true);
-console.log(JSON.stringify({ safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true, ruleContext: true, cacheLabel: true, explicitFresh: true, quotaConsent: true }));
+// A local file chosen for one link is never prepared for an edited link.
+const local = setup();
+local.controls.upload.files = [new Blob(["topic 1 metadata"])];
+local.fields.url.value = "https://tracker.example/topic/2"; local.fields.url.fire("input");
+assert.equal(local.controls.upload.value, "", "editing the link drops the chosen local file");
+local.controls.load.fire("click");
+assert.equal(local.requests[0].options.body.has("torrent"), false, "the old file is not sent for the new link");
+local.controls.upload.files = [new Blob(["topic 2 metadata"])];
+local.form.fire("reset");
+assert.equal(local.controls.upload.value, "", "cancel drops the chosen local file");
+
+// Cancel restores the page's own hidden preparation: form.reset() keeps script-set hidden values.
+const abandoned = setup();
+abandoned.controls.load.fire("click");
+await reply(abandoned.requests[0], snapshot);
+abandoned.controls.all.fire("click");
+assert.equal(abandoned.fields.content_token.value, snapshot.token);
+abandoned.form.fire("reset");
+assert.equal(abandoned.fields.content_token.value, "", "cancel discards an abandoned preparation");
+assert.equal(abandoned.fields.selection_indices.value, "", "cancel discards an abandoned choice");
+assert.equal(abandoned.controls.status.textContent, "");
+const draft = setup({ token: snapshot.token });
+await reply(draft.requests[0], snapshot);
+draft.controls.load.fire("click");
+await reply(draft.requests[1], { ...snapshot, token: "b".repeat(32) });
+draft.controls.none.fire("click");
+draft.form.fire("reset");
+assert.equal(draft.fields.content_token.value, snapshot.token, "cancel restores the refused form's preparation");
+assert.equal(draft.fields.selection_indices.value, "[1]");
+
+console.log(JSON.stringify({ localFileFollowsLink: true, cancelRestoresHidden: true, safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true, ruleContext: true, cacheLabel: true, explicitFresh: true, quotaConsent: true }));
