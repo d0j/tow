@@ -156,6 +156,13 @@
       summarize();
       if (focused) [...tree.querySelectorAll("[data-content-key]")].find((element) => element.dataset.contentKey === focused)?.focus();
     };
+    // The content routes answer JSON; the request middleware refuses in plain text (an
+    // expired sign-in, an oversized upload), which must not surface as a parser error.
+    const answer = async (response) => {
+      const failed = () => new Error(t(response.status === 401 ? "content.js.session" : response.status === 413 ? "content.js.too_large" : "content.js.failed"));
+      if (!(response.headers.get("content-type") || "").startsWith("application/json")) throw failed();
+      return response.json().catch(() => { throw failed(); });
+    };
     const resolveRule = async () => {
       if (!snapshot || manual()) { render(); return; }
       const epoch = ++ruleGeneration, current = snapshot, kind = mode.value, value = expression.value;
@@ -168,7 +175,7 @@
         topic_id: root.dataset.topicId || "", title, tracking_mode: lifecycle }).forEach(([key, item]) => body.set(key, item));
       try {
         const response = await fetch("/content/resolve", { method: "POST", body });
-        const data = await response.json();
+        const data = await answer(response);
         if (epoch !== ruleGeneration || current !== snapshot || kind !== mode.value || value !== expression.value
           || title !== field("title").value || lifecycle !== field("tracking_mode").value) return;
         if (!response.ok) throw new Error(data.error);
@@ -223,7 +230,7 @@
       else if (!fromMagnet && !fromTracker && !allowLimited && upload.files.length) body.set("torrent", upload.files[0]);
       try {
         const response = await fetch(restore ? "/content/snapshot" : "/content/prepare", { method: "POST", body, signal: controller.signal });
-        const data = await response.json();
+        const data = await answer(response);
         if (epoch !== generation || origin !== source()) return;
         if (!response.ok) {
           limited.hidden = data.code !== "content.limited";
