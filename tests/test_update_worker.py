@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import io
 import json
 import multiprocessing
 import os
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,6 +19,61 @@ from tow.platform import locks
 pytestmark = pytest.mark.allow_git
 origin = fixture_module.origin
 git_install = fixture_module.install
+
+
+@pytest.mark.parametrize("encoding", ["cp1251", "cp1252", "ascii", "utf-8"])
+def test_worker_main_writes_utf8_log_before_handoff(tmp_path, monkeypatch, encoding):
+    job_id = "b" * 32
+    script = tmp_path / job_id / "worker.py"
+    path = tmp_path / "job.json"
+    text = "Обновление: папка Тест — готово\n"
+    buffers = [io.BytesIO(), io.BytesIO()]
+    streams = [io.TextIOWrapper(buffer, encoding=encoding, newline="\n", write_through=True) for buffer in buffers]
+
+    def handoff(*_args):
+        print(text, end="")
+        print(text, end="", file=sys.stderr)
+        return 0
+
+    monkeypatch.setattr(update_worker, "__file__", str(script))
+    monkeypatch.setattr(update_worker, "handoff", handoff)
+    monkeypatch.setattr(sys, "argv", [str(script), str(tmp_path / "app"), str(path), job_id, "1.23.3"])
+    with monkeypatch.context() as stdio:
+        stdio.setattr(sys, "stdout", streams[0])
+        stdio.setattr(sys, "stderr", streams[1])
+        assert update_worker.main() == 0
+    for stream, buffer in zip(streams, buffers, strict=True):
+        stream.flush()
+        assert buffer.getvalue().decode("utf-8") == text
+        assert stream.write_through
+
+
+@pytest.mark.parametrize("stream", [None, io.StringIO()])
+def test_worker_main_accepts_output_without_reconfigure(monkeypatch, stream):
+    monkeypatch.setattr(sys, "argv", ["worker.py"])
+    with monkeypatch.context() as stdio:
+        stdio.setattr(sys, "stdout", stream)
+        stdio.setattr(sys, "stderr", stream)
+        assert update_worker.main() == 2
+
+
+@pytest.mark.parametrize("error", [AttributeError, OSError, ValueError])
+def test_worker_output_failure_does_not_skip_other_stream(monkeypatch, error):
+    calls = []
+
+    def unavailable(**_kwargs):
+        calls.append("unavailable")
+        raise error("diagnostic stream unavailable")
+
+    def available(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(sys, "argv", ["worker.py"])
+    with monkeypatch.context() as stdio:
+        stdio.setattr(sys, "stdout", SimpleNamespace(reconfigure=unavailable))
+        stdio.setattr(sys, "stderr", SimpleNamespace(reconfigure=available))
+        assert update_worker.main() == 2
+    assert calls == ["unavailable", {"encoding": "utf-8", "errors": "replace"}]
 
 
 @pytest.mark.parametrize(
