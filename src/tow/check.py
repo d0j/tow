@@ -17,6 +17,7 @@ from tow.check_steps import (
     owner_fields,
     reconcile_notification,
     resolve_client_hash,
+    store_file_aliases,
     store_revision,
     verify_magnet_metadata,
 )
@@ -1187,6 +1188,17 @@ def _check_revision(work: _TopicCheck) -> None:
             raise TowError("check.once_unconfirmed")
         topic["once_done"] = True
 
+    if (
+        h == old
+        and not needs_selection_update
+        and topic.get("selection_verified") is True
+        and str(topic.get("selection_hash") or "").upper() == h
+    ):
+        # The hash binds these original names to the already-confirmed rule.
+        # Refresh legacy/corrupt caches without any client mutation. A preview
+        # changes only its in-memory copy; the applying commit remains journaled.
+        store_file_aliases(topic, h, metadata.files, mode=plan.mode)
+
 
 def _fetch_revision(work: _TopicCheck, policy: dict[str, Any]) -> _Fetched | None:
     """The topic's .torrent; None when the tracker's magnet confirmed the saved revision."""
@@ -1390,6 +1402,7 @@ def _apply_revision(
         selection_verified=selection_verified,
         plan=plan,
         once=policy["tracking_mode"] == "once",
+        files=metadata.files,
     )
     if migrates:
         row["hash_identity_from"] = old  # reconcile relabels the history (B7)

@@ -617,7 +617,7 @@
     },
     "s5": {
       "title": "5. Checks and the clock in the header",
-      "text": "Topics are checked automatically every <b>{interval}</b> (change it in Settings → Checks). The clock in the header shows the time until the next check. Every 10 minutes the watchdog makes sure TOW is running: if TOW has stopped or hangs, it starts it again and reports the cause."
+      "text": "Topics without an individual timer are checked automatically every <b>{interval}</b> (Settings → Checks). The header clock shows the next global check; a topic's own timer replaces that interval for that topic. The running TOW service restarts the web server if it fails. Every 10 minutes the watchdog checks the schedule and reports downtime and its cause; it does not restart TOW."
     },
     "s6": {
       "title": "6. Backups",
@@ -1292,6 +1292,7 @@
     "nothing_matched": "the selection matches no file of the torrent",
     "exact_invalid": "Choose at least one real file from the torrent contents. Reload the contents if the selection is unavailable.",
     "exact_changed": "A selected file disappeared or changed size. Review the new contents; nothing was added.",
+    "file_map_changed": "Torrent file names or sizes cannot be matched to the verified metadata. Check the topic again to refresh it; no client files were changed.",
     "preview_changed": "The torrent revision changed after selection. Load its contents again; nothing was added."
   },
   "content": {

@@ -373,6 +373,13 @@ def _validate_state_topic(index: int, topic: Any) -> None:
         if key in topic and (not isinstance(topic[key], list) or not all(isinstance(item, str) for item in topic[key])):
             raise ExportImportError(f"{label}.{key} has an invalid type")
     selection = topic.get("selection")
+    if "file_aliases" in topic:
+        from tow.selection import normalize_file_aliases
+
+        try:
+            normalize_file_aliases(topic["file_aliases"])
+        except ValueError as exc:
+            raise ExportImportError(f"{label}.file_aliases has invalid metadata") from exc
     if selection is not None:
         if not isinstance(selection, dict):
             raise ExportImportError(f"{label}.selection has an invalid type")

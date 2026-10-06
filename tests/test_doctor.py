@@ -4,9 +4,94 @@ from copy import deepcopy
 from typing import ClassVar
 
 import httpx
+import pytest
 
 from tow.doctor import _probe_root, doctor_report
 from tow.store import load_state, save_state
+
+
+@pytest.mark.parametrize("client_result", ["5.2", "FAIL prior client"])
+@pytest.mark.parametrize("configured", [True, False])
+def test_cached_network_report_refreshes_local_inventory_without_probing_or_saving(
+    monkeypatch, client_result, configured
+):
+    from tow import doctor
+
+    cached = {
+        "python": "old-python",
+        "topics": 99,
+        "trackers": ["old-site"],
+        "qbit_host_set": not configured,
+        "notify_set": not configured,
+        "autostart": {"on": not configured},
+        "qbit": client_result,
+        "probes": [{"tracker": "demo", "host": "https://demo.example", "ok": False, "error": "http 503"}],
+        "ok": False,
+        "degraded": ["demo https://demo.example"],
+    }
+    state = {"topics": [{"id": "a"}, {"id": "b"}], "doctor": cached}
+    before = deepcopy(state)
+    monkeypatch.setattr(doctor, "load_state", lambda: state)
+    monkeypatch.setattr(doctor, "load_config", lambda: {"trackers": {"demo": {}}})
+    monkeypatch.setattr(
+        doctor,
+        "load_secrets",
+        lambda: (
+            {"qbittorrent": {"host": "http://client.example"}, "telegram": {"token": "test", "chat_ids": ["123"]}}
+            if configured
+            else {}
+        ),
+    )
+    monkeypatch.setattr(doctor, "_py", lambda: "current-python")
+    monkeypatch.setattr(doctor, "_autostart", lambda: {"on": configured, "where": "test-service"})
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("A cached report must not probe the network or write state")
+
+    monkeypatch.setattr(doctor, "http_client", forbidden)
+    monkeypatch.setattr(doctor.client_factory, "from_secrets", forbidden)
+    monkeypatch.setattr(doctor, "save_state", forbidden)
+
+    report = doctor_report(probe=False)
+
+    assert report["python"] == "current-python"
+    assert report["topics"] == 2
+    assert report["trackers"] == ["demo"]
+    assert report["qbit_host_set"] is configured
+    assert report["notify_set"] is configured
+    assert report["autostart"] == {"on": configured, "where": "test-service"}
+    for key in ("qbit", "probes", "ok", "degraded"):
+        assert report[key] == cached[key]
+    assert state == before
+    report["probes"][0]["ok"] = True
+    report["degraded"].clear()
+    assert state == before
+
+
+def test_doctor_page_does_not_render_the_cached_python_and_topic_count(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from tow import doctor
+    from tow.web import app
+
+    state = {
+        "topics": [{"id": "a"}, {"id": "b"}],
+        "doctor": {"python": "old-python", "topics": 99, "qbit": "FAIL prior client", "probes": [], "ok": False},
+    }
+    monkeypatch.setattr(doctor, "load_state", lambda: state)
+    monkeypatch.setattr(doctor, "load_config", lambda: {"trackers": {}})
+    monkeypatch.setattr(doctor, "load_secrets", dict)
+    monkeypatch.setattr(doctor, "_py", lambda: "current-python")
+    monkeypatch.setattr(doctor, "_autostart", lambda: {"on": False})
+
+    response = TestClient(app).get("/doctor")
+
+    assert response.status_code == 200
+    assert "current-python" in response.text
+    assert "old-python" not in response.text
+    assert '<div class="v">2</div>' in response.text
+    assert '<div class="v">99</div>' not in response.text
+    assert "prior client" in response.text
 
 
 class _Response:

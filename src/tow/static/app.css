@@ -370,6 +370,7 @@ a.set-link:hover { background: var(--panel2); text-decoration: none; }
 .help-back { margin: 0 0 .7rem; }
 .help-title { font-size: 1.1rem; margin: 0 0 .6rem; }
 .help-page h2 { font-size: 1rem; margin: 1rem 0 .35rem; }
+.help-page h2[id] { scroll-margin-top: 3.3rem; }
 .help-page p, .help-page li { color: var(--fg); }
 .help-page ul, .help-page ol { margin: .2rem 0 .6rem; padding-left: 1.2rem; }
 .log-box { max-height: 18rem; overflow: auto; font: 12px/1.45 ui-monospace, Consolas, monospace; }
@@ -700,7 +701,7 @@ details.help[open] > summary { color: var(--acc); border-color: var(--acc2); }
 .settings-accordion .settings-log-body { padding: .85rem .9rem 1rem; }
 @media (max-width: 720px) {
   .row-two, .row-three, .settings-grid { grid-template-columns: 1fr; }
-  .settings-section { scroll-margin-top: 5.5rem; }
+  .settings-section, .help-page h2[id] { scroll-margin-top: 5.5rem; }
   header.app { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; grid-template-areas: "nav nav right" "sites services clock"; row-gap: .1rem; }
   header.app nav { grid-area: nav; }
   .hdr-sites { grid-area: sites; min-width: 0; max-width: 100%; justify-self: stretch; overflow-x: auto; justify-content: flex-start; }

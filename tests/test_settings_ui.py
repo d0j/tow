@@ -47,7 +47,12 @@ def test_mobile_settings_anchor_keeps_clear_of_the_two_row_header():
     css = (Path(__file__).parents[1] / "src" / "tow" / "static" / "app.css").read_text(encoding="utf-8")
     mobile_blocks = re.findall(r"@media \(max-width: 720px\) \{(.*?)\n\}", css, re.DOTALL)
     assert any(
-        "header.app" in block and ".settings-section { scroll-margin-top: 5.5rem; }" in block for block in mobile_blocks
+        "header.app" in block
+        and re.search(
+            r"\.settings-section(?:\s*,\s*\.help-page h2\[id\])?\s*\{\s*scroll-margin-top:\s*5\.5rem;\s*\}",
+            block,
+        )
+        for block in mobile_blocks
     )
 
 

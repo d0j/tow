@@ -356,14 +356,20 @@ def test_doctor_in_english(client):
     assert ">answers (200)</span>" in page
 
 
-def test_doctor_tables_stack_into_cards_on_a_phone(client):
-    _seed(doctor=_DOCTOR)
+@pytest.mark.parametrize("autostart_on", [True, False])
+def test_doctor_tables_stack_into_cards_on_a_phone(client, monkeypatch, autostart_on):
+    from tow.i18n import t
+
+    _seed(doctor={**_DOCTOR, "autostart": {"on": not autostart_on}})
+    monkeypatch.setattr("tow.doctor._autostart", lambda: {"on": autostart_on, "where": "test-service"})
 
     page = client.get("/doctor").text
 
     assert page.count('<table class="table table-stack">') == 1  # the sites (1.21: no task table)
     assert '<td class="mono" data-label="Зеркало">http://rutor.info</td>' in page
-    assert "запускается вместе с компьютером" in page  # the autostart of this OS
+    key = "doctor.autostart_on" if autostart_on else "doctor.autostart_off"
+    assert f">{t(key, 'ru')}</span>" in page  # current OS observation, not the cached value
+    assert "<code>test-service</code>" in page
     phone = CSS.split("/* M4: on a phone", 1)[1].split("\n}\n", 1)[0]
     assert ".table-stack thead { display: none; }" in phone
     assert ".table-stack td:nth-child(2) { min-width: 0; }" in phone

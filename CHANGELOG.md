@@ -5,8 +5,56 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.23.10] — 2026-10-06
+
 ### Fixed
 
+- Help-section links keep their heading below the sticky header on desktop and
+  narrow screens, without changing the page layout or button sizes.
+- File masks keep their original metadata names after a client replaces unsupported
+  filename characters. Only affected path/size aliases are stored, including
+  unwanted files, and bound to the confirmed revision. Glob syntax, native disk
+  paths and priorities do not change; malformed or ambiguous mappings are refused.
+  Episode events use original names in all selection modes too. Complete verified legacy selections stay
+  readable; truncated old previews require a normal check, not a guessed complete target.
+  An unchanged verified metadata check refreshes original-name snapshots without
+  adding the torrent again or changing priorities; previews never persist the refresh.
+- File-rule progress understands the client's reported torrent root without
+  confusing it with a metadata-relative path. Literal selections use the shared
+  path-and-size mapping, including portable filename sanitization; ambiguous or
+  changed identities still fail closed. Native history paths, file priorities
+  and saved rules remain unchanged.
+- The guide distinguishes individual topic timers from the global clock and
+  supervised web-server recovery from the reporting-only watchdog. It no longer
+  promises that the watchdog restarts a stopped TOW service.
+- All-episode progress derives its current target from the full video metadata,
+  not just enabled client files. Disabled episodes cannot silently shrink an
+  all-files rule or finish an outdated title count. Temporary metadata loss
+  retains that target for the same verified context; a new tracker total
+  invalidates it. File priorities and completed-history evidence are unchanged.
+  Pending, unconfirmed or other-revision all-files rules cannot declare a
+  completed season from the previous selection.
+- Pending, unconfirmed or other-revision file rules no longer become completed
+  targets from old client selections. Current literal and mask rules are replayed
+  read-only against metadata so newly recognized memberships are counted and
+  unrelated client files cannot complete a selected target. Changed exact file
+  identities are refused; no client priorities or saved policies are rewritten.
+  Temporarily missing metadata keeps the last recomputed target only for the
+  same verified rule, torrent, client and season context, without shrinking it
+  to an older episode cache or creating completion events.
+- Explicit multi-season episode groups in one file are retained in selection,
+  progress and history instead of losing later seasons. Large or overlapping
+  mixed groups are not treated as one season's absolute-number alias. Ambiguous
+  cross-season ranges and invalid members remain file-level evidence; completing
+  or repairing one file does not emit duplicate episode notifications.
+- Attached episode markers and hybrid `S01x08` / `S01xE08` names now share the
+  existing single-episode, list and range parsing, including internal separators
+  such as `S01_E08` / `S01.E08` without losing the season. Selection and progress use
+  the same result without renaming files or re-announcing completed history.
+  Malformed marker suffixes and fractional specials do not become ordinary episodes.
+- Diagnostics refresh local Python, topic counts, connection settings and autostart
+  after updates or edits, without rerunning network probes, writing state or clearing
+  previously observed client/site failures.
 - Early web refusals carry the same security headers as normal responses. HTTP
   errors are not cached; missing versioned assets no longer get immutable caching.
   Successful downloads and revalidation keep their cache policy. Network permissions,
