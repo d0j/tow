@@ -197,3 +197,15 @@ def test_update_routes_use_service_seam_and_csrf(monkeypatch):
     assert calls == [{}, {"force": True}]
     assert TestClient(app).post("/updates/check").status_code == 403
     assert calls == [{}, {"force": True}]
+
+
+def test_manual_release_check_does_not_hold_the_site_write_lock(monkeypatch):
+    """The GitHub request may take seconds; it writes nothing the write lock protects."""
+    from tow.web import middleware
+
+    held = []
+    monkeypatch.setattr(
+        services, "release_status", lambda **_kwargs: held.append(middleware._SITE_HTTP_LOCK.locked()) or {}
+    )
+    TestClient(app, headers={"Origin": "http://127.0.0.1"}).post("/updates/check")
+    assert held == [False]

@@ -32,8 +32,11 @@ _SITE_HTTP_LOCK = asyncio.Lock()
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 # Signing in has its own atomic throttle. Content previews never change topics or transfer
 # tasks; explicit native magnet retrieval may contact peers. Cache commits use their own
-# short persistence_lock, not a lock held during tracker/client I/O.
-_UNSERIALIZED_WRITES = frozenset({"/login", "/content/prepare", "/content/resolve", "/content/snapshot"})
+# short persistence_lock, not a lock held during tracker/client I/O. A manual release check
+# only refreshes the in-memory release cache (its own lock) after a GitHub request.
+_UNSERIALIZED_WRITES = frozenset(
+    {"/login", "/content/prepare", "/content/resolve", "/content/snapshot", "/updates/check"}
+)
 
 
 def _is_public_path(path: str) -> bool:
