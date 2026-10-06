@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
+import random
 import subprocess
 import sys
 from pathlib import Path
@@ -112,7 +113,7 @@ def test_prepared_file_matchers_preserve_path_basename_and_wildcard_semantics(ex
         assert plan.expression == expression
 
 
-def test_distinct_file_masks_compile_one_matcher_without_changing_the_rule(monkeypatch):
+def test_distinct_file_masks_compile_bounded_groups_without_changing_the_rule(monkeypatch):
     original = tow.selection.re.compile
     compiled = []
 
@@ -126,7 +127,75 @@ def test_distinct_file_masks_compile_one_matcher_without_changing_the_rule(monke
     plan = resolve_selection(files, normalize_policy("files", expression))
     assert plan.selected_indices == (0, 1)
     assert plan.expression == expression
-    assert len(compiled) == 1
+    # One literal filter, one exact guarded union, one bracket-syntax union;
+    # never a Python matcher dispatch for every file/pattern pair.
+    assert len(compiled) == 3
+
+
+@pytest.mark.parametrize(
+    "patterns",
+    [
+        ("*", "?*?"),
+        ("*.mkv", "*absent*"),
+        ("*[[]*", "[!a]*", "[z-a]", "[!z-a]"),
+        ("[]", "[!]", "[", "[]a]", "[[:alpha:]]", "[a&&b]", "[a--b]"),
+        ("*literal*later*", "?literal?", "literal*", "*later", "**literal**"),
+        ("*|*", "*.*", "*straße*", "*日本語*", "*\n*"),
+        ("*same*.mkv", "*same*.srt", "*same*.bin", "[!a]*", "*?*?*"),
+    ],
+)
+def test_literal_prefilter_matches_standard_globs_on_generated_candidates(patterns):
+    rng = random.Random(261008)
+    normalized = tuple(pattern.casefold() for pattern in patterns)
+    matches = tow.selection._file_mask_matcher(normalized)
+    candidates = [
+        "",
+        "Show.mkv",
+        "Folder/Show.MKV",
+        "literal",
+        "literal/later",
+        "same.mkv",
+        "[]",
+        "[!]",
+        "[",
+        "]",
+        "a",
+        "b",
+        "Straße",
+        "日本語",
+        "|",
+        ".hidden",
+        "\n",
+    ]
+    candidates.extend("".join(rng.choices("ab[]!*?-.|/\n日本語ß", k=rng.randrange(1, 50))) for _ in range(1000))
+    for candidate in candidates:
+        path = candidate.casefold()
+        assert matches(path) == any(fnmatch.fnmatchcase(path, pattern) for pattern in normalized), (path, patterns)
+
+
+def test_literal_filter_never_accepts_a_wrong_exact_match_or_hides_bracket_matches():
+    matches = tow.selection._file_mask_matcher(("a*middle*z", "?fixed?", "*[[]*"))
+    assert not matches("middle")
+    assert not matches("fixed")
+    assert matches("amiddlez")
+    assert matches("afixedz")
+    assert matches("only[a bracket]")
+
+
+def test_file_mask_groups_are_bounded_at_the_maximum_rule_count(monkeypatch):
+    original = tow.selection.re.compile
+    compiled = []
+
+    def record(pattern, *args, **kwargs):
+        compiled.append(pattern)
+        return original(pattern, *args, **kwargs)
+
+    monkeypatch.setattr(tow.selection.re, "compile", record)
+    patterns = [f"*absent-{index:03d}*" for index in range(499)] + ["*[[]*"]
+    matches = tow.selection._file_mask_matcher(patterns)
+    assert len(compiled) == 3
+    assert not matches("ordinary.bin")
+    assert matches("[extra].bin")
 
 
 def test_repeated_unavailable_rules_keep_the_original_diagnostic_order():
@@ -181,6 +250,57 @@ print('ok')
         capture_output=True,
         text=True,
         timeout=5,
+        check=True,
+    )
+    assert result.stdout.strip() == "ok"
+
+
+@pytest.mark.allow_system
+@pytest.mark.parametrize("nested", [False, True])
+def test_parsed_large_torrents_with_long_paths_finish_file_selection(nested):
+    script = """
+import sys
+from pathlib import Path
+import tow.selection as selection
+from tow.torrent import MAX_FILES, MAX_TORRENT_BYTES, parse_torrent_metadata
+
+assert Path(selection.__file__).resolve() == Path(sys.argv[1])
+def encode(value):
+    if isinstance(value, bytes):
+        return str(len(value)).encode() + b':' + value
+    if isinstance(value, int):
+        return b'i' + str(value).encode() + b'e'
+    if isinstance(value, list):
+        return b'l' + b''.join(encode(item) for item in value) + b'e'
+    return b'd' + b''.join(encode(key) + encode(value[key]) for key in sorted(value)) + b'e'
+
+entries = []
+for index in range(MAX_FILES):
+    path = [('a' * 240 + f'{index:05d}.bin').encode()]
+    if sys.argv[2] == 'True':
+        path = [b'b' * 200, b'c' * 200, *path]
+    entries.append({b'length': 1, b'path': path})
+torrent = encode({b'info': {b'name': b'Fixture', b'piece length': 16384,
+                           b'pieces': b'x' * 40, b'files': entries}})
+assert len(torrent) < MAX_TORRENT_BYTES
+metadata = parse_torrent_metadata(torrent)
+assert len(metadata.files) == MAX_FILES
+expression = ','.join(f'*absent-{index:03d}*' for index in range(500))
+policy = selection.normalize_policy('files', expression)
+try:
+    selection.resolve_selection(metadata.files, policy)
+except selection.SelectionError as error:
+    assert error.code == 'selection.nothing_matched'
+else:
+    raise AssertionError('Absent patterns cannot select files')
+assert policy['value'] == expression
+print('ok')
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-B", "-c", script, str(Path(tow.selection.__file__).resolve()), str(nested)],
+        capture_output=True,
+        text=True,
+        timeout=10,
         check=True,
     )
     assert result.stdout.strip() == "ok"
