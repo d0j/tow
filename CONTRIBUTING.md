@@ -63,12 +63,37 @@ Linux checks and installer smoke tests run on both Ubuntu 24.04 and 26.04. The l
   holds keys. `tests/test_i18n.py` checks keys, placeholders, plural forms and inline markup.
 - English is plain and short. Russian addresses the user formally (на «вы») and avoids English terms.
 - Errors are `TowError("key", **params)`; their status colour never depends on the wording.
+- One thing has one word in the interface, the guides, the changelogs and the messages:
+
+| Thing | English | Русский |
+|---|---|---|
+| A tracker page TOW follows | topic | раздача |
+| A tracker TOW can read | site | сайт |
+| Another address of a site | mirror | зеркало |
+| One `.torrent` of a topic | revision | версия |
+| qBittorrent, Transmission, Deluge | torrent client | торрент-клиент |
+| Asking a site or the client | check | проверка |
+| Which files to download | selection (all files, choose files, episodes by number, files by pattern) | выбор файлов (все файлы раздачи, выбрать файлы, серии по номерам, файлы по маскам) |
+| The schedule of checks | global timer · personal timer | общий таймер · личный таймер |
+| The daily copy of the data | night copy (Settings: Nightly backups) | ночная копия (в настройках: «Ночные копии») |
+| A copy made by **Create a backup** or before a risky change | restore point (Settings: Backups made by hand) | точка восстановления (в настройках: «Копии по кнопке») |
+| The encrypted transfer file | TOW file (`.towx`) | файл TOW (`.towx`) |
+| `keys/master.key` | master key | мастер-ключ |
+| Saved logins of sites, clients and messengers | passwords and tokens | пароли и токены (не «секреты») |
+| Opening TOW from other devices | network access · sign in · sign out | доступ по сети · вход · выход |
+| Putting the last change back | Undo | Вернуть |
+| The reporting duty of `tow run` | watchdog | сторож |
+| Installing another release | update · roll back | обновление · откат |
+| A torrent's identity | hash | хеш |
+| Saved torrent contents kept for reuse | cache | кеш |
 
 ## Commits and pull requests
 
 - One logical change per commit, with its test. The subject is `area: what changed` in English (`web: …`,
-  `clients: …`, `docs: …`); the body says why.
-- User-visible changes get a line in `CHANGELOG.md`.
+  `clients: …`, `docs: …`), at most 72 characters; then a blank line and a body that says why and how it was
+  verified. The `commit-msg` hook in `.githooks` checks this form and refuses trailers such as `Co-Authored-By`.
+- User-visible changes get a line in `CHANGELOG.md` and the same in `CHANGELOG.ru.md`. A change to what
+  `README.md` or `docs/` describe updates `README.ru.md` and `docs/ru/` in the same commit.
 - Keep pull requests small and focused; fill in the template. Do not include personal data in code, tests,
   screenshots or logs.
 
