@@ -9,6 +9,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Help-section links keep their heading below the sticky header on desktop and
+  narrow screens, without changing the page layout or button sizes.
 - File-rule progress understands the client's reported torrent root without
   confusing it with a metadata-relative path. Literal selections use the shared
   path-and-size mapping, including portable filename sanitization; ambiguous or

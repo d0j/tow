@@ -53,3 +53,15 @@ def test_templates_do_not_style_buttons_inline():
     for path in templates.glob("*.html"):
         for tag in re.findall(r"<button[^>]*>", path.read_text(encoding="utf-8")):
             assert "style=" not in tag, (path.name, tag)
+
+
+def test_help_anchor_desktop_clearance_does_not_add_settings_card_layout():
+    body = dict(_rules(CSS)).get(".help-page h2[id]", "")
+    assert "scroll-margin-top: 3.3rem" in body
+    assert re.sub(r"\s+", "", body) == "scroll-margin-top:3.3rem;"
+
+
+def test_help_anchor_mobile_clearance_matches_the_two_row_header():
+    mobile = CSS.partition("@media (max-width: 720px) {")[2]
+    body = dict(_rules(mobile)).get(".settings-section, .help-page h2[id]", "")
+    assert "scroll-margin-top: 5.5rem" in body
