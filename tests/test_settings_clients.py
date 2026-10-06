@@ -144,3 +144,40 @@ def test_deluge_card_has_no_login_field(legacy_qbit):
     assert 'name="username"' not in card
     assert "Пароль Deluge Web" in card
     assert "TOW сам включит в Deluge стандартный модуль Label" in card
+
+
+@pytest.mark.parametrize(
+    ("host", "port", "key"),
+    [
+        ("nas", "99999", "web.settings.bad_port"),
+        ("nas", "0", "web.settings.bad_port"),
+        ("nas", "80a", "web.settings.bad_port"),
+        ("../../x", "8080", "web.settings.bad_client_host"),
+        ("<b>x</b>", "8080", "web.settings.bad_client_host"),
+        ("my nas", "8080", "web.settings.bad_client_host"),
+        ("http://nas/../admin", "8080", "web.settings.bad_client_host"),
+        ("ftp://nas", "8080", "web.settings.bad_client_host"),
+    ],
+)
+def test_an_invalid_client_address_or_port_is_never_stored(legacy_qbit, host, port, key):
+    from tow.i18n import t
+
+    before = load_secrets()
+    response = _client().post("/settings/client", data={"host": host, "port": port}, follow_redirects=False)
+
+    assert _flash(response) == t(key, "ru")
+    assert load_secrets() == before
+
+
+@pytest.mark.parametrize(
+    "host", ["nas", "192.168.1.10", "[fd00::1]", "http://nas.lan:8080/qbt/", "https://сервер.example"]
+)
+def test_a_client_address_may_be_a_name_an_ip_or_a_url(legacy_qbit, host):
+    response = _client().post(
+        "/settings/client",
+        data={"host": host, "port": "8080", "username": "admin", "password": "pw"},
+        follow_redirects=False,
+    )
+
+    assert _flash(response) == "сохранено"
+    assert load_secrets()["qbittorrent"]["host"] == host

@@ -2191,6 +2191,36 @@ def test_clamped_interval_is_reported_not_silent():
     assert "интервал 15 мин (допустимо 15–1440)" in location
 
 
+@pytest.mark.parametrize("value", ["abc", "1.5", "-"])
+def test_an_interval_that_is_not_a_whole_number_is_refused(value):
+    from tow.config import interval_sec_of, load_config
+    from tow.i18n import t
+
+    before = interval_sec_of(load_config())
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+
+    response = client.post(
+        "/settings/interval", data={"interval_min": value, "flash_ttl_min": "1"}, follow_redirects=False
+    )
+
+    assert t("web.settings.bad_minutes", "ru") in shown(response.headers["location"])
+    assert interval_sec_of(load_config()) == before
+
+
+def test_a_value_clamped_to_the_current_one_says_so():
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    client.post("/settings/interval", data={"interval_min": "1440", "flash_ttl_min": "1"})
+
+    location = shown(
+        client.post(
+            "/settings/interval", data={"interval_min": "5000", "flash_ttl_min": "1"}, follow_redirects=False
+        ).headers["location"]
+    )
+
+    assert "без изменений" in location
+    assert "интервал 1440 мин (допустимо 15–1440)" in location
+
+
 def test_undo_hint_only_on_the_page_right_after_the_action():
     from tow.web.templating import undo_just_made
 
