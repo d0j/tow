@@ -233,7 +233,7 @@ def test_delete_preserves_previous_cleanup_warning(copies, category):
         snapshots._record(
             last_cleanup_pending=True,
             location=str(path.parent.resolve()),
-            cleanup_inventory=snapshots._cleanup_inventory(path.parent),
+            **snapshots._cleanup_inventory(path.parent),
         )
     else:
         restore_points._record_cleanup(True, path.parent)

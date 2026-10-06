@@ -32,7 +32,7 @@ from typing import Any
 import yaml
 
 from tow import __version__
-from tow.backup_actions import copy_revision
+from tow.backup_actions import added_names, cleanup_names, copy_revision, inventory_digest
 from tow.backup_retention import MIB, copy_time, retained_copies, retention_settings
 from tow.config import interval_sec_of, load_config
 from tow.diagnostic_json import check_epochs, check_types, encode_object, read_object
@@ -123,20 +123,20 @@ def status() -> dict[str, Any]:
     return value
 
 
-def _cleanup_inventory(location: Path) -> str:
-    """Bind cleanup to committed candidate names; this does not grant deletion ownership."""
-    digest = hashlib.sha256()
-    try:
-        info = location.lstat()
-    except FileNotFoundError:
-        return digest.hexdigest()
-    if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
-        raise ValueError("cleanup folder is not a regular directory")
-    # Partial copies begin with a dot. Do not inspect candidate contents or follow links.
-    for name in sorted(path.name for path in location.iterdir() if path.name.startswith(_PREFIX)):
-        digest.update(name.encode("utf-8"))
-        digest.update(b"\0")
-    return digest.hexdigest()
+def _cleanup_inventory(location: Path) -> dict[str, Any]:
+    """The record fields binding cleanup to committed copy names (partial copies begin with a dot)."""
+    names = cleanup_names(location, lambda name: name.startswith(_PREFIX))
+    return {"cleanup_inventory": inventory_digest(names), "cleanup_names": names}
+
+
+def _new_copy_of_ours(location: Path, state: dict[str, Any]) -> bool:
+    """A copy of ours committed after the observation; one removed by hand or a foreign folder is not."""
+    names = cleanup_names(location, lambda name: name.startswith(_PREFIX))
+    added = added_names(state.get("cleanup_names"), state["cleanup_inventory"], names)
+    if not added:
+        return False
+    key = _signing_key()
+    return any(_owned_manifest(location / name, key) is not None for name in added)
 
 
 def cleanup_status(*, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -164,7 +164,7 @@ def _cleanup_status(*, cfg: dict[str, Any] | None) -> dict[str, Any]:
                 and re.fullmatch(r"tow-\d{8}-\d{6}(?:-[a-f0-9]{6})?", state["last_snapshot"])
                 and state.get("location") == result["location"]
             ):
-                _cleanup_inventory(location)  # old metadata cannot hide a folder-access failure
+                cleanup_names(location, bool)  # old metadata cannot hide a folder-access failure
                 result["legacy"] = True
             return result  # a new install or a copy failure alone has no cleanup observation
         if type(state["last_cleanup_pending"]) is not bool or not isinstance(state.get("location"), str):
@@ -177,12 +177,12 @@ def _cleanup_status(*, cfg: dict[str, Any] | None) -> dict[str, Any]:
         ):
             raise ValueError("invalid cleanup inventory")
         if state["location"] == result["location"]:
-            observed = _cleanup_inventory(location)
             if "cleanup_inventory" not in state:
+                cleanup_names(location, bool)  # old metadata cannot hide a folder-access failure
                 result["legacy"] = True
                 if state["last_cleanup_pending"]:
                     result["pending"] = True
-            elif observed != inventory:
+            elif _new_copy_of_ours(location, state):
                 raise ValueError("cleanup observation belongs to an earlier inventory")
             else:
                 result["pending"] = state["last_cleanup_pending"]
@@ -402,21 +402,20 @@ def create_snapshot(*, keep: int | None = None, how: str = "auto") -> dict[str, 
         with persistence_lock():  # creation, read-back and pruning cannot race another copy
             result = _create_snapshot(keep=keep, how=how)
             location = Path(result["snapshot"]).parent
-            fields: dict[str, Any] = {"location": str(location), "cleanup_inventory": None}
+            fields: dict[str, Any] = {"location": str(location), "cleanup_inventory": None, "cleanup_names": None}
             # A diagnostic failure cannot invalidate a verified copy. A missing binding
             # remains unknown, rather than binding an earlier result to a later copy.
             with contextlib.suppress(OSError, ValueError, UnicodeError):
                 fields["location"] = str(location.resolve())
-                fields["cleanup_inventory"] = _cleanup_inventory(location)
+                fields.update(_cleanup_inventory(location))
             _record(
                 last_ok_at=round(time.time(), 3),
                 last_snapshot=Path(result["snapshot"]).name,
                 last_bytes=result["bytes"],
                 last_missing=result["missing"],
                 last_cleanup_pending=bool(result.get("cleanup_warning")),
-                location=fields["location"],
-                cleanup_inventory=fields.get("cleanup_inventory"),
                 last_error="",
+                **fields,
             )
     except SnapshotError as exc:
         record_failure(str(exc))
@@ -508,7 +507,7 @@ def delete_snapshot(name: str, revision: str) -> dict[str, Any]:
                 _record(
                     last_cleanup_pending=not removed or before["pending"],
                     location=str(path.parent.resolve()),
-                    cleanup_inventory=_cleanup_inventory(path.parent),
+                    **_cleanup_inventory(path.parent),
                 )
         if not removed:
             raise SnapshotError(t("web.backup.delete_failed", owner_language()))

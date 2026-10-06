@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,7 @@ from tow import snapshots, watchdog
 from tow.config import load_config, save_config
 from tow.i18n import t
 from tow.pulse import Probes
-from tow.store import save_secrets, save_state
+from tow.store import persistence_lock, save_secrets, save_state
 from tow.web import app
 
 NOW = 1791072000
@@ -48,7 +49,7 @@ def _record(night, pending):
         last_error="",
         location=str(night.resolve()),
         last_cleanup_pending=pending,
-        cleanup_inventory=snapshots._cleanup_inventory(night),
+        **snapshots._cleanup_inventory(night),
     )
 
 
@@ -107,18 +108,35 @@ def test_inventory_change_invalidates_record_without_mutating_copies(night, pend
     _record(night, pending)
     sent = []
     _check(sent)
-    night.mkdir()
-    copy = night / "tow-20261004-000000"
-    copy.mkdir()
-    marker = copy / "MANIFEST.json"
-    marker.write_text("synthetic untrusted copy", encoding="utf-8")
     raw = snapshots.status_path().read_bytes()
+    with persistence_lock():  # a copy committed without its monitoring write
+        copy = Path(snapshots._create_snapshot(keep=None, how="auto")["snapshot"])
+    manifest = (copy / "MANIFEST.json").read_bytes()
     report = _check(sent)
     assert report["backup_cleanup_pending"] is None
     assert report["backup_cleanup_read_error"] is True
     assert watchdog._load_state()["backup_cleanup"] is not pending
     assert snapshots.status_path().read_bytes() == raw
-    assert marker.read_text(encoding="utf-8") == "synthetic untrusted copy"
+    assert (copy / "MANIFEST.json").read_bytes() == manifest
+
+
+@pytest.mark.parametrize("pending", [True, False])
+def test_a_copy_deleted_by_hand_or_a_foreign_folder_keeps_the_observation(night, pending):
+    first = Path(snapshots.create_snapshot()["snapshot"])
+    snapshots.create_snapshot()
+    _record(night, pending)
+    sent = []
+    _check(sent)
+    shutil.rmtree(first)  # in the file manager, not through TOW
+    foreign = night / "tow-copied-by-hand"
+    foreign.mkdir()
+    (foreign / "MANIFEST.json").write_text("synthetic untrusted copy", encoding="utf-8")
+
+    report = _check(sent)
+
+    assert report["backup_cleanup_pending"] is pending
+    assert report["backup_cleanup_read_error"] is False
+    assert (foreign / "MANIFEST.json").read_text(encoding="utf-8") == "synthetic untrusted copy"
 
 
 @pytest.mark.parametrize("lang", ["ru", "en"])
@@ -152,7 +170,7 @@ def test_new_copy_binds_its_cleanup_result_to_current_inventory(night):
     snapshots.create_snapshot()
     observed = snapshots.cleanup_status()
     assert observed == {"pending": False, "read_error": False, "legacy": False, "location": str(night.resolve())}
-    assert snapshots.status()["cleanup_inventory"] == snapshots._cleanup_inventory(night)
+    assert snapshots.status()["cleanup_inventory"] == snapshots._cleanup_inventory(night)["cleanup_inventory"]
 
 
 def test_fresh_install_missing_record_is_unknown_not_a_failure(night):
@@ -372,7 +390,7 @@ def test_incomplete_or_bound_metadata_is_not_pre_cleanup_migration(night, tmp_pa
     elif mode == "missing-location":
         del record["location"]
     else:
-        record["cleanup_inventory"] = snapshots._cleanup_inventory(night)
+        record.update(snapshots._cleanup_inventory(night))
     (tmp_path / snapshots.STATUS_NAME).write_text(json.dumps(record), encoding="utf-8")
     watchdog._save_state({"backup_cleanup": False})
     sent = []
