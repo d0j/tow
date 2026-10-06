@@ -12,10 +12,11 @@ import socket
 from pathlib import Path
 from typing import Any
 
+from fastapi import Request
 from fastapi.templating import Jinja2Templates
 
 from tow import __version__, access, i18n, paths, platform, undo
-from tow.auth import password_hint
+from tow.auth import SESSION_COOKIE, password_hint
 from tow.clients.factory import client_name
 from tow.config import interval_sec_of, port_of
 from tow.jsonish import as_dict
@@ -151,6 +152,12 @@ def login_help() -> dict[str, str]:
     return {"hint": password_hint(record), "machine": socket.gethostname(), "url": f"http://127.0.0.1:{port}"}
 
 
+def network_session(request: Request) -> bool:
+    """This page was opened from another device with a session: there is something to sign out
+    of (this computer needs no password, so it has none)."""
+    return not access.is_local(request) and bool(request.cookies.get(SESSION_COOKIE))
+
+
 def _languages() -> list[dict[str, str]]:
     return [{"code": code, "name": name, "native": native} for code, name, native in i18n.available()]
 
@@ -205,4 +212,5 @@ def configure(templates: Jinja2Templates = TEMPLATES) -> None:
     env["undo_left_sec"] = undo_left_sec
     env["flash_ttl_sec"] = flash_ttl_sec
     env["login_help"] = login_help
+    env["network_session"] = network_session
     env["client_name"] = client_name

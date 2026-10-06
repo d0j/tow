@@ -1821,7 +1821,10 @@ def test_lan_management_requires_authenticated_session(monkeypatch):
     assert c.get("/settings").status_code == 401
     login = c.post("/login", data={"token": token}, follow_redirects=False)
     assert login.status_code == 303
-    assert c.get("/settings").status_code == 200
+    page = c.get("/settings")
+    assert page.status_code == 200
+    assert 'action="/logout"' in page.text  # the session can be ended from every page's header
+    assert 'action="/logout"' not in TestClient(app).get("/settings").text  # this computer has none
 
     logout = c.post("/logout", headers={"Origin": "http://127.0.0.1"}, follow_redirects=False)
     assert logout.status_code == 303
