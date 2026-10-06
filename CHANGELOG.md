@@ -5,6 +5,14 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.23.5] — 2026-10-06
+
+### Fixed
+
+- File-mask selection quickly rejects long paths missing required literal text
+  before exact wildcard matching. Bracket rules keep standard `fnmatch` semantics;
+  accepted inputs, selected files and saved policies are unchanged.
+
 ## [1.23.4] — 2026-10-06
 
 ### Fixed

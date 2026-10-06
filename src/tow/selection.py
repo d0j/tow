@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
@@ -264,6 +264,32 @@ def _safe_globs(value: str) -> list[str]:
     return [pattern.replace("\\", "/").casefold() for pattern in globs]
 
 
+def _file_mask_matcher(patterns: Iterable[str]) -> Callable[[str], bool]:
+    """Reject missing mandatory literals before exact stdlib glob matching."""
+    guarded: list[str] = []
+    unguarded: list[str] = []
+    literals: dict[str, None] = {}
+    for pattern in dict.fromkeys(patterns):
+        # Bracket syntax, including malformed classes, stays entirely with
+        # fnmatch. In a class-free glob only * and ? can vary literal text.
+        literal = "" if "[" in pattern else max(pattern.replace("?", "*").split("*"), key=len)
+        if literal:
+            guarded.append(fnmatch.translate(pattern))
+            literals[literal] = None
+        else:
+            unguarded.append(fnmatch.translate(pattern))
+    literal_search = re.compile("|".join(re.escape(literal) for literal in literals)).search if literals else None
+    guarded_match = re.compile("|".join(guarded)).match if guarded else None
+    unguarded_match = re.compile("|".join(unguarded)).match if unguarded else None
+
+    def matches(path: str) -> bool:
+        if unguarded_match and unguarded_match(path):
+            return True
+        return bool(literal_search and literal_search(path) and guarded_match and guarded_match(path))
+
+    return matches
+
+
 def resolve_selection(
     files: Iterable[TorrentFile],
     policy: dict[str, Any],
@@ -310,10 +336,7 @@ def resolve_selection(
             if is_video_file(row.path):
                 episode_keys.update(label.key for label in labels(row))
     elif mode == "files":
-        # Each translated glob keeps its own flags and end anchor. One union
-        # avoids a Python matcher dispatch for every file/pattern pair.
-        patterns = dict.fromkeys(_safe_globs(expression))
-        matches = re.compile("|".join(fnmatch.translate(pattern) for pattern in patterns)).match
+        matches = _file_mask_matcher(_safe_globs(expression))
         selected = []
         for row in selectable:
             path = row.path.casefold()
