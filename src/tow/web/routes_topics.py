@@ -566,6 +566,8 @@ def topics_edit(
         if old_hash and not paths_equal(old_dest, dest):
             moved, moved_kind = _move_in_client(state, topic, tid, old_hash, old_dest, dest)
         break
+    else:  # deleted meanwhile (another tab, undo): nothing to save, never "Saved"
+        return flash_redirect("/", "web.topics.not_found", "err")
     services.save_state(state)
     undo.cleanup()
     return flash_redirect("/", t("web.common.saved") + moved, moved_kind)
