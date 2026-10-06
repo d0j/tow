@@ -34,6 +34,8 @@
     const originalExisting = existing;
     let manualWanted = existing, previousMode = mode.value;
     let preparationAttempted = false;
+    // Hidden inputs keep a script-set value through form.reset(); Cancel restores these.
+    const initialToken = token.value, initialIndices = indices.value;
     const rememberManual = () => {
       if (snapshot && manual()) manualWanted = snapshot.files.filter((row) => selected.has(row.id));
     };
@@ -181,14 +183,17 @@
       }
     };
     const invalidate = () => {
+      // Discard the preparation and invalidate a late response. A chosen local file
+      // belongs to the link it was chosen for, never to an edited one.
       generation++; ruleGeneration++;
-      controller?.abort();
+      controller?.abort(); window.clearTimeout(ruleTimer);
       snapshot = null; selected.clear(); existing = [];
       manualWanted = [];
       ruleNotice = "";
-      token.value = ""; indices.value = "";
-      results.hidden = true; loadButton.disabled = false; magnet.disabled = false; limited.disabled = false;
-      if (fresh) fresh.hidden = true;
+      token.value = ""; indices.value = ""; upload.value = "";
+      results.hidden = true; loadButton.disabled = false; magnet.disabled = false;
+      limited.disabled = false; limited.hidden = true;
+      if (fresh) { fresh.hidden = true; fresh.disabled = false; }
       if (cachedHint) cachedHint.hidden = true;
       status.textContent = t("content.js.stale");
     };
@@ -262,17 +267,12 @@
     showExpression();
     form.addEventListener("reset", () => {
       // Cancel resets the native fields after firing this event. It must also discard
-      // prepared state and invalidate a late response, not revive an abandoned edit.
-      generation++; ruleGeneration++;
-      controller?.abort(); window.clearTimeout(ruleTimer);
-      snapshot = null; selected.clear();
+      // prepared state, not revive an abandoned edit or keep its hidden preparation.
+      invalidate();
       existing = originalExisting; manualWanted = originalExisting;
       preparationAttempted = false;
-      ruleNotice = "";
-      results.hidden = true; status.textContent = "";
-      loadButton.disabled = false; magnet.disabled = false; limited.disabled = false; limited.hidden = true;
-      if (fresh) { fresh.hidden = true; fresh.disabled = false; }
-      if (cachedHint) cachedHint.hidden = true;
+      token.value = initialToken; indices.value = initialIndices;
+      status.textContent = "";
       window.setTimeout(() => { previousMode = mode.value; showExpression(); }, 0);
     });
     mode.addEventListener("change", () => {
