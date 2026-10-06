@@ -84,12 +84,17 @@ def client(
 
 def get_limited(c: httpx.Client, url: str, *, max_bytes: int) -> httpx.Response:
     """Stream one response into a bounded in-memory httpx.Response."""
+    return request_limited(c, "GET", url, max_bytes=max_bytes)
+
+
+def request_limited(c: httpx.Client, method: str, url: str, *, max_bytes: int, **kwargs: Any) -> httpx.Response:
+    """``c.request(method, url, **kwargs)`` with the body streamed into a bounded response."""
     if max_bytes <= 0:
         raise ValueError("max_bytes must be positive")
     # A few adapter tests use a deliberately tiny client double. Real httpx
     # clients always take the streaming branch below.
     if not hasattr(c, "stream"):
-        response = c.get(url)
+        response = c.get(url) if method == "GET" and not kwargs else c.request(method, url, **kwargs)
         declared = response.headers.get("content-length")
         if declared:
             try:
@@ -100,7 +105,7 @@ def get_limited(c: httpx.Client, url: str, *, max_bytes: int) -> httpx.Response:
         if len(response.content) > max_bytes:
             raise ResponseTooLargeError(f"response body exceeds {max_bytes} bytes")
         return response
-    with c.stream("GET", url) as response:
+    with c.stream(method, url, **kwargs) as response:
         declared = response.headers.get("content-length")
         if declared:
             try:

@@ -19,6 +19,7 @@ from tow.errors import Msg
 # Retries for a busy or briefly unreachable service: three attempts in about four seconds.
 RETRY_DELAYS = (1.0, 3.0)
 MAX_RETRY_AFTER = 10.0
+MAX_RESPONSE_BYTES = 1024 * 1024
 
 
 def ui_language() -> str:
@@ -163,14 +164,17 @@ def request(method: str, url: str, *, what: str, **kwargs: Any) -> httpx.Respons
 
     The URL is never put into an error: for webhooks and bots it contains the secret.
     """
+    from tow import http as thttp
+
     network_error = ""
     busy_code: int | None = None
     for attempt in range(len(RETRY_DELAYS) + 1):
         wait = RETRY_DELAYS[attempt] if attempt < len(RETRY_DELAYS) else 0.0
         try:
             with http_client() as client:
-                response = client.request(method, url, **kwargs)
-        except httpx.HTTPError as exc:
+                # A messenger answers with a little JSON; a huge or endless body is not read.
+                response = thttp.request_limited(client, method, url, max_bytes=MAX_RESPONSE_BYTES, **kwargs)
+        except (httpx.HTTPError, thttp.ResponseTooLargeError, thttp.ResponseTooSlowError) as exc:
             network_error, busy_code = type(exc).__name__, None
         else:
             if response.status_code != 429 and response.status_code < 500:

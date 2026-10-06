@@ -243,6 +243,29 @@ def test_network_error_is_retried_then_succeeds(http):
     assert sleeps == [1.0]
 
 
+def test_a_huge_messenger_answer_is_not_read_into_memory(http):
+    set_handler, seen, _ = http
+    read: list[int] = []
+
+    def endless() -> object:
+        for _ in range(64):  # 64 MiB if it were read to the end
+            read.append(1)
+            yield b"x" * (1024 * 1024)
+
+    set_handler(lambda _r: httpx.Response(200, content=endless()))
+    with pytest.raises(base.DeliveryError):
+        base.request("POST", DISCORD_URL, what="Discord", json={"content": "x"})
+    assert len(seen) == 3  # retried like a broken connection, then given up
+    assert len(read) <= 3 * (base.MAX_RESPONSE_BYTES // (1024 * 1024) + 1)
+
+
+def test_a_normal_answer_is_read_whole(http):
+    set_handler, _, _ = http
+    set_handler(lambda _r: httpx.Response(200, json={"ok": True, "result": {"message_id": 1}}))
+    response = base.request("POST", DISCORD_URL, what="Discord", json={"content": "x"})
+    assert base.json_or_empty(response) == {"ok": True, "result": {"message_id": 1}}
+
+
 # --- the queue -----------------------------------------------------------------------------
 
 
