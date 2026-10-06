@@ -555,6 +555,15 @@ def event_title(rec: Mapping[str, Any], title_index: Mapping[str, str] | None = 
     return ""
 
 
+def _shown_kind(rec: Mapping[str, Any], kind: str) -> str:
+    """A pause button toggles: its one event kind reads as "resumed" when it turned pause off."""
+    if kind == "topic_pause" and rec.get("paused") is False:
+        return "topic_resume"
+    if kind == "site_pause" and rec.get("status") == "resumed":
+        return "site_resume"
+    return kind
+
+
 def format_event(rec: Mapping[str, Any], *, title_index: Mapping[str, str] | None = None) -> dict[str, str]:
     ts = str(rec.get("created_at") or rec.get("ts") or "")
     at = ts
@@ -562,7 +571,7 @@ def format_event(rec: Mapping[str, Any], *, title_index: Mapping[str, str] | Non
         at = format_ui_timestamp(ts)
     kind = str(rec.get("kind") or "")
     lang = owner_language()
-    label = kind_label(kind, lang)
+    label = kind_label(_shown_kind(rec, kind), lang)
     label = label[:1].upper() + label[1:]  # a line of the log starts like a sentence
     title = event_title(rec, title_index)[:100]
     bits: list[str] = []

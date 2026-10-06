@@ -38,6 +38,17 @@ def test_log_roundtrip_no_secrets():
     assert "." in fmt["at"]
 
 
+def test_pause_then_resume_reads_as_paused_then_resumed():
+    labels = [
+        format_event({"kind": "topic_pause", "paused": True})["label"],
+        format_event({"kind": "topic_pause", "paused": False})["label"],
+        format_event({"kind": "site_pause", "status": "paused"})["label"],
+        format_event({"kind": "site_pause", "status": "resumed"})["label"],
+    ]
+
+    assert labels == ["Пауза", "Возобновлено", "Пауза сайта", "Сайт возобновлён"]
+
+
 def test_export_event_projection_rejects_hash_suffix_data():
     projected = export_event_projection({"hash": "a" * 64 + "SECRET"})
     assert "hash" not in projected
