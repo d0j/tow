@@ -507,6 +507,47 @@ def test_a_crash_after_new_code_changes_data_restores_the_snapshot_too(install, 
     assert not (install["root"] / ".update-switch.json").exists()
 
 
+def test_data_changed_after_a_cut_off_update_is_never_replaced_unasked(install, github, monkeypatch):
+    # Before: the snapshot from before the update was put back over whatever the new version had
+    # written since it was left running - days of data, silently.
+    github.release("v1.23.0", tarball("1.23.0"))
+    original = updater.Update.start_and_check
+
+    def start_then_crash(work, version):
+        result = original(work, version)
+        if version == "1.23.0":
+            raise Crash()  # killed during the health check: the new version keeps running
+        return result
+
+    monkeypatch.setattr(updater.Update, "start_and_check", start_then_crash)
+    killed(monkeypatch)
+    with pytest.raises(Crash):
+        run(Machine(install["app"], github), "v1.23.0")
+    monkeypatch.setattr(updater.Update, "start_and_check", original)
+    state_file = install["root"] / "data" / "state.json"
+    state_file.write_text('{"topics": ["added later"]}', encoding="utf-8")
+    later = state_file.stat().st_mtime + 2 * (5 + updater.STOP_GRACE)  # long after the health check
+    os.utime(state_file, (later, later))
+
+    machine = Machine(install["app"], github)
+    code, lines = run(machine, "v1.23.0")
+
+    assert code == 2
+    assert machine.calls == []  # nothing stopped
+    assert "state.json" in lines[-1]
+    assert "--discard-newer-data" in lines[-1]
+    assert state_file.read_text(encoding="utf-8") == '{"topics": ["added later"]}'
+    assert "marker-1.23.0" in names(install["app"])
+    assert (install["root"] / ".update-switch.json").exists()
+
+    # Asked for: the snapshot goes back over it.
+    code, _lines = run(Machine(install["app"], github), "not-a-tag", discard_newer_data=True)
+    assert code == 2  # the tag, after the recovery
+    assert state(install)["status"] == "recovered"
+    assert state_file.read_text(encoding="utf-8") == '{"topics": []}'
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+
+
 @pytest.mark.allow_system  # this Python runs the copy; a refused tag ends it before TOW is stopped or started
 def test_the_copy_in_runtime_updates_the_install_it_belongs_to(install):
     # The start files run <TOW>/runtime/update.py while a switch record exists: it must find

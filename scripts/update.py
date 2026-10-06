@@ -99,6 +99,8 @@ SKIP_DIRS = frozenset({"browser-auth", "run", "tmp", "keys", "logs"})
 SNAPSHOT_RE = re.compile(r"^(?:update|data)-(\d{8}-\d{6})-before-")
 # The oldest version an install managed by `tow run` can go to: older ones have no supervisor.
 MINIMUM_TARGET = (1, 18, 0)
+# Seconds after a health check in which a rollback still stops the version it started.
+STOP_GRACE = 300.0
 UNIT_NAME = "tow.service"
 AGENT_LABEL = "io.tow"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -149,6 +151,10 @@ TEXTS = {
     "switch_failed": "the code could not be switched ({error}): close programs and windows that use files in {app}",
     "recovering": "an earlier update was cut off while it replaced the code: putting back TOW {version} first",
     "recovery_failed": "the cut-off update could not be undone: {error}; run the update again to retry",
+    "newer_data": (
+        "the data changed after the update was cut off ({path}): putting back the copy from before it ({snapshot})"
+        " would lose that, so nothing was changed. To go back to TOW {version} and that copy anyway, run: {command}"
+    ),
 }
 
 
@@ -784,6 +790,9 @@ class GitCode:
     def discard(self) -> None:
         """Nothing was unpacked: a fetch leaves the checkout as it is."""
 
+    def allow_data_changes(self, seconds: float) -> None:
+        """A checkout keeps no switch record."""
+
 
 class ArchiveCode:
     """The code came from a release archive (no git): a release's source archive replaces it."""
@@ -860,6 +869,15 @@ class ArchiveCode:
         if finalize:
             self.journal.unlink()
         return "restored"
+
+    def allow_data_changes(self, seconds: float) -> None:
+        """TOW, started by this update, may change data in the next ``seconds``: such changes are
+        the update's own, and a recovery may put the snapshot back over them; later ones it does not."""
+        if self.journal.exists():
+            record = self._journal()
+            until = record.get("data_until")
+            record["data_until"] = max(until if isinstance(until, (int, float)) else 0, time.time() + seconds)
+            self._write_journal(record)
 
     def accept_switch(self) -> None:
         if self.journal.exists():
@@ -972,6 +990,7 @@ class ArchiveCode:
                     "new": sorted(os.listdir(self.new)),
                     "previous_version": self.work.version(),
                     "snapshot": self.work.snapshot.name if self.work.snapshot else None,
+                    "data_until": time.time(),  # TOW is stopped: nothing of the update's changes data yet
                 }
             )
             for entry in sorted(os.listdir(self.app)):
@@ -1051,11 +1070,14 @@ class Update:
         say: Callable[[str], None] = print,
         source: Path | None = None,
         sums: Path | None = None,
+        discard_newer_data: bool = False,
     ):
         self.sys = system
         self.app = system.app
         self.root = system.root
         self.ref = ref
+        # Undoing a cut-off update may put its snapshot back over data changed after it.
+        self.discard_newer_data = discard_newer_data
         self.health_timeout = health_timeout
         self.wait_minutes = wait_minutes
         self.keep = keep
@@ -1133,6 +1155,7 @@ class Update:
         snapshot = self.root / "backup" / snapshot_name
         self.manifest = self._load_snapshot(snapshot)
         self.snapshot = snapshot
+        self.refuse_newer_data(record.get("data_until"), previous_version)
         self.say("recovering", version=previous_version)
         self.write_state(
             status="in_progress", ref=self.ref, previous_version=previous_version, started_at=_now_iso(), error=None
@@ -1146,6 +1169,29 @@ class Update:
             return False
         self.code.check()
         return True
+
+    def refuse_newer_data(self, until: Any, previous_version: str) -> None:
+        """Data changed after the cut-off update let go of TOW (``data_until`` in its record) is not
+        the update's own: the snapshot is not put back over it unless the owner says so."""
+        if self.discard_newer_data or type(until) not in (int, float):
+            return  # the record of an older update.py does not say
+        data = self.root / "data"
+        try:
+            changed = [data / name for name, digest in data_files(data).items() if self.manifest.get(name) != digest]
+            if _hash(self.root / "config.yaml") != self.manifest.get("../config.yaml"):
+                changed.append(self.root / "config.yaml")
+            newer = sorted((path.stat().st_mtime, str(path)) for path in changed if path.stat().st_mtime > until)
+        except OSError as exc:
+            raise UpdateError(f"the data cannot be compared with the update snapshot: {exc}") from exc
+        if newer:
+            command = (
+                f'"{sys.executable}" "{self.root / "runtime" / "update.py"}" --ref {self.ref} --discard-newer-data'
+            )
+            raise UpdateError(
+                self.text(
+                    "newer_data", path=newer[-1][1], snapshot=self.snapshot, version=previous_version, command=command
+                )
+            )
 
     def _recover(self, previous_version: str) -> str | None:
         """Stop TOW, put the previous code and the snapshot back, start it; the error, if any."""
@@ -1239,6 +1285,8 @@ class Update:
         return self.wait(answers, self.health_timeout)
 
     def start_and_check(self, version: str) -> bool:
+        # Its health check, and a rollback's stop of it after a failed one, are the update's own time.
+        self.code.allow_data_changes(self.health_timeout + STOP_GRACE)
         self.start()
         ok = self.healthy(version)
         if ok:
@@ -1518,6 +1566,11 @@ def main(argv: list[str] | None = None) -> int:
         "--source", type=Path, default=None, help="without git: this source archive (.tar.gz) instead of a download"
     )
     parser.add_argument("--sums", type=Path, default=None, help="without git: the SHA256SUMS to check --source with")
+    parser.add_argument(
+        "--discard-newer-data",
+        action="store_true",
+        help="undoing an update that was cut off: put its snapshot back even over data changed after it",
+    )
     args = parser.parse_args(argv)
     return update(
         args.ref,
@@ -1527,6 +1580,7 @@ def main(argv: list[str] | None = None) -> int:
         keep=args.keep,
         source=args.source.resolve() if args.source else None,
         sums=args.sums.resolve() if args.sums else None,
+        discard_newer_data=args.discard_newer_data,
     )
 
 
