@@ -833,12 +833,15 @@ def _main(argv: list[str] | None) -> int:
         # Started by the OS or by hand without a launcher: find data/ and config.yaml first.
         os.environ.update(layout.child_env())
     # TOW writes only inside its install, for this user only: temporary files go to data/tmp,
-    # also those of the processes it starts (TMP/TEMP/TMPDIR); umask 077 on Linux and macOS.
+    # also those of the processes it starts (TMP/TEMP/TMPDIR); umask 077 on Linux and macOS;
+    # keys/ and data/ closed to other accounts (Windows ACLs, POSIX 0700).
     from tow.paths import use_private_temp
     from tow.platform import use_private_files
+    from tow.store import protect_install_folders
 
     use_private_files()
     use_private_temp()
+    protect_install_folders()
     try:
         return command(args)
     except KeyboardInterrupt:

@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 import sys
 import threading
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Protocol
@@ -68,6 +68,10 @@ class Backend(Protocol):
     def bring_to_front(self, pid: int) -> None: ...
 
     def protected_folders(self) -> list[str]: ...
+
+    def folder_shared(self, path: Path) -> bool | None: ...
+
+    def make_private(self, path: Path) -> bool: ...
 
     def open_url(self, url: str) -> bool: ...
 
@@ -140,13 +144,38 @@ def use_private_files() -> bool:
     """Files and folders this process creates from now on are for this user only.
 
     Called once at process start (the CLI and the web app), so data/, logs and temporary files
-    are never readable by other accounts on Linux and macOS (umask 077). On Windows the
-    install folder's permissions apply and nothing changes. True when the umask was set.
+    are never readable by other accounts on Linux and macOS (umask 077). On Windows nothing
+    changes here: ``private_folders`` closes keys/ and data/ instead, and what TOW creates
+    inside them inherits that. True when the umask was set.
     """
     if this_os() == "windows":
         return False
     os.umask(PRIVATE_UMASK)
     return True
+
+
+def private_folders(folders: Iterable[Path], *, repair: bool = True) -> list[Path]:
+    """The folders among ``folders`` that other accounts of this computer can still open.
+
+    With ``repair`` such a folder is first made private when this account owns it: on Windows
+    only this account, SYSTEM and Administrators keep access (an install in a drive root
+    inherits "Authenticated Users: modify"), on Linux and macOS it becomes 0700. Missing
+    folders, links and unknown answers are skipped; never raises.
+    """
+    backend = current()
+    still_open: list[Path] = []
+    for folder in folders:
+        try:
+            if folder.is_symlink() or folder.is_junction() or not folder.is_dir():
+                continue
+            if backend.folder_shared(folder) is not True:
+                continue
+            if repair and backend.make_private(folder):
+                continue
+        except AttributeError, OSError, ValueError:  # a backend without the question: unknown
+            continue
+        still_open.append(folder)
+    return still_open
 
 
 __all__ = [
@@ -156,6 +185,7 @@ __all__ = [
     "backend_for",
     "current",
     "is_windows",
+    "private_folders",
     "set_backend",
     "this_os",
     "use",

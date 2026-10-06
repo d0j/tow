@@ -5,7 +5,8 @@
 - why the PC went down: the System event log (1074 - who restarted or powered off and why,
   41 / 6008 - it went down without a clean shutdown);
 - processes: hidden, detached starts; the whole tree stopped with taskkill;
-- Edge or Chrome for the browser sign-in; Windows, program and AppData folders.
+- Edge or Chrome for the browser sign-in; Windows, program and AppData folders;
+- keys/ and data/ for this account, SYSTEM and Administrators only (icacls, read back).
 """
 
 from __future__ import annotations
@@ -387,6 +388,143 @@ def protected_folders() -> list[str]:
     return list(dict.fromkeys(root for root in roots if root))
 
 
+# --- folders for this account only --------------------------------------------------------------
+
+_SE_FILE_OBJECT = 1
+_OWNER_AND_DACL = 0x1 | 0x4  # OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION
+_TOKEN_QUERY = 0x0008
+_TOKEN_USER = 1
+_SYSTEM_SID = "S-1-5-18"
+_ADMINISTRATORS_SID = "S-1-5-32-544"
+# Who besides this account may be granted a private folder: SYSTEM and Administrators, and the
+# placeholders Windows resolves to the owner itself (CREATOR OWNER, OWNER RIGHTS). SDDL aliases.
+_PRIVATE_TRUSTEES = frozenset({"SY", "BA", "CO", "OW", _SYSTEM_SID, _ADMINISTRATORS_SID})
+_ALLOW_ACES = frozenset({"A", "OA", "XA", "ZA"})
+
+
+def _local_string(pointer: Any) -> str | None:
+    """The text of a string Windows allocated for us, freed afterwards."""
+    try:
+        return str(pointer.value) if pointer.value else None
+    finally:
+        _dll("kernel32").LocalFree(pointer)
+
+
+def user_sid() -> str | None:
+    """This process's account as a SID string (``S-1-5-21-…``), or None."""
+    try:
+        from ctypes import wintypes
+
+        advapi32, kernel32 = _dll("advapi32"), _dll("kernel32")
+        token = wintypes.HANDLE()
+        if not advapi32.OpenProcessToken(
+            ctypes.c_void_p(kernel32.GetCurrentProcess()), _TOKEN_QUERY, ctypes.byref(token)
+        ):
+            return None
+        try:
+            size = wintypes.DWORD()
+            advapi32.GetTokenInformation(token, _TOKEN_USER, None, 0, ctypes.byref(size))
+            buffer = ctypes.create_string_buffer(size.value)
+            if not size.value or not advapi32.GetTokenInformation(token, _TOKEN_USER, buffer, size, ctypes.byref(size)):
+                return None
+            sid = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_void_p))[0]  # TOKEN_USER.User.Sid
+            text = wintypes.LPWSTR()
+            if not advapi32.ConvertSidToStringSidW(ctypes.c_void_p(sid), ctypes.byref(text)):
+                return None
+            return _local_string(text)
+        finally:
+            kernel32.CloseHandle(token)
+    except AttributeError, OSError, ValueError, ImportError:
+        return None
+
+
+def folder_security(path: Path) -> str | None:
+    """The owner and permissions of ``path`` in SDDL (``O:<sid>D:<flags>(ace)…``), or None."""
+    try:
+        from ctypes import wintypes
+
+        advapi32, kernel32 = _dll("advapi32"), _dll("kernel32")
+        descriptor = ctypes.c_void_p()
+        if advapi32.GetNamedSecurityInfoW(
+            str(path), _SE_FILE_OBJECT, _OWNER_AND_DACL, None, None, None, None, ctypes.byref(descriptor)
+        ):
+            return None
+        try:
+            text = wintypes.LPWSTR()
+            if not advapi32.ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                descriptor, 1, _OWNER_AND_DACL, ctypes.byref(text), None
+            ):
+                return None
+            return _local_string(text)
+        finally:
+            kernel32.LocalFree(descriptor)
+    except AttributeError, OSError, ValueError, ImportError:
+        return None
+
+
+_SDDL = re.compile(r"O:(?P<owner>[^():]+?)D:(?P<flags>[A-Z_]*)(?P<aces>\(.*\))?")
+
+
+def _aces(text: str) -> list[list[str]] | None:
+    """The fields of each ``(type;flags;rights;object;inherited object;sid…)``; None when malformed."""
+    aces: list[list[str]] = []
+    depth, start = 0, 0
+    for index, char in enumerate(text):
+        if char == "(":
+            depth += 1
+            if depth == 1:
+                start = index + 1
+        elif char == ")":
+            depth -= 1
+            if depth < 0:
+                return None
+            if depth == 0:
+                fields = text[start:index].split(";", 6)
+                if len(fields) < 6:
+                    return None
+                aces.append(fields)
+    return aces if depth == 0 else None
+
+
+def sddl_owner(sddl: str) -> str | None:
+    match = _SDDL.fullmatch(sddl)
+    return match.group("owner") if match else None
+
+
+def sddl_others(sddl: str, user: str) -> bool | None:
+    """Whether the permissions let an account other than ``user``, SYSTEM or Administrators in."""
+    match = _SDDL.fullmatch(sddl)
+    if match is None:
+        return None
+    if "NO_ACCESS_CONTROL" in match.group("flags"):
+        return True  # no permissions at all: everyone may do everything
+    aces = _aces(match.group("aces") or "")
+    if aces is None:
+        return None
+    return any(ace[0] in _ALLOW_ACES and ace[5] not in _PRIVATE_TRUSTEES and ace[5] != user for ace in aces)
+
+
+def folder_shared(path: Path) -> bool | None:
+    """Other accounts of this computer may open ``path`` (None: unknown)."""
+    user, sddl = user_sid(), folder_security(path)
+    if user is None or sddl is None:
+        return None
+    return sddl_others(sddl, user)
+
+
+def make_private(path: Path) -> bool:
+    """Only this account, SYSTEM and Administrators may open ``path``: the inherited permissions
+    (``Authenticated Users: modify`` of a drive root) are replaced, the change goes on to what
+    the folder holds. Only a folder this account owns is changed. True when read back private."""
+    user, sddl = user_sid(), folder_security(path)
+    if user is None or sddl is None or sddl_owner(sddl) != user:
+        return False
+    icacls = ntpath.join(os.environ.get("SYSTEMROOT") or r"C:\Windows", "System32", "icacls.exe")
+    grants = [f"*{sid}:(OI)(CI)F" for sid in (user, _SYSTEM_SID, _ADMINISTRATORS_SID)]
+    _run([icacls, str(path), "/inheritance:r", "/grant:r", *grants, "/Q"], timeout=120)
+    return folder_shared(path) is False
+
+
 class WindowsBackend:
     name = "windows"
 
@@ -477,6 +615,12 @@ class WindowsBackend:
 
     def protected_folders(self) -> list[str]:
         return protected_folders()
+
+    def folder_shared(self, path: Path) -> bool | None:
+        return folder_shared(path)
+
+    def make_private(self, path: Path) -> bool:
+        return make_private(path)
 
     def open_url(self, url: str) -> bool:
         return _common.open_url(url)

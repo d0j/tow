@@ -686,15 +686,41 @@ def migrate_legacy_secrets() -> bool:
     return True
 
 
+def install_folders() -> list[Path]:
+    """keys/ and data/: folders only this account (and on Windows SYSTEM and Administrators)
+    may open - the master key opens every saved password, data/ holds the encrypted ones."""
+    return [key_file().parent, data_dir(create=False)]
+
+
+def protect_install_folders() -> list[Path]:
+    """At start: keys/ and data/ of this account become private when other accounts can open
+    them (an older install, an install in a drive root on Windows). A folder that stays open
+    (another account's, or the change failed) is named on stderr and returned; the start goes
+    on. `tow doctor` reports it too."""
+    import sys
+
+    from tow.i18n import t
+    from tow.platform import private_folders
+
+    try:
+        still_open = private_folders(install_folders())
+    except OSError, RuntimeError:  # no install located: the command reports that itself
+        return []
+    for folder in still_open:
+        print(t("cli.folder_shared", path=str(folder)), file=sys.stderr)
+    return still_open
+
+
 def _key_folder(path: Path) -> None:
     """Create the folder of a key file; a folder TOW creates is readable by this user only
-    (POSIX; Windows keeps the install folder's permissions). An existing folder - $HOME for
-    `--key-file ~/tow.key` - keeps its permissions."""
+    (POSIX 0700; Windows: this account, SYSTEM and Administrators, nothing inherited). An
+    existing folder - $HOME for `--key-file ~/tow.key` - keeps its permissions."""
     if path.parent.is_dir():
         return
+    from tow.platform import private_folders
+
     path.parent.mkdir(parents=True, exist_ok=True)
-    with suppress(OSError):
-        path.parent.chmod(0o700)
+    private_folders([path.parent])
 
 
 _NEW_KEY_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)

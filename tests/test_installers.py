@@ -231,6 +231,15 @@ def test_install_ps1_checks_the_zip_and_never_overwrites():
         assert option in text
 
 
+def test_install_ps1_closes_keys_and_data_to_other_accounts_before_the_first_start():
+    text = PS1.read_text(encoding="utf-8")
+    grant = "/inheritance:r /grant:r \"*${sid}:(OI)(CI)F\" '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F'"
+    assert grant in text
+    assert "foreach ($name in @('keys', 'data'))" in text
+    assert "Join-Path $env:SystemRoot 'System32\\icacls.exe'" in text
+    assert text.index(grant) < text.index("& (Join-Path $Dir 'Start TOW.cmd')")
+
+
 @pytest.mark.allow_system
 @pytest.mark.parametrize("shell", ["pwsh", "powershell"])
 def test_install_ps1_parses(shell):

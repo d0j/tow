@@ -67,12 +67,14 @@ ROUTERS: tuple[APIRouter, ...] = (
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Temporary files (form uploads included) stay inside the install, also when the app is
     served by something else than `tow serve` (which has set this up already); new files are
-    for this user only (umask 077 on Linux and macOS)."""
+    for this user only (umask 077 on Linux and macOS; keys/ and data/ closed to other accounts)."""
     from tow.paths import use_private_temp
     from tow.platform import use_private_files
+    from tow.store import protect_install_folders
 
     use_private_files()
     use_private_temp()
+    protect_install_folders()
     yield
 
 

@@ -194,6 +194,21 @@ function Install-Tow {
         }
     }
 
+    # keys\ and data\ for this account, SYSTEM and Administrators only: a folder in a drive root
+    # (D:\TOW) would otherwise inherit "Authenticated Users: modify" and every account of the PC
+    # could read the master key. TOW itself checks this again at every start.
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $icacls = Join-Path $env:SystemRoot 'System32\icacls.exe'
+    foreach ($name in @('keys', 'data')) {
+        $folder = Join-Path $Dir $name
+        New-Item -ItemType Directory -Force -Path $folder | Out-Null
+        $ErrorActionPreference = 'Continue'
+        & $icacls $folder /inheritance:r /grant:r "*${sid}:(OI)(CI)F" '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' /Q | Out-Null
+        $closed = $LASTEXITCODE -eq 0
+        $ErrorActionPreference = 'Stop'
+        if (-not $closed) { Say "could not limit $folder to your account (TOW tries again when it starts)" }
+    }
+
     Say "installed in $Dir; starting it (the first start takes a minute)"
     # The keyboard stays with this window: the start file's "press a key" returns at once.
     '' | & (Join-Path $Dir 'Start TOW.cmd')
