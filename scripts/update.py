@@ -24,10 +24,11 @@ Two kinds of install, told apart by ``app/.git``:
 
 Steps (each one checked; nothing is reported as done without its read-back):
 
-1. one update at a time (``<TOW>/.update.lock``); refuse local edits of the code and an install
-   that still runs the five Windows tasks of 1.17 (it switches with v1.20.0 first); fetch (or
-   download and unpack the archive); refuse a target older than v1.18.0 (no ``tow run`` to
-   start; v1.22.0 for an archive install) and one that cannot read data/state.json (its
+1. one update at a time (``<TOW>/.update.lock``); undo an archive update that was cut off
+   mid-switch; refuse local edits of the code; fetch (or download and unpack the archive);
+   ``latest`` that is installed changes nothing, an older one is refused; refuse a target older
+   than v1.18.0 (no ``tow run`` to start; v1.22.0 for an archive install) and one that cannot
+   read data/state.json (its
    ``STATE_SCHEMA_VERSION`` is lower than the file's format: v1.22 after v1.23 ran);
 2. stop TOW: ``tow run`` gets the stop request (it lets a running check finish); only if it does
    not stop in time is it stopped forcibly, with its web server and job (status.json). With
@@ -115,10 +116,6 @@ TEXTS = {
     ),
     "local_edits": "the code in {app} has local changes; nothing was updated",
     "busy": "another update is running ({lock})",
-    "five_tasks": (
-        "this install still runs the five Windows tasks of 1.17 (TOW-serve, TOW-check, ...): update it to"
-        " v1.20.0 first and run `tow autostart migrate --apply` there; nothing was updated"
-    ),
     "too_old": (
         "{ref} is TOW {version}: an install managed by `tow run` goes no further back than v1.18.0"
         " (older versions have no `tow run`); nothing was updated"
@@ -1289,14 +1286,6 @@ class Update:
         self.say("rolled_back")
         return None
 
-    def refuse_old_layout(self) -> None:
-        """The five Windows tasks of 1.17 switch to one supervisor in 1.18-1.20, not here."""
-        if not self.sys.windows:
-            return
-        info = task_info(self.sys.task_xml("TOW-serve"))
-        if info and same_path(info["command"], self.app / "scripts" / "tow-serve.cmd"):
-            raise UpdateError(self.text("five_tasks"))
-
     # --- stopping and starting ---------------------------------------------------------------
 
     def _wait_port_free(self) -> None:
@@ -1496,7 +1485,6 @@ class Update:
         self.check_install()
         if not self.recover_archive():
             return 1
-        self.refuse_old_layout()
         code = self.code
         previous = code.current()
         previous_version = self.version()

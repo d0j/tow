@@ -13,9 +13,8 @@
     <runtime>\backup\update-<time>-before-<tag>, checks out the ref, runs uv sync with the
     launchers' environment (runtime\python, runtime\cache), starts TOW, requires /healthz to
     report the new version and /health.json to answer, and rolls back code (and data when the new
-    version changed it) if not. <runtime>\update-state.json records the run. An install that
-    still runs the five Windows tasks of 1.17 is refused (update it to v1.20.0 and run
-    `tow autostart migrate --apply` there first), and so is a target older than v1.18.0.
+    version changed it) if not. <runtime>\update-state.json records the run. A target older
+    than v1.18.0 is refused.
 
 .EXAMPLE
     <runtime>\app\scripts\deploy.ps1 -Ref v1.18.0
