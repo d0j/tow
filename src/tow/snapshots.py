@@ -71,6 +71,8 @@ _READ_CHUNK_BYTES = 1024 * 1024
 _VALIDATED_MEMBERS = ("config.yaml", "state.json", "download_history.json", "secrets.enc", "secrets-undo.enc")
 # Exists only while a settings change can still be undone: its absence is normal.
 _OPTIONAL_MEMBERS = frozenset({"secrets-undo.enc"})
+# Copied for the record, never restored: History keeps what happened after the copy was made.
+_NOT_RESTORED = "tow.jsonl"
 _PREFIX = "tow-"
 # Access settings belong to this machine, not to the copy (as for restore points).
 _ACCESS_KEYS = ("bind", "port", "allow_lan")
@@ -837,7 +839,7 @@ def _read_verified(
     contents: dict[str, bytes] = {}
     for name, meta in manifest["files"].items():
         _member_target(name)  # a strict name, and a target that stays where it belongs
-        content = _verified_member(path / name, name, meta, collect=retain)
+        content = _verified_member(path / name, name, meta, collect=retain and name != _NOT_RESTORED)
         if content is not None:
             contents[name] = content
         del content
@@ -958,6 +960,8 @@ def _restore_plan(contents: dict[str, bytes], points_dir: str) -> list[tuple[str
     targets of restore points are those of the config in force while the files are written."""
     plan: list[tuple[str, Path, bytes | None]] = []
     for name, content in contents.items():
+        if name == _NOT_RESTORED:
+            continue
         if name == "config.yaml":
             content = _keep_local_access(content)
         elif name == "secrets.enc":
@@ -1256,38 +1260,26 @@ def _prune_safety_copies(keep: int) -> tuple[list[str], bool]:
 
 
 def _apply_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str, points_dir: str) -> tuple[Path, bool]:
-    """Under the data lock, hold one log barrier from safety capture through the final outcome."""
-    failure: Exception | None = None
-    rollback_failure: Exception | None = None
-    with locked_log_path():
-        safety = _begin_restore(plan, snapshot=snapshot, points_dir=points_dir)
+    """Write the plan under the data lock; any failure puts every saved file back."""
+    safety = _begin_restore(plan, snapshot=snapshot, points_dir=points_dir)
+    try:
+        for name, target, content in plan:
+            if content is None:
+                target.unlink(missing_ok=True)
+                continue
+            atomic_write_bytes(target, content)
+            if target.read_bytes() != content:
+                raise SnapshotError(t("backup.snapshot.read_back_failed", owner_language(), name=name))
+        _finish(safety, "committed")
+    except Exception as failure:  # every transaction failure is rolled back before the lock is released
         try:
-            for name, target, content in plan:
-                if content is None:
-                    target.unlink(missing_ok=True)
-                    continue
-                atomic_write_bytes(target, content)
-                if target.read_bytes() != content:
-                    raise SnapshotError(t("backup.snapshot.read_back_failed", owner_language(), name=name))
-            _finish(safety, "committed")
-        except Exception as exc:  # noqa: BLE001 - every transaction failure needs rollback before unlock
-            failure = exc
-            try:
-                _roll_back_locked(safety)
-            except Exception as exc:  # noqa: BLE001 - retain the marker and report any failed rollback
-                rollback_failure = exc
-    # The OS log lock is not reentrant. Cleanup and audit events run only after its release.
-    if failure is not None:
-        log_event(
-            "backup_restore_failed",
-            error=_reason(failure),
-            rollback="failed" if rollback_failure else "done",
-            how="manual",
-        )
-        if rollback_failure is not None:
+            _roll_back_files(safety)
+        except Exception as rollback_failure:  # the marker stays: the next lock holder tries again
+            log_event("backup_restore_failed", error=_reason(failure), rollback="failed", how="manual")
             raise SnapshotError(
                 t("backup.snapshot.rollback_failed", owner_language(), path=str(safety))
             ) from rollback_failure
+        log_event("backup_restore_failed", error=_reason(failure), rollback="done", how="manual")
         _tidy_safety_copies()
         raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=_reason(failure))) from failure
     # Cleanup is outside the transaction: its failure must not undo a committed restore.
@@ -1295,27 +1287,28 @@ def _apply_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str,
 
 
 def _roll_back(safety: Path) -> None:
-    """Recover under data-before-log ordering; append/rotation wait for the final read-back."""
-    with locked_log_path():
-        _roll_back_locked(safety)
+    _roll_back_files(safety)
     _tidy_safety_copies()
 
 
-def _roll_back_locked(safety: Path) -> None:
+def _roll_back_files(safety: Path) -> None:
     """Put back every file the journal saved (config.yaml first: it says where restore points live)."""
     try:
         _journal_bytes(_read_journal(safety), "rolled_back")  # legacy final metadata fits before any live write
         plan = _rollback_plan(safety)
     except (OSError, ValueError, TypeError, RecursionError, yaml.YAMLError) as exc:
         raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=_reason(exc))) from exc
-    for name, target, content in plan:
-        if content is None:
-            target.unlink(missing_ok=True)
-        else:
-            atomic_write_bytes(target, content)
-            if target.read_bytes() != content:
-                raise SnapshotError(t("backup.snapshot.read_back_failed", owner_language(), name=name))
-    _finish(safety, "rolled_back")
+    # A restore of 1.23.11 or earlier also replaced the event log: no append while it goes back.
+    legacy_log = any(name == "tow.jsonl" for name, _target, _content in plan)
+    with locked_log_path() if legacy_log else contextlib.nullcontext():
+        for name, target, content in plan:
+            if content is None:
+                target.unlink(missing_ok=True)
+            else:
+                atomic_write_bytes(target, content)
+                if target.read_bytes() != content:
+                    raise SnapshotError(t("backup.snapshot.read_back_failed", owner_language(), name=name))
+        _finish(safety, "rolled_back")
 
 
 class _MarkerGone(Exception):
