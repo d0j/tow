@@ -3,6 +3,9 @@
 Run from the development checkout after its release commit is merged into origin/main:
     uv run --frozen python scripts/publish-release.py v1.22.17
 
+Before anything is pushed the tag must be annotated with the message "TOW X.Y.Z", match the
+version in pyproject.toml, be on origin/main, and its commit (or, for a merge, a commit it
+merges) must be the release commit "release: vX.Y.Z - <summary>".
 No force pushes, history changes, new commits or tags. Git's pre-push gate still applies.
 """
 
@@ -36,6 +39,14 @@ def _verify_remote(root: Path, remote: str, expected: dict[str, str]) -> None:
         raise PublishError(f"{remote}: release references were not confirmed after push")
 
 
+def _check_release_commit(root: Path, commit: str, tag: str) -> None:
+    """The tagged commit, or a commit its merge brings in, is "release: vX.Y.Z - <summary>"."""
+    parents = git(root, "rev-list", "--parents", "-n", "1", commit).split()[1:]
+    subjects = git(root, "log", "--format=%s", commit, "--not", *parents[:1]).splitlines()
+    if not any(subject.startswith(f"release: {tag} - ") for subject in subjects):
+        raise PublishError(f"no release commit 'release: {tag} - <summary>' in the tagged merge")
+
+
 def publish(tag: str, *, root: Path = ROOT) -> None:
     if not TAG.fullmatch(tag):
         raise PublishError("use a release tag such as v1.22.17")
@@ -47,9 +58,16 @@ def publish(tag: str, *, root: Path = ROOT) -> None:
     version = tomllib.loads(git(root, "show", f"{tag_ref}:pyproject.toml"))["project"]["version"]
     if tag != f"v{version}":
         raise PublishError("the release tag does not match its package version")
+    message = git(root, "for-each-ref", "--format=%(contents:subject)", tag_ref)
+    if message != f"TOW {version}":
+        raise PublishError(f"the tag message must be 'TOW {version}', not '{message}'")
+    _check_release_commit(root, commit, tag)
     git(root, "fetch", "--no-tags", "origin", "main")
     main = git(root, "rev-parse", "refs/remotes/origin/main")
-    git(root, "merge-base", "--is-ancestor", commit, main)
+    try:
+        git(root, "merge-base", "--is-ancestor", commit, main)
+    except PublishError:
+        raise PublishError("the release tag is not on origin/main: merge the release first") from None
     if "backup" in git(root, "remote").splitlines():
         # Atomic and fast-forward only: neither an unavailable mirror nor a divergent branch
         # can leave a published tag that the runtime's local origin cannot fetch.

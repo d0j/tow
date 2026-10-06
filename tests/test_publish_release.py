@@ -2,6 +2,7 @@
 
 import importlib.util
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,12 @@ def publisher(monkeypatch):
         ("rev-parse", f"{tag_ref}^{{commit}}"): "b" * 40,
         ("rev-parse", "refs/remotes/origin/main"): "c" * 40,
         ("show", f"{tag_ref}:pyproject.toml"): '[project]\nversion="1.2.3"\n',
+        ("for-each-ref", "--format=%(contents:subject)", tag_ref): "TOW 1.2.3",
+        # The tag is on a pull request's merge commit; the release commit is the one it merges.
+        ("rev-list", "--parents", "-n", "1", "b" * 40): f"{'b' * 40} {'d' * 40} {'e' * 40}",
+        ("log", "--format=%s", "b" * 40, "--not", "d" * 40): (
+            "Merge pull request #9 from owner/release\nrelease: v1.2.3 - synthetic summary\ndocs: synthetic"
+        ),
         ("remote",): "origin\nbackup",
         ("ls-remote", "--refs", "backup", "refs/heads/main", tag_ref): (
             f"{'c' * 40}\trefs/heads/main\n{'a' * 40}\t{tag_ref}"
@@ -76,18 +83,44 @@ def test_a_checkout_without_a_mirror_can_publish(publisher):
     assert ("push", "origin", "refs/tags/v1.2.3:refs/tags/v1.2.3") in calls
 
 
-@pytest.mark.parametrize("reason", ["lightweight", "version", "not_merged"])
-def test_an_invalid_release_never_reaches_a_remote(publisher, reason):
+@pytest.mark.parametrize(
+    ("reason", "error"),
+    [
+        ("lightweight", "annotated"),
+        ("version", "package version"),
+        ("message", "tag message must be 'TOW 1.2.3'"),
+        ("no_release_commit", "no release commit 'release: v1.2.3 - <summary>'"),
+        ("other_release_commit", "no release commit"),
+        ("not_merged", "not on origin/main"),
+    ],
+)
+def test_an_invalid_release_never_reaches_a_remote(publisher, reason, error):
     module, calls, replies = publisher
+    tag_ref = "refs/tags/v1.2.3"
+    merged = ("log", "--format=%s", "b" * 40, "--not", "d" * 40)
     if reason == "lightweight":
-        replies[("cat-file", "-t", "refs/tags/v1.2.3")] = "commit"
+        replies[("cat-file", "-t", tag_ref)] = "commit"
     elif reason == "version":
-        replies[("show", "refs/tags/v1.2.3:pyproject.toml")] = '[project]\nversion="1.2.4"'
+        replies[("show", f"{tag_ref}:pyproject.toml")] = '[project]\nversion="1.2.4"'
+    elif reason == "message":
+        replies[("for-each-ref", "--format=%(contents:subject)", tag_ref)] = "synthetic release"
+    elif reason == "no_release_commit":
+        replies[merged] = "Merge pull request #9 from owner/release\nrelease: prepare 1.2.3"
+    elif reason == "other_release_commit":
+        replies[merged] = "Merge pull request #9 from owner/release\nrelease: v1.2.2 - synthetic summary"
     else:
-        replies[("merge-base", "--is-ancestor", "b" * 40, "c" * 40)] = module.PublishError("not merged")
-    with pytest.raises(module.PublishError):
+        replies[("merge-base", "--is-ancestor", "b" * 40, "c" * 40)] = module.PublishError("git merge-base failed: ")
+    with pytest.raises(module.PublishError, match=re.escape(error)):
         module.publish("v1.2.3")
     assert not any(args[0] == "push" for args in calls)
+
+
+def test_a_release_commit_tagged_directly_is_accepted(publisher):
+    module, calls, replies = publisher
+    replies[("rev-list", "--parents", "-n", "1", "b" * 40)] = f"{'b' * 40} {'d' * 40}"
+    replies[("log", "--format=%s", "b" * 40, "--not", "d" * 40)] = "release: v1.2.3 - synthetic summary"
+    module.publish("v1.2.3")
+    assert ("push", "origin", "refs/tags/v1.2.3:refs/tags/v1.2.3") in calls
 
 
 @pytest.mark.parametrize("tag", ["--all", "main", "v1.2.3;bad", "v1.2.3\nmain", "refs/tags/v1.2.3"])
@@ -138,11 +171,23 @@ def test_publication_with_real_git_on_throwaway_remotes(tmp_path, monkeypatch):
         module.git(checkout, "config", key, value)
     (checkout / "pyproject.toml").write_text('[project]\nversion="1.2.3"\n', encoding="utf-8")
     module.git(checkout, "add", "pyproject.toml")
-    module.git(checkout, "commit", "-m", "synthetic release")
+    module.git(checkout, "commit", "-m", "synthetic base")
+    # The release commit on its own branch, merged as a pull request merges it.
+    module.git(checkout, "switch", "-c", "release")
+    (checkout / "CHANGELOG.md").write_text("synthetic\n", encoding="utf-8")
+    module.git(checkout, "add", "CHANGELOG.md")
+    module.git(checkout, "commit", "-m", "release: v1.2.3 - synthetic summary")
+    module.git(checkout, "switch", "main")
+    module.git(checkout, "merge", "--no-ff", "-m", "Merge pull request #1 from owner/release", "release")
     module.git(checkout, "remote", "add", "origin", str(origin))
     module.git(checkout, "remote", "add", "backup", str(mirror))
+    module.git(checkout, "push", "origin", "HEAD~1:refs/heads/main")
+    module.git(checkout, "tag", "-a", "v1.2.3", "-m", "TOW 1.2.3")
+    with pytest.raises(module.PublishError, match="not on origin/main"):
+        module.publish("v1.2.3", root=checkout)  # the merge is not on origin yet
+    assert "refs/tags/" not in module.git(checkout, "ls-remote", "--refs", str(origin))
+    assert module.git(checkout, "ls-remote", "--refs", str(mirror)) == ""
     module.git(checkout, "push", "-u", "origin", "main")
-    module.git(checkout, "tag", "-a", "v1.2.3", "-m", "synthetic release")
     before = module.git(checkout, "rev-parse", "HEAD")
 
     module.publish("v1.2.3", root=checkout)
