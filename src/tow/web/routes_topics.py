@@ -16,13 +16,14 @@ from tow import undo
 from tow.check import await_relocation, client_owned_by_tow
 from tow.clock import iso_now
 from tow.config import as_bool
+from tow.content import selection as content_selection
 from tow.errors import TowError
 from tow.folders import paths_equal, recent_save_roots, remember_save_root, resolve_save_path, save_path_problem
 from tow.log import error_fields
 from tow.selection import normalize_policy, stored_policy
 from tow.store import CheckBusyError, SecretStoreError
 from tow.topic_timers import parse_interval, set_interval
-from tow.torrent import parse_torrent_metadata
+from tow.torrent import TorrentMetadata, parse_torrent_metadata
 from tow.trackers import load_trackers, match_tracker
 from tow.web import _context, services
 from tow.web.templating import TEMPLATES
@@ -155,29 +156,34 @@ _DRAFT_FIELDS = (
 )
 
 
+def _prepared(token: str, url: str, client_id: str) -> TorrentMetadata | None:
+    """The form's prepared torrent, read and decrypted once per request."""
+    return parse_torrent_metadata(services.read_content(token, url, client_id)) if token else None
+
+
 def _selection_form(
     mode: str,
     value: str,
     tracking: str,
-    token: str,
+    prepared: TorrentMetadata | None,
     indices: str,
-    url: str,
-    client_id: str,
     previous: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if mode != "exact":
         return normalize_policy(mode, value, tracking)
-    if not token and not indices and previous and previous.get("mode") == "exact":
+    if prepared is None and not indices and previous and previous.get("mode") == "exact":
         return normalize_policy(
             mode, tracking_mode=tracking, files=previous.get("files"), source_hash=previous.get("source_hash")
         )
+    if prepared is None:
+        raise TowError("content.expired")
     if len(indices) > 200_000:
         raise TowError("selection.exact_invalid")
     try:
         parsed = json.loads(indices)
     except (ValueError, RecursionError) as exc:
         raise TowError("selection.exact_invalid") from exc
-    return services.content_selection(token, url, client_id, parsed, tracking)
+    return content_selection(prepared, parsed, tracking)
 
 
 def _add_refused(problem: str, draft: dict[str, str], kind: str = "") -> RedirectResponse:
@@ -252,19 +258,8 @@ def topics_add(
     if not selected_client.get("enabled", True):
         return _add_refused(t("web.topics.client_disabled"), draft, "client")
     try:
-        policy = _selection_form(
-            selection_mode,
-            selection_value,
-            tracking_mode,
-            content_token,
-            selection_indices,
-            url,
-            str(selected_client["id"]),
-        )
-        if content_token:
-            prepared_hash = parse_torrent_metadata(
-                services.read_content(content_token, url, str(selected_client["id"]))
-            ).infohash
+        prepared = _prepared(content_token, url, str(selected_client["id"]))
+        policy = _selection_form(selection_mode, selection_value, tracking_mode, prepared, selection_indices)
     except (ValueError, RuntimeError) as exc:
         return _add_refused(str(exc), draft, "selection")
     new: dict[str, Any] = {
@@ -277,9 +272,9 @@ def topics_add(
         "selection": stored_policy(policy),
         "tracking_mode": policy["tracking_mode"],
     }
-    if content_token:
+    if prepared is not None:
         new["content_token"] = content_token
-        new["content_hash"] = prepared_hash
+        new["content_hash"] = prepared.infohash
     set_interval(new, interval)
     with services.persistence_lock():
         state = services.load_state()
@@ -446,16 +441,22 @@ def _move_in_client(
         return t("web.topics.move_failed"), "warn"
 
 
-def _bind_content_edit(topic: dict[str, Any], candidate: dict[str, Any], client_id: str, token: str, mode: str) -> None:
+def _bind_content_edit(
+    topic: dict[str, Any],
+    candidate: dict[str, Any],
+    client_id: str,
+    token: str,
+    prepared: TorrentMetadata | None,
+    mode: str,
+) -> None:
     changed = candidate["url"] != topic.get("url") or client_id != topic.get("client_id", client_id)
-    if mode == "exact" and not token and changed:
+    if mode == "exact" and prepared is None and changed:
         raise TowError("content.changed")
     if topic.get("hash"):
         return
-    if token:
-        metadata = parse_torrent_metadata(services.read_content(token, str(candidate["url"]), client_id))
+    if prepared is not None:
         candidate["content_token"] = token
-        candidate["content_hash"] = metadata.infohash
+        candidate["content_hash"] = prepared.infohash
     elif changed:
         candidate.pop("content_token", None)
         candidate.pop("content_hash", None)
@@ -513,17 +514,11 @@ def topics_edit(
             topic.get("selection") if isinstance(topic.get("selection"), dict) else {"mode": "all", "value": ""}
         )
         try:
+            prepared = _prepared(content_token, str(candidate["url"]), new_client_id)
             policy = _selection_form(
-                selection_mode,
-                selection_value,
-                tracking_mode,
-                content_token,
-                selection_indices,
-                str(candidate["url"]),
-                new_client_id,
-                old_selection,
+                selection_mode, selection_value, tracking_mode, prepared, selection_indices, old_selection
             )
-            _bind_content_edit(topic, candidate, new_client_id, content_token, selection_mode)
+            _bind_content_edit(topic, candidate, new_client_id, content_token, prepared, selection_mode)
         except (ValueError, RuntimeError) as exc:
             return flash_redirect("/", exc, "err")
         new_selection = stored_policy(policy)

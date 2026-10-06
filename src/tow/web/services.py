@@ -22,7 +22,6 @@ from tow.browser_auth import browser_auth
 from tow.check import record_check_failure, run_check
 from tow.config import load_config, save_config
 from tow.content import read as read_content
-from tow.content import selection as content_selection
 from tow.doctor import doctor_report
 from tow.lifecycle import request_restart, service_status, set_autostart
 from tow.log import log_event
@@ -64,7 +63,6 @@ __all__ = [
     "check_snapshot",
     "cleanup_secret_undo",
     "content_context_title",
-    "content_selection",
     "create_restore_point",
     "delete_restore_point",
     "delete_snapshot",
