@@ -83,6 +83,25 @@ def test_rotation_only_counts_verified_copies(monkeypatch):
     assert not restore_points.point_path(second["id"], must_exist=False).exists()
 
 
+def test_rotation_decrypts_only_the_points_it_removes(monkeypatch):
+    _seed()
+    monkeypatch.setattr(restore_points, "RESTORE_POINT_LIMIT", 3)
+    made = [restore_points.create_restore_point()["id"] for _ in range(3)]
+    checked: list[str] = []
+    real = restore_points.verify_bundle
+
+    def counted(path, passphrase):
+        checked.append(Path(path).stem)
+        return real(path, passphrase)
+
+    monkeypatch.setattr(restore_points, "verify_bundle", counted)
+    newest = restore_points.create_restore_point()["id"]
+
+    assert checked == [made[0]]  # one key derivation, not one per kept point
+    assert not restore_points.point_path(made[0], must_exist=False).exists()
+    assert {point["id"] for point in restore_points.list_restore_points()} == {*made[1:], newest}
+
+
 def test_web_reports_saved_copy_with_cleanup_warning(monkeypatch):
     from fastapi.testclient import TestClient
     from helpers import shown
