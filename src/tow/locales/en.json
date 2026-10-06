@@ -722,14 +722,6 @@
       "event": "Latest event",
       "progress": "Progress"
     },
-    "status": {
-      "action_confirmed": "Action confirmed by the history",
-      "action_unknown": "Result of the action is unknown",
-      "tracker_failed": "The last site check failed",
-      "tracker_ok": "The last site check passed",
-      "tracker_error": "Site error",
-      "not_checked": "Site not checked yet"
-    },
     "topic": {
       "no_events": "No events yet",
       "episodes_history": "Open the episode history",

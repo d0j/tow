@@ -178,17 +178,9 @@
   {#- Rows stay light (M2): no edit form inside (fetched when a row opens), icons from one
       sprite, no blank lines from the computed values. -#}
   {%- for topic in topics %}
-  {%- set legacy_error = (topic.last_error|default('', true))|lower %}
-  {%- set legacy_tracker_issue = 'no download link on page' in legacy_error or 'all hosts failed' in legacy_error or 'все зеркала' in legacy_error or 'cross-origin redirect' in legacy_error or 'запрещён cross-origin' in legacy_error or 'cloudflare' in legacy_error or 'frozen' in legacy_error %}
-  {%- set legacy_action_recorded = topic.last_event_label|default('', true) %}
-  {%- set torrent_tone = topic.torrent_tone|default('', true) %}
-  {%- if not torrent_tone %}{% set torrent_tone = 'ok' if legacy_action_recorded else 'warn' if topic.last_error_class in ('tracker', 'tracker_auth', 'frozen') or legacy_tracker_issue else 'bad' if topic.last_error else 'new' if topic.last_changed else 'ok' if topic.last_ok else 'mut' %}{% endif %}
-  {%- set torrent_label = topic.torrent_label|default('', true) %}
-  {%- if not torrent_label %}{% set torrent_label = t('home.status.action_confirmed') if legacy_action_recorded else t('home.status.action_unknown') %}{% endif %}
-  {%- set tracker_tone = topic.tracker_tone|default('', true) %}
-  {%- if not tracker_tone %}{% set tracker_tone = 'ok' if topic.last_ok else 'warn' if topic.last_error_class in ('tracker', 'tracker_auth', 'frozen') or legacy_tracker_issue else 'bad' if topic.last_error else 'mut' %}{% endif %}
-  {%- set tracker_label = topic.tracker_label|default('', true) %}
-  {%- if not tracker_label %}{% set tracker_label = t('home.status.tracker_failed') if tracker_tone == 'warn' else t('home.status.tracker_ok') if tracker_tone == 'ok' else t('home.status.tracker_error') if tracker_tone == 'bad' else t('home.status.not_checked') %}{% endif %}
+  {#- topic_rows projects every status channel (tow.status.project_home_status). -#}
+  {%- set torrent_tone, torrent_label = topic.torrent_tone, topic.torrent_label %}
+  {%- set tracker_tone, tracker_label = topic.tracker_tone, topic.tracker_label %}
   {%- set ds = topic.download_summary or {} %}
   {%- set pause_label = t('home.topic.resume') if topic.paused else t('home.topic.pause') %}
   <div class="row-wrap{% if topic.paused %} is-paused{% endif %}" data-tracker="{{ topic.tracker }}" data-name="{{ topic.series|lower }}" data-event="{{ topic.last_event_iso or '' }}" data-q="{{ [topic.title, topic.tracker_title, topic.tracker, topic.url, topic.save_path] | select | map('lower') | unique | join(' ') }}">

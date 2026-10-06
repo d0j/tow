@@ -1975,35 +1975,6 @@ def test_frozen_tracker_degradation_is_warning_on_home():
     assert 'class="dot lg bad"' not in html
 
 
-def test_home_legacy_view_model_keeps_status_indicator_visible(monkeypatch):
-    legacy_row = {
-        "id": "legacy-row",
-        "title": "Legacy row",
-        "tracker_title": "Legacy row",
-        "url": "http://rutor.info/torrent/4/legacy",
-        "save_path": r"M:\\anime",
-        "tracker": "rutor",
-        "series": "Legacy row",
-        "last_changed": False,
-        "last_ok": False,
-        "last_error": "rutor: все зеркала на паузе",
-        "paused": False,
-        "download_summary": {},
-        "last_event_label": "S01E01",
-        "last_event_at": "14.09.2026 01:00:00 IL+03",
-    }
-    monkeypatch.setattr("tow.web.routes_home.topic_rows", lambda _state: [legacy_row])
-
-    html = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/").text
-
-    assert 'class="dot lg ok"' in html
-    assert 'class="row-ico warn"' in html
-    # L4: the error text is no longer only in tooltips; the labels say the state.
-    assert 'title="Действие подтверждено историей"' in html
-    assert 'title="Последняя проверка сайта не прошла"' in html
-    assert 'class="dot lg "' not in html
-
-
 def test_successful_torrent_action_does_not_hide_latest_tracker_failure():
     topic_id = "known-good"
     state = load_state()
@@ -2038,8 +2009,11 @@ def test_successful_torrent_action_does_not_hide_latest_tracker_failure():
 
     html = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/").text
 
-    assert 'class="dot lg warn"' in html
-    assert 'class="row-ico warn"' in html
+    # The latest tracker error comes first (AGENTS.md), even after a recorded client event;
+    # every status mark is labelled, also for a record without an error class.
+    assert re.search(r'class="dot lg warn" title="[^"]+"', html)
+    assert re.search(r'class="row-ico warn" href="[^"]+" target="_blank" rel="noopener" title="[^"]+"', html)
+    assert 'class="dot lg ok"' not in html
 
 
 def test_undo_of_topic_edit_keeps_status_written_after_the_edit(monkeypatch):
