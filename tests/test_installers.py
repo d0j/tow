@@ -328,9 +328,13 @@ def test_installers_run_the_release_smokes_before_a_tag():
         assert path in paths
     assert triggers["schedule"]
     assert "workflow_dispatch" in triggers
+    jobs = flow["jobs"]
     # The same smokes as the release (after the step that makes the source archive).
-    tail = [step.get("run") for step in flow["jobs"]["windows"]["steps"][-3:]]
+    tail = [step.get("run") for step in jobs["windows"]["steps"][-3:]]
     assert tail == [step.get("run") for step in release["jobs"]["windows"]["steps"][-4:-1]]
+    assert jobs["update"]["strategy"] == release["jobs"]["update"]["strategy"]
+    assert jobs["update"]["steps"][-1]["run"] == release["jobs"]["update"]["steps"][-1]["run"]
+    assert "git archive --format=tar.gz --prefix=tow/ -o tow-source.tar.gz HEAD" in _runs(jobs["update"])
 
 
 def test_ci_keeps_the_required_check_names_and_audits_once():
@@ -370,7 +374,8 @@ def test_the_release_workflow_tests_everything_before_it_uploads():
     assert flow["permissions"] == {"contents": "read"}
     writers = [name for name, job in jobs.items() if job.get("permissions", {}).get("contents") == "write"]
     assert writers == ["publish"]
-    assert set(jobs["publish"]["needs"]) == {"gate", "source", "windows", "posix"}
+    assert set(jobs["publish"]["needs"]) == {"gate", "source", "windows", "posix", "update"}
+    assert "scripts/update-smoke.py --previous" in _runs(jobs["update"])
     ci_jobs = yaml.safe_load(ci_text)["jobs"]
     gate_runners = {"windows-latest", "ubuntu-latest", "ubuntu-26.04", "macos-latest"}
     assert set(jobs["gate"]["strategy"]["matrix"]["os"]) == gate_runners
@@ -444,7 +449,7 @@ def test_release_archive_and_publish_use_a_pinned_linux_runner():
 
 
 def test_the_smoke_scripts_never_use_the_live_port():
-    for name in ("bundle-smoke.ps1", "install-smoke.sh", "install-smoke.ps1"):
+    for name in ("bundle-smoke.ps1", "install-smoke.sh", "install-smoke.ps1", "update-smoke.py"):
         text = (ROOT / "scripts" / name).read_text(encoding="utf-8")
         assert "never on 8787" in text
         assert "TOW_NO_BROWSER" in text
