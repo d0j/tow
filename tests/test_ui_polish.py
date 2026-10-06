@@ -317,6 +317,25 @@ def test_empty_home_shows_three_steps_with_their_state(client, monkeypatch):
     assert '<span class="pill ok">Подключён</span>' in steps
 
 
+@pytest.mark.parametrize(
+    ("health", "pill", "header"),
+    [
+        ({}, '<span class="pill mut">Настроен, ещё не проверен', "mut"),
+        ({"qbit_ok": False, "at_ts": 1}, '<span class="pill bad">Настроен, не отвечает', "bad"),
+        ({"qbit_ok": True, "at_ts": 1}, '<span class="pill ok">Подключён', "ok"),
+    ],
+)
+def test_get_started_and_the_header_agree_on_the_client(client, health, pill, header):
+    from tow.store import save_secrets, save_state
+
+    save_secrets({"qbittorrent": {"host": "127.0.0.1", "port": 8080, "username": "admin", "password": "pw"}})
+    save_state({"topics": [], "health": health})
+    page = client.get("/").text
+
+    assert pill in page[page.index('class="empty-state first-steps"') :]
+    assert re.search(rf'<span class="trk {header}" title="[^"]*">qBit', page.split('class="hdr-svc"', 1)[1])
+
+
 def test_home_with_topics_has_no_checklist(client):
     from tow.store import save_state
 

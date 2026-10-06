@@ -218,6 +218,7 @@
       <li>
         <span class="step-head"><a href="/settings?open=clients">{{ t('home.start.client') }}</a>
         {%- if steps.client == 'ok' %} <span class="pill ok">{{ t('home.start.client_ok') }}</span>
+        {%- elif steps.client == 'failed' %} <span class="pill bad">{{ t('home.start.client_failed') }}</span>
         {%- elif steps.client == 'saved' %} <span class="pill mut">{{ t('home.start.client_saved') }}</span>
         {%- else %} <span class="pill warn">{{ t('home.start.todo') }}</span>{% endif %}</span>
         <span class="field-hint">{{ t('home.start.client_hint') }}</span>
