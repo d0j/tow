@@ -92,8 +92,9 @@ Linux checks and installer smoke tests run on both Ubuntu 24.04 and 26.04. The l
 - One logical change per commit, with its test. The subject is `area: what changed` in English (`web: …`,
   `clients: …`, `docs: …`), at most 72 characters; then a blank line and a body that says why and how it was
   verified. The `commit-msg` hook in `.githooks` checks this form and refuses trailers such as `Co-Authored-By`.
-- User-visible changes get a line in `CHANGELOG.md` and the same in `CHANGELOG.ru.md`. A change to what
-  `README.md` or `docs/` describe updates `README.ru.md` and `docs/ru/` in the same commit.
+- User-visible changes get a line in `CHANGELOG.md` and the same in `CHANGELOG.ru.md`. A change to `README.md`,
+  `docs/guide.md` or `docs/install.md` makes the same change to `README.ru.md` or the file of that name in
+  `docs/ru/`, in the same commit.
 - Keep pull requests small and focused; fill in the template. Do not include personal data in code, tests,
   screenshots or logs.
 
