@@ -506,6 +506,24 @@ class PosixBackend:
             "confined": self.name == "linux" and is_snap_browser(executable),
         }
 
+    def folder_shared(self, path: Path) -> bool | None:
+        """Other accounts may open ``path``: any group or other permission bit."""
+        try:
+            return bool(path.stat().st_mode & 0o077)
+        except OSError:
+            return None
+
+    def make_private(self, path: Path) -> bool:
+        """``path`` becomes 0700 when this account owns it; True when read back private."""
+        own_uid = getattr(os, "geteuid", None)
+        try:
+            if own_uid is None or path.stat().st_uid != own_uid():
+                return False
+            path.chmod(0o700)
+        except OSError:
+            return False
+        return self.folder_shared(path) is False
+
     def protected_folders(self) -> list[str]:
         roots = list(SYSTEM_FOLDERS)
         if self.home:

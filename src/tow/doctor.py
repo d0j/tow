@@ -57,8 +57,20 @@ def _inventory(cfg: dict[str, Any], secrets: dict[str, Any], state: dict[str, An
         "qbit": None,
         "probes": [],
         "autostart": _autostart(),
+        "open_folders": _open_folders(),
         "ok": True,
     }
+
+
+def _open_folders() -> list[str]:
+    """keys/ and data/ by name when other accounts of this computer can open them."""
+    from tow.platform import private_folders
+    from tow.store import install_folders
+
+    try:
+        return [folder.name for folder in private_folders(install_folders(), repair=False)]
+    except OSError, RuntimeError:
+        return []
 
 
 def _autostart() -> dict[str, Any]:
@@ -186,6 +198,8 @@ def doctor_text(report: dict[str, Any] | None = None) -> str:
         t("doctor_report.messengers", lang, value=r.get("notify_set")),
         t("doctor_report.topics", lang, value=r.get("topics")),
     ]
+    if r.get("open_folders"):
+        lines.append(t("doctor_report.open_folders", lang, value=", ".join(map(str, r["open_folders"]))))
     for p in r.get("probes") or []:
         mark = t("doctor_report.probe_ok", lang) if p.get("ok") else p.get("error")
         lines.append(t("doctor_report.probe", lang, tracker=p.get("tracker"), host=p.get("host"), result=mark))

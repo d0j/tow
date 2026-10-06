@@ -60,8 +60,8 @@ Master key resolution (built, `tow.store`): `TOW_MASTER_KEY` (env, tests/CI) >
 TOW itself on every start, not only by `tow-env.cmd`). `secret_store_status()["key_source"]` is
 `env`, `file`, `install`, `legacy` or `missing`; `master_key_file()` names the file in use;
 `tow keys adopt` without `--from` takes `TOW_MASTER_KEY_FILE`, else the legacy file.
-- `tow secrets generate-key [--key-file F]` writes `keys/master.key` by default (folder 0700 on
-  POSIX; the file is created 0600 in the same call, `O_CREAT|O_EXCL`, never with the umask's mode
+- `tow secrets generate-key [--key-file F]` writes `keys/master.key` by default (a new folder is
+  for this account only: 0700 on POSIX, no inherited permissions on Windows; the file is created 0600 in the same call, `O_CREAT|O_EXCL`, never with the umask's mode
   first); it refuses the default place while `secrets.enc` exists (that would create a
   second key that takes over once `TOW_MASTER_KEY_FILE` is removed) and never overwrites a file.
 - `tow keys adopt [--from F]` (default `TOW_MASTER_KEY_FILE`) copies the key into `keys/` only
@@ -82,7 +82,14 @@ task XML, the browser bundle routes).
 
 Permissions (1.21): at the same place `tow.platform.use_private_files()` sets umask 077 on Linux
 and macOS, so data/, logs, temporary files and night copies a TOW process creates are readable by
-the owner's account only (child processes inherit it); Windows keeps the install folder's ACLs.
+the owner's account only (child processes inherit it). Every start then runs
+`tow.platform.private_folders()` on `keys/` and `data/`: a folder this account owns that other
+accounts can open is closed - on Windows its inherited permissions are replaced by this account,
+SYSTEM and Administrators (`icacls /inheritance:r /grant:r`, so an install in `C:\TOW` no longer
+inherits "Authenticated Users: modify" from the drive root), on Linux and macOS it becomes 0700 -
+and read back. A folder that stays open (another account owns it, the change failed) is named on
+stderr and in `tow doctor`; the start goes on. A new key folder is closed the same way, and
+`install.ps1` closes `keys\` and `data\` when it installs.
 
 Python and caches (built, in the launchers and, since 1.21, `update.py`'s `launcher_env`): for a
 runtime install `UV_PYTHON_INSTALL_DIR=<root>/runtime/python`,

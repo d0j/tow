@@ -467,6 +467,10 @@ def _no_real_system_effects(request, monkeypatch):  # noqa: C901 - one guard, ev
             if "schtasks" in joined and "/query" in joined and not kwargs.get("shell"):
                 # Read-only task queries behave as "task absent" instead of reading this machine.
                 raise FileNotFoundError("schtasks is stubbed in tests")
+            if os.path.basename(argv[0]).lower() in {"icacls", "icacls.exe"} and not kwargs.get("shell"):
+                # Windows folder permissions stay as the test made them (tow.platform.private_folders
+                # reads back "still open" and warns); tests/test_private_folders.py fakes icacls.
+                raise FileNotFoundError("icacls is stubbed in tests")
             if is_git(argv[0]) and not kwargs.get("shell"):
                 super().__init__(args, *rest, **kwargs)
                 return

@@ -268,6 +268,7 @@
   },
   "cli": {
     "command_failed": "the command could not be completed; check the settings and try again",
+    "folder_shared": "Warning: other accounts on this computer can open {path}. TOW could not limit it to your account; change the folder's permissions so that only you have access.",
     "password": {
       "prompt": "New TOW password: ",
       "repeat": "Repeat the password: ",
@@ -567,6 +568,7 @@
     "qbit_ping": "torrent client answers: {value}",
     "messengers": "messengers: {value}",
     "topics": "topics: {value}",
+    "open_folders": "WARNING: other accounts on this computer can open: {value} (the master key opens every saved password); allow only your account in the folder's permissions",
     "probe_ok": "ok",
     "probe": "site {tracker} {host}: {result}"
   },
