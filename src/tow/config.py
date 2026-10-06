@@ -190,6 +190,21 @@ def _text_list_field(data: dict[str, Any], key: str, what: str) -> None:
         raise ConfigError(f"config.yaml: {key} must be a list of {what}")
 
 
+def web_address(value: object) -> bool:
+    """An http:// or https:// address with a host: what a site, a mirror or a topic link is.
+    Anything else (javascript:, file:, a bare word, "--switch") is never opened or linked."""
+    from tow.mirrors import origin_key
+
+    return isinstance(value, str) and origin_key(value) is not None
+
+
+def _site_hosts(name: object, spec: dict[str, Any]) -> None:
+    for key in ("fetch_hosts", "login_hosts"):
+        hosts = spec.get(key)
+        if hosts is not None and (not isinstance(hosts, list) or not all(web_address(host) for host in hosts)):
+            raise ConfigError(f"config.yaml: trackers.{name}.{key} must be a list of http:// or https:// addresses")
+
+
 def _validate(data: dict[str, Any]) -> None:
     _int_field(data, "port", 1, 65535)
     _int_field(data, "interval_sec", 60, 7 * 24 * 3600)
@@ -201,6 +216,8 @@ def _validate(data: dict[str, Any]) -> None:
     trackers = data.get("trackers")
     if not isinstance(trackers, dict) or not all(isinstance(spec, dict) for spec in trackers.values()):
         raise ConfigError("config.yaml: trackers must map each site name to its settings")
+    for name, spec in trackers.items():
+        _site_hosts(name, spec)
     if not isinstance(data.get("client"), dict):
         raise ConfigError("config.yaml: client must be a mapping (kind, ...)")
     if "clients" in data and not isinstance(data["clients"], (dict, list)):
