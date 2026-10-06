@@ -881,7 +881,11 @@ def _read_import_transaction(checkpoint: Path, *, bound: bool = True) -> dict[st
         raise ExportImportError("unsupported import transaction")
     if not isinstance(value.get("status"), str) or value["status"] not in {"prepared", "committed", "rolled_back"}:
         raise ExportImportError("invalid import transaction status")
-    if not isinstance(value.get("checkpoint"), str) or (bound and value["checkpoint"] != str(Path(checkpoint))):
+    # Bound by folder name, not by absolute path: a moved install (another drive letter, a
+    # renamed folder, another system) still recovers its own interrupted import.
+    if not isinstance(value.get("checkpoint"), str) or (
+        bound and re.split(r"[\\/]", value["checkpoint"])[-1] != Path(checkpoint).name
+    ):
         raise ExportImportError("import transaction checkpoint mismatch")
     return value
 
@@ -983,15 +987,9 @@ def _read_checkpoint(checkpoint: Path) -> dict[str, Any]:
     for entry in data["targets"]:
         if not isinstance(entry, dict) or entry.get("member") not in expected_targets:
             raise ExportImportError("malformed import checkpoint target")
+        # The member name alone says where a file goes back to; the recorded absolute
+        # "target" is informative only (it changes when the install moves).
         member = str(entry["member"])
-        target_value = entry.get("target")
-        if not isinstance(target_value, str) or not target_value:
-            raise ExportImportError("import checkpoint target is missing")
-        try:
-            if Path(target_value).resolve() != expected_targets[member].resolve():
-                raise ExportImportError(f"import checkpoint target mismatch: {member}")
-        except OSError as exc:
-            raise ExportImportError("import checkpoint target is unsafe") from exc
         exists = entry.get("exists")
         if not isinstance(exists, bool):
             raise ExportImportError("import checkpoint exists flag is invalid")
@@ -1081,11 +1079,6 @@ def _rollback_import(checkpoint: Path, *, apply: bool = False) -> dict[str, Any]
             raise ExportImportError("malformed import checkpoint target")
         member = str(entry["member"])
         target = expected_targets[member]
-        target_value = entry.get("target")
-        if not isinstance(target_value, str) or not target_value:
-            raise ExportImportError("import checkpoint target is missing")
-        if Path(target_value).resolve() != target.resolve():
-            raise ExportImportError(f"import checkpoint target mismatch: {member}")
         backup = checkpoint / "files" / member
         if entry.get("exists"):
             content = _read_limited(backup, label=f"checkpoint {member}")
