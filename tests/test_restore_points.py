@@ -16,6 +16,7 @@ from tow import restore_points
 from tow.bundle import ExportImportError
 from tow.config import load_config, save_config
 from tow.i18n import t
+from tow.paths import tmp_dir
 from tow.restore_points import (
     CREATE_FAILED,
     INVALID_FILE,
@@ -140,7 +141,7 @@ def test_browser_file_export_check_and_restore_round_trip(monkeypatch, tmp_path)
     assert exported.content.startswith(b"{")
     assert ".towx" in exported.headers["content-disposition"]
     assert exported.headers["cache-control"] == "no-store"
-    assert list((tmp_path / "data").glob("tow-browser-export-*")) == []
+    assert list(tmp_dir().glob("tow-browser-export-*")) == []
 
     save_state({"topics": [{"id": "current"}], "mirrors": {}})
     checked = client.post(
@@ -153,7 +154,7 @@ def test_browser_file_export_check_and_restore_round_trip(monkeypatch, tmp_path)
     assert checked.status_code == 303
     assert "можно восстановить" in shown(checked.headers["location"])
     assert load_state()["topics"] == [{"id": "current"}]
-    assert list((tmp_path / "data").glob("tow-browser-import-*")) == []
+    assert list(tmp_dir().glob("tow-browser-import-*")) == []
 
     restored = client.post(
         "/settings/portable/import",
@@ -165,7 +166,7 @@ def test_browser_file_export_check_and_restore_round_trip(monkeypatch, tmp_path)
     assert restored.status_code == 303
     assert "восстановлено из файла" in shown(restored.headers["location"])
     assert load_state()["topics"] == [{"id": "before"}]
-    assert list((tmp_path / "data").glob("tow-browser-import-*")) == []
+    assert list(tmp_dir().glob("tow-browser-import-*")) == []
 
 
 @pytest.mark.parametrize("origin", [None, "null", "https://evil.example"])
@@ -177,7 +178,7 @@ def test_browser_export_rejects_missing_or_foreign_origin(monkeypatch, tmp_path,
     response = client.post("/settings/portable/export", headers=headers)
 
     assert response.status_code == 403
-    assert list((tmp_path / "data").glob("tow-browser-export-*")) == []
+    assert list(tmp_dir().glob("tow-browser-export-*")) == []
 
 
 def test_browser_export_is_post_only(monkeypatch, tmp_path):
@@ -191,14 +192,21 @@ def test_browser_export_is_post_only(monkeypatch, tmp_path):
 @pytest.mark.parametrize("error", [RestorePointError("broken bundle"), OSError("disk full")])
 def test_browser_export_failure_cleans_temporary_directory(monkeypatch, tmp_path, error):
     _seed(monkeypatch, tmp_path)
-    monkeypatch.setattr("tow.web.services.export_portable_bundle", lambda _path: (_ for _ in ()).throw(error))
+    outputs = []
+
+    def export(path):
+        outputs.append(path)
+        raise error
+
+    monkeypatch.setattr("tow.web.services.export_portable_bundle", export)
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
 
     response = client.post("/settings/portable/export", follow_redirects=False)
 
     assert response.status_code == 303
     assert "не удалось сохранить файл" in shown(response.headers["location"])
-    assert list((tmp_path / "data").glob("tow-browser-export-*")) == []
+    assert outputs[0].parent.parent.resolve() == tmp_dir().resolve()  # TOW's temp folder, not data/
+    assert list(tmp_dir().glob("tow-browser-export-*")) == []
 
 
 def test_browser_rejects_tampered_file_without_state_change(monkeypatch, tmp_path):
@@ -269,7 +277,7 @@ def test_browser_import_reports_preparation_failure_without_changing_data(
     assert response.status_code == 303
     assert t("web.settings.file_stage_failed", language) in shown(response.headers["location"])
     assert all(path.read_bytes() == content for path, content in before.items())
-    assert list((tmp_path / "data").glob("tow-browser-import-*")) == []
+    assert list(tmp_dir().glob("tow-browser-import-*")) == []
 
 
 def test_browser_import_cleans_staged_file_when_upload_close_fails(monkeypatch, tmp_path):
@@ -289,7 +297,7 @@ def test_browser_import_cleans_staged_file_when_upload_close_fails(monkeypatch, 
     with pytest.raises(OSError, match="synthetic close failure"):
         asyncio.run(settings_portable_import(upload, "check"))
 
-    assert list((tmp_path / "data").glob("tow-browser-import-*")) == []
+    assert list(tmp_dir().glob("tow-browser-import-*")) == []
     assert load_state()["topics"] == [{"id": "before"}]
     upload.file.close()
 
@@ -306,7 +314,7 @@ def test_browser_import_never_uses_the_uploaded_filename_as_a_path(monkeypatch, 
         seen.append(path)
         assert path.name == "uploaded.towx"
         assert path.parent.name.startswith("tow-browser-import-")
-        assert path.parent.parent.resolve() == (tmp_path / "data").resolve()
+        assert path.parent.parent.resolve() == tmp_dir().resolve()
         return {"safety_point": "synthetic-point"}
 
     monkeypatch.setattr("tow.web.services.check_portable_bundle", inspect_staging)
@@ -322,7 +330,7 @@ def test_browser_import_never_uses_the_uploaded_filename_as_a_path(monkeypatch, 
 
     assert response.status_code == 303
     assert len(seen) == 1
-    assert list((tmp_path / "data").glob("tow-browser-import-*")) == []
+    assert list(tmp_dir().glob("tow-browser-import-*")) == []
     assert load_state()["topics"] == [{"id": "before"}]
 
 
