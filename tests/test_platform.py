@@ -83,6 +83,21 @@ def test_links_and_reparse_points_are_never_plain_files_or_folders(mode, attribu
     assert platform.is_plain_file(SimpleNamespace(st_mode=mode)) is (mode == stat.S_IFREG)  # type: ignore[arg-type]
 
 
+def test_the_account_is_named_by_the_session_and_numbered_only_on_posix(monkeypatch):
+    monkeypatch.delenv("USER", raising=False)
+    monkeypatch.setenv("USERNAME", "owner")
+    assert platform.user_name() == "owner"  # Windows names it USERNAME
+    monkeypatch.setenv("USER", "posix-owner")
+    assert platform.user_name() == "posix-owner"
+    monkeypatch.delenv("USER")
+    monkeypatch.delenv("USERNAME")
+    assert platform.user_name() == ""
+    monkeypatch.setattr(os, "getuid", lambda: 1000, raising=False)
+    assert platform.user_id() == 1000
+    monkeypatch.delattr(os, "getuid")
+    assert platform.user_id() == 0  # Windows has no numeric user id
+
+
 def test_a_real_file_folder_and_link_are_told_apart(tmp_path):
     (tmp_path / "file").write_text("x", encoding="utf-8")
     (tmp_path / "folder").mkdir()

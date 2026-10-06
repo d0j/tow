@@ -432,6 +432,15 @@ def test_each_os_gets_its_backend(install):
     assert platform_name() in {"windows", "linux", "macos"}
     current = Install.current()
     assert current.is_runtime is False  # tests run from a development checkout
+    from tow import paths
+    from tow import platform as tow_platform
+
+    # The owner's home and account come from tow.paths and tow.platform, like every location.
+    assert (current.home, current.uid, current.user) == (
+        paths.user_home(),
+        tow_platform.user_id(),
+        tow_platform.user_name(),
+    )
 
 
 def test_the_default_runner_never_raises(monkeypatch):

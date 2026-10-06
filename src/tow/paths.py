@@ -112,10 +112,37 @@ def key_file() -> Path:
     return keys_dir() / "master.key"
 
 
+def explicit_key_file() -> Path | None:
+    """``TOW_MASTER_KEY_FILE``: an absolute path as given, a relative one inside the data folder;
+    None when it is not set. Raises ValueError for a relative path that leads out of data/."""
+    value = os.environ.get("TOW_MASTER_KEY_FILE", "").strip()
+    if not value:
+        return None
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    if path.anchor:  # C:key or \key: relative to something other than data/
+        raise ValueError("TOW_MASTER_KEY_FILE leads out of the data folder")
+    try:
+        base = data_dir().resolve()
+        resolved = (base / path).resolve()
+    except (OSError, RuntimeError) as exc:
+        raise ValueError("TOW_MASTER_KEY_FILE cannot be resolved") from exc
+    if not resolved.is_relative_to(base):
+        raise ValueError("TOW_MASTER_KEY_FILE leads out of the data folder")
+    return resolved
+
+
 def legacy_key_file() -> Path:
     """``<data>/master.key``: where installs before 1.18 kept the master key. Used only while
     ``key_file()`` does not exist (tow.store); ``tow keys adopt`` moves it into keys/."""
     return data_dir() / "master.key"
+
+
+def user_home() -> Path:
+    """The owner's home folder. TOW writes there only the autostart entry (systemd user unit,
+    LaunchAgent), and only on request; everything else stays inside the root."""
+    return Path.home()
 
 
 def launcher(*, windows: bool) -> str:

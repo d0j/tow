@@ -62,7 +62,7 @@ def _runtime_app() -> Path:
     app = repo_root().resolve()
     if app != (root() / "app").resolve() or not (app / "scripts" / "update.py").is_file():
         raise WebUpdateError("releases.not_runtime")
-    if platform.current().name != "windows" and os.environ.get("TOW_AUTOSTART") in {"systemd", "launchd"}:
+    if not platform.is_windows() and os.environ.get("TOW_AUTOSTART") in {"systemd", "launchd"}:
         raise WebUpdateError("releases.detached_unavailable")
     return app
 

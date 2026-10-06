@@ -93,6 +93,20 @@ def test_folders_outside_data_are_not_created_by_asking(monkeypatch, tmp_path):
     assert paths.run_dir().is_dir()
 
 
+def test_an_explicit_key_file_is_absolute_or_inside_the_data_folder(monkeypatch, tmp_path):
+    monkeypatch.setenv("TOW_HOME", str(tmp_path / "data"))
+    monkeypatch.delenv("TOW_MASTER_KEY_FILE", raising=False)
+    assert paths.explicit_key_file() is None
+    monkeypatch.setenv("TOW_MASTER_KEY_FILE", str(tmp_path / "elsewhere" / "master.key"))
+    assert paths.explicit_key_file() == tmp_path / "elsewhere" / "master.key"
+    monkeypatch.setenv("TOW_MASTER_KEY_FILE", "keys/master.key")
+    assert paths.explicit_key_file() == (tmp_path / "data" / "keys" / "master.key").resolve()
+    for outside in ("../master.key", "keys/../../master.key"):
+        monkeypatch.setenv("TOW_MASTER_KEY_FILE", outside)
+        with pytest.raises(ValueError, match="out of the data folder"):
+            paths.explicit_key_file()
+
+
 def test_private_temp_moves_tempfile_and_child_processes_into_the_data_folder(monkeypatch, tmp_path):
     folder = paths.use_private_temp()
 
