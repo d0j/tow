@@ -125,12 +125,12 @@ def test_the_reminder_never_reveals_the_password():
         data={"lan_password": "secret-word-1", "lan_password2": "secret-word-1", "hint": "it is SECRET-word-1 ok"},
         follow_redirects=False,
     )
-    assert "подсказка не должна содержать сам пароль" in _flash(in_new)
+    assert "подсказка не должна содержать пароль" in _flash(in_new)
     assert "lan_auth" not in load_secrets()
 
     _with_password("old-horse-battery")
     only_hint = local.post("/settings/password", data={"hint": "is old-horse-battery"}, follow_redirects=False)
-    assert "подсказка не должна содержать сам пароль" in _flash(only_hint)
+    assert "подсказка не должна содержать пароль" in _flash(only_hint)
     assert password_hint(load_secrets()["lan_auth"]) == ""
 
     too_long = local.post("/settings/password", data={"hint": "x" * 121}, follow_redirects=False)

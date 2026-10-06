@@ -44,7 +44,7 @@
       "one": "the reminder must be at most {n} character",
       "other": "the reminder must be at most {n} characters"
     },
-    "hint_reveals_password": "the reminder must not contain the password itself — anyone on the network can read it",
+    "hint_reveals_password": "the reminder must not contain the password or a part of it — anyone on the network can read it",
     "record_invalid": "the saved password is damaged — set a new one on this computer",
     "token_file_missing": "the network access key file is missing",
     "token_file_unreadable": "the network access key file cannot be read",
