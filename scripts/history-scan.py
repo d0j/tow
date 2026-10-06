@@ -6,6 +6,24 @@ Exit 0: complete, no candidates; 1: complete, review candidates; 2: incomplete/r
 This is a pattern diagnostic, not proof that arbitrary secrets are absent.
 
     uv run --frozen python scripts/history-scan.py --repo <public-clone>
+
+Run it on a separate complete clone holding only the public refs to inspect (not a development
+checkout with private backups). It reads local blobs reachable from all refs and HEAD, binary
+content included, and checks every name in the historical raw diffs. It does not fetch missing
+objects, apply filters, honour replacement objects, rewrite refs or inspect untracked files.
+Metadata logs disable signature verification, mailmaps and display settings: the configured
+signature verifier is not launched and author names are not mapped. Unreachable or reflog-only
+objects and arbitrary secret formats are outside its claim. Exit 1 includes synthetic test data
+that needs review.
+
+Budgets: a blob larger than --max-blob-bytes is listed and makes the scan incomplete; each
+pattern operation has two seconds (the locked `regex` dependency in compatibility mode); Git
+metadata and reader calls have 120 seconds. An exceeded budget or a native failure is never a
+clean result. Raw matches, author email addresses and native error details are not printed;
+path hints are redacted and escaped; match totals count each blob once, even with aliases.
+
+Needs Git 2.36 or later (`cat-file --batch-command`): an unsupported command is an incomplete
+scan, not an empty history. https://git-scm.com/docs/git-cat-file#_batch_output
 """
 
 import argparse
@@ -305,9 +323,14 @@ def positive_int(value):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repo", type=Path, default=REPO)
-    parser.add_argument("--max-blob-bytes", type=positive_int, default=MAX_BLOB_BYTES)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--repo", type=Path, default=REPO, help="the clone to scan (default: this checkout)")
+    parser.add_argument(
+        "--max-blob-bytes",
+        type=positive_int,
+        default=MAX_BLOB_BYTES,
+        help=f"per-blob memory budget (default {MAX_BLOB_BYTES:,}); larger blobs make the scan incomplete",
+    )
     args = parser.parse_args(argv)
     try:
         return scan(args.repo, args.max_blob_bytes)

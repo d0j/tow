@@ -72,49 +72,35 @@ Linux checks and installer smoke tests run on both Ubuntu 24.04 and 26.04. The l
 - Keep pull requests small and focused; fill in the template. Do not include personal data in code, tests,
   screenshots or logs.
 
-By contributing you agree that your contribution is licensed under the [MIT License](LICENSE).
-
 ## Publishing a release
 
-Before a public-history audit, use a separate complete clone containing only the
-public refs you intend to inspect (not a development checkout with private backups):
+The release commit (version in `pyproject.toml`, changelogs) has the subject `release: vX.Y.Z - <summary>`.
+Pull requests that touch the installers, the updater or the dependencies also run the `installers`
+workflow: the Windows bundle and `install.ps1`, and the update of the latest release to the pull request
+(`scripts/update-smoke.py`: a broken copy must roll back, then the real update) on Windows and Linux.
 
-```sh
-uv run --frozen python scripts/history-scan.py --repo /path/to/public-clone
-```
-
-The diagnostic reads local blobs reachable from all refs and HEAD, including binary
-content, and checks all names in historical raw diffs. It does not fetch missing
-objects, apply filters, honour replacement objects, rewrite refs or inspect untracked
-files. Metadata logs disable signature verification, mailmaps and display settings;
-the diagnostic does not launch the configured signature verifier or map author names.
-Unreachable/reflog-only objects and arbitrary secret formats are outside its
-claim. Author and committer e-mails other than GitHub's noreply addresses are
-counted (never printed) and need review too. Exit codes: **0** complete with no pattern candidates; **1** complete with
-candidates requiring review (including synthetic test data); **2** incomplete or
-refused. A complete scan is not proof that every possible secret is absent.
-
-The default per-blob memory budget is 5,000,000 bytes. Larger objects are listed and
-make the result incomplete; increase `--max-blob-bytes` explicitly to inspect them.
-Pattern operations have a two-second limit and use the existing locked `regex`
-dependency in compatibility mode. Git metadata/reader deadlines are 120 seconds.
-Exceeded budgets or native failures never become a clean result; raw matches,
-author email addresses and native error details are not printed. Path hints are
-redacted and escaped; match totals count each blob once, even when it has aliases.
-
-Git 2.36 or later is needed for `cat-file --batch-command`; an unsupported command
-is an incomplete scan, not an empty history. Protocol reference:
-[Git batch output](https://git-scm.com/docs/git-cat-file#_batch_output).
-
-Merge the gated release commit through a pull request, fetch `origin/main`, and create an annotated
-`vX.Y.Z` tag on that commit (matching `pyproject.toml`). Publish it with:
+Merge the release commit through a pull request and wait for `ci` on `main`. Fetch `origin/main` and create
+an annotated tag on the merge commit with the message `TOW X.Y.Z`
+(`git tag -a vX.Y.Z -m "TOW X.Y.Z" origin/main`). Publish it with:
 
 ```sh
 uv run --frozen python scripts/publish-release.py vX.Y.Z
 ```
 
-When a `backup` remote is configured, this first atomically synchronizes its `main` and the release tag,
-then confirms both by reading them back. Only then is the tag sent to `origin`; existing remote history
-is never overwritten. The post-commit mirror alone is not enough: it cannot copy a later GitHub merge
-or a tag created after the commit. Git's full pre-push gate still applies. Wait for the release workflow
-and its installer checks to finish before updating a runtime installation.
+It refuses a tag that is not annotated, whose message is not `TOW X.Y.Z`, that does not match
+`pyproject.toml`, that is not on `origin/main`, or that has no release commit. When a `backup` remote is
+configured, it first atomically synchronizes its `main` and the release tag, then confirms both by reading
+them back. Only then is the tag sent to `origin`; existing remote history is never overwritten. The
+post-commit mirror alone is not enough: it cannot copy a later GitHub merge or a tag created after the
+commit. Git's full pre-push gate still applies.
+
+The release workflow does not run the gate again: it requires the tag on `origin/main` and a passed `ci`
+run of its commit, builds and tests the bundle and the installers, updates the latest release to the tag,
+then uploads everything to a draft release, reads it back and only then publishes it. Wait for it to
+finish before updating a runtime installation.
+
+Before a public-history audit, scan a separate complete clone holding only the public refs
+(`uv run --frozen python scripts/history-scan.py --repo /path/to/public-clone`); exit 0 is a complete
+scan without candidates, 1 needs review, 2 is incomplete. What it covers and its budgets: `--help`.
+
+By contributing you agree that your contribution is licensed under the [MIT License](LICENSE).
