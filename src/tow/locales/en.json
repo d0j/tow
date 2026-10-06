@@ -878,7 +878,8 @@
       "exists": "already added: {name}",
       "can_save_login": "you can save the login",
       "filled": "filled in {name}",
-      "need_login": "a login is needed"
+      "need_login": "a login is needed",
+      "kept_typed": "Fields you had filled in yourself were kept."
     },
     "settings": {
       "save_first": "Save the changes first",

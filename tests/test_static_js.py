@@ -56,6 +56,15 @@ def test_web_update_confirmation_lost_response_rollback_and_offline():
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_a_pasted_site_link_never_overwrites_what_the_owner_typed():
+    script = Path(__file__).parent / "js" / "site_guess_fill.mjs"
+    result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=30, check=True)
+    verdict = json.loads(result.stdout.strip().splitlines()[-1])
+    assert all(verdict.values()), verdict
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_home_countdown_polls_with_backoff_and_never_in_a_hidden_tab():
     # F6: /health.json was polled every 5 s forever while a check was overdue, in every tab.
     script = Path(__file__).parent / "js" / "clock_poll.mjs"
