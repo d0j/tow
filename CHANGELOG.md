@@ -9,6 +9,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Diagnostics refresh local Python, topic counts, connection settings and autostart
+  after updates or edits, without rerunning network probes, writing state or clearing
+  previously observed client/site failures.
 - Early web refusals carry the same security headers as normal responses. HTTP
   errors are not cached; missing versioned assets no longer get immutable caching.
   Successful downloads and revalidation keep their cache policy. Network permissions,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 from urllib.parse import urljoin
 
@@ -81,7 +82,12 @@ def doctor_report(*, probe: bool = True, names: list[str] | None = None) -> dict
     if not probe:
         cached = state.get("doctor")
         if isinstance(cached, dict) and cached.get("probes") is not None:
-            return cached
+            report = deepcopy(cached)
+            inventory = _inventory(load_config(), load_secrets(), state)
+            # Only network observations are cached. Local facts can change after an
+            # update or settings edit without a new client/site probe.
+            report.update({key: value for key, value in inventory.items() if key not in {"qbit", "probes", "ok"}})
+            return report
         cfg = load_config()
         return _inventory(cfg, load_secrets(), state)
     cfg = load_config()
