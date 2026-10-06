@@ -528,7 +528,10 @@ Night-copy and before-restore cleanup is best effort, separate from the verified
 restore. Only confirmed removals count as pruned. A held file, inaccessible directory or uncertain
 read-back shows a cleanup warning; it does not turn a usable new copy or completed restore into a
 failure. Ownership manifests/journals remain until the final directory step so interrupted cleanup
-can be retried. Foreign members, links, junctions and unfinished restores are kept. Settings shows
+can be retried. Foreign members, links, junctions and unfinished restores are kept. A partial copy
+(`.tow-<time>.partial`) that a crash, a power loss or the 30-minute job limit left behind is removed by the
+next copy when it carries this install's signed proof; one without it (another install, an earlier version)
+is kept. Settings shows
 pending night cleanup even with the section collapsed; CLI output and history retain the warning.
 The watchdog sends separate cleanup-pending and cleanup-complete messenger alerts once per state
 change; a usable copy with pending cleanup remains healthy rather than becoming a failed backup.
