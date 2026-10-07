@@ -133,7 +133,7 @@ class FakeClient:
 
 def _use_client(monkeypatch, fake: FakeClient) -> None:
     monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *_a, **_k: fake)
-    monkeypatch.setattr("tow.check.RELOCATION_WAIT_SEC", 0.0)
+    monkeypatch.setattr("tow.check.client_ops.RELOCATION_WAIT_SEC", 0.0)
 
 
 # --------------------------------------------------------------------------- login

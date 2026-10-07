@@ -917,7 +917,7 @@ def test_edit_path_moves_in_client(monkeypatch):
 
 def test_edit_path_records_move_in_progress(monkeypatch):
     monkeypatch.setattr("tow.web.services.run_check", lambda **kw: {"qbit": "ok", "results": []})
-    monkeypatch.setattr("tow.check.RELOCATION_WAIT_SEC", 0.0)
+    monkeypatch.setattr("tow.check.client_ops.RELOCATION_WAIT_SEC", 0.0)
 
     class MovingClient:
         def set_location(self, infohash: str, save_path: str) -> str:
