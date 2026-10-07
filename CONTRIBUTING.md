@@ -30,8 +30,9 @@ pwsh scripts/gate.ps1 -Quick     # without the test run and the wheel (the tests
 pwsh scripts/gate.ps1 -Staged    # only what the next commit contains
 ```
 
-The hooks run it for you: **pre-commit** runs `-Staged`, **pre-push** requires the full gate on exactly the content
-being pushed. CI runs the same gate on Windows, Linux and macOS.
+The hooks run it for you: **pre-commit** runs `-Staged`, **post-rewrite** runs `-Quick` after an amend or a
+rebase (git ignores its result, so it can only warn, loudly), **pre-push** requires the full gate on exactly the
+content being pushed. CI runs the same gate on Windows, Linux and macOS.
 
 Linux checks and installer smoke tests run on both Ubuntu 24.04 and 26.04. The legacy
 `ubuntu-latest` check name is retained for branch protection, but its runner is explicitly
