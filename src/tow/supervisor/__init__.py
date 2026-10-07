@@ -228,6 +228,7 @@ def default_deps() -> Deps:
         port_owner=lambda port: platform.current().port_owner(port),
         stop_pid=_stop_pid,
         own_server=lambda port: healthy(port, install=layout.install_id()),
+        tow_server=healthy,
     )
 
 

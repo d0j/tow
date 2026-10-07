@@ -668,6 +668,17 @@ def _cmd_run(_args: argparse.Namespace) -> int:
     return run_supervisor()
 
 
+def _says_port_busy(line: str, port: int) -> bool:
+    """``line`` is `tow run`'s refusal of a taken port, in any language it may have used."""
+    from tow import i18n
+
+    return any(
+        i18n.translate(key, lang, port=port) in line
+        for key in ("supervisor.port_busy", "supervisor.port_busy_tow")
+        for lang in i18n.codes()
+    )
+
+
 def _cmd_start(args: argparse.Namespace) -> int:
     """`tow run` in the background (unless it runs) and its page in the browser: the start files
     of every install run this. TOW_NO_BROWSER=1 (tests, a server) never opens a browser."""
@@ -686,9 +697,11 @@ def _cmd_start(args: argparse.Namespace) -> int:
     logs = layout.logs_dir()
     if result["state"] == "exited":
         # The reason itself, here: the start window says "the reason is above".
-        for line in starter.output_since(written):
+        lines = starter.output_since(written)
+        for line in lines:
             print(line)
-        print(t("cli.start.exited", log=logs / "run.log", stderr=starter.stderr_log()))
+        if not any(_says_port_busy(line, port) for line in lines):  # that one says all there is
+            print(t("cli.start.exited", log=logs / "run.log", stderr=starter.stderr_log()))
         return EXIT_CANNOT_RUN
     if result["state"] == "timeout":
         print(t("cli.start.timeout", seconds=int(args.wait), log=logs / "run.log"))

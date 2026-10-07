@@ -211,6 +211,29 @@ def test_a_tow_run_that_ended_says_why_in_the_window(monkeypatch, capsys):
     assert starter.output_since(10**9) == []
 
 
+@pytest.mark.parametrize("key", ["supervisor.port_busy", "supervisor.port_busy_tow"])
+@pytest.mark.parametrize("lang", ["en", "ru"])
+def test_a_taken_port_is_said_once(monkeypatch, capsys, key, lang):
+    """Round-3 audit: the refusal was followed by "TOW stopped right after it started. The
+    reason is in run.log" - the reason was the line just above."""
+    from tow.i18n import t
+
+    refusal = t(key, lang, port=8787)
+    log = starter.stderr_log()
+    log.parent.mkdir(parents=True, exist_ok=True)
+
+    def ended(port, *, wait, browser):
+        with log.open("a", encoding="utf-8") as handle:
+            handle.write(f"2026-10-08 10:00:00,000 ERROR {refusal}\n")
+        return {"ok": False, "state": "exited", "url": "", "pid": 1, "browser": False}
+
+    monkeypatch.setattr(starter, "start", ended)
+    assert cli.main(["start"]) == 3
+    out = capsys.readouterr().out
+    assert refusal in out
+    assert "run.log" not in out
+
+
 @pytest.mark.parametrize("state", ["exited", "timeout"])
 def test_a_failed_start_names_the_log(monkeypatch, capsys, state):
     seen: dict[str, Any] = {}
