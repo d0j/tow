@@ -53,10 +53,19 @@ def html_text(response: Any) -> str:
     return bytes(content).decode("cp1251", errors="replace")
 
 
-def is_cloudflare(status: int, text: str) -> bool:
-    if status in (403, 503) and "just a moment" in text[:4000].lower():
+def is_cloudflare(status: int, text: str, headers: Any = None) -> bool:
+    """A Cloudflare check page instead of the answer. Newer checks also come with status 200.
+
+    Only the check page's own marks count: Cloudflare puts its ``challenge-platform`` script
+    into ordinary pages of the sites it protects too."""
+    if str((headers or {}).get("cf-mitigated") or "").lower() == "challenge":
         return True
-    return "cf-challenge" in text[:4000].lower()
+    head = text[:65536].lower()
+    if "_cf_chl_opt" in head or "cf-challenge" in head[:4000]:
+        return True
+    if "just a moment" not in head[:4000]:
+        return False
+    return status in (403, 503) or "challenge-platform" in head
 
 
 def client(

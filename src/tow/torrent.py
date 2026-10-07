@@ -226,7 +226,6 @@ def _raw_info_span(data: bytes) -> tuple[dict[bytes, Any], dict[bytes, Any], int
     if data[:1] != b"d":
         raise ValueError("torrent root must be a dictionary")
     root: dict[bytes, Any] = {}
-    previous: bytes | None = None
     info_start = info_end = -1
     pos = 1
     while True:
@@ -236,9 +235,10 @@ def _raw_info_span(data: bytes) -> tuple[dict[bytes, Any], dict[bytes, Any], int
             pos += 1
             break
         key, pos = decoder._string(pos)
-        if previous is not None and key <= previous:
-            raise ValueError("duplicate or unsorted torrent root key")
-        previous = key
+        # Unsorted keys at the top level do not change the info hash, and clients load such
+        # files (announce after info); only a repeated key leaves it unclear which one counts.
+        if key in root:
+            raise ValueError("duplicate torrent root key")
         start = pos
         value, pos = decoder.parse(pos, 1)
         if key == b"info":
@@ -543,15 +543,11 @@ def looks_like_torrent(data: bytes) -> bool:
     HTML login page ("нужен вход").
     """
     try:
-        decoded, end = _Decoder(data).parse()
+        _root, info, _start, _end = _raw_info_span(data)
     except TypeError, ValueError, RecursionError:
         return False
-    if end != len(data) or not isinstance(decoded, dict):
-        return False
-    info = decoded.get(b"info")
     return (
-        isinstance(info, dict)
-        and isinstance(info.get(b"name"), bytes)
+        isinstance(info.get(b"name"), bytes)
         and isinstance(info.get(b"piece length"), int)
         and (isinstance(info.get(b"pieces"), bytes) or isinstance(info.get(b"file tree"), dict))
     )
@@ -565,8 +561,11 @@ def is_download_limit(data: bytes) -> bool:
         except UnicodeDecodeError:
             continue
         low = t.lower()
-        if "торрент-файл" in low and ("сутки" in low or "скачали сегодня" in low or "недоступен" in low):
+        # Kinozal: "Вам недоступен торрент-файл для скачивания. Вы скачали сегодня (20)". Only
+        # the limit's own words: a footer's "Количество торрентов" or "торрент-файл недоступен"
+        # of a closed topic are not a limit (asked only of sites with ``download_limit``).
+        if "торрент-файл" in low and ("сутки" in low or "скачали сегодня" in low):
             return True
-        if "количество торрент" in low:
+        if "количество торрент" in low and "исчерпан" in low:
             return True
     return False

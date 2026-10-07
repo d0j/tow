@@ -301,7 +301,12 @@ def test_quota_takes_precedence_over_earlier_auth(monkeypatch, tmp_path):
     monkeypatch.setattr(thttp, "client", lambda **_kwargs: Client())
     with pytest.raises(MirrorFetchError, match="лимит") as error:
         pick_and_get(
-            "demo", ["https://login.example", "https://quota.example"], "/file", ok=lambda _r: False, persist=False
+            "demo",
+            ["https://login.example", "https://quota.example"],
+            "/file",
+            ok=lambda _r: False,
+            persist=False,
+            download_limit=True,
         )
     assert error.value.failure == "quota"
     assert error.value.error_class == "quota"

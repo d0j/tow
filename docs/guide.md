@@ -142,7 +142,9 @@ manual checks and progress observations do not reset it.
   tomorrow and does not try other mirrors (they share the limit).
 - **Sign-in.** Sites that need it get a login and password on **Sites**, stored encrypted. A site that only allows
   signing in through a browser (NNM-Club) opens a browser window (Chrome, Chromium or Edge) on the computer
-  running TOW; the session is saved after you sign in.
+  running TOW; the session is saved after you sign in. When the saved session has expired (the site answers with a
+  page instead of the `.torrent`, or shows the topic without its download link), TOW signs in again with the saved
+  password: scheduled checks at most once in ten minutes per site, the row's ↻ every time.
 - **Site pause** stops scheduled checks of every topic on that site.
 
 ## Notifications

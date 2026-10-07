@@ -15,7 +15,15 @@ from tow import http as thttp
 from tow.config import as_bool, load_config
 from tow.errors import Msg, TowError
 from tow.jsonish import as_dict
-from tow.mirrors import MirrorFetchError, has_available_host, origin_key, pick_and_get
+from tow.mirrors import (
+    MirrorFetchError,
+    has_available_host,
+    login_recent,
+    note_login,
+    origin_key,
+    pick_and_get,
+    says_topic_removed,
+)
 from tow.store import load_secrets, persistence_lock, save_secrets
 from tow.title import title_from_html
 from tow.torrent import is_download_limit, looks_like_torrent, parse_magnet_hashes
@@ -29,6 +37,28 @@ MAX_URL_REGEX_SECONDS = 0.5
 MAX_PAGE_REGEX_SECONDS = 2.0
 _COOKIE_NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
 _SECRET_METADATA_KEYS = {"username", "password", "cookies_by_origin", "browser_user_agent"}
+# What a topic page shown to a guest (no session) has: a sign-in form, link or request.
+_GUEST_MARKS = re.compile(
+    r"""type\s*=\s*["']?password|login\.php|войдите|авторизуйтесь|зарегистрируйтесь|sign in|log in""",
+    re.IGNORECASE,
+)
+# Page titles of a sign-in page (a site showing it instead of the topic).
+_SIGN_IN_TITLES = frozenset(
+    {"вход", "войти", "вход на сайт", "авторизация", "login", "log in", "sign in", "authorization"}
+)
+
+
+def guest_page(page: str) -> bool:
+    """A page as a guest sees it: it asks to sign in and has no way to sign out."""
+    head = page[:MAX_DOWNLOAD_PAGE_CHARS]
+    return "logout" not in head.casefold() and bool(_GUEST_MARKS.search(head))
+
+
+def sign_in_page(page: str, title: str) -> bool:
+    """The site's sign-in page, not a topic: a password field under a sign-in title."""
+    return title.strip().casefold() in _SIGN_IN_TITLES and bool(
+        re.search(r"""type\s*=\s*["']?password""", page[:MAX_DOWNLOAD_PAGE_CHARS], re.IGNORECASE)
+    )
 
 
 def magnet_infohash(value: str) -> str | None:
@@ -209,6 +239,12 @@ class GenericHttpTracker:
             return self._cookie_jar(secrets)
         if not path.startswith("/") or path.startswith("//") or "\\" in path:
             raise TrackerSettingError("tracker.bad_login_path", prefix=self.name)
+        if persist and not ignore_cool and login_recent(self.name):
+            # Tried a moment ago (by this check or an earlier one): what that saved is used and
+            # the password is not sent again. A check the owner starts (ignore_cool) logs in.
+            return self._cookie_jar(load_secrets())
+        if persist:
+            note_login(self.name)
         form = login_form_data(self.spec, user, pw)
         pw_field = str((self.spec.get("login_form") or {}).get("pw_field") or "password")
         scoped = {}
@@ -256,10 +292,16 @@ class GenericHttpTracker:
         rx = self.spec.get("download_href_regex") or r"(?:download|dl)\.php\?(?:id|t)=(\d+)"
         pattern = validate_tracker_regex(rx, label="download", flags=re.IGNORECASE)
         try:
-            m = pattern.search(html[:MAX_DOWNLOAD_PAGE_CHARS], timeout=MAX_PAGE_REGEX_SECONDS)
+            found = dict.fromkeys(
+                m.group(1) for m in pattern.finditer(html[:MAX_DOWNLOAD_PAGE_CHARS], timeout=MAX_PAGE_REGEX_SECONDS)
+            )
         except TimeoutError as exc:
             raise TrackerSettingError("tracker.regex_timeout", what=Msg("tracker.regex_label_download")) from exc
-        return m.group(1) if m else None
+        if len(found) > 1:
+            # The description may link another topic's torrent (an earlier season): the first
+            # link on the page is not necessarily this topic's own.
+            raise TrackerError("tracker.download_link_ambiguous", prefix=self.name)
+        return next(iter(found), None)
 
     def _page_magnet(self, page: str) -> tuple[str, str] | None:
         candidates: dict[tuple[frozenset[str], frozenset[str]], tuple[str, str]] = {}
@@ -295,24 +337,40 @@ class GenericHttpTracker:
             "max_bytes": (thttp.MAX_TORRENT_RESPONSE_BYTES if torrent_only else thttp.MAX_HTML_RESPONSE_BYTES),
             "allowed_redirect_origins": (list(self.spec.get("download_redirect_hosts") or []) if torrent_only else []),
             "public_only": not as_bool(load_config().get("allow_private_tracker_hosts")),
+            "download_limit": torrent_only and as_bool(self.spec.get("download_limit")),
         }
         try:
             return pick_and_get(self.name, hosts, path, **kw)
         except MirrorFetchError as exc:
-            creds = (secrets.get("trackers") or {}).get(self.name) or {}
-            if (
-                exc.failure != "auth"
-                or not persist
-                or self.spec.get("browser_auth")
-                or not (creds.get("username") and creds.get("password"))
-                or not (self.spec.get("login_path") and self.spec.get("login_hosts"))
-            ):
+            if exc.failure != "auth":
                 raise
-            refreshed = self._login(secrets, ua, persist=True, ignore_cool=ignore_cool)
-            if refreshed == (cookies or {}):
+            refreshed = self._relogin(secrets, ua, cookies, ignore_cool=ignore_cool, persist=persist)
+            if refreshed is None:
                 raise
             kw["cookies"] = refreshed or None
             return pick_and_get(self.name, hosts, path, **kw)
+
+    def _relogin(
+        self,
+        secrets: dict[str, Any],
+        ua: str | None,
+        cookies: dict[str, dict[str, str]] | None,
+        *,
+        ignore_cool: bool,
+        persist: bool,
+    ) -> dict[str, dict[str, str]] | None:
+        """The site refused the session: log in again with the saved password. None when that
+        is not possible here (a preview, no password, a browser login) or gives nothing new."""
+        creds = (secrets.get("trackers") or {}).get(self.name) or {}
+        if (
+            not persist
+            or self.spec.get("browser_auth")
+            or not (creds.get("username") and creds.get("password"))
+            or not (self.spec.get("login_path") and self.spec.get("login_hosts"))
+        ):
+            return None
+        refreshed = self._login(secrets, ua, persist=True, ignore_cool=ignore_cool)
+        return None if refreshed == (cookies or {}) else refreshed
 
     def fetch_torrent(
         self,
@@ -338,7 +396,40 @@ class GenericHttpTracker:
         ):
             cookies = self._login(secrets, ua, persist=persist, ignore_cool=ignore_cool)
         if self.spec.get("page_download"):
-            topic_path = str(self.spec.get("topic_path") or "/forum/viewtopic.php?t={id}").format(id=tid)
+            dlid, cookies = self._download_id_from_page(
+                tid, hosts, secrets, ua, cookies, ignore_cool=ignore_cool, persist=persist
+            )
+            path = str(self.spec.get("download_path") or "/forum/download.php?id={id}").format(id=dlid)
+        else:
+            path = str(self.spec.get("download_path") or "/download/{id}").format(id=tid)
+        r, _host = self._get(
+            hosts, path, secrets, ua, cookies, torrent_only=True, ignore_cool=ignore_cool, persist=persist
+        )
+        if not looks_like_torrent(r.content):
+            if as_bool(self.spec.get("download_limit")) and is_download_limit(r.content):
+                raise TrackerError("mirrors.tracker_daily_limit", tracker=self.name)
+            raise TrackerError("tracker.not_torrent", prefix=self.name)
+        return r.content
+
+    def _download_id_from_page(
+        self,
+        tid: str,
+        hosts: list[str],
+        secrets: dict[str, Any],
+        ua: str | None,
+        cookies: dict[str, dict[str, str]],
+        *,
+        ignore_cool: bool,
+        persist: bool,
+    ) -> tuple[str, dict[str, dict[str, str]]]:
+        """The torrent's id from the topic page (TorrentPier forums: tapochek, unionpeer), and
+        the cookies to download it with.
+
+        These sites show an expired session the page as to a guest - 200, without the download
+        link - so that page counts as a refused session: the saved password logs in once more."""
+        topic_path = str(self.spec.get("topic_path") or "/forum/viewtopic.php?t={id}").format(id=tid)
+        page_html = ""
+        for attempt in range(2):
             page, _host = self._get(
                 hosts, topic_path, secrets, ua, cookies, torrent_only=False, ignore_cool=ignore_cool, persist=persist
             )
@@ -347,19 +438,17 @@ class GenericHttpTracker:
             page_html = thttp.html_text(page)
             self._pages[tid] = (time.monotonic(), page_html)
             dlid = self._page_download_id(page_html)
-            if not dlid:
-                raise TrackerError("tracker.no_download_link", prefix=self.name)
-            path = str(self.spec.get("download_path") or "/forum/download.php?id={id}").format(id=dlid)
-        else:
-            path = str(self.spec.get("download_path") or "/download/{id}").format(id=tid)
-        r, _host = self._get(
-            hosts, path, secrets, ua, cookies, torrent_only=True, ignore_cool=ignore_cool, persist=persist
-        )
-        if not looks_like_torrent(r.content):
-            if is_download_limit(r.content):
-                raise TrackerError("mirrors.tracker_daily_limit", tracker=self.name)
-            raise TrackerError("tracker.not_torrent", prefix=self.name)
-        return r.content
+            if dlid:
+                return dlid, cookies
+            if says_topic_removed(page_html):
+                raise MirrorFetchError("mirrors.topic_removed", failure="gone")
+            if attempt or not guest_page(page_html):
+                break
+            refreshed = self._relogin(secrets, ua, cookies, ignore_cool=ignore_cool, persist=persist)
+            if refreshed is None:
+                break
+            cookies = refreshed
+        raise TrackerError("tracker.no_download_link", prefix=self.name)
 
     def fetch_magnet(
         self,
@@ -423,7 +512,7 @@ class GenericHttpTracker:
             cookies = self._login(secrets, ua, persist=persist, ignore_cool=ignore_cool)
         cached = self._pages.pop(tid, None)
         if cached and time.monotonic() - cached[0] < self.PAGE_REUSE_SEC:
-            return title_from_html(cached[1])
+            return self._page_title(cached[1])
         if self.spec.get("topic_path"):
             path = str(self.spec["topic_path"]).format(id=tid)
         else:
@@ -441,7 +530,15 @@ class GenericHttpTracker:
             ignore_cool=ignore_cool,
             persist=persist,
         )
-        return title_from_html(thttp.html_text(response))
+        return self._page_title(thttp.html_text(response))
+
+    def _page_title(self, page: str) -> str:
+        """The topic's title on its page; a sign-in page shown instead has none (its "Sign in"
+        would become the topic's title). A Cloudflare check page never gets here (pick_and_get)."""
+        title = title_from_html(page)
+        if sign_in_page(page, title):
+            raise TrackerError("tracker.sign_in_page", cls="tracker_auth", prefix=self.name)
+        return title
 
 
 def load_trackers(cfg: Mapping[str, Any]) -> dict[str, GenericHttpTracker]:

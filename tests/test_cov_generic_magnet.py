@@ -197,6 +197,7 @@ def test_page_without_download_link_and_daily_limit_are_reported(site, monkeypat
     )
     monkeypatch.setattr("tow.trackers.generic.is_download_limit", lambda content: content == b"limit page")
     tracker.spec["page_download"] = False
+    tracker.spec["download_limit"] = True  # only a site with a daily limit is asked about one
     with pytest.raises(RuntimeError) as limited:
         tracker.fetch_torrent("https://demo.example/torrent/6", {}, None, persist=False)
     assert limited.value.code == "mirrors.tracker_daily_limit"
