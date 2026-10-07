@@ -282,43 +282,27 @@ def _safe_globs(value: str) -> list[str]:
     return [pattern.replace("\\", "/").casefold() for pattern in globs]
 
 
+# One glob token as fnmatch scans it: a wildcard, a closed bracket class or one character.
+# An unclosed [ is a literal character and scanning resumes after it.
+_MASK_TOKEN = re.compile(r"[*?]|\[!?+\]?+[^\]]*+\]|.", re.DOTALL)
+
+
 def _mask_parts(pattern: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Necessary fixed runs and whole classes; fnmatch owns their semantics."""
-    parts: list[str] = []
+    runs: list[list[str]] = [[]]
     classes: list[str] = []
-    literal: list[str] = []
-    cursor = 0
-    while cursor < len(pattern):
-        char = pattern[cursor]
-        end = cursor
-        if char == "[":
-            end += 1
-            if pattern[end : end + 1] == "!":
-                end += 1
-            if pattern[end : end + 1] == "]":
-                end += 1
-            end = pattern.find("]", end)
-            if end < 0:
-                # fnmatch treats an unclosed [ as literal, then resumes scanning.
-                literal.append(char)
-                cursor += 1
-                continue
-            body = pattern[cursor + 1 : end]
-            if len(body) == 1:
-                # [x], including [?], [*], [[] and []], is fixed text.
-                # Multi-character, negated and range classes stay with fnmatch.
-                literal.append(body)
-                cursor = end + 1
-                continue
-            classes.append(pattern[cursor : end + 1])
-        elif char not in "*?":
-            literal.append(char)
-            cursor += 1
-            continue
-        parts.append("".join(literal))
-        literal.clear()
-        cursor = end + 1
-    parts.append("".join(literal))
+    for token in _MASK_TOKEN.findall(pattern):
+        if len(token) == 3:
+            # [x], including [?], [*], [[] and []], is fixed text.
+            runs[-1].append(token[1])
+        elif len(token) == 1 and token not in "*?":
+            runs[-1].append(token)
+        else:
+            # Multi-character, negated and range classes stay with fnmatch.
+            runs.append([])
+            if len(token) > 1:
+                classes.append(token)
+    parts = ("".join(run) for run in runs)
     return tuple(dict.fromkeys(part for part in parts if part)), tuple(dict.fromkeys(classes))
 
 
