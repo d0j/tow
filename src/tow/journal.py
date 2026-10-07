@@ -18,6 +18,7 @@ state, secrets and secret undo of ``tow.store_transaction``).
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,10 @@ from typing import Any
 
 from tow.platform import is_link_like
 from tow.store import atomic_write_bytes, decode_json_bytes
+
+# What tempfile adds between the prefix and the suffix atomic_write_bytes() gives it (eight
+# of these characters today), then that suffix.
+_TEMPORARY = re.compile(r"[a-z0-9_]+\.tmp")
 
 
 def digest(content: bytes) -> str:
@@ -74,8 +79,14 @@ class Journal:
         return self.root.exists()
 
     def _own_temporary(self, name: str) -> bool:
-        """A leftover of an interrupted atomic_write_bytes() into the folder."""
-        return name.endswith(".tmp") and any(name.startswith(f".{own}.") for own in self.names)
+        """A leftover of an interrupted atomic_write_bytes() of one of the journal's own files:
+        ``.<own name>.<random letters>.tmp``. Any other ``*.tmp`` is not the journal's, so it is
+        never deleted (``check_folder`` refuses the folder instead)."""
+        for own in self.names:
+            prefix = f".{own}."
+            if name.startswith(prefix) and _TEMPORARY.fullmatch(name[len(prefix) :]):
+                return True
+        return False
 
     def check_folder(self) -> None:
         """Only plain files with the journal's own names (or their temporaries) in a plain folder."""
@@ -161,20 +172,19 @@ class Journal:
         except OSError as exc:
             raise self.error(f"cannot remove {self.label} directory") from exc
 
-    def recover(self, copies: Callable[[Any], list[Copy] | None]) -> bool:
-        """Put an unfinished journal back and remove it; True when stores were restored.
+    def recover(self, copies: Callable[[Any], list[Copy] | None]) -> None:
+        """Put an unfinished journal back and remove it.
 
         ``copies`` checks the marker and returns its stores - None for a journal that committed
         (only its cleanup was interrupted: later writes to the stores are legitimate).
         """
         if not self.exists():
-            return False
+            return
         self.check_folder()
         if not self.published():
             self.remove()  # preparation never published the marker, or cleanup was interrupted
-            return False
+            return
         restore = copies(self.read_marker())
         if restore is not None:
             self.restore(restore)
         self.remove()
-        return restore is not None

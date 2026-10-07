@@ -92,10 +92,10 @@ def _copies(manifest: Any, targets: dict[str, Path]) -> list[Copy] | None:
     return copies if status == "prepared" else None
 
 
-def recover_unlocked(root: Path, targets: dict[str, Path]) -> bool:
-    """Roll an unfinished transaction back (the caller holds the data lock); True if it did."""
+def recover_unlocked(root: Path, targets: dict[str, Path]) -> None:
+    """Roll an unfinished transaction back (the caller holds the data lock)."""
     try:
-        return journal(root).recover(lambda manifest: _copies(manifest, targets))
+        journal(root).recover(lambda manifest: _copies(manifest, targets))
     except OSError as exc:  # a store or copy that cannot be removed: still a RuntimeError (503)
         raise RuntimeError("site transaction journal cleanup failed") from exc
 
