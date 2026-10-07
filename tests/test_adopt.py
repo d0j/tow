@@ -36,16 +36,19 @@ def _events() -> list[dict[str, Any]]:
 
 
 def _unmarked_topic(found: str = NEW, **extra: Any) -> dict[str, Any]:
-    """What a check leaves on a topic whose torrent it found in the client without the mark."""
+    """What a check leaves on a topic whose torrent it found in the client without the mark (and
+    the link and client the check saw it for)."""
+    topic = _topic(**{"client_id": "main", **extra})
+    seen = {"hash": found, "url": topic["url"], "client": topic["client_id"]}
     fields: dict[str, Any] = {
         "hash": None,
         "last_ok": False,
         "last_error": "x",
         "last_error_class": "qbit",
         "last_error_code": "check.not_owned_existing",
-        "last_error_params": {"hash": found},
+        "last_error_params": seen,
     }
-    return _topic(**{**fields, **extra})
+    return {**topic, **fields, **extra}
 
 
 # --- the clients: only the mark changes -------------------------------------------------------
@@ -78,6 +81,21 @@ def test_deluge_adoption_sets_its_one_label_and_nothing_else():
     assert adapter.adopt_torrent(H) == ["tow"]
     assert torrent.labels == ["tow"]
     assert (torrent.path, torrent.wanted, torrent.running) == before
+
+
+def test_deluge_never_replaces_the_owners_label_unless_told():
+    """Deluge keeps one label: TOW's would silently take the owner's "movies" away."""
+    server = FakeDeluge()
+    adapter = _deluge(server)
+    adapter.ping()
+    torrent = _by_hand(server, ["movies"], running=True)
+    with pytest.raises(TowError) as raised:
+        adapter.adopt_torrent(H)
+    assert raised.value.code == "client.deluge.adopt_has_label"
+    assert raised.value.params["label"] == "movies"
+    assert torrent.labels == ["movies"]
+    assert adapter.adopt_torrent(H, replace_label=True) == ["tow"]
+    assert torrent.labels == ["tow"]
 
 
 def test_qbittorrent_adoption_adds_the_tag_only():
@@ -138,7 +156,55 @@ def test_check_reports_the_unmarked_torrent_with_its_hash(monkeypatch):
     check.run_check(apply=True, notify=False, how="test")
     saved = load_state()["topics"][0]
     assert adopt.unmarked_hash(saved) == NEW
-    assert saved["last_error_params"]["hash"] == NEW
+    assert saved["last_error_params"] == {"hash": NEW, "url": "https://tracker.example/1", "client": "main"}
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"url": "https://tracker.example/999"},  # the link was edited after the check
+        {"client_id": "other"},  # the topic was moved to another client
+    ],
+)
+def test_a_torrent_seen_for_another_link_or_client_is_not_adopted(monkeypatch, change):
+    """The unmarked hash belongs to what the check saw: after an edit "Adopt" would have marked
+    the old link's torrent as the new link's revision."""
+    save_state({"topics": [{**_unmarked_topic(), **change}]})
+    client = Adoptable()
+    client.put(NEW, "/media/tv", tags=[])
+    _wire(monkeypatch, {"main": client, "other": client}, Tracker())
+    saved = load_state()["topics"][0]
+    assert adopt.unmarked_hash(saved) == ""
+    with pytest.raises(adopt.AdoptError) as raised:
+        adopt.adopt_topic("t1", how="manual")
+    assert raised.value.code == "adopt.no_torrent"
+    assert client.torrents[NEW]["tags"] == []
+    assert load_state()["topics"][0].get("hash") is None
+
+
+def test_a_record_from_before_without_the_link_waits_for_a_check():
+    topic = _unmarked_topic()
+    topic["last_error_params"] = {"hash": NEW}
+    assert adopt.unmarked_hash(topic) == ""
+
+
+def test_a_topic_edited_while_it_is_adopted_is_not_recorded(monkeypatch):
+    save_state({"topics": [_unmarked_topic()]})
+
+    class EditedMeanwhile(Adoptable):
+        def adopt_torrent(self, h):
+            state = load_state()
+            state["topics"][0]["url"] = "https://tracker.example/999"
+            save_state(state)
+            return super().adopt_torrent(h)
+
+    client = EditedMeanwhile()
+    client.put(NEW, "/media/tv", tags=[])
+    _wire(monkeypatch, {"main": client}, Tracker())
+    with pytest.raises(adopt.AdoptError) as raised:
+        adopt.adopt_topic("t1", how="manual")
+    assert raised.value.code == "adopt.topic_changed"
+    assert load_state()["topics"][0].get("hash") is None
 
 
 def test_adopting_marks_records_logs_and_the_next_check_is_green(monkeypatch):
@@ -283,6 +349,46 @@ def test_cli_adopts_named_topics_with_yes_and_never_without_a_choice(monkeypatch
     assert cli.main(["adopt"]) == cli.EXIT_USAGE
     assert cli.main(["adopt", "t1", "--yes", "--json"]) == 0
     assert (client.torrents[NEW]["tags"], client.torrents[OTHER]["tags"]) == (["tow"], [])
+
+
+def test_cli_says_what_it_did_in_words_not_fields(monkeypatch, capsys):
+    _two_unmarked(monkeypatch)
+    assert cli.main(["adopt", "t1", "--yes"]) == 0
+    out = capsys.readouterr().out
+    assert "t1:" in out
+    assert "ok:" not in out
+    assert "adopted:" not in out
+
+
+def test_cli_json_prints_only_json_and_adopts_only_with_yes(monkeypatch, capsys):
+    client = _two_unmarked(monkeypatch)
+    monkeypatch.setattr("builtins.input", lambda _prompt: pytest.fail("asked"))
+    assert cli.main(["adopt", "--all-unmarked", "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert [item["id"] for item in data["candidates"]] == ["t1", "t2"]
+    assert data["adopted"] == []
+    assert client.torrents[NEW]["tags"] == []
+
+
+def test_cli_reports_a_client_that_does_not_answer(monkeypatch, capsys):
+    _two_unmarked(monkeypatch)
+
+    def down(cfg, secrets, client_id=None):
+        raise TowError("client.managed.no_address")
+
+    monkeypatch.setattr("tow.adopt.client_factory.from_secrets", down)
+    assert cli.main(["adopt", "--all-unmarked", "--json"]) == cli.EXIT_CANNOT_RUN
+    data = json.loads(capsys.readouterr().out)
+    assert data["ok"] is False
+    assert list(data["unreachable"]) == ["main"]
+
+
+def test_cli_reports_an_unknown_topic(monkeypatch, capsys):
+    client = _two_unmarked(monkeypatch)
+    assert cli.main(["adopt", "nope"]) == cli.EXIT_CANNOT_RUN
+    assert "nope" in capsys.readouterr().out
+    assert cli.main(["adopt", "nope", "t1", "--yes"]) == cli.EXIT_PARTIAL
+    assert client.torrents[NEW]["tags"] == ["tow"]
 
 
 def test_cli_without_an_answer_changes_nothing(monkeypatch):

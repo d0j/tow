@@ -127,6 +127,7 @@ def _build_parser() -> argparse.ArgumentParser:
     ad.add_argument("topics", nargs="*", metavar="TOPIC_ID", help=t("cli.help.adopt_ids"))
     ad.add_argument("--all-unmarked", action="store_true", help=t("cli.help.adopt_all"))
     ad.add_argument("--yes", action="store_true", help=t("cli.help.adopt_yes"))
+    ad.add_argument("--replace-label", action="store_true", help=t("cli.help.adopt_replace_label"))
     ad.add_argument("--json", action="store_true", help=as_json)
     c = sub.add_parser("check", help=t("cli.help.check"), description=t("cli.help.check"))
     c.add_argument("--json", action="store_true", help=as_json)
@@ -390,14 +391,36 @@ def _cmd_adopt(args: argparse.Namespace) -> int:
     from tow.i18n import t
     from tow.store import CheckBusyError
 
+    def say(data: dict[str, Any]) -> None:
+        # A person reads the message itself; --json is the whole record and nothing else.
+        if args.json:
+            _print(data, True)
+        else:
+            print(data.get("error") or data.get("message") or "")
+
     if not args.topics and not args.all_unmarked:
-        _print({"ok": False, "error": t("cli.adopt.nothing_asked")}, args.json)
+        say({"ok": False, "error": t("cli.adopt.nothing_asked")})
         return EXIT_USAGE
-    found = unmarked_topics(ids=None if args.all_unmarked else [str(tid) for tid in args.topics])
+    report = unmarked_topics(ids=None if args.all_unmarked else [str(tid) for tid in args.topics])
+    found: list[dict[str, Any]] = report["found"]
+    # An unknown id or a client that did not answer is said: it is not "nothing to adopt".
+    problems = [t("cli.adopt.unknown", id=tid) for tid in report["unknown"]] + [
+        t("cli.adopt.unreachable", client=client, error=error) for client, error in report["unreachable"].items()
+    ]
+    problem_fields = {"unknown": report["unknown"], "unreachable": report["unreachable"]}
     if not found:
-        _print({"ok": True, "adopted": [], "message": t("cli.adopt.none")}, args.json)
+        if problems:
+            say({"ok": False, "adopted": [], **problem_fields, "error": "\n".join(problems)})
+            return EXIT_CANNOT_RUN
+        say({"ok": True, "adopted": [], "message": t("cli.adopt.none")})
         return EXIT_OK
+    if args.json and not args.yes:
+        # No list and no question before the JSON: it lists what --yes would adopt.
+        say({"ok": True, "adopted": [], "candidates": found, **problem_fields, "message": t("cli.adopt.list_only")})
+        return EXIT_PARTIAL if problems else EXIT_OK
     if not args.yes:
+        for line in problems:
+            print(line)
         for item in found:
             print(f"{item['id']}  {item['hash'][:12]}  {item['title']}")
         try:
@@ -405,16 +428,16 @@ def _cmd_adopt(args: argparse.Namespace) -> int:
         except EOFError:
             answer = ""
         if answer not in {"y", "yes", "д", "да"}:
-            _print({"ok": True, "adopted": [], "message": t("cli.adopt.cancelled")}, args.json)
+            say({"ok": True, "adopted": [], "message": t("cli.adopt.cancelled")})
             return EXIT_OK
     adopted: list[str] = []
-    lines: list[str] = []
+    lines: list[str] = list(problems) if args.yes else []
     failed = 0
     for item in found:
         try:
-            result = adopt_topic(item["id"], how="manual")
+            result = adopt_topic(item["id"], how="manual", replace_label=args.replace_label)
         except CheckBusyError:
-            _print({"ok": False, "adopted": adopted, "error": t("cli.adopt.busy")}, args.json)
+            say({"ok": False, "adopted": adopted, "error": t("cli.adopt.busy")})
             return EXIT_CANNOT_RUN
         except Exception as exc:  # noqa: BLE001 - one topic's failure is reported (and logged); the others go on
             failed += 1
@@ -422,8 +445,9 @@ def _cmd_adopt(args: argparse.Namespace) -> int:
             continue
         adopted.append(item["id"])
         lines.append(t("cli.adopt.already" if result["already"] else "cli.adopt.done", id=item["id"]))
-    _print({"ok": not failed, "adopted": adopted, "message": "\n".join(lines)}, args.json)
-    return EXIT_PARTIAL if failed else EXIT_OK
+    ok = not failed and not problems
+    say({"ok": ok, "adopted": adopted, **problem_fields, "message": "\n".join(lines)})
+    return EXIT_OK if ok else EXIT_PARTIAL
 
 
 def _cmd_export(args: argparse.Namespace) -> int:

@@ -35,12 +35,22 @@ class AdoptError(TowError, RuntimeError):
     default_class = "qbit"
 
 
-def unmarked_hash(topic: Mapping[str, Any]) -> str:
-    """The hash a check found in the client without TOW's mark ("" when none was found)."""
+def _client_of(topic: Mapping[str, Any], cfg: Mapping[str, Any] | None = None) -> str:
+    return str(topic.get("client_id") or client_factory.default_client_id(dict(cfg or load_config())))
+
+
+def unmarked_hash(topic: Mapping[str, Any], cfg: Mapping[str, Any] | None = None) -> str:
+    """The hash a check found in the client without TOW's mark ("" when none was found, or the
+    topic has another link or client now: that torrent is not this topic's)."""
     if topic.get("last_error_code") not in UNMARKED_CODES:
         return ""
-    value = (topic.get("last_error_params") or {}).get("hash")
-    return value.upper() if isinstance(value, str) and _HASH.fullmatch(value) else ""
+    params = topic.get("last_error_params") or {}
+    value = params.get("hash")
+    if not isinstance(value, str) or not _HASH.fullmatch(value):
+        return ""
+    if params.get("url") != str(topic.get("url") or "") or params.get("client") != _client_of(topic, cfg):
+        return ""
+    return value.upper()
 
 
 def candidate_hash(topic: Mapping[str, Any]) -> str:
@@ -54,44 +64,54 @@ def _owned(tags: Any) -> bool:
     return any(str(tag).strip().casefold() == "tow" for tag in tags or [])
 
 
-def unmarked_topics(*, ids: list[str] | None = None) -> list[dict[str, Any]]:
-    """Topics whose torrent is in their client without TOW's mark ({id, title, hash, client_id}),
-    by asking the clients (read only). ``ids``: only these topics."""
+def unmarked_topics(*, ids: list[str] | None = None) -> dict[str, Any]:
+    """Topics whose torrent is in their client without TOW's mark, by asking the clients (read
+    only). ``ids``: only these topics. Returns {found: [{id, title, hash, client_id}], unknown:
+    [asked ids TOW does not have], unreachable: {client_id: error text}}: a client that does
+    not answer is said, never taken for "nothing to adopt"."""
     cfg, secrets = load_config(), load_secrets()
     clients: dict[str, Any] = {}
     found: list[dict[str, Any]] = []
-    for topic in topics_of(load_state(quarantine=False)):
+    unreachable: dict[str, str] = {}
+    topics = topics_of(load_state(quarantine=False))
+    known = {str(topic.get("id")) for topic in topics}
+    for topic in topics:
         if ids is not None and str(topic.get("id")) not in ids:
             continue
         h = candidate_hash(topic)
         if not h:
             continue
-        client_id = str(topic.get("client_id") or client_factory.default_client_id(cfg))
+        client_id = _client_of(topic, cfg)
+        if client_id in unreachable:
+            continue
         try:
             if client_id not in clients:
                 clients[client_id] = client_factory.from_secrets(cfg, secrets, client_id)
             info = clients[client_id].inspect_torrent(h)
-        except Exception:  # noqa: BLE001 - a client that does not answer has nothing to list here
+        except Exception as exc:  # noqa: BLE001 - a client that does not answer is reported, by its error
+            unreachable[client_id] = str(exc) or type(exc).__name__
             continue
         if info is not None and not _owned(info.get("tags")):
             title = str(topic.get("tracker_title") or topic.get("title") or "")
             found.append({"id": str(topic.get("id")), "title": title, "hash": h, "client_id": client_id})
-    return found
+    unknown = [tid for tid in dict.fromkeys(ids or []) if tid not in known]
+    return {"found": found, "unknown": unknown, "unreachable": unreachable}
 
 
-def adopt_topic(topic_id: str, *, how: str) -> dict[str, Any]:
+def adopt_topic(topic_id: str, *, how: str, replace_label: bool = False) -> dict[str, Any]:
     """Mark the topic's torrent as TOW's in its client (read back), record it on the topic and
     in the History. Refused while a check runs (``CheckBusyError``): one changes the client at a
-    time. Returns {id, hash, client_id, already}."""
+    time. ``replace_label``: a client with one label per torrent (Deluge) may replace the
+    owner's label with TOW's (only when the owner says so). Returns {id, hash, client_id, already}."""
     with check_run_lock(wait=False):
         try:
-            return _adopt(topic_id, how=how)
+            return _adopt(topic_id, how=how, replace_label=replace_label)
         except Exception as exc:
             log_event("client_adopt_failed", topic=topic_id, **error_fields(exc), how=how)
             raise
 
 
-def _adopt(topic_id: str, *, how: str) -> dict[str, Any]:
+def _adopt(topic_id: str, *, how: str, replace_label: bool = False) -> dict[str, Any]:
     cfg = load_config()
     topic = next((t for t in topics_of(load_state(quarantine=False)) if str(t.get("id")) == topic_id), None)
     if topic is None:
@@ -99,7 +119,7 @@ def _adopt(topic_id: str, *, how: str) -> dict[str, Any]:
     h = candidate_hash(topic)
     if not h:
         raise AdoptError("adopt.no_torrent")
-    client_id = str(topic.get("client_id") or client_factory.default_client_id(cfg))
+    client_id = _client_of(topic, cfg)
     client = client_factory.from_secrets(cfg, load_secrets(), client_id)
     adopt = getattr(client, "adopt_torrent", None)
     if not callable(adopt):
@@ -109,11 +129,14 @@ def _adopt(topic_id: str, *, how: str) -> dict[str, Any]:
         raise AdoptError("adopt.missing")
     already = _owned(info.get("tags"))
     if not already:
-        adopt(h)
+        if replace_label:
+            adopt(h, replace_label=True)
+        else:
+            adopt(h)
         after = client.inspect_torrent(h)
         if after is None or not _owned(after.get("tags")):
             raise AdoptError("adopt.unconfirmed")
-    _record(topic_id, h)
+    _record(topic_id, h, url=str(topic.get("url") or ""), client_id=client_id)
     log_event(
         "client_adopted",
         topic=topic_id,
@@ -127,7 +150,7 @@ def _adopt(topic_id: str, *, how: str) -> dict[str, Any]:
     return {"id": topic_id, "hash": h, "client_id": client_id, "already": already}
 
 
-def _record(topic_id: str, h: str) -> None:
+def _record(topic_id: str, h: str, *, url: str, client_id: str) -> None:
     """The adopted torrent is the topic's revision; its file selection is not TOW-verified (a
     check applies a partial selection to it, "all files" leaves it as it is)."""
     with persistence_lock():
@@ -135,6 +158,8 @@ def _record(topic_id: str, h: str) -> None:
         topic = next((t for t in topics_of(state) if str(t.get("id")) == topic_id), None)
         if topic is None:
             return  # deleted meanwhile: the mark stays in the client, the History says so
+        if str(topic.get("url") or "") != url or _client_of(topic) != client_id:
+            raise AdoptError("adopt.topic_changed")  # edited meanwhile: not this topic's torrent now
         old = str(topic.get("hash") or "").upper()
         if old == h:
             return

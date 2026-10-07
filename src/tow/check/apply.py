@@ -108,10 +108,12 @@ def _accept_existing_torrent(
     if not info_owned_by_tow(info, h):
         # Never green: TOW can change nothing about a torrent without its mark (the file
         # selection, the next revision), and it may be TOW's own add whose marking failed. The
-        # hash lets the owner adopt it into TOW (tow.adopt) - never done without being asked.
+        # hash lets the owner adopt it into TOW (tow.adopt) - never done without being asked -
+        # while the topic still has the link and the client this check saw.
+        seen = {"hash": h, "url": str(topic.get("url") or ""), "client": client_id}
         if plan.mode != "all":
-            raise TowError("check.not_owned_partial", hash=h)
-        raise TowError("check.not_owned_existing", cls="qbit", hash=h)
+            raise TowError("check.not_owned_partial", **seen)
+        raise TowError("check.not_owned_existing", cls="qbit", **seen)
     if not info_confirms(info, h, dest):
         raise TowError("check.migration_unconfirmed" if migrated else "check.existing_unconfirmed")
     selection_verified = True
