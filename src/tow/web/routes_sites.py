@@ -2,39 +2,21 @@
 
 from __future__ import annotations
 
-import copy
 import logging
 from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import (
-    HTMLResponse,
-    JSONResponse,
-    RedirectResponse,
-    Response,
-)
-from starlette.background import BackgroundTask
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
-from tow import store_transaction, undo
 from tow.guess import GuessError, guess_from_url
-from tow.jsonish import as_dict
-from tow.log import error_class
-from tow.store_transaction import StoreTransaction
-from tow.undo.snapshots import site_snapshot
 from tow.web import _context, services
-from tow.web.site_form import (
-    split_lines,
-    unresolved_note,
-    valid_site_hosts,
-    valid_site_name,
-    valid_tracker_path,
-    validate_tracker_regexes,
-)
-from tow.web.site_store import commit_site_stores, save_together, with_login
+from tow.web.site_actions import add_site, delete_site, edit_site, save_site
+from tow.web.site_form import NewSite, SiteEdit
+from tow.web.site_store import with_login
 from tow.web.templating import TEMPLATES
 from tow.web.text import t
-from tow.web.views import add_draft, add_refused_redirect, flash_location, flash_redirect, request_flash
+from tow.web.views import add_draft, flash_redirect, request_flash
 
 router = APIRouter()
 
@@ -114,48 +96,6 @@ def sites_guess(url: str = Form("")) -> Response:
     return JSONResponse(g)
 
 
-def _save_site(config: dict[str, Any] | None = None, secrets: dict[str, Any] | None = None) -> RedirectResponse | None:
-    """A site's config and login as one transaction, which also ends an older undo: a later,
-    independent change must not leave it actionable. None when saved, else the refusal."""
-    state = services.load_state()
-
-    def write(txn: StoreTransaction) -> None:
-        if config is not None:
-            txn.save_config(config)
-        if secrets is not None:
-            txn.save_secrets(secrets)
-        if undo.invalidate(state, txn):
-            txn.save_state(state)
-
-    return save_together("/sites", write)
-
-
-def _commit_site(
-    config: dict[str, Any],
-    state: dict[str, Any],
-    secrets: dict[str, Any],
-    undo_fields: dict[str, Any],
-    snapshot: dict[str, Any],
-) -> RedirectResponse | None:
-    """One transaction for the site's config, mirrors, logins and undo; a refusal if it failed."""
-    try:
-        commit_site_stores(config, state, secrets, undo_fields=undo_fields, secret_undo_snapshot=snapshot)
-    except store_transaction.RollbackError as exc:
-        services.log_event("site_save_fail", status="rollback_failed", error=error_class(exc), how="manual")
-        return flash_redirect("/sites", "web.common.rollback_incomplete", "err")
-    except store_transaction.TransactionError as exc:
-        services.log_event("site_save_fail", status="restored", error=error_class(exc.__cause__ or exc), how="manual")
-        return flash_redirect("/sites", "web.sites.not_saved", "err")
-    return None
-
-
-def _saved_location(message: str, hosts: list[str]) -> str:
-    """Back to Sites after a save; a warning names the mirrors whose names do not resolve now."""
-    if note := unresolved_note(hosts):
-        return flash_location("/sites", f"{t(message)}. {note}", "warn")
-    return flash_location("/sites", message)
-
-
 @router.post("/sites/new")
 @services.locked_state_mutation
 def sites_new(
@@ -171,97 +111,20 @@ def sites_new(
     topic_path: str = Form(""),
     download_href_regex: str = Form(""),
 ) -> Response:
-    draft = {
-        "name": name,
-        "url_regex": url_regex,
-        "fetch_hosts": fetch_hosts,
-        "download_path": download_path,
-        "from_url": from_url,
-        "username": username,
-        "login_path": login_path,
-        "page_download": page_download,
-        "topic_path": topic_path,
-        "download_href_regex": download_href_regex,
-    }
-
-    def refused(problem: Any, field: str) -> RedirectResponse:
-        """D2 for sites: the form comes back open with what was typed (never the password),
-        the reason above it and the cursor in the field it is about."""
-        return add_refused_redirect(str(problem), draft, kind=field, page="/sites")
-
-    guessed = None
-    if from_url.strip():
-        try:
-            guessed = guess_from_url(from_url)
-        except GuessError as e:
-            return refused(t(e.key), "from_url")
-    try:
-        key = valid_site_name(name or str((guessed or {}).get("name") or ""))
-    except ValueError as exc:
-        return refused(exc, "name")
-    cfg = services.load_config()
-    trackers = cfg.setdefault("trackers", {})
-    typed_login = bool(username.strip() or password.strip())
-    if key in trackers:
-        if typed_login:
-            if refused_save := _save_site(secrets=with_login(services.load_secrets(), key, username, password)):
-                return refused_save
-            return flash_redirect("/sites", "web.sites.login_saved", "ok")
-        return refused(t("web.sites.exists", name=key), "name")
-    try:
-        hosts = valid_site_hosts(split_lines(fetch_hosts) or split_lines(str((guessed or {}).get("fetch_hosts") or "")))
-    except ValueError as exc:
-        return refused(exc, "fetch_hosts")
-    regex = url_regex.strip() or str((guessed or {}).get("url_regex") or "")
-    if not regex:
-        return refused(t("web.sites.regex_missing"), "url_regex")
-    paths = {}
-    for field, typed, default, label in (
-        ("download_path", download_path, "/download/{id}", "sites.download_path"),
-        ("login_path", login_path, "", "sites.login_path"),
-        ("topic_path", topic_path, "", "sites.topic_path"),
-    ):
-        try:
-            paths[field] = valid_tracker_path(
-                typed or str((guessed or {}).get(field) or default), label=t(label), needs_id=field != "login_path"
-            )
-        except ValueError as exc:
-            return refused(exc, field)
-    dl, lp, tp = paths["download_path"], paths["login_path"], paths["topic_path"]
-    href = download_href_regex.strip() or str((guessed or {}).get("download_href_regex") or "")
-    pd = page_download in ("1", "true", "on") or bool((guessed or {}).get("page_download"))
-    for field, pair in (("url_regex", (regex, "")), ("download_href_regex", ("", href))):
-        try:
-            validate_tracker_regexes(*pair)
-        except ValueError as exc:
-            return refused(exc, field)
-    spec = {
-        "title": key,
-        "url_regex": regex,
-        "login_hosts": list(hosts),
-        "fetch_hosts": hosts,
-        "login_path": lp,
-        "download_path": dl,
-        "cookie_names": [],
-        "fail_threshold": 3,
-        "cooldown_sec": 3600,
-    }
-    if pd:
-        spec["page_download"] = True
-    if tp:
-        spec["topic_path"] = tp
-    if href:
-        spec["download_href_regex"] = href
-    trackers[key] = spec
-    secrets = with_login(services.load_secrets(), key, username, password) if typed_login else None
-    if not_saved := _save_site(config=cfg, secrets=secrets):
-        return not_saved
-    services.log_event("site_add", tracker=key, how="manual")
-    return RedirectResponse(
-        _saved_location("web.sites.added", hosts),
-        status_code=303,
-        background=BackgroundTask(services.doctor_report, probe=True, names=[key]),
+    form = NewSite(
+        name=name,
+        url_regex=url_regex,
+        fetch_hosts=fetch_hosts,
+        download_path=download_path,
+        from_url=from_url,
+        username=username,
+        password=password,
+        login_path=login_path,
+        page_download=page_download,
+        topic_path=topic_path,
+        download_href_regex=download_href_regex,
     )
+    return add_site(form)
 
 
 @router.post("/sites/{name}/freeze")
@@ -280,26 +143,7 @@ def sites_freeze(name: str) -> Response:
 @router.post("/sites/{name}/delete")
 @services.locked_state_mutation
 def sites_delete(name: str) -> Response:
-    old_config = services.load_config()
-    new_config = copy.deepcopy(old_config)
-    spec = (new_config.get("trackers") or {}).pop(name, None)
-    if spec is None:
-        return flash_redirect("/sites", "web.sites.no_site", "err")
-    old_state = services.load_state()
-    new_state = copy.deepcopy(old_state)
-    mirrors = new_state.setdefault("mirrors", {})
-    mirror_present = name in mirrors
-    mirror = copy.deepcopy(mirrors.pop(name, None))
-    old_secrets = services.load_secrets()
-    new_secrets = copy.deepcopy(old_secrets)
-    tracker_secrets = new_secrets.get("trackers")
-    if isinstance(tracker_secrets, dict):
-        tracker_secrets.pop(name, None)
-    undo_fields = {"name": name, "spec": spec, "mirror": mirror, "mirror_present": mirror_present}
-    if refused := _commit_site(new_config, new_state, new_secrets, undo_fields, site_snapshot(old_secrets, name)):
-        return refused
-    services.log_event("site_delete", tracker=name, how="manual")
-    return flash_redirect("/sites", "web.sites.deleted", "ok")
+    return delete_site(name)
 
 
 @router.post("/sites/{name}")
@@ -319,115 +163,21 @@ def sites_save(
     username: str = Form(""),
     password: str = Form(""),
 ) -> Response:
-    old_config = services.load_config()
-    new_config = copy.deepcopy(old_config)
-    trackers = new_config.setdefault("trackers", {})
-    current_spec = trackers.get(name)
-    if not isinstance(current_spec, dict):
-        return flash_redirect("/sites", "web.sites.no_site", "err")
-    previous_spec = copy.deepcopy(current_spec)
-    try:
-        validate_tracker_regexes(
-            url_regex.strip() or str(current_spec.get("url_regex") or ""), download_href_regex.strip()
-        )
-    except ValueError as exc:
-        return flash_redirect("/sites", exc, "err")
-    try:
-        key = valid_site_name(new_name) if new_name.strip() else name
-        new_hosts = valid_site_hosts(split_lines(fetch_hosts))
-        # An emptied list arrives as no field at all: the form's marker says it was there.
-        login_hosts_value = login_hosts if login_hosts is not None else "" if login_hosts_present == "1" else None
-        chosen_login_hosts = (
-            (
-                valid_site_hosts(split_lines(login_hosts_value))
-                if login_hosts_value and login_hosts_value.strip()
-                else []
-            )
-            if login_hosts_value is not None
-            else None
-        )
-        if chosen_login_hosts is not None and any(host not in new_hosts for host in chosen_login_hosts):
-            raise ValueError(t("web.sites.login_host_not_mirror"))
-    except ValueError as exc:
-        return flash_redirect("/sites", exc, "err")
-    if key != name and key in trackers:
-        return flash_redirect("/sites", "web.sites.name_taken", "err")
-    spec = trackers[name]
-    old_login_hosts = list(spec.get("login_hosts") or [])
-    spec["fetch_hosts"] = new_hosts
-    # Removed mirrors must never receive credentials; new mirrors need explicit login setup.
-    spec["login_hosts"] = (
-        chosen_login_hosts
-        if chosen_login_hosts is not None
-        else [host for host in old_login_hosts if host in new_hosts]
+    form = SiteEdit(
+        fetch_hosts=fetch_hosts,
+        login_hosts=login_hosts,
+        login_hosts_present=login_hosts_present,
+        url_regex=url_regex,
+        download_path=download_path,
+        login_path=login_path,
+        topic_path=topic_path,
+        page_download=page_download,
+        download_href_regex=download_href_regex,
+        new_name=new_name,
+        username=username,
+        password=password,
     )
-    added_login_hosts = set(spec["login_hosts"]) - set(old_login_hosts)
-    stored_password = ((services.load_secrets().get("trackers") or {}).get(name) or {}).get("password")
-    if added_login_hosts and stored_password and not password.strip():
-        # A stored tracker password must never be posted to a host it was not entered for.
-        return flash_redirect("/sites", "web.sites.password_again", "warn")
-    if url_regex.strip():
-        spec["url_regex"] = url_regex.strip()
-    try:
-        new_download_path = (
-            valid_tracker_path(download_path, label=t("sites.download_path"), needs_id=True)
-            if download_path.strip()
-            else ""
-        )
-        new_login_path = valid_tracker_path(login_path, label=t("sites.login_path"))
-        new_topic_path = valid_tracker_path(topic_path, label=t("sites.topic_path"), needs_id=True)
-    except ValueError as exc:
-        return flash_redirect("/sites", exc, "err")
-    if new_download_path:
-        spec["download_path"] = new_download_path
-    spec["login_path"] = new_login_path
-    if new_topic_path:
-        spec["topic_path"] = new_topic_path
-    else:
-        spec.pop("topic_path", None)
-    if page_download in ("1", "true", "on"):
-        spec["page_download"] = True
-    else:
-        spec.pop("page_download", None)
-    if download_href_regex.strip():
-        spec["download_href_regex"] = download_href_regex.strip()
-    else:
-        spec.pop("download_href_regex", None)
-    old_state = services.load_state()
-    new_state = copy.deepcopy(old_state)
-    old_mirrors = as_dict(old_state.get("mirrors"))
-    mirror_present = name in old_mirrors
-    mirror = copy.deepcopy(old_mirrors.get(name))
-    mirrors = new_state.setdefault("mirrors", {})
-    if key != name:
-        trackers[key] = trackers.pop(name)
-        trackers[key]["title"] = key
-        if mirror_present:
-            mirrors[key] = mirrors.pop(name)
-        else:
-            mirrors.pop(name, None)
-    old_secrets = services.load_secrets()
-    new_secrets = copy.deepcopy(old_secrets)
-    tracker_secrets = new_secrets.setdefault("trackers", {})
-    if key != name and name in tracker_secrets:
-        tracker_secrets[key] = tracker_secrets.pop(name)
-    if username.strip() or password.strip():
-        entry = tracker_secrets.setdefault(key, {})
-        if username.strip():
-            entry["username"] = username.strip()
-        if password.strip():
-            entry["password"] = password.strip()
-    undo_fields = {
-        "name": name,
-        "spec": previous_spec,
-        "mirror": mirror,
-        "mirror_present": mirror_present,
-        "renamed_to": key if key != name else "",
-    }
-    if refused := _commit_site(new_config, new_state, new_secrets, undo_fields, site_snapshot(old_secrets, name)):
-        return refused
-    services.log_event("site_save", tracker=key, how="manual")
-    return RedirectResponse(_saved_location("web.common.saved", new_hosts), status_code=303)
+    return edit_site(name, form)
 
 
 @router.post("/sites/{name}/login")
@@ -436,7 +186,7 @@ def sites_login(name: str, username: str = Form(""), password: str = Form("")) -
     if name not in (services.load_config().get("trackers") or {}):
         return flash_redirect("/sites", "web.sites.no_site", "err")
     if (username.strip() or password.strip()) and (
-        refused := _save_site(secrets=with_login(services.load_secrets(), name, username, password))
+        refused := save_site(secrets=with_login(services.load_secrets(), name, username, password))
     ):
         return refused
     return flash_redirect("/sites", "web.sites.login_saved", "ok")
@@ -458,9 +208,7 @@ def sites_probe(name: str) -> Response:
 
 @router.post("/sites/{name}/prefer")
 def sites_prefer(name: str, host: str = Form()) -> Response:
-    from tow.mirrors import prefer_host
-
-    ok = prefer_host(name, host)
+    ok = services.prefer_host(name, host)
     services.log_event("site_prefer", tracker=name, url=host, how="manual")
     return flash_redirect("/sites", "web.sites.preferred" if ok else "web.sites.no_mirror", "ok" if ok else "err")
 
