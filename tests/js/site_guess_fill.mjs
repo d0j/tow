@@ -51,7 +51,8 @@ fields["site-name"].value = "mine";             // typed by the owner before pas
 await paste("https://t1.example/1", guess(1));
 const typedKept = fields["site-name"].value === "mine";
 const emptyFilled = fields["site-hosts"].value === "https://t1.example" && fields["site-dl"].value === "/dl1/{id}";
-const saysKept = fields["guess-msg"].textContent.includes("js.guess.kept_typed");
+// Two sentences, not "…a login is needed Fields you had…" (QA 1.24.1).
+const saysKept = fields["guess-msg"].textContent === "js.guess.filled. js.guess.kept_typed";
 await paste("https://t2.example/2", guess(2));  // a second link replaces what the first one filled
 const refilled = fields["site-hosts"].value === "https://t2.example" && fields["site-name"].value === "mine";
 fields["site-dl"].value = "/mine/{id}";         // edited after the fill: now the owner's
