@@ -100,8 +100,9 @@ class Notifier(Protocol):
 
     Required: the members below. Optional, looked up only where they matter: ``STORAGE`` (the
     secrets block it keeps its settings in, default ``notifiers.<kind>``), ``targets(settings)``
-    (one recipient per chat), ``MAX_BYTES`` (a limit in UTF-8 bytes), ``CHUNK_PAUSE`` (seconds
-    between parts) and ``suggestion(field)`` (a ready value for a form field).
+    (one recipient per chat), ``MAX_BYTES`` (a limit in UTF-8 bytes), ``MAX_UTF16`` (a limit in
+    UTF-16 code units, as Telegram counts: an emoji is two), ``CHUNK_PAUSE`` (seconds between
+    parts) and ``suggestion(field)`` (a ready value for a form field).
     ``tests/test_plugin_contracts.py`` checks every messenger module against it.
     """
 
@@ -148,42 +149,97 @@ def backoff_sleep(seconds: float) -> None:
 
 
 def _retry_after(response: httpx.Response) -> float | None:
-    header = response.headers.get("retry-after")
+    """How long the service asks to wait: the Retry-After header, or ``retry_after`` in the
+    answer (Telegram keeps it under ``parameters``)."""
     try:
+        header = response.headers.get("retry-after")
         if header:
             return float(header)
         body = response.json()
-        value = body.get("retry_after") if isinstance(body, dict) else None
-        return float(value) if value is not None else None
+    except TypeError, ValueError:
+        return None
+    if not isinstance(body, dict):
+        return None
+    value = body.get("retry_after")
+    if value is None and isinstance(body.get("parameters"), dict):
+        value = body["parameters"].get("retry_after")
+    try:
+        return float(value) if value is not None and not isinstance(value, bool) else None
     except TypeError, ValueError:
         return None
 
 
+# Failures that prove the request never reached the service: sending it again cannot repeat it.
+_NOT_SENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+# One message's sending with its retries stays well inside the queue's lease (outbox.LEASE_SEC):
+# a dispatcher still sending is never taken over by another one that sends it again.
+REQUEST_BUDGET_SEC = 60.0
+# How long the answer's body is read (its status is already known by then).
+ANSWER_SECONDS = 10.0
+
+
+def _answer(response: httpx.Response) -> bytes:
+    """The answer's body, at most MAX_RESPONSE_BYTES and ANSWER_SECONDS of it; what could not be
+    read is left out. The status has arrived: a 2xx is a delivered message, whatever follows."""
+    chunks: list[bytes] = []
+    size = 0
+    deadline = time.monotonic() + ANSWER_SECONDS
+    try:
+        for chunk in response.iter_bytes():
+            size += len(chunk)
+            if size > MAX_RESPONSE_BYTES or time.monotonic() > deadline:
+                return b""
+            chunks.append(chunk)
+    except httpx.HTTPError:
+        return b""
+    return b"".join(chunks)
+
+
+def _send_once(client: httpx.Client, method: str, url: str, **kwargs: Any) -> httpx.Response:
+    with client.stream(method, url, **kwargs) as response:
+        body = _answer(response)
+        # The body is decoded already: its encoding and wire length no longer apply to it.
+        headers = [
+            (name, value)
+            for name, value in response.headers.multi_items()
+            if name.lower() not in {"content-encoding", "content-length", "transfer-encoding"}
+        ]
+        return httpx.Response(response.status_code, headers=headers, content=body, request=response.request)
+
+
 def request(method: str, url: str, *, what: str, **kwargs: Any) -> httpx.Response:
-    """One HTTP call; network errors, 429 and 5xx are retried, honouring Retry-After.
+    """One HTTP call. Only what cannot have reached the service is retried: a refused
+    connection, 429 (honouring the wait the service asks for) and 5xx.
 
-    The URL is never put into an error: for webhooks and bots it contains the secret.
+    A request that went out without an answer (a read timeout, a dropped connection) may have
+    been delivered: it is not sent again here; the queue keeps it with that reason. The URL is
+    never put into an error: for webhooks and bots it contains the secret.
     """
-    from tow import http as thttp
-
+    started = time.monotonic()
     network_error = ""
     busy_code: int | None = None
     for attempt in range(len(RETRY_DELAYS) + 1):
         wait = RETRY_DELAYS[attempt] if attempt < len(RETRY_DELAYS) else 0.0
         try:
             with http_client() as client:
-                # A messenger answers with a little JSON; a huge or endless body is not read.
-                response = thttp.request_limited(client, method, url, max_bytes=MAX_RESPONSE_BYTES, **kwargs)
-        except (httpx.HTTPError, thttp.ResponseTooLargeError, thttp.ResponseTooSlowError) as exc:
+                response = _send_once(client, method, url, **kwargs)
+        except _NOT_SENT as exc:
             network_error, busy_code = type(exc).__name__, None
+        except httpx.HTTPError as exc:
+            reason = Msg("notifier.common.delivery_unknown", what=what, error=type(exc).__name__)
+            raise DeliveryError(reason, transient=True) from exc
         else:
             if response.status_code != 429 and response.status_code < 500:
                 return response
             network_error, busy_code = "", response.status_code
             asked = _retry_after(response)
             if asked is not None:
-                wait = min(max(asked, 0.0), MAX_RETRY_AFTER)
+                if asked > MAX_RETRY_AFTER:
+                    break  # a longer wait is the next delivery's: the message stays queued
+                wait = max(asked, 0.0)
         if attempt < len(RETRY_DELAYS):
+            if time.monotonic() - started + wait > REQUEST_BUDGET_SEC:
+                break
             backoff_sleep(wait)
     if busy_code is not None:
         reason = Msg("notifier.common.busy_service", what=what, code=busy_code)

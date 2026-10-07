@@ -118,11 +118,19 @@ def chunks(text: str, size: int, *, measure: Callable[[str], int] = len) -> list
     return parts
 
 
+def _utf16_len(text: str) -> int:
+    return len(text.encode("utf-16-le")) // 2
+
+
 def parts_for(module: Notifier, text: str) -> list[str]:
-    """``text`` split the way ``module`` needs it: MAX_BYTES (UTF-8) when it has one, else MAX_LEN characters."""
+    """``text`` split the way ``module`` needs it: MAX_BYTES (UTF-8) or MAX_UTF16 (UTF-16 code
+    units) when it has one, else MAX_LEN characters."""
     max_bytes = getattr(module, "MAX_BYTES", None)
     if isinstance(max_bytes, int):
         return chunks(text, max_bytes, measure=_utf8_len)
+    max_utf16 = getattr(module, "MAX_UTF16", None)
+    if isinstance(max_utf16, int):
+        return chunks(text, max_utf16, measure=_utf16_len)
     return chunks(text, int(getattr(module, "MAX_LEN", 2000)))
 
 

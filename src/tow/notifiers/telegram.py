@@ -13,6 +13,8 @@ ORDER = 10
 # Telegram settings stay where TOW always kept them (secrets["telegram"]).
 STORAGE = "telegram"
 MAX_LEN = 4000
+# Telegram counts a message's length in UTF-16 code units (an emoji is two): 4096 at most.
+MAX_UTF16 = 4000
 # Texts are keys of the language files (notifier.telegram.*).
 STEPS = (
     "notifier.telegram.step_bot",
@@ -56,8 +58,8 @@ def send(settings: dict[str, Any], text: str) -> None:
             data={"chat_id": str(chat), "text": text, "disable_web_page_preview": "true"},
         )
         body = json_or_empty(response)
-        if response.status_code == 200 and body.get("ok"):
-            continue
+        if response.status_code == 200 and body.get("ok") is not False:
+            continue  # delivered, also when the answer itself could not be read
         if response.status_code in (401, 404):
             raise DeliveryError(Msg("notifier.telegram.bad_token"), transient=False)
         description = str(body.get("description") or "").casefold()

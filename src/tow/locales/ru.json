@@ -1238,6 +1238,7 @@
       "no_answer": "{what}: нет ответа",
       "network_down": "{what}: сеть недоступна ({error})",
       "busy_service": "{what}: сервис занят ({code})",
+      "delivery_unknown": "{what}: сообщение отправлено, но ответа нет ({error}) — возможно, оно дошло; оно оставлено для следующей отправки",
       "required": "{field}: заполните поле",
       "summary": "уведомления: {channels}",
       "summary_none": "уведомления: не подключены",
