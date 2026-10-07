@@ -286,6 +286,8 @@ def attention(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> list[str]:
     from datetime import UTC
 
     items: list[str] = []
+    if not state.get("topics") and (lost := services.data_lost()) is not None:
+        items.append(t("watchdog.alert.data_lost", folder=lost["folder"]))
     raw_health = state.get("health")
     health: dict[str, Any] = raw_health if isinstance(raw_health, dict) else {}
     interval = interval_sec_of(cfg)

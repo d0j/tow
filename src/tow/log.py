@@ -669,6 +669,9 @@ def format_event(rec: Mapping[str, Any], *, title_index: Mapping[str, str] | Non
         bits.append(t("log.check_result", lang, ok=rec.get("ok"), n=rec.get("n")))
         if rec.get("apply") is False:
             bits.append(t("log.check_preview", lang))
+    alerts = rec.get("alerts")
+    if isinstance(alerts, list):  # the watchdog's messages, as they were sent
+        bits.extend(scrub_text(str(alert)).strip()[:400] for alert in alerts if str(alert).strip())
     if rec.get("tracker"):
         bits.append(str(rec["tracker"]))
     h = str(rec.get("hash") or "")
