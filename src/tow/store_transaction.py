@@ -152,17 +152,17 @@ def _mark_committed(root: Path) -> None:
     store.atomic_write_text(manifest_path, json.dumps(manifest, indent=2))
 
 
-def recover() -> bool:
-    """Restore the stores of an unfinished transaction; True when it did.
+def recover() -> None:
+    """Restore the stores of an unfinished transaction.
 
     A cheap unlocked look first: the web runs this before every request and must not wait for a
     scheduled check. A real restore holds the data lock, so it never interleaves with a writer.
     """
     root = journal_root()
     if not root.exists() and not site_journal.journal(root).is_link(root):
-        return False
+        return
     with store.persistence_lock(), _LOCK:
-        return site_journal.recover_unlocked(journal_root(), journal_targets())
+        site_journal.recover_unlocked(journal_root(), journal_targets())
 
 
 @contextmanager
