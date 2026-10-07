@@ -1738,6 +1738,8 @@
     "rolled_back": "the previous version is back and answers",
     "rollback_failed": "the previous version did not come back: start TOW by hand (tow run) and look at data/logs",
     "data_restored": "data and config were put back from the snapshot (the new version had changed them)",
+    "held_retry": "TOW was not started: the previous code or its data could not be put back completely, and it does not run on a mix. Run the update again: it puts back the previous version and the copy {snapshot} first",
+    "held_by_hand": "TOW was not started: the previous code or its data could not be put back completely, and it does not run on a mix. Put data and config.yaml back from {snapshot}, check out {previous}, then start TOW (tow run)",
     "ok": "TOW {version} is running and answers on 127.0.0.1:{port}",
     "aborted": "update aborted: {error}",
     "downloading": "downloading {url}",

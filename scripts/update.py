@@ -42,7 +42,8 @@ Steps (each one checked; nothing is reported as done without its read-back):
 6. ``/healthz`` must report the target version and ``/health.json`` must read the state;
 7. on any failure each rollback step runs on its own: stop the new one, check out and sync the
    previous code, put back data and config if the new version changed them, start the previous
-   one and check it - and the report says which step failed;
+   one and check it - and the report says which step failed. The previous one is started only
+   when its code and the data are both back, never on a mix;
 8. on success prune old update snapshots (the newest 5; night copies, key copies and anything
    else in backup/ are never touched).
 
@@ -133,6 +134,14 @@ TEXTS = {
     "rolled_back": "the previous version is back and answers",
     "rollback_failed": "the previous version did not come back: start TOW by hand (tow run) and look at data/logs",
     "data_restored": "data and config were put back from the snapshot (the new version had changed them)",
+    "held_retry": (
+        "TOW was not started: the previous code or its data could not be put back completely, and it does not run"
+        " on a mix. Run the update again: it puts back the previous version and the copy {snapshot} first"
+    ),
+    "held_by_hand": (
+        "TOW was not started: the previous code or its data could not be put back completely, and it does not run"
+        " on a mix. Put data and config.yaml back from {snapshot}, check out {previous}, then start TOW (tow run)"
+    ),
     "ok": "TOW {version} is running and answers on 127.0.0.1:{port}",
     "aborted": "update aborted: {error}",
     "downloading": "downloading {url}",
@@ -809,6 +818,9 @@ class GitCode:
     def allow_data_changes(self, seconds: float) -> None:
         """A checkout keeps no switch record."""
 
+    def finish_rollback(self) -> None:
+        """A checkout keeps no switch record."""
+
 
 class ArchiveCode:
     """The code came from a release archive (no git): a release's source archive replaces it."""
@@ -848,21 +860,37 @@ class ArchiveCode:
                 not isinstance(name, str) or name in ("", ".", "..") or "/" in name or "\\" in name for name in names
             ):
                 raise UpdateError("invalid interrupted update record")
-        if record.get("phase") not in ("switching", "accepted"):
+        if record.get("phase") not in ("switching", "accepted") or not isinstance(record.get("restored", False), bool):
             raise UpdateError("invalid interrupted update record")
         return record
 
+    @staticmethod
+    def finished(record: dict[str, Any]) -> bool:
+        """Nothing is left to undo: the new code was accepted, or the previous code and data are
+        back (``restored``: a rollback whose record could not be removed)."""
+        return record["phase"] == "accepted" or record.get("restored") is True
+
     def _write_journal(self, record: dict[str, Any]) -> None:
+        """On disk before anything moves: a power cut never leaves an empty or partial record."""
         temporary = self.journal.with_name(self.journal.name + ".tmp")
-        temporary.write_text(json.dumps(record), encoding="utf-8")
+        with temporary.open("w", encoding="utf-8") as handle:
+            handle.write(json.dumps(record))
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(temporary, self.journal)
+        with contextlib.suppress(OSError):  # the folder entry too, where the system can (not Windows)
+            folder = os.open(self.journal.parent, os.O_RDONLY)
+            try:
+                os.fsync(folder)
+            finally:
+                os.close(folder)
 
     def recover_pending(self, *, finalize: bool = True) -> str | None:
         """Idempotently put back the old code after a hard interruption."""
         if not self.journal.exists():
             return None
         record = self._journal()
-        if record["phase"] == "accepted":
+        if self.finished(record):
             self.journal.unlink()
             remove_tree(self.new)
             remove_tree(self.failed)
@@ -887,13 +915,24 @@ class ArchiveCode:
         return "restored"
 
     def allow_data_changes(self, seconds: float) -> None:
-        """TOW, started by this update, may change data in the next ``seconds``: such changes are
-        the update's own, and a recovery may put the snapshot back over them; later ones it does not."""
+        """The new version, started by this update, may change data in the next ``seconds``: such
+        changes are the update's own, and a recovery may put the snapshot back over them; later
+        ones it does not. Never called for a start of the previous version: its data is the owner's."""
         if self.journal.exists():
             record = self._journal()
             until = record.get("data_until")
             record["data_until"] = max(until if isinstance(until, (int, float)) else 0, time.time() + seconds)
             self._write_journal(record)
+
+    def finish_rollback(self) -> None:
+        """The previous code and the snapshot's data are back: the record says so first (a removal
+        cut off then never puts the snapshot back over what TOW writes later), then it goes."""
+        if self.journal.exists():
+            record = self._journal()
+            record["restored"] = True
+            self._write_journal(record)
+            with contextlib.suppress(OSError):
+                self.journal.unlink()
 
     def accept_switch(self) -> None:
         if self.journal.exists():
@@ -1153,6 +1192,7 @@ class Update:
         self.port = 8787
         self.autostart: str | None = None  # how this install starts with the computer, if it does
         self.stopped = False  # TOW was stopped by this update and is not running yet
+        self.held = False  # a rollback could not put code and data back: TOW must stay stopped
         self.snapshot: Path | None = None
         self.manifest: dict[str, str] = {}
 
@@ -1209,7 +1249,7 @@ class Update:
         if not isinstance(self.code, ArchiveCode) or not self.code.journal.exists():
             return True
         record = self.code._journal()
-        if record["phase"] == "accepted":
+        if self.code.finished(record):
             self.code.recover_pending()
             self.code.check()
             return True
@@ -1264,24 +1304,27 @@ class Update:
         """Stop TOW, put the previous code and the snapshot back, start it; the error, if any."""
         assert isinstance(self.code, ArchiveCode)
         self.report("rolling_back")
-        code = "as found"  # -> "mixed" while the entries move -> "previous" once they are back
+        # "as found" -> "mixed" while the entries move -> "restoring" until the data is back and the
+        # record says so -> "started"
+        code = "as found"
         was_running = self.sys.supervisor_running() is not None
         try:
             self.stop()
             code = "mixed"
             self.code.recover_pending(finalize=False)
-            code = "previous"
+            code = "restoring"
             self.restore_snapshot()
+            self.code.finish_rollback()
             code = "started"
             if not self.start_and_check(previous_version):
                 raise UpdateError(self.text("unhealthy", version=previous_version, seconds=int(self.health_timeout)))
-            self.code.journal.unlink()
         except Exception as exc:  # noqa: BLE001 - the recovery boundary: recorded, and TOW started again where it can be
             error = str(exc) or type(exc).__name__
             self.say("recovery_failed", error=error)
-            if self.stopped and (code == "previous" or (code == "as found" and was_running)):  # never half-moved code
+            # Never on half-moved code or half-restored data: the record stays, the next run goes on.
+            if self.stopped and code == "as found" and was_running:
                 with contextlib.suppress(Exception):
-                    self.start_and_check(previous_version if code == "previous" else "")
+                    self.start_and_check("")
             return error
         self.say("rolled_back")
         return None
@@ -1345,8 +1388,6 @@ class Update:
         return self.wait(answers, self.health_timeout)
 
     def start_and_check(self, version: str) -> bool:
-        # Its health check, and a rollback's stop of it after a failed one, are the update's own time.
-        self.code.allow_data_changes(self.health_timeout + STOP_GRACE)
         self.start()
         ok = self.healthy(version)
         if ok:
@@ -1542,6 +1583,9 @@ class Update:
                     version = self.version()
                     self.write_state(target_version=version)
                     self.progress("checking")
+                    # Its health check, and a rollback's stop of it after a failed one, are the
+                    # update's own time: what the new version writes then a recovery may undo.
+                    code.allow_data_changes(self.health_timeout + STOP_GRACE)
                     if not self.start_and_check(version):
                         raise UpdateError(self.text("unhealthy", version=version, seconds=int(self.health_timeout)))
                     if isinstance(code, ArchiveCode):
@@ -1557,7 +1601,8 @@ class Update:
             error = str(exc)
             self.say("aborted", error=error)
         finally:
-            if self.stopped:  # stopped but never started again: the code did not change
+            # Stopped but never started again: the code did not change, or it is back with its data.
+            if self.stopped and not self.held:
                 with contextlib.suppress(Exception):
                     self.start_and_check(previous_version)
             running = bool(self.sys.http_json(f"http://127.0.0.1:{self.port}/healthz"))
@@ -1589,20 +1634,33 @@ class Update:
 
         step("stop the new version", stop_new)
         step("check out the previous code", lambda: self.code.switch_back(previous))
+        code_back = steps[-1]["ok"]
         step("uv sync", self.sys.uv_sync)
         # True: put back; None: the new version had changed nothing (both fine).
         restored = step("put back data and config", lambda: self.restore_snapshot() or None)
+        data_back = steps[-1]["ok"]
         if restored:
             self.say("data_restored")
+        ready = code_back and data_back
+        if ready and isinstance(self.code, ArchiveCode):
+            # Before the start: the previous version's own writes are never undone later.
+            step("finish rollback", self.code.finish_rollback)
+            ready = steps[-1]["ok"]
         self.write_state(data_restored=bool(restored), rollback=steps)
-        back = step("start the previous version", lambda: self.start_and_check(previous_version))
-        if back and all(item["ok"] for item in steps) and isinstance(self.code, ArchiveCode):
-            step("finish rollback", lambda: self.code.journal.unlink(missing_ok=True))
+        if ready:
+            back = step("start the previous version", lambda: self.start_and_check(previous_version))
+        else:
+            back = None  # never started on half-restored code or data
+            self.held = True
         self.write_state(rollback=steps)
         if back and all(item["ok"] for item in steps):
             self.say("rolled_back")
             return "rolled_back"
-        self.say("rollback_failed")
+        if self.held:
+            retry = isinstance(self.code, ArchiveCode) and self.code.journal.exists()
+            self.say("held_retry" if retry else "held_by_hand", snapshot=self.snapshot, previous=previous)
+        else:
+            self.say("rollback_failed")
         return "failed"
 
     def stop_quietly(self) -> None:

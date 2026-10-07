@@ -450,9 +450,15 @@ entries back, put back the snapshot if data changed, start and check the previou
 record says until when TOW ran under the update (`data_until`: the switch, a health check and
 the stop after it); data or config changed later is never replaced unasked: the run is refused
 before anything changes and names the file and the command with `--discard-newer-data` that
-puts the snapshot back anyway. If undoing fails, the run ends there with `recovery_failed` (exit
-code 1, the record stays for the next try) and TOW is started again unless its code is half
-moved.
+puts the snapshot back anyway. Once the previous code and the data are back (a rollback, or
+undoing a cut-off switch), the record first says so (`restored`) and is then removed, before the
+previous version starts: what it writes afterwards is the owner's, and a later update never
+takes it for the cut-off one's. If undoing fails, the run ends there with `recovery_failed`
+(exit code 1, the record stays for the next try); TOW is started again only when nothing was
+moved yet, never on half-moved code or half-restored data. A rollback that cannot put code and
+data back completely leaves TOW stopped too and says how to finish (run the update again, or
+put the snapshot back by hand in a git install). The record is written to disk (flushed) before
+anything moves.
 
 `<TOW>/update-state.json` records the run (`in_progress` → `ok` / `rolled_back` / `failed`, or
 `recovered` / `recovery_failed` for undoing a cut-off switch, ref,

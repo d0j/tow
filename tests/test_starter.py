@@ -188,9 +188,10 @@ def test_a_failed_start_names_the_log(monkeypatch, capsys, state):
 # --- an update cut off while it switched the code ------------------------------------------------
 
 
-def _switch_record(phase: str = "switching") -> Path:
+def _switch_record(phase: str = "switching", *, restored: bool = False) -> Path:
     record = layout.install_root() / ".update-switch.json"
-    record.write_text(f'{{"format": "tow-update-switch/v1", "phase": "{phase}", "old": [], "new": []}}')
+    extra = ', "restored": true' if restored else ""
+    record.write_text(f'{{"format": "tow-update-switch/v1", "phase": "{phase}", "old": [], "new": []{extra}}}')
     return record
 
 
@@ -222,6 +223,8 @@ def test_the_update_itself_starts_tow_while_it_holds_its_lock(monkeypatch):
             locks.unlock(handle)
     assert cli.main(["run"]) == cli.EXIT_CANNOT_RUN  # the updater is gone, its record is not
     _switch_record("accepted")  # the switch was finished; only the record's removal was cut off
+    assert cli.main(["run"]) == 0
+    _switch_record(restored=True)  # a rollback put code and data back; only the removal was cut off
     assert cli.main(["run"]) == 0
 
 

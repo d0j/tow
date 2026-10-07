@@ -578,7 +578,9 @@ def test_a_recovery_whose_previous_version_does_not_answer_is_a_failure_not_a_re
     assert "did not answer as 1.22.0" in record["error"]
     assert any(line.startswith("the cut-off update could not be undone") for line in lines)
     assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
-    assert (install["root"] / ".update-switch.json").exists()  # the next run tries again
+    # Code and data are back: nothing is left to undo, and what the previous version writes from
+    # now on is never taken for the cut-off update's (before: the record stayed, see below).
+    assert not (install["root"] / ".update-switch.json").exists()
 
 
 def test_a_recovery_that_cannot_stop_tow_starts_it_again(install, github, monkeypatch):
@@ -678,6 +680,166 @@ def test_data_changed_after_a_cut_off_update_is_never_replaced_unasked(install, 
     assert state(install)["status"] == "recovered"
     assert state_file.read_text(encoding="utf-8") == '{"topics": []}'
     assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+
+
+def _later(path: Path, text: str) -> None:
+    """``path`` written by the previous version long after the update's own time."""
+    path.write_text(text, encoding="utf-8")
+    later = path.stat().st_mtime + 2 * (5 + updater.STOP_GRACE)
+    os.utime(path, (later, later))
+
+
+def test_a_rollback_with_a_failed_step_keeps_no_record_once_code_and_data_are_back(install, github):
+    # Before: any failed step (here the environment rebuild) kept the switch record, and starting
+    # the previous version moved its cut-off time on. The data the previous version then wrote
+    # for days made the next update refuse ("the data changed after the update was cut off"),
+    # and the only way out, --discard-newer-data, put the old snapshot back over it.
+    github.release("v1.23.0", tarball("1.23.0"))
+    machine = Machine(install["app"], github, silent_version="1.23.0", uv_fails_on=(2,))
+
+    code, lines = run(machine, "v1.23.0")
+
+    assert code == 1
+    assert machine.calls[-1] == "spawn tow run 1.22.0"
+    steps = {step["step"]: step["ok"] for step in state(install)["rollback"]}
+    assert steps == {
+        "stop the new version": True,
+        "check out the previous code": True,
+        "uv sync": False,
+        "put back data and config": True,
+        "finish rollback": True,
+        "start the previous version": True,
+    }
+    assert not (install["root"] / ".update-switch.json").exists()
+    state_file = install["root"] / "data" / "state.json"
+    _later(state_file, '{"topics": ["added later"]}')
+
+    code, lines = run(Machine(install["app"], github), "not-a-tag")
+
+    assert code == 2
+    assert "not to not-a-tag" in lines[-1]  # the tag itself: no recovery, no refusal
+    assert state_file.read_text(encoding="utf-8") == '{"topics": ["added later"]}'
+
+
+def test_a_restored_record_left_behind_is_finished_without_the_snapshot(install, github):
+    # A rollback that recorded "restored" but could not remove the record (a power cut, a lock).
+    github.release("v1.23.0", tarball("1.23.0"))
+    code, _lines = run(Machine(install["app"], github), "v1.23.0")
+    assert code == 0
+    snapshot = next((install["root"] / "backup").glob("update-*-before-*"))
+    record = {
+        "format": "tow-update-switch/v1",
+        "phase": "switching",
+        "restored": True,
+        "old": [],
+        "new": [],
+        "previous_version": "1.22.0",
+        "snapshot": snapshot.name,
+        "data_until": 0,
+    }
+    (install["root"] / ".update-switch.json").write_text(json.dumps(record), encoding="utf-8")
+    state_file = install["root"] / "data" / "state.json"
+    _later(state_file, '{"topics": ["added later"]}')
+    machine = Machine(install["app"], github)
+
+    code, lines = run(machine, "not-a-tag")
+
+    assert code == 2
+    assert "not to not-a-tag" in lines[-1]
+    assert machine.calls == []  # nothing stopped, nothing put back
+    assert state_file.read_text(encoding="utf-8") == '{"topics": ["added later"]}'
+    assert not (install["root"] / ".update-switch.json").exists()
+
+
+def test_a_rollback_that_puts_data_back_only_partly_never_starts_tow(install, github, monkeypatch):
+    # Before: the previous version was started over half-restored data.
+    github.release("v1.23.0", tarball("1.23.0"))
+    machine = Machine(install["app"], github, silent_version="1.23.0")
+    real = updater.Update.restore_snapshot
+
+    def half(work):
+        (install["root"] / "config.yaml").write_text("port: 18999\nlanguage: en\n", encoding="utf-8")
+        raise OSError("the disk went away")
+
+    def start_then_change(work, version):
+        result = original(work, version)
+        if version == "1.23.0":
+            (install["root"] / "data" / "state.json").write_text('{"schema": 2}', encoding="utf-8")
+        return result
+
+    original = updater.Update.start_and_check
+    monkeypatch.setattr(updater.Update, "start_and_check", start_then_change)
+    monkeypatch.setattr(updater.Update, "restore_snapshot", half)
+
+    code, lines = run(machine, "v1.23.0")
+
+    assert code == 1
+    assert machine.calls == [  # the new version was stopped; nothing started since
+        "stop request",
+        "uv sync 1.23.0",
+        "spawn tow run 1.23.0",
+        "stop request",
+        "uv sync 1.22.0",
+    ]
+    assert not machine.up
+    record = state(install)
+    assert (record["status"], record["service_running"]) == ("failed", False)
+    assert "Run the update again" in lines[-1]
+    assert (install["root"] / ".update-switch.json").exists()
+
+    # The next run puts the data back first, then the previous version starts.
+    monkeypatch.setattr(updater.Update, "restore_snapshot", real)
+    monkeypatch.setattr(updater.Update, "start_and_check", original)
+    recovered = Machine(install["app"], github, supervisor=False)
+    code, _lines = run(recovered, "not-a-tag")
+    assert code == 2
+    assert recovered.calls == ["spawn tow run 1.22.0"]
+    assert (install["root"] / "data" / "state.json").read_text(encoding="utf-8") == '{"topics": []}'
+    assert not (install["root"] / ".update-switch.json").exists()
+
+
+def test_a_recovery_that_puts_data_back_only_partly_never_starts_tow(install, github, monkeypatch):
+    github.release("v1.23.0", tarball("1.23.0"))
+    original = updater.Update.start_and_check
+
+    def start_then_crash(work, version):
+        result = original(work, version)
+        if version == "1.23.0":
+            (install["root"] / "data" / "state.json").write_text('{"schema": 2}', encoding="utf-8")
+            raise Crash()
+        return result
+
+    monkeypatch.setattr(updater.Update, "start_and_check", start_then_crash)
+    killed(monkeypatch)
+    with pytest.raises(Crash):
+        run(Machine(install["app"], github), "v1.23.0")
+    monkeypatch.setattr(updater.Update, "start_and_check", original)
+
+    def half(work):
+        raise OSError("the disk went away")
+
+    monkeypatch.setattr(updater.Update, "restore_snapshot", half)
+    machine = Machine(install["app"], github)
+    code, _lines = run(machine, "not-a-tag")
+
+    assert code == 1
+    assert machine.calls == ["stop request"]  # stopped, and not started on half-restored data
+    assert state(install)["status"] == "recovery_failed"
+    assert (install["root"] / ".update-switch.json").exists()
+
+
+def test_the_switch_record_is_flushed_to_disk(install, github, monkeypatch):
+    # Before: a plain write and rename; a power cut could leave an empty record that blocks
+    # every later update ("cannot read the interrupted update record").
+    github.release("v1.23.0", tarball("1.23.0"))
+    flushed: list[int] = []
+    real = updater.os.fsync
+    monkeypatch.setattr(updater.os, "fsync", lambda fd: (flushed.append(fd), real(fd))[1])
+
+    code, lines = run(Machine(install["app"], github), "v1.23.0")
+
+    assert code == 0, lines
+    assert flushed  # the record of the switch, its cut-off time and its acceptance
 
 
 @pytest.mark.allow_system  # this Python runs the copy; a refused tag ends it before TOW is stopped or started
