@@ -295,6 +295,13 @@ def parse_ps(raw: str) -> tuple[int, str] | None:
         return None
 
 
+def _pwd() -> Any:
+    """The password database module (Linux and macOS only; ImportError elsewhere)."""
+    import importlib
+
+    return importlib.import_module("pwd")
+
+
 class PosixBackend:
     """Linux (``name="linux"``) or macOS (``name="macos"``)."""
 
@@ -541,6 +548,67 @@ class PosixBackend:
         except OSError:
             return False
         return self.folder_shared(path) is False
+
+    # --- handing a folder back to its owner (tow permissions fix) ---------------------------------
+
+    def elevated(self) -> bool:
+        geteuid = getattr(os, "geteuid", None)
+        return geteuid is not None and geteuid() == 0
+
+    def current_account(self) -> str | None:
+        geteuid = getattr(os, "geteuid", None)
+        return str(geteuid()) if geteuid is not None else None
+
+    def invoking_account(self) -> str | None:
+        """Under sudo, the account that ran it (SUDO_UID); else this one."""
+        sudo_uid = os.environ.get("SUDO_UID", "").strip()
+        if self.elevated() and sudo_uid.isdigit():
+            return sudo_uid
+        return self.current_account()
+
+    def personal_account(self, account: str) -> bool:
+        return account.isdigit() and account != "0"
+
+    def folder_owner(self, path: Path) -> str | None:
+        try:
+            return str(path.stat().st_uid)
+        except OSError:
+            return None
+
+    def shared_for(self, path: Path, account: str, *, root: bool = False) -> bool | None:
+        """The mode bits say it, whoever asks: the root when every account may write in it."""
+        del account
+        return self.root_shared(path) if root else self.folder_shared(path)
+
+    def account_name(self, account: str) -> str:
+        try:
+            return str(_pwd().getpwuid(int(account)).pw_name)
+        except ImportError, KeyError, ValueError:
+            return account
+
+    def account_of(self, name: str) -> str | None:
+        if name.isdigit():
+            return name
+        try:
+            return str(_pwd().getpwnam(name).pw_uid)
+        except ImportError, KeyError:
+            return None
+
+    def hand_over(self, path: Path, account: str) -> bool:
+        """``account`` becomes the owner of ``path`` (root only may give a folder away) and the
+        folder becomes 0700; True when read back so."""
+        chown = getattr(os, "chown", None)
+        if not self.personal_account(account) or chown is None:
+            return False
+        try:
+            if path.is_symlink():
+                return False
+            if self.folder_owner(path) != account:
+                chown(path, int(account), -1, follow_symlinks=False)
+            path.chmod(0o700)
+        except OSError:
+            return False
+        return self.folder_owner(path) == account and self.folder_shared(path) is False
 
     def protected_folders(self) -> list[str]:
         roots = list(SYSTEM_FOLDERS)

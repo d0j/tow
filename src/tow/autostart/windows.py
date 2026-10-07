@@ -55,7 +55,9 @@ def parse_task(raw: str) -> dict[str, Any] | None:
         "true",
     )
     restart = next((element for element in root.iter() if _local(element) == "RestartOnFailure"), None)
+    principals = next((child for child in root if _local(child) == "Principals"), None)
     return {
+        "user": text("UserId", principals) if principals is not None else "",
         "command": text("Command").strip('"'),
         "arguments": text("Arguments"),
         "working_directory": text("WorkingDirectory"),
@@ -178,6 +180,7 @@ class WindowsTask:
             "state": task.get("state"),
             "enabled": task.get("enabled"),
             "command": task.get("command"),
+            "user": task.get("user") or "",  # the account it runs as (DOMAIN\name or a SID)
             "problems": problems,
             "error": task.get("error") or "",
         }

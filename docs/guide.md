@@ -281,6 +281,7 @@ The left column is the text TOW shows (on Home, in a row, in a message or on a p
 | TOW was not started: an update was cut off while it replaced the code … | An update stopped half-way (the computer turned off, the updater was killed). | Run the update again (`Update TOW`): it puts the previous version back first. |
 | Sign-in from other devices is off — TOW opens only on its own computer. | Network access is off. | Turn it on at the computer running TOW. |
 | No password for other devices is set yet. | Network access is on, but there is no password. | Set it on the computer running TOW: Settings → Network access. |
+| Warning: other accounts on this computer can change the TOW folder … · … can open … | Other accounts may get into the TOW folder (an install in `C:\TOW` made from an administrator terminal belongs to Administrators, so TOW cannot close it at start). | `tow permissions` shows why. `tow permissions fix` closes it; when another account owns the folder, run it once in a terminal opened with **Run as administrator** (Linux, macOS: with `sudo`): the folder becomes your account's - the one autostart runs as - and nothing outside it changes. |
 
 Still stuck: **Diagnostics** checks the client and every site; `tow doctor` does the same from the command
 line. Logs are in `data/logs/`. When you report a bug, remove personal data first.
