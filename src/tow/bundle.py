@@ -256,58 +256,20 @@ def _validate_field(mapping: dict[str, Any], key: str, expected: type | tuple[ty
 
 def _validate_config_schema(data: dict[str, Any]) -> None:
     """config.yaml of a bundle: the schema ``load_config`` applies (``tow.config.validated``),
-    plus the shape of each site's settings an import must not let through."""
+    plus plain site names: config.yaml still loads an older odd name, an import never brings one
+    (a site name is part of /sites/<name>/... addresses)."""
     try:
         validate_graph(data)
     except YamlLimitError as exc:
         raise ExportImportError(f"invalid config.yaml: {exc}") from exc
     _validate_tree(data, label="config.yaml")
-    if isinstance(data.get("trackers"), dict):  # named per site below, before the shared check
-        _validate_tracker_settings(data["trackers"])
+    trackers = data.get("trackers")
+    if isinstance(trackers, dict) and not all(SAFE_ID.fullmatch(name) for name in trackers):
+        raise ExportImportError("config.yaml: a site name may have only letters, digits, - and _ (at most 64)")
     try:
         validated(data)
     except ConfigError as exc:
         raise ExportImportError(f"invalid {exc.text('en')}") from None  # the technical text, for the log
-
-
-def _validate_tracker_settings(trackers: dict[str, Any]) -> None:
-    for name, tracker in trackers.items():
-        if not isinstance(name, str) or not isinstance(tracker, dict):
-            raise ExportImportError("config.yaml tracker entry has an invalid type")
-        if not SAFE_ID.fullmatch(name):  # part of /sites/<name>/… addresses
-            raise ExportImportError("config.yaml: a site name may have only letters, digits, - and _ (at most 64)")
-        label = f"config.yaml.trackers.{name}"
-        for key in (
-            "title",
-            "url_regex",
-            "download_href_regex",
-            "topic_path",
-            "download_path",
-            "login_path",
-            "search_path",
-        ):
-            _validate_field(tracker, key, str, label=label)
-        _validate_field(tracker, "browser_auth", bool, label=label)
-        for key in ("login_hosts", "fetch_hosts", "cookie_names"):
-            if key in tracker and (
-                not isinstance(tracker[key], list) or not all(isinstance(item, str) for item in tracker[key])
-            ):
-                raise ExportImportError(f"{label}.{key} has an invalid type")
-        _validate_field(tracker, "page_download", bool, label=label)
-        form = tracker.get("login_form")
-        if form is not None:
-            if not isinstance(form, dict) or set(form) - {"user_field", "pw_field", "extra"}:
-                raise ExportImportError(f"{label}.login_form has an invalid shape")
-            for key in ("user_field", "pw_field"):
-                _validate_field(form, key, str, label=f"{label}.login_form")
-            extra = form.get("extra")
-            if extra is not None and (
-                not isinstance(extra, dict)
-                or not all(isinstance(k, str) and isinstance(v, str) for k, v in extra.items())
-            ):
-                raise ExportImportError(f"{label}.login_form.extra has an invalid type")
-        for key in ("fail_threshold", "cooldown_sec"):
-            _validate_field(tracker, key, int, label=label)
 
 
 def _has_exact_policy(value: Any) -> bool:

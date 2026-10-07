@@ -132,6 +132,56 @@ def test_unreadable_yaml_or_a_file_without_settings_is_a_config_error(text, code
     assert (caught.value.code, {k: v for k, v in caught.value.params.items() if k != "_prefix"}) == (code, values)
 
 
+@pytest.mark.parametrize(
+    ("setting", "code", "key"),
+    [
+        ("title: 5", "config_error.site_text", "title"),
+        ("login_path: [/login]", "config_error.site_text", "login_path"),
+        ('browser_auth: "false"', "config_error.site_true_false", "browser_auth"),
+        ("page_download: 1", "config_error.site_true_false", "page_download"),
+        ('fail_threshold: "3"', "config_error.site_number", "fail_threshold"),
+        ("cooldown_sec: true", "config_error.site_number", "cooldown_sec"),
+        ("cookie_names: uid", "config_error.site_text_list", "cookie_names"),
+        ("cookie_names: [1]", "config_error.site_text_list", "cookie_names"),
+        ("login_form: {password: x}", "config_error.site_login_form", None),
+        ("login_form: {extra: {login: 1}}", "config_error.site_login_form", None),
+        ("login_form: [user]", "config_error.site_login_form", None),
+    ],
+)
+def test_a_hand_edited_site_setting_of_the_wrong_type_is_refused_at_load(setting, code, key):
+    # These were checked only when a .towx was imported; a hand-edited config.yaml with
+    # `browser_auth: "false"` loaded and turned the browser sign-in on.
+    from tow.config import ConfigError
+    from tow.i18n import t
+
+    _write(f"trackers:\n  site:\n    fetch_hosts: [https://tracker.example]\n    {setting}\n")
+    with pytest.raises(ConfigError) as caught:
+        load_config()
+    params = {"site": "site", **({"key": key} if key else {})}
+    assert (caught.value.code, caught.value.params) == (code, params)
+    assert caught.value.text("ru") == t(code, "ru", **params)
+
+
+def test_every_known_site_and_the_example_config_still_load():
+    from pathlib import Path
+
+    from tow.config import validated
+    from tow.trackers.presets import known_sites
+
+    example = Path(__file__).parents[1] / "config.example.yaml"
+    _write(example.read_text(encoding="utf-8"))
+    assert load_config()["trackers"]
+    assert validated({"trackers": known_sites()})["trackers"].keys() == known_sites().keys()
+    site = {
+        "title": None,  # empty settings mean "not set", as before
+        "browser_auth": None,
+        "fail_threshold": None,
+        "login_form": {"user_field": "login", "pw_field": None, "extra": {"login": "Вход"}},
+        "cookie_names": [],
+    }
+    assert validated({"trackers": {"site": site}})["trackers"]["site"] == site
+
+
 def test_the_bundle_check_and_the_loader_share_one_schema():
     # An imported bundle used to check a state key (save_roots) and never allowed_save_roots.
     from tow.bundle import ExportImportError, _validate_config_schema
