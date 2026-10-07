@@ -700,3 +700,70 @@ def test_free_space_and_file_checks_of_a_remote_client(monkeypatch):
     assert free_space_problem("/downloads/tv", files, [0]) is None  # a remote client: not judged by C:
     assert free_space_problem("Q:\\no-such-drive\\tv", files, [0]) is None
     assert filesystem_confirmation("/downloads/tv", "big.mkv", 1) is None  # unverified, not "missing"
+
+
+# --- an add whose marking step fails never leaves an unmarked torrent behind silently ------
+
+
+class NoLabelDeluge(FakeDeluge):
+    def m_core_enable_plugin(self, name):
+        return False  # a build without the plugin: Deluge answers False and enables nothing
+
+
+def test_deluge_without_its_label_plugin_adds_nothing(tmp_path):
+    server = NoLabelDeluge()
+    with pytest.raises(ClientError) as raised:
+        _deluge(server).add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert raised.value.code == "client.deluge.no_label_plugin"
+    assert server.torrents == {}
+
+
+class OldTransmission(FakeTransmission):
+    """Transmission 3.0 (RPC 16): labels are ignored on torrent-add; setting them may time out."""
+
+    def __init__(self, label_failures: int) -> None:
+        super().__init__(rpc_version=16)
+        self.label_failures = label_failures
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content) if request.content else {}
+        if body.get("method") == "torrent-add":
+            body["arguments"].pop("labels", None)
+            request = httpx.Request("POST", request.url, headers=request.headers, json=body)
+        if body.get("method") == "torrent-set" and "labels" in body.get("arguments", {}) and self.label_failures:
+            self.label_failures -= 1
+            raise httpx.ReadTimeout("slow daemon")
+        return super().handler(request)
+
+
+def test_transmission_label_timeout_after_the_add_is_marked_again(tmp_path):
+    server = OldTransmission(label_failures=1)
+    _transmission(server).add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert server.torrents[K].labels == ["tow"]
+    assert server.torrents[K].running
+
+
+def test_torrent_that_cannot_be_marked_is_reported_not_left_silently(tmp_path):
+    server = OldTransmission(label_failures=5)
+    with pytest.raises(ClientError) as raised:
+        _transmission(server).add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert raised.value.code == "client.managed.added_unmarked"
+    torrent = server.torrents[K]
+    assert (torrent.running, torrent.labels) == (False, [])  # paused, and the owner is told
+
+
+def test_deluge_answer_that_is_not_deluges_is_an_error_not_a_removed_torrent():
+    server = FakeDeluge()
+    adapter = _deluge(server)
+    adapter.inspect_torrent(H)  # log in and attach
+    real = server.handler
+
+    def proxy_glitch(request: httpx.Request) -> httpx.Response:
+        if json.loads(request.content)["method"] == "core.get_torrent_status":
+            return httpx.Response(200, content=b"null")
+        return real(request)
+
+    adapter._http = httpx.Client(transport=httpx.MockTransport(proxy_glitch))
+    with pytest.raises(ClientError) as raised:
+        adapter.has_hash(H)
+    assert raised.value.code == "client.deluge.not_web"

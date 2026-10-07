@@ -39,6 +39,8 @@ STEPS = (
 NOTE = "client.qbittorrent.note"
 # Who reports the errors (in front of each message).
 NAME = "qBittorrent"
+# Seconds an add may take (reading a large .torrent); other requests keep the 8 s timeout.
+ADD_TIMEOUT_SEC = 60
 
 
 def _fail(code: str, /, **params: Any) -> ClientError:
@@ -312,6 +314,19 @@ class QBittorrentClient:
                     failed=failed,
                 )
 
+    def _added_by_this_add(self, hashes: tuple[str, ...]) -> bool:
+        """After a failed add request: the torrent is there with both of TOW's marks (it was
+        not there before, so this add put it there)."""
+        for value in dict.fromkeys(str(h).strip().upper() for h in hashes if str(h or "").strip()):
+            try:
+                info = self.inspect_torrent(value)
+            except Exception:  # noqa: BLE001 - not readable now: the add's own error stands
+                return False
+            tags = {str(tag).strip().casefold() for tag in (info or {}).get("tags") or []}
+            if {"tow", "tow-pending"}.issubset(tags):
+                return True
+        return False
+
     def _wait_for_ownership(
         self,
         infohash: str,
@@ -569,8 +584,21 @@ class QBittorrentClient:
             "is_stopped": True,
             "content_layout": "Original",
         }
-        result = self._c.torrents_add(**add_options)
-        self._api_ok(result, action="client.qbittorrent.action_add")
+        aliases = tuple(
+            value
+            for value in (metadata.hash_v1, metadata.hash_v2, metadata.hash_v2[:40] if metadata.hash_v2 else None)
+            if value
+        )
+        try:
+            # A large .torrent can take qBittorrent a while; its library sends a request that
+            # timed out once more, and the add must not be one of them.
+            result = self._c.torrents_add(**add_options, requests_args={"timeout": ADD_TIMEOUT_SEC})
+            self._api_ok(result, action="client.qbittorrent.action_add")
+        except Exception:
+            # ...and when it was: qBittorrent refuses the repeat as a duplicate although the first
+            # request added the torrent. It is this add when it is there now with both TOW marks.
+            if not self._added_by_this_add((infohash, *aliases)):
+                raise
         owned_hash: str | None = None
         release_requested = False
         try:
@@ -578,15 +606,7 @@ class QBittorrentClient:
                 infohash,
                 visibility_error="client.managed.not_visible",
                 ownership_error="client.managed.no_owner_mark",
-                aliases=tuple(
-                    value
-                    for value in (
-                        metadata.hash_v1,
-                        metadata.hash_v2,
-                        metadata.hash_v2[:40] if metadata.hash_v2 else None,
-                    )
-                    if value
-                ),
+                aliases=aliases,
             )
             if not paths_equal(str(added.get("save_path") or ""), destination):
                 raise _fail("client.managed.wrong_folder")

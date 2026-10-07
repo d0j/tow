@@ -109,7 +109,10 @@ class DelugeClient(ManagedClient):
             body = response.json()
         except ValueError as exc:
             raise self._fail("client.deluge.not_web") from exc
-        return body if isinstance(body, dict) else {}
+        if not isinstance(body, dict) or ("result" not in body and not body.get("error")):
+            # Not Deluge's answer (a proxy, a Web UI still starting): never "no such torrent".
+            raise self._fail("client.deluge.not_web")
+        return body
 
     def _raw(self, method: str, *params: Any, timeout: float | None = None) -> Any:
         body = self._post(method, list(params), timeout)
@@ -146,6 +149,10 @@ class DelugeClient(ManagedClient):
         plugins = self._call("core.get_enabled_plugins") or []
         if "Label" not in plugins:
             self._call("core.enable_plugin", "Label")
+            # A build without the plugin answers False and enables nothing: without labels TOW
+            # could not mark what it adds, so nothing is added.
+            if "Label" not in (self._call("core.get_enabled_plugins") or []):
+                raise self._fail("client.deluge.no_label_plugin")
         labels = set(self._call("label.get_labels") or [])
         for label in (OWNER, PENDING):
             if label not in labels:
@@ -217,6 +224,9 @@ class DelugeClient(ManagedClient):
             "tags": tags,
             "files": files,
         }
+
+    def _prepare_add(self) -> None:
+        self._ensure_labels()  # a torrent added before its label exists could stay unmarked
 
     def _add_stopped(self, content: bytes, save_path: str, labels: list[str]) -> None:
         torrent_id = self._call(

@@ -885,11 +885,15 @@ def _accept_existing_torrent(
 ) -> bool:
     """The revision is already in the client (or only its hash label changed): verify it
     without touching it and return whether its file selection is TOW-verified."""
-    if plan.mode != "all" and not client_owned_by_tow(topic_client, h):
-        raise TowError("check.not_owned_partial")
+    if not client_owned_by_tow(topic_client, h):
+        # Never green: TOW can change nothing about a torrent without its mark (the file
+        # selection, the next revision), and it may be TOW's own add whose marking failed.
+        if plan.mode != "all":
+            raise TowError("check.not_owned_partial")
+        raise TowError("check.not_owned_existing", cls="qbit")
     if not _confirm_client_add(topic_client, h, dest):
         raise TowError("check.migration_unconfirmed" if migrated else "check.existing_unconfirmed")
-    selection_verified = client_owned_by_tow(topic_client, h)
+    selection_verified = True
     row["added"] = False
     if migrated:
         row["hash_identity_migrated"] = True

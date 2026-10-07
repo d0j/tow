@@ -262,6 +262,32 @@ class ManagedClient:
             "client.managed.pending_not_cleared",
         )
 
+    def _prepare_add(self) -> None:
+        """What must be in place before a torrent is added (Deluge: its labels). Default: nothing."""
+
+    def _mark_after_failed_add(self, aliases: list[str], labels: list[str], error: Exception) -> None:
+        """The add failed, maybe after the client took the torrent (its marking step failed or
+        did not answer). A torrent there now is TOW's - it was not there a moment ago - and is
+        stopped: it gets TOW's mark again, and the add goes on. One that cannot be marked is
+        reported so (TOW could never manage it); with nothing added, the error stands."""
+        if isinstance(error, ClientError) and error.code == "client.managed.already_there":
+            raise error
+        try:
+            present = next((alias for alias in aliases if self._owner_tags(alias) is not None), None)
+        except Exception:  # noqa: BLE001 - the client does not answer: the add's own error says more
+            present = None
+        if present is None:
+            raise error
+        try:
+            if OWNER not in self._tags({"tags": self._owner_tags(present) or []}):
+                self._set_labels(present, labels)
+            marked = OWNER in self._tags({"tags": self._owner_tags(present) or []})
+        except Exception:  # noqa: BLE001 - reported below as the torrent TOW cannot mark
+            marked = False
+        if not marked:
+            raise self._fail("client.managed.added_unmarked") from error
+        _LOG.warning("an add step failed (%s); the torrent is in the client, marked again", type(error).__name__)
+
     def add_torrent_selected(
         self,
         content: bytes,
@@ -288,7 +314,12 @@ class ManagedClient:
         )
         if any(self.inspect_torrent(alias) is not None for alias in aliases):
             raise self._fail("client.managed.already_there")
-        self._add_stopped(content, destination, self._labels_for_add())
+        self._prepare_add()
+        labels = self._labels_for_add()
+        try:
+            self._add_stopped(content, destination, labels)
+        except Exception as error:  # noqa: BLE001 - re-raised unless the torrent is there and marked again
+            self._mark_after_failed_add(aliases, labels, error)
         # A hybrid (v1+v2) torrent is listed by most clients under its v1 hash: use what the
         # client actually shows from here on (the check accepts any of the torrent's hashes).
         infohash = self._visible_alias(aliases)
