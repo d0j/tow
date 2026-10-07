@@ -25,6 +25,25 @@
     "documents": "Файл настроек должен содержать только один документ YAML. Обработка остановлена.",
     "number": "В настройках YAML есть число или дата, которые нельзя прочитать (слишком большие или неверные). Обработка остановлена."
   },
+  "config_error": {
+    "mapping": "config.yaml должен содержать настройки в виде «имя: значение»",
+    "syntax": "Не удаётся прочитать config.yaml: ошибка в записи YAML в строке {line}, позиция {column}. Исправьте её и запустите TOW снова.",
+    "whole_number": "config.yaml: {key} должно быть целым числом от {low} до {high}",
+    "true_false": "config.yaml: {key} должно быть true или false",
+    "folder_list": "config.yaml: {key} должно быть списком папок",
+    "folder": "config.yaml: {key} должно быть путём к папке",
+    "site_name": "config.yaml: имя сайта не может содержать / или \\ и не может быть . или ..",
+    "site_hosts": "config.yaml: trackers.{site}.{key} должно быть списком адресов http:// или https://",
+    "bind": "config.yaml: bind должно быть адресом в виде текста, например 127.0.0.1",
+    "user_agent": "config.yaml: user_agent должно быть текстом",
+    "trackers": "config.yaml: в trackers каждому имени сайта должны соответствовать его настройки",
+    "client": "config.yaml: client должно быть набором настроек (kind, ...)",
+    "clients": "config.yaml: clients должно быть набором настроек или списком",
+    "backup_time": "config.yaml: backup_time должно быть в виде «03:30»",
+    "heartbeat_url": "config.yaml: heartbeat_url должно быть адресом https:// (например, от healthchecks.io)",
+    "language": "config.yaml: language должно быть «auto» или кодом языка, например en или ru",
+    "quiet_hours": "config.yaml: quiet_hours должно быть в виде «23-8» (часы, местное время)"
+  },
   "monitorrent": {
     "missing": "Файл базы Monitorrent не найден.",
     "invalid_database": "Не удалось прочитать базу Monitorrent: файл повреждён, занят или содержит неподдерживаемые данные. Импорт не выполнен.",

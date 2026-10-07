@@ -101,6 +101,37 @@ def test_wrong_types_are_named_when_the_config_is_loaded(line, message):
         load_config()
 
 
+def test_a_wrong_value_is_named_in_the_owners_language():
+    from tow.config import ConfigError
+    from tow.i18n import t
+
+    _write("port: http\n")
+    with pytest.raises(ConfigError) as caught:
+        load_config()
+    assert caught.value.code == "config_error.whole_number"
+    assert caught.value.text("ru") == t("config_error.whole_number", "ru", key="port", low=1, high=65535)
+    assert "целым числом" in caught.value.text("ru")
+
+
+@pytest.mark.parametrize(
+    ("text", "code", "values"),
+    [
+        ("port: 8790\nbind: [127.0.0.1\n", "config_error.syntax", {"line": 3, "column": 1}),
+        ("a: b\n  c: d\n", "config_error.syntax", {"line": 2, "column": 4}),
+        ("- port\n", "config_error.mapping", {}),
+        ("just text\n", "config_error.mapping", {}),
+    ],
+)
+def test_unreadable_yaml_or_a_file_without_settings_is_a_config_error(text, code, values):
+    # Both used to escape as a bare yaml.YAMLError / TypeError: "the command could not be completed".
+    from tow.config import ConfigError
+
+    _write(text)
+    with pytest.raises(ConfigError) as caught:
+        load_config()
+    assert (caught.value.code, {k: v for k, v in caught.value.params.items() if k != "_prefix"}) == (code, values)
+
+
 def test_the_bundle_check_and_the_loader_share_one_schema():
     # An imported bundle used to check a state key (save_roots) and never allowed_save_roots.
     from tow.bundle import ExportImportError, _validate_config_schema

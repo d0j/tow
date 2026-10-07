@@ -72,6 +72,26 @@ def test_a_broken_config_is_an_exit_code_not_a_traceback(capsys):
     assert "Traceback" not in err
 
 
+@pytest.mark.parametrize(
+    ("text", "code", "values"),
+    [("port: 8787\nbind: [x\n", "syntax", {"line": 3, "column": 1}), ("- a\n- b\n", "mapping", {})],
+)
+def test_starting_with_unreadable_yaml_says_where_in_the_owners_words(monkeypatch, capsys, text, code, values):
+    # `tow start` is what every start file runs; a YAML error used to be only "the command could
+    # not be completed".
+    from tow.paths import config_path
+
+    config_path().write_text(text, encoding="utf-8")
+    monkeypatch.setenv("TOW_NO_BROWSER", "1")
+
+    assert cli.main(["start"]) == cli.EXIT_CANNOT_RUN
+    captured = capsys.readouterr()
+    assert captured.out == ""  # refused before anything was started
+    # The terminal speaks the system's language when config.yaml cannot say which one.
+    expected = {f"tow start: {t(f'config_error.{code}', lang, **values)}" for lang in ("en", "ru")}
+    assert captured.err.strip() in expected, captured.err
+
+
 def test_unexpected_cli_error_does_not_echo_secret(monkeypatch, capsys):
     def broken(_args):
         raise RuntimeError("password=must-not-be-displayed")

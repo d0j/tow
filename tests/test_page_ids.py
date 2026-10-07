@@ -14,8 +14,9 @@ from tow.config import ConfigError, validated
 @pytest.mark.parametrize("name", ["../topics/1", "a/b", "a\\b", "..", "."])
 def test_config_and_import_refuse_a_site_name_that_moves_a_page_address(name):
     raw = {"trackers": {name: {"fetch_hosts": ["https://tracker.example"]}}}
-    with pytest.raises(ConfigError, match="site name"):
+    with pytest.raises(ConfigError) as caught:
         validated(raw)
+    assert caught.value.code == "config_error.site_name"
     with pytest.raises(ExportImportError, match="site name"):
         _validate_config_schema(raw)
 
