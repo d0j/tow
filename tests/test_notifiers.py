@@ -308,6 +308,72 @@ def test_telegram_200_with_an_unreadable_answer_is_delivered(http):
     assert len(seen) == 1
 
 
+WHATSAPP = {"notifiers": {"whatsapp": {"phone": "+79990001122", "apikey": "123456"}}}
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        lambda: httpx.Response(200, content=b""),
+        lambda: httpx.Response(200, content=b"x" * (base.MAX_RESPONSE_BYTES + 10)),  # not read: empty
+        lambda: httpx.Response(200, text="<html><body>Some new CallMeBot page</body></html>"),
+    ],
+)
+def test_whatsapp_200_that_says_nothing_known_is_delivered_once(http, answer):
+    """The gateway took the message: "wait and send again" would deliver it twice."""
+    set_handler, seen, _ = http
+    set_handler(lambda _r: answer())
+    assert notifiers.send_all(WHATSAPP, "серия") == {"whatsapp": (True, "")}
+    notifiers.flush(WHATSAPP)
+    assert len(seen) == 1
+
+
+def test_whatsapp_asking_to_wait_is_tried_again(http):
+    set_handler, _, _ = http
+    set_handler(lambda _r: httpx.Response(200, text="Please wait 2 seconds between messages"))
+    ((ok, _reason),) = notifiers.send_all(WHATSAPP, "серия").values()
+    assert not ok
+    assert [item["text"] for item in load_state()["notify_outbox"]["whatsapp"]["items"]] == ["серия"]
+
+
+def test_telegram_group_moved_to_a_supergroup_names_the_new_id(http):
+    set_handler, _, _ = http
+    set_handler(
+        lambda _r: httpx.Response(
+            400,
+            json={
+                "ok": False,
+                "error_code": 400,
+                "description": "Bad Request: group chat was upgraded to a supergroup chat",
+                "parameters": {"migrate_to_chat_id": -1001234567890},
+            },
+        )
+    )
+    telegram = {"telegram": {"token": TG_TOKEN, "chat_ids": ["-4242"]}}
+    ((ok, reason),) = notifiers.send_all(telegram, "x").values()
+    assert not ok
+    assert "-1001234567890" in reason
+    assert "-4242" in reason
+    # A settings problem: the message waits for the new id instead of being dropped.
+    assert [item["text"] for item in load_state()["notify_outbox"]["telegram:-4242"]["items"]] == ["x"]
+
+
+def test_discord_shows_titles_as_written(http):
+    from tow.notifiers.discord import escape_markdown
+
+    set_handler, seen, _ = http
+    set_handler(lambda _r: httpx.Response(204))
+    title = "*Show* __Part__ ||spoiler|| `x` ~~y~~ [a](b)\n# Big\n- item\n1. first\nhttps://t.example/a_b_c"
+    notifiers.send_all(DISCORD, title)
+    sent = json.loads(seen[0].content)["content"]
+    assert sent == escape_markdown(title)
+    assert "\\*Show\\* \\_\\_Part\\_\\_ \\|\\|spoiler\\|\\|" in sent
+    assert "\n\\# Big\n\\- item\n1\\. first\nhttps://t.example/a_b_c" in sent  # the link is left as it is
+    from tow.notifiers import discord
+
+    assert len(escape_markdown("*" * discord.MAX_LEN)) <= 2000  # Discord's own limit
+
+
 def test_no_answer_after_sending_is_not_sent_again_at_once(http):
     """The service got the POST but its answer timed out: it may have arrived. TOW does not post
     it again within this delivery; it keeps it, says why, and the next delivery sends it once."""
