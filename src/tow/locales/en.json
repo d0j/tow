@@ -659,6 +659,7 @@
     "autostart": "Autostart",
     "autostart_on": "starts with the computer",
     "autostart_off": "does not start automatically",
+    "autostart_foreign": "The autostart of this account ({where}) belongs to another TOW folder, not to this one. To start this TOW with the computer, turn autostart off in that TOW first, then on here.",
     "autostart_unread": "the system did not answer the question; the state above may be incomplete"
   },
   "doctor_report": {
