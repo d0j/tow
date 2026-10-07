@@ -40,8 +40,9 @@ _UNSERIALIZED_WRITES = frozenset(
 )
 # Actions that wait on the network (a client, a site, a messenger) for up to a minute: they
 # read their inputs, talk, and take the persistence lock only to save what they learned,
-# re-reading the stores under it (doctor_report, run_check, topics_add, the tracker login),
-# so another writer's change is never lost. Holding the site lock meanwhile froze every save.
+# re-reading the stores under it (doctor_report, run_check, topics_add, an edit that moves the
+# folder in the client, adopting, the tracker login), so another writer's change is never lost.
+# Holding the site lock meanwhile froze every save.
 _NETWORK_ACTIONS = re.compile(
     r"/(check"
     r"|doctor/run"
@@ -50,7 +51,7 @@ _NETWORK_ACTIONS = re.compile(
     r"|sites/[^/]+/probe"
     r"|topics/add"
     r"|topics/guess-title"
-    r"|topics/[^/]+/(check|replace-revision|tracker-login|tracker-browser-auth))"
+    r"|topics/[^/]+/(check|edit|adopt|replace-revision|tracker-login|tracker-browser-auth))"
 )
 
 

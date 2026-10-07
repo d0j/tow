@@ -229,49 +229,97 @@ def _first_check_failed(new: dict[str, Any], error: Exception) -> None:
         services.log_event("add_check_notify_fail", topic=new["id"], error=str(notify_exc), how="manual")
 
 
+class _Moved(NamedTuple):
+    """How the client-side move of a topic's folder went: ``outcome`` as ``await_relocation``
+    says it ("done", "moving", "failed"), or "error" when the client refused or did not answer
+    (the topic keeps its old folder); ``suffix`` and ``kind`` for the save message."""
+
+    outcome: str
+    suffix: str
+    kind: str
+
+
+def _find(state: dict[str, Any], tid: str) -> dict[str, Any] | None:
+    return next((item for item in state.get("topics") or [] if str(item.get("id")) == tid), None)
+
+
 def edit_topic(tid: str, form: TopicForm) -> RedirectResponse:
-    """The topic as the edit form says (the caller holds the persistence lock); a changed folder
-    of a topic with a revision is moved in its client too."""
-    state = services.load_state()
-    topic = next((item for item in state.get("topics") or [] if str(item.get("id")) == tid), None)
-    if topic is None:  # deleted meanwhile (another tab, undo): nothing to save, never "Saved"
-        return flash_redirect("/", "web.topics.not_found", "err")
-    try:
-        candidate, policy, selection_changed = _edited(topic, form)
-        dest = resolve_save_path(form.save_path, state)
-        if not dest:
-            raise Refused("web.topics.need_folder_short")
-        if problem := _folder_refusal(dest, current=str(topic.get("save_path") or "")):
-            raise Refused(problem)
-    except Refused as refusal:
-        return refusal.response(form)
+    """The topic as the edit form says; a changed folder of a topic with a revision is moved in
+    its client too. The persistence lock is held to read and to save, never while the client
+    moves the folder (up to ``RELOCATION_WAIT_SEC``): the save then reads the topic again and
+    applies only what the form changed, so a check that finished meanwhile is kept."""
+    with services.persistence_lock():
+        state = services.load_state()
+        topic = _find(state, tid)
+        if topic is None:  # deleted meanwhile (another tab, undo): nothing to save, never "Saved"
+            return flash_redirect("/", "web.topics.not_found", "err")
+        try:
+            candidate, policy, selection_changed = _edited(topic, form)
+            dest = resolve_save_path(form.save_path, state)
+            if not dest:
+                raise Refused("web.topics.need_folder_short")
+            if problem := _folder_refusal(dest, current=str(topic.get("save_path") or "")):
+                raise Refused(problem)
+        except Refused as refusal:
+            return refusal.response(form)
+        before = copy.deepcopy(topic)
+        services.log_event(
+            "topic_edit",
+            topic=tid,
+            title=candidate.get("title"),
+            url=candidate.get("url"),
+            path=dest,
+            client_id=candidate["client_id"],
+            selection_mode=policy["mode"],
+            selection_value=policy["value"],
+            tracking_mode=policy["tracking_mode"],
+            selection_changed=selection_changed,
+            check_interval_min=candidate.get("check_interval_min"),
+            how="manual",
+        )
+        old_dest = str(topic.get("save_path") or "")
+        old_hash = str(topic.get("hash") or "")
+        if not old_hash or paths_equal(old_dest, dest):
+            return _save_edit(state, topic, before, candidate, dest, None)
+    moved = _move_in_client(candidate, tid, old_hash, dest)
+    with services.persistence_lock():
+        state = services.load_state()
+        topic = _find(state, tid)
+        if topic is None:  # deleted while its folder moved: the History has the move
+            return flash_redirect("/", "web.topics.not_found", "err")
+        return _save_edit(state, topic, before, candidate, dest, moved, old_dest=old_dest)
+
+
+def _save_edit(
+    state: dict[str, Any],
+    topic: dict[str, Any],
+    before: dict[str, Any],
+    candidate: dict[str, Any],
+    dest: str,
+    moved: _Moved | None,
+    *,
+    old_dest: str = "",
+) -> RedirectResponse:
+    """The form's changes (``before`` -> ``candidate``) on ``topic`` as it is now, with the new
+    folder unless its move failed; the caller holds the persistence lock."""
     undo.stamp(state, "topic_put", item=copy.deepcopy(topic))
-    topic.update(candidate)
-    old_dest = str(topic.get("save_path") or "")
-    old_hash = str(topic.get("hash") or "")
-    if not old_hash or paths_equal(old_dest, dest):
+    for key in before.keys() | candidate.keys():
+        if key not in candidate:
+            topic.pop(key, None)
+        elif before.get(key) != candidate[key] or key not in before:
+            topic[key] = copy.deepcopy(candidate[key])
+    if moved is None or moved.outcome != "error":
         topic["save_path"] = dest
         remember_save_root(state, dest)
-    services.log_event(
-        "topic_edit",
-        topic=tid,
-        title=topic.get("title"),
-        url=topic.get("url"),
-        path=dest,
-        client_id=candidate["client_id"],
-        selection_mode=policy["mode"],
-        selection_value=policy["value"],
-        tracking_mode=policy["tracking_mode"],
-        selection_changed=selection_changed,
-        check_interval_min=topic.get("check_interval_min"),
-        how="manual",
-    )
-    moved, moved_kind = "", "ok"
-    if old_hash and not paths_equal(old_dest, dest):
-        moved, moved_kind = _move_in_client(state, topic, tid, old_hash, old_dest, dest)
+    if moved is not None and moved.outcome != "error":
+        if pending := pending_move(moved.outcome, old_dest, dest, iso_now()):
+            topic["move_pending"] = pending
+        else:
+            topic.pop("move_pending", None)
     services.save_state(state)
     services.cleanup_secret_undo()
-    return flash_redirect("/", t("web.common.saved") + moved, moved_kind)
+    suffix, kind = (moved.suffix, moved.kind) if moved is not None else ("", "ok")
+    return flash_redirect("/", t("web.common.saved") + suffix, kind)
 
 
 def _edited(topic: dict[str, Any], form: TopicForm) -> tuple[dict[str, Any], dict[str, Any], bool]:
@@ -299,6 +347,11 @@ def _edited(topic: dict[str, Any], form: TopicForm) -> tuple[dict[str, Any], dic
     client_id = str(selected_client["id"])
     if topic.get("hash") and client_id != str(topic.get("client_id") or client_id):
         raise Refused("web.topics.client_locked")
+    if candidate["url"] != topic.get("url") or client_id != str(topic.get("client_id") or client_id):
+        # What the last check found (an unmarked torrent to adopt) was about the old link or
+        # client: its message stays until the next check, its offer does not.
+        candidate.pop("last_error_code", None)
+        candidate.pop("last_error_params", None)
     try:
         prepared = _prepared(form.content_token, str(candidate["url"]), client_id)
         policy = selection_policy(
@@ -315,12 +368,10 @@ def _edited(topic: dict[str, Any], form: TopicForm) -> tuple[dict[str, Any], dic
     return candidate, policy, apply_selection(topic, candidate, client_id, policy)
 
 
-def _move_in_client(
-    state: dict[str, Any], topic: dict[str, Any], tid: str, old_hash: str, old_dest: str, dest: str
-) -> tuple[str, str]:
+def _move_in_client(topic: dict[str, Any], tid: str, old_hash: str, dest: str) -> _Moved:
     """The topic's torrent moves to ``dest`` in its client (only one TOW added; the owner's edit
-    asked for it): the save message's suffix and its kind. A failure is logged and said, never
-    raised - the edit itself is kept."""
+    asked for it), without the persistence lock. A failure is logged and said, never raised -
+    the edit itself is kept."""
     move_client_id = str(topic.get("client_id") or "") or None
     try:
         adapter = services.client_from_secrets(services.load_config(), services.load_secrets(), move_client_id)
@@ -329,12 +380,6 @@ def _move_in_client(
             raise RuntimeError(t("web.topics.not_owned"))
         adapter.set_location(old_hash, dest)
         outcome = services.await_relocation(adapter, old_hash, dest)
-        topic["save_path"] = dest
-        if pending := pending_move(outcome, old_dest, dest, iso_now()):
-            topic["move_pending"] = pending
-        else:
-            topic.pop("move_pending", None)
-        remember_save_root(state, dest)
         services.log_event(
             "qbit_move",
             topic=tid,
@@ -346,11 +391,11 @@ def _move_in_client(
             status={"done": "succeeded", "moving": "moving"}.get(outcome, "unconfirmed"),
             how="manual",
         )
-        moved = {
+        suffix = {
             "done": t("web.topics.moved_done"),
             "moving": t("web.topics.moved_moving"),
         }.get(outcome, t("web.topics.moved_unconfirmed"))
-        return moved, "ok" if outcome in ("done", "moving") else "warn"
+        return _Moved(outcome, suffix, "ok" if outcome in ("done", "moving") else "warn")
     except Exception as e:  # noqa: BLE001 - any client failure of the move is logged and said; the edit is kept
         services.log_event(
             "qbit_move_fail",
@@ -362,4 +407,4 @@ def _move_in_client(
             **error_fields(e),
             how="manual",
         )
-        return t("web.topics.move_failed"), "warn"
+        return _Moved("error", t("web.topics.move_failed"), "warn")
