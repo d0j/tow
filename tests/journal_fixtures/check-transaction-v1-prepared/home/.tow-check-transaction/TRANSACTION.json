@@ -1,0 +1,18 @@
+{
+  "format": "tow-check-transaction/v1",
+  "status": "prepared",
+  "targets": {
+    "history": {
+      "backup": null,
+      "before_exists": false,
+      "before_sha256": null,
+      "path": "download_history.json"
+    },
+    "state": {
+      "backup": "state.before",
+      "before_exists": true,
+      "before_sha256": "6ae0bc6fe39c9f41b318a17397a3ed2b5aeebea49bdc80cc97c15a57779d412b",
+      "path": "state.json"
+    }
+  }
+}

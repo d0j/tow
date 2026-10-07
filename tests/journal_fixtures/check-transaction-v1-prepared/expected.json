@@ -1,0 +1,10 @@
+{
+  "before": {
+    "download_history.json": null,
+    "state.json": "{\"topics\": [{\"id\": \"before\"}], \"mirrors\": {}}\n"
+  },
+  "mixed": {
+    "download_history.json": "{\"version\": 1, \"records\": []}\n",
+    "state.json": "{\"topics\": [{\"id\": \"half-written\"}], \"mirrors\": {}}\n"
+  }
+}

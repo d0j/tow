@@ -1,0 +1,18 @@
+{
+  "before": {
+    "config.yaml": "bind: 127.0.0.1\n# journal fixture: before\n",
+    "download_history.json": null,
+    "restore-points/20260101T000000Z-0a1b2c3d.towx": "synthetic-restore-point-before\n",
+    "secrets-undo.enc": null,
+    "secrets.enc": "synthetic-encrypted-secrets-before\n",
+    "state.json": "{\"topics\": [{\"id\": \"before\"}], \"mirrors\": {}}\n"
+  },
+  "mixed": {
+    "config.yaml": "bind: 127.0.0.1\n# journal fixture: half-written\n",
+    "download_history.json": "{\"version\": 1, \"records\": []}\n",
+    "restore-points/20260101T000000Z-0a1b2c3d.towx": "synthetic-restore-point-from-the-copy\n",
+    "secrets-undo.enc": "synthetic-undo-half-written\n",
+    "secrets.enc": "synthetic-encrypted-secrets-half-written\n",
+    "state.json": "{\"topics\": [{\"id\": \"half-written\"}], \"mirrors\": {}}\n"
+  }
+}

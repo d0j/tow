@@ -1,0 +1,44 @@
+{
+  "format": "tow-import-checkpoint-v1",
+  "created_at": "2026-10-07T19:35:12+03:00",
+  "checkpoint_id": "2026-10-07T19-35-12+03-00-6902c514ac",
+  "targets": [
+    {
+      "member": "config.yaml",
+      "target": "{TOW_HOME}/config.yaml",
+      "exists": true,
+      "sha256": "ae929aca6fba4be1cd6062ae6c81f34cc0eb685bc2f6cf211224004ffbaf5ecd"
+    },
+    {
+      "member": "state.json",
+      "target": "{TOW_HOME}/state.json",
+      "exists": true,
+      "sha256": "6ae0bc6fe39c9f41b318a17397a3ed2b5aeebea49bdc80cc97c15a57779d412b"
+    },
+    {
+      "member": "download_history.json",
+      "target": "{TOW_HOME}/download_history.json",
+      "exists": false,
+      "sha256": null
+    },
+    {
+      "member": "secrets.enc",
+      "target": "{TOW_HOME}/secrets.enc",
+      "exists": true,
+      "sha256": "bec189a154141d0d5392a0c1c72c98b06309f685bcdf6813246a9765084df25b"
+    },
+    {
+      "member": "secrets-undo.enc",
+      "target": "{TOW_HOME}/secrets-undo.enc",
+      "exists": false,
+      "sha256": null
+    }
+  ],
+  "excluded": [
+    "plaintext secrets",
+    "TOW_MASTER_KEY",
+    "TOW_MASTER_KEY_FILE",
+    "media bytes",
+    "qBittorrent data"
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "format": "tow-import-transaction-v1",
+  "checkpoint": "{TOW_HOME}/import-checkpoints/2026-10-07T19-35-12+03-00-6902c514ac",
+  "status": "prepared",
+  "updated_at": "2026-10-07T19:35:12+03:00"
+}
