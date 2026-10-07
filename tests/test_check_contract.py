@@ -1557,6 +1557,38 @@ def test_cookies_saved_by_one_topics_login_are_used_by_the_next_topic(monkeypatc
     assert seen_cookies == [None, {"https://tracker:443": {"sid": "fresh"}}]
 
 
+def test_a_check_decrypts_the_secrets_again_only_after_they_changed(monkeypatch):
+    from tow.store import save_secrets
+
+    save_secrets({"trackers": {"fake": {"username": "u", "password": "p"}}})
+    save_state(
+        {
+            "topics": [
+                {"id": f"t{i}", "title": "Show", "url": f"https://tracker/{i}", "save_path": r"M:\s", "hash": "H"}
+                for i in range(4)
+            ]
+        }
+    )
+    save_download_history({"schema_version": 1, "topics": {}})
+    tracker = _wire_fake_check(monkeypatch, FakeClient())
+    decrypted = []
+    original = check.load_secrets
+    monkeypatch.setattr(check, "load_secrets", lambda: decrypted.append(1) or original())
+
+    check.run_check(apply=True, notify=False, how="test")
+    assert len(decrypted) == 1  # four topics, a fetch and a title each: nothing changed
+
+    def login_on_the_second_topic(url, secrets, ua, *, ignore_cool=False, persist=True):
+        if url.endswith("/1"):
+            save_secrets({**original(), "fake": {"cookies": {"session": "fresh"}}})
+        return b"torrent"
+
+    tracker.fetch_torrent = login_on_the_second_topic
+    decrypted.clear()
+    check.run_check(apply=True, notify=False, how="test")
+    assert len(decrypted) == 2  # at the start, and once after the login saved its cookies
+
+
 def test_manual_check_does_not_move_the_scheduled_countdown(monkeypatch):
     from fastapi.testclient import TestClient
 
