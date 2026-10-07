@@ -227,9 +227,9 @@ _STORED_ZONE = re.compile(r"(?P<when>.+?) (?:[A-Z]{2,5} )?UTC(?:(?P<sign>[+-])(?
 
 
 def stored_ui_time(value: Any) -> str:
-    """A time a check stored as text, written in the page language of that moment ("07.10.2026
-    12:16:13 UTC+03:00"), written again in this page's language; an ISO time too. A text that
-    is neither is shown as it is."""
+    """A time a check stored - an ISO time, or (TOW 1.24 and before) a text written in the page
+    language of that moment ("07.10.2026 12:16:13 UTC+03:00") - written in this page's language.
+    A text that is neither is shown as it is."""
     text = str(value or "").strip()
     if not text:
         return ""
@@ -405,7 +405,8 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
             {
                 **topic,
                 "timer": timers.get(str(topic.get("id")), {}),
-                # Stored as text in the language of the check: shown in this page's language.
+                # Stored as an ISO time (by TOW 1.24 and before: as text in the language of the
+                # check): shown in this page's language.
                 "last_check": stored_ui_time(topic.get("last_check")),
                 "last_ok_at": stored_ui_time(topic.get("last_ok_at")),
                 "last_error": last_error,

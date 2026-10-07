@@ -778,8 +778,8 @@ def _status_view() -> dict[str, Any]:
         "client_ok": health.get("qbit_ok") if "qbit_ok" in health else None,
         "sites": len(cfg.get("trackers") or {}),
         "topics": len(state.get("topics") or []),
-        # The check stores "at" already written in the page's language of that moment; the number
-        # beside it is written again here, in the language this command speaks, like next_check.
+        # Written from the number beside "at" (an older TOW stored "at" already written in the
+        # page's language of that moment), in the language this command speaks, like next_check.
         "last_check": (
             format_ui_timestamp(datetime.fromtimestamp(health["at_ts"], UTC).isoformat())
             if isinstance(health.get("at_ts"), int) and health["at_ts"] > 0
