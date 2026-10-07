@@ -255,6 +255,14 @@ def run_supervisor(deps: Deps | None = None) -> int:
             {"pid": os.getpid(), "version": __version__, "port": supervisor.port, "started_at": time.time()},
         )
         LOG.info("TOW %s started (pid %s)", __version__, os.getpid())
+        for name in layout.outside_overrides():
+            LOG.warning(
+                "%s=%s (set in the environment TOW was started with) leads out of this install (%s): "
+                "remove it if it was meant for another TOW",
+                name,
+                os.environ.get(name, ""),
+                layout.install_root(),
+            )
 
         def by_signal(_signum: int, _frame: Any) -> None:
             supervisor.request_stop({"by": "signal"})
