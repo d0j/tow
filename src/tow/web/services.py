@@ -51,7 +51,7 @@ from tow.store import (
     save_state,
 )
 from tow.store_transaction import recover as recover_store_transaction
-from tow.supervisor.layout import next_check_at, topic_timer_status
+from tow.supervisor.layout import install_id, next_check_at, topic_timer_status
 from tow.undo import cleanup as cleanup_secret_undo
 from tow.web_update import log_tail as web_update_log
 from tow.web_update import start as start_web_update
@@ -69,6 +69,7 @@ __all__ = [
     "delete_snapshot",
     "doctor_report",
     "export_portable_bundle",
+    "install_id",
     "list_restore_points",
     "load_config",
     "load_download_history",

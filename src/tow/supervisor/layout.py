@@ -155,22 +155,88 @@ class InstanceLock:
         handle.close()
 
 
+def install_id() -> str:
+    """This install as its web server names itself on ``/healthz`` (asked from this computer).
+
+    A hash of the code folder: the same for every process of this install, another one for a
+    copy of the folder - so ``tow start``, ``tow setup`` and the supervisor never take another
+    TOW answering on the same port for their own.
+    """
+    import hashlib
+
+    folder = os.path.normcase(str(repo_root()))
+    return hashlib.sha256(folder.encode("utf-8", "surrogatepass")).hexdigest()[:16]
+
+
+def own_server_command(command: str, logs: Path | None = None) -> bool:
+    """A command line of this install's web server: ``-m tow serve`` with its own log file."""
+
+    def norm(text: str) -> str:
+        return os.path.normcase(text.replace('"', ""))
+
+    log = (logs or logs_dir()) / "serve.log"
+    return "-m tow serve" in norm(command) and norm(str(log)) in norm(command)
+
+
+def configured_port() -> int:
+    from tow.config import DEFAULTS, load_config, port_of
+
+    try:
+        return port_of(load_config())
+    except Exception:  # noqa: BLE001 - a broken config: the default port tells as well
+        return int(DEFAULTS["port"])
+
+
+def port_holder(port: int) -> str | None:
+    """Who holds ``port``: None (nobody), ``ours`` (a web server of this install, e.g. one a
+    killed supervisor left behind) or ``other`` (another program, or another TOW folder)."""
+    from tow.supervisor._os import port_open
+    from tow.watchdog import healthy
+
+    if not port_open(port):
+        return None
+    if healthy(port, install=install_id()):
+        return "ours"
+    from tow import platform
+
+    # Not answering as this install: a hung server of it is still known by its command line.
+    owner = platform.current().port_owner(port) or {}
+    return "ours" if own_server_command(str(owner.get("cmd") or "")) else "other"
+
+
 def busy() -> bool:
-    """TOW of this install is running - the supervisor, or a web server left on its port.
+    """TOW of this install is running - the supervisor, or a web server of it left on its port.
 
     ``tow setup`` asks this before it replaces ``app/.venv``: Windows lets a folder whose programs
-    are running be renamed, so the running TOW would lose its libraries mid-way.
+    are running be renamed, so the running TOW would lose its libraries mid-way. Another
+    program or another TOW folder on the port does not make this install busy
+    (``port_holder``).
     """
     if running() is not None:
         return True
-    from tow.config import DEFAULTS, load_config, port_of
-    from tow.supervisor._os import port_open
+    return port_holder(configured_port()) == "ours"
 
-    try:
-        port = port_of(load_config())
-    except Exception:  # noqa: BLE001 - a broken config: the default port tells as well
-        port = int(DEFAULTS["port"])
-    return port_open(port)
+
+def setup_check() -> int:
+    """What ``tow setup`` (``scripts/tow-setup.cmd``, ``scripts/tow``) asks before it replaces
+    ``app/.venv``: 4 when TOW of this install runs (the launcher says to stop it first), else 0.
+
+    Another program or another TOW folder on the port does not stop the setup - it was said to
+    be "TOW is running" before - but is named, with the port: TOW starts once it is free.
+    """
+    if running() is not None:
+        return 4
+    port = configured_port()
+    holder = port_holder(port)
+    if holder == "ours":
+        return 4
+    if holder == "other":
+        from tow import i18n
+
+        with suppress(Exception):  # a broken config: the default language
+            i18n.use(i18n.terminal_language())
+        print(i18n.t("cli.setup.port_other", port=port), flush=True)
+    return 0
 
 
 def interrupted_update() -> bool:

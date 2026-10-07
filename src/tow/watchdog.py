@@ -90,7 +90,9 @@ def _save_state(value: dict[str, Any]) -> None:
     atomic_write_text(_state_path(), encode_object(value))
 
 
-def healthy(port: int, *, timeout: float = 3.0) -> bool:
+def healthy(port: int, *, timeout: float = 3.0, install: str | None = None) -> bool:
+    """A TOW answers ``/healthz`` on ``port``; with ``install``, the TOW of that install
+    (``tow.supervisor.layout.install_id``), not a copy of the folder on the same port."""
     import httpx
 
     try:
@@ -98,9 +100,11 @@ def healthy(port: int, *, timeout: float = 3.0) -> bool:
         # stand between the watchdog and this machine's TOW - it made a healthy TOW look hung.
         response = httpx.get(f"http://127.0.0.1:{port}/healthz", timeout=timeout, trust_env=False)
         value = response.json() if response.status_code == 200 else None
-        return isinstance(value, dict) and value.get("ok") is True
     except httpx.HTTPError, ValueError, RecursionError:
         return False
+    if not isinstance(value, dict) or value.get("ok") is not True:
+        return False
+    return install is None or value.get("install") == install
 
 
 # An update stops the service on purpose and says so at the install root: update-state.json

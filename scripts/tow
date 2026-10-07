@@ -55,12 +55,13 @@ if [ "${1:-}" = setup ]; then
     if [ "$TOW_ROOT" = "$TOW_APP" ]; then
         exec "$uv" sync --frozen
     fi
-    # Never under a running TOW: its environment would be replaced while it runs.
+    # Never under a running TOW: its environment would be replaced while it runs. Another program
+    # or TOW folder on the port is only named (setup_check prints it); an older .venv has busy().
     if [ -x .venv/bin/python ]; then
         status=0
-        .venv/bin/python -c 'import sys; from tow.supervisor.layout import busy; sys.exit(4 if busy() else 0)' >/dev/null 2>&1 || status=$?
+        .venv/bin/python -c 'import sys; from tow.supervisor import layout as l; sys.exit(l.setup_check() if hasattr(l, "setup_check") else 4 if l.busy() else 0)' 2>/dev/null || status=$?
         if [ "$status" -eq 4 ]; then
-            echo "TOW setup: TOW is running. Stop it first (./tow stop), then run setup again." >&2
+            echo "TOW setup: TOW is running from this folder. Stop it first (./tow stop), then run setup again." >&2
             exit 3
         fi
     fi

@@ -6,6 +6,8 @@ What the start files run after the first-start setup: ``Start TOW.cmd`` of the W
 Otherwise ``tow run`` starts detached and without a window - it outlives the terminal that
 started it - and the page opens once ``/healthz`` answers. A ``tow run`` that ends before it
 answers (another program on the port, a broken config) is reported at once, with its log.
+Only this install's page counts (``layout.install_id``): another TOW folder answering on the
+same port is not "started".
 """
 
 from __future__ import annotations
@@ -61,11 +63,13 @@ def default_deps() -> Deps:
     from tow import platform
     from tow.watchdog import healthy
 
+    install = layout.install_id()
     return Deps(
         running=layout.running,
         spawn=_spawn,
         alive=lambda pid: platform.current().process_alive(pid),
-        healthy=lambda port: healthy(port),
+        # This install's page only: a copy of the folder started on the same port answers too.
+        healthy=lambda port: healthy(port, install=install),
         open_url=lambda url: platform.current().open_url(url),
     )
 

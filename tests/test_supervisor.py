@@ -270,6 +270,29 @@ def test_nothing_else_on_the_port_is_ever_stopped(tmp_path, cmd, owner_pid, pare
     assert stopped == []
 
 
+def test_an_orphan_whose_command_line_came_back_garbled_is_known_by_its_answer(tmp_path):
+    # A Cyrillic install folder read back through the ANSI code page lost its letters: the
+    # command line no longer named this install's log; the server's own answer still does.
+    world, sup = make(tmp_path, port_busy=True)
+    log = str(tmp_path / "Иван" / "serve.log")
+    garbled = f'"python.exe" -m tow serve --log-file "{log.replace("Иван", "????")}" --parent-pid 5'
+    stopped = _orphan(tmp_path, world, sup, cmd=garbled)
+    asked = []
+    sup.deps.own_server = lambda port: asked.append(port) or True
+    assert sup.preflight() is None
+    assert (stopped, asked) == ([77], [8787])
+
+
+def test_a_copy_of_the_install_on_the_port_is_never_taken_over(tmp_path):
+    # Its status.json was copied too (the same recorded pid), but it answers as another install
+    # and its command line names its own log.
+    world, sup = make(tmp_path, port_busy=True)
+    stopped = _orphan(tmp_path, world, sup, cmd="python -m tow serve --log-file D:\\Copy\\data\\logs\\serve.log")
+    sup.deps.own_server = lambda _port: False
+    assert "8787" in (sup.preflight() or "")
+    assert stopped == []
+
+
 def test_an_orphan_that_does_not_let_the_port_go_is_a_refusal(tmp_path):
     world, sup = make(tmp_path, port_busy=True)
     _orphan(tmp_path, world, sup)

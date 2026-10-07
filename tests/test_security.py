@@ -64,6 +64,15 @@ def test_internet_peers_are_refused_whatever_the_host_header_says(lan_config, pe
         assert response.text == "untrusted host"
 
 
+def test_healthz_names_the_install_only_to_this_computer(lan_config):
+    from tow.supervisor.layout import install_id
+
+    local = TestClient(app, client=("127.0.0.1", 50000)).get("/healthz").json()
+    assert local == {"ok": True, "version": local["version"], "install": install_id()}
+    remote = TestClient(app, client=("192.168.1.7", 50000)).get("/healthz", headers={"Host": "192.168.1.2:8787"})
+    assert "install" not in remote.json()  # nothing about this computer's folders on the network
+
+
 @pytest.fixture
 def lan_auto_language(monkeypatch):
     from tow.config import load_config, save_config

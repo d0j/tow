@@ -456,6 +456,20 @@ def test_the_local_health_check_ignores_system_proxies(monkeypatch):
     assert seen["trust_env"] is False  # HTTP_PROXY made a healthy TOW look hung
 
 
+def test_the_health_check_can_ask_for_one_install(monkeypatch):
+    import httpx
+
+    from tow.watchdog import healthy
+
+    answer = {"ok": True, "install": "aaaa"}
+    monkeypatch.setattr(httpx, "get", lambda url, **kwargs: httpx.Response(200, json=answer))
+    assert healthy(8787) is True  # any TOW
+    assert healthy(8787, install="aaaa") is True
+    assert healthy(8787, install="bbbb") is False  # a copy of the folder on the same port
+    answer.pop("install")
+    assert healthy(8787, install="aaaa") is False
+
+
 # --- failing scheduled checks are not "on time"; no false "late" after a wake (M6, M7) --------
 
 

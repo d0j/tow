@@ -419,7 +419,8 @@
       "autostart_without_login": "on: start at boot, before anyone signs in"
     },
     "setup": {
-      "use_launcher": "`setup` rebuilds TOW's environment, so it runs from the launcher, not from TOW itself. Stop TOW, then run in the install folder: {launcher} setup"
+      "use_launcher": "`setup` rebuilds TOW's environment, so it runs from the launcher, not from TOW itself. Stop TOW, then run in the install folder: {launcher} setup",
+      "port_other": "TOW setup: port {port} is used by another program or another TOW folder. The setup goes on; TOW starts once the port is free (or set another port in config.yaml)."
     },
     "status": {
       "running": "running (process {pid})",
