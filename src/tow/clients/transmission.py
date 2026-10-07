@@ -131,6 +131,10 @@ class TransmissionClient(ManagedClient):
             raise self._fail("client.transmission.too_old", version=str(info.get("version")))
         return f"{info.get('version')} rpc {rpc}"
 
+    def has_any_torrent(self) -> bool:
+        """The client lists at least one torrent (one still loading its list after a start lists none)."""
+        return bool(self._rpc("torrent-get", fields=["id"]).get("torrents"))
+
     def _get(self, infohash: str, fields: list[str] = _FIELDS) -> dict[str, Any] | None:
         rows = self._rpc("torrent-get", ids=[infohash.lower()], fields=fields).get("torrents") or []
         wanted = infohash.casefold()

@@ -1837,6 +1837,18 @@ class _ClientPool:
     errors: dict[str, Exception] = field(default_factory=dict)
     ok: dict[str, bool] = field(default_factory=dict)
     ping: str = ""
+    # Clients that had TOW's torrents at the last check (a topic of theirs was fine then).
+    expect_torrents: frozenset[str] = frozenset()
+
+    def _answered(self, client_id: str, client: TorrentClientAdapter) -> str:
+        """Ping the client; one that lists no torrent at all, although it had TOW's at the last
+        check, is still loading them after a start (qBittorrent answers meanwhile): this run
+        must not read its torrents as removed and add them again."""
+        answer = client.ping()
+        has_any = getattr(client, "has_any_torrent", None)
+        if client_id in self.expect_torrents and callable(has_any) and has_any() is False:
+            raise TowError("check.client_empty", cls="qbit")
+        return answer
 
     def _client_event(self, client_id: str, kind: str, title: str = "") -> None:
         self.batch.queue(
@@ -1849,7 +1861,7 @@ class _ClientPool:
         client_id = self.default_id
         try:
             client = _open_client(self.cfg, secrets, client_id, apply=self.apply)
-            self.ping = client.ping()
+            self.ping = self._answered(client_id, client)
             self.clients[client_id] = client
         except Exception as e:  # noqa: BLE001 - any failure to reach the client is 'the client is down' (recorded)
             self.ping = f"down: {e}"
@@ -1877,7 +1889,7 @@ class _ClientPool:
             return wanted, None
         try:
             adapter = _open_client(self.cfg, secrets, wanted, apply=self.apply)
-            adapter.ping()  # a second client that is down is reported like the main one
+            self._answered(wanted, adapter)  # a second client that is down is reported like the main one
         except Exception as e:  # noqa: BLE001 - any failure to reach the client is 'the client is down' (recorded)
             self.errors[wanted] = e
             self.ok[wanted] = False
@@ -2005,6 +2017,7 @@ def _run_check(
         if apply:
             log_event(kind, **fields)
 
+    default_id = client_factory.default_client_id(cfg)
     pool = _ClientPool(
         cfg=cfg,
         apply=apply,
@@ -2012,9 +2025,14 @@ def _run_check(
         how=how,
         record=_record,
         batch=batch,
-        default_id=client_factory.default_client_id(cfg),
+        default_id=default_id,
         previous_qbit_ok=previous_health.get("qbit_ok"),
         previous_clients_ok=dict(previous_health.get("clients_ok") or {}),
+        expect_torrents=frozenset(
+            str(topic.get("client_id") or default_id)
+            for topic in topics_of(state)
+            if topic.get("hash") and topic.get("last_ok") is True and not topic.get("paused")
+        ),
     )
     notifications = _RunNotifications(
         enabled=notify,

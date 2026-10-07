@@ -82,6 +82,11 @@ class QBittorrentClient:
         web = str(self._c.app.web_api_version)
         return f"{ver} webapi {web}"
 
+    def has_any_torrent(self) -> bool:
+        """The client lists at least one torrent. qBittorrent answers while it still loads its
+        torrents after a start, with fewer (or none) of them."""
+        return bool(self._c.torrents_info(limit=1))
+
     def has_hash(self, infohash: str) -> bool:
         rows = self._c.torrents_info(torrent_hashes=infohash.lower())
         return bool(rows)

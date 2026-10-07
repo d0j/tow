@@ -221,6 +221,9 @@ class FakeDeluge:
         self.torrents[torrent.hash] = torrent
         return torrent.hash
 
+    def m_core_get_session_state(self):
+        return sorted(self.torrents)
+
     def m_core_get_torrent_status(self, torrent_id, keys):
         t = self.torrents.get(torrent_id)
         if t is None:
@@ -767,3 +770,12 @@ def test_deluge_answer_that_is_not_deluges_is_an_error_not_a_removed_torrent():
     with pytest.raises(ClientError) as raised:
         adapter.has_hash(H)
     assert raised.value.code == "client.deluge.not_web"
+
+
+@pytest.mark.parametrize("make", [lambda: (FakeTransmission(), _transmission), lambda: (FakeDeluge(), _deluge)])
+def test_clients_say_whether_they_list_any_torrent(tmp_path, make):
+    server, adapter_of = make()
+    adapter = adapter_of(server)
+    assert adapter.has_any_torrent() is False
+    adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert adapter.has_any_torrent() is True

@@ -172,6 +172,48 @@ def test_which_client_runs_on_this_computer(host, here):
     assert on_this_computer({}, {"qbittorrent": {"host": host}}) is here
 
 
+# --- a client still loading its torrents after a start -----------------------------------------
+
+
+class StartingClient(Client):
+    """Answers, but lists no torrent yet (qBittorrent loads them after its Web UI is up)."""
+
+    loading = True
+
+    def has_any_torrent(self) -> bool:
+        return bool(self.torrents) and not self.loading
+
+    def has_hash(self, h):
+        return False if self.loading else super().has_hash(h)
+
+    def inspect_torrent(self, h):
+        return None if self.loading else super().inspect_torrent(h)
+
+
+def test_a_client_that_lists_nothing_yet_is_not_read_as_removed_or_added_to(monkeypatch, stores):
+    client = StartingClient()
+    client.put(OLD, "/media/tv", tags=["tow"])
+    save_state({"topics": [_topic(hash=OLD, last_ok=True)]})
+    _wire(monkeypatch, {"main": client}, Tracker())
+    check.run_check(apply=True, notify=False, how="test")
+    saved = load_state()["topics"][0]
+    assert client.adds == []
+    assert saved["last_error_code"] == "check.client_unreachable"
+    assert saved["last_error_params"]["reason"]["$msg"]["code"] == "check.client_empty"
+    client.loading = False  # loaded: the next check works as always
+    check.run_check(apply=True, notify=False, how="test")
+    assert client.adds == [(NEW, "/media/tv")]
+
+
+def test_an_empty_client_without_earlier_torrents_is_used(monkeypatch, stores):
+    client = StartingClient()
+    client.loading = False
+    save_state({"topics": [_topic(hash=None)]})
+    _wire(monkeypatch, {"main": client}, Tracker())
+    check.run_check(apply=True, notify=False, how="test")
+    assert client.adds == [(NEW, "/media/tv")]
+
+
 # --- the header clock's reason does not depend on the language ---------------------------------
 
 

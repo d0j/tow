@@ -59,7 +59,8 @@ class FakeWebUI:
             return self._resp(request, "Ok.")
         if path.endswith("/torrents/info"):
             wanted = (query.get("hashes") or [""])[0].lower()
-            return self._resp(request, [t for h, t in self.torrents.items() if not wanted or h == wanted])
+            rows = [t for h, t in self.torrents.items() if not wanted or h == wanted]
+            return self._resp(request, rows[: int((query.get("limit") or [len(rows)])[0])])
         if path.endswith("/torrents/files"):
             return self._resp(request, [])
         return self._resp(request, "")
@@ -96,3 +97,11 @@ def test_slow_add_repeated_by_the_library_is_not_reported_as_refused(webui, tmp_
     # Not "the client refused it": the add went on to its read-back, where the fake's folder
     # ("x") is the next thing to differ.
     assert raised.value.code == "client.managed.wrong_folder"
+
+
+def test_any_torrent_is_asked_with_a_single_row(webui):
+    fake = webui(first_add_times_out=False)
+    client = qbittorrent.QBittorrentClient("127.0.0.1", 18999, "u", "p")
+    assert client.has_any_torrent() is False
+    fake.torrents = {"a" * 40: {"hash": "a" * 40}, "b" * 40: {"hash": "b" * 40}}
+    assert client.has_any_torrent() is True
