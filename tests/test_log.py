@@ -318,6 +318,75 @@ def test_events_page_reads_only_the_tail_of_a_large_log(monkeypatch):
     assert sum(reads) <= logmod._TAIL_BYTES
 
 
+def _history_line(n, **fields):
+    return json.dumps({"kind": "file_completed", "event_id": f"e{n}", **fields}, ensure_ascii=False) + "\n"
+
+
+def test_history_reads_the_log_from_its_end_across_blocks_and_files(monkeypatch):
+    from tow import log as logmod
+
+    monkeypatch.setattr(logmod, "_BLOCK_BYTES", 97)  # lines cross block boundaries everywhere
+    path = logmod.log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    older = [_history_line(n, title="Сериал " * (n % 7)) for n in range(40)]
+    newer = [_history_line(n, title="Show " * (n % 3)) for n in range(40, 90)]
+    path.with_name(path.name + ".1").write_text("".join(older), encoding="utf-8")
+    path.write_text("".join(newer) + "\n", encoding="utf-8")
+
+    events = logmod.history_events(limit=1000)
+
+    assert [event["event_id"] for event in events] == [f"e{n}" for n in reversed(range(90))]
+    assert [event["event_id"] for event in logmod.history_events(limit=3)] == ["e89", "e88", "e87"]
+
+
+def test_history_stops_reading_once_it_has_enough_events(monkeypatch):
+    from tow import log as logmod
+
+    path = logmod.log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(_history_line(n, pad="x" * 200) for n in range(20_000)), encoding="utf-8")  # ~5 MiB
+    reads = []
+    real_open = Path.open
+
+    def counting_open(self, *args, **kwargs):
+        handle = real_open(self, *args, **kwargs)
+        if self == path:
+            real_read = handle.read
+            handle.read = lambda *a: reads.append(len(chunk := real_read(*a))) or chunk
+        return handle
+
+    monkeypatch.setattr(Path, "open", counting_open)
+
+    assert len(logmod.history_events(limit=300)) == 300
+    assert sum(reads) <= logmod._BLOCK_BYTES
+
+
+def test_history_search_by_a_topics_current_name_parses_only_its_events(monkeypatch):
+    from tow import log as logmod
+
+    path = logmod.log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [_history_line(n, topic_id=f"t{n % 50}") for n in range(500)]
+    lines.append(_history_line(500, hash="AB" * 20))
+    path.write_text("".join(lines), encoding="utf-8")
+    titles = index_event_titles(
+        [{"id": f"t{n}", "title": "Unique Show" if n == 7 else f"Other {n}"} for n in range(50)]
+        + [{"id": "h", "title": "Hashed Unique", "hash": "ab" * 20}]
+    )
+    parsed = []
+    real_loads = logmod.json.loads
+    monkeypatch.setattr(logmod.json, "loads", lambda text, *a, **k: parsed.append(text) or real_loads(text, *a, **k))
+
+    found = logmod.history_events(text="unique", title_index=titles)
+
+    assert [event["event_id"] for event in found] == ["e500", *(f"e{n}" for n in reversed(range(7, 500, 50)))]
+    assert len(parsed) == len(found)
+    parsed.clear()
+    by_text = logmod.history_events(text="E10", title_index=titles)  # in the line itself
+    assert [event["event_id"] for event in by_text] == [*(f"e{n}" for n in range(109, 99, -1)), "e10"]
+    assert len(parsed) == len(by_text)
+
+
 def test_log_keeps_five_files_of_five_mib():
     from tow import log as logmod
 
