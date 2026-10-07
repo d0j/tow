@@ -472,3 +472,54 @@ def test_next_healthy_copy_clears_failure_and_can_prune_normally(point):
     assert snapshots.verify_snapshot(newest)["signed"]
     assert snapshots.status()["last_error"] == ""
     assert snapshots.status()["last_snapshot"] == newest.name
+
+
+def _count_store_checks(monkeypatch):
+    """(store name, whether the data lock was held) for every parse of a store's contents."""
+    calls = []
+
+    def watching(name, original):
+        def check(content):
+            calls.append((name, bool(getattr(store._PROCESS_LOCK_STATE, "depth", 0))))
+            return original(content)
+
+        return check
+
+    for attribute, name in (
+        ("validate_state_bytes", "state.json"),
+        ("validate_download_history_bytes", "download_history.json"),
+        ("decrypt_secrets_bytes", "secrets.enc"),
+        ("_snapshot_config", "config.yaml"),
+    ):
+        monkeypatch.setattr(snapshots, attribute, watching(name, getattr(snapshots, attribute)))
+    return calls
+
+
+def test_a_night_copy_parses_no_store_while_it_holds_the_data_lock(point, monkeypatch):
+    calls = _count_store_checks(monkeypatch)
+
+    newest = Path(snapshots.create_snapshot()["snapshot"])
+
+    assert sorted(name for name, _locked in calls) == [
+        "config.yaml",
+        "download_history.json",
+        "secrets.enc",
+        "state.json",
+    ]
+    assert not any(locked for _name, locked in calls)
+    assert snapshots.verify_snapshot(newest)["signed"]
+
+
+def test_a_store_changed_after_its_check_is_checked_again_from_the_copy(point, monkeypatch):
+    proven = snapshots._proven_sources
+    monkeypatch.setattr(
+        snapshots,
+        "_proven_sources",
+        lambda: proven() | {"state.json": "0" * 64},  # as if the state was saved in between
+    )
+    calls = _count_store_checks(monkeypatch)
+
+    snapshots.create_snapshot()
+
+    assert ("state.json", True) in calls
+    assert ("download_history.json", True) not in calls

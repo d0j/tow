@@ -399,8 +399,9 @@ def _previous_members(root: Path, key: bytes) -> set[str]:
 
 def create_snapshot(*, how: str = "auto") -> dict[str, Any]:
     try:
+        proven = _proven_sources()  # parsed before the data lock: a check or an edit need not wait
         with persistence_lock():  # creation, read-back and pruning cannot race another copy
-            result = _create_snapshot(how=how)
+            result = _create_snapshot(how=how, proven=proven)
             location = Path(result["snapshot"]).parent
             fields: dict[str, Any] = {"location": str(location), "cleanup_inventory": None, "cleanup_names": None}
             # A diagnostic failure cannot invalidate a verified copy. A missing binding
@@ -560,8 +561,12 @@ def _write_snapshot_manifest(path: Path, manifest: dict[str, Any]) -> None:
         os.fsync(writer.fileno())
 
 
-def _create_snapshot(*, how: str) -> dict[str, Any]:
-    """Called with the data lock held: the copy is a consistent cut, no check or edit writes meanwhile."""
+def _create_snapshot(*, how: str, proven: dict[str, str] | None = None) -> dict[str, Any]:
+    """Called with the data lock held: the copy is a consistent cut, no check or edit writes meanwhile.
+
+    ``proven``: the sha256 of live stores whose contents already passed the payload checks
+    (``_proven_sources``); a copied store with another hash is checked here, from the copy.
+    """
     cfg = load_config()
     root = backup_root(cfg)
     policy = retention_settings(cfg)
@@ -595,6 +600,12 @@ def _create_snapshot(*, how: str) -> dict[str, Any]:
                     missing.append(name)  # said in the result, the log and the MANIFEST
                 continue
             files[name] = meta
+        for name in _VALIDATED_MEMBERS:
+            if name in files and files[name]["sha256"] != (proven or {}).get(name):
+                content = _verified_member(partial / name, name, files[name], collect=True)
+                assert content is not None
+                _check_member(name, content)
+                del content  # one store in memory at a time
         manifest = {
             "format": FORMAT,
             "created_at": datetime.now(UTC).isoformat(),
@@ -617,7 +628,9 @@ def _create_snapshot(*, how: str) -> dict[str, Any]:
             t("backup.snapshot.cannot_write", owner_language(), reason=exc.strerror or type(exc).__name__)
         ) from exc
     try:
-        verify_snapshot(target)  # read every file back from the copies folder before deleting any older copy
+        # Read every file back from the copies folder before deleting any older copy. Its hashes
+        # are the ones of bytes whose contents passed the checks above: no store is parsed again.
+        verify_snapshot(target, payloads=False)
     except SnapshotError as exc:
         # Never listed, restored or counted for retention: back to a partial folder, removed
         # now (or by the next copy when the folder cannot be read right now).
@@ -873,7 +886,7 @@ def _verified_member(source: Path, name: str, meta: Any, *, collect: bool) -> by
 
 
 def _read_verified(
-    path: Path, *, retain: bool = True, require_signed: bool = False
+    path: Path, *, retain: bool = True, require_signed: bool = False, payloads: bool = True
 ) -> tuple[dict[str, Any], dict[str, bytes], bool]:
     """(manifest, contents by member name, signed): all hashes pass before payload parsing.
 
@@ -904,24 +917,51 @@ def _read_verified(
         if "config.yaml" in contents:
             _snapshot_config(contents["config.yaml"])
         _check_payloads(contents)
-    else:
+    elif payloads:
         for name in _VALIDATED_MEMBERS:
             if name not in manifest["files"]:
                 continue
             content = _verified_member(path / name, name, manifest["files"][name], collect=True)
             assert content is not None
-            if name == "config.yaml":
-                _snapshot_config(content)
-            else:
-                _check_payloads({name: content})
+            _check_member(name, content)
             del content  # the next store must not overlap a previous verification-only buffer
     return manifest, contents, signed
 
 
-def verify_snapshot(path: Path) -> dict[str, Any]:
-    """The MANIFEST when hashes and store contents pass (``signed`` permits restoration)."""
-    manifest, _contents, signed = _read_verified(path, retain=False)
+def verify_snapshot(path: Path, *, payloads: bool = True) -> dict[str, Any]:
+    """The MANIFEST when hashes and store contents pass (``signed`` permits restoration).
+    ``payloads=False``: hashes only, for a copy whose stores were checked while it was made."""
+    manifest, _contents, signed = _read_verified(path, retain=False, payloads=payloads)
     return {**manifest, "signed": signed}
+
+
+def _check_member(name: str, content: bytes) -> None:
+    if name == "config.yaml":
+        _snapshot_config(content)
+    else:
+        _check_payloads({name: content})
+
+
+def _proven_sources() -> dict[str, str]:
+    """The sha256 of each live store whose bytes pass the payload checks, read without the data
+    lock: parsing a large download history held every save up for most of a night copy. The
+    copy made under the lock uses a proof only for bytes with the same hash; a store that
+    changed in between, or failed here, is checked again from the copy."""
+    proven: dict[str, str] = {}
+    for name, source in _fixed_members():
+        if name not in _VALIDATED_MEMBERS:
+            continue
+        try:
+            limit = MAX_INPUT_BYTES if name == "config.yaml" else MAX_MEMBER_SIZE
+            if not _ordinary_file(source, missing=True) or source.stat().st_size > limit:
+                continue
+            content = source.read_bytes()
+            _check_member(name, content)
+        except OSError, ValueError, SnapshotError:
+            continue  # said by the check under the lock, with the copy's own error
+        proven[name] = hashlib.sha256(content).hexdigest()
+        del content
+    return proven
 
 
 def _check_payloads(contents: dict[str, bytes]) -> None:
