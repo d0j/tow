@@ -345,6 +345,54 @@ def test_a_site_deleted_while_a_topic_is_added_is_not_added_to(monkeypatch):
     assert load_state().get("topics", []) == []
 
 
+def test_a_client_removed_while_a_topic_is_added_is_not_used(monkeypatch):
+    """Round-3 audit: the add waits on the site's title outside the site lock; a client removed
+    meanwhile was saved on the new topic all the same (remove_client's "in use" refusal never
+    saw it). The client is looked up again under the persistence lock."""
+    import asyncio
+
+    from tow.config import load_config
+    from tow.store import save_secrets
+
+    monkeypatch.setattr("tow.web.middleware._SITE_HTTP_LOCK", asyncio.Lock())
+    save_secrets({"qbittorrent": {"host": "127.0.0.1", "port": 8080, "username": "admin", "password": "pw"}})
+    entered, release = threading.Event(), threading.Event()
+
+    def slow_title(*_a, **_k):
+        entered.set()
+        release.wait(10)
+        return "Show"
+
+    monkeypatch.setattr("tow.web.services.guess_topic_title", slow_title)
+    monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: pytest.fail("no check for a refused add"))
+    added = {}
+    with TestClient(app, headers={"Origin": "http://127.0.0.1"}) as client:
+        client.post("/settings/client/add", data={"kind": "transmission"})
+        assert [row["id"] for row in load_config()["clients"]] == ["default", "transmission"]
+        adder = threading.Thread(
+            target=lambda: added.update(
+                response=client.post(
+                    "/topics/add",
+                    data={"url": "http://rutor.info/torrent/2/x", "save_path": "M:\\s", "client_id": "transmission"},
+                    follow_redirects=False,
+                )
+            ),
+            daemon=True,
+        )
+        adder.start()
+        assert entered.wait(5)
+        removed = client.post("/settings/client/remove", data={"client_id": "transmission"}, follow_redirects=False)
+        assert removed.status_code == 303
+        release.set()
+        adder.join(10)
+        location = added["response"].headers["location"]
+        assert location.startswith("/?add=")  # the add form again, with what was typed
+        page = client.get(location).text
+    assert [row["id"] for row in load_config()["clients"]] == ["default"]
+    assert load_state().get("topics", []) == []
+    assert "выберите торрент-клиент" in page
+
+
 def test_network_actions_are_the_only_writes_outside_the_site_lock():
     from starlette.requests import Request
 
