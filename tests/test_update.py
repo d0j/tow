@@ -71,7 +71,10 @@ def origin(tmp_path_factory) -> Path:
     git(origin, "commit", "-q", "-m", "one")
     git(origin, "tag", "v1.20.0")
     (origin / "pyproject.toml").write_text('[project]\nname = "tow"\nversion = "1.21.0"\n', encoding="utf-8")
-    git(origin, "commit", "-q", "-am", "two")
+    (origin / "src" / "tow").mkdir(parents=True)
+    (origin / "src" / "tow" / "store.py").write_text("STATE_SCHEMA_VERSION = 1\n", encoding="utf-8")  # as v1.21.0
+    git(origin, "add", "-A")
+    git(origin, "commit", "-q", "-m", "two")
     git(origin, "tag", "v1.21.0")
     (origin / "pyproject.toml").write_text('[project]\nname = "tow"\nversion = "1.17.1"\n', encoding="utf-8")
     git(origin, "commit", "-q", "-am", "before tow run")
