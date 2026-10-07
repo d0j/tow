@@ -582,6 +582,20 @@ RAW_REFUSED = (
         ("ConnectionResetError(10054, 'An existing connection was forcibly closed')", "соединение сброшено"),
         ("ConnectionError(something unusual)", "ошибка сети"),
         ("rutor: no mirror answered: timeout", "rutor: no mirror answered: timeout"),  # already words
+        # QA 1.24.1: a Russian History showed qBittorrent's English sentence and "(timed out)".
+        (
+            "Failed to connect to qBittorrent. Connection Error: ConnectionError(MaxRetryError('x: [WinError 10061]'))",
+            "qBittorrent: соединение отклонено",
+        ),
+        (
+            "qBittorrent: Failed to connect to qBittorrent. Connection Error: ConnectionError(MaxRetryError('x'))",
+            "qBittorrent: ошибка сети",
+        ),
+        (
+            "example: ни одно зеркало не ответило: нет связи (timed out)",
+            "example: ни одно зеркало не ответило: нет связи (нет ответа вовремя)",
+        ),
+        ("сайт ответил ошибкой (error 503)", "сайт ответил ошибкой (error 503)"),  # not a reason: kept
     ],
 )
 def test_network_errors_are_said_in_words(raw, words):
