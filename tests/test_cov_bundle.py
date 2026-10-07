@@ -606,7 +606,7 @@ def _deep(levels: int) -> dict[str, Any]:
         ("config.yaml", {"restore_points_dir": ["x"]}, r"restore_points_dir must be a folder path"),
         ("config.yaml", {"trackers": ["rutracker"]}, r"trackers must map each site name to its settings"),
         ("config.yaml", {"trackers": {"t": "x"}}, r"trackers must map each site name to its settings"),
-        ("config.yaml", {"trackers": {"t": {"title": 5}}}, r"trackers\.t\.title must be text"),
+        ("config.yaml", {"trackers": {"t": {"title": [5]}}}, r"trackers\.t\.title must be text"),
         ("config.yaml", {"trackers": {"t": {"login_hosts": "h"}}}, r"trackers\.t\.login_hosts must be a list of http"),
         ("config.yaml", {"trackers": {"t": {"login_form": "x"}}}, r"trackers\.t\.login_form may have only"),
         (

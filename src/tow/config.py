@@ -236,22 +236,62 @@ def _login_form(value: object) -> bool:
     )
 
 
+def _as_text(value: object) -> str | None:
+    """A site text: a number written without quotes (``title: 2024``) is that text."""
+    if isinstance(value, str):
+        return value
+    return str(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def _as_flag(value: object) -> bool | None:
+    """true/false, also as 1/0 or a quoted 'true', 'yes', 'off'... (what older versions read)."""
+    flag = as_bool(value, True)
+    return flag if flag == as_bool(value, False) else None
+
+
+def _as_whole(value: object) -> int | None:
+    """A whole number, also as 1800.0 or a quoted '1800' (what older versions read with int())."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return None
+    return value if isinstance(value, int) else None
+
+
 def _site_spec(name: object, spec: dict[str, Any]) -> None:
+    """Check a site's settings and bring each one to the type the site code reads.
+
+    Older versions read them loosely (``int(...)``, truthiness), so a hand-written '1800', 1800.0,
+    'true', 1 or an unquoted number as a title kept working: they are taken as what they mean.
+    Only a value that can never work (a list for a number, a word for a number) is refused."""
     if not path_safe_name(name):
         raise ConfigError("config_error.site_name")
     site = str(name)
     for key in ("fetch_hosts", "login_hosts"):
         hosts = spec.get(key)
+        if isinstance(hosts, str) and web_address(hosts):
+            spec[key] = hosts = [hosts]  # one address written without the list brackets
         if hosts is not None and (not isinstance(hosts, list) or not all(web_address(host) for host in hosts)):
             raise ConfigError("config_error.site_hosts", site=site, key=key)
-    for key, fits, code in (
-        *((key, lambda value: isinstance(value, str), "config_error.site_text") for key in _SITE_TEXT),
-        *((key, lambda value: isinstance(value, bool), "config_error.site_true_false") for key in _SITE_FLAGS),
-        *((key, lambda value: type(value) is int, "config_error.site_number") for key in _SITE_NUMBERS),
-        ("cookie_names", _texts, "config_error.site_text_list"),
+    for keys, convert, code in (
+        (_SITE_TEXT, _as_text, "config_error.site_text"),
+        (_SITE_FLAGS, _as_flag, "config_error.site_true_false"),
+        (_SITE_NUMBERS, _as_whole, "config_error.site_number"),
     ):
-        if spec.get(key) is not None and not fits(spec[key]):
-            raise ConfigError(code, site=site, key=key)
+        for key in keys:
+            if spec.get(key) is None:
+                continue
+            value = convert(spec[key])
+            if value is None:
+                raise ConfigError(code, site=site, key=key)
+            spec[key] = value
+    if spec.get("cookie_names") is not None and not _texts(spec["cookie_names"]):
+        raise ConfigError("config_error.site_text_list", site=site, key="cookie_names")
     if not _login_form(spec.get("login_form")):
         raise ConfigError("config_error.site_login_form", site=site)
 
