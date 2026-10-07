@@ -121,7 +121,7 @@ tracker degradation from a client or TOW failure before changing state.
 
 ```sh
 pwsh scripts/gate.ps1            # full gate: lock, ruff format + check, mypy, compileall, whitespace, pytest, wheel
-pwsh scripts/gate.ps1 -Quick     # without tests
+pwsh scripts/gate.ps1 -Quick     # without the test run and the wheel smoke (the tests are only collected)
 pwsh scripts/gate.ps1 -Staged    # what the next commit contains (the pre-commit hook)
 ```
 
