@@ -1833,6 +1833,11 @@
   },
   "web": {
     "data_unavailable": "TOW data is unavailable; check the installation on this computer",
+    "config_unreadable": {
+      "title": "TOW cannot read its settings file config.yaml",
+      "recover": "Correct config.yaml in the TOW folder at the place named above and reload this page: TOW reads the file again by itself. If that does not work, copy config.yaml back from the newest night copy (the folder backup/night in the TOW folder, unless you chose another one) and reload the page.",
+      "network": "Open TOW on the computer it runs on: the reason and the way back are shown there."
+    },
     "common": {
       "saved": "saved",
       "no_changes": "no changes",

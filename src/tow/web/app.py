@@ -9,16 +9,19 @@ globals. Importing a route module registers nothing.
 from __future__ import annotations
 
 import contextlib
-from collections.abc import AsyncIterator
+import logging
+from collections.abc import AsyncIterator, Awaitable, Callable
+from html import escape
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
 
 from tow import access
+from tow.config import ConfigError
 from tow.store import StoreCorruptionError
 from tow.web import (
     middleware,
@@ -41,6 +44,7 @@ from tow.web import (
 )
 from tow.web.text import t
 from tow.web.views import flash_redirect
+from tow.yaml_guard import YamlLimitError
 
 # The order routes are matched in: a fixed path before a parameterised one that would match
 # it too, and for one path its GET before its POST, as in v1.19 (tests/test_routes.py).
@@ -93,6 +97,65 @@ async def _http_error(request: Request, exc: StarletteHTTPException) -> Response
     return await http_exception_handler(request, exc)
 
 
+_CONFIG_LOG = logging.getLogger("uvicorn.error")  # serve.log
+_config_logged: list[str] = []
+
+
+def _config_unreadable(request: Request, exc: ConfigError | YamlLimitError) -> Response:
+    """config.yaml became unreadable while TOW runs: every page said a bare "Internal Server
+    Error" and serve.log nothing. Now a short page (JSON for everything but a browser page)
+    names the file, the place and the way back; /healthz still answers - the server itself is
+    fine, and a restart could not read the file either. Logged once per distinct problem."""
+    from tow import i18n
+
+    with contextlib.suppress(Exception):
+        i18n.use(i18n.negotiate(request.headers.get("accept-language")))
+    problem = str(exc)
+    seen = f"{exc.code} {sorted(exc.params.items())}"
+    if seen not in _config_logged:
+        _config_logged[:] = [seen]
+        _CONFIG_LOG.error("config.yaml cannot be used: %s", exc.text("en"))
+    if request.url.path == "/healthz":
+        from tow import __version__
+
+        answer: dict[str, object] = {"ok": True, "version": __version__}
+        if access.is_local(request):
+            from tow.web import services
+
+            answer.update(install=services.install_id(), config_error=problem)
+        return JSONResponse(answer, headers={"Cache-Control": "no-store"})
+    title = t("web.config_unreadable.title")
+    if access.is_local(request):
+        lines = [problem, t("web.config_unreadable.recover")]
+    else:  # who may ask from the network is in that very file: no detail beyond this computer
+        lines = [t("web.config_unreadable.network")]
+    headers = {
+        "Cache-Control": "no-store",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+    }
+    if not middleware.is_browser_navigation(request):
+        return JSONResponse({"ok": False, "error": title, "detail": lines}, status_code=503, headers=headers)
+    paragraphs = "".join(f"<p>{escape(line)}</p>" for line in lines)
+    body = (
+        f'<!doctype html><html lang="{escape(i18n.current())}"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f"<title>{escape(title)}</title><style>body{{font-family:system-ui,sans-serif;max-width:42rem;"
+        "margin:2rem auto;padding:0 1rem;line-height:1.5}</style></head>"
+        f"<body><h1>{escape(title)}</h1>{paragraphs}</body></html>"
+    )
+    return HTMLResponse(body, status_code=503, headers=headers)
+
+
+async def _config_guard(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    """Outside every other middleware: the security middleware itself reads config.yaml first."""
+    try:
+        return await call_next(request)
+    except (ConfigError, YamlLimitError) as exc:
+        return _config_unreadable(request, exc)
+
+
 async def _local_only(_request: Request, exc: access.LocalOnly) -> Response:
     """A this-computer-only route asked from the network (``access.require_local``)."""
     if exc.message:
@@ -110,6 +173,7 @@ def create_app() -> FastAPI:
     app.exception_handler(access.LocalOnly)(_local_only)
     app.exception_handler(StarletteHTTPException)(_http_error)
     app.middleware("http")(middleware.secure)
+    app.middleware("http")(_config_guard)  # added last: the outermost
     templating.configure()
     for router in ROUTERS:
         app.include_router(router)
