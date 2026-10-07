@@ -423,6 +423,25 @@ class QBittorrentClient:
                 time.sleep(0.1)
         raise _fail("client.managed.stop_unconfirmed")
 
+    def adopt_torrent(self, infohash: str) -> list[str]:
+        """The owner's "adopt into TOW": the tag "tow" on a torrent already in qBittorrent, and
+        nothing else. Not its category: with automatic torrent management a category moves the
+        files. The tag is read back; returns the torrent's tags then."""
+
+        def tags_now() -> list[str] | None:
+            rows = self._c.torrents_info(torrent_hashes=infohash.lower())
+            return self._tag_list(rows[0]) if rows else None
+
+        tags = tags_now()
+        if tags is None:
+            raise _fail("client.managed.missing")
+        if "tow" not in {tag.casefold() for tag in tags}:
+            self._c.torrents_add_tags(tags="tow", torrent_hashes=infohash.lower())
+            tags = tags_now() or []
+            if "tow" not in {tag.casefold() for tag in tags}:
+                raise _fail("client.managed.adopt_unconfirmed")
+        return tags
+
     def stop_owned_torrent(self, infohash: str) -> dict[str, Any]:
         """G1: stop a torrent TOW added itself (tag "tow"), on the owner's explicit request."""
         info = self.inspect_torrent(infohash)

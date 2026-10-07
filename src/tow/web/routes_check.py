@@ -54,6 +54,22 @@ def topics_replace_revision(tid: str) -> Response:
     return topics_check(tid)
 
 
+@router.post("/topics/{tid}/adopt")
+def topics_adopt(tid: str) -> Response:
+    """Adopt into TOW (tow.adopt): mark the topic's torrent, already in the client without TOW's
+    mark, as TOW's - on the owner's confirmed click only - then check the topic again."""
+    try:
+        services.adopt_topic(tid, how="manual")
+    except CheckBusyError:
+        return flash_redirect("/", "web.check.busy", "warn")
+    except SecretStoreError as exc:
+        services.record_check_failure(exc, how="manual")
+        return flash_redirect("/", "web.check.blocked", "err")
+    except Exception as exc:  # noqa: BLE001 - any client failure is logged (tow.adopt) and shown, never a 500
+        return flash_redirect("/", "web.topics.adopt_failed", "err", error=exc)
+    return topics_check(tid)
+
+
 @router.post("/topics/{tid}/check")
 def topics_check(tid: str) -> Response:
     try:

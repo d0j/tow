@@ -283,7 +283,7 @@
     "link_unavailable_selection": "the torrent file is not available (sign in to the site), and changing the file selection needs it",
     "once_unconfirmed": "torrent client: the one-time topic is not confirmed in the chosen client",
     "not_owned_partial": "the torrent in the client was not added by TOW — TOW cannot check a partial file selection there",
-    "not_owned_existing": "the torrent is already in the client without the label tow — TOW cannot manage it: give it the label tow in the client, or remove it there and TOW adds it again",
+    "not_owned_existing": "the torrent is already in the client without the label tow, so TOW cannot manage it — open the topic and choose “Adopt into TOW” (or give it the label tow in the client), or remove it there and TOW adds it again",
     "not_owned_priorities": "the torrent in the client was not added by TOW — its file selection was not changed",
     "migration_unconfirmed": "torrent client: the torrent under its new hash was not confirmed by reading it back",
     "unexpected_identity": "torrent client: the client added a torrent with a different hash",
@@ -300,6 +300,13 @@
       "hash_normalized": "the same torrent under its other hash",
       "already_in_client": "already in the torrent client"
     }
+  },
+  "adopt": {
+    "not_found": "no such topic",
+    "no_torrent": "the topic has no torrent in the client to adopt — check it first",
+    "unsupported": "this torrent client cannot take TOW's mark",
+    "missing": "the torrent is not in the torrent client",
+    "unconfirmed": "the torrent client did not keep TOW's mark (read-back)"
   },
   "cli": {
     "command_failed": "the command could not be completed; check the settings and try again",
@@ -369,6 +376,11 @@
       "monitorrent_db": "the Monitorrent database file (monitorrent.db)",
       "monitorrent_client": "client ID for new topics (default: the currently configured main client)",
       "monitorrent_apply": "take the topics over (without it: a preview only)",
+      "adopt": "adopt topics whose torrent is in the client without the label tow: TOW marks it (nothing else changes) and manages it from then on",
+      "adopt_ids": "topic ids",
+      "adopt_all": "every topic whose torrent is in its client without the label tow (listed first)",
+      "adopt_yes": "do not ask for confirmation",
+      "monitorrent_adopt": "with --apply: also adopt the imported topics whose torrent is already in the client (by the hash Monitorrent kept)",
       "check": "check the topics now (a preview that changes nothing unless --apply)",
       "check_apply": "hand what is found to the torrent client and save the result",
       "check_dry_run": "a preview only, even with --apply",
@@ -447,6 +459,16 @@
       "off": "Access from other devices is off: TOW opens on this computer only.",
       "restart": "It takes effect after `tow restart`."
     },
+    "adopt": {
+      "none": "No topic has a torrent in its client without the label tow.",
+      "confirm": "Mark these torrents in their torrent clients as TOW's (the tag or label tow; nothing else changes)? [y/N] ",
+      "cancelled": "Nothing was changed.",
+      "done": "{id}: taken under TOW's management",
+      "already": "{id}: already TOW's",
+      "failed": "{id}: not taken under TOW's management: {error}",
+      "busy": "A check is running right now; run the command again in a minute.",
+      "nothing_asked": "Name the topics (their ids) or use --all-unmarked."
+    },
     "bundle": {
       "passphrase": "TOW export passphrase: ",
       "passphrase_repeat": "Repeat the passphrase: ",
@@ -501,6 +523,7 @@
       "no_folder": "no folder given",
       "already_there": "the torrent is already in the client",
       "added_unmarked": "the torrent was added (paused), but the client did not keep the label tow on it — give it the label tow in the client, or remove it there",
+      "adopt_unconfirmed": "the label tow was not kept (read-back)",
       "wrong_folder": "the client saved the torrent to a different folder (read-back)",
       "hash_changed_selection": "the torrent hash changed before the file selection change",
       "not_owned": "the torrent was not added through TOW — TOW does not change it",
@@ -833,6 +856,8 @@
       "last_error_at": "Last error ({at}): {error}",
       "replace_confirm": "Stop the previous version of this torrent in the torrent client (its files stay) and add the new one?",
       "replace": "Stop the previous one and add",
+      "adopt": "Adopt into TOW",
+      "adopt_confirm": "Mark this torrent in the torrent client as TOW's (the tag or label tow)? Its files, folder, file selection and state stay as they are; from the next check on TOW manages it like a torrent it added.",
       "summary": "Current selection: {selection}; mode: {mode}{done}.",
       "sel_dirty": "will be recalculated at the next check",
       "sel_unverified": "file priorities of the existing torrent are not checked",
@@ -1154,6 +1179,8 @@
       "client_selection_updated": "file selection updated",
       "client_restored": "back in client",
       "client_stopped": "stopped in client",
+      "client_adopted": "taken under TOW's management",
+      "client_adopt_failed": "not taken under TOW's management",
       "client_stop_failed": "not stopped in client",
       "client_unreachable": "torrent client unreachable",
       "reconcile_failed": "client check failed",
@@ -2068,6 +2095,7 @@
       "replace_not_needed": "the previous torrent does not need to be stopped",
       "cannot_stop": "this client cannot stop a torrent",
       "replace_failed": "the previous torrent was not stopped: {error}",
+      "adopt_failed": "the torrent was not taken under TOW's management: {error}",
       "not_owned": "torrent client: the torrent has no tow tag — TOW does not touch it",
       "move_back_unconfirmed": "torrent client: moving the folder back was not confirmed by read-back",
       "added_check_busy": "TOW watch saved; another check is running right now, so this one was not checked yet — press “Check” in a minute or wait for the next scheduled check",

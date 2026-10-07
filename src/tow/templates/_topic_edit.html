@@ -10,6 +10,11 @@
     <button type="submit" data-busy-label="{{ t('common.busy.checking') }}">{{ t('home.topic.replace') }}</button>
   </form>
   {% endif %}
+  {% if topic.adoptable %}
+  <form method="post" action="/topics/{{ topic.id|urlencode }}/adopt" data-confirm="{{ t('home.topic.adopt_confirm') }}">
+    <button type="submit">{{ t('home.topic.adopt') }}</button>
+  </form>
+  {% endif %}
   {% if topic.selection_dirty %}{% set sel_text = t('home.topic.sel_dirty') %}{% elif topic.selection_verified is sameas false %}{% set sel_text = t('home.topic.sel_unverified') %}{% elif topic.selected_file_count is defined %}{% set sel_text = t('home.topic.sel_count', selected=topic.selected_file_count, total=topic.torrent_file_count or '?') %}{% elif topic.selection and topic.selection.mode != 'all' %}{% set sel_text = t('home.topic.sel_pending') %}{% else %}{% set sel_text = t('home.topic.sel_all') %}{% endif %}
   <p class="sub">{{ t('home.topic.summary', selection=sel_text, mode=t('home.topic.mode_once') if topic.tracking_mode == 'once' else t('home.topic.mode_watch'), done=('; ' ~ t('home.topic.once_done')) if topic.once_done else '') }}</p>
   <form id="ed-{{ topic.id }}" method="post" action="/topics/{{ topic.id|urlencode }}/edit" class="row row-three">

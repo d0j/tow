@@ -122,6 +122,12 @@ def _build_parser() -> argparse.ArgumentParser:
     im.add_argument("--db", required=True, type=Path, help=t("cli.help.monitorrent_db"))
     im.add_argument("--client", help=t("cli.help.monitorrent_client"))
     im.add_argument("--apply", action="store_true", help=t("cli.help.monitorrent_apply"))
+    im.add_argument("--adopt", action="store_true", help=t("cli.help.monitorrent_adopt"))
+    ad = sub.add_parser("adopt", help=t("cli.help.adopt"), description=t("cli.help.adopt"))
+    ad.add_argument("topics", nargs="*", metavar="TOPIC_ID", help=t("cli.help.adopt_ids"))
+    ad.add_argument("--all-unmarked", action="store_true", help=t("cli.help.adopt_all"))
+    ad.add_argument("--yes", action="store_true", help=t("cli.help.adopt_yes"))
+    ad.add_argument("--json", action="store_true", help=as_json)
     c = sub.add_parser("check", help=t("cli.help.check"), description=t("cli.help.check"))
     c.add_argument("--json", action="store_true", help=as_json)
     c.add_argument("--apply", action="store_true", help=t("cli.help.check_apply"))
@@ -369,11 +375,55 @@ def _cmd_import_monitorrent(args: argparse.Namespace) -> int:
     from tow.import_monitorrent import MonitorrentImportError, import_monitorrent
 
     try:
-        _print(import_monitorrent(args.db, apply=args.apply, client_id=args.client), args.json)
+        result = import_monitorrent(args.db, apply=args.apply, client_id=args.client, adopt=args.adopt)
+        _print(result, args.json)
     except MonitorrentImportError as exc:
         _print({"ok": False, "error": str(exc)}, args.json)
         return 3
-    return 0
+    return EXIT_PARTIAL if result.get("adopt_failed") else 0
+
+
+def _cmd_adopt(args: argparse.Namespace) -> int:
+    """Adopt into TOW (tow.adopt): list the topics whose torrent is in the client without TOW's
+    mark, ask, and mark them. Never without the owner's yes (or --yes)."""
+    from tow.adopt import adopt_topic, unmarked_topics
+    from tow.i18n import t
+    from tow.store import CheckBusyError
+
+    if not args.topics and not args.all_unmarked:
+        _print({"ok": False, "error": t("cli.adopt.nothing_asked")}, args.json)
+        return EXIT_USAGE
+    found = unmarked_topics(ids=None if args.all_unmarked else [str(tid) for tid in args.topics])
+    if not found:
+        _print({"ok": True, "adopted": [], "message": t("cli.adopt.none")}, args.json)
+        return EXIT_OK
+    if not args.yes:
+        for item in found:
+            print(f"{item['id']}  {item['hash'][:12]}  {item['title']}")
+        try:
+            answer = input(t("cli.adopt.confirm")).strip().casefold()
+        except EOFError:
+            answer = ""
+        if answer not in {"y", "yes", "д", "да"}:
+            _print({"ok": True, "adopted": [], "message": t("cli.adopt.cancelled")}, args.json)
+            return EXIT_OK
+    adopted: list[str] = []
+    lines: list[str] = []
+    failed = 0
+    for item in found:
+        try:
+            result = adopt_topic(item["id"], how="manual")
+        except CheckBusyError:
+            _print({"ok": False, "adopted": adopted, "error": t("cli.adopt.busy")}, args.json)
+            return EXIT_CANNOT_RUN
+        except Exception as exc:  # noqa: BLE001 - one topic's failure is reported (and logged); the others go on
+            failed += 1
+            lines.append(t("cli.adopt.failed", id=item["id"], error=str(exc)))
+            continue
+        adopted.append(item["id"])
+        lines.append(t("cli.adopt.already" if result["already"] else "cli.adopt.done", id=item["id"]))
+    _print({"ok": not failed, "adopted": adopted, "message": "\n".join(lines)}, args.json)
+    return EXIT_PARTIAL if failed else EXIT_OK
 
 
 def _cmd_export(args: argparse.Namespace) -> int:
@@ -828,6 +878,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "secrets": _cmd_secrets,
     "keys": _cmd_keys,
     "import-monitorrent": _cmd_import_monitorrent,
+    "adopt": _cmd_adopt,
     "export": _cmd_export,
     "import": _cmd_import,
     "import-rollback": _cmd_import_rollback,

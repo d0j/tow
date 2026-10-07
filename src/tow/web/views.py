@@ -17,6 +17,7 @@ from fastapi import Request
 from fastapi.responses import RedirectResponse
 
 from tow import i18n
+from tow.adopt import unmarked_hash
 from tow.check import blocked_by_previous_revision
 from tow.clock import format_ui_timestamp
 from tow.config import flash_ttl, interval_sec_of
@@ -409,6 +410,7 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "last_ok_at": stored_ui_time(topic.get("last_ok_at")),
                 "last_error": last_error,
                 "replaces_revision": blocked_by_previous_revision(topic),
+                "adoptable": bool(unmarked_hash(topic)),
                 "tracker": tr.name if tr else t("web.site_unknown"),
                 "series": title.split(" / ")[0],
                 "download_summary": summary,

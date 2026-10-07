@@ -910,10 +910,11 @@ def _accept_existing_torrent(
     without touching it and return whether its file selection is TOW-verified."""
     if not client_owned_by_tow(topic_client, h):
         # Never green: TOW can change nothing about a torrent without its mark (the file
-        # selection, the next revision), and it may be TOW's own add whose marking failed.
+        # selection, the next revision), and it may be TOW's own add whose marking failed. The
+        # hash lets the owner adopt it into TOW (tow.adopt) - never done without being asked.
         if plan.mode != "all":
-            raise TowError("check.not_owned_partial")
-        raise TowError("check.not_owned_existing", cls="qbit")
+            raise TowError("check.not_owned_partial", hash=h)
+        raise TowError("check.not_owned_existing", cls="qbit", hash=h)
     if not _confirm_client_add(topic_client, h, dest):
         raise TowError("check.migration_unconfirmed" if migrated else "check.existing_unconfirmed")
     selection_verified = True

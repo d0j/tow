@@ -19,6 +19,7 @@ from functools import wraps
 from threading import BoundedSemaphore
 from typing import Any
 
+from tow.adopt import adopt_topic
 from tow.browser_auth import browser_auth
 from tow.check import record_check_failure, run_check
 from tow.config import load_config, save_config
@@ -59,6 +60,7 @@ from tow.web_update import start as start_web_update
 from tow.web_update import status as web_update_status
 
 __all__ = [
+    "adopt_topic",
     "browser_auth",
     "check_portable_bundle",
     "check_restore_point",
