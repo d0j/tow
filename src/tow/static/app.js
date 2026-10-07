@@ -85,6 +85,19 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
   }
 };
 
+// A slow action (a check that waits on a client or a site, a copy, a restore) says that it is
+// working: its button shows data-busy-label with a spinner until the next page opens; a failed
+// request puts the label back (submitPostForm).
+const showBusy = (form, b) => {
+  if (!b?.dataset.busyLabel || b.dataset.originalLabel) return;
+  b.dataset.originalLabel = b.textContent;
+  b.replaceChildren(Object.assign(document.createElement("span"), { className: "busy-spin" }), b.dataset.busyLabel);
+  b.firstChild.setAttribute("aria-hidden", "true");
+  b.setAttribute("aria-busy", "true");
+  form.setAttribute("aria-busy", "true");
+  form.querySelectorAll("[data-busy-note]").forEach((note) => { note.hidden = false; });
+};
+
 document.addEventListener("submit", (e) => {
   if (e.defaultPrevented) return;
   const form = e.target;
@@ -125,15 +138,8 @@ document.addEventListener("submit", (e) => {
     b.dataset.originalLabel = b.textContent || t("js.browser_auth.start");
     b.textContent = t("js.browser_auth.starting");
   }
-  // A slow action (adding a topic checks it at once: up to a minute) says that it is working.
-  if (b.dataset.busyLabel) {
-    b.dataset.originalLabel = b.textContent;
-    b.replaceChildren(Object.assign(document.createElement("span"), { className: "busy-spin" }), b.dataset.busyLabel);
-    b.firstChild.setAttribute("aria-hidden", "true");
-    b.setAttribute("aria-busy", "true");
-    form.setAttribute("aria-busy", "true");
-    form.querySelectorAll("[data-busy-note]").forEach((note) => { note.hidden = false; });
-  }
+  // Adding a topic checks it at once: up to a minute.
+  showBusy(form, b);
   b.disabled = true;
   if (useFetch) submitPostForm(form, b, preparedBody);
 });

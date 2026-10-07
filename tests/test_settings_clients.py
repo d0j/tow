@@ -127,12 +127,77 @@ def test_check_button_shows_the_version_or_the_exact_problem(legacy_qbit, monkey
 
             raise ClientError("Transmission: неверный логин или пароль")  # what the adapter raises
 
+    monkeypatch.setattr("tow.web.services.client_answers", lambda _client_id: True)
     monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *_a: Alive())
     ok = _client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
     assert _flash(ok) == "связь есть: 5.0.1 webapi 2.11"
     monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *_a: Broken())
     bad = _client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
     assert _flash(bad) == "нет связи: Transmission: неверный логин или пароль"
+
+
+def test_check_of_a_client_nobody_listens_for_fails_after_one_quick_try(legacy_qbit, monkeypatch):
+    """QA 1.24.1: "Check" took ~24 s when nothing listened (the library's retries, each one a
+    Windows connect with its own retries). One connection attempt of 3 s now answers it."""
+    import socket
+
+    tried = []
+
+    def refused(address, timeout=None):
+        tried.append((address, timeout))
+        raise ConnectionRefusedError
+
+    monkeypatch.setattr(socket, "create_connection", refused)
+    monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *_a: pytest.fail("no slow library check"))
+    response = _client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
+    assert _flash(response) == "нет связи: клиент не отвечает по этому адресу и порту или его веб-интерфейс выключен"
+    assert tried == [(("127.0.0.1", 8080), 3.0)]
+
+
+def test_slow_settings_buttons_say_they_are_working(legacy_qbit):
+    """The client "Check" only greyed out for the 24 s it took: every slow action button now
+    names what it is doing (app.js showBusy)."""
+    import re
+
+    page = _client().get("/settings").text
+    ping = re.search(r'<button[^>]*form="ping-[^"]*"[^>]*>', page)
+    assert ping is not None
+    assert 'data-busy-label="Проверка…"' in ping.group(0)
+    for action, label in (("/settings/backup/now", "Создание копии…"), ("/settings/restore-points", "Создание копии…")):
+        form = page[page.index(f'action="{action}"') :]
+        assert f'data-busy-label="{label}"' in form[: form.index("</form>")], action
+    import_form = page[page.index('action="/settings/portable/import"') :]
+    import_form = import_form[: import_form.index("</form>")]
+    assert 'value="check" data-busy-label="Проверка…"' in import_form
+    assert 'data-busy-label="Восстановление…"' in import_form
+
+
+@pytest.mark.parametrize(
+    ("host", "port", "address"),
+    [
+        ("nas", 8080, ("nas", 8080)),
+        ("http://nas:9000/qbt", 8080, ("nas", 9000)),
+        ("https://nas/qbt", 443, ("nas", 443)),
+    ],
+)
+def test_the_quick_try_goes_to_the_address_the_client_uses(monkeypatch, host, port, address):
+    import socket
+
+    from tow.web import services
+
+    save_secrets({"qbittorrent": {"host": host, "port": port}})
+    tried = []
+
+    class Open:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+    monkeypatch.setattr(socket, "create_connection", lambda addr, timeout=None: tried.append(addr) or Open())
+    assert services.client_answers(None) is True
+    assert tried == [address]
 
 
 def test_deluge_card_has_no_login_field(legacy_qbit):

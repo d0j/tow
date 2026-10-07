@@ -91,3 +91,12 @@ def test_countdown_and_personal_timers_share_one_health_poll():
     assert verdict["clock"] == "00:00:00"
     assert verdict["whileHidden"] == 0
     assert verdict["onShow"] == 1
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_a_slow_action_button_says_it_is_working_and_recovers_after_a_failure():
+    script = Path(__file__).parent / "js" / "busy_label.mjs"
+    result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=30, check=True)
+    verdict = json.loads(result.stdout.strip().splitlines()[-1])
+    assert all(verdict.values()), verdict

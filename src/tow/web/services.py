@@ -63,6 +63,7 @@ __all__ = [
     "check_restore_point",
     "check_snapshot",
     "cleanup_secret_undo",
+    "client_answers",
     "content_context_title",
     "create_restore_point",
     "delete_restore_point",
@@ -244,6 +245,38 @@ def prepare_magnet_content(url: str, client_id: str) -> dict[str, object]:
         raise TowError("content.magnet_failed") from exc
     finally:
         _MAGNET_PREVIEWS.release()
+
+
+def client_answers(client_id: str | None, timeout: float = 3.0) -> bool:
+    """Whether anything accepts a connection at the client's saved address, one try within
+    ``timeout``: the manual "Check" fails fast instead of waiting out the client library's
+    retries (qBittorrent: about 24 s on Windows when nothing listens). True when there is no
+    address to try - the client's own check then says what is missing."""
+    import socket
+    from urllib.parse import urlparse
+
+    from tow.clients.factory import client_configuration, client_secret_block
+    from tow.clients.spec import get as client_spec
+    from tow.clients.transmission import base_url
+
+    cfg = load_config()
+    block = client_secret_block(cfg, load_secrets(), client_id)
+    host = str(block.get("host") or "").strip()
+    spec = client_spec(str(client_configuration(cfg, client_id).get("kind") or "qbittorrent").lower())
+    if not host or spec is None:
+        return True
+    try:
+        address = urlparse(base_url(host, int(block.get("port") or spec.default_port)))
+        name, port = address.hostname, address.port or (443 if address.scheme == "https" else 80)
+    except ValueError:
+        return True
+    if not name:
+        return True
+    try:
+        with socket.create_connection((name, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
 
 
 def locked_state_mutation[**P, R](function: Callable[P, R]) -> Callable[P, R]:

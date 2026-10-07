@@ -418,6 +418,9 @@ def settings_client_ping(client_id: str = Form("")) -> Response:
     from tow.clients.factory import from_secrets as client_from_secrets
 
     try:
+        # One quick try first: nothing listening fails in seconds, not after the library's retries.
+        if not services.client_answers(client_id or None):
+            raise ConnectionError  # answered as the client library's own "no connection"
         cfg = services.load_config()
         version = client_from_secrets(cfg, services.load_secrets(), client_id or None).ping()
         msg, kind = t("web.settings.ping_ok", version=version), "ok"

@@ -89,7 +89,7 @@
               </fieldset>
               <div class="settings-actions">
                 <button type="submit">{{ t('settings.common.save') }}</button>
-                <button class="ghost" type="submit" form="ping-{{ c.form_id }}" data-keep data-check-saved{% if not c.host %} data-needs-address disabled title="{{ t('js.settings.save_address_first') }}"{% endif %}>{{ t('settings.common.check') }}</button>
+                <button class="ghost" type="submit" form="ping-{{ c.form_id }}" data-keep data-check-saved data-busy-label="{{ t('common.busy.checking') }}"{% if not c.host %} data-needs-address disabled title="{{ t('js.settings.save_address_first') }}"{% endif %}>{{ t('settings.common.check') }}</button>
                 {% if c.multi and not c.default %}
                 <button class="ghost" type="submit" form="default-{{ c.form_id }}">{{ t('settings.clients.make_main') }}</button>
                 <button class="ghost danger" type="submit" form="remove-{{ c.form_id }}">{{ t('settings.common.remove') }}</button>
@@ -192,7 +192,7 @@
               <div class="settings-actions">
                 <button type="submit">{{ t('settings.common.save') }}</button>
                 {% if n.connected %}
-                <button class="ghost" type="submit" form="notifier-test-{{ n.kind }}" data-keep data-check-saved>{{ t('settings.common.check') }}</button>
+                <button class="ghost" type="submit" form="notifier-test-{{ n.kind }}" data-keep data-check-saved data-busy-label="{{ t('common.busy.checking') }}">{{ t('settings.common.check') }}</button>
                 <button class="ghost danger" type="submit" form="notifier-remove-{{ n.kind }}">{{ t('settings.notify.disconnect') }}</button>
                 {% endif %}
               </div>
@@ -460,7 +460,7 @@
           </div>
           <div class="settings-actions">
             <button type="submit" name="action" value="save">{{ t('settings.common.save') }}</button>
-            <button class="ghost" type="submit" name="action" value="check">{{ t('settings.common.check') }}</button>
+            <button class="ghost" type="submit" name="action" value="check" data-busy-label="{{ t('common.busy.checking') }}">{{ t('settings.common.check') }}</button>
             {% if not f.is_default %}<button class="ghost" type="submit" name="action" value="default">{{ t('settings.backups.use_default') }}</button>{% endif %}
           </div>
         </form>
@@ -475,7 +475,7 @@
             {% if backups.cleanup_pending %}<p class="section-note" role="status">{{ t('backup.snapshot.cleanup_warning') }}</p>{% endif %}
             {% if backups.cleanup_legacy %}<p class="section-note" role="status">{{ t('backup.snapshot.cleanup_legacy') }}</p>{% elif night_cleanup_unknown %}<p class="section-note" role="status">{{ t('backup.snapshot.cleanup_unknown') }}</p>{% endif %}
             <form method="post" action="/settings/backup/now" data-return-target="acc-transfer" class="settings-actions backup-make">
-              <button type="submit">{{ t('settings.backups.make_now') }}</button>
+              <button type="submit" data-busy-label="{{ t('common.busy.copying') }}">{{ t('settings.backups.make_now') }}</button>
             </form>
             <form method="post" action="/settings/backup/automatic" class="compact-form immediate-form" data-return-target="acc-transfer" data-auto-submit>
               <label class="check-field" for="backup-automatic">
@@ -502,10 +502,10 @@
                 <div><b>{{ snap.at }}</b><span>{{ snap.size }}</span></div>
                 <div class="settings-actions backup-copy-actions">
                   <form method="post" action="/settings/backup/night/{{ snap.name|urlencode }}/check" data-return-target="acc-transfer">
-                    <button class="ghost" type="submit">{{ t('settings.common.check') }}</button>
+                    <button class="ghost" type="submit" data-busy-label="{{ t('common.busy.checking') }}">{{ t('settings.common.check') }}</button>
                   </form>
                   <form method="post" action="/settings/backup/night/{{ snap.name|urlencode }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.night_restore_confirm', at=snap.at) }}">
-                    <button class="danger" type="submit">{{ t('settings.common.restore') }}</button>
+                    <button class="danger" type="submit" data-busy-label="{{ t('common.busy.restoring') }}">{{ t('settings.common.restore') }}</button>
                   </form>
                   <a class="btn ghost danger" href="/settings/backup/night/{{ snap.name|urlencode }}/delete">{{ t('settings.common.delete') }}</a>
                 </div>
@@ -528,7 +528,7 @@
             {% if backups.point_cleanup_pending %}<p class="section-note" role="status">{{ t('backup.restore_point.cleanup_pending') }}</p>{% endif %}
             {% if point_cleanup_unknown %}<p class="section-note" role="status">{{ t('backup.restore_point.cleanup_legacy' if backups.point_cleanup_legacy else 'backup.restore_point.cleanup_unknown') }}</p>{% endif %}
             <form method="post" action="/settings/restore-points" data-return-target="acc-transfer" class="settings-actions backup-make">
-              <button type="submit">{{ t('settings.backups.create') }}</button>
+              <button type="submit" data-busy-label="{{ t('common.busy.copying') }}">{{ t('settings.backups.create') }}</button>
             </form>
             {% if restore_points_error %}
             <p class="notice error" role="alert">{{ t('settings.backups.list_error') }}</p>
@@ -541,10 +541,10 @@
                 <div><b>{{ point.created_label }}</b><span>{{ point.size_label }}</span>{% if not point.bytes %}<span class="pill warn">{{ t('settings.backups.empty_archive') }}</span>{% endif %}</div>
                 <div class="settings-actions backup-copy-actions">
                   <form method="post" action="/settings/restore-points/{{ point.id }}/check" data-return-target="acc-transfer">
-                    <button class="ghost" type="submit"{% if not point.bytes %} disabled{% endif %}>{{ t('settings.common.check') }}</button>
+                    <button class="ghost" type="submit" data-busy-label="{{ t('common.busy.checking') }}"{% if not point.bytes %} disabled{% endif %}>{{ t('settings.common.check') }}</button>
                   </form>
                   <form method="post" action="/settings/restore-points/{{ point.id }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.manual_restore_confirm') }}">
-                    <button class="danger" type="submit"{% if not point.bytes %} disabled{% endif %}>{{ t('settings.common.restore') }}</button>
+                    <button class="danger" type="submit" data-busy-label="{{ t('common.busy.restoring') }}"{% if not point.bytes %} disabled{% endif %}>{{ t('settings.common.restore') }}</button>
                   </form>
                   <a class="btn ghost danger" href="/settings/restore-points/{{ point.id }}/delete">{{ t('settings.common.delete') }}</a>
                 </div>
@@ -570,8 +570,8 @@
               <label for="portable-backup-file">{{ t('settings.backups.file_choose') }} <code>.towx</code></label>
               <input id="portable-backup-file" name="backup_file" type="file" accept=".towx,application/octet-stream" required>
               <div class="settings-actions">
-                <button class="ghost" type="submit" name="operation" value="check">{{ t('settings.common.check') }}</button>
-                <button class="danger" type="submit" name="operation" value="restore" data-confirm="{{ t('settings.backups.file_restore_confirm') }}">{{ t('settings.common.restore') }}</button>
+                <button class="ghost" type="submit" name="operation" value="check" data-busy-label="{{ t('common.busy.checking') }}">{{ t('settings.common.check') }}</button>
+                <button class="danger" type="submit" name="operation" value="restore" data-confirm="{{ t('settings.backups.file_restore_confirm') }}" data-busy-label="{{ t('common.busy.restoring') }}">{{ t('settings.common.restore') }}</button>
               </div>
             </form>
             <p class="section-note">{{ tm('settings.backups.file_note', more='/settings/help#export-import') }}</p>

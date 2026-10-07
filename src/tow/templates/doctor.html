@@ -41,6 +41,6 @@
 <div class="card mut">{{ t('doctor.unavailable') }}</div>
 {% endif %}
 <form method="post" action="/doctor/run" class="actions">
-  <button type="submit">{{ t('doctor.run') }}</button>
+  <button type="submit" data-busy-label="{{ t('common.busy.checking') }}">{{ t('doctor.run') }}</button>
 </form>
 {% endblock %}

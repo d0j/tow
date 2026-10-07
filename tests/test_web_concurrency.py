@@ -237,7 +237,7 @@ def test_a_save_does_not_wait_for_a_client_check(monkeypatch):
 
     entered, release = threading.Event(), threading.Event()
     monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *_a, **_k: Silent())
-    monkeypatch.setattr("tow.web.routes_settings._client_answers", lambda *_a, **_k: True, raising=False)
+    monkeypatch.setattr("tow.web.services.client_answers", lambda *_a, **_k: True)
     with TestClient(app, headers={"Origin": "http://127.0.0.1"}) as client:
         _while_running(
             client,
