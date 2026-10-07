@@ -59,6 +59,57 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ## Python dependencies
 
 No Python package is vendored into this repository. TOW's dependencies (FastAPI, Starlette, Uvicorn, httpx,
-Jinja2, cryptography, Beautiful Soup, PyYAML, qbittorrent-api, tzdata and their own dependencies) are installed
-from PyPI at the exact versions pinned in [`uv.lock`](uv.lock), each under its own license, which ships with the
-installed package.
+httpcore, Jinja2, cryptography, Beautiful Soup, PyYAML, regex, python-multipart, websockets, qbittorrent-api,
+tzdata and their own dependencies) are installed from PyPI at the exact versions pinned in [`uv.lock`](uv.lock),
+each under its own license, which ships with the installed package.
+
+## Windows zip
+
+`TOW-windows-x64.zip` (built by `scripts/build-bundle.py`) carries, next to TOW itself, programs and packages of
+others in `TOW\runtime`, each under its own license:
+
+| Component | In the zip | License |
+|---|---|---|
+| [uv](https://github.com/astral-sh/uv), the version `build-bundle.py` pins | `runtime\bin\uv.exe` | MIT or Apache-2.0, at your option |
+| [CPython](https://www.python.org) of `.python-version` (the standalone build uv installs) | `runtime\python\` | Python Software Foundation License Version 2; the licenses of the libraries built into it are in its `LICENSE.txt` |
+| The packages below, as wheels (the runtime packages of `uv.lock` for Windows) | `runtime\cache\` | as listed; each wheel holds its license |
+
+| Package | License (SPDX) |
+|---|---|
+| annotated-doc | MIT |
+| annotated-types | MIT |
+| anyio | MIT |
+| beautifulsoup4 | MIT |
+| certifi | MPL-2.0 |
+| cffi | MIT-0 |
+| charset-normalizer | MIT |
+| click | BSD-3-Clause |
+| cryptography | Apache-2.0 OR BSD-3-Clause |
+| fastapi | MIT |
+| h11 | MIT |
+| httpcore | BSD-3-Clause |
+| httptools | MIT |
+| httpx | BSD-3-Clause |
+| idna | BSD-3-Clause |
+| jinja2 | BSD-3-Clause |
+| markupsafe | BSD-3-Clause |
+| opentelemetry-api | Apache-2.0 |
+| packaging | Apache-2.0 OR BSD-2-Clause |
+| pycparser | BSD-3-Clause |
+| pydantic | MIT |
+| pydantic-core | MIT |
+| python-dotenv | BSD-3-Clause |
+| python-multipart | Apache-2.0 |
+| pyyaml | MIT |
+| qbittorrent-api | MIT |
+| regex | Apache-2.0 AND CNRI-Python |
+| requests | Apache-2.0 |
+| soupsieve | MIT |
+| starlette | BSD-3-Clause |
+| typing-extensions | PSF-2.0 |
+| typing-inspection | MIT |
+| tzdata | Apache-2.0 |
+| urllib3 | MIT |
+| uvicorn | BSD-3-Clause |
+| watchfiles | MIT |
+| websockets | BSD-3-Clause |
