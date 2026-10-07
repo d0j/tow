@@ -300,6 +300,7 @@
   },
   "cli": {
     "command_failed": "the command could not be completed; check the settings and try again",
+    "folder_failed": "TOW cannot use {path}: {error}. Check that the folder exists and that your account may write to it (TOW keeps its data there).",
     "folder_shared": "Warning: other accounts on this computer can open {path}. TOW could not limit it to your account: run tow permissions fix (in a terminal opened with “Run as administrator” when another account owns the folder).",
     "root_shared": "Warning: other accounts on this computer can change the TOW folder {path} and the program in it. TOW could not limit it to your account: run tow permissions fix (in a terminal opened with “Run as administrator” when another account owns the folder).",
     "password": {
@@ -1561,6 +1562,7 @@
     },
     "service": {
       "autostart_unread": "could not read autostart status",
+      "not_supervised": "TOW does not run as `tow run` here: restart it by hand",
       "q": "service autostart restart windows",
       "title": "TOW service",
       "autostart_on": "Starts automatically",

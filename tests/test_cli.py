@@ -103,6 +103,32 @@ def test_unexpected_cli_error_does_not_echo_secret(monkeypatch, capsys):
     assert "не удалось выполнить команду" in out
 
 
+def test_a_folder_tow_cannot_write_is_named_with_its_cause(monkeypatch, capsys):
+    # QA: with data\ read-only every command said "could not be completed; check the settings".
+    def denied(_args):
+        raise PermissionError(13, "Access is denied", "C:\\TOW\\data\\state.json")
+
+    monkeypatch.setitem(cli._COMMANDS, "version", denied)
+    assert cli.main(["version", "--json"]) == cli.EXIT_CANNOT_RUN
+    out = capsys.readouterr().out
+    assert "C:\\\\TOW\\\\data\\\\state.json" in out  # JSON-escaped
+    assert "Access is denied" in out
+    assert "не удалось выполнить команду" not in out
+    monkeypatch.setitem(cli._COMMANDS, "version", lambda _args: (_ for _ in ()).throw(ConnectionError("x")))
+    assert cli.main(["version", "--json"]) == cli.EXIT_CANNOT_RUN  # no file: the general sentence
+    assert "не удалось выполнить команду" in capsys.readouterr().out
+
+
+def test_a_restart_without_a_supervisor_is_said_in_the_owners_language(monkeypatch):
+    from tow import i18n, lifecycle
+
+    monkeypatch.setattr("tow.supervisor.layout.running", lambda: None)
+    result = lifecycle.request_restart()
+    assert result == {"ok": False, "error": i18n.t("settings.service.not_supervised")}
+    assert "tow run" in result["error"]
+    assert result["error"] != i18n.t("settings.service.not_supervised", "en")  # the tests speak Russian
+
+
 def test_failed_check_does_not_echo_exception_secret(monkeypatch, capsys):
     def broken(**_kwargs):
         raise RuntimeError("token=must-not-be-displayed")
