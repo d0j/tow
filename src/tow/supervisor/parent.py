@@ -28,6 +28,19 @@ GRACE_SEC = 15.0
 LOG = logging.getLogger("tow.serve")
 
 
+def _parent_check(
+    parent_pid: int, *, parent: Callable[[], int] = os.getppid, windows: bool | None = None
+) -> Callable[[int], bool]:
+    from tow import platform
+
+    if windows if windows is not None else platform.is_windows():
+        return platform.current().process_alive
+    if parent() != int(parent_pid):
+        # Started through something in between (not by that parent itself): its pid is all there is.
+        return platform.current().process_alive
+    return lambda pid: parent() == int(pid)
+
+
 def watch_parent(
     parent_pid: int,
     on_gone: Callable[[], Any],
@@ -36,11 +49,17 @@ def watch_parent(
     sleep: Callable[[float], None] = time.sleep,
     interval: float = POLL_SEC,
 ) -> threading.Thread:
-    """Call ``on_gone`` once ``parent_pid`` has ended (from a daemon thread)."""
+    """Call ``on_gone`` once ``parent_pid`` has ended (from a daemon thread).
+
+    On Linux and macOS a process whose parent ended is handed to another one: ``getppid()``
+    changing says so even when the old pid already belongs to a new process (asking whether
+    that pid is alive would wait for ever then). Windows keeps the creator's pid instead, so it
+    asks whether the parent still runs.
+    """
     from tow import platform
 
     platform.current().die_with_parent(parent_pid)
-    check = alive or platform.current().process_alive
+    check = alive or _parent_check(parent_pid)
 
     def run() -> None:
         while check(parent_pid):

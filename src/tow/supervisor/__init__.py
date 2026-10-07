@@ -240,9 +240,13 @@ def run_supervisor(deps: Deps | None = None) -> int:
             supervisor.request_stop({"by": "signal"})
             supervisor.stop_deadline = min(supervisor.stop_deadline, supervisor.deps.monotonic() + SIGNAL_STOP_WAIT_SEC)
 
-        previous = signal.getsignal(signal.SIGTERM)
-        with contextlib.suppress(ValueError, OSError):  # not the main thread
-            signal.signal(signal.SIGTERM, by_signal)
+        # SIGHUP: the terminal of `tow run` was closed (Linux, macOS) - a clean stop like SIGTERM,
+        # not the default of ending at once with the web server and a job left behind.
+        stop_signals = [signal.SIGTERM, *([signal.SIGHUP] if hasattr(signal, "SIGHUP") else [])]
+        previous = {number: signal.getsignal(number) for number in stop_signals}
+        for number in stop_signals:
+            with contextlib.suppress(ValueError, OSError):  # not the main thread
+                signal.signal(number, by_signal)
         try:
             while not supervisor.finished:
                 try:
@@ -252,8 +256,9 @@ def run_supervisor(deps: Deps | None = None) -> int:
                         raise
                     by_signal(signal.SIGINT, None)
         finally:
-            with contextlib.suppress(ValueError, OSError, TypeError):
-                signal.signal(signal.SIGTERM, previous)
+            for number, handler in previous.items():
+                with contextlib.suppress(ValueError, OSError, TypeError):
+                    signal.signal(number, handler)
         return 0
     finally:
         if supervisor is not None:
