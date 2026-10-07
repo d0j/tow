@@ -679,8 +679,9 @@ def test_import_write_failure_automatically_restores_checkpoint(tmp_path, monkey
         raise SecretStoreError("fixture write failure")
 
     monkeypatch.setattr("tow.bundle.save_secrets", fail_save)
-    with pytest.raises(ExportImportError, match="destination was restored"):
+    with pytest.raises(ExportImportError, match="destination was restored") as caught:
         import_bundle(bundle, "bundle-passphrase", apply=True)
+    assert caught.value.owner_text.code == "cli.bundle.restored"  # `tow import` says the data is back
 
 
 def test_import_rollback_compensates_after_late_restore_failure(tmp_path, monkeypatch):

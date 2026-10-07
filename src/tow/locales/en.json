@@ -435,6 +435,24 @@
       "on": "Access from other devices is on (with the password).",
       "off": "Access from other devices is off: TOW opens on this computer only.",
       "restart": "It takes effect after `tow restart`."
+    },
+    "bundle": {
+      "passphrase": "TOW export passphrase: ",
+      "passphrase_repeat": "Repeat the passphrase: ",
+      "passphrase_short": "The passphrase must have at least {length} characters; nothing was written.",
+      "passphrase_mismatch": "The passphrases do not match; nothing was written.",
+      "output_exists": "{path} already exists; choose another file or add --force to replace it.",
+      "export_failed": "The export file could not be written.",
+      "path_map": "--path-map must look like OLD=NEW: two different, non-empty folder beginnings, each OLD only once.",
+      "import_refused": "The file was not imported: {reason}.",
+      "import_failed": "The import could not be completed.",
+      "wrong_passphrase": "the passphrase is wrong, or the file is damaged",
+      "legacy_secrets": "The passwords and tokens of this TOW are still in a plain-text file. Encrypt them first with `{command}`, then import again.",
+      "master_key": "The master key of this TOW is missing or does not open its passwords and tokens; nothing was imported.",
+      "restored": "The import failed; the previous data was put back.",
+      "not_restored": "The import failed, and putting the previous data back failed too. TOW tries again the next time it reads its data.",
+      "no_checkpoint": "There is no import checkpoint at {path}.",
+      "rollback_failed": "The import was not rolled back."
     }
   },
   "client": {
