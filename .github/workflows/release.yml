@@ -42,6 +42,10 @@ jobs:
     permissions:
       contents: read
       actions: read
+    # The commit checked here; every later job checks out exactly it, never the tag again (a tag
+    # moved in between would build and publish code that was not checked).
+    outputs:
+      commit: ${{ steps.tag.outputs.commit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -49,6 +53,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: The tag is an annotated "TOW X.Y.Z" on origin/main
+        id: tag
         run: |
           printf '%s\n' "$TAG" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?' || { echo "not a release tag: $TAG" >&2; exit 1; }
           # The tag object itself (a checkout of a tag may leave only its commit).
@@ -58,7 +63,9 @@ jobs:
           [ "$message" = "TOW ${TAG#v}" ] || { echo "the message of $TAG is '$message', not 'TOW ${TAG#v}'" >&2; exit 1; }
           commit=$(git rev-parse "refs/tags/$TAG^{commit}")
           git merge-base --is-ancestor "$commit" refs/remotes/origin/main || { echo "$TAG ($commit) is not on origin/main" >&2; exit 1; }
+          [ "$(git rev-parse HEAD)" = "$commit" ] || { echo "the checkout is not $TAG ($commit)" >&2; exit 1; }
           echo "COMMIT=$commit" >> "$GITHUB_ENV"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
       - name: The ci workflow passed on the tagged commit
         env:
           GH_TOKEN: ${{ github.token }}
@@ -90,6 +97,9 @@ jobs:
           version=$(tar -xzOf tow-source.tar.gz "$top/pyproject.toml" | sed -n 's/^version = "\(.*\)"/\1/p' | head -n 1)
           echo "top folder $top, version $version"
           [ "v$version" = "$TAG" ] || { echo "the tag $TAG holds version $version" >&2; exit 1; }
+          # git archive records its commit: the archive is of the commit checked above.
+          archived=$(gunzip -c tow-source.tar.gz | git get-tar-commit-id)
+          [ "$archived" = "$COMMIT" ] || { echo "the archive of $TAG is of $archived, not $COMMIT" >&2; exit 1; }
           sha256sum tow-source.tar.gz
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -106,9 +116,11 @@ jobs:
       # Pinned to full commit SHAs (the tag in the comment); Dependabot proposes updates.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ needs.source.outputs.commit }}
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false # a release is built from nothing another run left behind
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: source
@@ -142,7 +154,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ needs.source.outputs.commit }}
           persist-credentials: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -164,9 +176,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ needs.source.outputs.commit }}
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false # a release is built from nothing another run left behind
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: source
@@ -195,7 +209,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ needs.source.outputs.commit }}
           persist-credentials: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -252,8 +266,15 @@ jobs:
           [ "$(names)" = "$expected" ] || { echo "the draft of $TAG has: $(names)" >&2; exit 1; }
           readback
           cmp readback/SHA256SUMS assets/SHA256SUMS
-          latest=true
-          case $TAG in *-*) latest=false ;; esac
+          # "Latest" only for the highest stable version: a fix to an older line (v1.23.12 after
+          # v1.24.1) must not become what releases/latest (install.ps1, install.sh, updates) gives.
+          latest=false
+          highest=$({
+            gh release list --limit 1000 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[].tagName'
+            echo "$TAG"
+          } | grep -Ex 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -n 1)
+          [ "$highest" != "$TAG" ] || latest=true
+          echo "the highest stable release is $highest: latest=$latest"
           gh release edit "$TAG" --draft=false --latest=$latest
           [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = false ] || { echo "$TAG is still a draft" >&2; exit 1; }
           gh release view "$TAG" --json url,assets --jq '.url, .assets[].name'
