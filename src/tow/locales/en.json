@@ -2054,8 +2054,6 @@
       "replace_not_needed": "the previous torrent does not need to be stopped",
       "cannot_stop": "this client cannot stop a torrent",
       "replace_failed": "the previous torrent was not stopped: {error}",
-      "unknown_tracker": "unknown site",
-      "no_folder": "no folder",
       "not_owned": "torrent client: the torrent has no tow tag — TOW does not touch it",
       "move_back_unconfirmed": "torrent client: moving the folder back was not confirmed by read-back",
       "added_check_busy": "TOW watch saved; another check is running right now, so this one was not checked yet — press “Check” in a minute or wait for the next scheduled check",

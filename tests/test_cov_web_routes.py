@@ -253,14 +253,25 @@ def test_invalid_selection_syntax_is_refused_before_a_check_or_state_change(no_c
         assert _flash(response)
 
 
-def test_unknown_tracker_add_is_logged_as_no_tracker(no_check, client):
-    client.post(
-        "/topics/add", data={"url": "https://unknown.example/t/1", "save_path": r"M:\a"}, follow_redirects=False
-    )
+@pytest.mark.parametrize(
+    "form",
+    [
+        {"url": "https://unknown.example/t/1", "save_path": r"M:\a"},  # no such site yet
+        {"url": RUTOR_URL, "save_path": ""},  # no folder
+        {"url": RUTOR_URL, "save_path": "relative"},  # not a folder TOW can use
+    ],
+)
+def test_a_refused_add_logs_no_failed_check(no_check, client, monkeypatch, form):
+    """QA 1.24.1: an add refused because the site was not there yet was logged in History as
+    "Check failed · no site": no check ran and nothing was added. The form says why, at once
+    (before the site's page is asked for a title)."""
+    monkeypatch.setattr("tow.title.guess_topic_title", lambda *_a, **_k: pytest.fail("no title fetch for a refusal"))
+    response = client.post("/topics/add", data=form, follow_redirects=False)
 
-    failures = _events("check_fail")
-    assert failures
-    assert failures[-1]["cls"] == "no_tracker"
+    assert response.status_code == 303
+    assert "add" in _query(response)  # the form comes back with the reason
+    assert _events("check_fail") == []
+    assert load_state().get("topics", []) == []
 
 
 def test_add_of_already_watched_url_is_refused(no_check, client):

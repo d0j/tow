@@ -233,23 +233,16 @@ def topics_add(
     cfg = services.load_config()
     trs = load_trackers(cfg)
     tracker = match_tracker(trs, url)
+    # A refused add never happened: the form says why, History logs no failed check for it.
     if not tracker:
-        unknown = TowError("web.topics.unknown_tracker", cls="no_tracker")
-        services.log_event("check_fail", url=url, **error_fields(unknown), how="manual")
         return _add_refused(t("web.topics.unknown_link"), draft, "no_site")
     topics = state.setdefault("topics", [])
     if any(item.get("url") == url for item in topics):
         return flash_redirect("/", "web.topics.already_watched", "warn")
-    name = title.strip()
-    if title_is_placeholder(name, url):
-        name = guess_topic_title(url) or name or url
     dest = resolve_save_path(save_path, state)
     if not dest:
-        no_folder = TowError("web.topics.no_folder", cls="no_path")
-        services.log_event("check_fail", title=name, url=url, **error_fields(no_folder), how="manual")
         return _add_refused(t("web.topics.need_folder"), draft, "folder")
     if problem := _save_path_refusal(dest):
-        services.log_event("check_fail", title=name, url=url, error=problem, cls="no_path", how="manual")
         return _add_refused(problem, draft, "folder")
     try:
         selected_client = client_configuration(cfg, client_id or None)
@@ -262,6 +255,10 @@ def topics_add(
         policy = _selection_form(selection_mode, selection_value, tracking_mode, prepared, selection_indices)
     except (ValueError, RuntimeError) as exc:
         return _add_refused(str(exc), draft, "selection")
+    # Only now the site's page for a title (up to the site's timeouts): a refusal above is at once.
+    name = title.strip()
+    if title_is_placeholder(name, url):
+        name = guess_topic_title(url) or name or url
     new: dict[str, Any] = {
         "id": uuid.uuid4().hex[:12],
         "title": name,
