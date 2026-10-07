@@ -6,6 +6,7 @@ the data put back), a rollback step that fails, local edits and a second update 
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 import io
 import json
@@ -713,6 +714,36 @@ def test_task_xml_is_read_for_command_and_state():
     assert info == {"command": "C:\\TOW\\app\\scripts\\tow-check.cmd", "enabled": False}
     assert updater.task_info("") is None
     assert updater.task_info("<oops") is None
+
+
+def test_the_windows_task_is_read_as_utf8_from_powershell(tmp_path):
+    # schtasks /Query /XML wrote the ANSI code page: a Cyrillic folder came back as "?" and the
+    # task of this install was never recognised, so the update did not restart it by the task.
+    app = tmp_path / "Иван TOW" / "app"
+    pythonw = app / ".venv" / "Scripts" / "pythonw.exe"
+    xml = f'<Task xmlns="x"><Actions><Exec><Command>"{pythonw}"</Command></Exec></Actions></Task>'
+    answers = {
+        "present": (0, "xml:" + base64.b64encode(xml.encode("utf-8")).decode("ascii") + "\r\n"),
+        "absent": (0, "absent\r\n"),
+        "broken": (1, "Access is denied.\r\n"),
+    }
+
+    class Windows(updater.System):
+        windows = True
+        answer = "present"
+
+        def _run(self, argv, *, cwd=None, env=None, timeout=600):
+            self.argv = list(argv)
+            return answers[self.answer]
+
+    system = Windows(app)
+    assert system.autostart_kind() == "task"
+    assert system.argv[0] == "powershell"
+    assert "Export-ScheduledTask -TaskName 'TOW' -TaskPath '\\'" in system.argv[-1]
+    for answer in ("absent", "broken"):
+        system.answer = answer
+        assert system.task_xml("TOW") is None
+        assert system.autostart_kind() is None
 
 
 def test_tow_update_prints_how_to_run_it(capsys, tmp_path, monkeypatch):

@@ -54,6 +54,7 @@ Steps (each one checked; nothing is reported as done without its read-back):
 from __future__ import annotations
 
 import argparse
+import base64
 import contextlib
 import hashlib
 import json
@@ -703,8 +704,28 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
         )
 
     def task_xml(self, name: str) -> str | None:
-        code, output = self._run(["schtasks", "/Query", "/TN", name, "/XML"], timeout=60)
-        return output if code == 0 else None
+        """The task's XML, None when it is absent or cannot be read.
+
+        Read through PowerShell as base64 of its UTF-8, as tow.autostart.windows reads it:
+        ``schtasks /Query /XML`` writes the ANSI code page (best fit), so a Cyrillic folder
+        on an English Windows came back as "?" and the task never matched this install.
+        """
+        quoted = name.replace("'", "''")
+        script = (
+            "$ErrorActionPreference = 'Stop'; "
+            f"try {{ $xml = Export-ScheduledTask -TaskName '{quoted}' -TaskPath '\\' }} "
+            "catch { if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { 'absent'; exit 0 }; "
+            "[Console]::Error.WriteLine($_.Exception.Message); exit 1 }; "
+            "'xml:' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($xml))"
+        )
+        code, output = self._run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], timeout=60)
+        answer = next((line.strip() for line in output.splitlines() if line.strip().startswith("xml:")), "")
+        if code != 0 or not answer:
+            return None
+        try:
+            return base64.b64decode(answer[4:], validate=True).decode("utf-8")
+        except ValueError:
+            return None
 
 
 def parse_sums(text: str) -> dict[str, str]:
