@@ -90,6 +90,7 @@ class DelugeClient(ManagedClient):
         self._ready = False
         self._labels_ready = False
         self._metadata_preview = False
+        self._refresh_methods = False
 
     def _post(self, method: str, params: list[Any], timeout: float | None = None) -> dict[str, Any]:
         self._id += 1
@@ -127,7 +128,15 @@ class DelugeClient(ManagedClient):
         """Log in and attach Deluge Web to its daemon (read-only for the client's settings)."""
         if not self._raw("auth.login", self._password):
             raise self._fail("client.deluge.bad_password")
-        if not self._raw("web.connected"):
+        attached = self._raw("web.connected")
+        refresh, self._refresh_methods = self._refresh_methods, False
+        if attached and refresh and not (self.read_only or self._metadata_preview):
+            # Deluge Web learns the daemon's methods when it attaches (later only from a plugin
+            # event it may miss): "unknown method" while attached is that stale list, and a new
+            # login does not refresh it - attaching again does.
+            self._raw("web.disconnect")
+            attached = False
+        if not attached:
             if self.read_only or self._metadata_preview:
                 raise self._fail("client.deluge.not_attached_preview")
             hosts = self._raw("web.get_hosts") or []
@@ -166,9 +175,10 @@ class DelugeClient(ManagedClient):
             try:
                 return self._raw(method, *params, timeout=timeout)
             except _RpcError as exc:
-                # 1: session expired, 2: method unknown until the daemon is (re)connected.
+                # 1: session expired, 2: method unknown until the daemon is (re)attached.
                 if exc.code in (1, 2) and attempt == 0:
                     self._ready = False
+                    self._refresh_methods = exc.code == 2
                     continue
                 raise self._fail("client.managed.rpc_refused", method=method, answer=exc.message) from exc
         raise self._fail("client.deluge.no_answer", method=method)
