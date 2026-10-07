@@ -53,19 +53,24 @@ def html_text(response: Any) -> str:
     return bytes(content).decode("cp1251", errors="replace")
 
 
-def is_cloudflare(status: int, text: str, headers: Any = None) -> bool:
-    """A Cloudflare check page instead of the answer. Newer checks also come with status 200.
+# The titles of Cloudflare's own check pages.
+_CLOUDFLARE_TITLES = frozenset({"just a moment...", "just a moment…", "attention required! | cloudflare"})
+_TITLE = re.compile(r"<title[^>]*>([^<]{0,200})</title>", re.IGNORECASE)
 
-    Only the check page's own marks count: Cloudflare puts its ``challenge-platform`` script
-    into ordinary pages of the sites it protects too."""
+
+def is_cloudflare(status: int, text: str, headers: Any = None) -> bool:
+    """A Cloudflare check page instead of the answer: Cloudflare says so in its
+    ``cf-mitigated`` header, or the page has the check's exact title with the check's status.
+
+    Nothing else counts: Cloudflare puts its ``challenge-platform`` script into ordinary pages
+    of the sites it protects, a film may be called "Just a Moment" and a post may quote the
+    check's code."""
     if str((headers or {}).get("cf-mitigated") or "").lower() == "challenge":
         return True
-    head = text[:65536].lower()
-    if "_cf_chl_opt" in head or "cf-challenge" in head[:4000]:
-        return True
-    if "just a moment" not in head[:4000]:
+    if status not in (403, 503):
         return False
-    return status in (403, 503) or "challenge-platform" in head
+    title = _TITLE.search(text[:8192])
+    return title is not None and " ".join(title.group(1).split()).casefold() in _CLOUDFLARE_TITLES
 
 
 def client(
