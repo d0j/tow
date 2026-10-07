@@ -246,6 +246,16 @@ def _orphan(tmp_path, world, sup, *, cmd=None, owner_pid=78, parent=77):
     return stopped
 
 
+def test_another_tow_on_the_port_is_named_as_such(tmp_path):
+    """Round-3 audit: another TOW folder on the port was called "another program"."""
+    from tow.i18n import t
+
+    _world, sup = make(tmp_path, port_busy=True)
+    assert sup.preflight() == t("supervisor.port_busy", port=sup.port)
+    sup.deps.tow_server = lambda _port: True
+    assert sup.preflight() == t("supervisor.port_busy_tow", port=sup.port)
+
+
 def test_a_web_server_left_by_a_killed_supervisor_is_taken_over(tmp_path):
     world, sup = make(tmp_path, port_busy=True)
     stopped = _orphan(tmp_path, world, sup)

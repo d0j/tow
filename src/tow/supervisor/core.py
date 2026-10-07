@@ -98,6 +98,8 @@ class Deps:
     stop_pid: Callable[[int], bool] = field(default=lambda _pid: False)
     # The web server on the port answers /healthz as this install (layout.install_id).
     own_server: Callable[[int], bool] = field(default=lambda _port: False)
+    # A TOW answers /healthz on the port - this install's or another folder's.
+    tow_server: Callable[[int], bool] = field(default=lambda _port: False)
 
 
 @dataclass
@@ -204,7 +206,10 @@ class Supervisor:
             return None
         from tow.i18n import t
 
-        return t("supervisor.port_busy", port=self.port)
+        # Another TOW folder (a copy, an older install) is named as such: "another program"
+        # sent the owner looking for one that is not there.
+        key = "supervisor.port_busy_tow" if self.deps.tow_server(self.port) else "supervisor.port_busy"
+        return t(key, port=self.port)
 
     def _own_server_command(self, command: str) -> bool:
         return layout.own_server_command(command, self.home)
