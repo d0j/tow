@@ -1213,6 +1213,7 @@
     "redirect_outside_allowlist": "the download redirect left the allowed addresses",
     "daily_limit": "daily download limit reached",
     "not_torrent_login": "not a torrent (sign-in needed?)",
+    "topic_removed": "the site says this topic does not exist",
     "all_paused": "{tracker}: all mirrors are paused",
     "tracker_daily_limit": "{tracker}: daily download limit reached",
     "no_location": "the site redirected without saying where",
@@ -1759,6 +1760,8 @@
     "magnet_ambiguous": "the page has several different magnet links",
     "no_magnet": "the page has no valid magnet link",
     "no_download_link": "the page has no torrent link — log in to the site",
+    "download_link_ambiguous": "the page links several different torrent files — TOW does not guess which one",
+    "sign_in_page": "the site showed its sign-in page instead of the topic",
     "not_torrent": "the site did not send a torrent file"
   },
   "update": {

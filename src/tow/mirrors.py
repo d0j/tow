@@ -19,7 +19,33 @@ def _now() -> float:
 
 
 # What a failure says about the site, as a status class (default: the site is not answering well).
-_FAILURE_CLASSES = {"auth": "tracker_auth", "quota": "quota", "cloudflare": "cloudflare", "frozen": "frozen"}
+_FAILURE_CLASSES = {
+    "auth": "tracker_auth",
+    "quota": "quota",
+    "cloudflare": "cloudflare",
+    "frozen": "frozen",
+    "gone": "gone",
+}
+# A password login is not repeated by scheduled checks within this time: a site that answers
+# every download with a page (a removed topic, a check page) must not get the password each time.
+LOGIN_PAUSE_SEC = 600
+# What a site's page says when the topic does not exist (any case; the page in any encoding).
+_REMOVED_PHRASES = (
+    "тема не найдена",
+    "тема не существует",
+    "темы не существует",
+    "такой темы нет",
+    "раздача не найдена",
+    "раздача не существует",
+    "раздачи не существует",
+    "нет такой раздачи",
+    "торрент не найден",
+    "topic not found",
+    "topic does not exist",
+    "the requested topic does not exist",
+    "torrent not found",
+    "no such torrent",
+)
 
 
 class MirrorFetchError(TowError, RuntimeError):
@@ -40,7 +66,20 @@ def _rebuild_fetch_error(code: str, failure: str, cls: str, params: dict[str, An
 
 
 # Failures that describe the requested topic, not the mirror's health.
-_TOPIC_LEVEL_CODES = frozenset({"auth", "http_topic", "too_large"})
+_TOPIC_LEVEL_CODES = frozenset({"auth", "http_topic", "too_large", "gone"})
+
+
+def says_topic_removed(content: bytes | str) -> bool:
+    """The page says the topic does not exist (a site answering 200 instead of 404)."""
+    texts = [content[:65536]] if isinstance(content, str) else []
+    if isinstance(content, (bytes, bytearray)):
+        raw = bytes(content[:65536])
+        for encoding in ("utf-8", "cp1251"):
+            try:
+                texts.append(raw.decode(encoding))
+            except UnicodeDecodeError:
+                continue
+    return any(phrase in text.casefold() for text in texts for phrase in _REMOVED_PHRASES)
 
 
 def _bucket(state: dict[str, Any], tracker: str) -> dict[str, Any]:
@@ -116,6 +155,26 @@ def has_available_host(tracker: str, hosts: list[str], *, ignore_cool: bool = Fa
     if bucket["frozen"]:
         return False
     return any(ignore_cool or float(bucket["cool"].get(host.rstrip("/")) or 0) <= _now() for host in hosts)
+
+
+def login_recent(tracker: str) -> bool:
+    """A password login of this site was tried less than ``LOGIN_PAUSE_SEC`` ago."""
+    at = _bucket(load_state(), tracker).get("login_at")
+    if isinstance(at, bool) or not isinstance(at, (int, float)) or not math.isfinite(at):
+        return False
+    return 0 <= _now() - at < LOGIN_PAUSE_SEC
+
+
+def note_login(tracker: str) -> None:
+    """Remember that a password login of this (still configured) site is being tried now."""
+    from tow.config import load_config
+
+    with persistence_lock():
+        if not isinstance((load_config().get("trackers") or {}).get(tracker), dict):
+            return
+        st = load_state()
+        _bucket(st, tracker)["login_at"] = _now()
+        save_state(st)
 
 
 def _origin(url: str) -> tuple[str, str, int] | None:
@@ -219,6 +278,35 @@ def _raise_for_status(r: Any) -> None:
     raise MirrorFetchError("mirrors.http_status", failure="http" if host_level else "http_topic", status=r.status_code)
 
 
+def _refuse_page(r: Any, *, wanted: bool, download_limit: bool) -> None:
+    """A good status, but not the answer: why. ``wanted``: a torrent was asked for (any other
+    page is then refused; without it only a Cloudflare check page is)."""
+    head = bytes(r.content[:65536]).decode("latin-1")
+    if thttp.is_cloudflare(r.status_code, head, r.headers):
+        raise MirrorFetchError("mirrors.cloudflare", failure="cloudflare")
+    if not wanted:
+        return
+    if download_limit and is_download_limit(r.content):
+        raise MirrorFetchError("mirrors.daily_limit", failure="quota")
+    if says_topic_removed(r.content):
+        raise MirrorFetchError("mirrors.topic_removed", failure="gone")
+    raise MirrorFetchError("mirrors.not_torrent_login", failure="auth")
+
+
+def _says_gone(error: Exception) -> bool:
+    if not isinstance(error, MirrorFetchError):
+        return False
+    return error.failure == "gone" or (error.failure == "http_topic" and error.params.get("status") in (404, 410))
+
+
+def _deciding_failure(failures: list[Exception]) -> Exception:
+    """The failure that names the run: "the topic is gone" only when every mirror tried says
+    so; a mirror that did not answer leaves it open, whichever mirror was asked last."""
+    if all(_says_gone(error) for error in failures):
+        return failures[-1]
+    return next(error for error in reversed(failures) if not _says_gone(error))
+
+
 def _mark_host_ok(tracker: str, bucket: dict[str, Any], host: str, *, persist: bool) -> None:
     bucket["fail"][host] = 0
     bucket["cool"].pop(host, None)
@@ -250,7 +338,11 @@ def pick_and_get(
     max_bytes: int = thttp.MAX_HTML_RESPONSE_BYTES,
     allowed_redirect_origins: list[str] | None = None,
     public_only: bool = False,
+    download_limit: bool = False,
 ) -> tuple[httpx.Response, str]:
+    """The first mirror's good answer: ``ok`` says what a good one is (None: any page that is
+    not a Cloudflare check). ``download_limit``: the site has a daily download limit, so a
+    page instead of a torrent may be the one saying it is reached."""
     if not hosts:
         raise MirrorFetchError("mirrors.no_hosts", failure="config", cls="error", tracker=tracker)
     state = load_state()
@@ -259,6 +351,7 @@ def pick_and_get(
         raise MirrorFetchError("mirrors.frozen", failure="frozen", tracker=tracker)
     last_err = None
     auth_err = None
+    failures: list[Exception] = []
     allowed_redirects = {
         origin for value in (allowed_redirect_origins or []) if (origin := origin_key(value)) is not None
     }
@@ -279,14 +372,13 @@ def pick_and_get(
                     c, r, ua=ua, max_bytes=max_bytes, allowed_redirects=allowed_redirects, public_only=public_only
                 )
             _raise_for_status(r)
-            if ok and not ok(r):
-                if is_download_limit(r.content):
-                    raise MirrorFetchError("mirrors.daily_limit", failure="quota")
-                raise MirrorFetchError("mirrors.not_torrent_login", failure="auth")
+            if ok is None or not ok(r):
+                _refuse_page(r, wanted=ok is not None, download_limit=download_limit)
             _mark_host_ok(tracker, b, host, persist=persist)
             return r, host
         except Exception as e:  # noqa: BLE001 - any failure of a host is classified (_failure_code) and the next host tried
             last_err = e
+            failures.append(e)
             code = _failure_code(e)
             if code == "auth":
                 auth_err = e
@@ -304,7 +396,9 @@ def pick_and_get(
     if last_err is None:
         raise MirrorFetchError("mirrors.all_paused", failure="paused", tracker=tracker)
     selected_err = (
-        last_err if isinstance(last_err, MirrorFetchError) and last_err.failure == "quota" else auth_err or last_err
+        last_err
+        if isinstance(last_err, MirrorFetchError) and last_err.failure == "quota"
+        else auth_err or _deciding_failure(failures)
     )
     failure = _failure_code(selected_err)
     raise MirrorFetchError(
@@ -320,9 +414,7 @@ def _all_failed_class(error: Exception) -> str:
     """Every mirror failed: the class of the failure that decided it. Every mirror saying the
     topic does not exist (404) or is gone for good (410) means the topic was removed."""
     if isinstance(error, MirrorFetchError):
-        if error.failure == "http_topic" and error.params.get("status") in (404, 410):
-            return "gone"
-        return error.error_class
+        return "gone" if _says_gone(error) else error.error_class
     return "tracker"
 
 
