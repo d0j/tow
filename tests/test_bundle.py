@@ -62,10 +62,11 @@ def test_start_runs_the_apps_start_script_and_stop_the_launcher():
 
 
 def test_the_readme_says_how_to_start_stop_and_keep_the_key_in_both_languages():
-    text = bundle.readme("1.22.0")
+    text = bundle.readme()
     for line in ("Start TOW.cmd", "Stop TOW.cmd", "Update TOW.cmd", "keys\\master.key", "http://127.0.0.1:8787"):
         assert text.count(line) == 2, line  # English and Russian
-    assert "TOW 1.22.0" in text
+    # An update replaces app\ but never README.txt next to it: a version there would go stale.
+    assert not re.search(r"(?<![\d.])\d+\.\d+\.\d+(?![\d.])", text)  # 127.0.0.1 is no version
     assert "https://github.com/d0j/tow/blob/main/docs/install.md" in text
     assert "https://github.com/d0j/tow/blob/main/docs/ru/install.md" in text
     assert re.search("[а-яё]", text)
