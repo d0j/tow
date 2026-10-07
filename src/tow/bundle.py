@@ -57,8 +57,9 @@ TRANSACTION_FORMAT = "tow-import-transaction-v1"
 KDF_NAME = "pbkdf2-hmac-sha256"
 KDF_ITERATIONS = 600_000
 KDF_SALT_BYTES = 16
+# The bound of a bundle file, and of everything unpacked from it together: what a restore point
+# of the live data may hold. There is no smaller limit per member (the history is the big one).
 MAX_BUNDLE_BYTES = 64 * 1024 * 1024
-MAX_MEMBER_BYTES = 16 * 1024 * 1024
 REQUIRED_MEMBERS = ("config.yaml", "state.json", "download_history.json", "secrets.json")
 OPTIONAL_MEMBERS = ("secrets_undo.json", "events.json")
 ALLOWED_MEMBERS = {"manifest.json", *REQUIRED_MEMBERS, *OPTIONAL_MEMBERS}
@@ -99,9 +100,17 @@ class ExportImportError(RuntimeError):
         self.owner_text = owner_text
 
 
-def _json_bytes(data: Any) -> bytes:
+def _json_bytes(data: Any, *, readable: bool = False) -> bytes:
+    """Compact JSON, as the live store writes the download history: written indented and
+    sorted, a history of some 20,000 file records outgrew what a bundle could hold, and every
+    restore point (the web update's too) failed. ``readable``: indented, as the store writes
+    state.json and as the small records a person may open are kept."""
     try:
-        return (json.dumps(data, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False) + "\n").encode("utf-8")
+        if readable:
+            text = json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False)
+        else:
+            text = json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+        return (text + "\n").encode("utf-8")
     except (TypeError, ValueError, UnicodeError, RecursionError) as exc:
         raise ExportImportError("portable TOW data is not JSON serializable") from exc
 
@@ -499,7 +508,7 @@ def _validate_member_name(name: str) -> None:
 
 def _unzip_payload(payload: bytes) -> dict[str, bytes]:
     if len(payload) > MAX_BUNDLE_BYTES:
-        raise ExportImportError("decrypted export bundle is too large")
+        raise ExportImportError("decrypted export bundle is too large", reason="too_large")
     try:
         archive = zipfile.ZipFile(io.BytesIO(payload), "r")
         infos = archive.infolist()
@@ -515,12 +524,12 @@ def _unzip_payload(payload: bytes) -> dict[str, bytes]:
             _validate_member_name(info.filename)
             if info.is_dir() or (info.external_attr >> 16) & 0o170000 == 0o120000:
                 raise ExportImportError("bundle directories and links are not allowed")
-            if info.file_size > MAX_MEMBER_BYTES:
-                raise ExportImportError("bundle member is too large")
             total += info.file_size
             if total > MAX_BUNDLE_BYTES:
-                raise ExportImportError("bundle contents are too large")
-            members[info.filename] = archive.read(info)
+                raise ExportImportError("bundle contents are too large", reason="too_large")
+            # At most the declared size is unpacked (more data fails the CRC): the total bounds memory.
+            with archive.open(info) as handle:
+                members[info.filename] = handle.read(info.file_size or 1)
     except ExportImportError:
         raise
     except (OSError, RuntimeError, zipfile.BadZipFile) as exc:
@@ -840,7 +849,7 @@ def _create_import_checkpoint() -> Path:
         "targets": entries,
         "excluded": ["plaintext secrets", "TOW_MASTER_KEY", "TOW_MASTER_KEY_FILE", "media bytes", "qBittorrent data"],
     }
-    _atomic_write(checkpoint / "MANIFEST.json", _json_bytes(manifest))
+    _atomic_write(checkpoint / "MANIFEST.json", _json_bytes(manifest, readable=True))
     _read_checkpoint(checkpoint)  # every copy is intact before the operation can start
     _write_import_transaction(checkpoint, status="prepared")
     return checkpoint
@@ -856,7 +865,7 @@ def _write_import_transaction(checkpoint: Path, *, status: str, **fields: Any) -
         "updated_at": iso_now(),
         **fields,
     }
-    _atomic_write(Path(checkpoint) / "TRANSACTION.json", _json_bytes(transaction))
+    _atomic_write(Path(checkpoint) / "TRANSACTION.json", _json_bytes(transaction, readable=True))
 
 
 def _read_import_transaction(checkpoint: Path, *, bound: bool = True) -> dict[str, Any]:
@@ -1136,7 +1145,7 @@ def _read_bundle(path: Path, passphrase: str) -> dict[str, Any]:
     except (UnicodeError, ValueError, RecursionError) as exc:
         raise ExportImportError("invalid export bundle envelope", reason="not_tow") from exc
     except ExportImportError as exc:
-        raise ExportImportError(str(exc), reason="not_tow") from exc
+        raise ExportImportError(str(exc), reason="too_large" if exc.reason == "too_large" else "not_tow") from exc
     return _validated_payload(_decrypt_outer(outer, passphrase))
 
 
@@ -1246,7 +1255,7 @@ def _import_bundle(
         parsed["secrets"] = effective_secrets
     mappings = parse_path_maps(path_maps)
     mapped_state, warnings = _apply_path_maps(parsed["state"], mappings)
-    state_bytes = _json_bytes(mapped_state)
+    state_bytes = _json_bytes(mapped_state, readable=True)  # as tow.store writes each file
     history_bytes = _json_bytes(parsed["history"])
     members = sorted(name for name in parsed["members"] if name != "manifest.json")
     result = {
