@@ -71,6 +71,8 @@
   let logRefreshPending = false;
   let pollTimer = null;
   let rollbackVersion = "";
+  // The version installed now (the page's, then the update status's): an older target is a step back.
+  let installed = /^\d+\.\d+\.\d+$/.test(pageVersion) ? pageVersion : "";
   let busy = false;
   const dateLabel = (value, key, label) => {
     if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "";
@@ -190,6 +192,7 @@
       updating = job.active === true;
       const installedVersion = typeof job.current === "string" && job.current ? job.current :
         (job.status === "ok" && typeof job.target === "string" ? job.target : "");
+      if (/^\d+\.\d+\.\d+$/.test(installedVersion)) installed = installedVersion;
       const needsReload = !updating && Boolean(installedVersion) && pageVersion !== installedVersion;
       const phases = {
         queued: "js.releases.queued", preparing: "js.releases.preparing", stopping: "js.releases.stopping",
@@ -251,7 +254,13 @@
     if (!/^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(version || "")) {
       progress.hidden = false; progress.textContent = t("js.releases.invalid_version"); return;
     }
-    if (!window.confirm(t("js.releases.confirm", { version }))) return;
+    // Going back to an older version says so: it may not know settings made since.
+    const parts = (value) => String(value || "").replace(/^v/, "").split(".").map(Number);
+    const target = parts(version), current = parts(installed);
+    const order = target.map((part, index) => part - (current[index] ?? 0)).find((difference) => difference !== 0) ?? 0;
+    const question = installed && current.length === 3 && order < 0 ?
+      t("js.releases.confirm_older", { version: version.replace(/^v/, ""), current: installed }) : t("js.releases.confirm", { version });
+    if (!window.confirm(question)) return;
     generation++;
     operation = "";
     pendingBaseline = seenJob;

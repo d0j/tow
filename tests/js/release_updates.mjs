@@ -17,10 +17,11 @@ let reloads = 0;
 const fetches = [];
 const timers = new Map();
 let timerId = 0;
+const questions = [];
 const context = {
   document: { querySelector: (selector) => elements.get(selector), documentElement: { lang: "en" }, hidden: false },
   t: (key, vars = {}) => `${key}:${JSON.stringify(vars)}`, URLSearchParams, AbortSignal, Date,
-  window: { confirm: () => approve, location: { reload: () => { reloads++; } },
+  window: { confirm: (question) => { questions.push(question); return approve; }, location: { reload: () => { reloads++; } },
     setTimeout: (callback) => { const id = ++timerId; timers.set(id, callback); return id; },
     clearTimeout: (id) => timers.delete(id), setInterval: () => {}, },
   fetch: async (url, options = {}) => {
@@ -70,6 +71,16 @@ assert.equal(el("update-reload").hidden, false);
 assert.equal(reloads, 0);
 await click("update-reload");
 assert.equal(reloads, 1);
+// A newer version asks the plain question; an older one says that it goes back (QA 1.24.1).
+assert.ok(questions.every((question) => question.startsWith("js.releases.confirm:")));
+approve = false;
+el("update-version").value = "1.22.20";
+await click("update-apply");
+assert.match(questions.at(-1), /^js\.releases\.confirm_older:/);
+assert.match(questions.at(-1), /"current":"1\.22\.21"/);
+el("update-version").value = "v1.22.22";
+await click("update-apply");
+assert.match(questions.at(-1), /^js\.releases\.confirm:/);
 latest = { ok: false, available: false };
 await click("release-check");
 assert.match(el("release-status").textContent, /unavailable/);

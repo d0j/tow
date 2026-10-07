@@ -945,7 +945,8 @@
       "started": "Started: {when}",
       "finished": "Finished: {when}",
       "backup_cleanup_pending": "The data archive is verified; cleanup of old restore points is incomplete.",
-      "log_unavailable": "Could not read the update log."
+      "log_unavailable": "Could not read the update log.",
+      "confirm_older": "Go back to the older TOW {version} (installed: {current})? First TOW saves and checks a data archive, then restarts. The older version may not know settings made since; if it does not pass the health check, the updater tries to return the current version and its data."
     },
     "submit": {
       "no_next_page": "the server did not say which page comes next",
