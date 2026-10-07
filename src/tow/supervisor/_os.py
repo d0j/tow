@@ -52,8 +52,37 @@ def spawn(
     )
 
 
+def port_free(port: int) -> bool:
+    """Nothing holds ``port``: it can be bound on 127.0.0.1 and on every address.
+
+    Both: Windows lets a program bind 127.0.0.1 while another one listens on 0.0.0.0 (and the
+    other way round). Linux and macOS refuse a port whose closed connections still wait
+    (TIME_WAIT) unless SO_REUSEADDR is set, and with it still never share a listening port;
+    on Windows that option would let the probe share it, so it is not set there.
+    """
+    from tow import platform
+
+    for host in ("127.0.0.1", "0.0.0.0"):  # bound for an instant, never listened on
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            if not platform.is_windows():
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                probe.bind((host, int(port)))
+            except OSError:
+                return False
+    return True
+
+
 def port_open(port: int) -> bool:
-    """Something listens on 127.0.0.1:<port>."""
+    """Something listens on 127.0.0.1:<port>.
+
+    A port that can be bound is free at once: a connection to a closed loopback port is
+    retried by Windows for about a second and a half, which every ``tow run`` and ``tow setup``
+    waited for. A port that cannot be bound is confirmed by a connection (it may be held by a
+    socket that does not listen).
+    """
+    if port_free(port):
+        return False
     try:
         with socket.create_connection(("127.0.0.1", int(port)), timeout=1.5):
             return True
