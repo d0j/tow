@@ -97,7 +97,7 @@ pause
 exit /b %TOW_CODE%
 """
 
-README_TXT = """TOW {version} - torrent topic watcher
+README_TXT = """TOW - torrent topic watcher
 
 1. Double-click "Start TOW.cmd". The first start prepares TOW (a minute or two) and opens
    http://127.0.0.1:8787 in your browser. If Windows says "Windows protected your PC":
@@ -126,8 +126,9 @@ def crlf(text: str) -> str:
     return text.replace("\r\n", "\n").replace("\n", "\r\n")
 
 
-def readme(version: str) -> str:
-    return README_TXT.format(version=version, docs=DOCS, docs_ru=DOCS.replace("/docs/", "/docs/ru/"))
+def readme() -> str:
+    """Without a version: an update replaces app\\, never this file next to it."""
+    return README_TXT.format(docs=DOCS, docs_ru=DOCS.replace("/docs/", "/docs/ru/"))
 
 
 # --- the code ------------------------------------------------------------------------------------
@@ -166,10 +167,10 @@ def stage_code(app: Path, source: Path | None) -> None:
                 target.write_bytes(handle.read())
 
 
-def write_root_files(top: Path, version: str) -> None:
+def write_root_files(top: Path) -> None:
     for name, text in ROOT_FILES.items():
         (top / name).write_bytes(crlf(text).encode("ascii"))
-    (top / "README.txt").write_bytes(crlf(readme(version)).encode("utf-8-sig"))  # Notepad shows it right
+    (top / "README.txt").write_bytes(crlf(readme()).encode("utf-8-sig"))  # Notepad shows it right
     shutil.copyfile(top / "app" / "config.example.yaml", top / "config.yaml")
 
 
@@ -375,7 +376,7 @@ def build(out: Path, *, source: Path | None, work: Path | None, keep: bool) -> P
     stage_code(top / "app", source)
     version = version_of(top / "app")
     say(f"TOW {version} in {top}")
-    write_root_files(top, version)
+    write_root_files(top)
     uv = fetch_uv(top / "runtime" / "bin")
     prepare_runtime(top, uv, work)
     destination = out / ZIP_NAME
