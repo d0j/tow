@@ -6,23 +6,20 @@
   // Capture the loaded document's version, not the newer server's polling response.
   const pageVersion = document.querySelector("[data-page-version]")?.dataset?.pageVersion || "";
   let framePending = false;
+  // What lies under the version badge: the browser's own hit test at a few points inside it
+  // (corners, edges, middle) - not every control of the page measured on each scroll frame (a
+  // Home of 2000 rows has 12 000). Hidden controls and closed accordions are not hit at all.
+  const CONTROLS = "button,input,select,textarea,a,summary,td,.flash";
   const positionOverlay = () => {
     if (!overlay || framePending) return;
     framePending = true;
     window.requestAnimationFrame(() => {
       framePending = false;
       const box = overlay.getBoundingClientRect();
-      const obstructing = [...document.querySelectorAll("button,input,select,textarea,a,summary,td,.flash")].some((control) => {
-        if (overlay.contains(control) || !control.getClientRects().length) return false;
-        if (control.checkVisibility && !control.checkVisibility({ visibilityProperty: true })) return false;
-        // Closed accordions may still expose child rectangles in older browsers.
-        for (let parent = control.parentElement; parent; parent = parent.parentElement) {
-          if (parent.tagName === "DETAILS" && !parent.open && !parent.querySelector("summary")?.contains(control)) return false;
-        }
-        const rect = control.getBoundingClientRect();
-        return Math.min(box.right, rect.right) - Math.max(box.left, rect.left) > .5 &&
-          Math.min(box.bottom, rect.bottom) - Math.max(box.top, rect.top) > .5;
-      });
+      const xs = [box.left + 1, (box.left * 3 + box.right) / 4, (box.left + box.right) / 2, (box.left + box.right * 3) / 4, box.right - 1];
+      const ys = [box.top + 1, (box.top + box.bottom) / 2, box.bottom - 1];
+      const obstructing = box.width > 2 && box.height > 2 && xs.some((x) => ys.some((y) =>
+        document.elementsFromPoint(x, y).some((element) => !overlay.contains(element) && element.closest?.(CONTROLS))));
       overlay.classList.toggle("is-obstructing", obstructing);
     });
   };

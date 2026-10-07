@@ -82,23 +82,26 @@ let obstructing = false;
 let visible = true;
 let controlRect = { left: 0, right: 20, top: 0, bottom: 20 };
 let closed = false;
-const control = {
-  getClientRects: () => [controlRect], getBoundingClientRect: () => controlRect,
-  checkVisibility: () => visible,
-  parentElement: { tagName: "DETAILS", get open() { return !closed; }, parentElement: null,
-    querySelector: () => ({ contains: () => false }) },
-};
+let measuredControls = 0;
+// The browser's hit test: a hidden control, or one in a closed accordion, is never hit.
+const control = { closest: (selector) => (selector.includes("button") ? control : null) };
+const page = { closest: () => null };
 const floating = {
-  getBoundingClientRect: () => ({ left: 200, right: 300, top: 650, bottom: 680 }),
+  getBoundingClientRect: () => ({ left: 200, right: 300, top: 650, bottom: 680, width: 100, height: 30 }),
   contains: (element) => element === floating,
   classList: { toggle: (_name, value) => { obstructing = value; } },
+};
+const elementsFromPoint = (x, y) => {
+  const hit = visible && !closed && x > controlRect.left && x < controlRect.right && y > controlRect.top && y < controlRect.bottom;
+  return hit ? [floating, control, page] : [floating, page];
 };
 const floatingBadge = { hidden: true, textContent: "" };
 const guardContext = {
   ...context,
   document: { querySelector: (selector) => selector === ".app-version" ? floating :
     (selector === "[data-release-badge]" ? floatingBadge : (selector === "main" ? {} : null)),
-    querySelectorAll: () => [floating, control], documentElement: { lang: "en" }, body: {},
+    querySelectorAll: () => { measuredControls += 1; return []; }, elementsFromPoint,
+    documentElement: { lang: "en" }, body: {},
     addEventListener: (name, callback) => { listeners[name] = callback; }, },
   window: { ...context.window, requestAnimationFrame: (callback) => { frames.push(callback); },
     addEventListener: (name, callback) => { listeners[name] = callback; }, },
@@ -122,8 +125,9 @@ visible = false; listeners.toggle(); frames.shift()();
 assert.equal(obstructing, false); // hidden controls are not obstacles
 visible = true; closed = true; listeners.resizeObserver(); frames.shift()();
 assert.equal(obstructing, false); // collapsed details do not obscure the indicator
-control.checkVisibility = undefined; listeners.resize(); frames.shift()();
-assert.equal(obstructing, false); // same fallback in older browsers
+controlRect = { left: 245, right: 255, top: 660, bottom: 670 }; closed = false; listeners.resize(); frames.shift()();
+assert.equal(obstructing, true); // a small control inside the badge, away from its corners
+controlRect = { left: 240, right: 310, top: 650, bottom: 690 };
 closed = false; listeners.toggle(); frames.shift()();
 assert.equal(obstructing, true);
 controlRect = { left: 0, right: 20, top: 0, bottom: 20 };
@@ -136,4 +140,5 @@ assert.equal(obstructing, false); // dynamic row changes also restore the indica
 controlRect = { left: 300, right: 320, top: 650, bottom: 690 };
 listeners.scroll(); frames.shift()();
 assert.equal(obstructing, false); // touching edges are not overlaps
+assert.equal(measuredControls, 0); // QA 1.24.1: every control of the page was measured on each frame
 console.log(JSON.stringify({ confirmed: true, singleJob: true, lostResponse: true, rollback: true, explicitReload: true, offline: true, nonObstructingOverlay: true }));
