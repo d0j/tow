@@ -514,6 +514,8 @@ def _may_match(line: str, needle: str, refs: tuple[set[str], set[str]]) -> bool:
     if needle in line.casefold() or "\\u" in line:
         return True
     ids, hashes = refs
+    if not ids and not hashes:
+        return False
     for match in _TITLE_REF_RE.finditer(line):
         value = match.group(2)
         if "\\" in value or value in ids or value.upper() in hashes:
