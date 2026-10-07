@@ -272,6 +272,7 @@
     "removed_from_client": "the torrent was removed from the client",
     "paused_meanwhile": "paused during the check — nothing was handed to the torrent client",
     "deleted_meanwhile": "deleted during the check — nothing was handed to the torrent client",
+    "edited_meanwhile": "its folder, torrent client or file selection changed during the check — nothing was handed to the torrent client; the next check uses the new settings",
     "no_tracker": "no site is set up for this link",
     "frozen": "the site is paused",
     "hash_claimed": "another topic ({topic}) already uses this torrent with a different folder or file selection",
