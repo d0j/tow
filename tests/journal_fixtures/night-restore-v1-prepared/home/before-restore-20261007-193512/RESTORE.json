@@ -1,0 +1,37 @@
+{
+  "format": "tow-night-restore/v1",
+  "snapshot": "tow-20260101-000000",
+  "entries": [
+    {
+      "name": "state.json",
+      "existed": true,
+      "sha256": "6ae0bc6fe39c9f41b318a17397a3ed2b5aeebea49bdc80cc97c15a57779d412b"
+    },
+    {
+      "name": "download_history.json",
+      "existed": false
+    },
+    {
+      "name": "secrets.enc",
+      "existed": true,
+      "sha256": "bec189a154141d0d5392a0c1c72c98b06309f685bcdf6813246a9765084df25b"
+    },
+    {
+      "name": "secrets-undo.enc",
+      "existed": false
+    },
+    {
+      "name": "restore-points/20260101T000000Z-0a1b2c3d.towx",
+      "existed": true,
+      "sha256": "53b5af7983abb09a3879000346dc6b3936bd058a43a1a6ee5e201b5f343dd96d"
+    },
+    {
+      "name": "config.yaml",
+      "existed": true,
+      "sha256": "ae929aca6fba4be1cd6062ae6c81f34cc0eb685bc2f6cf211224004ffbaf5ecd"
+    }
+  ],
+  "points_dir": "",
+  "status": "prepared",
+  "updated_at": "2026-10-07T16:35:12.632854+00:00"
+}

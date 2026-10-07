@@ -1,0 +1,28 @@
+{
+  "after": {
+    "history": {
+      "exists": true,
+      "sha256": "1daf6a3a6709d1afdcde6762376649b8a8668bfd5d0057b05b7d127fd7b1de77"
+    },
+    "state": {
+      "exists": true,
+      "sha256": "60e2fa657911d0ca8f56ab7e85beab9b7e86fe0e3f917fc338cbf46ad2058dfb"
+    }
+  },
+  "format": "tow-check-transaction/v1",
+  "status": "committed",
+  "targets": {
+    "history": {
+      "backup": null,
+      "before_exists": false,
+      "before_sha256": null,
+      "path": "download_history.json"
+    },
+    "state": {
+      "backup": "state.before",
+      "before_exists": true,
+      "before_sha256": "6ae0bc6fe39c9f41b318a17397a3ed2b5aeebea49bdc80cc97c15a57779d412b",
+      "path": "state.json"
+    }
+  }
+}
