@@ -14,7 +14,8 @@ objects, apply filters, honour replacement objects, rewrite refs or inspect untr
 Metadata logs disable signature verification, mailmaps and display settings: the configured
 signature verifier is not launched and author names are not mapped. Unreachable or reflog-only
 objects and arbitrary secret formats are outside its claim. Exit 1 includes synthetic test data
-that needs review.
+that needs review. The synthetic stores in tests/journal_fixtures/ do not count as runtime paths
+(their contents are scanned like any other blob).
 
 Budgets: a blob larger than --max-blob-bytes is listed and makes the scan incomplete; each
 pattern operation has two seconds (the locked `regex` dependency in compatibility mode); Git
@@ -57,6 +58,9 @@ RISKY_PATH = re.compile(
     rb"(^|/)(data(?:/|$)|config\.yaml$|secrets(?:\.[^/]*)?$|master\.key$|\.coverage(?:\.[^/]*)?$"
     rb"|lan-auth(?:\.[^/]*)?$|tow\.jsonl$|state\.json$|download_history(?:\.json)?$)"
 )
+# Synthetic stores under the names of real ones: what an interrupted write of v1.24.1 left in a data
+# folder, restored by tests/test_journal_formats.py. Their contents are still scanned like any blob.
+SYNTHETIC_STORES = re.compile(rb"^tests/journal_fixtures/")
 # The only author/committer addresses public history may carry: GitHub's private ones.
 NOREPLY_EMAIL = re.compile(rb"[^@\s]+@users\.noreply\.github\.com|noreply@github\.com", re.IGNORECASE)
 DISPLAY_EMAIL = regex.compile(rb"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", regex.VERSION0)
@@ -274,7 +278,9 @@ def scan(repo, max_blob_bytes):
             if kind != b"blob":
                 continue
             names = paths.get(oid, {b"(unnamed blob " + oid[:12] + b")"})
-            risky_paths.update(name for name in names if RISKY_PATH.search(name.lower()))
+            risky_paths.update(
+                name for name in names if RISKY_PATH.search(name.lower()) and not SYNTHETIC_STORES.match(name)
+            )
             if size > max_blob_bytes:
                 skipped.append((oid, size))
                 continue
