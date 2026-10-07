@@ -73,7 +73,10 @@ def login(request: Request, password: str = Form(""), token: str = Form("")) -> 
         return _login_response(request, wrong, status_code=401)
     services.login_throttle.success(peer)
     response = RedirectResponse("/", status_code=303)
-    services.set_session_cookie(response, request, credential.session_key)
+    try:
+        services.set_session_cookie(response, request, credential.session_key)
+    except AuthConfigurationError as exc:  # data/sessions.json cannot be read: no session would work
+        return _login_response(request, str(exc), status_code=503)
     return response
 
 
