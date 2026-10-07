@@ -281,27 +281,35 @@ def test_going_back_to_a_version_that_cannot_read_the_data_is_refused_before_tow
     assert not (install["root"] / "update-state.json").exists()
 
 
-def _target(install, store: bytes | None) -> Any:
+def _target(install, store: bytes | None, version: str = "1.30.0") -> Any:
     """The update with an unpacked target in app.new (its src/tow/store.py, if any)."""
+    folder = install["root"] / "app.new" / "src" / "tow"
+    folder.mkdir(parents=True)
+    (install["root"] / "app.new" / "pyproject.toml").write_text(f'[project]\nversion = "{version}"\n', encoding="utf-8")
     if store is not None:
-        folder = install["root"] / "app.new" / "src" / "tow"
-        folder.mkdir(parents=True)
         (folder / "store.py").write_bytes(store)
-    return updater.Update(updater.System(install["app"]), "v1.30.0", say=lambda _line: None)
+    return updater.Update(updater.System(install["app"]), f"v{version}", say=lambda _line: None)
 
 
 @pytest.mark.parametrize(
-    ("store", "schema", "readable"),
+    ("store", "version", "schema", "readable"),
     [
-        (b"STATE_SCHEMA_VERSION = 2\n", 2, True),
-        (b"STATE_SCHEMA_VERSION = 2\n", 3, False),
-        (b"# v1.18-v1.20 declare no format; they read 1\n", 1, True),
-        (None, 2, False),
+        (b"STATE_SCHEMA_VERSION = 2\n", "1.30.0", 2, True),
+        (b"STATE_SCHEMA_VERSION = 2\n", "1.30.0", 3, False),
+        (b"# v1.18 declares no format; it reads 1\n", "1.18.0", 1, True),
+        (b"# v1.18 declares no format; it reads 1\n", "1.18.0", 2, False),
+        (None, "1.18.0", 2, False),
+        # Before: written any other way, the format was taken for 1 and every newer release refused.
+        (b"STATE_SCHEMA_VERSION: int = 3\n", "1.30.0", 3, True),
+        (b"STATE_SCHEMA_VERSION: Final[int] = 2\n", "1.30.0", 3, False),
+        (b"STATE_SCHEMA_VERSION = 3  # the topics' timers\n", "1.30.0", 3, True),
+        (b"STATE_SCHEMA_VERSION = SCHEMAS[-1]\n", "1.30.0", 3, True),  # not readable here: the target checks
+        (None, "1.30.0", 3, True),
     ],
 )
-def test_the_target_must_declare_a_state_format_the_data_has(install, store, schema, readable):
+def test_the_target_must_declare_a_state_format_the_data_has(install, store, version, schema, readable):
     (install["root"] / "data" / "state.json").write_text(json.dumps({"schema_version": schema}), encoding="utf-8")
-    work = _target(install, store)
+    work = _target(install, store, version)
     if readable:
         work.refuse_unreadable_data("v1.30.0")
     else:

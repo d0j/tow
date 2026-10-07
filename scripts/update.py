@@ -1468,10 +1468,21 @@ class Update:
     def refuse_unreadable_data(self, target: str) -> None:
         """The target must read this install's state.json: an older TOW cannot read a newer state
         format (v1.22 reads format 1, v1.23 writes 2), so going back that far is refused here,
-        before TOW stops. No declared format: v1.18-v1.20, which read format 1."""
+        before TOW stops. No declared format: v1.18, which reads format 1. A newer target whose
+        format cannot be read here (written another way) is not refused: it checks the data itself."""
         source = self.code.target_text(target, "src/tow/store.py") or ""
-        match = re.search(r"^STATE_SCHEMA_VERSION\s*=\s*([0-9]+)\s*$", source, re.MULTILINE)
-        known = int(match[1]) if match else 1
+        # `STATE_SCHEMA_VERSION = 2`, also with a type (`: int`, `: Final[int]`) or a comment.
+        match = re.search(r"^STATE_SCHEMA_VERSION\s*(?::[^=\n]*)?=\s*([0-9]+)\s*(?:#.*)?$", source, re.MULTILINE)
+        if match:
+            known = int(match[1])
+        else:
+            found_version = re.search(
+                r'(?m)^version\s*=\s*"([^"]+)"', self.code.target_text(target, "pyproject.toml") or ""
+            )
+            version = version_tuple(found_version[1]) if found_version else None
+            if version is None or version >= (1, 19, 0):
+                return
+            known = 1
         try:
             found = state_format((self.root / "data" / "state.json").read_bytes())
         except FileNotFoundError:
