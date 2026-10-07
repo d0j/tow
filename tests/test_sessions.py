@@ -229,8 +229,43 @@ def test_the_settings_button_signs_out_every_other_device(password):
 
     assert t("web.password.signed_out", "ru") in shown(response.headers["location"])
     assert phone.get("/settings", headers=HTML, follow_redirects=False).status_code == 200  # this one stays
-    assert laptop.get("/settings", headers=HTML, follow_redirects=False).headers["location"] == "/login"
+    assert laptop.get("/settings", headers=HTML, follow_redirects=False).headers["location"] == "/login?again=1"
     assert load_secrets()["lan_auth"] == password  # the password is the same
+
+
+def test_a_form_posted_with_an_ended_session_goes_to_the_sign_in_page(password):
+    """Round-3 audit: a form posted after the session ended got a bare English
+    "authentication required" (401). A form goes to the sign-in page, which says why; app.js
+    gets the same as {"redirect": ...}; a JSON caller gets the reason as JSON."""
+    device = _device(password)
+    sign_out_everywhere()
+
+    posted = device.post("/topics/t1/pause", headers=HTML, follow_redirects=False)
+    assert (posted.status_code, posted.headers["location"]) == (303, "/login?again=1")
+    assert 'tow_session=""' in posted.headers["set-cookie"]  # the dead cookie is removed
+    device = _device(password)
+    sign_out_everywhere()
+    fetched = device.post("/topics/t1/pause", headers={"Accept": "text/html", "X-TOW-Fetch": "1"})
+    assert fetched.json() == {"redirect": "/login?again=1"}
+    device = _device(password)
+    sign_out_everywhere()
+    api = device.get("/health.json", headers={"Accept": "application/json"})
+    assert api.status_code == 401
+    assert api.json() == {"error": t("web.login.again", "ru")}  # the page language of the tests
+    page = TestClient(app, client=LAN).get("/login?again=1", headers={"Accept-Language": "ru"})
+    assert t("web.login.again", "ru") in page.text
+    first_visit = TestClient(app, client=LAN).get("/settings", headers=HTML, follow_redirects=False)
+    assert first_visit.headers["location"] == "/login"  # never signed in: nothing "ended"
+
+
+def test_signing_out_with_an_ended_session_still_signs_out(password):
+    device = _device(password)
+    sign_out_everywhere()
+
+    for accept in ("text/html", "application/json"):
+        response = device.post("/logout", headers={"Accept": accept}, follow_redirects=False)
+        assert (response.status_code, response.headers["location"]) == (303, "/login")
+        assert 'tow_session=""' in response.headers["set-cookie"]
 
 
 def test_the_button_is_shown_only_with_a_password():

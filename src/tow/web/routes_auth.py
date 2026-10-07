@@ -39,6 +39,8 @@ def _login_response(request: Request, error: str = "", status_code: int = 200, *
             "credential_kind": kind,
             "problem": problem,
             "error": "" if problem else error,  # the reason is already the page's alert
+            # The device's session ended (expired, signed out elsewhere): tow.web.middleware.
+            "again": configured and not error and request.query_params.get("again") == "1",
             "version": __version__,
         },
         status_code=status_code,

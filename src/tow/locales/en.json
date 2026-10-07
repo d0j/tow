@@ -1993,7 +1993,8 @@
       "too_many": "Too many attempts. Try again in {sec} s",
       "no_password": "The password for other devices is not set yet",
       "wrong_password": "Wrong password",
-      "wrong_key": "Wrong access key"
+      "wrong_key": "Wrong access key",
+      "again": "Your sign-in on this device has ended (it expired or every device was signed out). Sign in again."
     },
     "check": {
       "not_confirmed": "check not confirmed",
