@@ -75,7 +75,7 @@
     "token_file_missing": "the network access key file is missing",
     "token_file_unreadable": "the network access key file cannot be read",
     "token_missing": "no network access key is set up",
-    "store_unavailable": "the saved password cannot be read (the secrets store is unavailable) — open TOW on the computer running it"
+    "store_unavailable": "the saved password cannot be read (saved passwords and tokens cannot be opened) — open TOW on the computer it runs on and see Settings"
   },
   "autostart": {
     "not_runtime": "Autostart is set up only from the working install (its code in the app folder); this copy is for development.",
@@ -347,16 +347,16 @@
     },
     "keys": {
       "generated": "A new master key was created: {path}. Keep a copy of it away from this computer: without the key the saved passwords and tokens cannot be read.",
-      "adopted": "The master key now lives in the install: {path}. It opens the saved secrets (files checked: {count}). TOW_MASTER_KEY_FILE is no longer needed and can be removed.",
+      "adopted": "The master key now lives in the install: {path}. It opens the saved passwords and tokens (files checked: {count}). TOW_MASTER_KEY_FILE is no longer needed and can be removed.",
       "already": "{path} already holds this key (files checked: {count}).",
       "error": {
-        "secrets_exist": "Saved secrets already exist and are encrypted with the key in use. Move that key into the install with `tow keys adopt` instead of creating a new one.",
+        "secrets_exist": "Saved passwords and tokens already exist and are encrypted with the key in use. Move that key into the install with `tow keys adopt` instead of creating a new one.",
         "exists": "A key file already exists there; it was not replaced.",
         "invalid": "This file is not a TOW master key.",
-        "wrong_key": "This key does not open the saved secrets; nothing was copied.",
+        "wrong_key": "This key does not open the saved passwords and tokens; nothing was copied.",
         "no_source": "Which key? Give --from FILE, or set TOW_MASTER_KEY_FILE.",
         "unreadable": "The key file cannot be read.",
-        "different": "keys/master.key already holds a different key; it was not replaced. Check which key opens the secrets.",
+        "different": "keys/master.key already holds a different key; it was not replaced. Check which key opens the saved passwords and tokens.",
         "write_failed": "The key could not be written to the keys folder of the install."
       },
       "first_run": "TOW created its master key: {path}. Back it up now, away from this computer (a USB stick, a password manager): without it the saved passwords and tokens cannot be read, not even from a backup. This message is shown once.",
@@ -364,7 +364,7 @@
     },
     "help": {
       "description": "TOW watches topics on torrent sites and hands new versions to your torrent client.",
-      "epilog": "exit codes (every command):\n  0    done\n  1    a wrong command or option\n  2    done in part: a topic, a mirror or a step failed\n  3    cannot run: config, secrets, the lock or a file is missing or broken\n  130  interrupted (Ctrl+C)\n\n\"setup\" is a command of the launcher ({launcher} setup): it rebuilds the environment after a\nmove or an update, with TOW stopped.\nEvery command explains itself: tow COMMAND --help",
+      "epilog": "exit codes (every command):\n  0    done\n  1    a wrong command or option\n  2    done in part: a topic, a mirror or a step failed\n  3    cannot run: config, passwords and tokens, the lock or a file is missing or broken\n  130  interrupted (Ctrl+C)\n\n“setup” is a command of the launcher ({launcher} setup): it rebuilds the environment after a\nmove or an update, with TOW stopped.\nEvery command explains itself: tow COMMAND --help",
       "json": "machine-readable output (JSON), also when the command fails",
       "version": "show the TOW version",
       "status": "one line on TOW: running or not, torrent client, sites, topics, last and next check, autostart",
@@ -395,15 +395,15 @@
       "access_action": "on: open TOW to the home network (with the password); off: this computer only; status: what is set",
       "access_password": "set a new password before turning access on",
       "secrets": "the encrypted store of passwords and tokens",
-      "secrets_status": "where the secrets are and which key opens them",
-      "secrets_migrate": "encrypt an old plain-text secrets file",
-      "secrets_generate": "create a new master key (only while no secrets exist)",
+      "secrets_status": "where the passwords and tokens are and which key opens them",
+      "secrets_migrate": "encrypt an old plain-text file of passwords and tokens",
+      "secrets_generate": "create a new master key (only while no passwords or tokens are saved)",
       "key_file": "where to write the key (default: keys/master.key in the install)",
       "keys": "the master key inside the install (keys/master.key)",
       "keys_status": "which master key is in use",
-      "keys_adopt": "copy the key in use into keys/ once it opens the secrets",
+      "keys_adopt": "copy the key in use into keys/ once it opens the saved passwords and tokens",
       "keys_from": "the key file to copy (default: TOW_MASTER_KEY_FILE)",
-      "export": "save the settings, topics, history and secrets into one file protected by a passphrase (for another install, even with another master key)",
+      "export": "save the settings, topics, history, passwords and tokens into one file protected by a passphrase (for another install, even with another master key)",
       "export_output": "the file to write",
       "export_log": "add the log to the file",
       "export_force": "replace the file if it exists",
@@ -989,7 +989,7 @@
       "starting": "Starting…"
     },
     "clock": {
-      "secrets_migration_required": "secrets need to be migrated",
+      "secrets_migration_required": "passwords and tokens cannot be opened",
       "never_checked": "No check has run yet",
       "last_attempt": "Last attempt: {error}",
       "overdue_title": "The last check is overdue",
@@ -1505,7 +1505,7 @@
       "title": "Settings",
       "help_link": "Guide",
       "help_q": "guide how it works help",
-      "secret_store": "The secrets store needs a migration. Open the <a href=\"{help}\">guide</a>."
+      "secret_store": "Saved passwords and tokens cannot be opened: the master key is missing or does not match. Put keys/master.key back from your copy, or run <code>tow keys status</code> to see why. More in the <a href=\"{help}\">guide</a>."
     },
     "common": {
       "save": "Save",
@@ -1930,7 +1930,7 @@
     },
     "header": {
       "client": "client",
-      "secrets_migration": "secrets need migration",
+      "secrets_migration": "passwords and tokens cannot be opened",
       "connected": "Connected",
       "disconnected": "No connection"
     },
@@ -1950,7 +1950,7 @@
       "relocate_failed": "could not move the files back",
       "topic_put_done": "topic edit undone",
       "topic_add_done": "adding undone: the watch is removed; the torrent in the torrent client was not touched",
-      "secrets_failed": "could not restore the secrets",
+      "secrets_failed": "could not restore the saved passwords and tokens",
       "site_done": "site change undone",
       "apply_failed": "could not apply the rollback",
       "settings_done": "settings restored",
@@ -1980,7 +1980,7 @@
       "not_confirmed": "check not confirmed",
       "added_client_refused": "added to TOW, but the torrent client did not confirm: {error}",
       "added_check_failed": "added to TOW, the check failed: {error}",
-      "blocked": "check blocked: the secrets store is unavailable",
+      "blocked": "check blocked: saved passwords and tokens cannot be opened — see Settings",
       "added": "added to the torrent client",
       "selection_updated": "file selection updated",
       "changed": "new torrent",
@@ -2008,7 +2008,7 @@
     "browser_auth": {
       "no_cookie": "the browser did not pass a session cookie",
       "site_deleted": "the site was deleted during sign-in",
-      "session_not_saved": "session not saved: the secrets store is unavailable",
+      "session_not_saved": "sign-in not saved: saved passwords and tokens cannot be opened — see Settings",
       "check_blocked": "session saved, but the check is blocked",
       "check_not_confirmed": "session saved, but the check is not confirmed: {error}",
       "verified": "login to {site} confirmed; topic checked",
@@ -2025,7 +2025,7 @@
     "site_unknown": "site",
     "attention": {
       "stale": "Scheduled checks have not run since {at}.",
-      "blocked": "The last scheduled check is blocked: the secrets store is unavailable.",
+      "blocked": "The last scheduled check is blocked: saved passwords and tokens cannot be opened. Open Settings to see what to do.",
       "client_down": "The torrent client is unavailable: new torrents are not added.",
       "need_login": "Log in to {site} is needed (topics: {count}) — open the topic's row.",
       "history_rebuilt": "The download history file was damaged: TOW started it over and keeps checking (the damaged file is kept next to it as download_history.json.corrupt-…). Downloads are not affected; events from before are not shown."
@@ -2075,7 +2075,7 @@
       "needs_auth": "this site needs a browser sign-in",
       "enter_login": "enter the login and password",
       "site_gone": "the site is already deleted",
-      "login_not_saved": "login not saved: the secrets store is unavailable",
+      "login_not_saved": "login not saved: saved passwords and tokens cannot be opened — see Settings",
       "login_blocked": "login not confirmed: the check is blocked",
       "password_not_restored": "; the previous password was not restored: the data has already changed",
       "restore_failed": "login to {site} not confirmed; could not restore the previous password",
@@ -2219,7 +2219,7 @@
       "current_wrong": "the current password is wrong",
       "saved": "password saved; other devices sign in again",
       "hint_saved": "reminder saved",
-      "store_unavailable": "the password was not changed: the secrets store is unavailable",
+      "store_unavailable": "the password was not changed: saved passwords and tokens cannot be opened — see Settings",
       "signed_out": "every other device has been signed out; they need the password to come back"
     }
   },
@@ -2231,7 +2231,7 @@
   "store": {
     "state_newer": "state.json was written by a newer TOW (data version {found}; this TOW knows {known}). Update TOW or restore a backup made by this version; nothing was changed.",
     "state_bad_version": "state.json has a data version this TOW cannot read ({found}); nothing was changed. Restore it from a restore point or a backup.",
-    "no_master_key": "The master key is missing, so the saved passwords and tokens cannot be opened. Put the key file back as keys/master.key in the install (or point TOW_MASTER_KEY_FILE at it), or bring it in with: tow keys adopt --from FILE. On a new install without saved secrets, run: tow keys ensure",
+    "no_master_key": "The master key is missing, so the saved passwords and tokens cannot be opened. Put the key file back as keys/master.key in the install (or point TOW_MASTER_KEY_FILE at it), or bring it in with: tow keys adopt --from FILE. On a new install without saved passwords and tokens, run: tow keys ensure",
     "key_path_outside_data": "A relative TOW_MASTER_KEY_FILE path must stay inside the TOW data folder. Use an absolute path for an external key file.",
     "key_unreadable": "The master key file cannot be read. Check that keys/master.key (or the file TOW_MASTER_KEY_FILE names) is there and that this account may open it.",
     "key_empty": "The master key file is empty, so the saved passwords and tokens cannot be opened. Put the key back from your copy: tow keys adopt --from FILE",

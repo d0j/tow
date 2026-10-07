@@ -433,8 +433,8 @@ def test_settings_renders_when_secret_store_requires_migration(monkeypatch):
     response = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings")
 
     assert response.status_code == 200
-    assert "хранилище паролей нужно обновить" in response.text.lower()
-    assert 'title="хранилище паролей нужно обновить"' in response.text
+    assert "пароли и токены не открываются" in response.text.lower()
+    assert 'title="пароли и токены не открываются"' in response.text
     assert "экспорт / импорт" in response.text
     health = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/health.json")
     assert health.json()["check_ok"] is False
