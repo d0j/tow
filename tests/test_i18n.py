@@ -779,7 +779,9 @@ def test_no_stray_braces_in_any_language():
 _KEY_SHAPE = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+")
 _FILE_NAME = re.compile(r"\.(py|json|jsonl|yaml|yml|html|js|css|txt|enc|key|towx|lock|exe|cmd|ps1|md|log|xml)$")
 # Strings shaped like keys that are not texts: Deluge Web RPC method names.
-_NOT_KEYS = frozenset({"auth.login", "web.connect", "web.connected", "web.get_host_status", "web.get_hosts"})
+_NOT_KEYS = frozenset(
+    {"auth.login", "web.connect", "web.connected", "web.disconnect", "web.get_host_status", "web.get_hosts"}
+)
 
 
 def _data_keys() -> dict[str, str]:
