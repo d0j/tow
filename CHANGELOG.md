@@ -3,6 +3,47 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.26.0] — 2026-10-08
+
+### Added
+
+- `tow permissions fix --owner ACCOUNT`; without it the fix keeps a personal owner, then takes the autostart
+  account, and refuses when the administrator terminal belongs to someone other than the signed-in user.
+- `tow adopt --replace-label` for a Deluge torrent that already has another label.
+- Home and History say when the data folder was deleted or replaced while TOW ran, and how to restore it.
+
+### Changed
+
+- A torrent or magnet link is taken only from the topic's own download block, never from a post or comment; a
+  signed-in page without it says "page not understood" instead of asking to sign in.
+- Adopting takes only the torrent the last check saw for the same link and client; `tow adopt` names an
+  unreachable client or unknown topics.
+- The Monitorrent import brings the hashes of every site, keeps paused topics paused, moves old site addresses to
+  today's, names topics it cannot watch, and imports a Transmission connection.
+- Moving a topic's folder in the client no longer holds up other saves.
+- Messages are plainer: one instruction for a broken `config.yaml`, a taken port named once, the Version card and
+  `tow update` in plain words, `tow doctor` in your language, folder warnings once and only when TOW starts.
+- The built-in guide covers updating, adopting, signing out and folder access.
+
+### Fixed
+
+- An emptied or new torrent client is believed after two checks; 1.25.0 could keep refusing to add forever.
+- A new topic is not saved with a client removed or disabled in another tab meanwhile.
+- A damaged sign-in file no longer locks every device out; a device whose session ended is sent to the sign-in
+  page instead of getting a bare error.
+- A cut-off update is reported by every launcher instead of a raw error; `tow status` says so.
+- WhatsApp messages that were delivered are not sent again; a Telegram group upgraded to a supergroup names the
+  new chat id; Discord shows titles as written; the watchdog keeps the quiet hours, and impossible quiet hours
+  are refused.
+- Transmission and Deluge at an IPv6 address keep their port; Deluge reattaches after an unknown method.
+- Ordinary pages are no longer taken for a Cloudflare check; page encodings are read correctly.
+- A client that answers "Check" shows as answering at once.
+
+### Security
+
+- `tow permissions fix` never gives the TOW folder to an administrator by mistake.
+- A password reminder that contains a punctuation-only password is refused.
+
 ## [1.25.0] — 2026-10-07
 
 ### Added
