@@ -40,8 +40,10 @@ Linux checks and installer smoke tests run on both Ubuntu 24.04 and 26.04. The l
 
 ## Tests
 
-- `uv run --frozen pytest -q` for a quick run; the gate runs the suite in random order (the seed is printed) with
-  branch coverage and a threshold in `pyproject.toml` — raise it as coverage grows, never lower it.
+- `uv run --frozen pytest -q` for a quick run (`-n auto` spreads it over every core); the gate runs the suite on
+  every core in random order (the seed is printed; every worker uses it) with branch coverage and a threshold in
+  `pyproject.toml` — raise it as coverage grows, never lower it. Tests that share an expensive module fixture
+  carry `@pytest.mark.xdist_group(...)` so that one worker runs them all.
 - The guard in `tests/conftest.py` refuses real network, processes, signals and writes outside the test's temp
   folder. Each test gets a throwaway master key and its own `TOW_ROOT`. `@pytest.mark.allow_git` lets only `git`
   through, on a throwaway repository.

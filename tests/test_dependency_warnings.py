@@ -22,7 +22,9 @@ def test_runtime_and_web_test_client_import_without_deprecation_filters():
         ],
         capture_output=True,
         text=True,
-        timeout=10,
+        # Only stops a hang: without bytecode it compiles the whole web stack, which took over
+        # 10 seconds while the gate's workers kept every core busy.
+        timeout=120,
         check=True,
     )
     assert result.stdout.strip() == "ok"
