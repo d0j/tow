@@ -1,4 +1,5 @@
-"""Transmission and Deluge adapters against stateful fake servers (no real client, no network).
+"""qBittorrent, Transmission and Deluge adapters against stateful fake servers (no real client,
+no network): the shared contract of ``tow.clients.managed`` runs against all three.
 
 The same contract was checked once against live transmission-daemon 4.1.3 and Deluge 2.2.0;
 these tests keep it from regressing.
@@ -9,12 +10,15 @@ from __future__ import annotations
 import base64
 import json
 import math
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
 import pytest
 from helpers import bencode, make_torrent
+from qbittorrentapi.torrents import TorrentFilesList, TorrentInfoList
 
+from tow.clients import qbittorrent
 from tow.clients.deluge import DelugeClient
 from tow.clients.managed import ClientError, ManagedClient
 from tow.clients.transmission import TransmissionClient, base_url
@@ -268,13 +272,97 @@ def _deluge(server: FakeDeluge, password: str = "deluge") -> DelugeClient:
     return DelugeClient("127.0.0.1", 8112, password, transport=httpx.MockTransport(server.handler))
 
 
-# --- the shared contract, for both clients --------------------------------------------------
+# --- a fake qBittorrent Web API (what qbittorrentapi.Client answers) -------------------------
 
 
-@pytest.fixture(params=["transmission", "deluge"])
-def client(request):
+class FakeQbit:
+    def __init__(self) -> None:
+        self.torrents: dict[str, Torrent] = {}
+        self.app = SimpleNamespace(version="5.1.2", web_api_version="2.11.4")
+        self.calls: list[str] = []
+
+    def torrents_info(self, torrent_hashes: str | None = None, limit: int | None = None) -> TorrentInfoList:
+        self.calls.append("torrents_info")
+        rows = [t for key, t in self.torrents.items() if torrent_hashes is None or key == torrent_hashes.lower()]
+        return TorrentInfoList([self._row(t) for t in rows][:limit], client=None)
+
+    @staticmethod
+    def _row(t: Torrent) -> dict[str, Any]:
+        return {
+            "hash": t.hash,
+            "infohash_v1": t.hash,
+            "infohash_v2": "",
+            "name": t.name,
+            "tags": ", ".join(t.labels),
+            "state": "downloading" if t.running else "stoppedDL",
+            "save_path": t.path,
+            "content_path": f"{t.path}/{t.name}",
+            "progress": 0.0,
+            "downloaded": 0,
+            "added_on": 1000,
+            "completion_on": -1,
+        }
+
+    def torrents_files(self, *, torrent_hash: str) -> TorrentFilesList:
+        self.calls.append("torrents_files")
+        t = self.torrents.get(torrent_hash.lower())
+        files = list(zip(t.files, t.wanted, strict=True)) if t else []
+        rows = [
+            {"index": i, "name": name, "size": size, "progress": 0.0, "priority": int(wanted)}
+            for i, ((name, size), wanted) in enumerate(files)
+        ]
+        return TorrentFilesList(rows, client=None)
+
+    def torrents_add(self, *, torrent_files: bytes, save_path: str, tags: str, is_stopped: bool, **_options: Any):
+        self.calls.append("torrents_add")
+        torrent = Torrent(torrent_files, save_path, tags.split(","), paused=is_stopped)
+        if torrent.hash in self.torrents:
+            return "Fails."
+        self.torrents[torrent.hash] = torrent
+        return "Ok."
+
+    def torrents_file_priority(self, *, torrent_hash: str, file_ids: list[int], priority: int) -> None:
+        self.calls.append("torrents_file_priority")
+        for index in file_ids:
+            self.torrents[torrent_hash.lower()].wanted[index] = priority > 0
+
+    def torrents_stop(self, *, torrent_hashes: str) -> None:
+        self.calls.append("torrents_stop")
+        self.torrents[torrent_hashes.lower()].running = False
+
+    def torrents_start(self, *, torrent_hashes: str) -> None:
+        self.calls.append("torrents_start")
+        self.torrents[torrent_hashes.lower()].running = True
+
+    def torrents_add_tags(self, *, tags: str, torrent_hashes: str) -> None:
+        self.calls.append("torrents_add_tags")
+        self.torrents[torrent_hashes.lower()].labels.append(tags)
+
+    def torrents_remove_tags(self, *, tags: str, torrent_hashes: str) -> None:
+        self.calls.append("torrents_remove_tags")
+        torrent = self.torrents[torrent_hashes.lower()]
+        torrent.labels = [label for label in torrent.labels if label != tags]
+
+    def torrents_set_location(self, *, location: str, torrent_hashes: str) -> None:
+        self.calls.append("torrents_set_location")
+        self.torrents[torrent_hashes.lower()].path = location
+
+
+def _qbittorrent(server: FakeQbit, monkeypatch: pytest.MonkeyPatch) -> qbittorrent.QBittorrentClient:
+    monkeypatch.setattr(qbittorrent, "Client", lambda **_kwargs: server)
+    return qbittorrent.QBittorrentClient("127.0.0.1", 8080, "tow", "pw")
+
+
+# --- the shared contract, for every client ----------------------------------------------------
+
+
+@pytest.fixture(params=["qbittorrent", "transmission", "deluge"])
+def client(request, monkeypatch):
+    if request.param == "qbittorrent":
+        server: Any = FakeQbit()
+        return _qbittorrent(server, monkeypatch), server
     if request.param == "transmission":
-        server: Any = FakeTransmission()
+        server = FakeTransmission()
         return _transmission(server), server
     server = FakeDeluge()
     return _deluge(server), server
@@ -310,13 +398,14 @@ def test_add_happens_stopped_before_the_selection(client, tmp_path, monkeypatch)
 
 
 def test_duplicate_and_bad_selection_are_refused(client, tmp_path):
-    adapter, _ = client
+    adapter, server = client
     with pytest.raises(ClientError, match="неверные номера"):
         adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [7])
     with pytest.raises(ClientError, match="не указана папка"):
         adapter.add_torrent_selected(TORRENT, "", H, [E01])
     adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
-    with pytest.raises(ClientError, match="уже есть"):
+    # qBittorrent refuses the repeat itself (TOW accepts a repeated add only while it is pending).
+    with pytest.raises(ClientError, match="«Fails.»" if isinstance(server, FakeQbit) else "уже есть"):
         adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
 
 
@@ -370,6 +459,16 @@ def test_missing_file_flags_are_unknown_and_refuse_selection(client, tmp_path, m
             return result
 
         monkeypatch.setattr(server, "_row", row)
+    elif isinstance(server, FakeQbit):
+        original = server.torrents_files
+
+        def file_rows(**kwargs):
+            rows = original(**kwargs)
+            for row in rows if malformed == "missing" else rows[1:]:
+                row["priority"] = None
+            return rows
+
+        monkeypatch.setattr(server, "torrents_files", file_rows)
     else:
         original = server.m_core_get_torrent_status
 
