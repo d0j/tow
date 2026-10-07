@@ -170,7 +170,7 @@
   "releases": {
     "title": "Version and updates",
     "automatic": "Check for updates automatically",
-    "automatic_hint": "At most once every 12 hours. Turning this off stops automatic checks; you can still check manually. Updates are never installed automatically.",
+    "automatic_hint": "At most once every 12 hours, while a TOW page is open. When it is off, TOW checks only when you press the button.",
     "preferences_saved": "Update-check preference saved",
     "details": "More: history, rollback and log",
     "search": "version update release rollback log automatic",
@@ -201,9 +201,9 @@
     "notes": "Release notes",
     "log": "Update log",
     "log_pending": "Open this section to read the latest update log.",
-    "policy": "Stable releases only. Checked every 12 hours while the interface is open; nothing is installed automatically.",
+    "policy": "Stable releases only. Nothing is installed without you.",
     "how": "How to update",
-    "install": "On the computer running TOW, open a terminal in the app folder and run this command with the release version you want. Follow the instructions it prints; the updater makes a safety copy first.",
+    "install": "The “Update” button above installs a newer release, or “Update TOW” in the TOW folder on the computer running TOW (“Update TOW.cmd” on Windows, “Update TOW.command” on macOS, update-tow on Linux). For a chosen version, open a terminal in the TOW folder (the one with config.yaml) and run the command below with that version: it shows how. The update makes a safety copy first.",
     "no_script": "Without JavaScript, use Release notes to check the latest version."
   },
   "base": {
@@ -348,7 +348,8 @@
     "update": {
       "how": "TOW updates itself with the install's base Python (the update replaces this environment). Run:",
       "or_windows": "or, on Windows:",
-      "archive": "This install has no git: the update downloads the release from GitHub (a release tag from v1.22.0, or latest)."
+      "archive": "This install has no git: the update downloads the release from GitHub (a release tag from v1.22.0, or latest).",
+      "archive_file": "Or, simpler: run “{file}” in the TOW folder (to this version: “{file}” {ref})."
     },
     "keys": {
       "generated": "A new master key was created: {path}. Keep a copy of it away from this computer: without the key the saved passwords and tokens cannot be read.",
@@ -958,7 +959,7 @@
       "disabled": "Automatic update checks are off",
       "unknown_build": "A stable release was found, but this build's version cannot be compared.",
       "available": "TOW {version} is available",
-      "current": "You have the latest stable version, or a newer build.",
+      "current": "You have the latest version.",
       "unavailable": "Could not check for updates. TOW keeps working; try again later.",
       "stale": "could not refresh; showing the last successful check",
       "checked": "checked: {when}",

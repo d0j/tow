@@ -762,4 +762,7 @@ def test_tow_update_prints_how_to_run_it(capsys, tmp_path, monkeypatch):
     out = capsys.readouterr().out
     assert "--ref latest" in out
     assert "v1.22.0" in out
+    # Round-3 audit: a zip install was sent to deploy.ps1, which needs git; it has its own file.
+    assert "deploy.ps1" not in out
+    assert ("Update TOW.cmd" if os.name == "nt" else "update-tow") in out or "Update TOW.command" in out
     assert "latest" in out
