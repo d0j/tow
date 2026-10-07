@@ -257,13 +257,44 @@ def _save_sessions(epoch: int, revoked: dict[str, int]) -> None:
         )
 
 
+def _signing_epoch() -> int:
+    """The epoch a new session is signed with.
+
+    A damaged sessions file (its epoch cannot be read) refuses every session: a sign-in signed
+    for epoch 0 was refused at once, so a device was sent back to the sign-in page for ever. The
+    file is rewritten first, with an epoch no earlier session was signed with (epochs count up
+    one "Sign out everywhere" at a time; this one is the time in seconds), the History says so
+    once, and every device signs in again. A file that cannot be read at all raises
+    ``auth.sessions_unreadable``: the sign-in page says it instead of a cookie that never works.
+    """
+    epoch = _sessions_state()[0]
+    if epoch >= 0:
+        return epoch
+    from tow.store import persistence_lock
+
+    with persistence_lock(), _sessions_lock:
+        epoch = _sessions_state()[0]
+        if epoch >= 0:  # another sign-in repaired it meanwhile
+            return epoch
+        try:
+            _sessions_path().read_bytes()
+        except OSError as exc:
+            raise AuthConfigurationError("auth.sessions_unreadable") from exc
+        epoch = max(1, int(time.time()))
+        _save_sessions(epoch, {})
+    from tow.log import log_event
+
+    log_event("sessions_reset", file="data/sessions.json", how="auto")
+    return epoch
+
+
 def issue_session(token: str, *, now: float | None = None) -> str:
     if len(token) < _MIN_TOKEN_LENGTH:
         raise AuthConfigurationError("auth.token_missing")
     session_id = _secrets.token_urlsafe(32)
     expires = int((time.time() if now is None else now) + SESSION_TTL_SEC)
     payload = f"{session_id}.{expires}"
-    return f"{payload}.{_signature(payload, token, max(0, _sessions_state()[0]))}"
+    return f"{payload}.{_signature(payload, token, _signing_epoch())}"
 
 
 def _parts(cookie: str | None) -> tuple[str, int, str] | None:
@@ -323,7 +354,9 @@ def sign_out_everywhere() -> int:
     from tow.store import persistence_lock
 
     with persistence_lock(), _sessions_lock:
-        epoch = max(0, _sessions_state()[0]) + 1
+        epoch = _sessions_state()[0]
+        # A damaged file's epoch is unknown: one no earlier session was signed with (_signing_epoch).
+        epoch = epoch + 1 if epoch >= 0 else max(1, int(time.time()))
         _save_sessions(epoch, {})  # every older session is invalid now: nothing to remember
         return epoch
 

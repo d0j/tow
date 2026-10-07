@@ -78,7 +78,8 @@
     "token_file_missing": "the network access key file is missing",
     "token_file_unreadable": "the network access key file cannot be read",
     "token_missing": "no network access key is set up",
-    "store_unavailable": "the saved password cannot be read (saved passwords and tokens cannot be opened) — open TOW on the computer it runs on and see Settings"
+    "store_unavailable": "the saved password cannot be read (saved passwords and tokens cannot be opened) — open TOW on the computer it runs on and see Settings",
+    "sessions_unreadable": "TOW cannot read data/sessions.json, so a sign-in would not hold. Check that the data folder can be read and written, then try again."
   },
   "autostart": {
     "not_runtime": "Autostart is set up only from the working install (its code in the app folder); this copy is for development.",
@@ -1211,7 +1212,8 @@
       "secret_undo_cleanup_fail": "undo cleanup postponed",
       "undo_fail": "undo not applied",
       "settings_save_fail": "settings not saved",
-      "master_key_created": "master key created — back it up"
+      "master_key_created": "master key created — back it up",
+      "sessions_reset": "sign-ins reset: data/sessions.json was damaged, every device signs in again"
     },
     "cls": {
       "quota": "daily limit",

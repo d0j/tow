@@ -138,6 +138,68 @@ def test_an_unreadable_sessions_file_fails_closed():
     assert not session_is_valid(cookie, TOKEN)
 
 
+def test_a_sign_in_after_a_damaged_sessions_file_holds(password):
+    """Round-3 audit: with data/sessions.json damaged every sign-in answered 303 with a cookie
+    signed for epoch 0 that the next page refused (epoch unknown): a silent loop that locked
+    out every device on the network. The sign-in rewrites the file once and says so."""
+    from tow.log import read_events
+
+    old = issue_session(lan_password_session_key(password))
+    (data_dir() / "sessions.json").write_text("{broken", encoding="utf-8")
+    device = TestClient(app, client=LAN, headers=ORIGIN)
+
+    response = device.post("/login", data={"password": "old-horse-battery"}, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert device.get("/settings", headers=HTML, follow_redirects=False).status_code == 200
+    stored = json.loads((data_dir() / "sessions.json").read_text(encoding="utf-8"))
+    assert stored["epoch"] > 1  # one no earlier session was signed with
+    assert not session_is_valid(old, lan_password_session_key(password))  # still closed for the old ones
+    second = TestClient(app, client=("192.168.1.8", 50000), headers=ORIGIN)
+    assert second.post("/login", data={"password": "old-horse-battery"}, follow_redirects=False).status_code == 303
+    assert device.get("/settings", headers=HTML, follow_redirects=False).status_code == 200  # not reset again
+    assert [event["kind"] for event in read_events(limit=20)].count("sessions_reset") == 1
+
+
+def test_a_sessions_file_that_cannot_be_read_refuses_the_sign_in_with_a_reason(password, monkeypatch):
+    from pathlib import Path
+
+    (data_dir() / "sessions.json").write_text('{"epoch": 2, "revoked": {}}\n', encoding="utf-8")
+    clear_sessions()
+    real = Path.read_bytes
+
+    def denied(self):
+        if self.name == "sessions.json":
+            raise PermissionError(13, "Access is denied")
+        return real(self)
+
+    monkeypatch.setattr(Path, "read_bytes", denied)
+    device = TestClient(app, client=LAN, headers=ORIGIN)
+
+    response = device.post("/login", data={"password": "old-horse-battery"}, follow_redirects=False)
+
+    assert response.status_code == 503
+    assert "tow_session" not in response.cookies
+    assert t("auth.sessions_unreadable", "ru") in response.text
+
+
+def test_the_session_cookie_format_is_pinned():
+    """A cookie a device got from an earlier TOW must keep working after an update: id, expiry
+    and an HMAC-SHA256 of both (base64url, no padding) keyed by the password's digest, and for
+    epoch N > 0 by that key + "\\x00tow-session-epoch-N"."""
+    payload = "Q" * 43 + ".1900000000"
+    now = 1_900_000_000 - 1000
+    epoch_0 = f"{payload}.AwuFW0qNwP5LvNPjHytjFOemS9jq5UMB9BUXgyXm6DQ"
+    epoch_3 = f"{payload}.U0CkIBCNE9N6togk86pb7Vi9OlZh1jAGdWbN1_AxU78"
+    assert session_is_valid(epoch_0, TOKEN, now=now)
+    assert not session_is_valid(epoch_3, TOKEN, now=now)
+    (data_dir() / "sessions.json").write_text('{"epoch": 3, "revoked": {}}\n', encoding="utf-8")
+    assert session_is_valid(epoch_3, TOKEN, now=now)
+    assert not session_is_valid(epoch_0, TOKEN, now=now)
+    session_id, expires, signature = issue_session(TOKEN, now=now).split(".")
+    assert (len(session_id), int(expires), len(signature)) == (43, now + SESSION_TTL_SEC, 43)
+
+
 def test_a_file_held_for_a_moment_keeps_the_last_known_state(monkeypatch):
     from pathlib import Path
 
