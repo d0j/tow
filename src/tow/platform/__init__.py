@@ -72,6 +72,8 @@ class Backend(Protocol):
 
     def folder_shared(self, path: Path) -> bool | None: ...
 
+    def root_shared(self, path: Path) -> bool | None: ...
+
     def make_private(self, path: Path, *, created: bool = False) -> bool: ...
 
     def open_url(self, url: str) -> bool: ...
@@ -211,6 +213,30 @@ def private_folders(folders: Iterable[Path], *, repair: bool = True, created: bo
     return still_open
 
 
+def private_root(folder: Path, *, repair: bool = True) -> bool:
+    """Whether other accounts of this computer can still change the install root ``folder``.
+
+    Through the root they could change the code TOW runs (app/, runtime/, the start files)
+    and so read the master key with the owner's rights. With ``repair`` the root is first
+    closed when this account owns it: on Windows only this account, SYSTEM and Administrators
+    keep access and what it holds inherits that (a folder in a drive root inherits
+    "Authenticated Users: modify"); on Linux and macOS it becomes 0700 when every account may
+    write in it (a folder shared with a group on purpose stays as it is). A drive or
+    filesystem root, a link and unknown answers are left alone; never raises.
+    """
+    backend = current()
+    try:
+        if folder.parent == folder or folder.is_symlink() or folder.is_junction() or not folder.is_dir():
+            return False
+        if backend.root_shared(folder) is not True:
+            return False
+        if repair and backend.make_private(folder):
+            return False
+    except AttributeError, OSError, ValueError:  # a backend without the question: unknown
+        return False
+    return True
+
+
 __all__ = [
     "NAMES",
     "PRIVATE_UMASK",
@@ -222,6 +248,7 @@ __all__ = [
     "is_plain_file",
     "is_windows",
     "private_folders",
+    "private_root",
     "set_backend",
     "this_os",
     "use",

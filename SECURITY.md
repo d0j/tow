@@ -27,9 +27,10 @@ otherwise.
   are refused. Writes require a matching `Origin` (CSRF); pages are served with a strict Content-Security-Policy.
 - **Secrets at rest.** Site logins, client passwords, messenger tokens, cookies and the password record are
   encrypted in `data/secrets.enc` with the master key in `keys/master.key`, which no backup or export contains.
-  Every start closes `keys/` and `data/` to other accounts of the computer (Windows: only your account, SYSTEM
-  and Administrators; Linux and macOS: 0700) and warns, also in `tow doctor`, when it cannot. Night copies are
-  signed; a modified copy is not restored.
+  Every start closes the TOW folder to other accounts of the computer, so they can neither change the program
+  in it nor open `keys/` and `data/` (Windows: only your account, SYSTEM and Administrators; Linux and macOS:
+  `keys/` and `data/` 0700, the folder itself 0700 when every account may write in it), and warns, also in
+  `tow doctor`, when it cannot. Night copies are signed; a modified copy is not restored.
 - **Outbound requests.** Site addresses entered in the UI may not point at this computer or the home network;
   download redirects may not leave the site's configured hosts.
 - **Your torrents and folders.** TOW changes only torrents it added (tag `tow`) and refuses system and profile

@@ -124,14 +124,39 @@ function Install-Tow {
         throw 'TOW: TOW needs 64-bit Windows'
     }
 
+    # Folders for this account, SYSTEM and Administrators only: in a drive root (D:\TOW) the
+    # install would inherit "Authenticated Users: modify", and every account of the PC could
+    # change the program TOW runs (app, runtime, the start files) and read the master key. Only
+    # a folder this run creates or this account owns is changed (never through a link): another
+    # account's keeps its permissions. TOW itself checks again at every start, but only after
+    # the code in the folder has run - so the folder is closed here, before anything is in it.
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $icacls = Join-Path $env:SystemRoot 'System32\icacls.exe'
+    function Close-Folder([string]$Folder, [bool]$New) {
+        try {
+            $item = Get-Item -LiteralPath $Folder -Force
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
+            $owner = (Get-Acl -LiteralPath $Folder).GetOwner([Security.Principal.SecurityIdentifier]).Value
+        }
+        catch { return $false }
+        if (-not $New -and $owner -ne $sid) { return $false }
+        $ErrorActionPreference = 'Continue'
+        & $icacls $Folder /inheritance:r /grant:r "*${sid}:(OI)(CI)F" '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' /Q | Out-Null
+        return $LASTEXITCODE -eq 0
+    }
+
     $created = -not (Test-Path -LiteralPath $Dir)
     $work = Join-Path $Dir '.install'
     $installed = $false
+    $rootClosed = $false
     $moved = New-Object System.Collections.Generic.List[string]
     $oldConfig = if (Test-Path -LiteralPath (Join-Path $Dir 'config.yaml') -PathType Leaf) {
         [IO.File]::ReadAllBytes((Join-Path $Dir 'config.yaml'))
     } else { $null }
     try {
+        New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+        $rootClosed = Close-Folder $Dir $created
+        if (-not $rootClosed) { Say "could not limit $Dir to your account (is it another account's folder?); its keys and data folders are limited instead" }
         New-Item -ItemType Directory -Force -Path $work | Out-Null
         if ($env:TOW_INSTALL_SOURCE) {
             $zip = (Resolve-Path -LiteralPath $env:TOW_INSTALL_SOURCE).Path
@@ -194,19 +219,13 @@ function Install-Tow {
         }
     }
 
-    # keys\ and data\ for this account, SYSTEM and Administrators only: a folder in a drive root
-    # (D:\TOW) would otherwise inherit "Authenticated Users: modify" and every account of the PC
-    # could read the master key. TOW itself checks this again at every start.
-    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-    $icacls = Join-Path $env:SystemRoot 'System32\icacls.exe'
+    # keys\ and data\ inherit from a closed folder; when it stays open they are closed on their own.
     foreach ($name in @('keys', 'data')) {
         $folder = Join-Path $Dir $name
+        $new = -not (Test-Path -LiteralPath $folder)
         New-Item -ItemType Directory -Force -Path $folder | Out-Null
-        $ErrorActionPreference = 'Continue'
-        & $icacls $folder /inheritance:r /grant:r "*${sid}:(OI)(CI)F" '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' /Q | Out-Null
-        $closed = $LASTEXITCODE -eq 0
-        $ErrorActionPreference = 'Stop'
-        if (-not $closed) { Say "could not limit $folder to your account (TOW tries again when it starts)" }
+        if ($rootClosed) { continue }
+        if (-not (Close-Folder $folder $new)) { Say "could not limit $folder to your account (TOW tries again when it starts)" }
     }
 
     Say "installed in $Dir; starting it (the first start takes a minute)"
