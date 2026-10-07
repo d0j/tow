@@ -50,7 +50,7 @@ def test_fractions_follow_the_readers_decimal_sign():
 def test_a_prefix_names_who_reports_it():
     error = TowError("client.managed.missing", prefix="Transmission")
     assert error.text("en") == "Transmission: the torrent is not in the client"
-    assert errors.render(error.record(), "ru") == "Transmission: раздачи нет в клиенте"
+    assert errors.render(error.record(), "ru") == "Transmission: торрента нет в клиенте"
 
 
 def test_the_class_comes_from_the_site_then_the_code_then_the_type():

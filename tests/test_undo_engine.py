@@ -141,12 +141,12 @@ def _change_clients(client, monkeypatch):
 
 # kind -> (set up and return the change, the message of its undo, the part that must come back)
 ROUND_TRIPS = {
-    "topic": (_change_topic_delete, "удаление отменено: наблюдение снова в списке", None),
+    "topic": (_change_topic_delete, "удаление отменено: раздача снова в списке", None),
     "topic_add": (_change_topic_add, None, "topics"),
     "topic_put": (_change_topic_edit, "правка раздачи отменена", "titles"),
     "site": (_change_site, "изменение сайта отменено", None),
     "settings": (_change_settings, "настройки возвращены", None),
-    "settings_access": (_change_access, "доступ вернул", None),
+    "settings_access": (_change_access, "доступ восстановлен", None),
     "settings_clients": (_change_clients, "клиенты возвращены", None),
 }
 EXTRA_ROUND_TRIPS = {
@@ -288,7 +288,7 @@ def test_an_older_pending_removal_does_not_colour_an_unrelated_undo(client):
     response = client.post("/undo", follow_redirects=False)
 
     assert flash_kind(response.headers["location"]) == "ok"
-    assert flash_of(response.headers["location"]) == "удаление отменено: наблюдение снова в списке"
+    assert flash_of(response.headers["location"]) == "удаление отменено: раздача снова в списке"
 
 
 @pytest.mark.parametrize("name", ["site", "settings", "settings_access:password", "settings_clients"])

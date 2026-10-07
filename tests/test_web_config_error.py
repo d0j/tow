@@ -36,7 +36,7 @@ def test_a_page_names_the_file_the_place_and_the_way_back(broken_config):
     text = response.text
     assert "config.yaml" in text
     assert "line " in text  # the place of the error
-    assert "night copy" in text  # and how to get back
+    assert "nightly backup" in text  # and how to get back
     assert "Internal Server Error" not in text
     russian = _local().get("/settings", headers={**HTML, "Accept-Language": "ru"})
     assert "ночной копии" in russian.text

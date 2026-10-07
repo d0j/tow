@@ -481,7 +481,7 @@ def test_check_interval_and_undo_time_are_separate_fields_with_hints(client):
     assert 'class="field-grid"' not in form
     assert 'aria-describedby="interval-hint"' in form
     assert 'aria-describedby="undo-hint"' in form
-    assert "Активные раздачи без своего таймера проверяются раз в 12 ч." in form
+    assert "Активные раздачи без личного таймера проверяются раз в 12 ч." in form
 
 
 # --- Sentence case: labels, chips, column heads and messages start with a capital -----------------
@@ -594,7 +594,7 @@ RAW_REFUSED = (
     [
         (RAW_REFUSED, "torrent client: соединение отклонено"),
         ("[WinError 10061] No connection could be made", "соединение отклонено"),
-        ("no connection ([Errno 110] Connection timed out)", "no connection: нет ответа вовремя"),
+        ("no connection ([Errno 110] Connection timed out)", "no connection: ответ не пришёл вовремя"),
         ("HTTPSConnectionPool(host='x', port=443): NameResolutionError(getaddrinfo failed)", "адрес не найден"),
         ("SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED]'))", "ошибка сертификата"),
         ("ConnectionResetError(10054, 'An existing connection was forcibly closed')", "соединение сброшено"),
@@ -611,7 +611,7 @@ RAW_REFUSED = (
         ),
         (
             "example: ни одно зеркало не ответило: нет связи (timed out)",
-            "example: ни одно зеркало не ответило: нет связи (нет ответа вовремя)",
+            "example: ни одно зеркало не ответило: нет связи (ответ не пришёл вовремя)",
         ),
         ("сайт ответил ошибкой (error 503)", "сайт ответил ошибкой (error 503)"),  # not a reason: kept
     ],

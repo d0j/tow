@@ -196,7 +196,7 @@ def test_repeated_restarts_are_told_once_per_window(tmp_path):
     for _ in range(4):
         world.servers()[-1].code = 1
         run_for(sup, world.clock, 60)
-    assert world.sent[0] == "TOW был закрыт или упал — выполнен перезапуск, TOW снова работает"
+    assert world.sent[0] == "TOW был закрыт или аварийно завершился — выполнен перезапуск, TOW снова работает"
     assert len(world.sent) == 2
     assert world.sent[1].startswith("TOW: перезапусков за ")
     assert ": 3 — что-то раз за разом ломает TOW" in world.sent[1]
@@ -208,7 +208,9 @@ def test_a_crash_is_told_with_its_last_error(tmp_path):
     run_for(sup, world.clock, 5)
     world.servers()[0].code = 1
     run_for(sup, world.clock, 10)
-    assert world.sent == ["TOW упал (последняя ошибка: OSError: disk full) — выполнен перезапуск, TOW снова работает"]
+    assert world.sent == [
+        "TOW аварийно завершился (последняя ошибка: OSError: disk full) — выполнен перезапуск, TOW снова работает"
+    ]
 
 
 def test_a_spawn_failure_is_retried(tmp_path):

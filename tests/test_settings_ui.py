@@ -31,12 +31,12 @@ def test_settings_explains_global_and_personal_timers(language, custom_minutes):
     interval = page.split('id="acc-intervals"', 1)[1].split('id="acc-access"', 1)[0]
     if language == "ru":
         assert '<label for="interval_min">Общий таймер</label>' in interval
-        assert "Активные раздачи без своего таймера проверяются раз в 2 ч." in interval
-        assert "Свой таймер задаётся при добавлении или редактировании раздачи." in interval
+        assert "Активные раздачи без личного таймера проверяются раз в 2 ч." in interval
+        assert "Личный таймер задаётся при добавлении или редактировании раздачи." in interval
         assert "Каждая раздача проверяется" not in interval
     else:
         assert '<label for="interval_min">Global timer</label>' in interval
-        assert "Active topics without their own timer are checked every 2 h." in interval
+        assert "Active topics without a personal timer are checked every 2 h." in interval
         assert "Set a personal timer when adding or editing a topic." in interval
         assert "Every watched topic is checked" not in interval
 

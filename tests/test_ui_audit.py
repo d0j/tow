@@ -440,8 +440,8 @@ def test_row_buttons_have_distinct_names(client):
     labels = re.findall(r'class="row-ico[^"]*"[^>]*aria-label="([^"]+)"', home)
     assert len(labels) == 6
     assert len(set(labels)) == 6
-    assert "Поставить на паузу наблюдение «Show t1»" in labels
-    assert "Снять с паузы наблюдение «Show t2»" in labels
+    assert "Поставить на паузу раздачу «Show t1»" in labels
+    assert "Снять с паузы раздачу «Show t2»" in labels
     assert "Проверить раздачу «Show t2»" in labels
     site_labels = re.findall(r'class="row-ico[^"]*"[^>]*aria-label="([^"]+)"', sites)
     assert site_labels

@@ -46,7 +46,7 @@ def test_pause_then_resume_reads_as_paused_then_resumed():
         format_event({"kind": "site_pause", "status": "resumed"})["label"],
     ]
 
-    assert labels == ["Пауза", "Возобновлено", "Пауза сайта", "Сайт возобновлён"]
+    assert labels == ["Пауза", "Возобновлена", "Сайт на паузе", "Сайт возобновлён"]
 
 
 def test_export_event_projection_rejects_hash_suffix_data():

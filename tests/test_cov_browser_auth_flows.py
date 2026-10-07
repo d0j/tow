@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import subprocess
 import sys
 import threading
@@ -407,14 +408,14 @@ def test_json_endpoint_is_read_and_its_failures_are_plain(monkeypatch):
     assert urls == ["http://127.0.0.1:9222/json/list"]
 
     monkeypatch.setattr(ba.urllib.request, "urlopen", lambda *_a, **_k: FakeResponse(b"not json"))
-    with pytest.raises(ba.BrowserAuthError, match=t("browser_auth.cdp_unavailable")):
+    with pytest.raises(ba.BrowserAuthError, match=re.escape(t("browser_auth.cdp_unavailable"))):
         ba._json_get(9222, "/json/list")
 
     def refused(*_a, **_k):
         raise ConnectionRefusedError
 
     monkeypatch.setattr(ba.urllib.request, "urlopen", refused)
-    with pytest.raises(ba.BrowserAuthError, match=t("browser_auth.cdp_unavailable")):
+    with pytest.raises(ba.BrowserAuthError, match=re.escape(t("browser_auth.cdp_unavailable"))):
         ba._json_get(9222, "/json/list")
 
 

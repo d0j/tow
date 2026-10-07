@@ -351,7 +351,7 @@ def test_browser_reports_critical_rollback_failure_truthfully(monkeypatch, tmp_p
 
     assert response.status_code == 303
     message = shown(response.headers["location"])
-    assert "критическая ошибка отката" in message
+    assert "восстановление не удалось и не отменилось" in message
     assert "данные могли измениться" in message
 
 

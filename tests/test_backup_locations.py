@@ -233,7 +233,7 @@ def test_failed_copy_is_recorded_and_shown(tmp_path):
         create_snapshot()
     assert status()["last_error"].startswith(t("backup.snapshot.cannot_write", reason=""))
     page = _client().get("/settings").text
-    assert "копия не удалась" in page
+    assert ") не удалась: " in page
 
 
 def test_a_signed_in_device_restores_a_night_copy_too(night, monkeypatch):

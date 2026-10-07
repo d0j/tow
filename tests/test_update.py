@@ -703,7 +703,7 @@ def test_the_owners_language_is_used(install):
     for code in ("en", "ru"):
         (locales / f"{code}.json").write_text((source / f"{code}.json").read_text(encoding="utf-8"), encoding="utf-8")
     texts = updater._messages(install["app"], install["root"])
-    assert texts["stopping"] == "останавливаю TOW..."
+    assert texts["stopping"] == "остановка TOW…"
 
 
 def test_task_xml_is_read_for_command_and_state():
