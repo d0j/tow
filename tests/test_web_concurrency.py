@@ -467,8 +467,12 @@ def test_a_new_link_drops_the_offer_to_adopt_the_old_torrent():
     """Round-3 audit: the hash a check found unmarked survived a link edit, so "Adopt" stayed
     offered and would have marked the OLD link's torrent as the new link's revision."""
     from tow.adopt import unmarked_hash
+    from tow.clients.factory import default_client_id
+    from tow.config import load_config
 
     h = "AB" * 20
+    # What the check saw with the unmarked hash (1.26 records it): this link, this client.
+    seen = {"hash": h, "url": "http://rutor.info/torrent/1", "client": default_client_id(load_config())}
     save_state(
         {
             "topics": [
@@ -481,7 +485,7 @@ def test_a_new_link_drops_the_offer_to_adopt_the_old_torrent():
                     "last_error": "x",
                     "last_error_class": "qbit",
                     "last_error_code": "check.not_owned_existing",
-                    "last_error_params": {"hash": h},
+                    "last_error_params": seen,
                 }
             ]
         }
