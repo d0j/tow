@@ -121,7 +121,7 @@ TOW/
   config.yaml      settings
   data/            your topics, history, logs
   keys/master.key  the master key
-  backup/          night copies
+  backup/          nightly backups
   app/             the program
   runtime/         its Python and libraries
 ```
@@ -181,7 +181,7 @@ that the folder is your former TOW install.
 
 ## Manual install with git
 
-For developers and servers: a clone that `deploy.ps1` / `tow update` move between tags with git. You need
+For developers and servers: a clone that `deploy.ps1` / `tow update` move between release tags with git. You need
 [git](https://git-scm.com/downloads) and [uv](https://docs.astral.sh/uv/) 0.12 or newer; `setup` installs Python
 3.14 and the libraries inside the TOW folder.
 

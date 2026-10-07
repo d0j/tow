@@ -3,7 +3,7 @@
 # TOW
 
 **Torrent topic watcher.** Follows tracker topics that replace their `.torrent` in place and adds every new
-revision to your torrent client.
+version to your torrent client.
 
 [![CI](https://github.com/d0j/tow/actions/workflows/ci.yml/badge.svg)](https://github.com/d0j/tow/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/d0j/tow)](https://github.com/d0j/tow/releases/latest)
@@ -25,15 +25,15 @@ revision to your torrent client.
 
 ## Features
 
-- **Watch or add once.** All files, checked files, chosen episodes (`S01E03-E05`, `04x01-03`) or patterns
+- **Keep watching or add once.** All files, checked files, chosen episodes (`S01E03-E05`, `04x01-03`) or patterns
   (`*.mkv`); one check interval for all topics, or a personal one per topic.
 - **Confirmed adds.** The torrent is added stopped, files are selected, the selection is read back, then it starts.
   A failure is reported as a failure.
 - **Mirrors.** Several addresses per site with fallback and cooldown; daily download limits respected; sign-in by
   password or a browser window.
 - **Notifications.** One message per topic per check, quiet hours, a daily digest, a queue that survives restarts.
-- **History and undo.** Every file and revision is recorded; the last change can be undone.
-- **Backups and updates.** Signed night copies, restore points, encrypted `.towx` files; updates from the
+- **History and undo.** Every file and version is recorded; the last change can be undone.
+- **Backups and updates.** Signed nightly backups, restore points, encrypted `.towx` files; updates from the
   Settings page that put the previous version back by themselves if anything fails.
 - **One folder, two languages.** Code, settings, data, key, backups and its own Python: move it and it keeps
   working. English and Russian; a new language is one JSON file.
@@ -84,7 +84,7 @@ Step by step, with what each screen shows: [docs/install.md](docs/install.md). A
 1. **Settings → Torrent clients.** Turn on the Web UI in your client; enter address, port, login, password; **Check**.
 2. **Settings → Notifications** (optional). Follow *How to connect* for a messenger; **Check**.
 3. **Home → +.** Paste a topic link, choose the folder and what to download, **Add**.
-4. **Read the dot.** Green — confirmed. Blue — something new. Amber — the site is unreachable for now. Red — open
+4. **Read the dot.** Green — confirmed. Blue — something new. Yellow — the site is unreachable for now. Red — open
    the row for the reason.
 
 The [user guide](docs/guide.md) covers every screen, status and message.
@@ -94,7 +94,7 @@ Linux and macOS. `tow --help` lists all commands.
 
 | Command | Does |
 |---|---|
-| `tow run` | one supervised service: web UI, schedule, night copy, watchdog |
+| `tow run` | one supervised service: web UI, schedule, nightly backups, watchdog |
 | `tow start` | `tow run` in the background, then the page in the browser (what the start files do) |
 | `tow status` | one line: running, client, sites, topics, last and next check (`--json`) |
 | `tow stop` · `tow restart` | stop TOW · restart its web server |
@@ -131,7 +131,7 @@ closes network access.
 | Go back from the page | Settings → Version and updates → **Install another version or roll back** (1.22.21 or newer) | the same | the same |
 | Go back | `Update TOW.cmd v1.23.0` (v1.23.0 or newer once v1.23 ran: older ones cannot read its data) | `update-tow v1.23.0` (the same) | the same with the older tag (v1.18.0 or newer; v1.23.0 or newer once v1.23 ran) |
 | After moving the folder | `Start TOW.cmd` prepares it again; then `tow autostart on` if you use it | the start file does it too; then `tow autostart on` | `tow stop`, `tow setup`, `tow autostart on` |
-| Restore a night copy | `tow restore-snapshot --path <copy> --apply` | the same | the same |
+| Restore a nightly backup | `tow restore-snapshot --path <copy> --apply` | the same | the same |
 | Remove | [docs/install.md](docs/install.md#remove-tow) | the same | the same |
 
 An update stops TOW, snapshots `data/` and `config.yaml`, switches the code, starts TOW and checks the version. If
@@ -140,12 +140,12 @@ release's `SHA256SUMS`.
 
 | Backup | Where | Notes |
 |---|---|---|
-| Night copy | `TOW/backup/night/` | daily at 03:30; keep 7 days by default |
+| Nightly backup | `TOW/backup/night/` | daily at 03:30; keep 7 days by default |
 | Restore point | `TOW/data/restore-points/` | before risky changes, last 10 |
 | `.towx` file | where you save it | Settings → Backups; restoring needs the same `master.key` |
 | `tow export` / `tow import` | where you save it | protected by its own passphrase; works across installs |
 
-Settings → Backups checks, restores and deletes saved copies. Night copies are signed, not encrypted as a whole:
+Settings → Backups checks, restores and deletes saved copies. Nightly backups are signed, not encrypted as a whole:
 settings, topics and history stay readable (passwords stay encrypted), so keep the backup folder private.
 [Details](docs/guide.md#backups).
 

@@ -185,8 +185,8 @@ TOW/
 
 ## Ручная установка через git
 
-Для разработчиков и серверов: клон, который `deploy.ps1` / `tow update` переключают между тегами через git. Нужны
-[git](https://git-scm.com/downloads) и [uv](https://docs.astral.sh/uv/) версии 0.12 или новее; `setup` ставит
+Для разработчиков и серверов: клон, который `deploy.ps1` / `tow update` переключают между метками выпусков через
+git. Нужны [git](https://git-scm.com/downloads) и [uv](https://docs.astral.sh/uv/) версии 0.12 или новее; `setup` ставит
 Python 3.14 и библиотеки внутрь папки TOW.
 
 **Windows** (PowerShell):
