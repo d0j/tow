@@ -81,6 +81,34 @@ def test_invalid_manual_policy_cannot_be_saved():
     assert load_state()["topics"] == []
 
 
+def test_a_proven_manual_policy_is_not_checked_file_by_file_again(monkeypatch):
+    from tow import selection, store
+
+    checked = []
+    original = selection.policy_from_topic
+    monkeypatch.setattr(selection, "policy_from_topic", lambda topic: checked.append(1) or original(topic))
+    big = normalize_policy(
+        "exact", files=[{"path": f"Season 1/S01E{n:03d}.mkv", "size": n} for n in range(1, 400)], source_hash=HASH
+    )
+    topic = {"id": "t", "selection": stored_policy(big), "tracking_mode": "watch"}
+    for _ in range(3):
+        save_state({"topics": [topic]})
+        store._parsed.clear()  # every read parses the file again
+        assert policy_from_topic(load_state()["topics"][0]) == big
+    assert len(checked) == 1  # three saves and three parsed reads: one check file by file
+
+    other = {**topic, "tracking_mode": "once"}
+    save_state({"topics": [other]})
+    assert len(checked) == 2
+    bad = copy.deepcopy(topic)
+    bad["selection"]["files"].append(dict(bad["selection"]["files"][0]))  # the same file twice
+    with pytest.raises(StoreCorruptionError):
+        save_state({"topics": [bad]})
+    store.state_path().write_text(json.dumps({"topics": [bad]}), encoding="utf-8")
+    with pytest.raises(StoreCorruptionError):
+        load_state(quarantine=False)
+
+
 def test_preparation_is_encrypted_bound_and_does_not_create_topics():
     save_state({"topics": []})
     snapshot = content.prepare(blob(), URL, "main")

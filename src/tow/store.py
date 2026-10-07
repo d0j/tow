@@ -953,12 +953,36 @@ def _validate_state_container(value: Any) -> None:
             raise ValueError("invalid topic check interval") from exc
         selection = topic.get("selection")
         if isinstance(selection, dict) and selection.get("mode") == "exact":
-            from tow.selection import policy_from_topic
+            _check_exact_selection(topic, selection)
 
-            try:
-                policy_from_topic(topic)
-            except TowError as exc:
-                raise ValueError("invalid exact file selection") from exc
+
+# Exact selections proven in this process, by a digest of everything their check reads: a state is
+# checked on every read and write, and a selection of 20 000 files takes about 150 ms to check
+# file by file, its digest about 8 ms. Bounded; a digest that is not here is checked in full.
+_PROVEN_SELECTIONS: dict[bytes, None] = {}
+_PROVEN_SELECTIONS_MAX = 1024
+
+
+def _check_exact_selection(topic: Mapping[str, Any], selection: Mapping[str, Any]) -> None:
+    from tow.selection import policy_from_topic
+
+    try:
+        digest: bytes | None = hashlib.sha256(
+            json.dumps([selection, topic.get("tracking_mode", "watch")], ensure_ascii=False).encode()
+        ).digest()
+    except TypeError, ValueError, UnicodeError, RecursionError:
+        digest = None  # not JSON: the full check (and the writer) refuses it
+    if digest is not None and digest in _PROVEN_SELECTIONS:
+        return
+    try:
+        policy_from_topic(topic)
+    except TowError as exc:
+        raise ValueError("invalid exact file selection") from exc
+    if digest is not None:
+        with _PARSED_LOCK:
+            if len(_PROVEN_SELECTIONS) >= _PROVEN_SELECTIONS_MAX:
+                _PROVEN_SELECTIONS.clear()
+            _PROVEN_SELECTIONS[digest] = None
 
 
 def _validate_history_container(value: Any) -> None:
