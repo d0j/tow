@@ -258,7 +258,14 @@ def test_client_enabled_flag_written_as_text_is_respected(raw, enabled):
 
 @pytest.mark.parametrize(
     ("line", "message"),
-    [("quiet_hours: night", "quiet_hours must look like"), ("daily_digest_hour: 25", "daily_digest_hour")],
+    [
+        ("quiet_hours: night", "quiet_hours must look like"),
+        ("daily_digest_hour: 25", "daily_digest_hour"),
+        # Read as "no quiet hours at all": refused, so the owner is not left with messages at night.
+        ("quiet_hours: 0-24", '"0-24" does not name a part of the day'),
+        ("quiet_hours: 8-8", '"8-8" does not name a part of the day'),
+        ("quiet_hours: 25-3", '"25-3" does not name a part of the day'),
+    ],
 )
 def test_notification_settings_are_validated(line, message):
     from tow.config import ConfigError

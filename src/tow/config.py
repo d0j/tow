@@ -348,8 +348,12 @@ def _validate(data: dict[str, Any]) -> None:
     ):
         raise ConfigError("config_error.language")
     quiet = data.get("quiet_hours")
-    if quiet is not None and not re.fullmatch(r"\s*\d{1,2}\s*-\s*\d{1,2}\s*", str(quiet)):
+    span = re.fullmatch(r"\s*(\d{1,2})\s*-\s*(\d{1,2})\s*", str(quiet))
+    if quiet is not None and not span:
         raise ConfigError("config_error.quiet_hours")
+    if span and not (int(span[1]) <= 23 and int(span[2]) <= 24 and int(span[1]) % 24 != int(span[2]) % 24):
+        # "0-24" or "8-8" would be read as no quiet hours at all.
+        raise ConfigError("config_error.quiet_hours_span", value=str(quiet).strip())
 
 
 def _header(path: Path) -> str:
