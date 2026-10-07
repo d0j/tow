@@ -36,6 +36,36 @@ def test_hidden_list_tools_are_really_hidden():
     assert "tools.hidden = originalOrder.length < 2 && !tracker;" in JS
 
 
+def test_round_three_words(client, monkeypatch):
+    """Round-3 audit texts: the "+" is a new topic («Новая раздача»), the last night copy has
+    its year as the list of copies has, the web server's state is in words."""
+    from datetime import UTC, datetime
+
+    from tow.clock import format_ui_timestamp
+    from tow.i18n import t
+
+    home = client.get("/", headers={"Accept-Language": "ru"}).text
+    assert 'title="Новая раздача"' in home
+    assert "Новый торрент" not in home
+    from starlette.requests import Request
+
+    from tow.config import load_config
+    from tow.web import _context
+    from tow.web.views import backup_view
+
+    monkeypatch.setattr("tow.snapshots.status", lambda: {"last_ok_at": 1_790_000_000})
+    _context.begin()
+    view = backup_view(load_config(), Request({"type": "http", "headers": [], "query_string": b""}))
+    at = format_ui_timestamp(datetime.fromtimestamp(1_790_000_000, UTC).isoformat())
+    assert "2026" in at
+    assert view["last_ok"] == at
+    for state in ("up", "starting", "waiting", "not_answering", "stopped"):
+        assert f"'{state}': 'settings.service.server_state.{state}'" in (SRC / "templates" / "settings.html").read_text(
+            encoding="utf-8"
+        )
+    assert t("log.kind.client_adopted", "en") == "adopted into TOW"
+
+
 # --- Status-colour contract: transport trouble is amber, "not checked yet" is grey ----------------
 
 

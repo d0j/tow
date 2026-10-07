@@ -505,7 +505,7 @@
     "fields": {
       "host": "Address",
       "port": "Port",
-      "username": "Login",
+      "username": "Sign-in name",
       "password": "Password"
     },
     "factory": {
@@ -815,7 +815,7 @@
       "mode_all": "All files of the torrent",
       "mode_episodes": "Episodes by number",
       "mode_files": "Files by pattern",
-      "follow": "Keep watching",
+      "follow": "Follow the topic",
       "watch": "Yes, add new versions",
       "once": "No, add once",
       "selection": "Episode numbers or file patterns",
@@ -832,7 +832,7 @@
       "title": "Sign-in needed",
       "start": "Sign in",
       "enter": "Enter the login and password.",
-      "username": "Login",
+      "username": "Sign-in name",
       "password": "Password",
       "password_note": "The password never goes into the address, the TOW state or the log.",
       "save_retry": "Save and retry"
@@ -884,7 +884,7 @@
       "sel_pending": "chosen at the next check",
       "sel_all": "all files",
       "mode_once": "once",
-      "mode_watch": "keep watching",
+      "mode_watch": "follow the topic",
       "once_done": "the one-time add is done",
       "search_on": "Find on {site}",
       "next_season": "Next season",
@@ -895,12 +895,12 @@
       "save": "Save",
       "delete_title": "Remove the topic from TOW only; the torrent stays in the torrent client",
       "delete": "Remove from TOW",
-      "resume": "Resume watching",
-      "pause": "Pause watching",
+      "resume": "Resume the topic",
+      "pause": "Pause the topic",
       "check_title": "Check this topic",
       "site_aria_named": "Site of “{name}”: {label}",
-      "pause_named": "Pause watching “{name}”",
-      "resume_named": "Resume watching “{name}”",
+      "pause_named": "Pause the topic “{name}”",
+      "resume_named": "Resume the topic “{name}”",
       "check_named": "Check “{name}”"
     },
     "edit": {
@@ -1198,8 +1198,8 @@
       "client_selection_updated": "file selection updated",
       "client_restored": "back in client",
       "client_stopped": "stopped in client",
-      "client_adopted": "taken under TOW's management",
-      "client_adopt_failed": "not taken under TOW's management",
+      "client_adopted": "adopted into TOW",
+      "client_adopt_failed": "not adopted into TOW",
       "client_stop_failed": "not stopped in client",
       "client_unreachable": "torrent client unreachable",
       "reconcile_failed": "client check failed",
@@ -1651,7 +1651,14 @@
       "without_login": "Start without signing in",
       "without_login_hint": "TOW starts with the computer, before anyone signs in. Windows may ask for administrator rights, and network folders are then not reachable; on Linux it needs one command, which TOW shows.",
       "autostart_where": "Autostart",
-      "web_server": "Web server"
+      "web_server": "Web server",
+      "server_state": {
+        "up": "answers",
+        "starting": "starting",
+        "waiting": "waiting to start again",
+        "not_answering": "does not answer",
+        "stopped": "stopped"
+      }
     },
     "backups": {
       "q": "backups transfer export / import towx",
@@ -1750,7 +1757,7 @@
     "href_regex": "Pattern of the .torrent link on the page (regex)",
     "from_url": "Link to a topic on the site",
     "from_url_placeholder": "paste a topic link to fill in the form",
-    "login": "Login",
+    "login": "Sign-in name",
     "password": "Password",
     "add": "Add",
     "cancel": "Cancel",
@@ -2119,7 +2126,7 @@
       "replace_not_needed": "the previous torrent does not need to be stopped",
       "cannot_stop": "this client cannot stop a torrent",
       "replace_failed": "the previous torrent was not stopped: {error}",
-      "adopt_failed": "the torrent was not taken under TOW's management: {error}",
+      "adopt_failed": "the torrent was not adopted into TOW: {error}",
       "not_owned": "torrent client: the torrent has no tow tag — TOW does not touch it",
       "move_back_unconfirmed": "torrent client: moving the folder back was not confirmed by read-back",
       "added_check_busy": "topic saved; another check is running right now, so this one was not checked yet — press “Check” in a minute or wait for the next scheduled check",

@@ -436,7 +436,7 @@
           <dl>
             <div><dt>PID</dt><dd><code>{{ service.pid }}</code></dd></div>
             <div><dt>{{ t('settings.service.autostart_where') }}</dt><dd><code>{{ (service.autostart_detail or {}).get('where') or '—' }}</code></dd></div>
-            {% if service.supervisor %}<div><dt>{{ t('settings.service.web_server') }}</dt><dd><code>{{ service.supervisor.get('server', {}).get('state') or '—' }}</code></dd></div>{% endif %}
+            {% if service.supervisor %}{% set server_state = service.supervisor.get('server', {}).get('state') %}{% set state_key = {'up': 'settings.service.server_state.up', 'starting': 'settings.service.server_state.starting', 'waiting': 'settings.service.server_state.waiting', 'not_answering': 'settings.service.server_state.not_answering', 'stopped': 'settings.service.server_state.stopped'}.get(server_state) %}<div><dt>{{ t('settings.service.web_server') }}</dt><dd>{% if state_key %}{{ t(state_key) }}{% else %}<code>{{ server_state or '—' }}</code>{% endif %}</dd></div>{% endif %}
             {% if service.restart %}<div><dt>{{ t('settings.service.operation_id') }}</dt><dd><code>{{ service.restart.get('operation_id') or '—' }}</code></dd></div>{% endif %}
           </dl>
         </details>
