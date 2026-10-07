@@ -128,7 +128,7 @@ TEXTS = {
         " (older versions have no `tow run`); nothing was updated"
     ),
     "start": "TOW update: {previous} -> {target} ({ref}) in {root}",
-    "stopping": "stopping TOW...",
+    "stopping": "stopping TOW…",
     "not_stopped": "TOW did not stop within {minutes} min; it was stopped forcibly",
     "port_busy": "port {port} is still in use after stopping TOW",
     "snapshot": "data and config snapshot: {path}",
