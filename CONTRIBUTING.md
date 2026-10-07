@@ -70,20 +70,26 @@ Linux checks and installer smoke tests run on both Ubuntu 24.04 and 26.04. The l
 | A tracker page TOW follows | topic | раздача |
 | A tracker TOW can read | site | сайт |
 | Another address of a site | mirror | зеркало |
-| One `.torrent` of a topic | revision | версия |
+| One `.torrent` of a topic | version | версия |
 | qBittorrent, Transmission, Deluge | torrent client | торрент-клиент |
+| A topic's torrent inside the torrent client | torrent | торрент (не «раздача») |
 | Asking a site or the client | check | проверка |
 | Which files to download | selection (all files, choose files, episodes by number, files by pattern) | выбор файлов (все файлы раздачи, выбрать файлы, серии по номерам, файлы по маскам) |
 | The schedule of checks | global timer · personal timer | общий таймер · личный таймер |
-| The daily copy of the data | night copy (Settings: Nightly backups) | ночная копия (в настройках: «Ночные копии») |
+| The daily copy of the data | nightly backup (Settings: Nightly backups) | ночная копия (в настройках: «Ночные копии») |
 | A copy made by **Create a backup** or before a risky change | restore point (Settings: Backups made by hand) | точка восстановления (в настройках: «Копии по кнопке») |
 | The encrypted transfer file | TOW file (`.towx`) | файл TOW (`.towx`) |
 | `keys/master.key` | master key | мастер-ключ |
 | Saved logins of sites, clients and messengers | passwords and tokens | пароли и токены (не «секреты») |
 | Opening TOW from other devices | network access · sign in · sign out | доступ по сети · вход · выход |
+| Signing in to a site | sign in (not "log in") | вход (не «авторизация») |
 | Putting the last change back | Undo | Вернуть |
 | The reporting duty of `tow run` | watchdog | сторож |
+| Starting TOW with the computer | autostart | автозапуск (не «автозагрузка») |
 | Installing another release | update · roll back | обновление · откат |
+| The program that installs a release | updater | программа обновления |
+| The list of topics | Home | Главная |
+| Help inside TOW · the guide in `docs/` | Guide · user guide | Инструкция · Руководство |
 | A torrent's identity | hash | хеш |
 | Saved torrent contents kept for reuse | cache | кеш |
 
