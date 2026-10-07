@@ -229,7 +229,7 @@ def test_a_copy_that_does_not_read_back_prunes_nothing(backup, monkeypatch):
     for _ in range(3):
         create_snapshot()
 
-    def unreadable(_path):
+    def unreadable(_path, **_kwargs):
         raise SnapshotError("file damaged in the copy: state.json")
 
     monkeypatch.setattr("tow.snapshots.verify_snapshot", unreadable)
