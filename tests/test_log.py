@@ -86,6 +86,17 @@ def test_format_event_omits_malformed_hash():
     assert "SECRET" not in rendered["detail"]
 
 
+def test_a_long_folder_keeps_its_own_name_and_says_it_was_cut():
+    """Round-3 audit: paths were cut at 80 characters with nothing to say so."""
+    short = "M:\\Series\\Show"
+    assert short in format_event({"kind": "topic_edit", "path": short})["detail"]
+    long = "M:\\" + "\\".join(["folder"] * 15) + "\\The Show S01"
+    detail = format_event({"kind": "topic_edit", "path": long})["detail"]
+    assert "…" in detail
+    assert detail.endswith("\\The Show S01")
+    assert len(detail) == 80
+
+
 def test_event_titles_resolve_from_topic_or_revision_without_rewriting_log():
     current_hash = "A" * 40
     old_hash = "B" * 40
