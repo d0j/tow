@@ -102,6 +102,13 @@ def problem(value: str, location: Location) -> str | None:
     return None
 
 
+def is_network_share(value: str | None) -> bool:
+    """A Windows network share (``\\\\server\\share\\…``, also written with ``/``): opening it signs
+    in to that server with this account's Windows credentials."""
+    raw = str(value or "").strip().strip('"')
+    return is_windows() and raw.replace("/", "\\").startswith("\\\\")
+
+
 def _of_another_system(raw: str) -> bool:
     """An absolute path written for another system: D:\\... or \\\\nas\\share on Linux and macOS (it
     would become a folder named "D:\\..." inside the install), /mnt/... on Windows (a folder on

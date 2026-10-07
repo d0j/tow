@@ -2050,6 +2050,7 @@
       "old_copies_stay": "; прежние копии остались в {path}",
       "folder_default": "папка {title}: по умолчанию — {path}{moved}",
       "folder_refused": "папка {title} не подходит: {reason}",
+      "share_local_only": "сетевую папку можно выбрать только на компьютере, где работает TOW: Windows входит на этот сервер под вашей учётной записью",
       "free": ", свободно {size}",
       "write_works": "{path}: запись работает{room}",
       "folder_set": "папка {title}: {path}{room}{moved}",

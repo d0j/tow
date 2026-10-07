@@ -2036,6 +2036,7 @@
       "old_copies_stay": "; earlier copies stay in {path}",
       "folder_default": "folder for {title}: default — {path}{moved}",
       "folder_refused": "the folder for {title} cannot be used: {reason}",
+      "share_local_only": "a network folder can be chosen only on the computer running TOW: Windows signs in to that server with your account",
       "free": ", {size} free",
       "write_works": "{path}: writing works{room}",
       "folder_set": "folder for {title}: {path}{room}{moved}",

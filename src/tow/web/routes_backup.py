@@ -160,8 +160,11 @@ def _restore_outcome(key: str, result: dict[str, Any]) -> tuple[str, str]:
 
 @router.post("/settings/backup/location")
 @services.locked_state_mutation
-def settings_backup_location(kind: str = Form(""), path: str = Form(""), action: str = Form("save")) -> Response:
-    from tow.locations import LOCATIONS, check_writable, free_bytes, problem, resolve
+def settings_backup_location(
+    request: Request, kind: str = Form(""), path: str = Form(""), action: str = Form("save")
+) -> Response:
+    from tow import access
+    from tow.locations import LOCATIONS, check_writable, free_bytes, is_network_share, problem, resolve
 
     location = LOCATIONS.get(kind)
     if location is None:
@@ -178,6 +181,10 @@ def settings_backup_location(kind: str = Form(""), path: str = Form(""), action:
     raw = path.strip().strip('"')
     if reason := problem(raw, location):
         return _backup_redirect("web.backup.folder_refused", "err", title=location.title, reason=reason)
+    if is_network_share(raw) and not access.is_local(request):
+        # Even the check signs in to that server with the owner's Windows account (NTLM), and
+        # night copies would go there: only the owner at this computer names a server.
+        return _backup_redirect("web.backup.share_local_only", "err")
     target = resolve(raw, location)
     if reason := check_writable(target):
         return _backup_redirect(f"{target}: {reason}", "err")

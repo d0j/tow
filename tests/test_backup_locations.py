@@ -328,3 +328,53 @@ def test_system_folders_are_named_the_way_this_system_has_them():
 
     expected = t("locations.other_system") if sys.platform == "win32" else t("locations.protected_system")
     assert problem("/etc/tow", NIGHT) == expected
+
+
+def test_a_network_share_is_named_only_on_this_computer(monkeypatch):
+    # From a network session even the check would make Windows sign in to that server (NTLM)
+    # with the owner's account, and night copies would go there.
+    from tow import locations, platform
+    from tow.auth import issue_session
+    from tow.platform.windows import WindowsBackend
+
+    share = r"\\files\share\tow"
+    touched: list[object] = []
+    monkeypatch.setattr(locations, "problem", lambda *_args: None)  # the share's syntax is fine everywhere
+    monkeypatch.setattr(locations, "check_writable", lambda path: touched.append(path))
+    monkeypatch.setattr(locations, "free_bytes", lambda _path: None)
+    monkeypatch.setenv("TOW_LAN_AUTH_TOKEN", "t" * 32)
+    cfg = load_config()
+    cfg["allow_lan"] = True
+    save_config(cfg)
+    lan = _client(client=("192.168.1.7", 50000), cookies={"tow_session": issue_session("t" * 32)})
+    with platform.use(WindowsBackend()):
+        for action in ("check", "save"):
+            for path in (share, share.replace("\\", "/")):
+                refused = lan.post(
+                    "/settings/backup/location",
+                    data={"kind": "night", "path": path, "action": action},
+                    follow_redirects=False,
+                )
+                assert _flash(refused) == t("web.backup.share_local_only", "ru")
+        assert touched == []
+        assert "backup_dir" not in load_config()
+
+        saved = _client().post(
+            "/settings/backup/location", data={"kind": "night", "path": share, "action": "save"}, follow_redirects=False
+        )
+    assert _flash(saved).startswith("папка ночных копий: ")
+    assert load_config()["backup_dir"] == share
+    assert len(touched) == 1
+
+
+def test_only_a_windows_share_counts_as_one():
+    from tow import platform
+    from tow.locations import is_network_share
+    from tow.platform.posix import PosixBackend
+    from tow.platform.windows import WindowsBackend
+
+    with platform.use(WindowsBackend()):
+        assert all(map(is_network_share, [r"\\nas\share", "//nas/share", '"\\\\nas\\x"']))
+        assert not any(map(is_network_share, [r"D:\backup", "backup/night", ""]))
+    with platform.use(PosixBackend("linux")):
+        assert not is_network_share("//srv/backup")

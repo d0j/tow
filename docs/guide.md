@@ -200,7 +200,8 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
   dated copy and cannot be undone; it removes only that copy, not current settings, torrents or history.
 - Before any restore TOW checks the copy and saves the current state; network access settings stay as they are.
   Restoring a night copy keeps the event log (History) as it is: what happened after the copy stays listed.
-- Folders: Settings → Backups → Backup folders. Another drive or a network share (`\\server\share`) is fine.
+- Folders: Settings → Backups → Backup folders. Another drive or a network share (`\\server\share`) is fine; a
+  network share is chosen on the computer running TOW, not from another device.
 
 **Keep a copy of `keys/master.key` away from the computer.** TOW creates it on the first start (`tow keys ensure`
 does it on its own) and says once to back it up. Without it, saved passwords and tokens cannot be read and copies
