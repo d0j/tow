@@ -90,7 +90,7 @@ def test_the_help_and_sites_pages_render_their_markup_in_either_language():
     english = TestClient(app, headers={"Accept-Language": "en"})
     russian = TestClient(app, headers={"Accept-Language": "ru"})
     assert "<li><b>Home</b> — the topics TOW watches" in english.get("/settings/help").text
-    assert "<li><b>Дом</b> — раздачи, за которыми следит TOW" in russian.get("/settings/help").text
+    assert "<li><b>Главная</b> — раздачи, за которыми следит TOW" in russian.get("/settings/help").text
     sites = english.get("/sites").text
     assert "Replace the number with <code>(\\d+)</code>" in sites
     assert "<code>/forum/dl.php?t={id}</code> or <code>/download.php?id={id}</code>" in sites

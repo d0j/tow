@@ -138,7 +138,7 @@ def test_pages_ok():
         "← настройки",
     ):
         assert essential in text, essential
-    assert re.search(r"каждые <b>\d+ (ч|мин)</b>", text)  # the real interval, not a hard-coded one
+    assert re.search(r"раз в <b>\d+ (ч|мин)</b>", text)  # the real interval, not a hard-coded one
     assert "хранится 5 файлов по 5,0 МБ" in text  # the real log limits
     # plain words for the owner; commands and internals live in the README
     for jargon in ("regex", "hash", "media bytes", "Fernet", "TOW_MASTER_KEY", "морде", "plaintext", "tow secrets"):
@@ -200,7 +200,7 @@ def test_post_forms_use_fetch_transport_for_origin_compatibility():
     assert 'b.textContent = t("js.browser_auth.starting")' in app_js
     texts = re.search(r'<script type="application/json" id="tow-i18n">(.*?)</script>', home, re.DOTALL)
     assert texts
-    assert json.loads(texts.group(1))["js.browser_auth.starting"] == "Запускается…"  # app.js texts come from the page
+    assert json.loads(texts.group(1))["js.browser_auth.starting"] == "Запуск…"  # app.js texts come from the page
     assert "response.url" in app_js
 
 
@@ -307,7 +307,7 @@ def test_settings_service_routes_require_adapter_success(monkeypatch):
     restart = settings_service_restart()
 
     assert autostart.status_code == 303
-    assert "автозагрузка включена" in shown(autostart.headers["location"])
+    assert "автозапуск включён" in shown(autostart.headers["location"])
     assert restart.status_code == 303
     assert "restart-test" in restart.headers["location"]
 
@@ -323,7 +323,7 @@ def test_settings_autostart_requires_semantic_readback(monkeypatch):
     response = settings_service_autostart("1", "0")
 
     assert response.status_code == 303
-    assert "не подтверждена" in shown(response.headers["location"])
+    assert "не подтверждён" in shown(response.headers["location"])
     assert events == ["settings_service_autostart_fail"]
 
 
@@ -695,7 +695,7 @@ def test_add_edit_undo_delete(monkeypatch):
     assert r"M:\anime" in home
     assert f"/topics/{tid}/edit" in home
     assert f"/topics/{tid}/delete" in home
-    assert 'data-confirm="Убрать раздачу из TOW? Раздача в торрент-клиенте и история останутся."' in home
+    assert 'data-confirm="Убрать раздачу из TOW? Торрент в торрент-клиенте и история останутся."' in home
     assert "onsubmit=" not in home
     assert "edit-actions" in home
     assert "Сохранить" in home
@@ -749,7 +749,7 @@ def test_add_and_edit_round_trip_selection_and_once_mode(monkeypatch):
     html = client.get("/").text
     assert 'name="selection_mode"' in html
     assert 'name="tracking_mode"' in html
-    assert "нулевое или неоднозначное совпадение" in html.lower()
+    assert "совпадение неоднозначно, ничего не запускается" in html.lower()
 
     topic["hash"] = "A" * 40
     topic["once_done"] = True
@@ -1027,9 +1027,9 @@ def test_nnmclub_auth_failure_opens_home_credential_prompt(monkeypatch):
     assert f'action="/topics/{topic_id}/tracker-browser-auth"' in home.text
     assert 'name="password"' not in home.text
     dialog = home.text.split('<dialog class="credential-prompt"', 1)[1].split("</dialog>", 1)[0]
-    assert "Требуется авторизация" in dialog
+    assert "Нужен вход на сайт" in dialog
     assert 'data-native-post="1"' not in dialog
-    assert "Авторизоваться" in dialog
+    assert "Войти" in dialog
     assert "NNMClub" not in dialog
     assert "Сериал В" in dialog
     assert "Turnstile" not in dialog
@@ -1042,7 +1042,7 @@ def test_browser_auth_get_redirects_to_home_prompt():
     assert response.status_code == 303
     location = shown(response.headers["location"])
     assert "credential_topic=nnm-browser-get" in location
-    assert "требуется авторизация" in location
+    assert "нужен вход на сайт" in location
 
 
 def test_nnmclub_browser_auth_start_returns_operation_and_does_not_accept_password(monkeypatch):
@@ -1237,7 +1237,7 @@ def test_tracker_login_for_browser_auth_tracker_never_saves_form_password(monkey
     )
 
     assert response.status_code == 303
-    assert "для этого сайта требуется вход" in shown(response.headers["location"])
+    assert "для этого сайта нужен вход через браузер" in shown(response.headers["location"])
     assert saved == []
 
 
@@ -1288,7 +1288,7 @@ def test_tracker_login_saves_encrypted_site_credentials_and_retries_topic(monkey
     assert response.status_code == 303
     location = shown(response.headers["location"])
     assert "credential_topic=" not in location
-    assert "вход в nnmclub прошёл" in location
+    assert "вход на nnmclub выполнен" in location
     assert "nnm-pass" not in location
     assert saved[-1]["trackers"]["nnmclub"] == {"username": "nnm-user", "password": "nnm-pass"}
     assert seen == {
@@ -1632,7 +1632,7 @@ def test_header_dots_follow_health():
     assert 'title="qBit"' not in t or "hdr-svc" in t
     assert "hdr-sites" in t
     assert "hdr-svc" in t
-    assert 'title="qBittorrent: Связи нет"' in t
+    assert 'title="qBittorrent: Нет связи"' in t
     # No messenger connected: the header says so (it used to call it "бот молчит").
     assert 'class="trk trk-ico mut" href="/settings?open=bots" title="уведомления: не подключены"' in t
     assert 'title="Kinozal"' in t
@@ -2167,8 +2167,8 @@ def test_pause_and_resume_say_which_and_missing_topics_are_named():
     missing = shown(client.post("/topics/nope/pause", follow_redirects=False).headers["location"])
     deleted_missing = shown(client.post("/topics/nope/delete", follow_redirects=False).headers["location"])
 
-    assert "наблюдение на паузе" in paused
-    assert "наблюдение возобновлено" in resumed
+    assert "раздача на паузе" in paused
+    assert "раздача снята с паузы" in resumed
     assert "раздача не найдена" in missing
     assert "раздача не найдена; ничего не удалено" in deleted_missing
     assert load_state()["topics"][0]["paused"] is False
@@ -2520,7 +2520,7 @@ def test_owner_can_stop_the_previous_revision_and_add_the_new_one(monkeypatch):
         lambda **kw: checks.append(kw["ids"]) or {"qbit": "ok", "results": [{"id": "t1", "ok": True, "added": True}]},
     )
     page = TestClient(app).get("/").text + TestClient(app).get("/topics/t1/edit-panel").text  # M2
-    assert "Остановить прежнюю и добавить" in page
+    assert "Остановить прежний и добавить" in page
 
     response = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
         "/topics/t1/replace-revision", follow_redirects=False
@@ -2550,7 +2550,7 @@ def test_a_revision_tow_did_not_add_is_never_stopped(monkeypatch):
 def test_no_stop_button_without_an_overlap_error():
     _topic_state(hash="OLD", last_error="nnmclub: all hosts failed")
 
-    assert "Остановить прежнюю и добавить" not in TestClient(app).get("/").text
+    assert "Остановить прежний и добавить" not in TestClient(app).get("/").text
     location = (
         TestClient(app, headers={"Origin": "http://127.0.0.1"})
         .post("/topics/t1/replace-revision", follow_redirects=False)

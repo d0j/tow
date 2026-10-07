@@ -850,7 +850,7 @@ def test_doctor_text_is_words_and_counts_a_missing_client(monkeypatch):
     report.update(qbit_host_set=True, qbit=None)
     doctor._summarize(report)
     assert report["ok"] is True
-    assert "торрент-клиент отвечает: не спрашивали" in doctor.doctor_text(report)
+    assert "торрент-клиент отвечает: не запрашивалось" in doctor.doctor_text(report)
 
 
 def test_doctor_json_and_notify(monkeypatch, capsys):

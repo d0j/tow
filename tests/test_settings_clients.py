@@ -208,7 +208,7 @@ def test_deluge_card_has_no_login_field(legacy_qbit):
     card = card[: card.index("</article>")]
     assert 'name="username"' not in card
     assert "Пароль Deluge Web" in card
-    assert "TOW сам включит в Deluge стандартный модуль Label" in card
+    assert "TOW сам включает в Deluge стандартный модуль Label" in card
 
 
 @pytest.mark.parametrize(

@@ -80,7 +80,7 @@ def test_a_manual_check_does_not_wait_for_a_running_check():
             follow_redirects=False,
         )
         assert held.is_set()
-        assert "наблюдение TOW сохранено; сейчас идёт другая проверка" in shown(added.headers["location"])
+        assert "раздача сохранена; сейчас идёт другая проверка" in shown(added.headers["location"])
         assert len(load_state()["topics"]) == 2  # the new watch is saved all the same
     finally:
         release.set()

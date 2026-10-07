@@ -972,7 +972,7 @@ def test_every_logged_event_kind_has_a_label():
 def test_history_shows_labels_not_identifiers():
     from tow.log import format_event, kind_label
 
-    assert kind_label("backup_created", "en") == "night copy made"
+    assert kind_label("backup_created", "en") == "nightly backup made"
     assert kind_label("some_future_kind", "en") == "some future kind"  # an older/newer log: words
     row = format_event({"kind": "check", "ok": 3, "n": 4, "apply": False, "ts": "2026-10-01T18:50:00+03:00"})
     assert row["label"] == i18n.translate("log.kind.check").capitalize()

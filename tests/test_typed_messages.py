@@ -19,7 +19,7 @@ from tow.web import app
 
 ORIGIN = {"Origin": "http://127.0.0.1"}
 NO_LINK_RU = "rutor: на странице нет ссылки на торрент-файл — нужен вход на сайт"
-NO_LINK_EN = "rutor: the page has no torrent link — log in to the site"
+NO_LINK_EN = "rutor: the page has no torrent link — sign in to the site"
 
 
 def _browser(lang: str) -> TestClient:
@@ -140,11 +140,11 @@ def test_a_notification_speaks_the_owners_language():
 def test_progress_labels_are_rendered_for_the_reader():
     from tow.web.views import _event_display
 
-    event = {"kind": "client_restored", "label": "Раздача снова в клиенте", "label_code": "progress.back_in_client"}
+    event = {"kind": "client_restored", "label": "Торрент снова в клиенте", "label_code": "progress.back_in_client"}
     i18n.use("en")
     assert _event_display(event) == "Back in the client"
     i18n.use("ru")
-    assert _event_display(event) == "Раздача снова в клиенте"
+    assert _event_display(event) == "Торрент снова в клиенте"
     assert _event_display({"kind": "new_file", "label": "Show.S01E01.mkv"}) == "Show.S01E01.mkv"
 
 

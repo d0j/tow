@@ -53,7 +53,7 @@ def test_a_dead_service_is_told_once_and_never_started_here(clock):
 
     assert report["service_ok"] is False
     assert "started" not in report
-    assert sent == ["TOW недоступен: процесс не запущен (закрыт или упал)"]
+    assert sent == ["TOW недоступен: процесс не запущен (закрыт или аварийно завершился)"]
 
 
 def test_outage_is_reported_once_and_its_end_too(clock):
@@ -61,7 +61,7 @@ def test_outage_is_reported_once_and_its_end_too(clock):
     _, second = _run(clock, up=False)
     _, third = _run(clock, up=True)
 
-    assert first == ["TOW недоступен: процесс не запущен (закрыт или упал)"]
+    assert first == ["TOW недоступен: процесс не запущен (закрыт или аварийно завершился)"]
     assert second == []
     assert third == ["TOW снова работает (не работал 1 мин)"]
 
@@ -302,7 +302,9 @@ def test_a_crash_is_reported_with_its_last_error(clock):
 
     _, sent = _run(clock, up=False, probes=probes)
 
-    assert sent == ["TOW недоступен: процесс упал, последняя ошибка: OSError: [Errno 28] No space left on device"]
+    assert sent == [
+        "TOW недоступен: процесс аварийно завершился, последняя ошибка: OSError: [Errno 28] No space left on device"
+    ]
 
 
 def test_late_checks_say_since_when_and_the_last_error(clock):
@@ -373,7 +375,7 @@ def test_outage_after_windows_update_restart():
         }
     ]
     text = _cause(Machine(boot_ts=T0 + HOUR + 120, asleep_sec=0, logon_ts=T0 + HOUR + 150), events=events)
-    assert text.startswith("Windows Update перезагрузил компьютер в ")
+    assert text.startswith("Центр обновления Windows перезагрузил компьютер в ")
     assert "; снова включён в " in text
     assert "вход в Windows" not in text  # logged on right away
 
@@ -397,8 +399,8 @@ def test_outage_after_a_restart_from_the_start_menu_and_a_late_logon():
 def test_outage_after_a_power_loss():
     events = [{"id": 41, "ts": T0 + 2 * HOUR, "process": "", "reason": "", "action": ""}]
     text = _cause(Machine(boot_ts=T0 + 2 * HOUR, asleep_sec=0), events=events)
-    assert text.startswith("компьютер выключился аварийно около ")
-    assert "(пропало питание, завис или сбой Windows)" in text
+    assert text.startswith("компьютер аварийно выключился около ")
+    assert "(пропало питание, компьютер завис или произошёл сбой Windows)" in text
 
 
 def test_outage_while_asleep_logged_off_or_unexplained():
@@ -439,7 +441,7 @@ def test_shutdown_events_are_parsed_from_the_event_log_xml():
     events = parse_events(raw)
     assert [e["id"] for e in events] == [41, 1074]  # oldest first
     assert events[1]["action"] == "restart"
-    assert describe_shutdown(events).startswith("Windows Update перезагрузил компьютер в ")
+    assert describe_shutdown(events).startswith("Центр обновления Windows перезагрузил компьютер в ")
     assert parse_events("not xml <") == []
     assert describe_shutdown([]) == ""
 
@@ -489,7 +491,7 @@ def test_update_restarts_are_mentioned_before_the_last_manual_one():
     }
     text = describe_shutdown([update, manual])
     assert text.startswith(
-        "Windows Update устанавливал обновления и перезагружал компьютер; затем компьютер перезагрузили"
+        "Центр обновления Windows установил обновления и перезагрузил компьютер; затем компьютер перезагрузили"
     )
 
 

@@ -406,7 +406,7 @@ def test_queue_is_bounded(http):
     assert load_state()["notify_dropped"]["discord"] == 5
     assert next(card for card in notifiers.cards(DISCORD, load_state()) if card["kind"] == "discord")["dropped"] == 5
     save_secrets(DISCORD)
-    assert "Очередь переполнилась: 5 старых сообщений удалено" in _client().get("/settings").text
+    assert "Очередь переполнилась; удалено старых сообщений: 5" in _client().get("/settings").text
 
 
 def test_one_broken_channel_does_not_stop_the_others(http, monkeypatch):
@@ -448,7 +448,7 @@ def test_disabled_channel_is_skipped(http):
 def test_validation_explains_mistakes():
     values, errors = notifiers.validate("discord", {"webhook_url": "https://example.com/hook"}, None)
     assert errors == [
-        "URL вебхука: адрес должен начинаться с https://discord.com/api/webhooks/ — скопируйте его кнопкой в Discord"
+        "Адрес вебхука: адрес должен начинаться с https://discord.com/api/webhooks/ — скопируйте его кнопкой в Discord"
     ]
     _, errors = notifiers.validate("whatsapp", {"phone": "", "apikey": ""}, None)
     assert errors == ["Ваш номер WhatsApp: заполните поле", "apikey от CallMeBot: заполните поле"]
@@ -538,7 +538,7 @@ def test_save_check_and_remove_from_the_page(http):
 
     bad = c.post("/settings/notifier/discord", data={"webhook_url": "https://example.com/x"}, follow_redirects=False)
     assert bad.status_code == 303
-    assert _flash(bad).startswith("Discord: не сохранено — URL вебхука: адрес должен")
+    assert _flash(bad).startswith("Discord: не сохранено — Адрес вебхука: адрес должен")
     assert "notifiers" not in load_secrets()
 
     saved = c.post("/settings/notifier/discord", data={"webhook_url": DISCORD_URL}, follow_redirects=False)
@@ -625,7 +625,7 @@ def test_settings_show_the_watchdogs_last_message():
 
     page = _client().get("/settings").text
     assert "Сторож следит за расписанием" in page
-    assert "сам сторож не перезапускает TOW" in page
+    assert "сам сторож TOW не перезапускает" in page
     assert "Последнее сообщение сторожа" not in page
     (data_dir() / "watchdog.json").write_text(
         json.dumps(

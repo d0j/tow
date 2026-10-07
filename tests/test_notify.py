@@ -67,7 +67,7 @@ def test_event_text():
     assert event_text(title="A", kind="error", error="лимит скачиваний на сегодня") == (
         "Сбой — A: лимит скачиваний на сегодня"
     )
-    assert event_text(title="Show", kind="restored") == "Show — раздача снова в торрент-клиенте"
+    assert event_text(title="Show", kind="restored") == "Show — торрент снова в торрент-клиенте"
 
 
 def test_completed_event_has_exact_status_and_range_total():

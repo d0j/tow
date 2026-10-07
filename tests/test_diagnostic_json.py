@@ -247,7 +247,9 @@ def test_unreadable_watchdog_reports_monitoring_not_fake_outage_then_recovers():
     assert first["monitoring_ok"] is False
     assert first["service_ok"] is True
     assert "outage" not in first
-    assert first["alerts"] == ["TOW: предыдущая запись сторожа не читается; непрерывность наблюдения неизвестна"]
+    assert first["alerts"] == [
+        "TOW: предыдущая запись сторожа не читается; неизвестно, работал ли сторож без перерывов"
+    ]
     assert _watchdog()["alerts"] == ["TOW: записи сторожа снова читаются"]
     assert _watchdog()["alerts"] == []
 
@@ -258,7 +260,7 @@ def test_settings_displays_unreadable_watchdog_without_fabricated_date():
     _write("watchdog", b'{"last_problem":{"at":1e999}}')
     response = TestClient(app, raise_server_exceptions=False).get("/settings")
     assert response.status_code == 200
-    assert "непрерывность наблюдения неизвестна" in response.text
+    assert "неизвестно, работал ли сторож без перерывов" in response.text
     assert "1970" not in response.text
 
 

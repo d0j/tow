@@ -1450,7 +1450,7 @@ def test_revision_overlap_guard_compares_readable_non_ascii_names_exactly(monkey
     )
     assert client.add_calls == (0 if blocked else 1)
     if blocked:
-        assert "остановите прежнюю раздачу" in error
+        assert "остановите прежний торрент" in error
 
 
 def test_committed_transaction_with_failed_cleanup_does_not_block_later_checks():
@@ -1718,7 +1718,7 @@ def test_torrent_removed_from_client_makes_the_topic_red(monkeypatch):
 
     topic = load_state()["topics"][0]
     assert topic["last_ok"] is False
-    assert topic["last_error"] == "раздача удалена из клиента"
+    assert topic["last_error"] == "торрент удалён из клиента"
     assert topic["last_error_class"] == "qbit"
 
 
@@ -1888,7 +1888,7 @@ def test_a_daily_limit_is_kept_until_the_next_local_day(monkeypatch):
 
     out = check.run_check(apply=True, notify=False, how="auto")  # the next scheduled run, same day
     assert len(fetches) == 1  # the site is not asked again
-    assert out["results"][0]["error"] == "лимит скачиваний на сегодня"
+    assert out["results"][0]["error"] == "дневной лимит скачиваний исчерпан"
 
     day["today"] = "2026-10-02"  # after local midnight
     tracker.fetch_torrent = lambda *_a, **_k: b"torrent"

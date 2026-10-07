@@ -288,8 +288,8 @@ def test_add_of_already_watched_url_is_refused(no_check, client):
 @pytest.mark.parametrize(
     ("added", "flash"),
     [
-        (True, "наблюдение TOW добавлено; раздача подтверждена клиентом"),
-        (False, "наблюдение TOW добавлено; новой раздачи нет"),
+        (True, "раздача добавлена; торрент подтверждён клиентом"),
+        (False, "раздача добавлена; новой версии нет"),
     ],
 )
 def test_add_reports_whether_the_client_confirmed_a_torrent(monkeypatch, client, added, flash):
@@ -322,7 +322,7 @@ def test_add_keeps_observation_when_check_crashes_and_telegram_fails(monkeypatch
         "/topics/add", data={"url": RUTOR_URL, "title": "Show", "save_path": r"M:\anime"}, follow_redirects=False
     )
 
-    assert _flash(response) == "наблюдение TOW сохранено; проверка не выполнена — подробности в журнале"
+    assert _flash(response) == "раздача сохранена; проверка не выполнена — подробности в журнале"
     topics = load_state()["topics"]
     assert [t["url"] for t in topics] == [RUTOR_URL]
     assert _events("add_check_fail")[-1]["topic"] == topics[0]["id"]
@@ -338,7 +338,7 @@ def test_undo_of_add_removes_only_the_observation(monkeypatch, client):
 
     response = client.post("/undo", follow_redirects=False)
 
-    assert _flash(response) == "добавление отменено: наблюдение убрано; раздача в торрент-клиенте не тронута"
+    assert _flash(response) == "добавление отменено: раздача убрана из TOW; торрент в торрент-клиенте не тронут"
     state = load_state()
     assert [t["id"] for t in state["topics"]] == ["keep"]
     assert "undo" not in state
@@ -352,7 +352,7 @@ def test_browser_auth_start_for_unknown_topic(client):
 
     response = client.post("/topics/nope/tracker-browser-auth", follow_redirects=False)
 
-    assert _flash(response) == "наблюдение не найдено"
+    assert _flash(response) == "раздача не найдена"
     assert "credential_topic" not in _query(response)
 
 
@@ -375,7 +375,7 @@ def test_browser_auth_start_failure_is_reported(monkeypatch, client):
 
     response = client.post("/topics/t1/tracker-browser-auth", follow_redirects=False)
 
-    assert _flash(response) == "не удалось запустить авторизацию"
+    assert _flash(response) == "не удалось начать вход"
     assert _query(response)["credential_topic"] == "t1"
 
 
@@ -392,7 +392,7 @@ def test_browser_auth_status_of_unknown_operation_is_idle(client):
 @pytest.mark.parametrize(
     ("tid", "form", "flash", "prompt"),
     [
-        ("missing", {"username": "u", "password": "p"}, "наблюдение не найдено", False),
+        ("missing", {"username": "u", "password": "p"}, "раздача не найдена", False),
         ("rutor", {"username": "u", "password": "p"}, "для этого сайта вход не нужен", False),
         ("kinozal", {"username": "u", "password": " "}, "введите логин и пароль", True),
     ],
@@ -445,7 +445,7 @@ def test_tracker_login_auth_failure_drops_unverified_new_login(monkeypatch, clie
 
     response = client.post("/topics/t1/tracker-login", data={"username": "u", "password": "p"}, follow_redirects=False)
 
-    assert _flash(response) == "вход в kinozal не прошёл: tracker auth failed"
+    assert _flash(response) == "вход на kinozal не удался: tracker auth failed"
     assert _query(response)["credential_topic"] == "t1"
     assert "kinozal" not in (load_secrets().get("trackers") or {})
 
@@ -460,7 +460,7 @@ def test_tracker_login_transport_failure_keeps_the_new_login(monkeypatch, client
 
     response = client.post("/topics/t1/tracker-login", data={"username": "u", "password": "p"}, follow_redirects=False)
 
-    assert _flash(response) == "вход в kinozal не прошёл: all hosts failed"
+    assert _flash(response) == "вход на kinozal не удался: all hosts failed"
     assert load_secrets()["trackers"]["kinozal"] == {"username": "u", "password": "p"}
 
 
@@ -476,7 +476,7 @@ def test_tracker_login_rejected_row_restores_previous_partial_entry(monkeypatch,
         "/topics/t1/tracker-login", data={"username": "new-user", "password": "new-pw"}, follow_redirects=False
     )
 
-    assert _flash(response) == "вход в kinozal не прошёл: tracker auth required"
+    assert _flash(response) == "вход на kinozal не удался: tracker auth required"
     assert _query(response)["credential_topic"] == "t1"
     assert load_secrets()["trackers"]["kinozal"] == {"username": "old-user"}
 
@@ -501,7 +501,7 @@ def test_tracker_login_never_overwrites_a_concurrent_secret_change(monkeypatch, 
     response = client.post("/topics/t1/tracker-login", data={"username": "u", "password": "p"}, follow_redirects=False)
 
     assert _flash(response) == (
-        "вход в kinozal не прошёл: tracker auth required; прежний пароль не восстановлен: данные уже изменились"
+        "вход на kinozal не удался: tracker auth required; прежний пароль не восстановлен: данные уже изменились"
     )
     assert load_secrets() == concurrent
 
@@ -520,7 +520,7 @@ def test_tracker_login_reports_when_restore_itself_fails(monkeypatch, client):
 
     response = client.post("/topics/t1/tracker-login", data={"username": "u", "password": "p"}, follow_redirects=False)
 
-    assert _flash(response) == "вход в kinozal не подтверждён; не удалось восстановить прежний пароль"
+    assert _flash(response) == "вход на kinozal не подтверждён; не удалось восстановить прежний пароль"
     assert _query(response)["credential_topic"] == "t1"
     assert _events("site_login_restore_failed")
 
@@ -689,7 +689,7 @@ def test_undo_of_path_edit_keeps_topic_when_client_does_not_confirm(monkeypatch,
 
     response = client.post("/undo", follow_redirects=False)
 
-    assert _flash(response) == "не удалось вернуть расположение"
+    assert _flash(response) == "не удалось вернуть файлы на прежнее место"
     assert bool(fake.moves) is moved
     topic = load_state()["topics"][0]
     assert topic["title"] == "Edited"
@@ -841,7 +841,7 @@ def test_settings_access_undo_restores_bind(client):
 
     response = client.post("/undo", follow_redirects=False)
 
-    assert _flash(response) == "доступ вернул"
+    assert _flash(response) == "доступ восстановлен"
     cfg = load_config()
     assert (cfg["bind"], cfg["allow_lan"]) == ("127.0.0.1", False)
     assert "lan_auth" in load_secrets()  # the password was set by an earlier, separate change
@@ -908,7 +908,7 @@ def test_settings_access_undo_refusals_leave_config_alone(client, undo, flash):
     [
         ({"selection_mode": "bogus"}, "неизвестный способ выбора файлов"),
         ({"client_id": "nope"}, "выберите клиент"),
-        ({"client_id": "spare"}, "клиент активной раздачи менять нельзя; создайте новое наблюдение"),
+        ({"client_id": "spare"}, "клиент активной раздачи менять нельзя; добавьте новую раздачу"),
         ({"save_path": ""}, "укажите папку"),
         ({"save_path": r"relative\dir"}, "нужен полный путь, например D:\\Media"),
     ],
@@ -978,7 +978,7 @@ def test_topic_check_blocked_by_secret_store(monkeypatch, client):
     ("row", "flash"),
     [
         ({"ok": True, "selection_updated": True}, "выбор файлов обновлён"),
-        ({"ok": True, "changed": True}, "новая раздача"),
+        ({"ok": True, "changed": True}, "новая версия"),
         ({"ok": True, "skipped": "уже в клиенте"}, "без изменений: уже в клиенте"),
         ({"ok": True}, "без изменений"),
     ],
@@ -1080,7 +1080,7 @@ def test_site_guess_never_exposes_internal_parser_errors(client, monkeypatch):
     monkeypatch.setattr("tow.guess.presets.guess", broken)
     response = client.post("/sites/guess", data={"url": "https://fresh.example/viewtopic.php?t=5"})
     assert response.status_code == 200
-    assert response.json() == {"ok": False, "error": "не удалось прочитать ссылку на раздачу"}
+    assert response.json() == {"ok": False, "error": "не удалось разобрать ссылку на раздачу"}
     assert "must-not-be-displayed" not in response.text
 
 
@@ -1097,7 +1097,10 @@ def no_probe(monkeypatch):
 @pytest.mark.parametrize(
     ("form", "flash"),
     [
-        ({"from_url": "magnet:?xt=urn:btih:x"}, "это magnet — нужна ссылка на страницу или файл с сайта"),
+        (
+            {"from_url": "magnet:?xt=urn:btih:x"},
+            "это magnet-ссылка — нужна ссылка на страницу раздачи или на файл на сайте",
+        ),
         ({"name": "new", "url_regex": "x", "fetch_hosts": "https://a.example"}, "Имя: только латинские буквы"),
         ({"name": "fresh", "url_regex": "x", "fetch_hosts": "ftp://a.example"}, "Зеркала: каждая строка — адрес сайта"),
         ({"name": "fresh", "fetch_hosts": "https://a.example"}, "Шаблон ссылки на раздачу: заполните его"),
@@ -1184,18 +1187,18 @@ def test_actions_on_unknown_site_are_refused(monkeypatch, client, path, data):
 
     response = client.post(path, data=data, follow_redirects=False)
 
-    assert _flash(response) == "нет сайта"
+    assert _flash(response) == "нет такого сайта"
     assert load_config() == config_before
     assert not encrypted_secrets_path().exists()
 
 
 def test_freeze_toggles_site_pause(client):
     first = client.post("/sites/rutor/freeze", follow_redirects=False)
-    assert _flash(first) == "пауза"
+    assert _flash(first) == "сайт на паузе"
     assert load_state()["mirrors"]["rutor"]["frozen"] is True
 
     second = client.post("/sites/rutor/freeze", follow_redirects=False)
-    assert _flash(second) == "возобновлено"
+    assert _flash(second) == "сайт снят с паузы"
     assert load_state()["mirrors"]["rutor"]["frozen"] is False
     assert [e["status"] for e in _events("site_pause")] == ["paused", "resumed"]
 
@@ -1295,7 +1298,7 @@ def test_prefer_unknown_mirror_changes_nothing(client):
             {"ok": True, "degraded": ["a", "b"]},
             "http://127.0.0.1/sites",
             "/sites",
-            "проверка состояния: всё в порядке; не отвечают зеркал: 2",
+            "проверка состояния: всё в порядке; зеркала не отвечают: 2",
         ),
         ({"ok": True}, "http://127.0.0.1/settings?open=x", "/settings", "проверка состояния: всё в порядке"),
         (

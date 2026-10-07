@@ -22,12 +22,12 @@ def _post(path: str, data: dict) -> str:
 def test_the_service_card_shows_one_service_and_its_autostart():
     page = _page()
     assert "TOW работает как единый сервис" in page
-    assert "Запускать TOW при входе в этот компьютер" in page
+    assert "Запускать TOW при входе в систему на этом компьютере" in page
     # 1.21: the five Windows tasks and the switch from them are gone.
     assert 'action="/settings/service/migrate"' not in page
     assert "пятью задачами" not in page
     assert "задачами Windows" not in page
-    assert "сам сторож не перезапускает TOW" in page
+    assert "сам сторож TOW не перезапускает" in page
 
 
 @pytest.mark.parametrize(
@@ -81,22 +81,20 @@ def test_without_signing_in_counts_only_when_read_back(monkeypatch):
         "tow.web.services.service_status",
         lambda: {"autostart": True, "without_login": False, "supports_without_login": True},
     )
-    assert "автозагрузка не подтверждена" in _post(
-        "/settings/service/autostart", {"enabled": "1", "without_login": "1"}
-    )
+    assert "автозапуск не подтверждён" in _post("/settings/service/autostart", {"enabled": "1", "without_login": "1"})
     assert calls == [(True, {"without_login": True})]
 
     hint = "loginctl enable-linger owner"
     monkeypatch.setattr("tow.web.services.set_autostart", lambda enabled, **kw: {"ok": True, "hint": hint})
     location = _post("/settings/service/autostart", {"enabled": "1", "without_login": "1"})
-    assert "автозагрузка включена" in location
+    assert "автозапуск включён" in location
     assert hint in location
 
 
 def test_a_refused_autostart_says_why(monkeypatch):
     monkeypatch.setattr("tow.web.services.set_autostart", lambda enabled, **kw: {"ok": False, "error": "чужая папка"})
     monkeypatch.setattr("tow.web.services.service_status", lambda: {"autostart": False})
-    assert "автозагрузка не подтверждена: чужая папка" in _post("/settings/service/autostart", {"enabled": "1"})
+    assert "автозапуск не подтверждён: чужая папка" in _post("/settings/service/autostart", {"enabled": "1"})
 
 
 def test_restart_without_tow_run_says_it_did_not_start():

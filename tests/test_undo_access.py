@@ -115,7 +115,7 @@ def test_the_network_cannot_undo_switching_network_access_on():
 
     location = response.headers["location"]
     assert flash_of(location) == (
-        "доступ из сети включается и выключается только на компьютере с TOW: отмените это изменение там"
+        "доступ по сети включается и выключается только на компьютере с TOW: отмените это изменение там"
     )
     assert flash_kind(location) == "err"
     assert load_config()["allow_lan"] is True  # nothing changed...
@@ -180,7 +180,7 @@ def test_an_access_undo_written_before_1_19_still_works_and_its_lan_auth_flag_is
 
     response = _local().post("/undo", follow_redirects=False)
 
-    assert flash_of(response.headers["location"]) == "доступ вернул"
+    assert flash_of(response.headers["location"]) == "доступ восстановлен"
     cfg = load_config()
     assert (cfg["bind"], cfg["allow_lan"]) == ("127.0.0.1", False)
     assert "lan_auth" not in config_path().read_text(encoding="utf-8")
