@@ -269,7 +269,8 @@ registration is taken over (or turned off).
   for it, and network shares are not reachable that way. Read back from `schtasks /Query /XML`.
 - **Linux:** systemd user unit `~/.config/systemd/user/tow.service` (`$XDG_CONFIG_HOME` honoured):
   `ExecStart="<app>/.venv/bin/tow" run`, `WorkingDirectory=<TOW>`, `Environment="TOW_ROOT=<TOW>"`,
-  `Restart=on-failure`, `RestartPreventExitStatus=3`, `KillMode=mixed` (SIGTERM to `tow run` alone;
+  `Environment=TOW_AUTOSTART=systemd` (a unit without it, written by 1.24.1 or older, still counts
+  as on), `Restart=on-failure`, `RestartPreventExitStatus=3`, `KillMode=mixed` (SIGTERM to `tow run` alone;
   it stops its job and server itself), `TimeoutStopSec=90`; no `After=network-online.target` (a
   system target the user manager does not have). `%`, `$`, quotes and backslashes in the path are
   escaped, so a folder named `50%` or `$HOME` names itself. Then `systemctl --user daemon-reload`
@@ -358,9 +359,13 @@ the local WMI service and permission to create a process as the current user. Ol
 refuse this context; bootstrap the fixed release through the terminal. Both relay and worker use isolated
 base Python outside the replaceable app; a queued worker arriving after its reservation expires refuses.
 Linux/macOS installs started normally can detach into their own session. Web updates of
-systemd/launchd-managed installations are currently refused with terminal instructions: a new session alone
-does not guarantee survival when the service manager stops the process group or cgroup. No autostart or network
-access settings are changed by enabling these controls.
+systemd/launchd-managed installations are refused with terminal instructions: a new session alone
+does not survive when the service manager stops the process group or cgroup (systemd ends everything left in
+`tow.service`'s cgroup once `tow run` exits). TOW knows it runs there from `TOW_AUTOSTART` (the unit and the
+agent set it) or, for a unit an older TOW wrote, from systemd's `INVOCATION_ID` with the process in the
+`tow.service` cgroup (launchd: `XPC_SERVICE_NAME=io.tow`) — `tow.autostart.service_manager`. Detaching
+through `systemd-run --user --scope` is not attempted: the terminal update is the one supported path there.
+No autostart or network access settings are changed by enabling these controls.
 
 Release discovery uses fixed HTTPS endpoints of `d0j/tow` with public-IP-pinned requests, strict version checks,
 timeouts and response limits. Archive installs verify SHA256SUMS; git installs use the configured origin.

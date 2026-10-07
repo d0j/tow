@@ -240,6 +240,33 @@ def test_the_systemd_unit_runs_tow_from_the_install(install, monkeypatch):
     assert unit_backend.start() is True
 
 
+def test_the_unit_tells_tow_that_systemd_started_it(install):
+    # Stopping the unit ends every process it started: TOW must know, so that the web page
+    # never starts an update the stop would kill halfway (tow.web_update).
+    unit_backend = SystemdUser(install, Systemd())
+    assert "Environment=TOW_AUTOSTART=systemd\n" in unit_backend.unit()
+    assert unit_backend.enable()["ok"] is True
+    # A unit written by an older TOW (without the line) still works: it stays "on".
+    unit_backend.unit_path.write_text(unit_backend.unit(marked=False), encoding="utf-8")
+    assert "TOW_AUTOSTART" not in unit_backend.unit(marked=False)
+    assert unit_backend.status()["on"] is True
+
+
+def test_the_service_manager_is_recognised_also_from_an_older_unit():
+    from tow.autostart import service_manager
+
+    in_unit = "0::/user.slice/user-1000.slice/user@1000.service/app.slice/tow.service\n"
+    in_terminal = "0::/user.slice/user-1000.slice/user@1000.service/app.slice/gnome-terminal-server.service\n"
+    assert service_manager({"TOW_AUTOSTART": "systemd"}, lambda: "") == "systemd"
+    assert service_manager({"TOW_AUTOSTART": "launchd"}, lambda: "") == "launchd"
+    assert service_manager({"INVOCATION_ID": "abc"}, lambda: in_unit) == "systemd"
+    assert service_manager({"INVOCATION_ID": "abc"}, lambda: "") == "systemd"  # unknown: careful
+    assert service_manager({"INVOCATION_ID": "abc"}, lambda: in_terminal) is None  # a desktop terminal
+    assert service_manager({"XPC_SERVICE_NAME": "io.tow"}, lambda: "") == "launchd"
+    assert service_manager({"XPC_SERVICE_NAME": "0"}, lambda: "") is None
+    assert service_manager({}, lambda: in_unit) is None
+
+
 def test_without_login_on_linux_needs_lingering_and_says_how(install):
     result = SystemdUser(install, Systemd(linger=False)).enable(without_login=True)
     assert result["ok"] is True
