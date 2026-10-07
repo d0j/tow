@@ -48,6 +48,13 @@ def _run(args: list[str], timeout: float = 20) -> str:
     return _common.run_quiet(args, timeout=timeout, creationflags=CREATE_NO_WINDOW)
 
 
+def _powershell(script: str, timeout: float = 20) -> str:
+    """A PowerShell script's output, written as UTF-8: without it Windows PowerShell writes the
+    ANSI code page, and a Cyrillic folder in a command line came back as U+FFFD."""
+    utf8 = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+    return _run(["powershell", "-NoProfile", "-NonInteractive", "-Command", utf8 + script], timeout=timeout)
+
+
 def _missing(*_args: Any, **_kwargs: Any) -> Any:
     raise AttributeError("not available on this system")
 
@@ -171,7 +178,7 @@ def port_owner(port: int) -> dict[str, Any] | None:
             "| ConvertTo-Json -Compress }",
         ]
     )
-    raw = _run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script]).strip()
+    raw = _powershell(script).strip()
     try:
         value = json.loads(raw) if raw else None
     except ValueError:
@@ -215,7 +222,7 @@ def process_command(pid: int) -> str | None:
         f'Get-CimInstance Win32_Process -Filter "ProcessId={pid}" -ErrorAction SilentlyContinue '
         "| Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"
     )
-    raw = _run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], timeout=5)
+    raw = _powershell(script, timeout=5)
     try:
         info = json.loads(raw) if raw else None
     except ValueError:

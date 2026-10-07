@@ -306,6 +306,19 @@ def test_windows_port_owner_reads_powershell_json(monkeypatch, output, expected)
     assert "-LocalPort 8787 " in args[4]
 
 
+def test_windows_powershell_probes_write_utf8(monkeypatch):
+    # The output is read as UTF-8; Windows PowerShell writes the ANSI code page unless told: a
+    # Cyrillic install folder in the web server's command line came back as U+FFFD, and a server
+    # a killed supervisor left behind was no longer recognised as this install's.
+    scripts: list[list[str]] = []
+    monkeypatch.setattr(windows, "_run", lambda args, timeout=20: scripts.append(args) or "")
+    WindowsBackend().port_owner(8787)
+    WindowsBackend().process_command(123)
+    assert len(scripts) == 2
+    for args in scripts:
+        assert args[4].startswith("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ")
+
+
 # --- Windows: processes -------------------------------------------------------------------------
 
 
