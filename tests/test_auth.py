@@ -55,7 +55,7 @@ def test_session_is_bound_to_token_expires_and_can_be_revoked():
     assert not session_is_valid(cookie, TOKEN, now=100.0 + 90 * 24 * 3600 + 1)
 
     fresh_cookie = issue_session(TOKEN, now=100.0)
-    revoke_session(fresh_cookie)
+    revoke_session(fresh_cookie, TOKEN, now=100.0)
     assert not session_is_valid(fresh_cookie, TOKEN, now=100.0)
     clear_sessions()
 

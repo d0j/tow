@@ -139,8 +139,15 @@ def session_is_valid(request: Request, session_key: str) -> bool:
 
 
 def sign_out(request: Request, response: Response) -> None:
-    """This device signs out: its session is revoked and its cookie removed."""
-    auth.revoke_session(request.cookies.get(auth.SESSION_COOKIE))
+    """This device signs out: its session is revoked (only a valid one) and its cookie removed."""
+    from tow.store import SecretStoreError, load_secrets
+
+    try:
+        session_key: str | None = credential(load_secrets()).session_key
+    except AuthConfigurationError, SecretStoreError:
+        session_key = None  # no credential: no session can be valid
+    if session_key:
+        auth.revoke_session(request.cookies.get(auth.SESSION_COOKIE), session_key)
     response.delete_cookie(auth.SESSION_COOKIE, path="/")
 
 
