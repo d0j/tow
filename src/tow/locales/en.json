@@ -1722,7 +1722,8 @@
     "probe_named": "Check the mirrors of {name}",
     "not_added": "Not added: {error}",
     "add_title": "Add a site",
-    "empty": "No sites yet. A site is where your topics come from (rutor, kinozal…): add it once, then add its topics on Home."
+    "empty": "No sites yet. A site is where your topics come from (rutor, kinozal…): add it once, then add its topics on Home.",
+    "name_hint": "Small Latin letters, digits and _ only, no spaces: rutor, kinozal_tv."
   },
   "status": {
     "torrent": {

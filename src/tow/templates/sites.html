@@ -41,7 +41,9 @@
     <input id="from-url" name="from_url" placeholder="{{ t('sites.from_url_placeholder') }}" autocomplete="off" inputmode="url" value="{{ draft.get('from_url', '') }}" aria-describedby="guess-msg"{{ invalid('from-url') }}>
     <p class="field-hint" id="guess-msg" aria-live="polite"></p>
     <label for="site-name">{{ t('sites.name') }}</label>
-    <input id="site-name" class="field-narrow" name="name" pattern="[a-z0-9_]+" placeholder="rutor" autocomplete="off" value="{{ draft.get('name', '') }}"{{ invalid('site-name') }}>
+    {#- The rule is said before a typed Cyrillic name meets the browser's bare "match the format". -#}
+    <input id="site-name" class="field-narrow" name="name" pattern="[a-z0-9_]+" title="{{ t('sites.name_hint') }}" placeholder="rutor" autocomplete="off" value="{{ draft.get('name', '') }}"{% if bad_field == 'site-name' %} aria-invalid="true" aria-describedby="add-error site-name-hint"{% else %} aria-describedby="site-name-hint"{% endif %}>
+    <p class="field-hint" id="site-name-hint">{{ t('sites.name_hint') }}</p>
     <label for="site-hosts">{{ t('sites.mirrors') }}</label>
     <textarea id="site-hosts" name="fetch_hosts" rows="3" placeholder="https://rutor.info"{{ invalid('site-hosts') }}>{{ draft.get('fetch_hosts', '') }}</textarea>
     <div class="row row-two">
@@ -116,7 +118,7 @@
         </div>
         {% endif %}
         <form id="ed-site-{{ name }}" method="post" action="/sites/{{ name|urlencode }}" class="row row-two">
-          <div><label for="site-new-name-{{ name }}">{{ t('sites.name') }}</label><input id="site-new-name-{{ name }}" name="new_name" value="{{ name }}" pattern="[a-z0-9_]+" required></div>
+          <div><label for="site-new-name-{{ name }}">{{ t('sites.name') }}</label><input id="site-new-name-{{ name }}" name="new_name" value="{{ name }}" pattern="[a-z0-9_]+" title="{{ t('sites.name_hint') }}" required aria-describedby="site-new-name-hint-{{ name }}"><p class="field-hint" id="site-new-name-hint-{{ name }}">{{ t('sites.name_hint') }}</p></div>
           <div><label for="site-url-rx-{{ name }}">{{ t('sites.url_regex') }}</label><input id="site-url-rx-{{ name }}" name="url_regex" value="{{ spec.url_regex }}"></div>
           <div class="full-width"><label for="site-hosts-{{ name }}">{{ t('sites.mirrors') }}</label><textarea id="site-hosts-{{ name }}" name="fetch_hosts" rows="3">{{ (spec.fetch_hosts or []) | join('\n') }}</textarea></div>
           <input type="hidden" name="login_hosts_present" value="1">
