@@ -172,6 +172,22 @@ def test_which_client_runs_on_this_computer(host, here):
     assert on_this_computer({}, {"qbittorrent": {"host": host}}) is here
 
 
+# --- the header clock's reason does not depend on the language ---------------------------------
+
+
+@pytest.mark.parametrize("lang", ["en", "ru"])
+def test_check_failure_reason_comes_from_the_error_not_its_words(lang):
+    from tow import i18n
+    from tow.errors import TowError
+    from tow.store import MissingMasterKeyError, SecretStoreError
+
+    i18n.use(lang)
+    assert check._check_failure_code(MissingMasterKeyError("store.no_master_key")) == "secrets_migration_required"
+    assert check._check_failure_code(SecretStoreError("legacy plaintext secrets")) == "secrets_migration_required"
+    assert check._check_failure_code(TowError("check.daily_limit")) == "quota"
+    assert check._check_failure_code(RuntimeError("the master key of the client")) == "error"
+
+
 # --- owner edits made while the check runs -------------------------------------------------------
 
 

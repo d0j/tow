@@ -38,6 +38,7 @@ from tow.records import CheckRow, DownloadHistory, Health, HistoryRecord, Topic,
 from tow.selection import SelectionPendingError, policy_from_topic, resolve_selection
 from tow.status import TRACKER_WARNING_CLASSES
 from tow.store import (
+    SecretStoreError,
     StoreCorruptionError,
     StoreReadError,
     check_run_lock,
@@ -255,6 +256,12 @@ def _now() -> str:
 
 
 def _check_failure_code(error: str | BaseException) -> str:
+    """The header clock's reason: by the error's type (its text is in the owner's language);
+    only a plain text (from an older caller) is matched by its words."""
+    if isinstance(error, SecretStoreError):
+        return "secrets_migration_required"
+    if isinstance(error, BaseException):
+        return error_class(error)
     message = str(error or "").lower()
     if "legacy plaintext" in message or "master key" in message or "secret" in message:
         return "secrets_migration_required"
