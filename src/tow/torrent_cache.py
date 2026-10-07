@@ -168,9 +168,9 @@ def _remember(blob: bytes, url: str) -> None:
         path = _path(url, create=True)
         total = count = 0
         # One directory listing with the entries' own types and sizes (on Windows no call per
-        # file): a lstat and a junction test per file made a first check of 2000 topics spend
-        # about 40 s listing. The folder's modification time cannot stand in for a listing: on
-        # NTFS it often stays the same across files created in the same clock tick.
+        # file; a lstat and a junction test per file took ten times as long). The folder's
+        # modification time cannot stand in for a listing: on NTFS it often stays the same
+        # across files created in the same clock tick.
         with os.scandir(path.parent) as entries:
             for entry in entries:
                 info = entry.stat(follow_symlinks=False)
