@@ -111,6 +111,10 @@ def _pending(state: dict[str, Any], text: str, operation_id: str, topic: Topic |
     del pending[:-PENDING_LIMIT]
 
 
+def _count(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
+
+
 def stage(
     state: dict[str, Any], items: Iterable[PendingNotification], *, cfg: dict[str, Any], now: datetime | None = None
 ) -> int:
@@ -119,11 +123,20 @@ def stage(
     queue = [str(text) for text in state.get("notify_queue") or []]
     if quiet_now(cfg, now):
         if messages:
-            state["notify_queue"] = [*queue, *(text for text, _, _ in messages)][-QUEUE_LIMIT:]
+            queued = [*queue, *(text for text, _, _ in messages)]
+            if len(queued) > QUEUE_LIMIT:
+                # The oldest go; the morning message says how many (they are never lost silently).
+                overflow = len(queued) - QUEUE_LIMIT
+                state["notify_queue_dropped"] = _count(state.get("notify_queue_dropped")) + overflow
+            state["notify_queue"] = queued[-QUEUE_LIMIT:]
         return 0
+    dropped = _count(state.pop("notify_queue_dropped", 0))
     if queue:
         state.pop("notify_queue", None)
-        heading = t("notify.quiet_hours", i18n.message_language())
+        lang = i18n.message_language()
+        heading = t("notify.quiet_hours", lang)
+        if dropped:
+            heading += "\n" + t("notify.quiet_dropped", lang, n=dropped)
         _pending(state, heading + "\n\n" + "\n\n".join(queue), "quiet-hours", None)
     for text, operation_id, topic in messages:
         _pending(state, text, operation_id, topic)

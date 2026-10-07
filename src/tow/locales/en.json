@@ -1335,6 +1335,10 @@
       "other": "Problem — {tracker}: {problem} for {n} topics ({topics})"
     },
     "quiet_hours": "During quiet hours:",
+    "quiet_dropped": {
+      "one": "({n} older message did not fit and was dropped)",
+      "other": "({n} older messages did not fit and were dropped)"
+    },
     "digest": {
       "summary": "TOW in the last day: added to the client {added}, new episodes and files {found}, downloaded {completed}",
       "completed": "Downloaded: {titles}"
