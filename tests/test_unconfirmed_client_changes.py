@@ -388,11 +388,12 @@ def test_a_confirmation_asks_for_the_mark_only_when_told_to():
 
 
 def test_a_pending_add_needs_both_marks_on_this_torrent():
-    assert client_ops.is_pending_tow_add(Inspected({"hash": V1, "tags": ["tow", "tow-pending"]}), V1) is True
-    assert client_ops.is_pending_tow_add(Inspected({"hash": V1, "tags": ["tow"]}), V1) is False
-    assert client_ops.is_pending_tow_add(Inspected({"hash": V1, "tags": ["tow-pending"]}), V1) is False
-    assert client_ops.is_pending_tow_add(Inspected({"hash": OTHER, "tags": ["tow", "tow-pending"]}), V1) is False
-    assert client_ops.is_pending_tow_add(Inspected(None), V1) is False
+    # The check reads the torrent once and asks about that report (no second client read).
+    assert client_ops.info_is_pending_tow_add({"hash": V1, "tags": ["tow", "tow-pending"]}, V1) is True
+    assert client_ops.info_is_pending_tow_add({"hash": V1, "tags": ["tow"]}, V1) is False
+    assert client_ops.info_is_pending_tow_add({"hash": V1, "tags": ["tow-pending"]}, V1) is False
+    assert client_ops.info_is_pending_tow_add({"hash": OTHER, "tags": ["tow", "tow-pending"]}, V1) is False
+    assert client_ops.info_is_pending_tow_add(None, V1) is False
 
 
 class Moving:
