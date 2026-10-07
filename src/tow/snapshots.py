@@ -39,7 +39,7 @@ from tow.diagnostic_json import check_epochs, check_types, encode_object, read_o
 from tow.i18n import t
 from tow.log import locked_log_path, log_event, log_path, owner_language
 from tow.paths import config_path, data_dir, download_history_path, state_path
-from tow.platform import is_plain_dir, is_plain_file
+from tow.platform import child_path, is_plain_dir, is_plain_file
 from tow.store import (
     SecretStoreError,
     StateVersionError,
@@ -460,7 +460,10 @@ def snapshot_path(name: str) -> Path:
     if not name.startswith(_PREFIX) or not all(ch.isalnum() or ch in "-_" for ch in name):
         raise SnapshotError(t("backup.snapshot.unknown", owner_language()))
     root = backup_root()
-    path = root / name
+    try:
+        path = child_path(root, name)
+    except ValueError:
+        raise SnapshotError(t("backup.snapshot.unknown", owner_language())) from None
     if path.is_symlink() or path.is_junction() or path.resolve().parent != root.resolve():
         raise SnapshotError(t("backup.snapshot.unknown", owner_language()))
     if not (path / "MANIFEST.json").is_file():

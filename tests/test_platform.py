@@ -1055,3 +1055,40 @@ def test_posix_identity_probe_never_truncates_long_process_arguments(monkeypatch
     monkeypatch.setattr(posix, "_run", lambda args, **kwargs: calls.append(args) or f"1 {command}")
     assert posix.PosixBackend(system).process_command(123) == command
     assert calls == [["ps", "-ww", "-o", "ppid=,command=", "-p", "123"]]
+
+
+# --- one plain name inside a folder (snapshots, restore points, prepared torrents) --------------
+
+_WINDOWS = platform.this_os() == "windows"
+
+
+@pytest.mark.parametrize(
+    ("root", "name"),
+    [
+        *(
+            [
+                ("C:\\TOW\\backup\\night", "tow-20261007-010000"),
+                ("C:\\", "tow-x"),
+                ("\\\\nas\\share", "tow-x"),
+                ("\\\\nas\\share\\night\\", "tow-x"),
+                ("D:/b/night", "20261007T010000Z-abcdef01.towx"),
+            ]
+            if _WINDOWS
+            else [("/srv/tow/night", "tow-x"), ("/", "tow-x"), ("/srv/night/", "20261007T010000Z-abcdef01.towx")]
+        )
+    ],
+)
+def test_child_path_keeps_a_plain_name_inside_its_folder_also_on_a_share(root, name):
+    path = platform.child_path(root, name)
+    assert path.name == name
+    assert str(path) == os.path.join(os.path.normpath(root), name)
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["", ".", "..", "a/b", "../x", "x/../y", "x/"]
+    + (["a\\b", "..\\x", "C:x", "tow-x\\..\\..\\y", "\\\\h\\s\\x", "x:y", "C:\\x"] if _WINDOWS else []),
+)
+def test_child_path_refuses_anything_but_a_plain_name(name):
+    with pytest.raises(ValueError, match="plain name"):
+        platform.child_path("C:\\TOW\\night" if _WINDOWS else "/srv/night", name)
