@@ -86,6 +86,23 @@ def test_quiet_hours_hold_messages_and_send_them_together_afterwards():
     assert "notify_queue" not in load_state()
 
 
+def test_quiet_hours_overflow_is_counted_in_the_morning_message():
+    state: dict = {}
+    night = datetime(2026, 10, 7, 2, 0).astimezone()
+    items = [
+        PendingNotification("added", f"op{i}", {"id": f"t{i}", "title": f"Show {i}", "url": ""}) for i in range(250)
+    ]
+    delivery.stage(state, items[:150], cfg={"quiet_hours": "23-8"}, now=night)
+    delivery.stage(state, items[150:], cfg={"quiet_hours": "23-8"}, now=night)
+    assert len(state["notify_queue"]) == delivery.QUEUE_LIMIT
+    assert state["notify_queue_dropped"] == 50
+    delivery.stage(state, [], cfg={"quiet_hours": "23-8"}, now=datetime(2026, 10, 7, 9, 0).astimezone())
+    (record,) = state["notify_pending"]
+    heading = record["text"].split("\n\n")[0]
+    assert heading == "Пока были тихие часы:\n(50 более ранних сообщений не поместились и пропущены)"
+    assert "notify_queue_dropped" not in state
+
+
 def test_daily_digest_once_a_day_after_its_hour():
     sent, send = _sender()
     now = datetime(2026, 10, 1, 9, 30).astimezone()
