@@ -173,6 +173,10 @@ class ConfigError(TowError, ValueError):
     setting), not as a crash later; ``str()`` is the text in the current language."""
 
 
+# What tow.i18n says, once per process, when config.yaml cannot give it the language.
+LANGUAGE_UNREAD = "config_error.language_unread"
+
+
 def _int_field(data: dict[str, Any], key: str, low: int, high: int) -> None:
     value = data.get(key)
     if isinstance(value, str) and value.strip().isdigit():

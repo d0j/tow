@@ -495,8 +495,33 @@ def _configured_language_of(_stamp: tuple[str, int, int, int]) -> str:
     try:
         return str(load_config().get("language") or AUTO)
     except Exception as exc:  # noqa: BLE001 - a broken config must not take every text down: automatic
-        _LOG.warning("language setting not read (automatic is used): %s", type(exc).__name__)
+        _tell_language_unread(exc)
         return AUTO
+
+
+_TOLD: set[str] = set()
+
+
+def _tell_language_unread(exc: Exception) -> None:
+    """Once per process, in the language TOW falls back to: the language setting was not read,
+    and why (TOW's own error text; another exception only by its class). Marked told before it
+    is rendered, so rendering it never reads the language - and so this - again."""
+    if "language_unread" in _TOLD:
+        return
+    _TOLD.add("language_unread")
+    from tow.config import LANGUAGE_UNREAD
+    from tow.errors import TowError
+
+    lang = _CURRENT.get()
+    if lang is None:  # a command before its language is set: the system's, as `auto` gives it
+        from tow import platform
+
+        try:
+            lang = negotiate(platform.current().ui_language())
+        except Exception:  # noqa: BLE001 - an unknown system language is the default, never a failure
+            lang = DEFAULT
+    error = exc.text(lang) if isinstance(exc, TowError) else type(exc).__name__
+    _LOG.warning("%s", translate(LANGUAGE_UNREAD, lang, error=error))
 
 
 def _seen_language(path: Path) -> str | None:

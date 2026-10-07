@@ -102,10 +102,13 @@ def test_error_rendering_with_a_broken_config_cannot_recursively_render_itself(m
     from tow.yaml_guard import YamlLimitError
 
     monkeypatch.setattr(i18n, "_CURRENT", i18n.ContextVar("test_language", default=None))
+    monkeypatch.setattr(i18n, "_TOLD", set())
     i18n._configured_language_of.cache_clear()
     config_path().write_bytes(CYCLE)
     assert str(YamlLimitError("yaml_limits.references"))
-    assert sum("language setting not read" in entry.message for entry in caplog.records) == 1
+    told = [entry.getMessage() for entry in caplog.records if entry.name == "tow.i18n"]
+    assert len(told) == 1
+    assert "config.yaml" in told[0]
 
 
 def test_healthy_restore_merge_can_repair_a_cyclic_live_config_without_mutating_it():
