@@ -234,7 +234,7 @@ def fake_pipeline(monkeypatch, items):
         seen.append((item["id"], set(run.quota)))
         return {"id": item["id"], "ok": True}
 
-    monkeypatch.setattr(check, "_check_topic", row)
+    monkeypatch.setattr(check, "check_topic", row)
     monkeypatch.setattr(check, "_progress_only_row", lambda item: {"id": item["id"], "ok": True})
     monkeypatch.setattr(check.client_factory, "from_secrets", lambda *_a, **_k: SimpleNamespace(ping=lambda: "ok"))
     monkeypatch.setattr(check, "reconcile_topic", lambda *_a, **_k: {"events": []})

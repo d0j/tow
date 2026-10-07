@@ -7,6 +7,7 @@ import pytest
 from test_check_contract import FakeClient, _wire_fake_check
 
 from tow import bundle, check
+from tow.check import topic as topic_step
 from tow.progress import reconcile_topic
 from tow.selection import normalize_policy
 from tow.store import load_download_history, load_state, save_state
@@ -60,7 +61,7 @@ def prepare(monkeypatch, tmp_path, *, add_error=None, selection_mode="files"):
     client = Client(tmp_path, add_error=add_error)
     tracker = _wire_fake_check(monkeypatch, client)
     monkeypatch.setattr(
-        check,
+        topic_step,
         "parse_torrent_metadata",
         lambda _blob: SimpleNamespace(
             infohash=HASH.upper(), client_hash=HASH.upper(), name="ShowRoot", files=(TorrentFile(0, CANONICAL, 1),)

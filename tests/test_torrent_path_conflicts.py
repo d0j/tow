@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from helpers import make_torrent, multi_file_torrent
 
 from tow import content
+from tow.check import topic as topic_step
 from tow.paths import tmp_dir
 from tow.store import load_download_history, load_state, save_download_history, save_state
 from tow.torrent import (
@@ -159,7 +160,7 @@ def test_conflicting_tracker_revision_never_mutates_client_or_history(monkeypatc
 
     client = FakeClient()
     tracker = _wire_fake_check(monkeypatch, client)
-    monkeypatch.setattr(check, "parse_torrent_metadata", parse_torrent_metadata)
+    monkeypatch.setattr(topic_step, "parse_torrent_metadata", parse_torrent_metadata)
     monkeypatch.setattr(tracker, "fetch_torrent", lambda *_args, **_kwargs: torrent(["A", "A/B"]))
     save_state({"topics": [{"id": "fixture", "title": "Show", "url": URL, "save_path": "M:/TV", "hash": None}]})
     save_download_history({"schema_version": 1, "topics": {}})

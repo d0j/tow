@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from helpers import multi_file_torrent
 
 from tow import content
+from tow.check import topic as topic_step
 from tow.errors import TowError
 from tow.paths import tmp_dir
 from tow.selection import normalize_policy, policy_from_topic, resolve_selection, stored_policy
@@ -264,7 +265,7 @@ def test_manual_prepared_add_uses_existing_verified_client_pipeline(monkeypatch,
 
     client = Client()
     tracker = _wire_fake_check(monkeypatch, client)
-    monkeypatch.setattr(check, "parse_torrent_metadata", parse_torrent_metadata)
+    monkeypatch.setattr(topic_step, "parse_torrent_metadata", parse_torrent_metadata)
     snapshot = content.prepare(blob(), URL, "main", from_site=True)
     topic = {
         "id": "prepared",
@@ -309,7 +310,7 @@ def test_local_file_is_only_a_preview_never_the_first_revision(monkeypatch, matc
 
     client = FakeClient()
     tracker = _wire_fake_check(monkeypatch, client)
-    monkeypatch.setattr(check, "parse_torrent_metadata", parse_torrent_metadata)
+    monkeypatch.setattr(topic_step, "parse_torrent_metadata", parse_torrent_metadata)
     site = blob() if matches else _other_topic_blob()
     monkeypatch.setattr(tracker, "fetch_torrent", lambda *_args, **_kwargs: site)
     save_state({"topics": [{"id": "new", "title": "Show", "url": URL, "save_path": r"M:\TV", "hash": None}]})
@@ -342,7 +343,7 @@ def test_manual_dirty_revision_change_refuses_before_client_mutation(monkeypatch
 
     client = FakeClient()
     tracker = _wire_fake_check(monkeypatch, client)
-    monkeypatch.setattr(check, "parse_torrent_metadata", parse_torrent_metadata)
+    monkeypatch.setattr(topic_step, "parse_torrent_metadata", parse_torrent_metadata)
     monkeypatch.setattr(tracker, "fetch_torrent", lambda *_args, **_kwargs: blob())
     save_state(
         {
@@ -377,7 +378,7 @@ def test_expired_preparation_refetch_cannot_add_changed_revision(monkeypatch, mo
 
     client = FakeClient()
     tracker = _wire_fake_check(monkeypatch, client)
-    monkeypatch.setattr(check, "parse_torrent_metadata", parse_torrent_metadata)
+    monkeypatch.setattr(topic_step, "parse_torrent_metadata", parse_torrent_metadata)
     monkeypatch.setattr(tracker, "fetch_torrent", lambda *_args, **_kwargs: blob())
     policy = exact() if mode == "exact" else normalize_policy("all")
     save_state(
@@ -416,7 +417,7 @@ def test_expired_preparation_cannot_materialize_magnet_before_identity_check(mon
         tracker, "fetch_torrent", lambda *_args, **_kwargs: (_ for _ in ()).throw(TowError("tracker.no_download_link"))
     )
     monkeypatch.setattr(
-        check, "_fetch_by_magnet", lambda *_args: pytest.fail("cannot mutate a client while recovering preview")
+        topic_step, "_fetch_by_magnet", lambda *_args: pytest.fail("cannot mutate a client while recovering preview")
     )
     save_state(
         {

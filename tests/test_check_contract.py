@@ -7,6 +7,7 @@ import pytest
 from tow import check, check_transaction
 from tow.check import client_ops
 from tow.check import rows as check_rows
+from tow.check import topic as topic_step
 from tow.notify import event_text
 from tow.store import (
     StoreCorruptionError,
@@ -90,9 +91,9 @@ def _wire_fake_check(monkeypatch, client):
     cfg = {"trackers": {}, "client": {"id": "main", "kind": "fake"}}
     monkeypatch.setattr(check, "load_config", lambda: cfg)
     monkeypatch.setattr(check, "load_trackers", lambda cfg: {"fake": tracker})
-    monkeypatch.setattr(check, "match_tracker", lambda trackers, url: tracker)
+    monkeypatch.setattr(topic_step, "match_tracker", lambda trackers, url: tracker)
     monkeypatch.setattr(
-        check,
+        topic_step,
         "parse_torrent_metadata",
         lambda blob: SimpleNamespace(
             infohash="HASH-NEW",
@@ -599,7 +600,8 @@ def test_dry_run_is_preview_without_authoritative_writes(monkeypatch, tmp_path: 
     client = FakeClient()
     tracker = _wire_fake_check(monkeypatch, client)
     log_calls = []
-    monkeypatch.setattr(check, "log_event", lambda *args, **kwargs: log_calls.append((args, kwargs)))
+    for module in (check, topic_step):
+        monkeypatch.setattr(module, "log_event", lambda *args, **kwargs: log_calls.append((args, kwargs)))
     monkeypatch.setattr(check, "save_state", lambda state: (_ for _ in ()).throw(AssertionError("dry-run saved state")))
     monkeypatch.setattr(
         check,
@@ -933,7 +935,7 @@ def test_partial_episode_selection_reaches_client_as_exact_indices(monkeypatch):
     client = FakeClient()
     _wire_fake_check(monkeypatch, client)
     monkeypatch.setattr(
-        check,
+        topic_step,
         "parse_torrent_metadata",
         lambda blob: SimpleNamespace(
             infohash="HASH-NEW",
@@ -983,7 +985,7 @@ def test_partial_selection_refuses_to_mutate_foreign_existing_torrent(monkeypatc
     client.present = True
     _wire_fake_check(monkeypatch, client)
     monkeypatch.setattr(
-        check,
+        topic_step,
         "parse_torrent_metadata",
         lambda blob: SimpleNamespace(
             infohash="HASH-NEW",
@@ -1124,7 +1126,7 @@ def test_revision_overlap_guard_fails_closed_for_sanitized_non_utf_path(monkeypa
     client = SanitizedRevisionClient()
     _wire_fake_check(monkeypatch, client)
     monkeypatch.setattr(
-        check,
+        topic_step,
         "parse_torrent_metadata",
         lambda blob: SimpleNamespace(
             infohash="HASH-NEW",
@@ -1329,7 +1331,7 @@ def test_hybrid_v1_state_hash_migrates_to_modern_qbit_id_without_readd(monkeypat
     client.present = True
     _wire_fake_check(monkeypatch, client)
     monkeypatch.setattr(
-        check,
+        topic_step,
         "parse_torrent_metadata",
         lambda _blob: SimpleNamespace(
             infohash=new_v2_id + "3" * 24,
@@ -1432,7 +1434,7 @@ def test_revision_overlap_guard_compares_readable_non_ascii_names_exactly(monkey
     client = ReadableRevisionClient()
     _wire_fake_check(monkeypatch, client)
     monkeypatch.setattr(
-        check,
+        topic_step,
         "parse_torrent_metadata",
         lambda blob: SimpleNamespace(
             infohash="HASH-NEW",
@@ -1574,8 +1576,8 @@ def test_a_check_decrypts_the_secrets_again_only_after_they_changed(monkeypatch)
     save_download_history({"schema_version": 1, "topics": {}})
     tracker = _wire_fake_check(monkeypatch, FakeClient())
     decrypted = []
-    original = check.load_secrets
-    monkeypatch.setattr(check, "load_secrets", lambda: decrypted.append(1) or original())
+    original = topic_step.load_secrets
+    monkeypatch.setattr(topic_step, "load_secrets", lambda: decrypted.append(1) or original())
 
     check.run_check(apply=True, notify=False, how="test")
     assert len(decrypted) == 1  # four topics, a fetch and a title each: nothing changed
@@ -1677,7 +1679,7 @@ def test_a_lasting_error_is_reported_once_and_its_end_is_reported(monkeypatch):
     client.present = True
     _wire_fake_check(monkeypatch, client)
     failing = FailingTracker()
-    monkeypatch.setattr(check, "match_tracker", lambda trackers, url: failing)
+    monkeypatch.setattr(topic_step, "match_tracker", lambda trackers, url: failing)
     sent = _capture_sends(monkeypatch)
     _seed_watched_topic()
 
@@ -1691,7 +1693,7 @@ def test_a_lasting_error_is_reported_once_and_its_end_is_reported(monkeypatch):
     check.run_check(apply=True, notify=True, how="test")
     assert len([text for text in sent if text.startswith("Сбой")]) == 2
 
-    monkeypatch.setattr(check, "match_tracker", lambda trackers, url: FakeTracker())
+    monkeypatch.setattr(topic_step, "match_tracker", lambda trackers, url: FakeTracker())
     check.run_check(apply=True, notify=True, how="test")
     assert sent[-1] == "Show — снова работает"
     assert "error_notified" not in load_state()["topics"][0]
@@ -1822,7 +1824,7 @@ def test_hash_label_migration_relabels_history_instead_of_a_new_revision(monkeyp
     client.present = True
     _wire_fake_check(monkeypatch, client)
     monkeypatch.setattr(
-        check,
+        topic_step,
         "parse_torrent_metadata",
         lambda _blob: SimpleNamespace(
             infohash=new_v2_id + "3" * 24,
@@ -1855,7 +1857,7 @@ def test_watched_range_in_the_future_waits_instead_of_failing(monkeypatch, track
     _wire_fake_check(monkeypatch, client)
     _seed_watched_topic(hash="", selection={"mode": "episodes", "value": "S01E11-20"}, tracking_mode=tracking_mode)
     monkeypatch.setattr(
-        check,
+        topic_step,
         "parse_torrent_metadata",
         lambda _blob: SimpleNamespace(
             infohash="HASH-NEW",
@@ -1886,7 +1888,7 @@ def test_an_add_that_cannot_fit_is_refused_before_the_client(monkeypatch, tmp_pa
     _wire_fake_check(monkeypatch, client)
     big = TorrentFile(0, "Show.mkv", 50 * 1024**3)
     monkeypatch.setattr(
-        check,
+        topic_step,
         "parse_torrent_metadata",
         lambda _blob: SimpleNamespace(infohash="HASH-NEW", client_hash="HASH-NEW", name="Show", files=(big,)),
     )
@@ -1977,7 +1979,7 @@ def test_season_complete_is_announced_once_when_the_last_episode_lands(monkeypat
     client = FakeClient()
     client.present = True
     _wire_fake_check(monkeypatch, client)
-    monkeypatch.setattr(check, "match_tracker", lambda trackers, url: FakeTracker())
+    monkeypatch.setattr(topic_step, "match_tracker", lambda trackers, url: FakeTracker())
     sent = _capture_sends(monkeypatch)
     _seed_watched_topic()
 
@@ -2069,7 +2071,7 @@ def test_cli_progress_only_is_its_own_kind_of_run(monkeypatch):
 def test_preview_does_not_spend_a_daily_download_limit():
     from types import SimpleNamespace
 
-    from tow.check import _download_limited, _skip_row
+    from tow.check.topic import _download_limited, _skip_row
 
     kinozal = SimpleNamespace(name="kinozal", spec={})
     row: dict = {}

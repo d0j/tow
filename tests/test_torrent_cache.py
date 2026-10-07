@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from test_content import URL, blob
 
 from tow import releases, torrent_cache
+from tow.check import topic as topic_step
 from tow.config import ConfigError, load_config, save_config, validated
 from tow.errors import TowError
 from tow.store import load_state, master_fernet, save_state
@@ -232,17 +233,15 @@ def test_cache_replaced_between_stat_and_open_is_refused(monkeypatch):
 
 
 def test_validated_tracker_metadata_is_retained_even_if_client_identity_lookup_fails(monkeypatch):
-    from tow import check
-
     watch()
     work = SimpleNamespace(topic={"id": "test-topic"}, run=SimpleNamespace(apply=True), row={}, old="", url=URL)
-    monkeypatch.setattr(check, "_fetch_revision", lambda *_args: SimpleNamespace(blob=blob(), magnet_hash=None))
+    monkeypatch.setattr(topic_step, "_fetch_revision", lambda *_args: SimpleNamespace(blob=blob(), magnet_hash=None))
     monkeypatch.setattr(
-        check, "resolve_client_hash", lambda *_args: (_ for _ in ()).throw(TowError("content.unavailable"))
+        topic_step, "resolve_client_hash", lambda *_args: (_ for _ in ()).throw(TowError("content.unavailable"))
     )
     work.client = None
     with pytest.raises(TowError):
-        check._check_revision(work)
+        topic_step._check_revision(work)
     assert torrent_cache.read(URL) == blob()
 
 
