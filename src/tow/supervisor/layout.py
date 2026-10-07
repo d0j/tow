@@ -178,11 +178,15 @@ def interrupted_update() -> bool:
 
     scripts/update.py keeps ``.update-switch.json`` in the install while it switches an archive
     install and holds ``.update.lock`` while it runs; it starts TOW itself then. A record without
-    that lock was left by an update that did not finish (an accepted record is finished code).
+    that lock was left by an update that did not finish (an accepted record is finished code, a
+    restored one the previous code with its data back).
     """
     root = install_root()
     record = root / ".update-switch.json"
-    if not record.exists() or read_json(record).get("phase") == "accepted":
+    if not record.exists():
+        return False
+    found = read_json(record)
+    if found.get("phase") == "accepted" or found.get("restored") is True:
         return False
     try:
         with (root / ".update.lock").open("r+b") as handle:

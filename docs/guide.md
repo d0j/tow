@@ -219,7 +219,8 @@ Settings → **Version and updates**; the version in the corner of every page op
 - **What is kept:** settings, topics, history, saved passwords and tokens, `keys/master.key`, autostart and network
   access. Downloaded files are never touched.
 - **When the new version fails** to install, start or read the data, the update puts the previous version and data
-  back by itself and says so.
+  back by itself and says so. If they cannot be put back completely, TOW is not started on the mix: the update says
+  what to do (usually: run it again).
 - **Going back:** **Install another version or roll back** installs an earlier release, 1.22.21 or newer. A version
   that cannot read the current data (anything before 1.23.0 once 1.23 ran) is refused before TOW stops.
 - **Without the page** (TOW started by systemd or launchd, or a version before 1.22.20) use `Update TOW.cmd`,
