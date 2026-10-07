@@ -1,12 +1,5 @@
 # Architecture
 
-Download folder history is a convenience, not an access allowlist: every authorized owner device
-may enter a new absolute client folder. Syntax, protected-system-folder and optional UNC checks
-still run before a topic is saved or moved. The legacy `allowed_save_roots` config field is accepted
-for old config/import compatibility but no longer restricts the owner. `state.save_roots` keeps up to
-ten full recently used paths, newest first; older ancestor-only entries remain usable without a data
-rewrite. The editable folder picker shows this entire list on its arrow, independent of typed text.
-
 One page on how TOW is built: processes, modules, data, recovery and the security model. For running an install
 see [PORTABLE.md](PORTABLE.md); for adding a client, messenger, site, language or page see
 [EXTENDING.md](EXTENDING.md).
@@ -169,6 +162,13 @@ plus ten regexes, never a Python dispatch per file and mask.
 `tow.paths.root()` finds the install: `TOW_ROOT`; else the parent of an `app` code folder that has `config.yaml`
 or `data/` next to it; else the development checkout itself. Nothing is written outside the install except the
 autostart entry, and that only on request.
+
+Download folder history is a convenience, not an access allowlist: every authorized owner device
+may enter a new absolute client folder. Syntax, protected-system-folder and optional UNC checks
+still run before a topic is saved or moved. The legacy `allowed_save_roots` config field is accepted
+for old config/import compatibility but no longer restricts the owner. `state.save_roots` keeps up to
+ten full recently used paths, newest first; older ancestor-only entries remain usable without a data
+rewrite. The editable folder picker shows this entire list on its arrow, independent of typed text.
 
 The detached update worker holds its per-job OS lease throughout the installation. Its initial acquisition
 retries nonblocking calls for at most one second on a monotonic clock, so a brief status probe does not abort

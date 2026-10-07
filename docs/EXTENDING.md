@@ -140,9 +140,10 @@ The web package (`src/tow/web/`):
 
 - `app.py` — `create_app()`: the middleware (`middleware.py`), error handlers, static files, template globals and
   the routers in `ROUTERS` order. `tow.web.app` is the built app (`tow serve`, `tow run`, tests).
-- `routes_<topic>.py` — one `router = APIRouter()` per topic: `routes_home`, `routes_topics`,
-  `routes_topic_login`, `routes_check`, `routes_undo`, `routes_sites`, `routes_settings`, `routes_notifiers`,
-  `routes_backup`, `routes_service`, `routes_password`, `routes_auth`, `routes_health`, `routes_history`.
+- `routes_<topic>.py` — one `router = APIRouter()` per topic: `routes_home`, `routes_topics`, `routes_content`
+  (a topic's contents: the file list from the site, a `.torrent` or a magnet), `routes_topic_login`, `routes_check`,
+  `routes_undo`, `routes_sites`, `routes_settings`, `routes_notifiers`, `routes_backup`, `routes_service`,
+  `routes_password`, `routes_auth`, `routes_health`, `routes_history`.
   Importing a module registers nothing.
 - `services.py` — the only way out of the package: config, state, secrets and history, checks, the service,
   restore points, diagnostics, browser sign-in, the log; also `login_throttle` and `locked_state_mutation`.
