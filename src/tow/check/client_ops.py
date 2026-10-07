@@ -52,10 +52,8 @@ def magnet_matches_saved_hash(magnet_url: str, saved_hash: str, client: TorrentC
     return known_v2 in btmh
 
 
-def client_owned_by_tow(client: TorrentClientAdapter, infohash: str) -> bool:
-    if not client.has_hash(infohash):
-        return False
-    info = client.inspect_torrent(infohash)
+def info_owned_by_tow(info: dict[str, Any] | None, infohash: str) -> bool:
+    """The client's report (``inspect_torrent``) is of this torrent and carries TOW's mark."""
     if not info or not _client_info_matches_hash(info, infohash):
         return False
     tags = info.get("tags")
@@ -64,20 +62,31 @@ def client_owned_by_tow(client: TorrentClientAdapter, infohash: str) -> bool:
     return any(str(tag).strip().casefold() == "tow" for tag in tags)
 
 
-def confirm_client_add(
-    client: TorrentClientAdapter, infohash: str, save_path: str, *, require_tow_ownership: bool = False
+def info_confirms(
+    info: dict[str, Any] | None, infohash: str, save_path: str, *, require_tow_ownership: bool = False
 ) -> bool:
-    if require_tow_ownership and not client_owned_by_tow(client, infohash):
+    """The client's report confirms the torrent in ``save_path`` (and with TOW's mark when asked)."""
+    if require_tow_ownership and not info_owned_by_tow(info, infohash):
         return False
-    if not client.has_hash(infohash):
-        return False
-    info = client.inspect_torrent(infohash)
-    if not info:
-        return False
-    if not _client_info_matches_hash(info, infohash):
+    if not info or not _client_info_matches_hash(info, infohash):
         return False
     observed_path = str(info.get("save_path") or "").strip()
     return bool(observed_path) and paths_equal(observed_path, save_path)
+
+
+def client_owned_by_tow(client: TorrentClientAdapter, infohash: str) -> bool:
+    return info_owned_by_tow(client.inspect_torrent(infohash), infohash)
+
+
+def confirm_client_add(
+    client: TorrentClientAdapter, infohash: str, save_path: str, *, require_tow_ownership: bool = False
+) -> bool:
+    """Read-back of an add or a change, from one read of the torrent: a torrent the client does
+    not have reports None, so asking has_hash first was a second read (a full one, with the file
+    list, in a ManagedClient), and the ownership check two more."""
+    return info_confirms(
+        client.inspect_torrent(infohash), infohash, save_path, require_tow_ownership=require_tow_ownership
+    )
 
 
 RELOCATION_WAIT_SEC = 20.0
@@ -95,10 +104,10 @@ def await_relocation(
     """
     deadline = time.monotonic() + max(0.0, RELOCATION_WAIT_SEC if timeout is None else timeout)
     while True:
-        if confirm_client_add(client, infohash, save_path, require_tow_ownership=True):
+        info = client.inspect_torrent(infohash)
+        if info_confirms(info, infohash, save_path, require_tow_ownership=True):
             return "done"
-        info = client.inspect_torrent(infohash) or {}
-        moving = str(info.get("state") or "").casefold() == "moving"
+        moving = str((info or {}).get("state") or "").casefold() == "moving"
         if time.monotonic() >= deadline:
             return "moving" if moving else "failed"
         time.sleep(0.5)

@@ -11,6 +11,8 @@ from tow.check.client_ops import (
     client_owned_by_tow,
     client_unreachable,
     confirm_client_add,
+    info_confirms,
+    info_owned_by_tow,
     is_pending_tow_add,
 )
 from tow.check_steps import client_identities, is_owned_add_recovery, store_revision
@@ -100,15 +102,17 @@ def _accept_existing_torrent(
     migrated: bool,
 ) -> bool:
     """The revision is already in the client (or only its hash label changed): verify it
-    without touching it and return whether its file selection is TOW-verified."""
-    if not client_owned_by_tow(topic_client, h):
+    without touching it and return whether its file selection is TOW-verified (one read of
+    the torrent decides both its mark and its folder)."""
+    info = topic_client.inspect_torrent(h)
+    if not info_owned_by_tow(info, h):
         # Never green: TOW can change nothing about a torrent without its mark (the file
         # selection, the next revision), and it may be TOW's own add whose marking failed. The
         # hash lets the owner adopt it into TOW (tow.adopt) - never done without being asked.
         if plan.mode != "all":
             raise TowError("check.not_owned_partial", hash=h)
         raise TowError("check.not_owned_existing", cls="qbit", hash=h)
-    if not confirm_client_add(topic_client, h, dest):
+    if not info_confirms(info, h, dest):
         raise TowError("check.migration_unconfirmed" if migrated else "check.existing_unconfirmed")
     selection_verified = True
     row["added"] = False
@@ -244,9 +248,10 @@ def _update_client_selection(
 ) -> None:
     """Apply a new file selection to a TOW-owned torrent already in the client, or finish
     an add an earlier run left pending (``resume``); confirm by read-back, log, notify."""
-    if not client_owned_by_tow(topic_client, h):
+    info = topic_client.inspect_torrent(h)  # one read for the mark and the folder
+    if not info_owned_by_tow(info, h):
         raise TowError("check.not_owned_priorities")
-    if not confirm_client_add(topic_client, h, dest, require_tow_ownership=True):
+    if not info_confirms(info, h, dest, require_tow_ownership=True):
         raise TowError("check.save_path_unconfirmed")
     owned_add_recovery = h != old and (is_owned_add_recovery(topic) or _unrecorded_own_add(run.state, topic, h))
     completed_pending_add = resume or owned_add_recovery
