@@ -47,3 +47,35 @@ def test_html_text_falls_back_to_cp1251_for_undeclared_non_utf8():
 
 def test_html_text_keeps_utf8():
     assert "Сериал А" in thttp.html_text(_response("<title>Сериал А</title>".encode(), "text/html"))
+
+
+TITLE = "Сериал Ж [01x01-10 из 12] — 1080p"
+
+
+def test_html_text_meta_beats_a_servers_latin1_default():
+    page = f"<html><head><meta charset=windows-1251><title>{TITLE}</title></head></html>".encode("cp1251")
+    assert TITLE in thttp.html_text(_response(page, "text/html; charset=ISO-8859-1"))
+
+
+def test_html_text_valid_utf8_beats_a_wrong_cp1251_header():
+    page = f"<html><title>{TITLE}</title></html>".encode()
+    assert TITLE in thttp.html_text(_response(page, "text/html; charset=windows-1251"))
+
+
+def test_html_text_byte_order_mark_comes_first():
+    page = b"\xef\xbb\xbf" + f"<html><title>{TITLE}</title></html>".encode()
+    assert thttp.html_text(_response(page, "text/html; charset=windows-1251")).startswith("<html><title>Сериал")
+
+
+def test_a_page_title_without_an_html_content_type_is_read_with_the_same_rules(monkeypatch):
+    from tow import title
+
+    page = b"\xef\xbb\xbf" + f"<html><title>{TITLE}</title></html>".encode()
+    response = httpx.Response(200, content=page, headers={"content-type": "application/octet-stream"})
+    monkeypatch.setattr("tow.mirrors.origin_key", lambda url: "o")
+    monkeypatch.setattr("tow.trackers.load_trackers", lambda cfg: {})
+    monkeypatch.setattr("tow.http.get_limited", lambda c, url, max_bytes: response)
+    monkeypatch.setattr(
+        "tow.trackers.match_tracker", lambda trackers, url: type("T", (), {"spec": {"fetch_hosts": ["x"]}})()
+    )
+    assert title._title_from_page("https://t.example/1") == TITLE

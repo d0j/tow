@@ -146,11 +146,7 @@ def _title_from_page(url: str) -> str:
         return ""
     if looks_like_torrent(r.content):
         return ""
-    text = thttp.html_text(r) if "html" in (r.headers.get("content-type") or "").lower() else ""
-    if not text:
-        head = r.content[:200].lstrip().lower()
-        if head.startswith((b"<!doctype", b"<html")):
-            text = r.content.decode(r.encoding or "utf-8", "replace")
-        else:
-            return ""
-    return title_from_html(text)
+    head = r.content[:200].removeprefix(b"\xef\xbb\xbf").lstrip().lower()
+    if "html" not in (r.headers.get("content-type") or "").lower() and not head.startswith((b"<!doctype", b"<html")):
+        return ""
+    return title_from_html(thttp.html_text(r))
