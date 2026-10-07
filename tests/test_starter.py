@@ -192,6 +192,25 @@ def test_a_browser_that_did_not_open_gets_the_address_to_open_by_hand(monkeypatc
     assert out.count("http://127.0.0.1:8787/") == 2  # running at ..., open ... by hand
 
 
+def test_a_tow_run_that_ended_says_why_in_the_window(monkeypatch, capsys):
+    # QA: "Start TOW.cmd" said "the reason is above", but the reason was only in the log.
+    log = starter.stderr_log()
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text("an earlier start\n", encoding="utf-8")
+
+    def ended(port, *, wait, browser):
+        with log.open("a", encoding="utf-8") as handle:
+            handle.write("TOW is not started: port 8787 is already in use by another program.\n")
+        return {"ok": False, "state": "exited", "url": "", "pid": 1, "browser": False}
+
+    monkeypatch.setattr(starter, "start", ended)
+    assert cli.main(["start"]) == 3
+    out = capsys.readouterr().out
+    assert "port 8787 is already in use by another program" in out
+    assert "an earlier start" not in out  # only what this start wrote
+    assert starter.output_since(10**9) == []
+
+
 @pytest.mark.parametrize("state", ["exited", "timeout"])
 def test_a_failed_start_names_the_log(monkeypatch, capsys, state):
     seen: dict[str, Any] = {}
