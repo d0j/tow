@@ -456,6 +456,59 @@ def test_the_windows_smoke_scripts_parse(name):
     assert done.returncode == 0, done.stdout + done.stderr
 
 
+@pytest.mark.allow_system
+def test_the_bundle_smoke_ignores_runner_noise_but_not_ours(tmp_path):
+    # CI: a Mozilla folder appeared in AppData during the smoke, which failed as "the bundle
+    # wrote outside its folder". Only names TOW, uv or Python could make count there.
+    program = shutil.which("pwsh")
+    if program is None:
+        pytest.skip("no pwsh on this machine")
+    probe = tmp_path / "probe.ps1"
+    probe.write_text(
+        "$ast = [Management.Automation.Language.Parser]::ParseFile($args[0], [ref]$null, [ref]$null)\n"
+        "$functions = $ast.FindAll({ $args[0] -is [Management.Automation.Language.FunctionDefinitionAst] }, $true)\n"
+        "foreach ($f in $functions) {\n"
+        "  if ($f.Name -in 'Test-Ours', 'Compare-Outside') { . ([scriptblock]::Create($f.Extent.Text)) } }\n"
+        "$installName = 'tow smoke abc123'\n"
+        "$before = [ordered]@{ 'uv' = 3; 'entries of R' = 'A|B'; 'entries of L' = 'X' }\n"
+        "function Probe([int]$uv, [string]$r, [string]$l) {\n"
+        "  $after = [ordered]@{ 'uv' = $uv; 'entries of R' = $r; 'entries of L' = $l }\n"
+        "  '=' + ((Compare-Outside $before $after) -join ',') }\n"
+        "Probe 3 'A|B|Mozilla' ''\n"
+        "Probe 3 'A|B|Python' 'X'\n"
+        "Probe 3 'A|B' 'X|old tow smoke ABC123'\n"
+        "Probe 5 'A|B' 'X'\n",
+        encoding="utf-8",
+    )
+    done = subprocess.run(
+        [program, "-NoProfile", "-NonInteractive", "-File", str(probe), str(ROOT / "scripts" / "bundle-smoke.ps1")],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+    lines = done.stdout.splitlines()
+    assert "  ignored as runner noise in R: +Mozilla" in lines
+    assert "  ignored as runner noise in L: -X" in lines
+    assert [line for line in lines if line.startswith("=")] == ["=", "=entries of R", "=entries of L", "=uv"]
+
+
+@pytest.mark.allow_system
+def test_the_posix_install_smoke_ignores_runner_noise_in_home():
+    shell = shutil.which("dash") or shutil.which("sh")
+    if shell is None:
+        pytest.skip("no sh on this machine")
+    text = (ROOT / "scripts" / "install-smoke.sh").read_text(encoding="utf-8")
+    assert '"$(ls -A "$HOME" | grep -iE "$ours" |' in text  # only our names are compared
+    found = re.search(r"^ours=.*?$.*?^noise\(\) \{.*?^\}$", text, re.MULTILINE | re.DOTALL)
+    assert found is not None
+    before, after = "a\\nb\\nX", "a\\nb\\nMozilla\\npython3\\ntow smoke 1"
+    script = found.group(0) + f"\nnoise \"$(printf '{before}')\" \"$(printf '{after}')\"\n"
+    done = subprocess.run([shell, "-c", script], capture_output=True, text=True, check=False)
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.split() == ["Mozilla", "X"]
+
+
 @pytest.mark.parametrize(("workflow", "job_id"), [("ci", "gate"), ("ci", "install"), ("release", "posix")])
 def test_linux_runners_keep_both_lts_versions_without_renaming_required_checks(workflow, job_id):
     import yaml
