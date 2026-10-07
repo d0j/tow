@@ -426,8 +426,41 @@ def test_default_stop_does_not_terminate_a_reused_pid(monkeypatch):
 # --- the OS adapter ---------------------------------------------------------------------------
 
 
-def test_a_closed_port_is_free(monkeypatch):
-    # No real connect: a refused one costs up to a second and a half on Windows.
+def _free_port() -> int:
+    import socket
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
+
+
+def test_a_free_port_is_free_at_once_without_a_connection(monkeypatch):
+    # A refused loopback connection costs a second and a half on Windows: every `tow run` and
+    # `tow setup` waited for it. A port that can be bound needs no connection at all.
+    import time
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("a bindable port must not be probed with a connection")
+
+    monkeypatch.setattr(_os.socket, "create_connection", forbidden)
+    port = _free_port()
+    started = time.perf_counter()
+    assert _os.port_open(port) is False
+    assert time.perf_counter() - started < 0.5
+
+
+def test_a_listening_port_is_open():
+    import socket
+
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        port = int(listener.getsockname()[1])
+        assert _os.port_free(port) is False
+        assert _os.port_open(port) is True
+
+
+def test_a_port_that_cannot_be_bound_is_confirmed_by_a_connection(monkeypatch):
     import contextlib
 
     asked = []
@@ -436,11 +469,43 @@ def test_a_closed_port_is_free(monkeypatch):
         asked.append((address, timeout))
         raise ConnectionRefusedError
 
+    monkeypatch.setattr(_os, "port_free", lambda _port: False)  # e.g. bound but not listening
     monkeypatch.setattr(_os.socket, "create_connection", refused)
     assert _os.port_open(8790) is False
     assert asked == [(("127.0.0.1", 8790), 1.5)]
     monkeypatch.setattr(_os.socket, "create_connection", lambda address, timeout: contextlib.nullcontext())
     assert _os.port_open(8790) is True
+
+
+@pytest.mark.parametrize("name", ["windows", "linux"])
+def test_the_bind_probe_shares_no_port_on_windows(monkeypatch, name):
+    # Windows: SO_REUSEADDR would let the probe bind a port another program listens on.
+    from tow import platform
+
+    options = []
+
+    class Probe:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def setsockopt(self, *args):
+            options.append(args)
+
+        def bind(self, address):
+            options.append(("bind", address[0]))
+
+    monkeypatch.setattr(_os.socket, "socket", Probe)
+    with platform.use(platform.backend_for(name)):
+        assert _os.port_free(8790) is True
+    binds = [item for item in options if item[0] == "bind"]
+    assert binds == [("bind", "127.0.0.1"), ("bind", "0.0.0.0")]  # wildcard listeners too
+    assert (len(options) == 2) is (name == "windows")
 
 
 @pytest.mark.parametrize("name", ["windows", "linux", "macos"])
