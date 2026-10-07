@@ -15,6 +15,8 @@ import hashlib
 import json
 import os
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -22,6 +24,7 @@ from cryptography.fernet import Fernet
 
 from tow import check_transaction, store
 from tow.check_transaction import CheckTransactionError, check_store_transaction, recover_check_transaction
+from tow.errors import Msg
 from tow.paths import data_dir, download_history_path, secrets_path, state_path
 from tow.store import (
     SecretStoreError,
@@ -62,6 +65,16 @@ def key(monkeypatch) -> str:
     value = Fernet.generate_key().decode("ascii")
     monkeypatch.setenv("TOW_MASTER_KEY", value)
     return value
+
+
+@contextmanager
+def _refused(code: str) -> Iterator[None]:
+    """A secret-store refusal saying the catalog text ``code`` (in whatever language)."""
+    with pytest.raises(SecretStoreError) as raised:
+        yield
+    message = raised.value.args[0]
+    assert isinstance(message, Msg), message
+    assert message.code == code
 
 
 def _temp_leftovers(directory: Path) -> list[str]:
@@ -445,7 +458,7 @@ def test_secret_store_status_reports_every_storage_and_key_source(monkeypatch, k
 
     _write_envelope(encrypted_secrets_path(), {"x": 1}, key)
     assert secret_store_status()["storage"] == "blocked_legacy_plaintext"
-    with pytest.raises(SecretStoreError, match="must be removed"):
+    with _refused("store.legacy_left"):
         load_secrets()
 
     monkeypatch.setenv("TOW_MASTER_KEY", key)
@@ -464,7 +477,7 @@ def test_relative_key_file_resolves_inside_tow_home(monkeypatch):
 
 @pytest.mark.parametrize(
     ("content", "message"),
-    [(None, "cannot read TOW master key file"), (b"  \n", "master key file is empty")],
+    [(None, "store.key_unreadable"), (b"  \n", "store.key_empty")],
 )
 def test_unusable_key_file_fails_closed(monkeypatch, tmp_path, content, message):
     key_file = tmp_path / "master.key"
@@ -472,7 +485,7 @@ def test_unusable_key_file_fails_closed(monkeypatch, tmp_path, content, message)
         key_file.write_bytes(content)
     monkeypatch.setenv("TOW_MASTER_KEY_FILE", str(key_file))
 
-    with pytest.raises(SecretStoreError, match=message):
+    with _refused(message):
         save_secrets({"telegram": {"token": "fixture"}})
     assert not encrypted_secrets_path().exists()
 
@@ -480,9 +493,9 @@ def test_unusable_key_file_fails_closed(monkeypatch, tmp_path, content, message)
 @pytest.mark.parametrize("bad_key", ["not-a-fernet-key", "ключ-не-ascii"])
 def test_invalid_master_key_is_rejected_before_any_write(monkeypatch, bad_key):
     monkeypatch.setenv("TOW_MASTER_KEY", bad_key)
-    with pytest.raises(SecretStoreError, match="invalid TOW master key"):
+    with _refused("store.key_invalid"):
         save_secrets({"a": 1})
-    with pytest.raises(SecretStoreError, match="invalid TOW master key"):
+    with _refused("store.key_invalid"):
         derive_local_secret("session")
     assert not encrypted_secrets_path().exists()
 
@@ -538,7 +551,7 @@ def test_generate_master_key_reports_os_errors(monkeypatch, tmp_path):
 
     monkeypatch.setattr(tow.store.os, "open", denied)  # the key file is created with os.open (0600)
 
-    with pytest.raises(SecretStoreError, match="cannot create TOW master key file"):
+    with _refused("cli.keys.error.write_failed"):
         generate_master_key(path)
     assert not path.exists()
 
@@ -548,11 +561,11 @@ def test_missing_cryptography_fails_closed(monkeypatch, key):
     before = encrypted_secrets_path().read_bytes()
     monkeypatch.setitem(sys.modules, "cryptography.fernet", None)
 
-    with pytest.raises(SecretStoreError, match="cryptography dependency is unavailable"):
+    with _refused("store.no_cryptography"):
         load_secrets()
-    with pytest.raises(SecretStoreError, match="cryptography dependency is unavailable"):
+    with _refused("store.no_cryptography"):
         save_secrets({"a": 2})
-    with pytest.raises(SecretStoreError, match="cryptography dependency is unavailable"):
+    with _refused("store.no_cryptography"):
         generate_master_key(data_dir() / "new.key")
 
     assert encrypted_secrets_path().read_bytes() == before
@@ -565,25 +578,25 @@ def test_missing_cryptography_fails_closed(monkeypatch, key):
 @pytest.mark.parametrize(
     ("envelope", "message"),
     [
-        ("{not json", "unreadable"),
-        ("[]", "unsupported encrypted TOW secrets format"),
-        ('{"format": "tow-secrets-undo/v1", "cipher": "fernet", "token": "x"}', "unsupported encrypted TOW secrets"),
-        ('{"format": "tow-secrets/v1", "cipher": "aes", "token": "x"}', "unsupported encrypted TOW cipher"),
-        ('{"format": "tow-secrets/v1", "cipher": "fernet", "token": ""}', "malformed"),
-        ('{"format": "tow-secrets/v1", "cipher": "fernet", "token": 5}', "malformed"),
-        ('{"format": "tow-secrets/v1", "cipher": "fernet", "token": "garbage"}', "cannot decrypt"),
+        ("{not json", "store.secrets_damaged"),
+        ("[]", "store.secrets_unsupported"),
+        ('{"format": "tow-secrets-undo/v1", "cipher": "fernet", "token": "x"}', "store.secrets_unsupported"),
+        ('{"format": "tow-secrets/v1", "cipher": "aes", "token": "x"}', "store.secrets_unsupported"),
+        ('{"format": "tow-secrets/v1", "cipher": "fernet", "token": ""}', "store.secrets_damaged"),
+        ('{"format": "tow-secrets/v1", "cipher": "fernet", "token": 5}', "store.secrets_damaged"),
+        ('{"format": "tow-secrets/v1", "cipher": "fernet", "token": "garbage"}', "store.secrets_wrong_key"),
     ],
 )
 def test_malformed_encrypted_envelope_fails_closed(key, envelope, message):
     encrypted_secrets_path().write_text(envelope, encoding="utf-8")
-    with pytest.raises(SecretStoreError, match=message):
+    with _refused(message):
         load_secrets()
     assert encrypted_secrets_path().read_text(encoding="utf-8") == envelope
 
 
 def test_decrypted_payload_must_be_an_object(key):
     _write_envelope(encrypted_secrets_path(), ["not", "an", "object"], key)
-    with pytest.raises(SecretStoreError, match="must be an object"):
+    with _refused("store.secrets_damaged"):
         load_secrets()
 
 
@@ -613,7 +626,7 @@ def test_secret_write_failure_keeps_previous_secrets_and_no_temp_file(monkeypatc
 
     real_replace = store.os.replace
     monkeypatch.setattr(store.os, "replace", replace_fails)
-    with pytest.raises(SecretStoreError, match="cannot write encrypted TOW secrets"):
+    with _refused("store.secrets_write_failed"):
         save_secrets({"telegram": {"token": "new"}})
     monkeypatch.setattr(store.os, "replace", real_replace)
 
@@ -635,7 +648,7 @@ def test_save_secrets_reports_legacy_plaintext_it_could_not_remove(monkeypatch, 
     legacy = _write_legacy({"telegram": {"token": "legacy"}})
     monkeypatch.setattr(Path, "unlink", _fail_for("secrets.json", Path.unlink, PermissionError("locked")))
 
-    with pytest.raises(SecretStoreError, match="legacy plaintext remains"):
+    with _refused("store.legacy_remains"):
         save_secrets({"telegram": {"token": "fresh"}})
 
     assert legacy.exists()
@@ -655,7 +668,7 @@ def test_migrate_refuses_when_both_stores_exist(key):
     legacy = _write_legacy({"telegram": {"token": "legacy"}})
     encrypted_before = encrypted_secrets_path().read_bytes()
 
-    with pytest.raises(SecretStoreError, match="both encrypted and legacy"):
+    with _refused("store.legacy_left"):
         migrate_legacy_secrets()
 
     assert legacy.exists()
@@ -664,12 +677,12 @@ def test_migrate_refuses_when_both_stores_exist(key):
 
 @pytest.mark.parametrize(
     ("legacy_text", "message"),
-    [("{broken", "legacy TOW secrets are unreadable"), ('["list"]', "legacy TOW secrets must be an object")],
+    [("{broken", "store.legacy_unreadable"), ('["list"]', "store.legacy_unreadable")],
 )
 def test_migrate_rejects_bad_legacy_plaintext_and_keeps_it(key, legacy_text, message):
     secrets_path().write_text(legacy_text, encoding="utf-8")
 
-    with pytest.raises(SecretStoreError, match=message):
+    with _refused(message):
         migrate_legacy_secrets()
 
     assert secrets_path().read_text(encoding="utf-8") == legacy_text
@@ -680,11 +693,11 @@ def test_migrate_that_cannot_remove_plaintext_fails_closed(monkeypatch, key):
     legacy = _write_legacy({"telegram": {"token": "legacy"}})
     monkeypatch.setattr(Path, "unlink", _fail_for("secrets.json", Path.unlink, PermissionError("locked")))
 
-    with pytest.raises(SecretStoreError, match="legacy plaintext remains"):
+    with _refused("store.legacy_remains"):
         migrate_legacy_secrets()
 
     assert legacy.exists()
-    with pytest.raises(SecretStoreError, match="must be removed"):
+    with _refused("store.legacy_left"):
         load_secrets()
 
 
@@ -700,7 +713,7 @@ def test_secret_undo_round_trip_and_idempotent_delete(key):
     delete_secret_undo(ref)
     assert not secret_undo_path().exists()
     delete_secret_undo(ref)  # already gone: not an error
-    with pytest.raises(SecretStoreError, match="unreadable"):
+    with _refused("store.secrets_damaged"):
         load_secret_undo(ref)
 
 
@@ -727,7 +740,7 @@ def test_secret_undo_with_malformed_inner_payload_fails_closed(key):
 
 def test_secrets_envelope_is_not_accepted_as_undo_snapshot(key):
     _write_envelope(secret_undo_path(), {"secrets": {}}, key, fmt="tow-secrets/v1")
-    with pytest.raises(SecretStoreError, match="unsupported encrypted TOW secrets format"):
+    with _refused("store.secrets_unsupported"):
         load_secret_undo("settings-v1")
 
 

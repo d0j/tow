@@ -16,7 +16,7 @@ from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, BinaryIO
 
-from tow.errors import TowError
+from tow.errors import Msg, TowError
 
 if TYPE_CHECKING:
     from cryptography.fernet import Fernet
@@ -465,9 +465,9 @@ def _read_key_file(path: Path) -> bytes:
     try:
         key = path.read_bytes().strip()
     except (OSError, UnicodeError) as exc:
-        raise SecretStoreError("cannot read TOW master key file") from exc
+        raise SecretStoreError(Msg("store.key_unreadable")) from exc
     if not key:
-        raise SecretStoreError("TOW master key file is empty")
+        raise SecretStoreError(Msg("store.key_empty"))
     return key
 
 
@@ -500,11 +500,11 @@ def master_fernet() -> Fernet:
     try:
         from cryptography.fernet import Fernet
     except ImportError as exc:
-        raise SecretStoreError("cryptography dependency is unavailable") from exc
+        raise SecretStoreError(Msg("store.no_cryptography")) from exc
     try:
         return Fernet(_master_key())
     except (TypeError, ValueError, UnicodeError) as exc:
-        raise SecretStoreError("invalid TOW master key") from exc
+        raise SecretStoreError(Msg("store.key_invalid")) from exc
 
 
 def _json_bytes(data: Any) -> bytes:
@@ -523,7 +523,7 @@ def _write_bytes_atomic(path: Path, content: bytes) -> None:
         atomic_write_bytes(path, content)
         _restrict_file(path)
     except OSError as exc:
-        raise SecretStoreError("cannot write encrypted TOW secrets") from exc
+        raise SecretStoreError(Msg("store.secrets_write_failed")) from exc
 
 
 def _restrict_file(path: Path) -> None:
@@ -535,7 +535,7 @@ def _encrypted_payload(path: Path, expected_format: str) -> dict[str, Any]:
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
-        raise SecretStoreError("encrypted TOW secrets are unreadable") from exc
+        raise SecretStoreError(Msg("store.secrets_damaged")) from exc
     return _decrypted_envelope(text, expected_format)
 
 
@@ -553,7 +553,7 @@ def _decrypt_envelope_bytes(content: bytes, expected_format: str) -> dict[str, A
     try:
         text = content.decode("utf-8")
     except UnicodeError as exc:
-        raise SecretStoreError("encrypted TOW secrets are unreadable") from exc
+        raise SecretStoreError(Msg("store.secrets_damaged")) from exc
     return _decrypted_envelope(text, expected_format)
 
 
@@ -569,25 +569,25 @@ def _decrypted_envelope(text: str, expected_format: str, fernet: Any = None) -> 
     try:
         envelope = decode_json_bytes(text.encode("utf-8"))
     except (UnicodeError, ValueError, RecursionError) as exc:
-        raise SecretStoreError("encrypted TOW secrets are unreadable") from exc
+        raise SecretStoreError(Msg("store.secrets_damaged")) from exc
     if not isinstance(envelope, dict) or envelope.get("format") != expected_format:
-        raise SecretStoreError("unsupported encrypted TOW secrets format")
+        raise SecretStoreError(Msg("store.secrets_unsupported"))
     if envelope.get("cipher") != "fernet":
-        raise SecretStoreError("unsupported encrypted TOW cipher")
+        raise SecretStoreError(Msg("store.secrets_unsupported"))
     token = envelope.get("token")
     if not isinstance(token, str) or not token:
-        raise SecretStoreError("encrypted TOW secrets are malformed")
+        raise SecretStoreError(Msg("store.secrets_damaged"))
     try:
         from cryptography.fernet import InvalidToken
     except ImportError as exc:
-        raise SecretStoreError("cryptography dependency is unavailable") from exc
+        raise SecretStoreError(Msg("store.no_cryptography")) from exc
     try:
         decoded = (fernet or master_fernet()).decrypt(token.encode("ascii"))
         payload = decode_json_bytes(decoded)
     except (InvalidToken, UnicodeError, ValueError, TypeError, RecursionError) as exc:
-        raise SecretStoreError("cannot decrypt TOW secrets") from exc
+        raise SecretStoreError(Msg("store.secrets_wrong_key")) from exc
     if not isinstance(payload, dict):
-        raise SecretStoreError("decrypted TOW secrets must be an object")
+        raise SecretStoreError(Msg("store.secrets_damaged"))
     return payload
 
 
@@ -601,9 +601,11 @@ def _read_legacy() -> dict[str, Any]:
     try:
         data = decode_json_bytes(secrets_path().read_bytes())
     except (OSError, UnicodeError, ValueError, RecursionError) as exc:
-        raise SecretStoreError("legacy TOW secrets are unreadable") from exc
+        raise SecretStoreError(
+            Msg("store.legacy_unreadable", file="data/secrets.json", command="tow secrets migrate")
+        ) from exc
     if not isinstance(data, dict):
-        raise SecretStoreError("legacy TOW secrets must be an object")
+        raise SecretStoreError(Msg("store.legacy_unreadable", file="data/secrets.json", command="tow secrets migrate"))
     return data
 
 
@@ -626,10 +628,10 @@ def load_secrets() -> dict[str, Any]:
     legacy = secrets_path()
     if encrypted.is_file():
         if legacy.is_file():
-            raise SecretStoreError("legacy plaintext TOW secrets must be removed")
+            raise SecretStoreError(Msg("store.legacy_left", file="data/secrets.json", encrypted="secrets.enc"))
         return _encrypted_payload(encrypted, _SECRETS_FORMAT)
     if legacy.is_file():
-        raise SecretStoreError("legacy plaintext TOW secrets require explicit migrate")
+        raise SecretStoreError(Msg("store.migrate_needed", file="data/secrets.json", command="tow secrets migrate"))
     return {}
 
 
@@ -639,13 +641,15 @@ def save_secrets(data: dict[str, Any]) -> None:
     encrypted = encrypted_secrets_path()
     _write_encrypted(encrypted, data, _SECRETS_FORMAT)
     if _encrypted_payload(encrypted, _SECRETS_FORMAT) != data:
-        raise SecretStoreError("encrypted TOW secrets read-back mismatch")
+        raise SecretStoreError(Msg("store.readback_mismatch"))
     legacy = secrets_path()
     if legacy.is_file():
         try:
             legacy.unlink()
         except OSError as exc:
-            raise SecretStoreError("encrypted secrets saved but legacy plaintext remains") from exc
+            raise SecretStoreError(
+                Msg("store.legacy_remains", file="data/secrets.json", encrypted="secrets.enc")
+            ) from exc
 
 
 def migrate_legacy_secrets() -> bool:
@@ -654,15 +658,15 @@ def migrate_legacy_secrets() -> bool:
     if not legacy.is_file():
         return False
     if encrypted.is_file():
-        raise SecretStoreError("both encrypted and legacy TOW secrets exist")
+        raise SecretStoreError(Msg("store.legacy_left", file="data/secrets.json", encrypted="secrets.enc"))
     data = _read_legacy()
     _write_encrypted(encrypted, data, _SECRETS_FORMAT)
     if _encrypted_payload(encrypted, _SECRETS_FORMAT) != data:
-        raise SecretStoreError("encrypted TOW secrets read-back mismatch")
+        raise SecretStoreError(Msg("store.readback_mismatch"))
     try:
         legacy.unlink()
     except OSError as exc:
-        raise SecretStoreError("encrypted secrets saved but legacy plaintext remains") from exc
+        raise SecretStoreError(Msg("store.legacy_remains", file="data/secrets.json", encrypted="secrets.enc")) from exc
     return True
 
 
@@ -726,9 +730,9 @@ def _write_new_key_file(path: Path, key: bytes) -> None:
     try:
         handle = os.fdopen(os.open(path, _NEW_KEY_FLAGS, 0o600), "wb")
     except FileExistsError as exc:
-        raise SecretStoreError("TOW master key file already exists") from exc
+        raise SecretStoreError(Msg("cli.keys.error.exists")) from exc
     except OSError as exc:
-        raise SecretStoreError("cannot create TOW master key file") from exc
+        raise SecretStoreError(Msg("cli.keys.error.write_failed")) from exc
     try:
         with handle:
             handle.write(key + b"\n")
@@ -737,7 +741,7 @@ def _write_new_key_file(path: Path, key: bytes) -> None:
     except OSError as exc:
         with suppress(OSError):
             path.unlink()  # a half-written key must not look like a different one next time
-        raise SecretStoreError("cannot create TOW master key file") from exc
+        raise SecretStoreError(Msg("cli.keys.error.write_failed")) from exc
     _restrict_file(path)
 
 
@@ -764,7 +768,7 @@ def generate_master_key(path: Path | None = None) -> Path:
     try:
         from cryptography.fernet import Fernet
     except ImportError as exc:
-        raise SecretStoreError("cryptography dependency is unavailable") from exc
+        raise SecretStoreError(Msg("store.no_cryptography")) from exc
     if path is None:
         if encrypted_secrets_path().is_file():
             raise MasterKeyError("encrypted secrets exist: adopt their key instead", kind="secrets_exist")
@@ -783,7 +787,7 @@ def _proven_secret_files(key: bytes) -> int:
 
         fernet = Fernet(key)
     except ImportError as exc:
-        raise SecretStoreError("cryptography dependency is unavailable") from exc
+        raise SecretStoreError(Msg("store.no_cryptography")) from exc
     except (TypeError, ValueError) as exc:
         raise MasterKeyError("not a TOW master key", kind="invalid") from exc
     checked = 0

@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+from tow import i18n
 from tow.paths import state_path
 from tow.store import (
     SecretStoreError,
@@ -49,8 +50,29 @@ def test_encrypted_secrets_fail_closed_without_or_with_wrong_key(monkeypatch):
         load_secrets()
 
     monkeypatch.setenv("TOW_MASTER_KEY", base64.urlsafe_b64encode(b"wrong-key-32bytes-for-test-only!").decode())
-    with pytest.raises(SecretStoreError, match="decrypt"):
+    with pytest.raises(SecretStoreError) as wrong:
         load_secrets()
+    # Shown as it is by tow check, tow doctor and tow secrets status: the owner's words and
+    # what to do, not "cannot decrypt TOW secrets".
+    assert str(wrong.value) == i18n.translate("store.secrets_wrong_key", i18n.current())
+    assert "tow keys adopt" in str(wrong.value)
+
+
+def test_tow_check_says_a_secret_store_refusal_in_the_owners_language(monkeypatch, capsys):
+    from tow import cli
+
+    monkeypatch.setenv("TOW_MASTER_KEY", _key())
+    legacy = encrypted_secrets_path().with_name("secrets.json")
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    legacy.write_text(json.dumps({"telegram": {"token": "legacy-token"}}), encoding="utf-8")
+    monkeypatch.setattr(i18n, "_CURRENT", i18n.ContextVar("test_language", default=None))
+    monkeypatch.setattr(cli, "_use_language", lambda _argv: i18n.use("ru"))
+
+    assert cli.main(["check", "--json"]) == 3
+
+    error = json.loads(capsys.readouterr().out)["error"]
+    said = i18n.translate("store.migrate_needed", "ru", file="data/secrets.json", command="tow secrets migrate")
+    assert error == said
 
 
 def test_key_file_is_a_portable_key_source(tmp_path, monkeypatch):
