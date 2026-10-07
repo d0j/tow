@@ -11,7 +11,9 @@
     "Stop TOW.cmd" and removes the folder. -Offline points every proxy variable at a closed port
     for the first start: the bundle must start without the internet. Places outside the folder
     where uv or Python could write (uv's own folders, the Python registry keys, the top of the
-    profile folders) are compared before and after.
+    profile folders) are compared before and after. At the top of the profile folders only names
+    TOW, uv or Python could make count (uv, python, pip, tow, the test folder's name); other
+    programs of a CI runner come and go there, and what was ignored is printed.
 
 .EXAMPLE
     pwsh scripts/bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Offline
@@ -50,6 +52,32 @@ function Get-Outside {
     return $state
 }
 
+# Entries at the top of the profile folders that TOW, uv or Python could make: other programs of a
+# CI runner (a browser's Mozilla folder once) come and go there during the smoke on their own.
+function Test-Ours([string]$Name) {
+    return $Name -match '(?i)uv|python|pip|tow' -or $Name.Contains($installName, [StringComparison]::OrdinalIgnoreCase)
+}
+
+# The places that changed between two Get-Outside states; entries of the profile folders that are
+# not ours are printed as runner noise and not counted.
+function Compare-Outside($Before, $After) {
+    $changed = @()
+    foreach ($place in $Before.Keys) {
+        if ("$($Before[$place])" -eq "$($After[$place])") { continue }
+        if ($place -like 'entries of *') {
+            $old = @("$($Before[$place])" -split '\|' | Where-Object { $_ })
+            $new = @("$($After[$place])" -split '\|' | Where-Object { $_ })
+            $diff = @($new | Where-Object { $old -notcontains $_ } | ForEach-Object { "+$_" }) +
+                @($old | Where-Object { $new -notcontains $_ } | ForEach-Object { "-$_" })
+            $noise = @($diff | Where-Object { -not (Test-Ours $_.Substring(1)) })
+            if ($noise.Count) { Write-Host "  ignored as runner noise in $($place.Substring(11)): $($noise -join ', ')" }
+            if ($noise.Count -eq $diff.Count) { continue }
+        }
+        $changed += $place
+    }
+    return , $changed
+}
+
 function Wait-Until([scriptblock]$Condition, [int]$Seconds) {
     $deadline = (Get-Date).AddSeconds($Seconds)
     while ((Get-Date) -lt $deadline) {
@@ -67,6 +95,7 @@ function Test-Health {
 $cyrillic = -join [char[]](0x0422, 0x0435, 0x0441, 0x0442)  # "Test" in Russian: the file stays ASCII
 $folder = Join-Path $Base ("tow smoke $cyrillic " + [guid]::NewGuid().ToString('N').Substring(0, 6))
 $root = Join-Path $folder 'TOW'
+$installName = Split-Path -Leaf $folder
 $saved = @{ TOW_NO_BROWSER = $env:TOW_NO_BROWSER; HTTP_PROXY = $env:HTTP_PROXY; HTTPS_PROXY = $env:HTTPS_PROXY; ALL_PROXY = $env:ALL_PROXY; NO_PROXY = $env:NO_PROXY }
 # The bundle runs as on a new computer: no TOW or uv variables of this machine (a developer's
 # machine may name its own install's master key in TOW_MASTER_KEY_FILE; setup-uv sets UV_*).
@@ -177,7 +206,7 @@ try {
     }
 
     $after = Get-Outside
-    $changed = @($before.Keys | Where-Object { "$($before[$_])" -ne "$($after[$_])" })
+    $changed = Compare-Outside $before $after
     foreach ($place in $changed) { Write-Host "  outside the folder: $place`n    before: $($before[$place])`n    after:  $($after[$place])" -ForegroundColor Yellow }
     if ($changed.Count) { throw "the bundle wrote outside its folder: $($changed -join ', ')" }
     $size = (Get-ChildItem -LiteralPath $root -Recurse -File -Force | Measure-Object -Sum Length).Sum

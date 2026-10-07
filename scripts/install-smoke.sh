@@ -8,7 +8,8 @@
 # `tow status`, starts again (it only finds TOW running), stops it with the stop file, removes it
 # with --uninstall --yes (data, keys and config stay), installs again around them (same key),
 # starts, checks and stops it again, uninstalls, then --purge (nothing stays). uv's and Python's
-# places outside the folder are compared before and after. Never port 8787.
+# places outside the folder are compared before and after; at the top of the home folder only
+# names TOW, uv or Python could make count, and what was ignored is printed. Never port 8787.
 set -eu
 
 archive=$1
@@ -31,6 +32,9 @@ fail() {
 }
 sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d ' ' -f 1; }
 healthy() { curl -fsS --noproxy '*' --max-time 3 "http://127.0.0.1:$port/healthz" >/dev/null 2>&1; }
+# Names TOW, uv or Python could make at the top of the home folder (the test folders are named
+# "tow ..."); other programs of a CI runner come and go there on their own.
+ours='uv|python|pip|tow'
 outside() { # where uv or Python could write outside the folder
     for place in "$HOME/.local/share/uv" "$HOME/.cache/uv" "$HOME/.local/bin" "$HOME/Library/Caches/uv" \
         "$HOME/.config/uv" "$HOME/.local/share/applications"; do
@@ -40,7 +44,10 @@ outside() { # where uv or Python could write outside the folder
             printf '%s absent\n' "$place"
         fi
     done
-    printf 'home: %s\n' "$(ls -A "$HOME" | tr '\n' '|')"
+    printf 'home: %s\n' "$(ls -A "$HOME" | grep -iE "$ours" | LC_ALL=C sort | tr '\n' '|')"
+}
+noise() { # entries of one of two listings, not of both, that are not ours
+    printf '%s\n%s\n' "$1" "$2" | LC_ALL=C sort | uniq -u | grep -viE "^\$|$ours" | tr '\n' ' '
 }
 cleanup() {
     [ ! -x "$dir/app/scripts/tow" ] || "$dir/app/scripts/tow" stop >/dev/null 2>&1 || true
@@ -50,6 +57,7 @@ trap cleanup EXIT
 
 if healthy; then fail "something already answers on port $port"; fi
 before=$(outside)
+home_before=$(ls -A "$HOME")
 printf '%s  tow-source.tar.gz\n' "$(sha "$archive")" >"$sums"
 
 say "install.sh into $dir"
@@ -136,6 +144,8 @@ sh "$installer" --uninstall --yes --purge --dir "$dir" </dev/null
 [ ! -e "$dir" ] || fail "--purge left $dir"
 
 after=$(outside)
+ignored=$(noise "$home_before" "$(ls -A "$HOME")")
+[ -z "$ignored" ] || say "ignored as runner noise in $HOME: $ignored"
 if [ "$before" != "$after" ]; then
     printf 'before:\n%s\nafter:\n%s\n' "$before" "$after" >&2
     fail "the install wrote outside its folder"
