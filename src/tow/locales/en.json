@@ -2142,7 +2142,7 @@
       "no_such_client": "no such client",
       "client_added": "{title} added — fill in the connection below and press “Save”",
       "client_removed": "client removed",
-      "default_client": "main client chosen: TOW adds new torrents to it",
+      "default_client": "main client chosen: TOW adds new topics to it",
       "access_local_only": "access and password can be changed only on the computer running TOW",
       "set_password_first": "set a password first",
       "access_saved": "access saved; restart TOW",
