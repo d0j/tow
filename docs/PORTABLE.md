@@ -756,7 +756,9 @@ Built so far (this workstream):
   all 45 large file-selection scenarios of `tests/selection_work_probe.py`
   (`TOW_SELECTION_WORK=all`); the gate measures the costliest of each kind.
 - Releases (`.github/workflows/release.yml`, 1.22): a `v*` tag (or a dispatch with a tag) must be
-  an annotated `TOW X.Y.Z` on `origin/main` whose commit passed `ci` (the gate is not run again);
+  an annotated `TOW X.Y.Z` on `origin/main` whose content passed `ci` - on its commit or on any
+  commit with the same tree, such as the head of the merged pull request (the gate is not run
+  again, and the run of the same content on `main` is not waited for);
   then GitHub's source archive of the tag (its version must be the tag's): Windows builds the bundle
   from it and runs `scripts/bundle-smoke.ps1 -Offline` (unpacked into a path with a space and
   Cyrillic letters, `Start TOW.cmd` with every proxy pointing at a closed port, `/healthz`,
