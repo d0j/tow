@@ -630,3 +630,60 @@ def test_tampered_point_is_an_invalid_file(monkeypatch, tmp_path):
 
     assert caught.value.kind == INVALID_FILE
     assert str(caught.value) == t("backup.restore_point.validation_failed", "en")
+
+
+def test_a_large_download_history_fits_a_restore_point(monkeypatch, tmp_path):
+    # Before: members were written indented and sorted, and the read-back refused a member over
+    # 16 MiB - about 20,000 file records (a year or two of episodes) failed every restore point,
+    # and with it the web update, while the same data was some 12 MiB on disk.
+    from tow.store import save_download_history
+
+    _seed(monkeypatch, tmp_path, "en")
+    item = {
+        "kind": "episode",
+        "label": "S01E01",
+        "episode_key": "episode:s01e01",
+        "episode_keys": ["episode:s01e01"],
+        "relative_path": "Show.1/Show.1.S01E01.1080p.WEB-DL.mkv",
+        "client_id": "default",
+        "client_kind": "qbittorrent",
+        "source_hash": "A" * 40,
+        "size": 700000000,
+        "first_seen_at": "2026-10-07T12:11:04+03:00",
+        "completed_observed_at": "2026-10-07T12:11:04+03:00",
+        "torrent_completed_at": 1791364204,
+        "status": "completed",
+        "new_after_baseline": False,
+        "superseded": False,
+        "progress": 1.0,
+    }
+
+    def identity(topic: int, episode: int) -> str:
+        return f"file:show.{topic}/show.{topic}.s01e{episode:02d}.1080p.web-dl.mkv:{700000000 + episode}"
+
+    topics = {
+        f"p{topic:04d}": {"items": {identity(topic, e): {**item, "identity": identity(topic, e)} for e in range(70)}}
+        for topic in range(300)
+    }
+    history = {"schema_version": 1, "topics": topics}
+    save_download_history(history)
+    assert len(json.dumps(history, ensure_ascii=False, sort_keys=True, indent=2).encode()) > 16 * 2**20
+
+    saved = create_restore_point()
+
+    assert restore_points.check_restore_point(saved["id"])["ok"] is True
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_data_too_large_for_a_restore_point_is_said_in_the_owner_language(monkeypatch, tmp_path, language):
+    from tow import bundle
+
+    _seed(monkeypatch, tmp_path, language)
+    monkeypatch.setattr(bundle, "MAX_BUNDLE_BYTES", 400)  # the config fits, the unpacked whole does not
+
+    with pytest.raises(RestorePointError) as caught:
+        create_restore_point()
+
+    assert caught.value.kind == CREATE_FAILED
+    reason = t("backup.restore_point.data_too_large", language, mib=64)
+    assert str(caught.value) == t("backup.restore_point.cannot_create", language, reason=reason)

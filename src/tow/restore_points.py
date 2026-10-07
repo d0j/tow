@@ -9,7 +9,14 @@ from pathlib import Path
 from typing import Any
 
 from tow.backup_actions import added_names, cleanup_names, copy_revision, inventory_digest
-from tow.bundle import ExportImportError, export_bundle, import_bundle, rollback_import, verify_bundle
+from tow.bundle import (
+    MAX_BUNDLE_BYTES,
+    ExportImportError,
+    export_bundle,
+    import_bundle,
+    rollback_import,
+    verify_bundle,
+)
 from tow.config import load_config
 from tow.diagnostic_json import encode_object, read_object
 from tow.i18n import t
@@ -268,7 +275,12 @@ def _create_restore_point(*, protected: set[str] | None = None) -> dict[str, Any
         # The exporter owns its failed writes. An existing or concurrently created
         # file at this name is not ours to delete.
         # Name the cause (OSError without its filename: no local paths in the UI flash).
-        reason = (exc.strerror or type(exc).__name__) if isinstance(exc, OSError) else str(exc)
+        if isinstance(exc, OSError):
+            reason = exc.strerror or type(exc).__name__
+        elif isinstance(exc, ExportImportError) and exc.reason == "too_large":
+            reason = t("backup.restore_point.data_too_large", owner_language(), mib=MAX_BUNDLE_BYTES // 2**20)
+        else:
+            reason = str(exc)
         raise RestorePointError(
             t("backup.restore_point.cannot_create", owner_language(), reason=reason), kind=CREATE_FAILED
         ) from exc

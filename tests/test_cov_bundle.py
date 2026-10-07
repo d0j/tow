@@ -563,16 +563,23 @@ def test_member_with_corrupted_bytes_fails_the_archive_crc(tmp_path):
     _rejects(tmp_path, bundle, "cannot read export bundle archive")
 
 
-def test_member_over_the_per_member_limit_is_rejected(tmp_path, monkeypatch):
-    monkeypatch.setattr(tow_bundle, "MAX_MEMBER_BYTES", 64)
-    bundle = _bundle(tmp_path / "in" / "tow.towx", _members(config_yaml=b"# " + b"x" * 200 + b"\nport: 1\n"))
-    _rejects(tmp_path, bundle, "bundle member is too large")
+def test_a_member_is_never_unpacked_beyond_its_declared_size(tmp_path):
+    marker = b"bind: 127.0.0.1\nport: 8787\n"
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("config.yaml", marker * 1000)
+    payload = bytearray(buffer.getvalue())
+    for offset in (22, payload.find(b"PK\x01\x02") + 24):  # the size in the local and the central header
+        assert int.from_bytes(payload[offset : offset + 4], "little") == len(marker) * 1000
+        payload[offset : offset + 4] = len(marker).to_bytes(4, "little")
+    bundle = _write_outer(tmp_path / "in" / "tow.towx", _seal(bytes(payload)))
+
+    _rejects(tmp_path, bundle, "cannot read export bundle archive")
 
 
 def test_members_whose_total_size_exceeds_the_bundle_limit_are_rejected(tmp_path, monkeypatch):
     # Highly compressible members: the sealed file stays small, the unpacked total does not.
     monkeypatch.setattr(tow_bundle, "MAX_BUNDLE_BYTES", 6000)
-    monkeypatch.setattr(tow_bundle, "MAX_MEMBER_BYTES", 5000)
     padding = b"#" + b" " * 3500 + b"\n"
     bundle = _bundle(
         tmp_path / "in" / "tow.towx",

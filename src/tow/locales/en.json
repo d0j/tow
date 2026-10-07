@@ -145,6 +145,7 @@
       "unsafe_dir": "unsafe restore points folder",
       "read_back_failed": "the new restore point could not be read back",
       "cannot_create": "the backup could not be written: {reason}",
+      "data_too_large": "the data is larger than a backup file holds ({mib} MB)",
       "cannot_create_portable": "cannot create the backup file",
       "portable_invalid": "the backup file is not valid",
       "portable_check_failed": "the backup file check failed",
