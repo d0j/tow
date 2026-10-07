@@ -6,6 +6,7 @@ whole network-bound run; the web process must not wait for it on plain reads.
 
 import threading
 
+import pytest
 from fastapi.testclient import TestClient
 from helpers import shown
 
@@ -117,7 +118,7 @@ def test_pending_secret_undo_cleanup_still_runs():
 
 def test_a_slow_write_does_not_hold_up_pages(monkeypatch):
     """1.19: every request used to queue for the site lock - a site probe of half a minute froze
-    Home. Reads no longer take it; writes still go one at a time."""
+    Home. Reads no longer take it, and a probe no longer holds up a save either."""
     import asyncio
 
     monkeypatch.setattr("tow.web.middleware._SITE_HTTP_LOCK", asyncio.Lock())  # bound to this test's loop
@@ -143,13 +144,227 @@ def test_a_slow_write_does_not_hold_up_pages(monkeypatch):
                 assert client.get(path, headers={"Accept": "text/html"}).status_code == 200, path
                 assert probe.is_alive(), f"{path} only answered after the probe ended"
             pause.start()
-            assert not done.wait(0.3), "a second write did not wait for the first"
+            # 1.24.1: a probe of half a minute held every save behind it.
+            assert done.wait(5), "a save waited for a site probe"
+            assert probe.is_alive()
         finally:
             release.set()
             probe.join(10)
         pause.join(10)
-        assert done.is_set()
     assert load_state()["topics"][0]["paused"] is True
+
+
+def test_ordinary_saves_still_go_one_at_a_time(monkeypatch):
+    """A write that is not a network action keeps the site lock (one that takes no persistence
+    lock of its own here, so only the site lock can make the second one wait)."""
+    import asyncio
+
+    monkeypatch.setattr("tow.web.middleware._SITE_HTTP_LOCK", asyncio.Lock())
+    entered, release = threading.Event(), threading.Event()
+
+    def slow_restart():
+        entered.set()
+        release.wait(10)
+        return {"ok": False}
+
+    monkeypatch.setattr("tow.web.services.request_restart", slow_restart)
+    save_state({"topics": [{"id": "t", "title": "Show", "url": "http://rutor.info/torrent/1", "save_path": "M:\\s"}]})
+    with TestClient(app, headers={"Origin": "http://127.0.0.1"}) as client:
+        first = threading.Thread(target=lambda: client.post("/settings/service/restart"), daemon=True)
+        first.start()
+        done = threading.Event()
+        second = threading.Thread(
+            target=lambda: (client.post("/topics/t/pause", follow_redirects=False), done.set()), daemon=True
+        )
+        try:
+            assert entered.wait(5)
+            second.start()
+            assert not done.wait(0.3), "a second write did not wait for the first"
+        finally:
+            release.set()
+            first.join(10)
+        second.join(10)
+        assert done.is_set()
+
+
+def _slow_network(monkeypatch, name: str, result, save=None):
+    """``services.<name>`` waits like a client or a site that does not answer; ``save`` then
+    writes what it learned the way the real action does (under the persistence lock)."""
+    entered, release = threading.Event(), threading.Event()
+
+    def slow(*_args, **_kwargs):
+        entered.set()
+        release.wait(10)
+        if save is not None:
+            with persistence_lock():
+                state = load_state()
+                save(state)
+                save_state(state)
+        return result
+
+    monkeypatch.setattr(f"tow.web.services.{name}", slow)
+    return entered, release
+
+
+def _while_running(client, slow_request, entered, release, save_request) -> None:
+    """``save_request`` finishes while ``slow_request`` still waits on the network."""
+    slow = threading.Thread(target=slow_request, daemon=True)
+    slow.start()
+    try:
+        assert entered.wait(5)
+        response = save_request()
+        assert response.status_code in (200, 303), response.text
+        assert slow.is_alive(), "the save only answered after the network action ended"
+    finally:
+        release.set()
+        slow.join(10)
+
+
+def test_a_save_does_not_wait_for_a_client_check(monkeypatch):
+    """QA 1.24.1: "Check" on a client that does not answer took 24 s; a language save made
+    meanwhile waited 23.6 s for it."""
+    import asyncio
+
+    from tow.config import load_config
+
+    monkeypatch.setattr("tow.web.middleware._SITE_HTTP_LOCK", asyncio.Lock())
+
+    class Silent:
+        def ping(self):
+            entered.set()
+            release.wait(10)
+            raise ConnectionError("no answer")
+
+    entered, release = threading.Event(), threading.Event()
+    monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *_a, **_k: Silent())
+    monkeypatch.setattr("tow.web.routes_settings._client_answers", lambda *_a, **_k: True, raising=False)
+    with TestClient(app, headers={"Origin": "http://127.0.0.1"}) as client:
+        _while_running(
+            client,
+            lambda: client.post("/settings/client/ping", follow_redirects=False),
+            entered,
+            release,
+            lambda: client.post("/settings/language", data={"language": "en"}, follow_redirects=False),
+        )
+    assert load_config()["language"] == "en"
+
+
+def test_a_topic_check_and_a_save_keep_both_changes(monkeypatch):
+    """A check against a tracker that does not answer (45 s) no longer holds up a pause; the
+    check's result, saved under the persistence lock, keeps the pause and the pause keeps it."""
+    import asyncio
+
+    monkeypatch.setattr("tow.web.middleware._SITE_HTTP_LOCK", asyncio.Lock())
+    save_state({"topics": [{"id": "t", "title": "Show", "url": "http://rutor.info/torrent/1", "save_path": "M:\\s"}]})
+
+    def checked(state):
+        state["topics"][0]["last_ok"] = True
+
+    entered, release = _slow_network(monkeypatch, "run_check", {"results": [{"id": "t", "ok": True}]}, checked)
+    with TestClient(app, headers={"Origin": "http://127.0.0.1"}) as client:
+        _while_running(
+            client,
+            lambda: client.post("/topics/t/check", follow_redirects=False),
+            entered,
+            release,
+            lambda: client.post("/topics/t/pause", follow_redirects=False),
+        )
+    topic = load_state()["topics"][0]
+    assert topic["paused"] is True
+    assert topic["last_ok"] is True
+
+
+def test_adding_a_topic_does_not_hold_up_saves(monkeypatch):
+    """Adding a topic on a tracker that does not answer kept every save waiting for ~53 s."""
+    import asyncio
+
+    from tow.config import load_config
+
+    monkeypatch.setattr("tow.web.middleware._SITE_HTTP_LOCK", asyncio.Lock())
+    monkeypatch.setattr("tow.title.guess_topic_title", lambda *_a, **_k: "")
+    entered, release = _slow_network(monkeypatch, "run_check", {"results": []})
+    with TestClient(app, headers={"Origin": "http://127.0.0.1"}) as client:
+        _while_running(
+            client,
+            lambda: client.post(
+                "/topics/add",
+                data={"url": "http://rutor.info/torrent/2/x", "title": "Show", "save_path": "M:\\s"},
+                follow_redirects=False,
+            ),
+            entered,
+            release,
+            lambda: client.post("/settings/language", data={"language": "en"}, follow_redirects=False),
+        )
+    assert load_config()["language"] == "en"
+    assert [topic["title"] for topic in load_state()["topics"]] == ["Show"]
+
+
+def test_a_site_deleted_while_a_topic_is_added_is_not_added_to(monkeypatch):
+    """The add no longer holds the site lock while it fetches the title: the site is looked up
+    again under the persistence lock before the topic is saved."""
+    import tow.web.routes_topics
+    from tow.config import load_config, save_config
+
+    real = tow.web.routes_topics.match_tracker
+    calls = []
+
+    def site_goes_away(trackers, url):
+        calls.append(url)
+        if len(calls) == 2:  # the second look, under the lock: the owner deleted the site meanwhile
+            cfg = load_config()
+            cfg["trackers"].pop("rutor", None)
+            save_config(cfg)
+            return None
+        return real(trackers, url)
+
+    monkeypatch.setattr("tow.web.routes_topics.match_tracker", site_goes_away)
+    monkeypatch.setattr("tow.title.guess_topic_title", lambda *_a, **_k: "")
+    monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: pytest.fail("no check for a refused add"))
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    response = client.post(
+        "/topics/add",
+        data={"url": "http://rutor.info/torrent/2/x", "title": "Show", "save_path": "M:\\s"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert load_state().get("topics", []) == []
+
+
+def test_network_actions_are_the_only_writes_outside_the_site_lock():
+    from starlette.requests import Request
+
+    from tow.web.middleware import _serialized
+
+    def serialized(path: str) -> bool:
+        return _serialized(Request({"type": "http", "method": "POST", "path": path, "headers": []}))
+
+    for path in (
+        "/check",
+        "/doctor/run",
+        "/settings/client/ping",
+        "/settings/notifier/telegram/test",
+        "/sites/rutor/probe",
+        "/topics/add",
+        "/topics/guess-title",
+        "/topics/t1/check",
+        "/topics/t1/replace-revision",
+        "/topics/t1/tracker-login",
+        "/topics/t1/tracker-browser-auth",
+    ):
+        assert not serialized(path), path
+    for path in (
+        "/settings/language",
+        "/settings/client",
+        "/settings/notifier/telegram",
+        "/sites/new",
+        "/sites/rutor",
+        "/sites/rutor/delete",
+        "/topics/t1/edit",
+        "/topics/t1/pause",
+        "/topics/t1/check/extra",
+        "/settings/restore-points",
+    ):
+        assert serialized(path), path
 
 
 def test_the_middleware_reads_no_file_on_the_event_loop(monkeypatch):
