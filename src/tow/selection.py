@@ -346,42 +346,25 @@ def _class_filters(rows: Iterable[tuple[str, ...]]) -> list[Callable[[set[str]],
 
 def _file_mask_matcher(patterns: Iterable[str]) -> Callable[[str], bool]:
     """Only exact stdlib globs can accept; filters locate candidate groups."""
-    groups: dict[str, list[str]] = {}
-    unguarded: list[str] = []
     specs = {pattern: _mask_parts(pattern) for pattern in dict.fromkeys(patterns)}
     frequencies = Counter(part for parts, _ in specs.values() for part in parts)
-    guarded_count = sum(bool(parts) for parts, _ in specs.values())
-    # Shared title text should not hide a missing rule-specific piece. Every
-    # guarded glob also needs these common pieces; cap checks, not accepted rules.
-    common = sorted((part for part, count in frequencies.items() if count == guarded_count), key=len, reverse=True)[:8]
-    class_checks = _class_filters(classes for _, classes in specs.values())
+    groups: dict[str, list[str]] = {}
+    unguarded: list[str] = []
     for pattern, (parts, _) in specs.items():
-        # Only fixed text is a necessary condition; fnmatch still decides the
-        # exact match, including class membership, ranges and malformed syntax.
-        literal = min(parts, key=lambda part: (frequencies[part], -len(part))) if parts else ""
-        if literal:
-            groups.setdefault(literal, []).append(fnmatch.translate(pattern))
-        else:
-            unguarded.append(fnmatch.translate(pattern))
+        # Only fixed text is a necessary condition; fnmatch still decides the exact match.
+        # The rarest piece, then the longest: a shared title cannot make every rule a candidate.
+        literal = min(parts, key=lambda part: (frequencies[part], -len(part)), default="")
+        (groups.setdefault(literal, []) if literal else unguarded).append(fnmatch.translate(pattern))
+    # Every guarded rule also needs the pieces they all share; cap checks, not accepted rules.
+    guarded = len(specs) - len(unguarded)
+    common = sorted((part for part, count in frequencies.items() if count == guarded), key=len, reverse=True)[:8]
+    class_checks = _class_filters(classes for _, classes in specs.values())
     # A zero-width lookahead retains overlapping hits. Greedy terminals return
     # the longest literal at each position; its shorter prefixes remain candidates.
-    literal_filter = re.compile("(?=(" + _literal_union(groups) + "))") if groups else None
+    literal_filter = re.compile("(?=(" + _literal_union(groups) + "))").findall if groups else None
     prefixes = {literal: tuple(other for other in groups if literal.startswith(other)) for literal in groups}
     unguarded_match = re.compile("|".join(unguarded)).match if unguarded else None
-    compiled: dict[str, re.Pattern[str]] = {}
-
-    def try_literal(path: str, literal: str, seen: set[str]) -> bool:
-        for required in prefixes[literal]:
-            if required in seen:
-                continue
-            seen.add(required)
-            exact = compiled.get(required)
-            if exact is None:
-                exact = re.compile("|".join(groups[required]))
-                compiled[required] = exact
-            if exact.match(path):
-                return True
-        return False
+    exact: dict[str, Callable[[str], object]] = {}
 
     def matches(path: str) -> bool:
         if class_checks:
@@ -392,15 +375,17 @@ def _file_mask_matcher(patterns: Iterable[str]) -> Callable[[str], bool]:
             return True
         if literal_filter is None or any(part not in path for part in common):
             return False
-        first = literal_filter.search(path)
-        if first is None:
-            return False
         seen: set[str] = set()
-        if try_literal(path, first.group(1), seen):
-            return True
-        if len(seen) == len(groups):
-            return False
-        return any(try_literal(path, literal, seen) for literal in set(literal_filter.findall(path)))
+        for literal in set(literal_filter(path)):
+            for required in prefixes[literal]:
+                if required in seen:
+                    continue
+                seen.add(required)
+                if required not in exact:
+                    exact[required] = re.compile("|".join(groups[required])).match
+                if exact[required](path):
+                    return True
+        return False
 
     return matches
 
