@@ -93,7 +93,7 @@ def test_an_undo_of_a_password_change_on_this_pc_signs_every_device_out():
 def test_undoing_a_reminder_change_keeps_everyone_signed_in():
     record = _with_password(hint="старая")
     device = issue_session(_key(record))
-    _local().post("/settings/password", data={"hint": "новая"})
+    _local().post("/settings/password", data={"current_password": OLD, "hint": "новая"})
     epoch = auth._sessions_state()[0]
 
     response = _local().post("/undo", follow_redirects=False)
