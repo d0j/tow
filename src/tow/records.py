@@ -82,6 +82,7 @@ class Health(TypedDict, total=False):
     client: str
     qbit_ok: bool
     clients_ok: dict[str, bool]
+    clients_empty: dict[str, int]  # client -> checks in a row it listed no torrent
     check_ok: bool
     check_error: str
     check_failures: int

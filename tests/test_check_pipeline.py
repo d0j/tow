@@ -211,6 +211,57 @@ def test_a_client_that_lists_nothing_yet_is_not_read_as_removed_or_added_to(monk
     assert client.adds == [(NEW, "/media/tv")]
 
 
+def test_a_finished_one_time_topic_does_not_hold_an_emptied_client(monkeypatch, stores):
+    """A finished "once" topic is skipped without a new result, so it keeps last_ok and its hash
+    forever: an emptied (or new) client was "still starting" on every check and nothing was added."""
+    client = StartingClient()
+    client.loading = False
+    save_state(
+        {
+            "topics": [
+                {**_topic(hash=OLD, last_ok=True, once_done=True, tracking_mode="once"), "id": "done"},
+                {**_topic(hash=None), "id": "t2", "url": "https://tracker.example/2"},
+            ]
+        }
+    )
+    _wire(monkeypatch, {"main": client}, Tracker())
+    check.run_check(apply=True, notify=False, how="test")
+    assert client.adds == [(NEW, "/media/tv")]
+
+
+def test_a_topic_whose_timer_is_not_due_does_not_hold_an_emptied_client(monkeypatch, stores):
+    client = StartingClient()
+    client.loading = False
+    save_state(
+        {
+            "topics": [
+                {**_topic(hash=OLD, last_ok=True, check_interval_min=1440), "id": "later"},
+                {**_topic(hash=None), "id": "t2", "url": "https://tracker.example/2"},
+            ]
+        }
+    )
+    _wire(monkeypatch, {"main": client}, Tracker())
+    check.run_check(apply=True, notify=False, how="auto", scheduled_scope="global")
+    assert client.adds == [(NEW, "/media/tv")]
+
+
+def test_a_client_that_stays_empty_is_believed_after_two_checks(monkeypatch, stores):
+    client = StartingClient()
+    client.loading = False  # emptied by the owner: nothing will ever be listed
+    save_state({"topics": [_topic(hash=OLD, last_ok=True)]})
+    _wire(monkeypatch, {"main": client}, Tracker())
+    for _ in range(2):
+        check.run_check(apply=True, notify=False, how="test")
+        saved = load_state()["topics"][0]
+        assert saved["last_error_params"]["reason"]["$msg"]["code"] == "check.client_empty"
+        assert client.adds == []
+    assert load_state()["health"]["clients_empty"] == {"main": 2}
+    check.run_check(apply=True, notify=False, how="test")
+    assert client.adds == [(NEW, "/media/tv")]
+    check.run_check(apply=True, notify=False, how="test")  # lists the torrent now: the count is gone
+    assert "clients_empty" not in load_state()["health"]
+
+
 def test_an_empty_client_without_earlier_torrents_is_used(monkeypatch, stores):
     client = StartingClient()
     client.loading = False
