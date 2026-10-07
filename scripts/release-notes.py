@@ -26,13 +26,28 @@ def section(changelog: Path, version: str) -> str:
     return "\n".join(lines).strip()
 
 
+def unwrap(text: str) -> str:
+    """Join each indented continuation line to the line it continues: GitHub shows every line
+    break of a release body as a break, so a list item wrapped in the changelog broke mid-sentence.
+    A nested item ("  - ...") and blank lines stay as they are."""
+    lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        continues = line.startswith("  ") and bool(stripped) and not stripped.startswith(("- ", "* ", "|", "```"))
+        if continues and lines and lines[-1].strip():
+            lines[-1] = f"{lines[-1].rstrip()} {stripped}"
+        else:
+            lines.append(line)
+    return "\n".join(lines)
+
+
 def notes(tag: str, repo: str) -> str:
     version = tag.removeprefix("v")
     latest = f"https://github.com/{repo}/releases/latest/download"
     guide = f"https://github.com/{repo}/blob/{tag}/docs/install.md"
     guide_ru = f"https://github.com/{repo}/blob/{tag}/docs/ru/install.md"
-    english = section(ROOT / "CHANGELOG.md", version) or f"TOW {version}"
-    russian = section(ROOT / "CHANGELOG.ru.md", version)
+    english = unwrap(section(ROOT / "CHANGELOG.md", version)) or f"TOW {version}"
+    russian = unwrap(section(ROOT / "CHANGELOG.ru.md", version))
     parts = [
         "## Download",
         "",
