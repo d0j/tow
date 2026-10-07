@@ -3,6 +3,54 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.25.0] — 2026-10-07
+
+### Added
+
+- **Adopt into TOW**: a topic whose torrent is already in the client without TOW's mark can be taken under TOW's
+  management from its row, with `tow adopt` or `tow import-monitorrent --adopt`; only the mark is added.
+- `tow permissions` shows who can get into the TOW folder; `tow permissions fix` closes it (from an administrator
+  terminal when another account owns the folder).
+
+### Changed
+
+- The TOW folder itself is closed to other accounts of the computer, not only `keys` and `data`; folders are
+  compared by account, and only folders of your account are changed.
+- Saving is never held up by a slow check, client test or sign-in: those run on their own.
+- A manual client check fails in about two seconds when nothing answers, and long buttons say what they are doing.
+- Checks are about four times faster with many topics; Home, the topic panel and History open faster.
+- Site transport trouble is reported after three failed checks in a row, not on every flap.
+- A site signs in again by itself when its session expires; a Cloudflare page or a removed topic no longer
+  triggers a sign-in on every check.
+- One word for each thing in both languages, plain Russian, and every error says what to do next; a missing or
+  wrong master key is named as such.
+- A broken `config.yaml` shows a page that names the line and how to recover, instead of a server error.
+- `tow start` says why TOW did not start; another TOW on the same port is never taken for this one.
+
+### Fixed
+
+- A legacy site name (with a dot, Cyrillic, long) no longer breaks restore points, export, import or the update
+  from the page; loosely written site settings (`'1800'`, `'true'`) load again.
+- Restore points and the update from the page work with a large download history.
+- A cut-off update never puts back the data of the previous version over newer data, and TOW never starts on
+  half-restored files; the start files follow the same rule as `tow run`.
+- A message that was delivered is never sent again; a timed-out message is not resent in the same round.
+- A torrent left without TOW's mark after a failed add is never shown green.
+- A new site from a pasted link gets the right download path again.
+- `S02E01.x264` is one episode, and "2 сезон 3 серия" is season 2.
+- A topic edited while a check runs is left to the next check.
+- The Monitorrent import skips rows that cannot make a usable topic and counts them.
+- The update from the page is refused under systemd autostart instead of stopping TOW for good.
+- `tow setup` works after copying the TOW folder; the autostart task with Cyrillic in its path is read correctly.
+- A data folder deleted while TOW runs is reported.
+
+### Security
+
+- A password reminder that shares four characters with the password is refused; changing only the reminder
+  needs the current password.
+- A network-share folder for backups can be chosen only on the computer running TOW.
+- A forged sign-out cannot sign every device out.
+
 ## [1.24.1] — 2026-10-07
 
 ### Fixed
