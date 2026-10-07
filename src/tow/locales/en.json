@@ -1825,6 +1825,7 @@
       "point_cleanup_readable": "TOW: cleanup status of restore points can be read again. This confirms observation, not completion of cleanup.",
       "was_down_for": " (was down for {duration})",
       "up_again": "TOW works again",
+      "data_lost": "TOW's data folder ({folder}) was deleted or replaced while TOW was running: the topics, history and settings kept there are gone from TOW, which goes on empty. Restore a night copy (Settings → Backups): the copies are kept outside the data folder.",
       "checks_late": "TOW: scheduled checks have not run since {since}",
       "checks_ok": "TOW: scheduled checks are running again",
       "restarts_repeat": "TOW: restarts in {duration}: {count} — something keeps breaking TOW; look at the log files in the logs folder",

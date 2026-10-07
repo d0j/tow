@@ -231,8 +231,11 @@ blocks for long.
     occurrence, once. The last attempt is kept in `data/run/schedule.json`;
   - watchdog duties every 10 minutes **in-process**: lateness, night copies, change alerts, the
     heartbeat ping, the queued-message flush and the removal of an expired "Undo"'s saved
-    secrets — never a restart (the supervisor owns the server). `tow watchdog` makes the same
-    pass by hand as a diagnostic; it changes nothing either;
+    secrets — never a restart (the supervisor owns the server). A data folder deleted or
+    replaced while TOW runs (its id `data/.tow-data`, written once, is not the one `tow run`
+    saw at its start) is said once (`watchdog.alert.data_lost`, Settings and `run.log`; the
+    messengers too while their tokens are still readable) with the way back: a night copy.
+    `tow watchdog` makes the same pass by hand as a diagnostic; it changes nothing either;
   - jobs run one at a time (a check also holds `check_run_lock` against a check from the web
     page), each with a time limit (check 1 h, progress 10 min, night copy 30 min); output goes to
     `data/logs/<job>-last.log`.
