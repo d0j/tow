@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from tow.check import _audited_send
+from tow.check.notices import _audited_send
 from tow.paths import data_dir
 
 

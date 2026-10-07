@@ -9,6 +9,7 @@ from test_check_contract import FakeClient, _wire_fake_check
 
 from tow import check
 from tow.check import client_ops
+from tow.check import notices as check_notices
 from tow.notify import event_text
 from tow.store import load_state, persistence_lock, save_state
 
@@ -236,7 +237,7 @@ def test_a_second_client_that_is_down_is_reported(monkeypatch):
     )
     monkeypatch.setattr(client_ops, "_client_title", lambda cfg, client_id: "NAS")
     sent = []
-    monkeypatch.setattr(check, "_audited_send", lambda _s, *, text, **_k: sent.append(text) or True)
+    monkeypatch.setattr(check_notices, "_audited_send", lambda _s, *, text, **_k: sent.append(text) or True)
     check.run_check(apply=True, notify=True)
     assert "Торрент-клиент «NAS» недоступен" in sent
     assert load_state()["health"]["clients_ok"]["nas"] is False

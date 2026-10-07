@@ -17,6 +17,7 @@ from tow.check.client_ops import (
     client_unreachable,
     remote_clients,
 )
+from tow.check.notices import RunNotifications, flush_notifications, queue_recoveries
 from tow.check.rows import fail_row, row_error, stamp_result
 from tow.check.topic import CheckRun, check_topic, read_secrets
 from tow.check_steps import (
@@ -37,7 +38,6 @@ from tow.log import error_class, error_fields, log_event, owner_language
 from tow.notify import NotificationBatch
 from tow.progress import reconcile_topic
 from tow.records import CheckRow, DownloadHistory, Health, HistoryRecord, Topic, health_of, topics_of
-from tow.status import TRACKER_WARNING_CLASSES
 from tow.store import (
     SecretStoreError,
     StoreCorruptionError,
@@ -227,7 +227,7 @@ def _reconcile_and_commit(
         history, rebuilt = _load_history(quarantine=True)
     history_seen = copy.deepcopy(history)
     _reconcile_all(state, results, run, history, records, want)
-    _queue_recoveries(state, results, run)
+    queue_recoveries(state, results, run)
     keep_days, max_items = run.history_retention
     watched = {str(topic.get("id")) for topic in topics_of(state)}
     with persistence_lock():
@@ -268,44 +268,6 @@ def _reconcile_all(
         if not topic.get("hash"):
             continue
         _reconcile_one(topic, row, run, history, records)
-
-
-def _audited_send(
-    secrets: dict[str, Any],
-    *,
-    text: str,
-    operation_id: str,
-    topic: Topic | None = None,
-    how: str = "auto",
-) -> bool:
-    """Deliver a message ``delivery.dispatch`` has already put into the messengers' queue, and log it."""
-    from tow.notifiers import connected, deliver_queued
-
-    topic_id = (topic or {}).get("id")
-    fields = {
-        "operation_id": operation_id,
-        "component": "notification",
-        "topic_id": topic_id,
-        "topic": topic_id,
-        "how": how,
-    }
-    channels = [kind for kind, _, _ in connected(secrets)]
-    if not channels:
-        # No messenger is connected: nothing is sent, so nothing is logged as a delivery (a
-        # "sending to bot" / "bot delivery error" pair after every check meant nothing).
-        return False
-    log_event("bot_delivery_started", **fields, integration_id=",".join(channels))
-    results = deliver_queued(secrets)
-    for kind, (ok, reason) in results.items():
-        log_event(
-            "bot_delivery_succeeded" if ok else "bot_delivery_failed",
-            **fields,
-            integration_id=kind,
-            status="succeeded" if ok else "queued",
-            reason=None if ok else "send_failed",
-            error=reason or None,
-        )
-    return bool(results) and all(ok for ok, _ in results.values())
 
 
 def run_check(
@@ -472,22 +434,6 @@ def _note_season_complete(
         )
 
 
-def _queue_recoveries(state: dict[str, Any], results: list[dict[str, Any]], run: CheckRun) -> None:
-    """Close every reported failure that is over: the owner heard "Сбой", now hears it ended."""
-    topics_by_id = {str(topic.get("id")): topic for topic in topics_of(state)}
-    for row in results:
-        topic = topics_by_id.get(str(row.get("id")))
-        if topic is None or not row.get("ok") or topic.get("last_error"):
-            continue
-        topic.pop("error_streak", 0)
-        # A check that sends nothing (tow check --apply without --notify) keeps the mark: the
-        # next one that does still tells the owner it works again.
-        if run.notify and topic.pop("error_notified", False):
-            run.queue_notification(
-                topic, kind="recovered", operation_id=new_operation_id("bot"), tracker=str(row.get("tracker") or "")
-            )
-
-
 def _today() -> str:
     """The local date (YYYY-MM-DD) a daily download limit belongs to."""
     return iso_now()[:10]
@@ -512,65 +458,6 @@ def _store_daily_limits(state: dict[str, Any], limits: dict[str, str]) -> None:
         state.pop("daily_limit", None)
 
 
-# Checks in a row a site's transport trouble (an amber class) lasts before the owner hears of it.
-TRACKER_ERROR_NOTIFY_AFTER = 3
-
-
-def _streak(value: Any) -> int:
-    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
-
-
-@dataclass
-class _RunNotifications:
-    """The messages one run collects; an error is reported when it starts or changes class,
-    not on every run while it lasts."""
-
-    enabled: bool
-    batch: NotificationBatch
-    # Error class each topic ended the previous run with ("" = healthy).
-    previous_error_class: dict[str, str]
-    client_errors: dict[str, Exception]
-    default_client_id: str
-
-    def queue(
-        self,
-        topic: Topic,
-        *,
-        kind: str,
-        operation_id: str,
-        tracker: str = "",
-        error: Any = "",
-        episodes: str = "",
-        error_cls: str = "",
-    ) -> None:
-        if not self.enabled:
-            return
-        if kind == "error":
-            if str(topic.get("client_id") or self.default_client_id) in self.client_errors:
-                return  # a single "торрент-клиент недоступен" covers every topic of a dead client
-            cls = error_cls or error_class(error)
-            if cls in TRACKER_WARNING_CLASSES:
-                # A site's transport trouble (amber) often passes by itself: reported once it
-                # lasted several checks in a row, not as an error/recovered pair every other run.
-                streak = _streak(topic.get("error_streak")) + 1
-                topic["error_streak"] = streak
-                if streak < TRACKER_ERROR_NOTIFY_AFTER and not topic.get("error_notified"):
-                    return
-            else:
-                topic.pop("error_streak", None)
-            if self.previous_error_class.get(str(topic.get("id"))) == cls and topic.get("error_notified"):
-                return  # already reported; "снова работает" will close it
-            topic["error_notified"] = True
-        self.batch.queue(
-            topic,
-            kind=kind,
-            operation_id=operation_id,
-            tracker=tracker,
-            error=error,
-            episodes=episodes,
-        )
-
-
 def _load_run_state(*, apply: bool) -> dict[str, Any]:
     """The state a run works on: an apply first finishes an interrupted commit; a dry run
     works on a copy (it never writes)."""
@@ -579,19 +466,6 @@ def _load_run_state(*, apply: bool) -> dict[str, Any]:
             check_transaction.recover_check_transaction()
             return load_state(quarantine=True)
     return copy.deepcopy(load_state(quarantine=False))
-
-
-def _flush_notifications(cfg: dict[str, Any], secrets: dict[str, Any], *, how: str, notify: bool) -> None:
-    """G4: grouped per tracker, with links, held during quiet hours, plus the digest. The
-    messages were staged in the commit; here they are handed to the messengers."""
-    from tow import delivery
-
-    def send(*, text: str, operation_id: str, topic: Topic | None) -> bool:
-        return _audited_send(secrets, text=text, operation_id=operation_id, topic=topic, how=how)
-
-    delivery.dispatch(send)
-    if notify:
-        delivery.maybe_digest(cfg=cfg, send=send)
 
 
 @dataclass
@@ -687,7 +561,7 @@ def _run_check(
             if topic.get("hash") and topic.get("last_ok") is True and not topic.get("paused")
         ),
     )
-    notifications = _RunNotifications(
+    notifications = RunNotifications(
         enabled=notify,
         batch=batch,
         previous_error_class={
@@ -744,7 +618,7 @@ def _run_check(
     if not apply:
         history, _rebuilt = _load_history(quarantine=False)
         _reconcile_all(state, results, run, history, pending_reconcile_records, want)
-        _queue_recoveries(state, results, run)
+        queue_recoveries(state, results, run)
         return {"qbit": pool.ping, "results": results, "preview": True}
 
     outcome = _RunResult(state, results, started, pool, batch, cfg, how, limited_today, quota, today)
@@ -758,7 +632,7 @@ def _run_check(
     )
     for event_kind, fields in pending_reconcile_records:
         _record(event_kind, **fields)
-    _flush_notifications(cfg, secrets, how=how, notify=notify)
+    flush_notifications(cfg, secrets, how=how, notify=notify)
     if cleanup_pending:
         _record("check_persistence_cleanup_pending", how=how)
     _record("check", apply=apply, ok=sum(1 for r in results if r.get("ok")), n=len(results), how=how)
