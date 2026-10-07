@@ -464,7 +464,13 @@ def _no_real_system_effects(request, monkeypatch):  # noqa: C901 - one guard, ev
         def __init__(self, args, *rest, **kwargs):
             argv = [str(a) for a in args] if isinstance(args, (list, tuple)) else [str(args)]
             joined = " ".join(argv).lower()
-            if "schtasks" in joined and "/query" in joined and not kwargs.get("shell"):
+            reads_task = ("schtasks" in joined and "/query" in joined) or (
+                os.path.basename(argv[0]).lower() in {"powershell", "powershell.exe"}
+                and "export-scheduledtask" in joined
+                and "register-" not in joined
+                and "unregister" not in joined
+            )
+            if reads_task and not kwargs.get("shell"):
                 # Read-only task queries behave as "task absent" instead of reading this machine.
                 raise FileNotFoundError("schtasks is stubbed in tests")
             if os.path.basename(argv[0]).lower() in {"icacls", "icacls.exe"} and not kwargs.get("shell"):
