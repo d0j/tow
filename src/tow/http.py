@@ -29,28 +29,39 @@ _HEADER_CHARSET = re.compile(r"charset\s*=\s*[\"']?([\w.:-]+)", re.IGNORECASE)
 _META_CHARSET = re.compile(rb"""<meta[^>]+charset\s*=\s*["']?([\w.:-]+)""", re.IGNORECASE)
 
 
-def html_text(response: Any) -> str:
-    """Decode a tracker page the way a browser would.
+# A charset a server names by default rather than for the page (its own setting, not the site's).
+_WEAK_CHARSETS = frozenset({"iso-8859-1", "iso8859-1", "latin1", "latin-1", "l1", "us-ascii", "ascii", "windows-1252"})
+_BOMS = ((b"\xef\xbb\xbf", "utf-8-sig"), (b"\xff\xfe", "utf-16"), (b"\xfe\xff", "utf-16"))
 
-    httpx falls back to UTF-8 when the Content-Type has no charset, which garbles
-    windows-1251 forums. Order: header charset, <meta charset>, UTF-8, cp1251.
+
+def html_text(response: Any) -> str:
+    """Decode a tracker page the way a browser would - and where Russian forums need it,
+    better than one.
+
+    Order: a byte-order mark; the <meta charset> when the header names none or only a
+    server's latin-1 default; a body that is valid UTF-8 (a windows-1251 page almost never
+    is); the header's charset, the meta's; windows-1251.
     """
     content = getattr(response, "content", None)
     if not isinstance(content, (bytes, bytearray)):
         return str(getattr(response, "text", "") or "")
-    candidates: list[str] = []
-    header = _HEADER_CHARSET.search(str((getattr(response, "headers", None) or {}).get("content-type") or ""))
-    if header:
-        candidates.append(header.group(1))
-    meta = _META_CHARSET.search(bytes(content[:8192]))
-    if meta:
-        candidates.append(meta.group(1).decode("ascii", "ignore"))
-    for encoding in [*candidates, "utf-8"]:
+    body = bytes(content)
+    for bom, encoding in _BOMS:
+        if body.startswith(bom):
+            return body.decode(encoding, errors="replace")
+    found = _HEADER_CHARSET.search(str((getattr(response, "headers", None) or {}).get("content-type") or ""))
+    header = found.group(1).casefold() if found else ""
+    found_meta = _META_CHARSET.search(body[:8192])
+    meta = found_meta.group(1).decode("ascii", "ignore") if found_meta else ""
+    first = [meta] if meta and (not header or header in _WEAK_CHARSETS) else []
+    for encoding in [*first, "utf-8", header, meta]:
+        if not encoding:
+            continue
         try:
-            return bytes(content).decode(encoding)
+            return body.decode(encoding)
         except LookupError, UnicodeDecodeError:
             continue
-    return bytes(content).decode("cp1251", errors="replace")
+    return body.decode("cp1251", errors="replace")
 
 
 # The titles of Cloudflare's own check pages.
