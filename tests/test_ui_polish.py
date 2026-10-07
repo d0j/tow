@@ -278,6 +278,19 @@ def test_site_name_field_says_its_rule_before_the_browser_refuses_it(client):
     assert 'aria-describedby="add-error site-name-hint"' in field.group(0)
 
 
+def test_a_phones_site_list_gets_the_free_room_and_fades_before_the_client():
+    """QA 1.24.1 at 390 px: the site names got a third of the row, were cut off mid-name and ran
+    into "qBittorrent" (two thirds of the row for one name and a bell)."""
+    phone = CSS[CSS.index("@media (max-width: 720px) {\n  .row-two") :]
+    mobile = _rules(phone.partition("\n}\n")[0].partition("{")[2])
+    assert "minmax(0, 1fr) minmax(0, max-content) auto" in mobile["header.app"]
+    sites = mobile[".hdr-sites"]
+    assert "overflow-x: auto" in sites
+    assert "mask-image: linear-gradient(to right, black calc(100% - 1rem), transparent)" in sites
+    assert "padding-right: 1rem" in sites  # the last name can be scrolled clear of the fade
+    assert "border-left: 1px solid var(--line)" in mobile[".hdr-svc"]
+
+
 def test_home_add_form_has_a_heading(client):
     assert '<h2 id="add-topic-title" class="add-title">Добавить раздачу</h2>' in client.get("/").text
 
