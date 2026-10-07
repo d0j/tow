@@ -66,6 +66,22 @@ def test_round_three_words(client, monkeypatch):
     assert t("log.kind.client_adopted", "en") == "adopted into TOW"
 
 
+def test_the_guide_covers_updates_adopting_signing_out_and_permissions(client):
+    from bs4 import BeautifulSoup
+
+    from tow.i18n import t
+
+    page = BeautifulSoup(client.get("/settings/help").text, "html.parser")
+    text = page.get_text(" ")
+    for word in ("Взять под управление TOW", "Выйти на всех устройствах", "Другая версия или откат"):
+        assert word in text, word
+    codes = [code.get_text() for code in page.select("code")]
+    assert codes[-2].endswith("tow.cmd permissions") or codes[-2].endswith("tow permissions")
+    assert codes[-1] == codes[-2] + " fix"
+    for key in ("help.s2.adopt", "help.s7.sign_out", "help.s9.update"):
+        assert t(key, "ru") != t(key, "en")  # written in both languages
+
+
 # --- Status-colour contract: transport trouble is amber, "not checked yet" is grey ----------------
 
 
