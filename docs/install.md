@@ -25,16 +25,17 @@ Windows 10 or 11, 64-bit.
 1. Download [TOW-windows-x64.zip](https://github.com/d0j/tow/releases/latest/download/TOW-windows-x64.zip) (about
    50 MB).
 2. Optional, saves one question later: right-click the zip → **Properties** → tick **Unblock** → **OK**.
-3. Right-click the zip → **Extract All…** → choose a folder, for example `C:\TOW` or your user folder → **Extract**.
-   You get a folder `TOW` with `Start TOW.cmd` inside.
+3. Right-click the zip → **Extract All…** → choose where it goes, for example `C:\` or your user folder →
+   **Extract**. The zip holds a folder `TOW`, so you get `C:\TOW` (or `TOW` in your user folder) with
+   `Start TOW.cmd` inside.
 4. Double-click **Start TOW.cmd**.
    - Windows may say **"Windows protected your PC"**. Click **More info**, then **Run anyway**. It says this about
      every program that is not from the Microsoft Store and has no paid signature.
    - It may also ask **"Do you want to run this file?"** — click **Run**.
 5. A black window opens and says **"Preparing TOW…"**. The first start takes a minute or two and needs no internet.
-6. The window shows where your **master key** is and waits: copy that file now (see
+6. Your browser opens **<http://127.0.0.1:8787>**. That is TOW.
+7. The black window shows where your **master key** is and waits: copy that file now (see
    [Back up the master key](#back-up-the-master-key)), then press any key. The window closes; TOW keeps running.
-7. Your browser opens **<http://127.0.0.1:8787>**. That is TOW.
 
 Next time, double-click **Start TOW.cmd** again: if TOW is running, it only opens the page.
 
@@ -53,6 +54,11 @@ starts it. With options (another folder, start with Windows, another port):
 ```powershell
 & ([scriptblock]::Create((irm https://github.com/d0j/tow/releases/latest/download/install.ps1))) -Dir D:\TOW -Autostart -Port 8788
 ```
+
+The options are `-Dir FOLDER`, `-Version v1.25.0` (a particular release instead of the latest), `-Port N` and
+`-Autostart`; for removal `-Uninstall` with `-Yes` (do not ask), `-Purge` and `-AdoptData` (see
+[Remove TOW](#remove-tow)). `-Dir`, `-Version` and `-Port` can also come from the variables `TOW_INSTALL_DIR`,
+`TOW_VERSION` and `TOW_INSTALL_PORT`.
 
 ## macOS
 
@@ -105,7 +111,11 @@ curl -LsSf https://github.com/d0j/tow/releases/latest/download/install.sh | sh -
 | `--desktop` | add TOW to the applications menu |
 | `--dir DIR` | install somewhere else than `~/TOW` |
 | `--port N` | another port than 8787 |
-| `--version v1.22.0` | a particular release |
+| `--version v1.25.0` | a particular release instead of the latest |
+| `--uninstall` | remove TOW (see [Remove TOW](#remove-tow)); with `--yes` it does not ask, with `--purge` it removes the data too |
+
+`--dir`, `--version` and `--port` can also come from the variables `TOW_INSTALL_DIR`, `TOW_VERSION` and
+`TOW_INSTALL_PORT` (for example `curl … | TOW_INSTALL_DIR=/srv/tow sh`).
 
 On a server, to start TOW at boot before anyone signs in: `~/TOW/app/scripts/tow autostart on --without-login`,
 then `sudo loginctl enable-linger $USER`. To open the page from another computer, see
@@ -136,7 +146,7 @@ Move or copy the whole folder: the start file prepares it again in the new place
 | Stop | `Stop TOW.cmd` | `Stop TOW.command` | `~/TOW/stop-tow` |
 | Start with the computer | `app\scripts\tow.cmd autostart on` | `~/TOW/app/scripts/tow autostart on` | the same |
 | Update to the latest release | `Update TOW.cmd` | `Update TOW.command` | `~/TOW/update-tow` |
-| Go back to an earlier release | `"Update TOW.cmd" v1.23.0` in a terminal | `~/TOW/update-tow v1.23.0` | the same |
+| Go back to an earlier release | PowerShell in the TOW folder: `& ".\Update TOW.cmd" v1.25.0` | `~/TOW/update-tow v1.25.0` | the same |
 
 An update stops TOW, keeps a copy of your data and settings in `backup/`, puts in the new version, starts it and
 checks it. If anything fails, the previous version comes back by itself. It needs the internet. When TOW is
@@ -173,11 +183,13 @@ that the folder is your former TOW install.
 |---|---|
 | "Windows protected your PC" | **More info** → **Run anyway**. Or before extracting: zip → **Properties** → **Unblock**. |
 | "TOW did not start", and `data/logs/run.log` says port 8787 is in use | Another program uses that port (often a second TOW). Open `config.yaml` in the TOW folder, change `port: 8787` to `port: 8788`, start again and open <http://127.0.0.1:8788>. |
-| The page does not open | Wait a minute and open <http://127.0.0.1:8787> by hand. `tow status` says whether TOW runs; the reason of a failed start is in `TOW/data/logs/run.log`. |
-| The installer cannot download (company network, antivirus) | It needs `github.com` and, on macOS and Linux, `pypi.org`. Behind a proxy set `HTTPS_PROXY` first. The Windows zip needs no internet for its first start. |
+| The page does not open | Wait a minute and open <http://127.0.0.1:8787> by hand. `app\scripts\tow.cmd status` in the TOW folder (macOS, Linux: `~/TOW/app/scripts/tow status`) says whether TOW runs; the reason of a failed start is in `TOW/data/logs/run.log`. |
+| The installer cannot download (company network, antivirus) | It needs `github.com` and `raw.githubusercontent.com` (and the `*.githubusercontent.com` hosts GitHub sends downloads to); on macOS and Linux also `pypi.org` and `files.pythonhosted.org`. Behind a proxy set `HTTPS_PROXY` first. The Windows zip needs no internet for its first start. |
 | macOS asks whether Terminal or Python may access a folder | Allow it, or keep TOW and your download folders out of Documents, Desktop and Downloads. |
 | An Intel Mac stops at "cryptography" | Install the developer tools (`xcode-select --install`) and Rust (<https://rustup.rs>), then run the installer again. |
 | "TOW is already installed" | Use the update file instead, or remove TOW first. |
+| "… is not empty: choose another folder" | The folder holds other files. Install into a new or empty folder (`-Dir` / `--dir`). |
+| "… has data without a TOW install marker" | The folder holds data of an older TOW installer, or another program's `data` and `config.yaml`. If it is your former TOW folder, run the installer again with `-AdoptData` / `--adopt-data`; otherwise choose another folder. |
 
 ## Manual install with git
 
@@ -228,5 +240,5 @@ cp config.example.yaml ../config.yaml
 
 Start at login (LaunchAgent): `./scripts/tow autostart on`.
 
-Update a clone: `.\scripts\deploy.ps1 -Ref v1.22.0` on Windows; on Linux and macOS `./scripts/tow update --ref
-v1.22.0` prints the command. Details: [PORTABLE.md](PORTABLE.md).
+Update a clone: `.\scripts\deploy.ps1 -Ref v1.25.0` on Windows; on Linux and macOS `./scripts/tow update --ref
+v1.25.0` prints the command. Details: [PORTABLE.md](PORTABLE.md).
