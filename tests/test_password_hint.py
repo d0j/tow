@@ -66,6 +66,10 @@ REVEALING = [
     ("tr0ub4dor&3", "troubador 3"),
     ("Пароль-2024", "пароль 2024"),
     ("Correct-Horse-Tow", "wot esroh"),  # backwards
+    # No letter or digit at all (round-3 audit): compared as they are, without spaces.
+    ("__--__--", "it is __--__--"),
+    ("!@#$%^&*()", "starts with !@#$ and so on"),
+    ("........", "eight dots: . . . . ...."),
 ]
 
 
@@ -80,6 +84,7 @@ def test_a_reminder_sharing_four_characters_in_a_row_with_the_password_is_refuse
 def test_a_reminder_that_shares_nothing_is_kept():
     assert clean_hint("  the  stable animal ", password="Correct-Horse-Tow") == "the stable animal"
     assert clean_hint("our first dog", password="mydog2024!") == "our first dog"  # "dog" alone is three
+    assert clean_hint("dashes and lines, no letters", password="__--__--") == "dashes and lines, no letters"
 
 
 def test_a_new_reminder_alone_needs_the_current_password_and_removing_it_does_not():

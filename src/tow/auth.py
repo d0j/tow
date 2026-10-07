@@ -84,7 +84,8 @@ def clean_hint(hint: str, *, password: str) -> str:
     The login page shows it to anyone on the network, so a reminder that shares a run of four
     or more letters and digits with ``password``, forwards or backwards, is refused; they are
     compared without case, punctuation or spaces ("correct horse tow" for "Correct-Horse-Tow",
-    "dog2024" for "mydog2024!", "horse tow correct" too). A reminder needs the password to be
+    "dog2024" for "mydog2024!", "horse tow correct" too); a password of punctuation alone is
+    compared as it is, without spaces. A reminder needs the password to be
     compared with (``auth.hint_needs_password`` without it).
     """
     hint = " ".join(str(hint or "").split())
@@ -94,7 +95,11 @@ def clean_hint(hint: str, *, password: str) -> str:
         return ""
     if not password:
         raise AuthConfigurationError("auth.hint_needs_password")
-    if _reveals(_squeezed(hint), _squeezed(password)):
+    if _squeezed(password):
+        reveals = _reveals(_squeezed(hint), _squeezed(password))
+    else:  # a password of punctuation alone ("__--__--") is compared as it is, without spaces
+        reveals = _reveals("".join(hint.split()), "".join(password.split()))
+    if reveals:
         raise AuthConfigurationError("auth.hint_reveals_password")
     return hint
 
