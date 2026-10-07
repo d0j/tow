@@ -86,6 +86,32 @@ def test_closing_the_terminal_of_tow_run_stops_it_cleanly(run_env, monkeypatch):
     assert handlers == {signal.SIGTERM: signal.SIG_DFL, hangup: signal.SIG_DFL}  # restored
 
 
+def test_variables_that_lead_a_portable_install_elsewhere_are_named(monkeypatch, tmp_path):
+    # A TOW_HOME / TOW_CONFIG / TOW_MASTER_KEY_FILE set for the whole account (left from another
+    # install) wins in every start - launcher, Task Scheduler, systemd: said in run.log.
+    root = tmp_path / "TOW"
+    monkeypatch.setattr(layout, "install_root", lambda: root)
+    monkeypatch.setattr(layout, "repo_root", lambda: root / "app")
+    env = {
+        "TOW_HOME": str(root / "data"),
+        "TOW_CONFIG": str(tmp_path / "Other" / "config.yaml"),
+        "TOW_MASTER_KEY_FILE": str(tmp_path / "old" / "master.key"),
+    }
+    assert layout.outside_overrides(env) == ["TOW_CONFIG", "TOW_MASTER_KEY_FILE"]
+    assert layout.outside_overrides({"TOW_MASTER_KEY_FILE": "master.key"}) == []  # relative: inside data
+    monkeypatch.setattr(layout, "repo_root", lambda: root)  # a development checkout
+    assert layout.outside_overrides(env) == []
+
+
+def test_run_logs_a_variable_leading_out_of_the_install(run_env, monkeypatch):
+    monkeypatch.setattr(layout, "outside_overrides", lambda: ["TOW_CONFIG"])
+    world = _world_that_stops_after(2)
+    deps = world.deps()
+    deps.sleep = world.sleep  # type: ignore[attr-defined]
+    assert run_supervisor(deps) == 0
+    assert "TOW_CONFIG=" in (layout.logs_dir() / "run.log").read_text(encoding="utf-8")
+
+
 def test_a_second_run_is_refused_while_one_holds_the_lock(run_env, capsys):
     held = layout.InstanceLock()
     assert held.acquire()

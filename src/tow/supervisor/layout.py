@@ -81,6 +81,32 @@ def child_env(base: dict[str, str] | None = None) -> dict[str, str]:
     return env
 
 
+OVERRIDES = ("TOW_HOME", "TOW_CONFIG", "TOW_MASTER_KEY_FILE")
+
+
+def outside_overrides(env: dict[str, str] | None = None) -> list[str]:
+    """The variables among ``OVERRIDES`` that lead this runtime install out of its folder.
+
+    They are honoured everywhere alike (the launchers, Task Scheduler, systemd, launchd all
+    start TOW in the owner's environment), so a variable set for the whole account - left from
+    another install, say - makes this one use another data folder, config or key. Said in
+    run.log at every start; a development checkout is not a portable install and is skipped.
+    """
+    values = os.environ if env is None else env
+    root = install_root()
+    if root == repo_root():
+        return []
+    found = []
+    for name in OVERRIDES:
+        value = values.get(name, "").strip()
+        if not value:
+            continue
+        path = Path(os.path.abspath(value)) if os.path.isabs(value) else None
+        if path is not None and not path.is_relative_to(Path(os.path.abspath(root))):
+            found.append(name)
+    return found
+
+
 def read_json(path: Path) -> dict[str, Any]:
     try:
         return read_object(path)

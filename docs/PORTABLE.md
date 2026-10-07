@@ -315,6 +315,23 @@ registration is taken over (or turned off).
    (only that entry, only when it is not a link) so that uv can make the link again;
 4. `tow autostart on` (and `tow run`, or let the autostart start it).
 
+**Where the folder can live, and what can lead it elsewhere:**
+
+- `TOW_HOME`, `TOW_CONFIG` and `TOW_MASTER_KEY_FILE` win over the folder's own `data/`,
+  `config.yaml` and `keys/master.key` in every start alike — the launchers, Task Scheduler,
+  systemd and launchd all start TOW in the owner's environment. One set for the whole account
+  (left from another install) therefore makes a portable install use another data folder,
+  config or key. `tow run` names such a variable in `run.log` at every start
+  (`layout.outside_overrides`); remove it unless it is meant for this install. The autostart does
+  not clear them: a start by hand and a start by the OS must use the same data.
+- Windows without long paths enabled (`LongPathsEnabled`): an install folder longer than about
+  110 characters lets paths deep in `app\.venv` pass the 260-character limit, and setup or a
+  package import fails. Choose a shorter folder, or enable long paths.
+- The folder needs a file system with links: uv links `runtime/python/cpython-X.Y-*` to the
+  full version (a junction on Windows, a symlink elsewhere). FAT32 and exFAT (many USB sticks)
+  have none, and `tow setup` cannot complete there (not verified on every uv version); use NTFS
+  (Windows), APFS/HFS+ (macOS) or ext4 and the like (Linux).
+
 ## 4. Update: `tow update --ref <tag>` (`scripts/update.py`)
 
 ### Web updates (1.22.20)
