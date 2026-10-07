@@ -157,6 +157,10 @@ class FakeDeluge:
         self.labels: set[str] = set()
         self.calls: list[str] = []
         self.prefetch: tuple[str, str] | None = None
+        # Deluge Web's list of the daemon's methods: read when it attaches, and on a plugin event
+        # (which it may miss: then a plugin's methods stay unknown until it attaches again).
+        self.misses_plugin_event = False
+        self.known_plugins: list[str] = []
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
@@ -169,7 +173,7 @@ class FakeDeluge:
             return self._error(body, "Not authenticated", 1)
         if method.startswith(("core.", "label.", "daemon.")) and not self.connected:
             return self._error(body, "Unknown method", 2)
-        if method.startswith("label.") and "Label" not in self.plugins:
+        if method.startswith("label.") and "Label" not in self.known_plugins:
             return self._error(body, "Unknown method", 2)
         result = getattr(self, "m_" + method.replace(".", "_"))(*params)
         return self._ok(body, result)
@@ -193,7 +197,12 @@ class FakeDeluge:
 
     def m_web_connect(self, host_id):
         self.connected = True
+        self.known_plugins = list(self.plugins)
         return []
+
+    def m_web_disconnect(self):
+        self.connected = False
+        return "disconnected"
 
     def m_daemon_get_version(self):
         return "2.2.0"
@@ -206,6 +215,8 @@ class FakeDeluge:
 
     def m_core_enable_plugin(self, name):
         self.plugins.append(name)
+        if not self.misses_plugin_event:
+            self.known_plugins = list(self.plugins)
         return True
 
     def m_label_get_labels(self):
@@ -695,6 +706,19 @@ def test_deluge_check_changes_nothing_and_adding_turns_on_labels(tmp_path):
     adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
     assert server.plugins == ["Label"]
     assert server.labels == {"tow", "tow-pending"}
+
+
+def test_deluge_reattaches_when_its_web_ui_does_not_know_a_method(tmp_path):
+    """Deluge Web learns the daemon's methods when it attaches; the Label plugin TOW turned on is
+    announced by an event it may miss. A new login does not refresh the list, attaching does."""
+    server = FakeDeluge()
+    server.misses_plugin_event = True
+    adapter = _deluge(server)
+    adapter.ping()
+    adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert server.labels == {"tow", "tow-pending"}
+    assert server.calls.count("web.disconnect") == 1
+    assert server.calls.count("web.connect") == 2
 
 
 def test_deluge_in_a_preview_does_not_attach_the_web_ui_to_a_daemon():
