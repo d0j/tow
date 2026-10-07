@@ -257,6 +257,50 @@ def test_a_signed_in_device_restores_a_night_copy_too(night, monkeypatch):
     assert bad.status_code in (303, 404)
 
 
+def test_a_night_restore_says_what_happens_to_network_access(night):
+    """QA 1.24.1: the restore changed nothing visible about network access and said nothing; the
+    owner could not tell whether devices on the network still reach TOW."""
+    from tow.auth import lan_password_record
+    from tow.snapshots import create_snapshot
+    from tow.store import load_secrets, save_secrets
+
+    secrets = load_secrets()
+    secrets["lan_auth"] = lan_password_record("a-long-password")
+    save_secrets(secrets)
+    cfg = load_config()
+    cfg.update(allow_lan=True, bind="0.0.0.0")
+    save_config(cfg)
+    name = Path(create_snapshot()["snapshot"]).name
+    page = _client().get("/settings").text
+    assert "Доступ по сети и его пароль останутся текущими." in page  # in the restore confirmation
+    done = _client().post(f"/settings/backup/night/{name}/restore", follow_redirects=False)
+    assert load_config()["allow_lan"] is True
+    assert _flash(done).endswith("; доступ по сети остался как был")
+
+
+def test_a_night_restore_says_when_network_access_was_turned_off(night, monkeypatch):
+    """The settings in force could not be read: the restore makes TOW local-only, and says so."""
+    from tow.snapshots import create_snapshot
+
+    cfg = load_config()
+    cfg.update(allow_lan=True, bind="0.0.0.0")
+    save_config(cfg)
+    name = Path(create_snapshot()["snapshot"]).name
+    real = __import__("tow.snapshots", fromlist=["restore_snapshot"]).restore_snapshot
+
+    def restore_as_if_unreadable(path, *, apply=False):
+        result = real(path, apply=apply)
+        after = load_config()
+        after.update(allow_lan=False, bind="127.0.0.1")  # what _keep_local_access does then
+        save_config(after)
+        return result
+
+    monkeypatch.setattr("tow.snapshots.restore_snapshot", restore_as_if_unreadable)
+    done = _client().post(f"/settings/backup/night/{name}/restore", follow_redirects=False)
+    assert "доступ по сети выключен" in _flash(done)
+    assert "/settings" in done.headers["location"]
+
+
 def test_regular_copies_follow_their_folder(tmp_path):
     from tow.restore_points import create_restore_point, list_restore_points
 

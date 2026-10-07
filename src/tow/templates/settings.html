@@ -504,7 +504,7 @@
                   <form method="post" action="/settings/backup/night/{{ snap.name|urlencode }}/check" data-return-target="acc-transfer">
                     <button class="ghost" type="submit" data-busy-label="{{ t('common.busy.checking') }}">{{ t('settings.common.check') }}</button>
                   </form>
-                  <form method="post" action="/settings/backup/night/{{ snap.name|urlencode }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.night_restore_confirm', at=snap.at) }}">
+                  <form method="post" action="/settings/backup/night/{{ snap.name|urlencode }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.night_restore_confirm', at=snap.at) }} {{ t('settings.backups.night_restore_access') }}">
                     <button class="danger" type="submit" data-busy-label="{{ t('common.busy.restoring') }}">{{ t('settings.common.restore') }}</button>
                   </form>
                   <a class="btn ghost danger" href="/settings/backup/night/{{ snap.name|urlencode }}/delete">{{ t('settings.common.delete') }}</a>
