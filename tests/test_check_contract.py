@@ -1647,8 +1647,9 @@ def test_a_lasting_error_is_reported_once_and_its_end_is_reported(monkeypatch):
     sent = _capture_sends(monkeypatch)
     _seed_watched_topic()
 
-    check.run_check(apply=True, notify=True, how="test")
-    check.run_check(apply=True, notify=True, how="test")
+    # A site that does not answer (amber) is reported once it lasted three checks in a row.
+    for _ in range(4):
+        check.run_check(apply=True, notify=True, how="test")
     assert [text for text in sent if text.startswith("Сбой")] == ["Сбой — Show: fake: all hosts failed"]
     assert load_state()["topics"][0]["error_notified"] is True
 

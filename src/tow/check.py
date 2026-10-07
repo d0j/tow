@@ -36,6 +36,7 @@ from tow.notify import NotificationBatch
 from tow.progress import reconcile_topic
 from tow.records import CheckRow, DownloadHistory, Health, HistoryRecord, Topic, health_of, mirror_of, topics_of
 from tow.selection import SelectionPendingError, policy_from_topic, resolve_selection
+from tow.status import TRACKER_WARNING_CLASSES
 from tow.store import (
     StoreCorruptionError,
     StoreReadError,
@@ -1680,7 +1681,10 @@ def _queue_recoveries(state: dict[str, Any], results: list[dict[str, Any]], run:
         topic = topics_by_id.get(str(row.get("id")))
         if topic is None or not row.get("ok") or topic.get("last_error"):
             continue
-        if topic.pop("error_notified", None):
+        topic.pop("error_streak", 0)
+        # A check that sends nothing (tow check --apply without --notify) keeps the mark: the
+        # next one that does still tells the owner it works again.
+        if run.notify and topic.pop("error_notified", False):
             run.queue_notification(
                 topic, kind="recovered", operation_id=new_operation_id("bot"), tracker=str(row.get("tracker") or "")
             )
@@ -1719,6 +1723,14 @@ def _store_daily_limits(state: dict[str, Any], limits: dict[str, str]) -> None:
         state.pop("daily_limit", None)
 
 
+# Checks in a row a site's transport trouble (an amber class) lasts before the owner hears of it.
+TRACKER_ERROR_NOTIFY_AFTER = 3
+
+
+def _streak(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
+
+
 @dataclass
 class _RunNotifications:
     """The messages one run collects; an error is reported when it starts or changes class,
@@ -1747,7 +1759,17 @@ class _RunNotifications:
         if kind == "error":
             if str(topic.get("client_id") or self.default_client_id) in self.client_errors:
                 return  # a single "торрент-клиент недоступен" covers every topic of a dead client
-            if self.previous_error_class.get(str(topic.get("id"))) == (error_cls or error_class(error)):
+            cls = error_cls or error_class(error)
+            if cls in TRACKER_WARNING_CLASSES:
+                # A site's transport trouble (amber) often passes by itself: reported once it
+                # lasted several checks in a row, not as an error/recovered pair every other run.
+                streak = _streak(topic.get("error_streak")) + 1
+                topic["error_streak"] = streak
+                if streak < TRACKER_ERROR_NOTIFY_AFTER and not topic.get("error_notified"):
+                    return
+            else:
+                topic.pop("error_streak", None)
+            if self.previous_error_class.get(str(topic.get("id"))) == cls and topic.get("error_notified"):
                 return  # already reported; "снова работает" will close it
             topic["error_notified"] = True
         self.batch.queue(
