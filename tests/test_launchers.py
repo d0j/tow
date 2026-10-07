@@ -62,7 +62,40 @@ def test_generic_cli_launcher_uses_runtime_env():
     # setup, else the environment's tow.exe, else (not set up yet) uv from the locked environment.
     assert last.startswith('if /i "%~1"=="setup" (call "%~dp0tow-setup.cmd" %*)')
     assert last.index('if exist "%TOW_EXE%" ("%TOW_EXE%" %*)') < last.index('"%TOW_UV%" run --frozen --no-dev')
-    assert not any("exit /b" in line for line in text.splitlines() if not line.startswith("rem "))
+    exits = [line for line in text.splitlines() if "exit /b" in line and not line.startswith("rem ")]
+    assert exits == ["if defined TOW_MOVED exit /b 3"]  # the one refusal, before TOW runs
+
+
+@pytest.mark.allow_system  # the launcher in a temp install whose environment was left behind by a move
+def test_a_moved_install_says_to_run_setup_instead_of_a_trampoline_error(tmp_path):
+    # QA: after moving the folder `tow.cmd status` printed "uv trampoline failed to canonicalize
+    # script path" - tow-start.cmd knew the case, tow.cmd did not.
+    import os
+    import shutil
+    import subprocess
+
+    root = tmp_path / "TOW"
+    shutil.copytree(ROOT / "scripts", root / "app" / "scripts")
+    (root / "data").mkdir()
+    env = {key: value for key, value in os.environ.items() if not key.startswith(("TOW_", "UV_"))}
+    if os.name == "nt":
+        scripts = root / "app" / ".venv" / "Scripts"
+        scripts.mkdir(parents=True)
+        (scripts / "python.exe").write_bytes(b"not a program: its base Python stayed in the old folder")
+        (scripts / "tow.exe").write_bytes(b"")
+        argv = ["cmd.exe", "/d", "/c", str(root / "app" / "scripts" / "tow.cmd"), "status"]
+    else:
+        scripts = root / "app" / ".venv" / "bin"
+        scripts.mkdir(parents=True)
+        (scripts / "python").symlink_to(tmp_path / "old" / "runtime" / "python" / "bin" / "python3")
+        (scripts / "tow").write_text("#!/bin/sh\necho ran\n", encoding="utf-8")
+        (scripts / "tow").chmod(0o755)
+        argv = ["/bin/sh", str(root / "app" / "scripts" / "tow"), "status"]
+    done = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=60, check=False)
+    assert done.returncode == 3, done.stdout + done.stderr
+    assert "moved or copied" in done.stdout + done.stderr
+    assert " setup first" in done.stdout + done.stderr
+    assert "ran" not in done.stdout
 
 
 def test_setup_installs_python_and_the_environment_inside_the_install():
