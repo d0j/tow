@@ -355,7 +355,7 @@ def test_the_watchdog_duty_gets_the_wake_and_never_probes_the_port(monkeypatch):
     seen = {}
     monkeypatch.setattr(watchdog, "run_watchdog", lambda **kwargs: seen.update(kwargs) or {"ok": True})
     assert _watchdog_pass(123.0) == {"ok": True}
-    assert set(seen) == {"wake_ts", "probes"}  # 1.21: the watchdog restarts nothing at all
+    assert set(seen) == {"wake_ts", "probes", "data_id"}  # 1.21: the watchdog restarts nothing at all
     assert seen["wake_ts"] == 123.0
     assert seen["probes"].port_listening(8787) is False
 

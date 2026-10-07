@@ -90,6 +90,64 @@ def test_stale_scheduled_checks_alert_on_change_only(clock):
     assert back == ["TOW: плановые проверки снова идут"]
 
 
+def test_a_data_folder_deleted_while_tow_runs_is_reported(clock):
+    # QA: deleting data\ while TOW ran went unnoticed - TOW silently went on empty, and the
+    # watchdog's own state went with the folder, so it saw nothing to compare.
+    import shutil
+
+    from tow.paths import data_dir
+    from tow.watchdog import data_marker
+
+    seen = data_marker(create=True)
+    assert seen is not None
+    assert data_marker(create=True) == seen  # made once
+    sent: list[str] = []
+    quiet = run_watchdog(
+        is_healthy=lambda _port: True, send=sent.append, now=clock.now, sleep=clock.sleep, data_id=seen
+    )
+    assert "data_lost" not in quiet
+    assert sent == []
+
+    from tow.paths import config_path
+
+    for item in data_dir().iterdir():  # the whole folder (config.yaml of the tests lives in it)
+        if item != config_path():
+            shutil.rmtree(item) if item.is_dir() else item.unlink()
+    report = run_watchdog(
+        is_healthy=lambda _port: True, send=sent.append, now=clock.now, sleep=clock.sleep, data_id=seen
+    )
+    assert report["data_lost"] is True
+    (alert,) = report["alerts"]
+    assert str(data_dir()) in alert
+    assert "ночную копию" in alert  # and how to get the data back
+    assert sent == [alert]
+
+
+def test_an_unreadable_data_marker_is_not_a_lost_folder(clock, monkeypatch):
+    from tow import watchdog
+
+    def unreadable(**_kwargs):
+        raise PermissionError(13, "denied")
+
+    monkeypatch.setattr(watchdog, "data_marker", unreadable)
+    report = run_watchdog(is_healthy=lambda _port: True, send=lambda _t: True, now=clock.now, data_id="abc")
+    assert "data_lost" not in report
+
+
+def test_the_supervisor_says_a_lost_data_folder_once(monkeypatch, caplog):
+    from tow import supervisor, watchdog
+
+    reports = iter([{"data_lost": True}, {}])
+    monkeypatch.setattr(watchdog, "run_watchdog", lambda **kwargs: next(reports))
+    monkeypatch.setattr(supervisor, "_expire_undo", lambda: None)
+    monkeypatch.setattr(supervisor, "_data_seen", {"id": "old"})
+    supervisor._watchdog_pass(None)
+    assert supervisor._data_seen["id"] not in (None, "old")  # the folder it goes on with
+    assert "data folder was deleted or replaced" in caplog.text
+    supervisor._watchdog_pass(None)
+    assert caplog.text.count("data folder was deleted or replaced") == 1
+
+
 def test_deploy_marker_counts_only_while_fresh_and_in_progress(tmp_path, monkeypatch):
     from tow import watchdog
 

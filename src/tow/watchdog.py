@@ -50,6 +50,33 @@ def _state_path() -> Path:
     return data_dir() / STATE_NAME
 
 
+# The data folder's own id, written once: a folder deleted (or replaced) while TOW runs no
+# longer has the one `tow run` saw at its start - TOW would otherwise just go on empty.
+DATA_MARKER = ".tow-data"
+
+
+def data_marker(*, create: bool = False) -> str | None:
+    """The id in ``data/.tow-data`` (made when ``create`` and missing), None when there is none.
+
+    OSError other than a missing file (unreadable) is raised: unknown is not "gone".
+    """
+    import uuid
+
+    path = data_dir(create=create) / DATA_MARKER
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        value = ""
+    if value or not create:
+        return value or None
+    try:
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(uuid.uuid4().hex + "\n")
+    except FileExistsError:
+        pass  # made at the same moment by another process: its id counts
+    return data_marker()
+
+
 def _load_state() -> dict[str, Any]:
     try:
         value = read_object(_state_path())
@@ -238,6 +265,20 @@ def _service(
     else:
         p.cause = t("watchdog.cause.not_running", p.lang)
     report["cause"] = p.cause
+
+
+def _data_folder(p: _Pass, data_id: str | None) -> None:
+    """The data folder is not the one ``tow run`` started with: deleted (TOW went on empty, its
+    own watchdog state included, so nothing else would notice) or replaced."""
+    if data_id is None:
+        return
+    try:
+        lost = data_marker() != data_id
+    except OSError:
+        return  # unreadable is not gone
+    if lost:
+        p.report["data_lost"] = True
+        p.report["alerts"].append(t("watchdog.alert.data_lost", p.lang, folder=str(data_dir(create=False))))
 
 
 def _checks(p: _Pass, interval: int, state: dict[str, Any], *, wake_ts: float | None = None) -> None:
@@ -463,11 +504,12 @@ def run_watchdog(
     flush: Callable[[], None] | None = None,
     probes: Probes | None = None,
     wake_ts: float | None = None,
+    data_id: str | None = None,
 ) -> dict[str, Any]:
     """One watchdog pass; returns what it saw and why.
 
-    ``tow run`` calls it every 10 minutes with its own probes and ``wake_ts``, the last time it
-    saw the machine wake up.
+    ``tow run`` calls it every 10 minutes with its own probes, ``wake_ts``, the last time it
+    saw the machine wake up, and ``data_id``, the data folder's id it saw at its start.
     """
     from tow.store import load_state
 
@@ -485,6 +527,7 @@ def run_watchdog(
         "alerts": [],
     }
     p = _Pass(now=now, previous=previous, report=report, lang=i18n.message_language(cfg))
+    _data_folder(p, data_id)
 
     _service(
         p,

@@ -122,6 +122,20 @@ def _expire_undo() -> None:
         LOG.warning("undo secrets not cleaned up: %s", type(exc).__name__)
 
 
+# The data folder's id this `tow run` saw at its start (tow.watchdog.data_marker).
+_data_seen: dict[str, str | None] = {"id": None}
+
+
+def _remember_data_folder() -> None:
+    from tow.watchdog import data_marker
+
+    try:
+        _data_seen["id"] = data_marker(create=True)
+    except OSError as exc:
+        _data_seen["id"] = None  # not known: never reported as gone
+        LOG.warning("data folder id not readable: %s", type(exc).__name__)
+
+
 def _watchdog_pass(wake_ts: float | None) -> Any:
     from tow import pulse
     from tow.watchdog import run_watchdog
@@ -134,7 +148,12 @@ def _watchdog_pass(wake_ts: float | None) -> Any:
         port_listening=lambda _port: False,
         crash_line=lambda since: pulse.last_crash_line(layout.logs_dir(), since),
     )
-    return run_watchdog(wake_ts=wake_ts, probes=probes)
+    report = run_watchdog(wake_ts=wake_ts, probes=probes, data_id=_data_seen["id"])
+    if isinstance(report, dict) and report.get("data_lost"):
+        # Said once (and in run.log): the folder TOW goes on with now is the one watched next.
+        LOG.error("the data folder was deleted or replaced while TOW ran: restore a night copy")
+        _remember_data_folder()
+    return report
 
 
 def _send(text: str) -> bool:
@@ -230,6 +249,7 @@ def run_supervisor(deps: Deps | None = None) -> int:
                 return 0
             return 3
         _clear_old_requests()
+        _remember_data_folder()
         layout.write_json(
             layout.pid_path(),
             {"pid": os.getpid(), "version": __version__, "port": supervisor.port, "started_at": time.time()},
