@@ -414,6 +414,19 @@ if (addError) {
   (field || addError).focus({ preventScroll: true });
 }
 
+// Esc folds the open add form (Home: a topic, Sites: a site) back to its "+", keeping what was
+// typed; a menu, a list or a dialog that is open takes the Esc first (they stop or prevent it).
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+  const add = document.getElementById("new");
+  if (!add?.open || document.querySelector("dialog[open]")) return;
+  const focus = document.activeElement;
+  if (focus && focus !== document.body && !add.contains(focus)) return;
+  event.preventDefault();
+  add.open = false;
+  add.querySelector("summary")?.focus();
+});
+
 document.querySelectorAll("a.plus, a[data-open-new]").forEach((a) => {
   a.addEventListener("click", (e) => {
     e.preventDefault();
