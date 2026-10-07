@@ -10,9 +10,10 @@ from typing import Any
 
 import yaml
 
+from tow.errors import TowError
 from tow.paths import config_path
 from tow.store import atomic_write_text
-from tow.yaml_guard import SAFE_LOADER, validate_graph
+from tow.yaml_guard import SAFE_LOADER, YamlLimitError, validate_graph
 from tow.yaml_guard import dump as dump_yaml
 from tow.yaml_guard import load as load_yaml
 from tow.yaml_guard import read_text as read_yaml_text
@@ -133,11 +134,18 @@ def load_config() -> dict[str, Any]:
     path = config_path()
     if not path.is_file():
         raise FileNotFoundError(f"TOW config not found: {path}; create it or set TOW_CONFIG")
-    data = _parsed_config_file(path)
+    try:
+        data = _parsed_config_file(path)
+    except YamlLimitError:
+        raise
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        line, column = (mark.line + 1, mark.column + 1) if mark is not None else (0, 0)
+        raise ConfigError("config_error.syntax", line=line, column=column) from exc
     if data is None:
         data = {}
     if not isinstance(data, dict):
-        raise TypeError("config.yaml must be a mapping")
+        raise ConfigError("config_error.mapping")
     return validated(data)
 
 
@@ -160,8 +168,9 @@ def validated(raw: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-class ConfigError(ValueError):
-    """config.yaml has a value of the wrong type: named here, not as a crash later."""
+class ConfigError(TowError, ValueError):
+    """config.yaml has a value of the wrong type: named here (``config_error.*`` and the
+    setting), not as a crash later; ``str()`` is the text in the current language."""
 
 
 def _int_field(data: dict[str, Any], key: str, low: int, high: int) -> None:
@@ -169,20 +178,20 @@ def _int_field(data: dict[str, Any], key: str, low: int, high: int) -> None:
     if isinstance(value, str) and value.strip().isdigit():
         value = int(value.strip())
     if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
-        raise ConfigError(f"config.yaml: {key} must be a whole number {low}..{high}")
+        raise ConfigError("config_error.whole_number", key=key, low=low, high=high)
     data[key] = value
 
 
 def _bool_field(data: dict[str, Any], key: str) -> None:
     value = data.get(key)
     if value is not None and as_bool(value, True) != as_bool(value, False):
-        raise ConfigError(f"config.yaml: {key} must be true or false")
+        raise ConfigError("config_error.true_false", key=key)
 
 
-def _text_list_field(data: dict[str, Any], key: str, what: str) -> None:
+def _folder_list_field(data: dict[str, Any], key: str) -> None:
     value = data.get(key)
     if value is not None and (not isinstance(value, list) or not all(isinstance(item, str) for item in value)):
-        raise ConfigError(f"config.yaml: {key} must be a list of {what}")
+        raise ConfigError("config_error.folder_list", key=key)
 
 
 def web_address(value: object) -> bool:
@@ -206,11 +215,11 @@ def path_safe_name(name: object) -> bool:
 
 def _site_spec(name: object, spec: dict[str, Any]) -> None:
     if not path_safe_name(name):
-        raise ConfigError("config.yaml: a site name must not contain / or \\ and must not be . or ..")
+        raise ConfigError("config_error.site_name")
     for key in ("fetch_hosts", "login_hosts"):
         hosts = spec.get(key)
         if hosts is not None and (not isinstance(hosts, list) or not all(web_address(host) for host in hosts)):
-            raise ConfigError(f"config.yaml: trackers.{name}.{key} must be a list of http:// or https:// addresses")
+            raise ConfigError("config_error.site_hosts", site=str(name), key=key)
 
 
 def _validate(data: dict[str, Any]) -> None:
@@ -218,22 +227,22 @@ def _validate(data: dict[str, Any]) -> None:
     _int_field(data, "interval_sec", 60, 7 * 24 * 3600)
     _int_field(data, "flash_ttl_sec", 1, 24 * 3600)
     if not isinstance(data.get("bind"), str):
-        raise ConfigError("config.yaml: bind must be a text address such as 127.0.0.1")
+        raise ConfigError("config_error.bind")
     if data.get("user_agent") is not None and not isinstance(data["user_agent"], str):
-        raise ConfigError("config.yaml: user_agent must be text")
+        raise ConfigError("config_error.user_agent")
     trackers = data.get("trackers")
     if not isinstance(trackers, dict) or not all(isinstance(spec, dict) for spec in trackers.values()):
-        raise ConfigError("config.yaml: trackers must map each site name to its settings")
+        raise ConfigError("config_error.trackers")
     for name, spec in trackers.items():
         _site_spec(name, spec)
     if not isinstance(data.get("client"), dict):
-        raise ConfigError("config.yaml: client must be a mapping (kind, ...)")
+        raise ConfigError("config_error.client")
     if "clients" in data and not isinstance(data["clients"], (dict, list)):
-        raise ConfigError("config.yaml: clients must be a mapping or a list")
+        raise ConfigError("config_error.clients")
     for key in ("backup_dir", "restore_points_dir"):
         if data.get(key) is not None and not isinstance(data[key], str):
-            raise ConfigError(f"config.yaml: {key} must be a folder path")
-    _text_list_field(data, "allowed_save_roots", "folders")
+            raise ConfigError("config_error.folder", key=key)
+    _folder_list_field(data, "allowed_save_roots")
     for key in ("allow_unc_save_paths", "allow_private_tracker_hosts", "allow_private_notifier_hosts"):
         _bool_field(data, key)
     if data.get("backup_keep") is not None:
@@ -248,21 +257,21 @@ def _validate(data: dict[str, Any]) -> None:
     if data.get("backup_time") is not None:
         try:
             parse_backup_time(data["backup_time"])
-        except ValueError as exc:
-            raise ConfigError(f"config.yaml: {exc}") from None
+        except ValueError:
+            raise ConfigError("config_error.backup_time") from None
     pulse = data.get("heartbeat_url")
     if pulse is not None and not (isinstance(pulse, str) and pulse.startswith("https://")):
-        raise ConfigError("config.yaml: heartbeat_url must be an https:// address (e.g. from healthchecks.io)")
+        raise ConfigError("config_error.heartbeat_url")
     if data.get("daily_digest_hour") is not None:
         _int_field(data, "daily_digest_hour", 0, 23)
     language = data.get("language")
     if language is not None and not (
         isinstance(language, str) and re.fullmatch(r"auto|[a-z]{2,3}(-[a-z0-9]{1,8})*", language, re.IGNORECASE)
     ):
-        raise ConfigError('config.yaml: language must be "auto" or a language code such as en or ru')
+        raise ConfigError("config_error.language")
     quiet = data.get("quiet_hours")
     if quiet is not None and not re.fullmatch(r"\s*\d{1,2}\s*-\s*\d{1,2}\s*", str(quiet)):
-        raise ConfigError('config.yaml: quiet_hours must look like "23-8" (hours, local time)')
+        raise ConfigError("config_error.quiet_hours")
 
 
 def _header(path: Path) -> str:
@@ -320,7 +329,7 @@ def _set_top_level_int(key: str, value: int) -> None:
     # Raw (unvalidated) data: the broken value being replaced must not block its own fix.
     data = _parsed_config_file(path)
     if not isinstance(data, dict):
-        raise ConfigError("config.yaml must be a mapping")
+        raise ConfigError("config_error.mapping")
     data[key] = value
     save_config(data)
 

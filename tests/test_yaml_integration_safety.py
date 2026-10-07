@@ -70,8 +70,9 @@ def test_night_rollback_config_is_guarded_before_resolving_restore_point_targets
 @pytest.mark.parametrize("source", [b"false", b"0", b"''", b"[]"])
 def test_falsy_non_mapping_configs_are_not_silently_replaced_by_defaults(source):
     config_path().write_bytes(source)
-    with pytest.raises(TypeError, match="must be a mapping"):
+    with pytest.raises(config.ConfigError) as caught:
         config.load_config()
+    assert caught.value.code == "config_error.mapping"
     with pytest.raises(snapshots.SnapshotError):
         snapshots._snapshot_config(source)
     assert config_path().read_bytes() == source

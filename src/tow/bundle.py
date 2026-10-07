@@ -267,7 +267,7 @@ def _validate_config_schema(data: dict[str, Any]) -> None:
     try:
         validated(data)
     except ConfigError as exc:
-        raise ExportImportError(f"invalid {exc}") from None
+        raise ExportImportError(f"invalid {exc.text('en')}") from None  # the technical text, for the log
 
 
 def _validate_tracker_settings(trackers: dict[str, Any]) -> None:

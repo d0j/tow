@@ -25,6 +25,25 @@
     "documents": "The settings file must contain only one YAML document. Processing was stopped.",
     "number": "The YAML settings contain a number or a date that cannot be read (too large or invalid). Processing was stopped."
   },
+  "config_error": {
+    "mapping": "config.yaml must be a mapping of settings (name: value)",
+    "syntax": "config.yaml cannot be read: the YAML is broken at line {line}, column {column}. Correct it and start TOW again.",
+    "whole_number": "config.yaml: {key} must be a whole number {low}..{high}",
+    "true_false": "config.yaml: {key} must be true or false",
+    "folder_list": "config.yaml: {key} must be a list of folders",
+    "folder": "config.yaml: {key} must be a folder path",
+    "site_name": "config.yaml: a site name must not contain / or \\ and must not be . or ..",
+    "site_hosts": "config.yaml: trackers.{site}.{key} must be a list of http:// or https:// addresses",
+    "bind": "config.yaml: bind must be a text address such as 127.0.0.1",
+    "user_agent": "config.yaml: user_agent must be text",
+    "trackers": "config.yaml: trackers must map each site name to its settings",
+    "client": "config.yaml: client must be a mapping (kind, ...)",
+    "clients": "config.yaml: clients must be a mapping or a list",
+    "backup_time": "config.yaml: backup_time must look like \"03:30\"",
+    "heartbeat_url": "config.yaml: heartbeat_url must be an https:// address (e.g. from healthchecks.io)",
+    "language": "config.yaml: language must be \"auto\" or a language code such as en or ru",
+    "quiet_hours": "config.yaml: quiet_hours must look like \"23-8\" (hours, local time)"
+  },
   "monitorrent": {
     "missing": "The Monitorrent database file was not found.",
     "invalid_database": "Could not read the Monitorrent database: the file is corrupt, busy or contains unsupported data. Nothing was imported.",
