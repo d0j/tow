@@ -128,10 +128,10 @@ def test_check_button_shows_the_version_or_the_exact_problem(legacy_qbit, monkey
             raise ClientError("Transmission: неверный логин или пароль")  # what the adapter raises
 
     monkeypatch.setattr("tow.web.services.client_answers", lambda _client_id: True)
-    monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *_a: Alive())
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a: Alive())
     ok = _client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
     assert _flash(ok) == "связь есть: 5.0.1 webapi 2.11"
-    monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *_a: Broken())
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a: Broken())
     bad = _client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
     assert _flash(bad) == "нет связи: Transmission: неверный логин или пароль"
 
@@ -148,7 +148,7 @@ def test_check_of_a_client_nobody_listens_for_fails_after_one_quick_try(legacy_q
         raise ConnectionRefusedError
 
     monkeypatch.setattr(socket, "create_connection", refused)
-    monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *_a: pytest.fail("no slow library check"))
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a: pytest.fail("no slow library check"))
     response = _client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
     assert _flash(response) == "нет связи: клиент не отвечает по этому адресу и порту или его веб-интерфейс выключен"
     assert tried == [(("127.0.0.1", 8080), 3.0)]

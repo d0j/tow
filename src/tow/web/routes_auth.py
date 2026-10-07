@@ -26,7 +26,7 @@ def _login_response(request: Request, error: str = "", status_code: int = 200, *
     configured, kind, problem = False, "password", ""
     if enabled:
         try:
-            kind = access.credential(_context.secrets_or_none()).kind
+            kind = services.network_credential(_context.secrets_or_none()).kind
             configured = True
         except AuthConfigurationError as exc:
             problem = "" if exc.code == "auth.token_missing" else str(exc)
@@ -57,7 +57,7 @@ def login(request: Request, password: str = Form(""), token: str = Form("")) -> 
         return RedirectResponse("/", status_code=303)
     peer = request.client.host if request.client else "unknown"
     try:
-        credential = access.credential(_context.secrets_or_none())
+        credential = services.network_credential(_context.secrets_or_none())
     except AuthConfigurationError:
         return _login_response(request, t("web.login.no_password"), status_code=503)
     # Reserved (counted as a failure) before the check, given back on success: parallel
@@ -73,12 +73,12 @@ def login(request: Request, password: str = Form(""), token: str = Form("")) -> 
         return _login_response(request, wrong, status_code=401)
     services.login_throttle.success(peer)
     response = RedirectResponse("/", status_code=303)
-    access.set_session_cookie(response, request, credential.session_key)
+    services.set_session_cookie(response, request, credential.session_key)
     return response
 
 
 @router.post("/logout")
 def logout(request: Request) -> Response:
     response = RedirectResponse("/login", status_code=303)
-    access.sign_out(request, response)
+    services.sign_out(request, response)
     return response

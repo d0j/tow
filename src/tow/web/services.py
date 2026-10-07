@@ -1,5 +1,6 @@
-"""What the web pages call outside the web package: the stores, the check, the service lifecycle,
-restore points and portable bundles, diagnostics, the browser sign-in and the event log.
+"""What the web pages call outside the web package: the stores and their transactions, the check,
+the clients and sites, the service lifecycle, copies of the data, diagnostics, the sessions, the
+browser sign-in, the messengers and the event log.
 
 This is the web layer's one seam. Route modules and view helpers call these through this
 module - ``services.load_config()``, ``services.run_check(...)`` - never by importing them from
@@ -7,9 +8,9 @@ their home modules, so a test replaces one in one place and every page sees it::
 
     monkeypatch.setattr("tow.web.services.run_check", fake_check)
 
-Pure helpers (formatting, parsing, validation) are imported from their own modules as usual;
-anything that reads or writes the install's data, talks to a client or a site, or changes the
-service belongs here.
+Pure helpers (formatting, parsing, validation, constants, error types) are imported from their
+own modules as usual; anything that reads or writes the install's data, talks to a client or a
+site, or changes the service belongs here.
 """
 
 from __future__ import annotations
@@ -19,6 +20,8 @@ from functools import wraps
 from threading import BoundedSemaphore
 from typing import Any
 
+from tow.access import credential as network_credential
+from tow.access import set_session_cookie, sign_out, sign_out_everywhere
 from tow.adopt import adopt_topic
 from tow.browser_auth import browser_auth
 from tow.check import await_relocation, client_owned_by_tow, record_check_failure, run_check
@@ -28,8 +31,11 @@ from tow.content import metadata as content_metadata
 from tow.content import read as read_content
 from tow.doctor import doctor_report
 from tow.lifecycle import request_restart, service_status, set_autostart
-from tow.log import log_event
+from tow.locations import check_writable as folder_write_problem
+from tow.locations import free_bytes
+from tow.log import history_events, log_event, read_events
 from tow.mirrors import prefer_host
+from tow.notifiers import test as test_notifier
 from tow.notify import send as notify_send
 from tow.ratelimit import LoginThrottle
 from tow.releases import release_status
@@ -45,7 +51,14 @@ from tow.restore_points import (
     restore_portable_bundle,
 )
 from tow.restore_points import cleanup_status as restore_point_cleanup_status
-from tow.snapshots import check_snapshot, delete_snapshot, snapshot_delete_view
+from tow.snapshots import (
+    check_snapshot,
+    create_snapshot,
+    delete_snapshot,
+    restore_snapshot,
+    snapshot_delete_view,
+    snapshot_path,
+)
 from tow.snapshots import cleanup_status as night_cleanup_status
 from tow.store import (
     load_download_history,
@@ -55,16 +68,21 @@ from tow.store import (
     save_secrets,
     save_state,
 )
+from tow.store_transaction import commit as commit_stores
 from tow.store_transaction import recover as recover_store_transaction
+from tow.store_transaction import transaction as store_transaction
 from tow.supervisor.layout import install_id, next_check_at, topic_timer_status
 from tow.title import guess_topic_title
+from tow.undo import apply as apply_undo
 from tow.undo import cleanup as cleanup_secret_undo
+from tow.watchdog import last_problem as watchdog_problem
 from tow.web_update import log_tail as web_update_log
 from tow.web_update import start as start_web_update
 from tow.web_update import status as web_update_status
 
 __all__ = [
     "adopt_topic",
+    "apply_undo",
     "await_relocation",
     "browser_auth",
     "check_portable_bundle",
@@ -74,14 +92,19 @@ __all__ = [
     "client_answers",
     "client_from_secrets",
     "client_owned_by_tow",
+    "commit_stores",
     "content_context_title",
     "content_metadata",
     "create_restore_point",
+    "create_snapshot",
     "delete_restore_point",
     "delete_snapshot",
     "doctor_report",
     "export_portable_bundle",
+    "folder_write_problem",
+    "free_bytes",
     "guess_topic_title",
+    "history_events",
     "install_id",
     "list_restore_points",
     "load_config",
@@ -91,6 +114,7 @@ __all__ = [
     "locked_state_mutation",
     "log_event",
     "login_throttle",
+    "network_credential",
     "next_check_at",
     "night_cleanup_status",
     "notify_send",
@@ -99,6 +123,7 @@ __all__ = [
     "prepare_content",
     "prepare_magnet_content",
     "read_content",
+    "read_events",
     "record_check_failure",
     "recover_store_transaction",
     "release_status",
@@ -107,15 +132,23 @@ __all__ = [
     "restore_point_cleanup_status",
     "restore_point_delete_view",
     "restore_portable_bundle",
+    "restore_snapshot",
     "run_check",
     "save_config",
     "save_secrets",
     "save_state",
     "service_status",
     "set_autostart",
+    "set_session_cookie",
+    "sign_out",
+    "sign_out_everywhere",
     "snapshot_delete_view",
+    "snapshot_path",
     "start_web_update",
+    "store_transaction",
+    "test_notifier",
     "topic_timer_status",
+    "watchdog_problem",
     "web_update_log",
     "web_update_status",
 ]

@@ -21,9 +21,8 @@ def service_view() -> dict[str, Any]:
     service = services.service_status()
     from tow.diagnostic_json import epoch
     from tow.pulse import clock
-    from tow.watchdog import last_problem
 
-    problem = last_problem()
+    problem = services.watchdog_problem()
     problem_at = epoch(problem.get("at")) if problem else None
     service["watchdog_problem"] = (
         {"at": clock(problem_at) if problem_at else "—", "lines": str(problem["text"]).splitlines()}

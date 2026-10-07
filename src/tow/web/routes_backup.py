@@ -165,7 +165,7 @@ def settings_backup_location(
     request: Request, kind: str = Form(""), path: str = Form(""), action: str = Form("save")
 ) -> Response:
     from tow import access
-    from tow.locations import LOCATIONS, check_writable, free_bytes, is_network_share, problem, resolve
+    from tow.locations import LOCATIONS, is_network_share, problem, resolve
 
     location = LOCATIONS.get(kind)
     if location is None:
@@ -187,9 +187,9 @@ def settings_backup_location(
         # night copies would go there: only the owner at this computer names a server.
         return _backup_redirect("web.backup.share_local_only", "err")
     target = resolve(raw, location)
-    if reason := check_writable(target):
+    if reason := services.folder_write_problem(target):
         return _backup_redirect(f"{target}: {reason}", "err")
-    free = free_bytes(target)
+    free = services.free_bytes(target)
     room = t("web.backup.free", size=format_bytes(free)) if free is not None else ""
     if action == "check":
         return _backup_redirect(t("web.backup.write_works", path=target, room=room))
@@ -223,10 +223,8 @@ def _member_words(name: str) -> str:
 
 @router.post("/settings/backup/now")
 def settings_backup_now() -> Response:
-    from tow.snapshots import SnapshotError, create_snapshot
-
     try:
-        result = create_snapshot(how="manual")
+        result = services.create_snapshot(how="manual")
     except SnapshotError as exc:
         return _backup_redirect("web.backup.night_failed", "err", error=exc)
     message = t("web.backup.copy_made", name=result["snapshot"], size=format_bytes(result["bytes"]))
@@ -241,11 +239,9 @@ def settings_backup_now() -> Response:
 @router.post("/settings/backup/night/{name}/restore")
 def settings_backup_restore(name: str) -> Response:
     # A signed-in device on the network is the owner (owner's decision, 01.10.2026).
-    from tow.snapshots import SnapshotError, restore_snapshot, snapshot_path
-
     lan_before = _network_access()
     try:
-        result = restore_snapshot(snapshot_path(name), apply=True)
+        result = services.restore_snapshot(services.snapshot_path(name), apply=True)
     except SnapshotError as exc:
         return _backup_redirect("web.backup.restore_failed", "err", error=exc)
     # The copy's date, as the list shows it: its folder name is TOW's own.

@@ -112,7 +112,7 @@ def settings_notifier_test(kind: str) -> Response:
     secrets = services.load_secrets()
     if problem := _private_server_problem(kind, _raw_notifier(secrets, kind)):  # saved by an older version
         return _notifier_redirect(problem, kind, "err")
-    ok, message = notifiers.test(secrets, kind)
+    ok, message = services.test_notifier(secrets, kind)
     services.log_event("notifier_test", integration_id=kind, ok=ok, error=None if ok else message, how="manual")
     return _notifier_redirect(message, kind, "ok" if ok else "err")
 

@@ -52,7 +52,7 @@ def test_configured_drive_relative_path_is_refused_when_used(value, key, monkeyp
 def test_settings_refuse_drive_relative_path_without_probe_or_config_change(value, kind, action, monkeypatch):
     from tow.web import app
 
-    monkeypatch.setattr(locations, "check_writable", lambda *_a: pytest.fail("drive-relative write probe"))
+    monkeypatch.setattr("tow.web.services.folder_write_problem", lambda *_a: pytest.fail("drive-relative write probe"))
     before = config_path().read_bytes()
     response = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
         "/settings/backup/location",
