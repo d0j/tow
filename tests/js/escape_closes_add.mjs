@@ -7,20 +7,20 @@ const require = createRequire(import.meta.url);
 const keydown = [];
 let focused = null;
 let dialogOpen = false;
-const summary = { focus() { focused = summary; } };
+const plus = { focus() { focused = plus; } };  // the header's "+" that opens the form
 const inside = { name: "url field" };
 const outside = { name: "search" };
 const add = {
   open: true,
-  contains: (node) => node === inside || node === summary,
-  querySelector: (selector) => (selector === "summary" ? summary : null),
+  contains: (node) => node === inside,
+  querySelector: () => null,
 };
 const document = {
   hidden: false,
   body: { name: "body" },
   activeElement: inside,
   getElementById: (id) => (id === "new" ? add : null),
-  querySelector: (selector) => (selector === "dialog[open]" && dialogOpen ? {} : null),
+  querySelector: (selector) => (selector === "dialog[open]" ? (dialogOpen ? {} : null) : selector === 'a.plus[href="#new"]' ? plus : null),
   querySelectorAll: () => [],
   addEventListener: (name, fn) => { if (name === "keydown") keydown.push(fn); },
   createElement: () => ({ append() {}, setAttribute() {}, classList: { add() {} } }),
@@ -57,5 +57,5 @@ press("Escape");
 const focusElsewhereKept = add.open === true;
 document.activeElement = inside;
 press("Escape");
-const closes = add.open === false && focused === summary;
+const closes = add.open === false && focused === plus;
 console.log(JSON.stringify({ otherKeysIgnored, dialogFirst, takenEscKept, focusElsewhereKept, closes }));
