@@ -49,6 +49,8 @@ otherwise.
 - A reverse proxy on the same machine makes every request look local, so TOW asks no password. Do not run TOW behind
   one unless the proxy authenticates every request.
 - TOW is meant for one computer, a home network or a VPN. It is not hardened for direct exposure to the internet.
-- Traffic between a device and TOW over the network is plain HTTP; use a VPN (WireGuard, Tailscale) or an SSH tunnel
-  on untrusted networks.
+- Traffic between a device and TOW over the network is plain HTTP: anyone who can watch the home network (a shared
+  Wi-Fi, a compromised router) can read the password at sign-in and the session cookie, and that cookie works for
+  90 days until the device signs out or you use "Sign out everywhere". Use a VPN (WireGuard, Tailscale) or an SSH
+  tunnel on networks you do not fully trust.
 - The password reminder is visible to anyone who opens the sign-in page.
