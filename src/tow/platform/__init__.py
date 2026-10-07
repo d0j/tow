@@ -171,6 +171,26 @@ def is_plain_dir(info: os.stat_result) -> bool:
     return stat.S_ISDIR(info.st_mode) and not is_link_like(info)
 
 
+def child_path(root: Path | str, name: str) -> Path:
+    """``root / name`` for one plain name directly inside ``root``: no separator, drive, ``.``
+    or ``..`` (ValueError otherwise). Also for a network share (``\\\\nas\\share``).
+
+    The containment is written as normpath + startswith, the form code scanning recognises.
+    """
+    base = os.path.normpath(root)
+    if not base.endswith(os.sep):
+        base += os.sep
+    path = os.path.normpath(os.path.join(base, name))
+    if (
+        name in ("", ".", "..")
+        or os.path.basename(name) != name
+        or not path.startswith(base)
+        or path[len(base) :] != name
+    ):
+        raise ValueError("not a plain name inside its folder")
+    return Path(path)
+
+
 PRIVATE_UMASK = 0o077
 
 
@@ -242,6 +262,7 @@ __all__ = [
     "PRIVATE_UMASK",
     "Backend",
     "backend_for",
+    "child_path",
     "current",
     "is_link_like",
     "is_plain_dir",

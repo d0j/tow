@@ -22,7 +22,7 @@ from tow.diagnostic_json import encode_object, read_object
 from tow.i18n import t
 from tow.log import log_event, owner_language
 from tow.paths import data_dir
-from tow.platform import is_link_like, is_plain_file
+from tow.platform import child_path, is_link_like, is_plain_file
 from tow.store import SecretStoreError, atomic_write_text, derive_local_secret, persistence_lock
 
 RESTORE_POINT_LIMIT = 10
@@ -179,7 +179,10 @@ def point_path(point_id: str, *, must_exist: bool = True, cfg: dict[str, Any] | 
     if not isinstance(point_id, str) or _ID_RE.fullmatch(point_id) is None:
         raise RestorePointError(t("backup.restore_point.unknown", owner_language()), kind=UNKNOWN_POINT)
     root = restore_points_dir(cfg=cfg).resolve()
-    path = root / f"{point_id}.towx"
+    try:
+        path = child_path(root, f"{point_id}.towx")
+    except ValueError:
+        raise RestorePointError(t("backup.restore_point.unsafe", owner_language()), kind=UNKNOWN_POINT) from None
     if path.parent.resolve() != root or _is_link(path):
         raise RestorePointError(t("backup.restore_point.unsafe", owner_language()), kind=UNKNOWN_POINT)
     if must_exist and (not path.is_file() or path.stat().st_size <= 0):

@@ -17,6 +17,7 @@ from cryptography.fernet import InvalidToken
 
 from tow.errors import TowError
 from tow.paths import tmp_dir
+from tow.platform import child_path
 from tow.selection import normalize_policy
 from tow.store import atomic_create_bytes, master_fernet, persistence_lock
 from tow.torrent import MAX_TORRENT_BYTES, TorrentMetadata, parse_torrent_metadata
@@ -110,7 +111,7 @@ def _read(token: str, url: str, client_id: str) -> tuple[bytes, bool]:
     if not re.fullmatch(r"[0-9a-f]{32}", token):
         raise TowError("content.expired")
     try:
-        path = _folder(create=False) / f"{token}.bin"
+        path = child_path(_folder(create=False), f"{token}.bin")
         info = path.lstat()
         if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_RECORD_BYTES:
             raise TowError("content.unavailable")
