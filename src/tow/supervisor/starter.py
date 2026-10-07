@@ -42,6 +42,28 @@ def stderr_log() -> Path:
     return layout.logs_dir() / "run-stderr.log"
 
 
+def output_size() -> int:
+    """How much the started ``tow run`` logs have already written (before a new start)."""
+    try:
+        return stderr_log().stat().st_size
+    except OSError:
+        return 0
+
+
+def output_since(offset: int, *, lines: int = 3) -> list[str]:
+    """The last lines a ``tow run`` wrote after ``offset``: why it ended (``port N is already in
+    use``, a broken config.yaml), for the window that started it."""
+    try:
+        with stderr_log().open("rb") as handle:
+            end = handle.seek(0, 2)
+            handle.seek(max(0, offset, end - 64 * 1024))
+            text = handle.read().decode("utf-8", "replace")
+    except OSError:
+        return []
+    found = [line.strip() for line in text.splitlines() if line.strip()]
+    return found[-lines:]
+
+
 def run_argv() -> list[str]:
     """``python -m tow run`` of this environment; ``pythonw`` on Windows (no console window)."""
     executable = sys.executable

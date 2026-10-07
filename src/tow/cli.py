@@ -598,9 +598,13 @@ def _cmd_start(args: argparse.Namespace) -> int:
     browser = not args.no_browser and os.environ.get("TOW_NO_BROWSER", "").strip().lower() not in ("1", "true", "yes")
     if layout.running() is None:
         print(t("cli.start.starting"), flush=True)
+    written = starter.output_size()
     result = starter.start(port, wait=args.wait, browser=browser)
     logs = layout.logs_dir()
     if result["state"] == "exited":
+        # The reason itself, here: the start window says "the reason is above".
+        for line in starter.output_since(written):
+            print(line)
         print(t("cli.start.exited", log=logs / "run.log", stderr=starter.stderr_log()))
         return EXIT_CANNOT_RUN
     if result["state"] == "timeout":
