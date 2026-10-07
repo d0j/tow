@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 from cryptography.fernet import Fernet
 
-from tow import check_transaction, store
+from tow import check_transaction, journal, store
 from tow.check_transaction import CheckTransactionError, check_store_transaction, recover_check_transaction
 from tow.errors import Msg
 from tow.paths import data_dir, download_history_path, secrets_path, state_path
@@ -1031,14 +1031,14 @@ def test_failed_journal_reservation_never_deletes_another_directory(monkeypatch)
 def test_recovery_uses_verified_bytes_even_if_a_backup_changes_later(monkeypatch):
     original = _seed()
     _crash("prepared")
-    real_write = check_transaction.atomic_write_bytes
+    real_write = journal.atomic_write_bytes
 
     def changing_backup(path, content):
         if path == state_path():
             (_tx_root() / "download_history.before").write_bytes(b"corrupted after preflight")
         return real_write(path, content)
 
-    monkeypatch.setattr(check_transaction, "atomic_write_bytes", changing_backup)
+    monkeypatch.setattr(journal, "atomic_write_bytes", changing_backup)
     recover_check_transaction()
     assert (state_path().read_bytes(), download_history_path().read_bytes()) == original
     assert not _tx_root().exists()
@@ -1047,10 +1047,10 @@ def test_recovery_uses_verified_bytes_even_if_a_backup_changes_later(monkeypatch
 def test_failed_second_restore_can_be_retried_with_the_complete_journal(monkeypatch):
     original = _seed()
     _crash("prepared")
-    real_write = check_transaction.atomic_write_bytes
+    real_write = journal.atomic_write_bytes
     with monkeypatch.context() as patched:
         patched.setattr(
-            check_transaction,
+            journal,
             "atomic_write_bytes",
             _fail_for("download_history.json", real_write, PermissionError("locked")),
         )
@@ -1065,12 +1065,12 @@ def test_failed_second_restore_can_be_retried_with_the_complete_journal(monkeypa
 def test_bad_restore_write_readback_keeps_the_journal(monkeypatch):
     _seed()
     _crash("prepared")
-    real_write = check_transaction.atomic_write_bytes
+    real_write = journal.atomic_write_bytes
 
     def corrupt_write(path, content):
         return real_write(path, b"bad write" if path == state_path() else content)
 
-    monkeypatch.setattr(check_transaction, "atomic_write_bytes", corrupt_write)
+    monkeypatch.setattr(journal, "atomic_write_bytes", corrupt_write)
     with pytest.raises(CheckTransactionError, match="restore read-back mismatch"):
         recover_check_transaction()
     assert (_tx_root() / "TRANSACTION.json").exists()
