@@ -1,4 +1,4 @@
-"""The transactional add/selection contract, shared by every client except qBittorrent.
+"""The transactional add/selection contract, shared by every client.
 
 A client module implements a few primitives (find, add stopped, set wanted files, stop,
 start, set labels, move) and inherits the guarantees TOW gives for every client:
@@ -11,6 +11,10 @@ start, set labels, move) and inherits the guarantees TOW gives for every client:
 ``inspect_torrent`` returns the same shape as the qBittorrent adapter (states in qBittorrent
 words: stoppedDL/stoppedUP, downloading, uploading, queuedDL/queuedUP, checkingDL, moving,
 error), so the rest of TOW does not care which client it talks to.
+
+A client whose own ways differ overrides a step, never the guarantees: qBittorrent keeps its
+own add (``_check_add`` and ``_finish_add`` around it), priority levels in
+``_restore_selection`` and the read-back of padding in ``_ignored_padding``.
 """
 
 from __future__ import annotations

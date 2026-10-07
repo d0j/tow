@@ -23,9 +23,9 @@ A client module declares:
 - `STEPS` — how to turn on the Web UI in the client; `NOTE` — its quirks (language-file keys `client.<kind>.*`);
 - `from_secrets(secrets)` → an object satisfying `TorrentClientAdapter`.
 
-Every client follows the same read-back contract. Transmission and Deluge use the shared flow in
-`clients/managed.py`; qBittorrent currently has its own transaction implementation. New clients should use
-`ManagedClient` rather than duplicate that flow:
+Every client follows the same read-back contract, the shared flow in `clients/managed.py`; a new client uses
+`ManagedClient` rather than duplicate it (qBittorrent overrides single steps, such as its add, never the
+guarantees):
 
 1. the torrent is added **stopped** with the labels `tow` + `tow-pending`;
 2. files are selected by path and size, never by index;
