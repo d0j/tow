@@ -38,10 +38,13 @@ from tow.records import CheckRow, DownloadHistory, Health, HistoryRecord, Topic,
 from tow.selection import SelectionPendingError, policy_from_topic, resolve_selection
 from tow.status import TRACKER_WARNING_CLASSES
 from tow.store import (
+    FileStamp,
     SecretStoreError,
     StoreCorruptionError,
     StoreReadError,
     check_run_lock,
+    encrypted_secrets_path,
+    file_stamp,
     load_download_history,
     load_secrets,
     load_state,
@@ -822,6 +825,18 @@ class _CheckRun:
     history_retention: tuple[int, int] = (download_history.DEFAULT_KEEP_DAYS, download_history.DEFAULT_MAX_ITEMS)
     # Clients on another computer: a folder they name is not measured on this one's disks (G6).
     remote_clients: frozenset[str] = frozenset()
+    # The secrets.enc that ``secrets`` was decrypted from (see _reread_secrets).
+    secrets_stamp: FileStamp | None = None
+
+
+def _reread_secrets(run: _CheckRun) -> None:
+    """Pick up what a login in this run persisted (new tracker cookies) before the next request.
+    The file is decrypted again only when it changed: twice for every topic, it was decrypted
+    4000 times in a check of 2000 topics."""
+    stamp = file_stamp(encrypted_secrets_path())
+    if stamp is None or stamp != run.secrets_stamp:
+        run.secrets = load_secrets()
+        run.secrets_stamp = stamp
 
 
 def _confirm_matching_magnet(
@@ -1263,7 +1278,7 @@ def _fetch_revision(work: _TopicCheck, policy: dict[str, Any]) -> _Fetched | Non
     if run.apply:
         # Pick up tracker cookies a previous topic's login persisted in this run;
         # the snapshot taken at the start would make every topic log in again.
-        run.secrets = load_secrets()
+        _reread_secrets(run)
     try:
         blob = work.tracker.fetch_torrent(work.url, run.secrets, run.ua, ignore_cool=run.ignore_cool, persist=run.apply)
     except Exception as torrent_error:  # a tracker refusal may fall back to its magnet; else re-raised
@@ -1345,7 +1360,7 @@ def _plan_selection(work: _TopicCheck, metadata: Any, policy: dict[str, Any]) ->
     if run.apply:
         # The fetch may have logged in again and persisted new cookies; the title
         # request must not go out with the stale ones (and log in yet again).
-        run.secrets = load_secrets()
+        _reread_secrets(run)
     tracker_title = _current_tracker_title(
         work.tracker,
         work.url,
@@ -2004,6 +2019,7 @@ def _run_check(
     scheduled_scope: str = "",
 ) -> dict[str, Any]:
     cfg = load_config()
+    secrets_stamp = file_stamp(encrypted_secrets_path())
     secrets = load_secrets()
     state = _load_run_state(apply=apply)
     started = {str(topic.get("id")): owner_fields(topic) for topic in topics_of(state)}
@@ -2079,6 +2095,7 @@ def _run_check(
         queue_notification=notifications.queue,
         history_retention=download_history.retention(cfg),
         remote_clients=_remote_clients(cfg, secrets),
+        secrets_stamp=secrets_stamp,
     )
     results: list[CheckRow] = []
     for topic in topics_of(state):
