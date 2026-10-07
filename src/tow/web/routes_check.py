@@ -29,8 +29,6 @@ def topics_replace_revision(tid: str) -> Response:
 
     The automatic check never stops a seeding revision; this is the owner's one click.
     """
-    from tow.clients.factory import from_secrets
-
     state = services.load_state()
     topic = next((item for item in state.get("topics") or [] if str(item.get("id")) == tid), None)
     if topic is None:
@@ -38,7 +36,9 @@ def topics_replace_revision(tid: str) -> Response:
     if not blocked_by_previous_revision(topic):
         return flash_redirect("/", "web.topics.replace_not_needed", "warn")
     try:
-        client = from_secrets(services.load_config(), services.load_secrets(), topic.get("client_id") or None)
+        client = services.client_from_secrets(
+            services.load_config(), services.load_secrets(), topic.get("client_id") or None
+        )
         stop = getattr(client, "stop_owned_torrent", None)
         if not callable(stop):
             raise RuntimeError(t("web.topics.cannot_stop"))  # noqa: TRY004

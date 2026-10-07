@@ -80,7 +80,7 @@ def test_an_own_server_at_home_can_be_allowed():
 
 def test_check_does_not_post_to_a_home_server_saved_by_an_older_version(monkeypatch):
     save_secrets({"notifiers": {"ntfy": {"topic": TOPIC, "server": "https://192.168.1.10"}}})
-    monkeypatch.setattr("tow.notifiers.test", lambda *_a: pytest.fail("must not send"))
+    monkeypatch.setattr("tow.web.services.test_notifier", lambda *_a: pytest.fail("must not send"))
 
     response = _client().post("/settings/notifier/ntfy/test", follow_redirects=False)
 
@@ -110,7 +110,7 @@ def test_the_client_check_names_a_class_not_the_socket_text(monkeypatch, error, 
         def ping(self):
             raise error
 
-    monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *_a: Broken())
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a: Broken())
 
     flash = _flash(_client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False))
 
@@ -134,7 +134,7 @@ def test_every_client_check_failure_reads_like_qbittorrents(monkeypatch, code, e
         def ping(self):
             raise ClientError(code, prefix="Transmission", error="ConnectError")
 
-    monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *_a: Broken())
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a: Broken())
 
     flash = _flash(_client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False))
 
@@ -150,7 +150,7 @@ def test_the_client_check_keeps_tows_own_plain_words(monkeypatch):
         def ping(self):
             raise ClientError("Transmission: неверный логин или пароль")
 
-    monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *_a: Broken())
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a: Broken())
 
     flash = _flash(_client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False))
 

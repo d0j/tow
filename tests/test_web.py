@@ -1704,7 +1704,8 @@ def test_settings_supports_distinct_client_forms_and_ping(monkeypatch):
             return "ok"
 
     monkeypatch.setattr(
-        "tow.clients.factory.from_secrets", lambda cfg, secrets, client_id=None: seen.append(client_id) or FakeClient()
+        "tow.web.services.client_from_secrets",
+        lambda cfg, secrets, client_id=None: seen.append(client_id) or FakeClient(),
     )
     monkeypatch.setattr("tow.web.services.client_answers", lambda _client_id: True)
     response = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
@@ -2515,7 +2516,7 @@ def test_owner_can_stop_the_previous_revision_and_add_the_new_one(monkeypatch):
     # G1: one click instead of stopping the seeding revision by hand in qBittorrent.
     _blocked_topic()
     client = _RevisionClient()
-    monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *a, **k: client)
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *a, **k: client)
     checks = []
     monkeypatch.setattr(
         "tow.web.services.run_check",
@@ -2536,7 +2537,7 @@ def test_owner_can_stop_the_previous_revision_and_add_the_new_one(monkeypatch):
 def test_a_revision_tow_did_not_add_is_never_stopped(monkeypatch):
     _blocked_topic()
     client = _RevisionClient(tags=())
-    monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *a, **k: client)
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *a, **k: client)
     monkeypatch.setattr("tow.web.services.run_check", lambda **kw: (_ for _ in ()).throw(AssertionError("no check")))
 
     response = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(

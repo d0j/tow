@@ -14,7 +14,7 @@ from typing import Any
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from tow import __version__, access, store_transaction, undo
+from tow import __version__, access, undo
 from tow.auth import (
     MAX_HINT_LENGTH,
     AuthConfigurationError,
@@ -24,7 +24,7 @@ from tow.auth import (
 )
 from tow.config import as_bool
 from tow.store import SecretStoreError
-from tow.store_transaction import StoreTransaction
+from tow.store_transaction import StoreTransaction, TransactionError
 from tow.web import _context, services
 from tow.web.site_store import save_together
 from tow.web.templating import TEMPLATES
@@ -93,10 +93,10 @@ def setup_save(
     if lan:
         cfg.update(allow_lan=True, bind="0.0.0.0")
     try:
-        store_transaction.commit(config=cfg, secrets=secrets)  # never a password without its network setting
-    except store_transaction.TransactionError:
+        services.commit_stores(config=cfg, secrets=secrets)  # never a password without its network setting
+    except TransactionError:
         return _setup_page(request, t("web.password.store_unavailable"), status_code=503)
-    access.sign_out_everywhere()
+    services.sign_out_everywhere()
     services.log_event("setup_password", allow_lan=lan, hint=bool(record.get("hint")), how="manual")
     return flash_redirect("/", "setup.saved_lan" if lan else "setup.saved")
 
@@ -185,7 +185,7 @@ def settings_password(
     # A new password signs every device out (its key changes), and so does a later undo of it:
     # the old sessions stay out even if the old password comes back. This device stays in.
     response = _back("web.password.saved")
-    access.sign_out_everywhere(request, response, session_key=lan_password_session_key(new_record))
+    services.sign_out_everywhere(request, response, session_key=lan_password_session_key(new_record))
     return response
 
 
@@ -194,10 +194,10 @@ def settings_password(
 def settings_sign_out_everywhere(request: Request) -> Response:
     """Every device signed in over the network signs in again; the password stays the same."""
     try:
-        session_key: str | None = access.credential(_context.secrets_or_none()).session_key
+        session_key: str | None = services.network_credential(_context.secrets_or_none()).session_key
     except AuthConfigurationError:
         session_key = None
     response = _back("web.password.signed_out")
-    access.sign_out_everywhere(request, response, session_key=session_key)
+    services.sign_out_everywhere(request, response, session_key=session_key)
     services.log_event("sessions_signed_out", where="local" if access.is_local(request) else "network", how="manual")
     return response

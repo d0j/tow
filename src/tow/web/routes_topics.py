@@ -165,7 +165,7 @@ def topics_delete(tid: str) -> Response:
         )
     state["topics"] = [item for item in topics if str(item.get("id")) != tid]
     services.save_state(state)
-    undo.cleanup()  # the secrets of an undo this one replaced, if their removal was postponed
+    services.cleanup_secret_undo()  # the secrets of an undo this one replaced, if their removal was postponed
     try:
         services.forget_cached_content(str(gone.get("url") or ""))
     except TowError, OSError, ValueError, RuntimeError:

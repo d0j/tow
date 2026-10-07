@@ -53,7 +53,7 @@ def test_backup_folder_rejects_namespace_before_path_resolution(prefix, location
 def test_web_backup_rejects_namespace_without_probe_or_config_write(prefix, kind, action, monkeypatch):
     from tow.web import app
 
-    monkeypatch.setattr(locations, "check_writable", lambda *_a: pytest.fail("namespace write probe"))
+    monkeypatch.setattr("tow.web.services.folder_write_problem", lambda *_a: pytest.fail("namespace write probe"))
     before = config_path().read_bytes()
     response = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
         "/settings/backup/location",
