@@ -258,17 +258,22 @@ def _validate_field(mapping: dict[str, Any], key: str, expected: type | tuple[ty
 
 
 def _validate_config_schema(data: dict[str, Any]) -> None:
-    """config.yaml of a bundle: the schema ``load_config`` applies (``tow.config.validated``),
-    plus plain site names: config.yaml still loads an older odd name, an import never brings one
-    (a site name is part of /sites/<name>/... addresses)."""
+    """config.yaml of a bundle: exactly the schema ``load_config`` applies (``tow.config.validated``).
+
+    Site names follow the config's own rule too: an older name (a dot, Cyrillic, a YAML number
+    such as 123) loads, so the restore point, export and import of that same config.yaml must
+    not refuse it; a name that could move a page address (/, \\, . or ..) is refused by
+    ``validated`` and every page encodes the others (/sites/<name>/...)."""
     try:
         validate_graph(data)
     except YamlLimitError as exc:
         raise ExportImportError(f"invalid config.yaml: {exc}") from exc
-    _validate_tree(data, label="config.yaml")
     trackers = data.get("trackers")
-    if isinstance(trackers, dict) and not all(SAFE_ID.fullmatch(name) for name in trackers):
-        raise ExportImportError("config.yaml: a site name may have only letters, digits, - and _ (at most 64)")
+    # A site name may be any YAML scalar ``validated`` accepts; the settings under it are
+    # checked as anywhere else.
+    _validate_tree(
+        {**data, "trackers": list(trackers.values())} if isinstance(trackers, dict) else data, label="config.yaml"
+    )
     try:
         validated(data)
     except ConfigError as exc:

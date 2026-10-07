@@ -1,6 +1,6 @@
 """Site names and topic ids are parts of page addresses (/sites/<name>/delete,
-/topics/<id>/pause): config.yaml and an imported bundle accept only [A-Za-z0-9_-]{1,64}, and
-the pages encode them anyway."""
+/topics/<id>/pause): a site name must not move such an address (no /, \\, . or ..), an imported
+topic id is [A-Za-z0-9_-]{1,64}, and the pages encode both."""
 
 from __future__ import annotations
 
@@ -21,12 +21,32 @@ def test_config_and_import_refuse_a_site_name_that_moves_a_page_address(name):
         _validate_config_schema(raw)
 
 
-@pytest.mark.parametrize("name", ["site name", "", "x" * 65, "сайт", 123, None])
-def test_an_older_odd_site_name_still_loads_but_is_never_imported(name):
+@pytest.mark.parametrize("name", ["site name", "", "x" * 65, "сайт", "kinozal.tv", 123, None])
+def test_an_older_odd_site_name_loads_and_passes_its_own_backup(name):
+    # Before: config.yaml loaded such a name, but the read-back of TOW's own restore point (and
+    # with it the web update, tow export and the Monitorrent import) refused the same file.
     raw = {"trackers": {name: {"fetch_hosts": ["https://tracker.example"]}}}
     assert name in validated(raw)["trackers"]  # legacy config.yaml keeps working
-    with pytest.raises(ExportImportError, match=r"site name|non-string key"):
-        _validate_config_schema(raw)
+    _validate_config_schema(raw)
+
+
+def test_a_restore_point_of_a_config_with_a_legacy_site_name_is_made_and_checked(monkeypatch, tmp_path):
+    import yaml
+    from cryptography.fernet import Fernet
+
+    from tow import restore_points
+    from tow.store import save_state
+
+    config = tmp_path / "config.yaml"
+    monkeypatch.setenv("TOW_HOME", str(tmp_path / "data"))
+    monkeypatch.setenv("TOW_CONFIG", str(config))
+    monkeypatch.setenv("TOW_MASTER_KEY", Fernet.generate_key().decode("ascii"))
+    site = {"url_regex": r"^https?://old\.example/t/(\d+)", "fetch_hosts": ["https://old.example"]}
+    config.write_text(yaml.safe_dump({"trackers": {"kinozal.tv": site, 123: site}}), encoding="utf-8")
+    save_state({"topics": [], "mirrors": {}})
+
+    point = restore_points.create_restore_point()
+    assert restore_points.check_restore_point(point["id"])["ok"] is True
 
 
 @pytest.mark.parametrize("name", ["nnmclub", "Fast-Torrent_2", "x" * 64])
