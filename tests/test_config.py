@@ -135,12 +135,17 @@ def test_unreadable_yaml_or_a_file_without_settings_is_a_config_error(text, code
 @pytest.mark.parametrize(
     ("setting", "code", "key"),
     [
-        ("title: 5", "config_error.site_text", "title"),
+        ("title: [Show]", "config_error.site_text", "title"),
+        ("title: true", "config_error.site_text", "title"),
         ("login_path: [/login]", "config_error.site_text", "login_path"),
-        ('browser_auth: "false"', "config_error.site_true_false", "browser_auth"),
-        ("page_download: 1", "config_error.site_true_false", "page_download"),
-        ('fail_threshold: "3"', "config_error.site_number", "fail_threshold"),
+        ('browser_auth: "maybe"', "config_error.site_true_false", "browser_auth"),
+        ("page_download: 2", "config_error.site_true_false", "page_download"),
+        ("page_download: {on: true}", "config_error.site_true_false", "page_download"),
+        ('fail_threshold: "three"', "config_error.site_number", "fail_threshold"),
+        ("fail_threshold: 1.5", "config_error.site_number", "fail_threshold"),
         ("cooldown_sec: true", "config_error.site_number", "cooldown_sec"),
+        ("cooldown_sec: [1800]", "config_error.site_number", "cooldown_sec"),
+        ("fetch_hosts: tracker.example", "config_error.site_hosts", "fetch_hosts"),
         ("cookie_names: uid", "config_error.site_text_list", "cookie_names"),
         ("cookie_names: [1]", "config_error.site_text_list", "cookie_names"),
         ("login_form: {password: x}", "config_error.site_login_form", None),
@@ -154,12 +159,37 @@ def test_a_hand_edited_site_setting_of_the_wrong_type_is_refused_at_load(setting
     from tow.config import ConfigError
     from tow.i18n import t
 
-    _write(f"trackers:\n  site:\n    fetch_hosts: [https://tracker.example]\n    {setting}\n")
+    hosts = "" if setting.startswith("fetch_hosts") else "    fetch_hosts: [https://tracker.example]\n"
+    _write(f"trackers:\n  site:\n{hosts}    {setting}\n")
     with pytest.raises(ConfigError) as caught:
         load_config()
     params = {"site": "site", **({"key": key} if key else {})}
     assert (caught.value.code, caught.value.params) == (code, params)
     assert caught.value.text("ru") == t(code, "ru", **params)
+
+
+@pytest.mark.parametrize(
+    ("setting", "key", "value"),
+    [
+        ("cooldown_sec: '1800'", "cooldown_sec", 1800),
+        ("cooldown_sec: 1800.0", "cooldown_sec", 1800),
+        ("fail_threshold: ' 3 '", "fail_threshold", 3),
+        ("browser_auth: 'true'", "browser_auth", True),
+        ('browser_auth: "false"', "browser_auth", False),
+        ("page_download: 1", "page_download", True),
+        ("page_download: 0", "page_download", False),
+        ("title: 2024", "title", "2024"),
+        ("fetch_hosts: https://other.example", "fetch_hosts", ["https://other.example"]),
+    ],
+)
+def test_a_loosely_written_site_setting_loads_as_what_it_means(setting, key, value):
+    # 1.23 read these with int() and truthiness and started; 1.24.0 refused them at load, so an
+    # update stopped at the new version's start and rolled back. ('false' was even read as on.)
+    hosts = "" if key == "fetch_hosts" else "    fetch_hosts: [https://tracker.example]\n"
+    _write(f"trackers:\n  site:\n{hosts}    {setting}\n")
+    site = load_config()["trackers"]["site"]
+    assert site[key] == value
+    assert type(site[key]) is type(value)
 
 
 def test_every_known_site_and_the_example_config_still_load():
