@@ -8,6 +8,7 @@ import pytest
 from test_check_contract import FakeClient, _wire_fake_check
 
 from tow import check
+from tow.check import client_ops
 from tow.notify import event_text
 from tow.store import load_state, persistence_lock, save_state
 
@@ -233,7 +234,7 @@ def test_a_second_client_that_is_down_is_reported(monkeypatch):
         "from_secrets",
         lambda cfg, secrets, client_id=None: Down() if client_id == "nas" else main,
     )
-    monkeypatch.setattr(check, "_client_title", lambda cfg, client_id: "NAS")
+    monkeypatch.setattr(client_ops, "_client_title", lambda cfg, client_id: "NAS")
     sent = []
     monkeypatch.setattr(check, "_audited_send", lambda _s, *, text, **_k: sent.append(text) or True)
     check.run_check(apply=True, notify=True)

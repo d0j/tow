@@ -5,6 +5,7 @@ from typing import ClassVar
 import pytest
 
 from tow import check, check_transaction
+from tow.check import client_ops
 from tow.check import rows as check_rows
 from tow.notify import event_text
 from tow.store import (
@@ -1373,7 +1374,7 @@ def test_client_confirmation_accepts_hybrid_v1_alias():
     client = HybridClient()
 
     assert check.client_owned_by_tow(client, v1) is True
-    assert check._confirm_client_add(client, v1, r"M:\TV", require_tow_ownership=True) is True
+    assert client_ops.confirm_client_add(client, v1, r"M:\TV", require_tow_ownership=True) is True
 
 
 @pytest.mark.parametrize(
