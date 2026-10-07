@@ -1301,6 +1301,7 @@
       "bad_token": "Telegram: wrong token or the bot was deleted — get a new one from @BotFather",
       "chat_unreachable": "Telegram: recipient {chat} is unreachable — open the bot and press “Start”",
       "error": "Telegram: error {code}"
+      "chat_moved": "Telegram: the group {chat} became a supergroup with the new id {new} — replace {chat} with {new} in the recipients",
     },
     "discord": {
       "step_channel": "In Discord, open the channel → ⚙ “Edit Channel” → “Integrations” → “Webhooks”.",

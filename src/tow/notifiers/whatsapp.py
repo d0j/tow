@@ -48,7 +48,9 @@ def send(settings: dict[str, Any], text: str) -> None:
         what="WhatsApp",
         params={"phone": str(settings.get("phone") or ""), "text": text, "apikey": str(settings.get("apikey") or "")},
     )
-    # CallMeBot answers 200 with a short page; success says the message was queued/sent.
+    # CallMeBot answers 200 with a short page; success says the message was queued/sent. A 200
+    # whose page says nothing TOW knows (or could not be read) was taken by the gateway: sending
+    # it again would repeat the message, so only a page that asks to wait is tried again.
     body = re.sub(r"<[^>]+>", " ", response.text or "").lower()
     if response.status_code == 200 and ("queued" in body or "message sent" in body):
         return
@@ -56,6 +58,8 @@ def send(settings: dict[str, Any], text: str) -> None:
         raise DeliveryError(Msg("notifier.whatsapp.bad_apikey"), transient=False)
     if "phone" in body:
         raise DeliveryError(Msg("notifier.whatsapp.bad_phone"), transient=False)
-    if "wait" in body or response.status_code == 200:
+    if "wait" in body:
         raise DeliveryError(Msg("notifier.whatsapp.wait"), transient=True)
+    if response.status_code == 200:
+        return
     raise status_error(response.status_code, Msg("notifier.whatsapp.error", code=response.status_code))

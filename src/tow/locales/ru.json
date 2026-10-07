@@ -1309,6 +1309,7 @@
       "bad_token": "Telegram: токен неверный или бот удалён — возьмите новый у @BotFather",
       "chat_unreachable": "Telegram: получатель {chat} недоступен — откройте бота и нажмите «Start»",
       "error": "Telegram: ошибка {code}"
+      "chat_moved": "Telegram: группа {chat} стала супергруппой с новым id {new} — замените в получателях {chat} на {new}",
     },
     "discord": {
       "step_channel": "В Discord откройте нужный канал → ⚙ «Изменить канал» → «Интеграции» → «Вебхуки».",

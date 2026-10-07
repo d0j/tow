@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from tow.errors import Msg
@@ -10,7 +11,8 @@ from tow.notifiers.base import DeliveryError, Field, request, status_error
 KIND = "discord"
 TITLE = "Discord"
 ORDER = 20
-MAX_LEN = 2000
+# Discord takes 2000 characters; escaping the Markdown (escape_markdown) at most doubles a part.
+MAX_LEN = 1000
 # Texts are keys of the language files (notifier.discord.*).
 STEPS = (
     "notifier.discord.step_channel",
@@ -31,13 +33,38 @@ FIELDS = (
 )
 
 
+_URL = re.compile(r"https?://\S+")
+# What Discord reads as Markdown: anywhere, and (lists, quotes, headings) at a line's start.
+_MARKUP = re.compile(r"([\\*_~`|\[\]<>])")
+_LINE_START = re.compile(r"(?m)^(\s*)(#|-|\d+\.)")
+
+
+def _line_start(match: re.Match[str]) -> str:
+    mark = match.group(2)
+    # A backslash escapes punctuation only: "1." becomes "1\.", "-" becomes "\-".
+    return match.group(1) + (mark[:-1] + "\\." if mark.endswith(".") else "\\" + mark)
+
+
+def escape_markdown(text: str) -> str:
+    """``text`` shown as written: a torrent title such as ``*Show* __Part__ ||x||`` is not bold,
+    underlined or hidden. Links are left as they are (Discord still makes them clickable)."""
+    out: list[str] = []
+    at = 0
+    for link in _URL.finditer(text):
+        out.append(_MARKUP.sub(r"\\\1", text[at : link.start()]))
+        out.append(link.group(0))
+        at = link.end()
+    out.append(_MARKUP.sub(r"\\\1", text[at:]))
+    return _LINE_START.sub(_line_start, "".join(out))
+
+
 def send(settings: dict[str, Any], text: str) -> None:
     response = request(
         "POST",
         str(settings.get("webhook_url") or ""),
         what="Discord",
-        # No @everyone / role pings from torrent titles.
-        json={"content": text, "allowed_mentions": {"parse": []}},
+        # No @everyone / role pings from torrent titles, and no Markdown either.
+        json={"content": escape_markdown(text), "allowed_mentions": {"parse": []}},
     )
     if response.status_code in (200, 204):
         return
