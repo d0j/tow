@@ -136,6 +136,31 @@ def test_check_button_shows_the_version_or_the_exact_problem(legacy_qbit, monkey
     assert _flash(bad) == "нет связи: Transmission: неверный логин или пароль"
 
 
+def test_a_client_that_answers_check_shows_as_answering_at_once(legacy_qbit, monkeypatch):
+    """Round-3 audit: a client set up and checked in Settings stayed red in the header and on
+    Home until the next check. A failure is not recorded (the check's own message about it
+    would be lost)."""
+    from tow.web.templating import header_health
+
+    class Alive:
+        def ping(self):
+            return "5.0.1"
+
+    save_state({"topics": [], "health": {"qbit_ok": False, "clients_ok": {"default": False}, "check_ok": True}})
+    monkeypatch.setattr("tow.web.services.client_answers", lambda _client_id: False)
+    _client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
+    assert load_state()["health"]["qbit_ok"] is False  # a failure is the check's to record
+    monkeypatch.setattr("tow.web.services.client_answers", lambda _client_id: True)
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a: Alive())
+    _client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
+    health = load_state()["health"]
+    assert (health["qbit_ok"], health["clients_ok"], health["check_ok"]) == (True, {"default": True}, True)
+    from tow.web import _context
+
+    _context.begin()
+    assert header_health()["qbit_tone"] == "ok"
+
+
 def test_check_of_a_client_nobody_listens_for_fails_after_one_quick_try(legacy_qbit, monkeypatch):
     """QA 1.24.1: "Check" took ~24 s when nothing listened (the library's retries, each one a
     Windows connect with its own retries). One connection attempt of 3 s now answers it."""

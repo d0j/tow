@@ -422,12 +422,33 @@ def settings_client_ping(client_id: str = Form("")) -> Response:
         cfg = services.load_config()
         version = services.client_from_secrets(cfg, services.load_secrets(), client_id or None).ping()
         msg, kind = t("web.settings.ping_ok", version=version), "ok"
+        _client_answered(client_id)
     except Exception as e:  # noqa: BLE001 - a client library fails in its own ways: "Check" names the class only
         reason = _ping_reason(e)
         msg = t("web.settings.ping_failed", error=reason) if reason else t("web.settings.ping_silent")
         kind = "err"
         services.log_event("qbit_unreachable", client_id=client_id or None, error=reason, cls="qbit", how="manual")
     return flash_redirect("/settings?open=clients", msg, kind)
+
+
+def _client_answered(client_id: str) -> None:
+    """The header and Home show the client as answering at once, not at the next check: a
+    client set up (or repaired) and checked here stayed red or grey until then. Only an answer
+    is recorded - a failure is left to the check, whose message about it would be lost."""
+    from tow.clients.factory import default_client_id
+
+    with services.persistence_lock():
+        state = services.load_state()
+        raw = state.get("health")
+        health: dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
+        default = default_client_id(services.load_config())
+        wanted = client_id or default
+        if wanted == default:
+            health["qbit_ok"] = True
+        clients = health.get("clients_ok")
+        health["clients_ok"] = {**(clients if isinstance(clients, dict) else {}), wanted: True}
+        state["health"] = health
+        services.save_state(state)
 
 
 def _ping_reason(exc: Exception) -> str:
