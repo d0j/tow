@@ -1,5 +1,6 @@
 """History diagnostics must distinguish candidates from incomplete local scans."""
 
+import codecs
 import contextlib
 import importlib.util
 import io
@@ -115,6 +116,31 @@ def test_matches_are_candidates_not_clean_success_and_never_print_values(reposit
     assert "password value: 1" in output
     assert "fixture-sentinel-secret" not in output
     assert "review required" in output
+
+
+def test_attribution_trailers_are_counted_in_blobs_and_messages_never_printed(repository, monkeypatch):
+    commit(repository, "ordinary.txt")
+    code, output = scan(repository, monkeypatch)
+    assert code == 0
+    assert "attribution trailers in commit messages: none" in output
+
+    assistant = codecs.decode("pynhqr", "rot13")  # a model name, spelled so that this file does not carry it
+    commit(repository, "notes.txt", f"Generated with fixture-tool, reviewed by {assistant.title()}\n".encode())
+    (repository / "third.txt").write_bytes(b"ordinary contents")
+    git(repository, "add", "third.txt")
+    git(repository, "commit", "-m", "synthetic\n\nCo-Authored-By: Fixture Helper <1+fixture@users.noreply.github.com>")
+    code, output = scan(repository, monkeypatch)
+    assert code == 1
+    assert "attribution trailer: 2 matches in 1 historical path hints" in output
+    assert "attribution trailers in commit messages: 1 commits" in output
+    for text in ("fixture-tool", assistant, assistant.title(), "Fixture Helper"):
+        assert text not in output
+
+
+def test_pull_request_refs_need_a_mirror_clone_says_the_help(scanner, capsys):
+    with pytest.raises(SystemExit):
+        scanner.main(["--help"])
+    assert "git clone --mirror" in capsys.readouterr().out
 
 
 def test_binary_blobs_are_not_silently_excluded(repository, monkeypatch):
