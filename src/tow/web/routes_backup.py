@@ -81,7 +81,7 @@ def settings_point_check(point_id: str) -> Response:
             return _backup_redirect("web.backup.check_failed_reason", "err", reason=reason)
         return _backup_redirect("web.backup.check_failed", "err")
     services.log_event("settings_backup_checked", copy_kind="restore_point", how="manual")
-    return _backup_redirect("web.backup.checked")
+    return _backup_redirect("web.backup.point_checked")
 
 
 def _delete_confirmation(request: Request, kind: str, identifier: str) -> Response:
@@ -246,7 +246,12 @@ def settings_backup_restore(name: str) -> Response:
         result = restore_snapshot(snapshot_path(name), apply=True)
     except SnapshotError as exc:
         return _backup_redirect("web.backup.restore_failed", "err", error=exc)
-    message = t("web.backup.restored", name=name, path=result["safety_copy"])
+    # The copy's date, as the list shows it: its folder name is TOW's own.
+    try:
+        at = format_ui_timestamp(str(result["created_at"]))
+    except KeyError, TypeError, ValueError:
+        at = name
+    message = t("web.backup.restored_night", at=at, path=result["safety_copy"])
     if result.get("cleanup_warning"):
         return _backup_redirect(f"{message} · {t('backup.snapshot.restore_cleanup_warning')}", "warn")
     return _backup_redirect(message)
@@ -262,7 +267,7 @@ def settings_restore_point_create() -> Response:
     services.log_event("settings_restore_point_created", restore_point=point["id"], how="manual")
     if point.get("cleanup_warning"):
         return flash_redirect("/settings?open=transfer", "backup.restore_point.cleanup_warning", "warn")
-    return flash_redirect("/settings?open=transfer", "web.settings.point_saved", "ok")
+    return flash_redirect("/settings?open=transfer", "web.settings.point_created", "ok")
 
 
 @router.post("/settings/restore-points/{point_id}/restore")

@@ -2082,14 +2082,15 @@
       "night_failed": "night copy not made: {error}",
       "copy_made": "copy made: {name} ({size})",
       "restore_failed": "not restored: {error}",
-      "restored": "restored from {name}; the previous state is saved in {path}",
       "copy_missing": "; not in the copy because they do not exist yet: {names}",
       "member_state": "the list of topics",
       "member_history": "the download history",
       "member_secrets": "passwords and tokens",
       "member_log": "the event log",
       "member_config": "the settings",
-      "member_restore_point": "a backup made with the button"
+      "member_restore_point": "a backup made with the button",
+      "point_checked": "The restore point passed the check; current data is unchanged.",
+      "restored_night": "restored from the nightly backup of {at}; the previous state is saved in {path}"
     },
     "settings": {
       "no_such_client": "no such client",
@@ -2105,7 +2106,6 @@
       "restart_not_started": "restart did not start",
       "restart_started": "restart started; check the service health",
       "point_failed": "backup not created: {error}",
-      "point_saved": "backup created",
       "restore_failed": "restore did not run; current data is kept",
       "restored": "restored; network access settings kept",
       "export_failed": "could not save the file",
@@ -2139,7 +2139,8 @@
       "not_saved": "not saved",
       "notifier_private_host": "the server must be an internet address: TOW does not send to this PC or the home network (for your own server at home: allow_private_notifier_hosts: true in config.yaml)",
       "ping_login": "the client did not accept the login or password",
-      "ping_unreachable": "the client does not answer at this address and port, or its web interface is off"
+      "ping_unreachable": "the client does not answer at this address and port, or its web interface is off",
+      "point_created": "restore point created"
     },
     "sites": {
       "login_saved": "login saved",
