@@ -3,7 +3,7 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
-## [Unreleased]
+## [1.24.0] — 2026-10-07
 
 ### Added
 
@@ -16,8 +16,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Commands typed in a terminal answer in the language of Settings → Language, or with automatic, in the
   operating system's language.
 - `tow doctor` writes its findings in words and exits with 2 for any finding, a missing torrent client included.
-- One word per thing in both languages: Russian says «пароли и токены» and «доступ по сети», the Home column is
-  "Topic", and Home and Diagnostics name sites by their title (NNM-Club, Rutor) as the Sites page does.
+- One word per thing in both languages: Russian says «пароли и токены», «доступ по сети» and «Раздача» for the
+  Home column, and Home and Diagnostics name sites by their title (NNM-Club, Rutor) as the Sites page does.
 - Sizes use one unit system (KB, MB) and dates the language's format everywhere, the update card included; the
   file picker says "Files selected: 1".
 - Updating to `latest` when it is already installed changes nothing; a `latest` older than the installed version is
@@ -31,6 +31,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - On a phone Home rows wrap instead of being cut off, and the version badge no longer covers text.
 - A removed topic shows one reason on Home; History shows a resumed topic or site as resumed.
 - A saved `config.yaml` names the commented reference that explains every setting.
+- A `config.yaml` with a site setting of the wrong type (for example `browser_auth: "false"`) is refused at
+  start; a broken `config.yaml` is named with its line and column in your language.
+- `tow export` and `tow import` say why they refuse in your language.
 
 ### Fixed
 
