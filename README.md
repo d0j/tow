@@ -37,8 +37,9 @@ version to your torrent client.
   Settings page that put the previous version back by themselves if anything fails.
 - **One folder, two languages.** Code, settings, data, key, backups and its own Python: move it and it keeps
   working. English and Russian; a new language is one JSON file.
-- **Moving from Monitorrent?** `tow import-monitorrent` brings over its topics and site logins; `--adopt` takes
-  the torrents already in your client under TOW's management (only their `tow` mark is added).
+- **Moving from Monitorrent?** `tow import-monitorrent` brings over its topics, its Kinozal login and its
+  qBittorrent connection (where TOW has none yet); `--adopt` takes the torrents already in your client under TOW's
+  management (only their `tow` mark is added).
 
 ## Supported
 
