@@ -813,6 +813,8 @@ class _CheckRun:
     queue_notification: Callable[..., None]
     # How long the download history keeps what is no longer watched (tow.download_history).
     history_retention: tuple[int, int] = (download_history.DEFAULT_KEEP_DAYS, download_history.DEFAULT_MAX_ITEMS)
+    # Clients on another computer: a folder they name is not measured on this one's disks (G6).
+    remote_clients: frozenset[str] = frozenset()
 
 
 def _confirm_matching_magnet(
@@ -964,12 +966,14 @@ def _add_new_revision(
 
     Returns the hash the client actually registered (a hybrid may come back as its v1 hash).
     """
-    if problem := free_space_problem(
-        dest,
-        metadata.files,
-        plan.selected_indices,
-        name=str(getattr(metadata, "name", "") or ""),
-        is_multi=bool(getattr(metadata, "is_multi", False)),
+    if client_id not in run.remote_clients and (
+        problem := free_space_problem(
+            dest,
+            metadata.files,
+            plan.selected_indices,
+            name=str(getattr(metadata, "name", "") or ""),
+            is_multi=bool(getattr(metadata, "is_multi", False)),
+        )
     ):
         raise problem
     added_info = topic_client.add_torrent_selected(blob, dest, h, plan.selected_indices)
@@ -1705,6 +1709,17 @@ def _queue_recoveries(state: dict[str, Any], results: list[dict[str, Any]], run:
             )
 
 
+def _remote_clients(cfg: dict[str, Any], secrets: dict[str, Any]) -> frozenset[str]:
+    """The configured clients that run on another computer."""
+    try:
+        rows = client_factory.client_configurations(cfg)
+    except TowError, RuntimeError, ValueError:
+        return frozenset()
+    return frozenset(
+        str(row["id"]) for row in rows if not client_factory.on_this_computer(cfg, secrets, str(row["id"]))
+    )
+
+
 def _open_client(cfg: dict[str, Any], secrets: dict[str, Any], client_id: str, *, apply: bool) -> TorrentClientAdapter:
     """The client adapter; for a dry run in its read-only mode where it has one (Deluge does
     not attach its Web UI to a daemon during a preview)."""
@@ -2037,6 +2052,7 @@ def _run_check(
         record=_record,
         queue_notification=notifications.queue,
         history_retention=download_history.retention(cfg),
+        remote_clients=_remote_clients(cfg, secrets),
     )
     results: list[CheckRow] = []
     for topic in topics_of(state):

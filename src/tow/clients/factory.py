@@ -122,6 +122,26 @@ def client_secret_block(
     return block
 
 
+def on_this_computer(cfg: dict[str, Any], secrets: dict[str, Any], client_id: str | None = None) -> bool:
+    """The client runs on this computer (its address is a loopback one or this computer's
+    name): a folder it names is then a folder here. True when it cannot be told."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlsplit
+
+    try:
+        host = str(client_secret_block(cfg, secrets, client_id).get("host") or "").strip()
+    except TowError, RuntimeError, ValueError, TypeError:
+        return True
+    name = (urlsplit(host if "://" in host else f"http://{host}").hostname or "").casefold()
+    if name in {"", "localhost"} or name.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(name).is_loopback
+    except ValueError:
+        return name.split(".")[0] == socket.gethostname().casefold().split(".")[0]
+
+
 def _secret_payload(
     cfg: dict[str, Any], secrets: dict[str, Any], configuration: dict[str, Any], spec: ClientSpec
 ) -> dict[str, Any]:

@@ -134,6 +134,44 @@ def test_torrent_with_the_tow_mark_already_there_is_accepted(monkeypatch, stores
     assert not load_state()["topics"][0].get("last_error")
 
 
+# --- the free-space check measures only this computer's disks -----------------------------------
+
+
+@pytest.mark.parametrize(("host", "remote"), [("192.168.1.5", True), ("127.0.0.1", False), ("", False)])
+def test_free_space_is_judged_only_for_a_client_on_this_computer(monkeypatch, stores, host, remote):
+    """A remote client's /downloads whose top folder also exists here was measured on this
+    computer's disk (and could refuse the add with "not enough space")."""
+    from tow.errors import TowError
+    from tow.store import save_secrets
+
+    save_secrets({"qbittorrent": {"host": host}})
+    save_state({"topics": [_topic(hash=OLD)]})
+    client = Client()
+    _wire(monkeypatch, {"main": client}, Tracker())
+    full = TowError("check.low_disk", needed=1.0, free=0.1, path="/media")
+    monkeypatch.setattr(check, "free_space_problem", lambda *a, **k: full)
+    row = check.run_check(apply=True, notify=False, how="test")["results"][0]
+    assert row["ok"] is remote
+    assert client.adds == ([(NEW, "/media/tv")] if remote else [])
+
+
+@pytest.mark.parametrize(
+    ("host", "here"),
+    [
+        ("127.0.0.1", True),
+        ("http://localhost:8080", True),
+        ("[::1]", True),
+        ("", True),
+        ("192.168.1.5", False),
+        ("https://nas.example:9091/transmission/rpc", False),
+    ],
+)
+def test_which_client_runs_on_this_computer(host, here):
+    from tow.clients.factory import on_this_computer
+
+    assert on_this_computer({}, {"qbittorrent": {"host": host}}) is here
+
+
 # --- owner edits made while the check runs -------------------------------------------------------
 
 
