@@ -24,7 +24,7 @@ from typing import Any, ClassVar
 from tow.clients import files
 from tow.errors import TowError
 from tow.folders import paths_equal
-from tow.torrent import TorrentFile, parse_torrent_metadata
+from tow.torrent import TorrentFile, TorrentMetadata, parse_torrent_metadata
 
 _LOG = logging.getLogger("tow.clients")
 
@@ -152,15 +152,18 @@ class ManagedClient:
         labels = [OWNER, PENDING, *([category] if category else []), *extra]
         return list(dict.fromkeys(label for label in labels))
 
+    def _check_state(self, info: dict[str, Any] | None) -> None:
+        state = str((info or {}).get("state") or "").casefold()
+        if state in UNSAFE_STATES:
+            raise self._fail("client.managed.error_state", state=state)
+
     def _wait(self, infohash: str, done: Any, error: str) -> dict[str, Any]:
         """Poll until ``done(info)``; ``error`` (a catalog key) is the reason when it never comes."""
         last: dict[str, Any] | None = None
         for attempt in range(self.POLLS):
             last = self.inspect_torrent(infohash)
             if last is not None:
-                state = str(last.get("state") or "").casefold()
-                if state in UNSAFE_STATES:
-                    raise self._fail("client.managed.error_state", state=state)
+                self._check_state(last)
                 if done(last):
                     return last
             if attempt + 1 < self.POLLS:
@@ -246,16 +249,46 @@ class ManagedClient:
             list(verified.get("files") or []),
             wanted,
             fail=lambda: self._fail("client.managed.wrong_selection"),
-            ignored={
-                row["index"] for row in rows if row["index"] not in mapped_ids and self._padding_like(row.get("name"))
-            },
+            ignored=self._ignored_padding(rows, mapped_ids, source_files, selected),
         )
         self._require_owned(infohash)
         return verified
 
+    def _ignored_padding(
+        self,
+        rows: list[dict[str, Any]],
+        mapped_ids: set[int],
+        source_files: tuple[TorrentFile, ...],
+        selected: set[int],
+    ) -> set[int]:
+        """Client files the selection read-back does not judge: padding no torrent file maps to
+        (some clients keep its flag as it was)."""
+        return {row["index"] for row in rows if row["index"] not in mapped_ids and self._padding_like(row.get("name"))}
+
+    def _restore_selection(self, infohash: str, previous: dict[int, int], before_rows: list[dict[str, Any]]) -> None:
+        """A failed selection change, rolled back on the stopped torrent: the files wanted before
+        are wanted again, read back."""
+        wanted = {index for index, priority in previous.items() if priority > 0}
+        self._require_owned(infohash)
+        self._set_wanted(infohash, wanted, sorted(previous))
+        restored = self._inspect_with_files(infohash)
+        files.verify_selection(
+            before_rows,
+            list(restored.get("files") or []),
+            wanted,
+            fail=lambda: self._fail("client.managed.wrong_selection"),
+        )
+
+    def _add_label(self, infohash: str, tags: list[str], label: str) -> None:
+        """``label`` added to the torrent's current ``tags``."""
+        self._set_labels(infohash, [*tags, label])
+
+    def _remove_label(self, infohash: str, tags: list[str], label: str) -> None:
+        """``label`` taken off the torrent's current ``tags``."""
+        self._set_labels(infohash, [tag for tag in tags if tag.strip().casefold() != label])
+
     def _clear_pending(self, infohash: str) -> dict[str, Any]:
-        labels = [tag for tag in self._require_owned(infohash) if tag.strip().casefold() != PENDING]
-        self._set_labels(infohash, labels)
+        self._remove_label(infohash, self._require_owned(infohash), PENDING)
         return self._wait(
             infohash,
             lambda current: OWNER in self._tags(current) and PENDING not in self._tags(current),
@@ -288,13 +321,11 @@ class ManagedClient:
             raise self._fail("client.managed.added_unmarked") from error
         _LOG.warning("an add step failed (%s); the torrent is in the client, marked again", type(error).__name__)
 
-    def add_torrent_selected(
-        self,
-        content: bytes,
-        save_path: str | None,
-        infohash: str,
-        selected_indices: list[int] | tuple[int, ...],
-    ) -> dict[str, Any]:
+    def _check_add(
+        self, content: bytes, save_path: str | None, infohash: str, selected_indices: list[int] | tuple[int, ...]
+    ) -> tuple[TorrentMetadata, str, set[int]]:
+        """An add refused before it reaches the client: another torrent, no folder, or files the
+        torrent does not have. Returns the torrent, the folder and the files to download."""
         metadata = parse_torrent_metadata(content)
         if metadata.client_hash.casefold() != str(infohash).casefold():
             raise self._fail("client.managed.hash_changed_add")
@@ -305,6 +336,52 @@ class ManagedClient:
         valid = {row.index for row in metadata.files if not row.is_pad}
         if not selected or not selected.issubset(valid):
             raise self._fail("client.managed.bad_selection")
+        return metadata, destination, selected
+
+    def _stop_after_failure(self, infohash: str) -> None:
+        """A failed change stops the torrent it touched (when it is still TOW's)."""
+        try:
+            self._require_owned(infohash)
+            self._stop(infohash)
+        except Exception as cleanup_error:  # noqa: BLE001 - the original failure is re-raised; this must not hide it
+            _LOG.warning("cleanup after a failed client change did not finish: %s", cleanup_error)
+
+    def _stop_after_add(self, added: dict[str, Any]) -> bool:
+        """Whether the torrent just added must still be stopped (the client started it anyway)."""
+        return not self._stopped(added)
+
+    def _finish_add(
+        self, infohash: str, added: dict[str, Any], destination: str, metadata: TorrentMetadata, selected: set[int]
+    ) -> dict[str, Any]:
+        """The add is visible with both marks: its folder, a confirmed stop, the file selection,
+        the start, the release. A failure before the release stops the torrent again."""
+        release_requested = False
+        try:
+            if not paths_equal(str(added.get("save_path") or ""), destination):
+                raise self._fail("client.managed.wrong_folder")
+            if self._stop_after_add(added):
+                self._require_owned(infohash)
+                self._stop(infohash)
+            self._wait_stopped(infohash)
+            self._apply_selection(infohash, metadata.files, selected, metadata.name)
+            self._require_owned(infohash)
+            self._start(infohash)
+            self._wait_started(infohash)
+            release_requested = True
+            return self._clear_pending(infohash)
+        except Exception:
+            if not release_requested:
+                self._stop_after_failure(infohash)
+            raise
+
+    def add_torrent_selected(
+        self,
+        content: bytes,
+        save_path: str | None,
+        infohash: str,
+        selected_indices: list[int] | tuple[int, ...],
+    ) -> dict[str, Any]:
+        metadata, destination, selected = self._check_add(content, save_path, infohash, selected_indices)
         aliases = list(
             dict.fromkeys(
                 value.upper()
@@ -323,29 +400,12 @@ class ManagedClient:
         # A hybrid (v1+v2) torrent is listed by most clients under its v1 hash: use what the
         # client actually shows from here on (the check accepts any of the torrent's hashes).
         infohash = self._visible_alias(aliases)
-        release_requested = False
         try:
             added = self._wait_owned(infohash)
-            if not paths_equal(str(added.get("save_path") or ""), destination):
-                raise self._fail("client.managed.wrong_folder")
-            if not self._stopped(added):
-                self._require_owned(infohash)
-                self._stop(infohash)
-            self._wait_stopped(infohash)
-            self._apply_selection(infohash, metadata.files, selected, metadata.name)
-            self._require_owned(infohash)
-            self._start(infohash)
-            self._wait_started(infohash)
-            release_requested = True
-            return self._clear_pending(infohash)
         except Exception:
-            if not release_requested:
-                try:
-                    self._require_owned(infohash)
-                    self._stop(infohash)
-                except Exception as cleanup_error:  # noqa: BLE001 - the original failure is re-raised; this must not hide it
-                    _LOG.warning("cleanup after a failed client change did not finish: %s", cleanup_error)
+            self._stop_after_failure(infohash)
             raise
+        return self._finish_add(infohash, added, destination, metadata, selected)
 
     def configure_torrent_selection(
         self,
@@ -392,15 +452,7 @@ class ManagedClient:
                 self._require_owned(infohash)
                 self._stop(infohash)
                 self._wait_stopped(infohash)
-                self._require_owned(infohash)
-                self._set_wanted(infohash, {i for i, p in previous.items() if p > 0}, sorted(previous))
-                restored = self._inspect_with_files(infohash)
-                files.verify_selection(
-                    list(before.get("files") or []),
-                    list(restored.get("files") or []),
-                    {i for i, p in previous.items() if p > 0},
-                    fail=lambda: self._fail("client.managed.wrong_selection"),
-                )
+                self._restore_selection(infohash, previous, list(before.get("files") or []))
                 if not was_stopped:
                     self._require_owned(infohash)
                     self._start(infohash)
@@ -417,7 +469,7 @@ class ManagedClient:
         if tags is None:
             raise self._fail("client.managed.missing")
         if OWNER not in self._tags({"tags": tags}):
-            self._set_labels(infohash, [*tags, OWNER])
+            self._add_label(infohash, tags, OWNER)
             tags = self._owner_tags(infohash) or []
             if OWNER not in self._tags({"tags": tags}):
                 raise self._fail("client.managed.adopt_unconfirmed")
