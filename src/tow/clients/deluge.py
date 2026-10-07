@@ -178,6 +178,10 @@ class DelugeClient(ManagedClient):
         version = self._call("daemon.get_version")
         return f"{version} libtorrent {self._call('core.get_libtorrent_version')}"
 
+    def has_any_torrent(self) -> bool:
+        """The client lists at least one torrent (one still loading its list after a start lists none)."""
+        return bool(self._call("core.get_session_state"))
+
     def _owner_tags(self, infohash: str) -> list[str] | None:
         row = self._call("core.get_torrent_status", infohash.lower(), ["hash", "label"])
         return _label_tags(row) if row and row.get("hash") else None
