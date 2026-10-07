@@ -181,6 +181,37 @@ def test_store_nesting_limit_is_explicit_and_identical_for_reading_and_writing(t
         load_json(path, {}, quarantine=False)
 
 
+def _nested(depth, leaf, *, mapping=False):
+    value = leaf
+    for _ in range(depth):
+        value = {"k": value, "n": 1} if mapping else [1, value, "x"]
+    return value
+
+
+@pytest.mark.parametrize("mapping", [False, True])
+@pytest.mark.parametrize(
+    ("depth", "leaf", "allowed"),
+    [
+        (JSON_MAX_DEPTH, 1, True),
+        (JSON_MAX_DEPTH, [], True),  # an empty container at the limit holds nothing deeper
+        (JSON_MAX_DEPTH, {}, True),
+        (JSON_MAX_DEPTH, [1], False),
+        (JSON_MAX_DEPTH, {"k": None}, False),
+        (JSON_MAX_DEPTH + 1, [], False),
+    ],
+)
+def test_store_nesting_limit_counts_every_value_and_container(depth, leaf, allowed, mapping):
+    from tow.store import decode_json_bytes
+
+    value = {"wide": [[1, 2]] * 50, "deep": _nested(depth - 1, leaf, mapping=mapping)}
+    raw = json.dumps(value).encode()
+    if allowed:
+        assert decode_json_bytes(raw) == value
+    else:
+        with pytest.raises(ValueError, match="nesting"):
+            decode_json_bytes(raw)
+
+
 def test_persistence_lock_is_exclusive_across_processes(tmp_path, monkeypatch):
     home = tmp_path / "runtime"
     monkeypatch.setenv("TOW_HOME", str(home))

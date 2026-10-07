@@ -96,16 +96,22 @@ JSON_MAX_DEPTH = 128
 
 def _check_json_depth(value: Any) -> None:
     # Native parser/encoder stack limits differ by OS. Keep the store contract
-    # explicit, and use an iterative walk so this check has no recursion limit.
-    stack = [(value, 0)]
-    while stack:
-        item, depth = stack.pop()
-        if depth > JSON_MAX_DEPTH:
-            raise ValueError("JSON nesting exceeds the store limit")
-        if isinstance(item, dict):
-            stack.extend((child, depth + 1) for child in item.values())
-        elif isinstance(item, (list, tuple)):
-            stack.extend((child, depth + 1) for child in item)
+    # explicit, and walk level by level so this check has no recursion limit.
+    # Only containers are visited: a value inside a non-empty container at the
+    # limit is one level too deep, whatever it is.
+    level = [value] if isinstance(value, (dict, list, tuple)) else []
+    depth = 0
+    while level:
+        deeper: list[Any] = []
+        for item in level:
+            children = item.values() if isinstance(item, dict) else item
+            if not children:
+                continue
+            if depth >= JSON_MAX_DEPTH:
+                raise ValueError("JSON nesting exceeds the store limit")
+            deeper.extend([child for child in children if isinstance(child, (dict, list, tuple))])
+        level = deeper
+        depth += 1
 
 
 def decode_json_bytes(raw: bytes) -> Any:
