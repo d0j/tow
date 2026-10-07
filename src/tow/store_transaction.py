@@ -28,6 +28,7 @@ from typing import Any
 
 from tow import config as config_store
 from tow import site_journal, store
+from tow.journal import digest
 
 
 class TransactionError(RuntimeError):
@@ -108,14 +109,15 @@ def begin_unlocked() -> Path:
     if root.exists():
         raise RuntimeError("unfinished store transaction could not be cleared")
     root.mkdir(parents=True)
+    site = site_journal.journal(root)
     entries = []
     try:
         for key, target in targets.items():
-            content = site_journal.read_store(target, key)
+            content = site.read(target)
             backup_name = f"{key}.bin" if content is not None else None
             if content is not None:
                 store.atomic_write_bytes(root / f"{key}.bin", content)
-                if site_journal.read_store(root / f"{key}.bin", key) != content:
+                if site.read(root / f"{key}.bin") != content:
                     raise RuntimeError(f"store transaction backup read-back failed: {key}")
             entries.append(
                 {
@@ -123,11 +125,11 @@ def begin_unlocked() -> Path:
                     "target": str(target.resolve()),
                     "backup": backup_name,
                     "exists": content is not None,
-                    "sha256": site_journal.digest(content) if content is not None else None,
+                    "sha256": digest(content) if content is not None else None,
                 }
             )
         store.atomic_write_text(
-            root / "MANIFEST.json",
+            root / site_journal.MARKER,
             json.dumps({"format": site_journal.FORMAT, "status": "prepared", "targets": entries}, indent=2),
         )
     except Exception:
@@ -144,7 +146,7 @@ def begin() -> Path:
 
 
 def _mark_committed(root: Path) -> None:
-    manifest_path = root / "MANIFEST.json"
+    manifest_path = root / site_journal.MARKER
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["status"] = "committed"
     store.atomic_write_text(manifest_path, json.dumps(manifest, indent=2))
@@ -156,7 +158,8 @@ def recover() -> bool:
     A cheap unlocked look first: the web runs this before every request and must not wait for a
     scheduled check. A real restore holds the data lock, so it never interleaves with a writer.
     """
-    if not journal_root().exists() and not site_journal.is_link(journal_root()):
+    root = journal_root()
+    if not root.exists() and not site_journal.journal(root).is_link(root):
         return False
     with store.persistence_lock(), _LOCK:
         return site_journal.recover_unlocked(journal_root(), journal_targets())
