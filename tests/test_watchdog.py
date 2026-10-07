@@ -57,6 +57,32 @@ def test_a_dead_service_is_told_once_and_never_started_here(clock):
     assert sent == ["TOW недоступен: процесс не запущен (закрыт или аварийно завершился)"]
 
 
+def test_quiet_hours_hold_the_watchdogs_alert_and_queued_retries(clock, monkeypatch):
+    from tow import delivery
+    from tow.store import load_state
+
+    quiet = {"on": True}
+    monkeypatch.setattr(delivery, "quiet_now", lambda cfg, now=None: quiet["on"])
+    flushed: list[object] = []
+    monkeypatch.setattr("tow.notifiers.flush_outbox", lambda secrets: flushed.append(secrets))
+    state = load_state()
+    state["notify_pending"] = [{"id": "a", "text": "waiting retry", "operation_id": "bot"}]
+    save_state(state)
+
+    report, sent = _run(clock, up=False)
+    assert sent == []
+    assert report["held"] is True
+    assert load_state()["notify_queue"] == ["TOW недоступен: процесс не запущен (закрыт или аварийно завершился)"]
+    assert flushed == []  # nothing goes out during the quiet hours, retries neither
+
+    quiet["on"] = False
+    _run(clock, up=False)
+    state = load_state()
+    assert "notify_queue" not in state  # released after the quiet hours: handed to the messengers
+    assert "notify_pending" not in state
+    assert len(flushed) == 1
+
+
 def test_outage_is_reported_once_and_its_end_too(clock):
     _, first = _run(clock, up=False)
     _, second = _run(clock, up=False)

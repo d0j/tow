@@ -569,7 +569,15 @@ def run_watchdog(
         report["heartbeat"] = (pulse or (lambda u, ok: ping_heartbeat(u, ok=ok)))(heartbeat, healthy_now)
     (flush or _flush_queued_messages)()
     if report["alerts"]:
-        delivered = (send or send_to_messengers)("\n".join(report["alerts"]))
+        from tow.delivery import hold, quiet_now
+
+        if quiet_now(cfg):
+            # Like a check's messages: kept, and sent with them when the quiet hours end.
+            hold("\n".join(report["alerts"]))
+            delivered = False
+            report["held"] = True
+        else:
+            delivered = (send or send_to_messengers)("\n".join(report["alerts"]))
         report["delivered"] = delivered
         log_event("watchdog_alert", alerts=report["alerts"], delivered=delivered, how="auto")
     return report
@@ -586,11 +594,16 @@ def last_problem() -> dict[str, Any] | None:
 
 def _flush_queued_messages() -> None:
     """Messages not delivered yet, retried on every pass: those a check staged but could not hand
-    over (TOW stopped in between) and those a messenger could not take."""
-    from tow.delivery import dispatch
+    over (TOW stopped in between) and those a messenger could not take. Nothing goes out during
+    the quiet hours; after them, what they held goes too."""
+    from tow.delivery import dispatch, quiet_now, release_held
     from tow.notifiers import flush_outbox
     from tow.store import SecretStoreError, load_secrets, load_state
 
+    cfg = load_config()
+    if quiet_now(cfg):
+        return
+    release_held(cfg)
     state = load_state()
     if not state.get("notify_outbox") and not state.get("notify_pending"):
         return

@@ -44,6 +44,7 @@
     "language": "config.yaml: language must be \"auto\" or a language code such as en or ru",
     "language_unread": "The language in config.yaml was not read, so TOW chooses it itself until the file is corrected: {error}",
     "quiet_hours": "config.yaml: quiet_hours must look like \"23-8\" (hours, local time)",
+    "quiet_hours_span": "config.yaml: quiet_hours \"{value}\" does not name a part of the day (hours from 0 to 23 and up to 24, start and end different) — for no quiet hours, leave it out",
     "site_text": "config.yaml: trackers.{site}.{key} must be text",
     "site_true_false": "config.yaml: trackers.{site}.{key} must be true or false",
     "site_number": "config.yaml: trackers.{site}.{key} must be a whole number",
@@ -1300,8 +1301,8 @@
       "chat_ids_error": "a recipient ID is a number (with a minus sign for groups)",
       "bad_token": "Telegram: wrong token or the bot was deleted — get a new one from @BotFather",
       "chat_unreachable": "Telegram: recipient {chat} is unreachable — open the bot and press “Start”",
-      "error": "Telegram: error {code}"
       "chat_moved": "Telegram: the group {chat} became a supergroup with the new id {new} — replace {chat} with {new} in the recipients",
+      "error": "Telegram: error {code}"
     },
     "discord": {
       "step_channel": "In Discord, open the channel → ⚙ “Edit Channel” → “Integrations” → “Webhooks”.",

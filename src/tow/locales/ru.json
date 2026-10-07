@@ -44,6 +44,7 @@
     "language": "config.yaml: language должно быть «auto» или кодом языка, например en или ru",
     "language_unread": "Язык из config.yaml не прочитан, TOW выбирает его сам, пока файл не исправлен: {error}",
     "quiet_hours": "config.yaml: quiet_hours должно быть в виде «23-8» (часы, местное время)",
+    "quiet_hours_span": "config.yaml: quiet_hours «{value}» не задаёт часть суток (часы от 0 до 23 и конец до 24, начало и конец разные) — если тихие часы не нужны, уберите эту строку",
     "site_text": "config.yaml: trackers.{site}.{key} должно быть текстом",
     "site_true_false": "config.yaml: trackers.{site}.{key} должно быть true или false",
     "site_number": "config.yaml: trackers.{site}.{key} должно быть целым числом",
@@ -1308,8 +1309,8 @@
       "chat_ids_error": "ID получателя — это число (у групп со знаком минус)",
       "bad_token": "Telegram: токен неверный или бот удалён — возьмите новый у @BotFather",
       "chat_unreachable": "Telegram: получатель {chat} недоступен — откройте бота и нажмите «Start»",
-      "error": "Telegram: ошибка {code}"
       "chat_moved": "Telegram: группа {chat} стала супергруппой с новым id {new} — замените в получателях {chat} на {new}",
+      "error": "Telegram: ошибка {code}"
     },
     "discord": {
       "step_channel": "В Discord откройте нужный канал → ⚙ «Изменить канал» → «Интеграции» → «Вебхуки».",

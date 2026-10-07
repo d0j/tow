@@ -115,6 +115,40 @@ def _count(value: Any) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
 
 
+def _hold(state: dict[str, Any], texts: list[str]) -> None:
+    """Keep messages for the end of the quiet hours (in ``state``; the caller saves it)."""
+    if not texts:
+        return
+    queued = [*(str(text) for text in state.get("notify_queue") or []), *texts]
+    if len(queued) > QUEUE_LIMIT:
+        # The oldest go; the morning message says how many (they are never lost silently).
+        overflow = len(queued) - QUEUE_LIMIT
+        state["notify_queue_dropped"] = _count(state.get("notify_queue_dropped")) + overflow
+    state["notify_queue"] = queued[-QUEUE_LIMIT:]
+
+
+def hold(text: str) -> None:
+    """A message of the watchdog during the quiet hours: sent with the others when they end."""
+    with persistence_lock():
+        state = load_state()
+        _hold(state, [text])
+        save_state(state)
+
+
+def release_held(cfg: dict[str, Any], now: datetime | None = None) -> int:
+    """After the quiet hours, what they held goes to the messengers (``dispatch`` sends it):
+    also when no check runs to do it."""
+    if quiet_now(cfg, now):
+        return 0
+    with persistence_lock():
+        state = load_state()
+        if not state.get("notify_queue") and not state.get("notify_queue_dropped"):
+            return 0
+        staged = stage(state, [], cfg=cfg, now=now)
+        save_state(state)
+    return staged
+
+
 def stage(
     state: dict[str, Any], items: Iterable[PendingNotification], *, cfg: dict[str, Any], now: datetime | None = None
 ) -> int:
@@ -122,13 +156,7 @@ def stage(
     messages = compose(items)
     queue = [str(text) for text in state.get("notify_queue") or []]
     if quiet_now(cfg, now):
-        if messages:
-            queued = [*queue, *(text for text, _, _ in messages)]
-            if len(queued) > QUEUE_LIMIT:
-                # The oldest go; the morning message says how many (they are never lost silently).
-                overflow = len(queued) - QUEUE_LIMIT
-                state["notify_queue_dropped"] = _count(state.get("notify_queue_dropped")) + overflow
-            state["notify_queue"] = queued[-QUEUE_LIMIT:]
+        _hold(state, [text for text, _, _ in messages])
         return 0
     dropped = _count(state.pop("notify_queue_dropped", 0))
     if queue:
