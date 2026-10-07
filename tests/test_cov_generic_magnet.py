@@ -163,6 +163,30 @@ def test_the_same_magnet_twice_is_not_ambiguous(site):
     ) == (magnet, V1)
 
 
+def test_a_magnet_in_a_comment_is_not_the_topics_own(site):
+    site.pages["/torrent/2"] = (
+        "<html><title>Show</title><div class=post_body>старый сезон "
+        f"<a href='magnet:?xt=urn:btih:{'ab' * 20}'>magnet</a></div></html>"
+    )
+    with raises_code("tracker.no_magnet", RuntimeError):
+        _tracker(fetch_hosts=["https://demo.example"]).fetch_magnet(
+            "https://demo.example/torrent/2", {}, None, persist=False
+        )
+
+
+def test_the_magnet_of_the_topics_own_block_wins_over_one_in_a_comment(site):
+    site.pages["/torrent/2"] = (
+        f"<html><div id=download><a href='magnet:?xt=urn:btih:{V1}'>magnet</a></div>"
+        f"<div class=comment><a href='magnet:?xt=urn:btih:{'ab' * 20}'>old</a></div></html>"
+    )
+    assert (
+        _tracker(fetch_hosts=["https://demo.example"]).fetch_magnet(
+            "https://demo.example/torrent/2", {}, None, persist=False
+        )[1]
+        == V1
+    )
+
+
 def test_a_missing_topic_page_is_a_mirror_error(site):
     with pytest.raises(MirrorFetchError) as error:
         _tracker(fetch_hosts=["https://demo.example"]).fetch_magnet(

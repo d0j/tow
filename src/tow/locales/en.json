@@ -1800,6 +1800,7 @@
     "no_download_link": "the page has no torrent link — sign in to the site",
     "download_link_ambiguous": "the page links several different torrent files — TOW does not guess which one",
     "sign_in_page": "the site showed its sign-in page instead of the topic",
+    "page_not_understood": "you are signed in, but TOW cannot find this topic's own torrent link on the page — the site may have changed its layout; open the topic in a browser",
     "not_torrent": "the site did not send a torrent file"
   },
   "update": {
