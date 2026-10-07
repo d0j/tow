@@ -968,6 +968,8 @@ def _use_language(argv: list[str] | None) -> None:
     except AttributeError, ValueError:
         interactive = False
     background = bool(words) and words[0] in _BACKGROUND_COMMANDS and not interactive
+    if not background:
+        i18n.leave_language_unread_to_caller()  # a broken config.yaml is said once, by the command
     try:
         i18n.use(i18n.message_language() if background else i18n.terminal_language())
     except Exception:  # noqa: BLE001 - a broken config is reported by the command itself

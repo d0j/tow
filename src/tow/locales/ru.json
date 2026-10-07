@@ -27,7 +27,7 @@
   },
   "config_error": {
     "mapping": "config.yaml должен содержать настройки в виде «имя: значение»",
-    "syntax": "Не удаётся прочитать config.yaml: ошибка в записи YAML в строке {line}, позиция {column}. Исправьте её и запустите TOW снова.",
+    "syntax": "Не удаётся прочитать config.yaml: ошибка в записи YAML в строке {line}, позиция {column}.",
     "whole_number": "config.yaml: {key} должно быть целым числом от {low} до {high}",
     "true_false": "config.yaml: {key} должно быть true или false",
     "folder_list": "config.yaml: {key} должно быть списком папок",

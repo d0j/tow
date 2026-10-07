@@ -27,7 +27,7 @@
   },
   "config_error": {
     "mapping": "config.yaml must be a mapping of settings (name: value)",
-    "syntax": "config.yaml cannot be read: the YAML is broken at line {line}, column {column}. Correct it and start TOW again.",
+    "syntax": "config.yaml cannot be read: the YAML is broken at line {line}, column {column}.",
     "whole_number": "config.yaml: {key} must be a whole number {low}..{high}",
     "true_false": "config.yaml: {key} must be true or false",
     "folder_list": "config.yaml: {key} must be a list of folders",

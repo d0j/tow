@@ -502,11 +502,21 @@ def _configured_language_of(_stamp: tuple[str, int, int, int]) -> str:
 _TOLD: set[str] = set()
 
 
+_LANGUAGE_UNREAD_QUIET: ContextVar[bool] = ContextVar("tow_language_unread_quiet", default=False)
+
+
+def leave_language_unread_to_caller() -> None:
+    """A command in a terminal reports a broken config.yaml itself (its error boundary): the
+    warning that the language was not read would say the same error a second time. For the
+    current context only (`tow.cli.main` runs each command in its own)."""
+    _LANGUAGE_UNREAD_QUIET.set(True)
+
+
 def _tell_language_unread(exc: Exception) -> None:
     """Once per process, in the language TOW falls back to: the language setting was not read,
     and why (TOW's own error text; another exception only by its class). Marked told before it
     is rendered, so rendering it never reads the language - and so this - again."""
-    if "language_unread" in _TOLD:
+    if "language_unread" in _TOLD or _LANGUAGE_UNREAD_QUIET.get():
         return
     _TOLD.add("language_unread")
     from tow.config import LANGUAGE_UNREAD
