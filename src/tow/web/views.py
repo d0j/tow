@@ -8,6 +8,8 @@ import secrets
 import threading
 import time
 from collections.abc import Mapping
+from contextlib import suppress
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote, unquote
 
@@ -220,6 +222,30 @@ def ui_time(value: str | None) -> str:
         return "—"
 
 
+_STORED_ZONE = re.compile(r"(?P<when>.+?) (?:[A-Z]{2,5} )?UTC(?:(?P<sign>[+-])(?P<hours>\d{2}):(?P<minutes>\d{2}))?")
+
+
+def stored_ui_time(value: Any) -> str:
+    """A time a check stored as text, written in the page language of that moment ("07.10.2026
+    12:16:13 UTC+03:00"), written again in this page's language; an ISO time too. A text that
+    is neither is shown as it is."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    with suppress(TypeError, ValueError):
+        return format_ui_timestamp(text)
+    match = _STORED_ZONE.fullmatch(text)
+    if match is None:
+        return text
+    minutes = int(match["hours"] or 0) * 60 + int(match["minutes"] or 0)
+    zone = timezone(timedelta(minutes=-minutes if match["sign"] == "-" else minutes))
+    for code in i18n.codes():
+        with suppress(ValueError):
+            moment = datetime.strptime(match["when"], i18n.datetime_pattern(code)).replace(tzinfo=zone)
+            return format_ui_timestamp(moment)
+    return text
+
+
 # Event kind -> catalog key of its short label.
 _EVENT_LABELS = {
     "torrent_completed": "web.event.file",
@@ -256,7 +282,7 @@ _STALE_SLACK_SEC = 10 * 60
 def attention(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> list[str]:
     """G3: what needs the owner now - shown above the list, empty when all is well."""
     import time
-    from datetime import UTC, datetime
+    from datetime import UTC
 
     items: list[str] = []
     raw_health = state.get("health")
@@ -378,6 +404,9 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
             {
                 **topic,
                 "timer": timers.get(str(topic.get("id")), {}),
+                # Stored as text in the language of the check: shown in this page's language.
+                "last_check": stored_ui_time(topic.get("last_check")),
+                "last_ok_at": stored_ui_time(topic.get("last_ok_at")),
                 "last_error": last_error,
                 "replaces_revision": blocked_by_previous_revision(topic),
                 "tracker": tr.name if tr else t("web.site_unknown"),

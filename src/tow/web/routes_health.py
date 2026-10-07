@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse, Response
 
 from tow import __version__, access
+from tow.clock import format_ui_timestamp
 from tow.web import _context, services
 from tow.web.templating import header_health
 from tow.web.text import t
@@ -16,14 +19,26 @@ from tow.web_update import WebUpdateError
 router = APIRouter()
 
 
+def _with_time_labels(result: dict[str, Any], *fields: str) -> dict[str, Any]:
+    """Each time (epoch seconds) also written as every other date of the page is - the page's
+    language, this computer's zone - so the update card does not mix two ways (``<field>_label``)."""
+    out = dict(result)
+    for field in fields:
+        value = out.get(field)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+            with suppress(OSError, OverflowError, ValueError):
+                out[f"{field}_label"] = format_ui_timestamp(datetime.fromtimestamp(value, UTC))
+    return out
+
+
 @router.get("/updates.json", response_model=None)
 def updates_json() -> dict[str, Any]:
-    return services.release_status()
+    return _with_time_labels(services.release_status(), "checked_at")
 
 
 @router.post("/updates/check", response_model=None)
 def updates_check() -> dict[str, Any]:
-    return services.release_status(force=True)
+    return _with_time_labels(services.release_status(force=True), "checked_at")
 
 
 @router.get("/updates/status")
@@ -46,6 +61,7 @@ def updates_status() -> Response:
         "releases.worker_unverified",
     }:
         result["error_message"] = t(error)
+    result = _with_time_labels(result, "started_at", "finished_at")
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
 

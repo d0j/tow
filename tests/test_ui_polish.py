@@ -606,6 +606,71 @@ def test_network_errors_are_said_in_words(raw, words):
     assert humanize(raw) == words
 
 
+def test_a_topics_check_times_are_written_in_the_pages_language():
+    """QA 1.24.1: the check stores its time as text in the page language of that moment; an
+    English page showed the Russian "07.10.2026 12:16:13" next to its own dates."""
+    from datetime import UTC, datetime
+
+    from tow.clock import format_ui_timestamp
+    from tow.config import load_config, save_config
+    from tow.store import save_state
+
+    cfg = load_config()
+    cfg["language"] = "en"
+    save_config(cfg)
+    save_state(
+        {
+            "topics": [
+                {
+                    "id": "t1",
+                    "title": "Show",
+                    "url": "http://rutor.info/torrent/1/x",
+                    "save_path": "Z:\\a",
+                    "last_error": "rutor: all hosts failed",
+                    "last_check": "07.10.2026 12:16:13 UTC+03:00",
+                    "last_ok_at": "2026-10-06 08:00:00 MSK UTC+03:00",
+                }
+            ]
+        }
+    )
+    panel = TestClient(app, headers=ORIGIN).get("/topics/t1/edit-panel").text
+    assert "07.10.2026" not in panel
+    assert format_ui_timestamp(datetime(2026, 10, 7, 9, 16, 13, tzinfo=UTC), "en") in panel
+    assert format_ui_timestamp(datetime(2026, 10, 6, 5, 0, 0, tzinfo=UTC), "en") in panel
+
+
+def test_stored_times_that_are_not_dates_stay_as_they_are():
+    from tow.web.views import stored_ui_time
+
+    assert stored_ui_time("") == ""
+    assert stored_ui_time("yesterday") == "yesterday"
+    assert stored_ui_time("99.99.2026 12:00:00 UTC") == "99.99.2026 12:00:00 UTC"
+
+
+def test_the_update_card_gets_its_times_written_by_the_server(client, monkeypatch):
+    """The card wrote "checked: 07.10.2026 12:23:55" with the script's pattern and no zone, the
+    rest of the page "07.10.2026 12:16:38 UTC+03:00": the server now writes the card's times too."""
+    from datetime import UTC, datetime
+
+    from tow.clock import format_ui_timestamp
+
+    at = datetime(2026, 10, 7, 9, 23, 55, tzinfo=UTC)
+    monkeypatch.setattr(
+        "tow.web.services.release_status", lambda force=False: {"ok": True, "checked_at": at.timestamp()}
+    )
+    monkeypatch.setattr(
+        "tow.web.services.web_update_status",
+        lambda: {"status": "ok", "started_at": at.timestamp(), "finished_at": at.timestamp() + 11},
+    )
+    assert client.get("/updates.json").json()["checked_at_label"] == format_ui_timestamp(at)
+    job = client.get("/updates/status").json()
+    assert job["started_at_label"] == format_ui_timestamp(at)
+    assert job["finished_at_label"] == format_ui_timestamp(datetime(2026, 10, 7, 9, 24, 6, tzinfo=UTC))
+    updates = (SRC / "static" / "updates.js").read_text(encoding="utf-8")
+    for field in ("data.checked_at_label", "job.started_at_label", "job.finished_at_label"):
+        assert field in updates
+
+
 def test_home_row_edit_panel_and_history_say_the_error_in_words(client):
     from tow.log import log_event
     from tow.store import save_state
