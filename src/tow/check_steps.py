@@ -130,6 +130,7 @@ _CHECK_CLEARABLE_FIELDS = (
     "file_aliases",
     "move_pending",
     "error_notified",
+    "error_streak",
     "last_error_code",
     "last_error_params",
     "content_token",

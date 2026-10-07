@@ -132,3 +132,99 @@ def test_torrent_with_the_tow_mark_already_there_is_accepted(monkeypatch, stores
     assert row["ok"] is True
     assert load_state()["topics"][0]["hash"] == NEW
     assert not load_state()["topics"][0].get("last_error")
+
+
+# --- when the owner hears of an error ----------------------------------------------------------
+
+
+def _notified(monkeypatch) -> list[tuple[Any, Any]]:
+    seen: list[tuple[Any, Any]] = []
+    real = check.NotificationBatch.queue
+
+    def spy(self, topic, **kw):
+        seen.append((topic.get("id"), kw.get("kind")))
+        return real(self, topic, **kw)
+
+    monkeypatch.setattr(check.NotificationBatch, "queue", spy)
+    monkeypatch.setattr(check, "_flush_notifications", lambda *a, **k: None)
+    return seen
+
+
+class Failing(Tracker):
+    """Fails on the runs listed in ``failing`` (1-based) with ``error``."""
+
+    def __init__(self, failing: set[int], error: Exception) -> None:
+        super().__init__()
+        self.failing, self.error, self.n = failing, error, 0
+
+    def fetch_torrent(self, *a, **k):
+        self.n += 1
+        if self.n in self.failing:
+            raise self.error
+        return b"torrent"
+
+
+def _healthy_topic(client: Client) -> None:
+    client.put(NEW, "/media/tv", tags=["tow"])
+    save_state({"topics": [_topic(hash=NEW, last_ok=True)]})
+
+
+def _site_down() -> Exception:
+    from tow.errors import TowError
+
+    return TowError("mirrors.all_failed", tracker="fake", error="x")
+
+
+def test_a_flapping_site_is_not_reported_every_other_check(monkeypatch, stores):
+    client = Client()
+    _healthy_topic(client)
+    notified = _notified(monkeypatch)
+    _wire(monkeypatch, {"main": client}, Failing({1, 3, 5}, _site_down()))
+    for _ in range(6):
+        check.run_check(apply=True, notify=True, how="auto")
+    assert notified == []
+    assert not load_state()["topics"][0].get("last_error")  # the last check was fine
+    assert "error_streak" not in load_state()["topics"][0]
+
+
+def test_a_lasting_site_problem_is_reported_once_after_three_checks(monkeypatch, stores):
+    client = Client()
+    _healthy_topic(client)
+    notified = _notified(monkeypatch)
+    _wire(monkeypatch, {"main": client}, Failing({1, 2, 3, 4}, _site_down()))
+    kinds = []
+    for _ in range(5):
+        check.run_check(apply=True, notify=True, how="auto")
+        kinds.append([kind for _tid, kind in notified])
+        notified.clear()
+    assert kinds == [[], [], ["error"], [], ["recovered"]]
+    assert load_state()["topics"][0]["last_error_class"] == ""
+
+
+def test_a_red_error_is_reported_at_once_and_once(monkeypatch, stores):
+    from tow.errors import TowError
+
+    client = Client()
+    _healthy_topic(client)
+    notified = _notified(monkeypatch)
+    _wire(monkeypatch, {"main": client}, Failing({1, 2}, TowError("tracker.not_torrent")))
+    check.run_check(apply=True, notify=True, how="auto")
+    check.run_check(apply=True, notify=True, how="auto")
+    assert [kind for _tid, kind in notified] == ["error"]
+
+
+def test_a_check_without_messages_keeps_the_recovery_for_the_next_one(monkeypatch, stores):
+    """A check that sends nothing (the CLI's apply without notify) after a reported failure:
+    the owner who heard "error" still hears "working again" from the next check that sends."""
+    client = Client()
+    client.put(NEW, "/media/tv", tags=["tow"])
+    failed = _topic(hash=NEW, last_error="boom", last_error_class="tracker", error_notified=True, last_ok=False)
+    save_state({"topics": [failed]})
+    notified = _notified(monkeypatch)
+    _wire(monkeypatch, {"main": client}, Tracker())
+    check.run_check(apply=True, notify=False, how="manual")
+    assert notified == []
+    assert load_state()["topics"][0]["error_notified"] is True
+    check.run_check(apply=True, notify=True, how="auto")
+    assert [kind for _tid, kind in notified] == ["recovered"]
+    assert "error_notified" not in load_state()["topics"][0]

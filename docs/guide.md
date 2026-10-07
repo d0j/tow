@@ -155,6 +155,8 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
 - One message per topic per check: added, new version, new episodes, download complete, removed, back in the
   client. An error in the same check is added to the message, not hidden.
 - Errors are sent when they appear or change kind, not on every check; “… — working again” follows the recovery.
+  A site that does not answer (amber) is reported once it fails three checks in a row, so a mirror that drops out
+  now and then does not send “error” and “working again” every other check.
   When one site fails the same way for several topics, you get one message for the site.
 - Every message goes to every connected messenger. An undelivered message waits in a queue and goes first next time.
 - Optional in `config.yaml`: `quiet_hours: "23-8"` (held and sent together afterwards), `daily_digest_hour: 9`,

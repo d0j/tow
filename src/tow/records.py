@@ -72,6 +72,7 @@ class Topic(TypedDict, total=False):
     last_error_params: dict[str, Any]
     last_error_class: str
     error_notified: bool
+    error_streak: int  # checks in a row with a site's transport trouble (tow.check notifications)
 
 
 class Health(TypedDict, total=False):
