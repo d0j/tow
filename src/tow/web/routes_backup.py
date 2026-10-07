@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 
+from tow import i18n
 from tow.bundle import MAX_BUNDLE_BYTES
 from tow.clock import format_ui_timestamp, machine_now
 from tow.config import as_bool
@@ -326,6 +327,11 @@ def settings_portable_export() -> Response:
     )
 
 
+# A file made with another master key, as restore_points.invalid_file words it (in the owner's
+# language, which may not be this page's).
+_OTHER_KEY = frozenset(i18n.translate("backup.restore_point.reason_other_key", code) for code in i18n.codes())
+
+
 @router.post("/settings/portable/import")
 async def settings_portable_import(
     backup_file: Annotated[UploadFile, File()],
@@ -376,6 +382,8 @@ async def settings_portable_import(
         elif failure == INVALID_FILE:
             reason = getattr(exc, "reason", "")
             flash = t("web.settings.file_invalid_reason", reason=reason) if reason else t("web.settings.file_invalid")
+            if reason in _OTHER_KEY:  # what to do about it, not only what is wrong
+                flash += ". " + t("web.settings.file_other_key_next")
         elif failure == CREATE_FAILED:
             flash = t("web.settings.safety_point_failed")
         elif temp_dir is None:

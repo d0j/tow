@@ -495,7 +495,12 @@ def test_browser_copy_needs_its_original_key_and_preserves_a_different_install(
     before = {path: path.read_bytes() for path in members}
 
     reason = t("backup.restore_point.reason_other_key", language)
-    assert t("web.settings.file_invalid_reason", language, reason=reason) in _upload(client, exported, operation)
+    shown_text = _upload(client, exported, operation)
+    assert t("web.settings.file_invalid_reason", language, reason=reason) in shown_text
+    # QA 1.24.1: no next step was given; now: bring the key, or move the data with a passphrase.
+    assert shown_text.endswith(". " + t("web.settings.file_other_key_next", language))
+    assert "keys/master.key" in shown_text
+    assert "tow export" in shown_text
     assert {path: path.read_bytes() for path in members} == before
     assert not (destination / "data" / "restore-points").exists()
 

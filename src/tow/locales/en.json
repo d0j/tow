@@ -2143,7 +2143,8 @@
       "notifier_private_host": "the server must be an internet address: TOW does not send to this PC or the home network (for your own server at home: allow_private_notifier_hosts: true in config.yaml)",
       "ping_login": "the client did not accept the login or password",
       "ping_unreachable": "the client does not answer at this address and port, or its web interface is off",
-      "point_created": "restore point created"
+      "point_created": "restore point created",
+      "file_other_key_next": "Copy keys/master.key of the TOW that made the file into the keys folder of this TOW and try again, or move the data with a passphrase instead: tow export on that computer, tow import here."
     },
     "sites": {
       "login_saved": "login saved",
