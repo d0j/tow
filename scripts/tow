@@ -41,7 +41,32 @@ if [ "$TOW_ROOT" != "$TOW_APP" ]; then
     export UV_MANAGED_PYTHON=1
 fi
 
+# An update cut off while it replaced the code (the rule of scripts/tow-start): app/ may hold half of
+# the new code and no environment. Setup, or uv without an environment, would build one from it (a
+# raw uv error and a stray app/.venv); TOW's own environment says it itself (`tow status`, `tow start`).
+interrupted() {
+    [ -f "$TOW_ROOT/.update-switch.json" ] || return 1
+    if grep -Eq '"phase": *"accepted"|"restored": *true' "$TOW_ROOT/.update-switch.json" 2>/dev/null; then
+        return 1
+    fi
+    [ -f "$TOW_ROOT/.update.lock" ] || return 0
+    if command -v flock >/dev/null 2>&1; then
+        flock -n "$TOW_ROOT/.update.lock" true 2>/dev/null || return 1
+    elif command -v perl >/dev/null 2>&1; then
+        perl -MFcntl=:flock -e 'open(my $f, "<", $ARGV[0]) or exit 0; exit(flock($f, LOCK_EX | LOCK_NB) ? 0 : 1)' \
+            "$TOW_ROOT/.update.lock" 2>/dev/null || return 1
+    fi
+    return 0
+}
+refuse_interrupted() {
+    if interrupted; then
+        echo "TOW cannot run: an update was cut off while it replaced the code in $TOW_ROOT. Run the update there again (update-tow, or \"Update TOW.command\" on macOS): it puts the previous version back first." >&2
+        exit 3
+    fi
+}
+
 if [ "${1:-}" = setup ]; then
+    refuse_interrupted
     shift
     if [ $# -gt 0 ]; then
         echo "Usage: ./tow setup (no options): Python and TOW's environment inside the install; run it with TOW stopped." >&2
@@ -102,4 +127,5 @@ if [ -x "$TOW_APP/.venv/bin/tow" ]; then
     exec "$TOW_APP/.venv/bin/tow" "$@"
 fi
 # Not set up yet: uv runs TOW from the locked environment.
+refuse_interrupted
 exec "$uv" run --frozen --no-dev --project "$TOW_APP" tow "$@"
