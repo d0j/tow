@@ -1,4 +1,5 @@
-"""The state file is parsed again only when it changed; every caller still gets its own copy."""
+"""The state and download history files are parsed again only when they changed; every caller
+still gets its own copy."""
 
 from pathlib import Path
 
@@ -20,12 +21,46 @@ def _count_parses(monkeypatch) -> list[Path]:
     return parsed
 
 
-def test_an_unchanged_state_file_is_parsed_once(monkeypatch):
-    save_state({"topics": [{"id": "a"}]})
+class _State:
+    path = staticmethod(store.state_path)
+    load = staticmethod(load_state)
+
+    @staticmethod
+    def save(name):
+        save_state({"topics": [{"id": name}]})
+
+    @staticmethod
+    def names(data):
+        return [topic["id"] for topic in data["topics"]]
+
+    hand_edit = '{"topics": [{"id": "edited-by-hand"}]}'
+
+
+class _History:
+    path = staticmethod(store.download_history_path)
+    load = staticmethod(store.load_download_history)
+
+    @staticmethod
+    def save(name):
+        store.save_download_history({"schema_version": 1, "topics": {name: {"items": {}}}})
+
+    @staticmethod
+    def names(data):
+        return list(data["topics"])
+
+    hand_edit = '{"topics": {"edited-by-hand": {"items": {}}}}'
+
+
+STORES = [pytest.param(_State, id="state"), pytest.param(_History, id="history")]
+
+
+@pytest.mark.parametrize("kind", STORES)
+def test_an_unchanged_file_is_parsed_once(monkeypatch, kind):
+    kind.save("a")
     parsed = _count_parses(monkeypatch)
 
     for _ in range(5):
-        assert load_state()["topics"] == [{"id": "a"}]
+        assert kind.names(kind.load()) == ["a"]
 
     assert len(parsed) == 1
 
@@ -43,42 +78,57 @@ def test_every_caller_gets_its_own_copy():
     assert second["topics"] is not first["topics"]
 
 
-def test_a_save_is_seen_by_the_next_read(monkeypatch):
-    save_state({"topics": [{"id": "a"}]})
-    load_state()
+def test_every_history_reader_gets_its_own_copy():
+    store.save_download_history({"schema_version": 1, "topics": {"a": {"items": {"x": {"status": "new"}}}}})
+    first = store.load_download_history()
+    first["topics"]["a"]["items"]["x"]["status"] = "changed"
+    first["topics"]["b"] = {}
+
+    second = store.load_download_history()
+
+    assert second == {"schema_version": 1, "topics": {"a": {"items": {"x": {"status": "new"}}}}}
+
+
+@pytest.mark.parametrize("kind", STORES)
+def test_a_save_is_seen_by_the_next_read(monkeypatch, kind):
+    kind.save("a")
+    kind.load()
     parsed = _count_parses(monkeypatch)
 
-    save_state({"topics": [{"id": "b"}]})
+    kind.save("b")
 
-    assert load_state()["topics"] == [{"id": "b"}]
+    assert kind.names(kind.load()) == ["b"]
     assert len(parsed) == 1
 
 
-def test_a_file_changed_in_place_is_read_again():
-    save_state({"topics": [{"id": "a"}]})
-    load_state()
-    Path(store.state_path()).write_text('{"topics": [{"id": "edited-by-hand"}]}', encoding="utf-8")
+@pytest.mark.parametrize("kind", STORES)
+def test_a_file_changed_in_place_is_read_again(kind):
+    kind.save("a")
+    kind.load()
+    Path(kind.path()).write_text(kind.hand_edit, encoding="utf-8")
 
-    assert load_state()["topics"] == [{"id": "edited-by-hand"}]
+    assert kind.names(kind.load()) == ["edited-by-hand"]
 
 
-def test_a_corrupt_file_after_a_cached_read_is_still_refused():
-    save_state({"topics": [{"id": "a"}]})
-    load_state()
-    Path(store.state_path()).write_text("{not json", encoding="utf-8")
+@pytest.mark.parametrize("kind", STORES)
+def test_a_corrupt_file_after_a_cached_read_is_still_refused(kind):
+    kind.save("a")
+    kind.load()
+    Path(kind.path()).write_text("{not json", encoding="utf-8")
 
     with pytest.raises(StoreCorruptionError):
-        load_state()
+        kind.load()
 
 
-def test_another_data_folder_is_not_served_from_the_cache(monkeypatch, tmp_path):
-    save_state({"topics": [{"id": "here"}]})
-    load_state()
+@pytest.mark.parametrize("kind", STORES)
+def test_another_data_folder_is_not_served_from_the_cache(monkeypatch, tmp_path, kind):
+    kind.save("here")
+    kind.load()
     other = tmp_path / "other"
     other.mkdir()
     monkeypatch.setenv("TOW_HOME", str(other))
 
-    assert load_state()["topics"] == []
+    assert kind.names(kind.load()) == []
 
 
 def test_the_write_counter_moves_with_every_written_file():

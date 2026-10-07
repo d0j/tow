@@ -878,7 +878,11 @@ def delete_secret_undo(reference: str) -> None:
         raise SecretStoreError("cannot remove TOW secret undo snapshot") from exc
 
 
-def _file_stamp(path: Path) -> tuple[str, int, int, int] | None:
+type FileStamp = tuple[str, int, int, int]
+
+
+def file_stamp(path: Path) -> FileStamp | None:
+    """(path, mtime, size, file id): changes with every write of a file TOW replaces atomically."""
     try:
         stat = path.stat()
     except OSError:
@@ -886,12 +890,28 @@ def _file_stamp(path: Path) -> tuple[str, int, int, int] | None:
     return (str(path), stat.st_mtime_ns, stat.st_size, stat.st_ino)
 
 
-# The state is read by every page and every check: parse it again only when the file changed.
-# Writers replace it atomically, so (mtime, size, file id) changes with every write (as for the
-# config). Each caller gets its own copy, made from a pickle of the parsed data: about fifteen
-# times faster than parsing the JSON again. The pickle never leaves this process.
-_STATE_CACHE_LOCK = threading.Lock()
-_state_cache: tuple[tuple[str, int, int, int], bytes] | None = None
+# The state and the download history are read by every page and every check: parse them again
+# only when the file changed. Writers replace them atomically, so (mtime, size, file id) changes
+# with every write (as for the config). Each caller gets its own copy, made from a pickle of the
+# parsed data: several times faster than parsing the JSON again. The pickle never leaves this
+# process.
+_PARSED_LOCK = threading.Lock()
+_parsed: dict[str, tuple[FileStamp, bytes]] = {}
+
+
+def _parsed_copy(stamp: FileStamp | None) -> Any:
+    """A private copy of the store parsed at ``stamp``, or None when it changed since."""
+    if stamp is None:
+        return None
+    with _PARSED_LOCK:
+        cached = _parsed.get(stamp[0])
+    return pickle.loads(cached[1]) if cached is not None and cached[0] == stamp else None
+
+
+def _keep_parsed(path: Path, stamp: FileStamp | None, data: Any) -> None:
+    if stamp is not None and file_stamp(path) == stamp:  # not replaced while it was read
+        with _PARSED_LOCK:
+            _parsed[stamp[0]] = (stamp, pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL))
 
 
 def state_schema_version(data: Mapping[str, Any]) -> int:
@@ -967,14 +987,11 @@ def validate_download_history_bytes(content: bytes) -> None:
 
 
 def load_state(*, quarantine: bool = True) -> dict[str, Any]:
-    global _state_cache
     path = state_path()
-    stamp = _file_stamp(path)
-    with _STATE_CACHE_LOCK:
-        cached = _state_cache
-    if stamp is not None and cached is not None and cached[0] == stamp:
-        copy_: dict[str, Any] = pickle.loads(cached[1])
-        return copy_
+    stamp = file_stamp(path)
+    cached: dict[str, Any] | None = _parsed_copy(stamp)
+    if cached is not None:
+        return cached
     data = load_json(path, {"topics": [], "mirrors": {}}, quarantine=quarantine, validate=_validate_state_container)
     version = state_schema_version(data)
     data.pop("schema_version", None)  # a file-format detail: callers see the topics, not it
@@ -984,9 +1001,7 @@ def load_state(*, quarantine: bool = True) -> dict[str, Any]:
     undo = data.get("undo")
     if isinstance(undo, dict) and "secrets" in undo:
         data.pop("undo", None)
-    if stamp is not None and _file_stamp(path) == stamp:  # not replaced while it was read
-        with _STATE_CACHE_LOCK:
-            _state_cache = (stamp, pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL))
+    _keep_parsed(path, stamp, data)
     return data
 
 
@@ -1015,14 +1030,20 @@ def save_state(data: dict[str, Any]) -> None:
 
 
 def load_download_history(*, quarantine: bool = True) -> dict[str, Any]:
+    path = download_history_path()
+    stamp = file_stamp(path)
+    cached: dict[str, Any] | None = _parsed_copy(stamp)
+    if cached is not None:
+        return cached
     data: dict[str, Any] = load_json(
-        download_history_path(),
+        path,
         {"schema_version": 1, "topics": {}},
         quarantine=quarantine,
         validate=_validate_history_container,
     )
     data.setdefault("schema_version", 1)
     data.setdefault("topics", {})
+    _keep_parsed(path, stamp, data)
     return data
 
 
