@@ -330,6 +330,52 @@ def test_the_start_script_follows_the_interrupted_update_rule(tmp_path, record, 
         assert "could not be prepared" in output  # it went on to prepare TOW (no uv here)
 
 
+@pytest.mark.allow_system  # the platform's launcher in a temp install; it ends before uv (none on PATH)
+@pytest.mark.parametrize(
+    ("record", "args", "refused"),
+    [
+        ('{"format": "tow-update-switch/v1", "phase": "switching", "old": [], "new": []}', ["status"], True),
+        ('{"format": "tow-update-switch/v1", "phase": "switching", "old": [], "new": []}', ["setup"], True),
+        ('{"format": "tow-update-switch/v1", "phase": "accepted", "old": [], "new": []}', ["status"], False),
+    ],
+)
+def test_the_launcher_refuses_to_build_an_environment_from_a_cut_off_update(tmp_path, record, args, refused):
+    """Round-3 audit: during a cut-off update (no environment in app/) the launcher fell back to
+    `uv run --frozen`: a raw uv error and a stray app/.venv built from half of the new code."""
+    import shutil
+    import subprocess
+
+    root = tmp_path / "TOW"
+    shutil.copytree(ROOT / "scripts", root / "app" / "scripts")
+    (root / "data").mkdir()
+    (root / "config.yaml").write_text("port: 18999\n", encoding="utf-8")
+    (root / ".update-switch.json").write_text(record, encoding="utf-8")
+    env = {key: value for key, value in os.environ.items() if not key.startswith(("TOW_", "UV_"))}
+    if os.name == "nt":
+        env["PATH"] = os.path.join(os.environ.get("SYSTEMROOT", r"C:\Windows"), "System32")  # no uv, no Python
+        argv = ["cmd.exe", "/d", "/c", str(root / "app" / "scripts" / "tow.cmd"), *args]
+    else:
+        env["PATH"] = "/usr/bin:/bin"
+        argv = ["/bin/sh", str(root / "app" / "scripts" / "tow"), *args]
+    done = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=120, check=False)
+    output = done.stdout + done.stderr
+    assert done.returncode != 0, output  # refused, or no uv to run with
+    assert ("update was cut off" in output) is refused, output
+    if refused:
+        assert done.returncode == 3
+    assert not (root / "app" / ".venv").exists()
+
+
+def test_status_says_an_update_was_cut_off(capsys):
+    from tow.i18n import t
+
+    _switch_record()
+    assert cli.main(["status"]) == 0
+    assert t("cli.status.update_interrupted") in capsys.readouterr().out
+    assert cli.main(["status", "--json"]) == 0
+    assert '"update_interrupted": true' in capsys.readouterr().out
+
+
 def test_the_windows_start_script_prepares_offline_first_then_online():
     text = (ROOT / "scripts" / "tow-start.cmd").read_text(encoding="utf-8")
     assert text.isascii()

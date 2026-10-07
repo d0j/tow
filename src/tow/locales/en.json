@@ -449,6 +449,7 @@
     "status": {
       "running": "running (process {pid})",
       "stopped": "not running",
+      "update_interrupted": "not running: an update was cut off while it replaced the code; run the update again (“Update TOW” in the TOW folder)",
       "none": "no torrent client",
       "answers": "answers",
       "not_answering": "does not answer",

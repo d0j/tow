@@ -822,6 +822,7 @@ def _status_view() -> dict[str, Any]:
         "next_check": format_ui_timestamp(datetime.fromtimestamp(next_at, UTC).isoformat()) if next_at else None,
         "network": as_bool(cfg.get("allow_lan")),
         "autostart": autostart,
+        "update_interrupted": running is None and layout.interrupted_update(),
     }
 
 
@@ -838,9 +839,13 @@ def _cmd_status(args: argparse.Namespace) -> int:
     client = view["client"] or t("cli.status.none")
     if view["client_ok"] is not None:
         client += " " + (t("cli.status.answers") if view["client_ok"] else t("cli.status.not_answering"))
+    if view["running"]:
+        state = t("cli.status.running", pid=view["pid"] or "?")
+    else:
+        state = t("cli.status.update_interrupted" if view["update_interrupted"] else "cli.status.stopped")
     parts = [
         f"TOW {view['version']}",
-        t("cli.status.running", pid=view["pid"] or "?") if view["running"] else t("cli.status.stopped"),
+        state,
         client,
         t("cli.status.sites", n=view["sites"]),
         t("cli.status.topics", n=view["topics"]),
