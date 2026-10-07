@@ -130,28 +130,16 @@ not another scan of all files. The original first ten diagnostic labels, includi
 remain in input order. Subtitle season context still contributes to ambiguity. The index is
 not a persistent cache and does not change saved policies, file priorities or history identities.
 
-File masks are translated with the standard `fnmatch.translate` API and prepared once
-per distinct case-folded rule per call. They still match the full relative path or
-basename; flat paths are not tested twice. Validation and stored expressions are unchanged.
-Fixed text outside wildcards, including single-character bracket classes such as `[?]`,
-provides necessary conditions before exact matching. Unclosed brackets remain literal
-as in `fnmatch`; multi-character, negated and range classes are left to `fnmatch`.
-The filter favours text shared by fewer rules, with
-length breaking ties, so a common title cannot hide missing rule-specific text. Up to
-eight fixed parts required by every guarded rule are also checked; this bounds filter
-overhead, not accepted rules. Exact guarded rules are grouped by their necessary literal;
-only groups whose literal occurs are compiled, once per call. An escaped prefix-factored
-literal union avoids repeating every similar literal at each path character. Its zero-width
-lookahead retains overlaps, and shorter prefixes of the longest hit remain candidates.
-No wildcard semantics are implemented by that literal trie; standard `fnmatch` and `re`
-still decide every exact match. Patterns without fixed text use a separate exact union.
-Up to eight necessary class sets are rejection-only checks: whole shared classes first,
-then unions of each rule's class at a common position. Class semantics are also delegated
-to `fnmatch`; the character-result caches keep at most 1,024 entries per filter per call,
-without refusing uncached characters. Preparation is bounded by the existing rule/text
-limits: at most the number of distinct rules plus ten regexes per call, not a Python
-matcher dispatch for every file and mask. All caches are local to one call; filters
-never decide a successful match on their own.
+File masks match the full relative path or basename (a flat path is tried once) through
+`fnmatch.translate`, prepared once per distinct case-folded rule per call; only those exact
+regexes accept a path. Each rule is grouped under its rarest fixed text (text outside wildcards, `[?]` and
+other one-character classes included), so a shared title cannot make every rule a
+candidate. One prefix-factored lookahead union finds the longest such text at each path
+position (shorter ones there are its prefixes), and only the groups found are compiled and
+tried. Rules without fixed text form one exact union. Up to eight texts every guarded rule
+needs, and up to eight unions of each rule's n-th class (membership decided by `fnmatch`,
+1,024 cached characters per filter), only reject. A call compiles at most its distinct rules
+plus ten regexes, never a Python dispatch per file and mask.
 
 ## Data layout
 
