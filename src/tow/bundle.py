@@ -23,7 +23,7 @@ import yaml
 from tow import __version__
 from tow.clock import iso_now
 from tow.config import SAFE_ID, ConfigError, validated, web_address
-from tow.errors import TowError
+from tow.errors import Msg, TowError
 from tow.log import EXPORT_EVENT_KEYS, export_event_projection, log_event, read_events
 from tow.paths import config_path, data_dir, download_history_path, secrets_path, state_path
 from tow.platform import is_plain_dir, is_plain_file
@@ -89,11 +89,14 @@ class ExportImportError(RuntimeError):
 
     ``reason`` is what the owner is told about a file that does not pass: ``not_tow`` (not a TOW
     backup at all), ``other_key`` (cannot be decrypted: another master key, or damaged),
-    ``too_large``, or ``damaged`` (anything else); the message stays technical, for the log."""
+    ``too_large``, or ``damaged`` (anything else); the message stays technical, for the log.
+    ``owner_text`` is what the owner is told instead, when the refusal says more than the reason
+    (a file that exists, a --path-map typed wrong, data put back after a failed import)."""
 
-    def __init__(self, message: str = "", *, reason: str = "damaged") -> None:
+    def __init__(self, message: str = "", *, reason: str = "damaged", owner_text: Msg | TowError | None = None) -> None:
         super().__init__(message)
         self.reason = reason
+        self.owner_text = owner_text
 
 
 def _json_bytes(data: Any) -> bytes:
@@ -269,7 +272,9 @@ def _validate_config_schema(data: dict[str, Any]) -> None:
     try:
         validated(data)
     except ConfigError as exc:
-        raise ExportImportError(f"invalid {exc.text('en')}") from None  # the technical text, for the log
+        raise ExportImportError(  # the English text for the log, the owner's language on screen
+            f"invalid {exc.text('en')}", owner_text=Msg("cli.bundle.import_refused", reason=exc)
+        ) from None
 
 
 def _has_exact_policy(value: Any) -> bool:
@@ -687,7 +692,10 @@ def _export_bundle(
 ) -> dict[str, Any]:
     output = Path(output)
     if output.exists() and not overwrite:
-        raise ExportImportError("export output already exists; choose another path or use --force")
+        raise ExportImportError(
+            "export output already exists; choose another path or use --force",
+            owner_text=Msg("cli.bundle.output_exists", path=str(output)),
+        )
     previous = output.read_bytes() if overwrite and output.is_file() else None
     members = _build_export_members(include_log=include_log)
     payload = _zip_payload(members)
@@ -735,19 +743,22 @@ def _export_bundle(
 
 
 def parse_path_maps(values: Iterable[str] | None) -> list[tuple[str, str]]:
+    def refuse(message: str) -> ExportImportError:
+        return ExportImportError(message, owner_text=Msg("cli.bundle.path_map"))
+
     result = []
     for raw in values or ():
         if not isinstance(raw, str) or "=" not in raw:
-            raise ExportImportError("path map must use OLD=NEW")
+            raise refuse("path map must use OLD=NEW")
         old, new = raw.split("=", 1)
         old, new = old.strip(), new.strip()
         if not old or not new:
-            raise ExportImportError("path map must contain non-empty OLD and NEW")
+            raise refuse("path map must contain non-empty OLD and NEW")
         if old == new:
-            raise ExportImportError("path map OLD and NEW must differ")
+            raise refuse("path map OLD and NEW must differ")
         result.append((old, new))
     if len({old for old, _ in result}) != len(result):
-        raise ExportImportError("duplicate path map source")
+        raise refuse("duplicate path map source")
     return result
 
 
@@ -934,7 +945,9 @@ def _checkpoint_directory(path: Path, *, missing: bool = False) -> bool:
 def _read_checkpoint(checkpoint: Path) -> dict[str, Any]:
     checkpoint = Path(checkpoint)
     if not _checkpoint_directory(checkpoint, missing=True):
-        raise ExportImportError("import checkpoint does not exist")
+        raise ExportImportError(
+            "import checkpoint does not exist", owner_text=Msg("cli.bundle.no_checkpoint", path=str(checkpoint))
+        )
     try:
         _checkpoint_directory(checkpoint)
         _checkpoint_file(checkpoint / "MANIFEST.json")
@@ -1249,11 +1262,16 @@ def _import_bundle(
     if not apply:
         return result
     if secrets_path().is_file():
-        raise ExportImportError("destination legacy plaintext secrets require explicit migration before import")
+        raise ExportImportError(
+            "destination legacy plaintext secrets require explicit migration before import",
+            owner_text=Msg("cli.bundle.legacy_secrets", command="tow secrets migrate"),
+        )
     try:
         master_fernet()
     except SecretStoreError as exc:
-        raise ExportImportError("destination master key is unavailable or invalid") from exc
+        raise ExportImportError(
+            "destination master key is unavailable or invalid", owner_text=Msg("cli.bundle.master_key")
+        ) from exc
 
     checkpoint = _create_import_checkpoint()
     try:
@@ -1276,10 +1294,15 @@ def _import_bundle(
         try:
             rollback_import(checkpoint, apply=True)
         except ExportImportError as rollback_exc:
-            raise ExportImportError("import failed and destination rollback also failed") from rollback_exc
+            raise ExportImportError(
+                "import failed and destination rollback also failed", owner_text=Msg("cli.bundle.not_restored")
+            ) from rollback_exc
         if isinstance(exc, ExportImportError):
+            exc.owner_text = exc.owner_text or Msg("cli.bundle.restored")  # what failed is in the message
             raise
-        raise ExportImportError("import failed; destination was restored") from exc
+        raise ExportImportError(
+            "import failed; destination was restored", owner_text=Msg("cli.bundle.restored")
+        ) from exc
 
     result.update(
         {"preview": False, "apply_required": False, "checkpoint": str(checkpoint), "read_back": True, "committed": True}

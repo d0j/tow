@@ -747,7 +747,7 @@ def test_export_refuses_mismatched_passphrases(monkeypatch, capsys, tmp_path):
     output = tmp_path / "x.towx"
 
     assert cli.main(["export", "--output", str(output), "--json"]) == 3
-    assert json.loads(capsys.readouterr().out) == {"ok": False, "error": "export passphrases do not match"}
+    assert json.loads(capsys.readouterr().out) == {"ok": False, "error": t("cli.bundle.passphrase_mismatch", "ru")}
     assert not output.exists()
 
 
@@ -761,7 +761,7 @@ def test_export_unexpected_failure_does_not_leak_details(monkeypatch, capsys, tm
 
     assert cli.main(["export", "--output", str(tmp_path / "x.towx"), "--json"]) == 3
     out = capsys.readouterr().out
-    assert json.loads(out) == {"ok": False, "error": "export failed safely"}
+    assert json.loads(out) == {"ok": False, "error": t("cli.bundle.export_failed", "ru")}
     assert "private" not in out
 
 
@@ -781,15 +781,37 @@ def test_export_then_import_preview_round_trip(monkeypatch, capsys, tmp_path):
     _passphrases(monkeypatch, "wrong passphrase!!")
     assert cli.main(["import", "--input", str(output), "--json"]) == 3
     refused = json.loads(capsys.readouterr().out)
-    assert refused["ok"] is False
-    assert refused["error"]
+    # In the owner's words (the test config says ru), with the technical cause for a report.
+    why = t("cli.bundle.wrong_passphrase", "ru")
+    assert refused == {
+        "ok": False,
+        "error": t("cli.bundle.import_refused", "ru", reason=why),
+        "detail": refused["detail"],
+    }
+    assert "wrong passphrase" in refused["detail"]
+
+    _passphrases(monkeypatch, "correct horse battery", "correct horse battery")
+    assert cli.main(["export", "--output", str(output), "--json"]) == 3  # never replaced without --force
+    assert json.loads(capsys.readouterr().out) == {
+        "ok": False,
+        "error": t("cli.bundle.output_exists", "ru", path=str(output)),
+    }
+
+    _passphrases(monkeypatch, "correct horse battery")
+    assert cli.main(["import", "--input", str(output), "--path-map", "D:/TV", "--json"]) == 3
+    assert json.loads(capsys.readouterr().out) == {"ok": False, "error": t("cli.bundle.path_map", "ru")}
+
+    (tmp_path / "not-a-backup.towx").write_bytes(b"plain text")
+    _passphrases(monkeypatch, "correct horse battery")
+    assert cli.main(["import", "--input", str(tmp_path / "not-a-backup.towx"), "--json"]) == 3
+    why = t("backup.restore_point.reason_not_tow", "ru")
+    assert json.loads(capsys.readouterr().out)["error"] == t("cli.bundle.import_refused", "ru", reason=why)
 
 
 def test_import_rollback_of_missing_checkpoint_is_a_guarded_error(capsys, tmp_path):
     assert cli.main(["import-rollback", "--checkpoint", str(tmp_path / "nope"), "--json"]) == 3
     result = json.loads(capsys.readouterr().out)
-    assert result["ok"] is False
-    assert "Traceback" not in result["error"]
+    assert result == {"ok": False, "error": t("cli.bundle.no_checkpoint", "ru", path=str(tmp_path / "nope"))}
 
 
 @pytest.mark.parametrize(("report_ok", "code"), [(True, 0), (False, 2)])

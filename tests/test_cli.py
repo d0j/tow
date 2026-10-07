@@ -178,9 +178,19 @@ def test_check_text_output_is_one_line_per_topic(monkeypatch, capsys):
 
 
 def test_export_refuses_a_short_passphrase(monkeypatch, capsys, tmp_path):
-    answers = iter(["short"])
-    monkeypatch.setattr("getpass.getpass", lambda _prompt: next(answers))
+    import json
+
+    from tow.config import load_config, save_config
+
+    cfg = load_config()
+    cfg["language"] = "en"  # the owner chose English: prompt and refusal follow
+    save_config(cfg)
+    prompts = []
+    monkeypatch.setattr("getpass.getpass", lambda prompt: prompts.append(prompt) or "short")
 
     assert cli.main(["export", "--output", str(tmp_path / "x.towx"), "--json"]) == 3
-    assert "at least 12 characters" in capsys.readouterr().out
+    assert prompts == [t("cli.bundle.passphrase", "en")]
+    refusal = json.loads(capsys.readouterr().out)
+    assert refusal == {"ok": False, "error": t("cli.bundle.passphrase_short", "en", length=12)}
+    assert "at least 12 characters" in refusal["error"]
     assert not (tmp_path / "x.towx").exists()

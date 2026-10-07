@@ -198,18 +198,39 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _guarded(args: argparse.Namespace, action: Callable[[], dict[str, Any]], failure: str) -> int:
-    """Print the result of a portable export/import step; never leak an unexpected error."""
+# Why a file was not imported, in the owner's words (tow.bundle.ExportImportError.reason). A
+# `tow export` file is protected by a passphrase, not by the master key.
+_IMPORT_REASONS = {
+    "not_tow": "backup.restore_point.reason_not_tow",
+    "other_key": "cli.bundle.wrong_passphrase",
+    "too_large": "backup.restore_point.reason_too_large",
+    "damaged": "backup.restore_point.reason_damaged",
+}
+
+
+def _guarded(
+    args: argparse.Namespace, action: Callable[[], dict[str, Any]], failure: str, *, importing: bool = False
+) -> int:
+    """Print the result of a portable export/import step in the owner's words (``failure``: the
+    catalog key said when nothing more precise is known); never leak an unexpected error.
+    A refusal keeps its technical cause as ``detail``."""
     from tow.bundle import ExportImportError
+    from tow.i18n import t
 
     try:
         _print(action(), args.json)
         return 0
     except ExportImportError as exc:
-        _print({"ok": False, "error": str(exc)}, getattr(args, "json", False))
+        if exc.owner_text is not None:
+            refusal = {"ok": False, "error": exc.owner_text.text()}
+        else:
+            why = t(_IMPORT_REASONS.get(exc.reason, _IMPORT_REASONS["damaged"]))
+            error = t("cli.bundle.import_refused", reason=why) if importing else t(failure)
+            refusal = {"ok": False, "error": error, "detail": str(exc)}
+        _print(refusal, getattr(args, "json", False))
         return 3
     except Exception:  # noqa: BLE001 - the CLI boundary: a fixed sentence, never a traceback that may hold a secret
-        _print({"ok": False, "error": failure}, getattr(args, "json", False))
+        _print({"ok": False, "error": t(failure)}, getattr(args, "json", False))
         return 3
 
 
@@ -351,35 +372,41 @@ def _cmd_export(args: argparse.Namespace) -> int:
     from getpass import getpass
 
     from tow.bundle import ExportImportError, export_bundle
+    from tow.errors import Msg
+    from tow.i18n import t
 
     def run() -> dict[str, Any]:
-        first = getpass("TOW export passphrase: ")
+        first = getpass(t("cli.bundle.passphrase"))
         if len(first) < MIN_EXPORT_PASSPHRASE:
-            raise ExportImportError(f"export passphrase must have at least {MIN_EXPORT_PASSPHRASE} characters")
-        second = getpass("Repeat TOW export passphrase: ")
+            raise ExportImportError(
+                f"export passphrase must have at least {MIN_EXPORT_PASSPHRASE} characters",
+                owner_text=Msg("cli.bundle.passphrase_short", length=MIN_EXPORT_PASSPHRASE),
+            )
+        second = getpass(t("cli.bundle.passphrase_repeat"))
         if first != second:
-            raise ExportImportError("export passphrases do not match")
+            raise ExportImportError("export passphrases do not match", owner_text=Msg("cli.bundle.passphrase_mismatch"))
         return export_bundle(args.output, first, include_log=args.include_log, overwrite=args.force)
 
-    return _guarded(args, run, "export failed safely")
+    return _guarded(args, run, "cli.bundle.export_failed")
 
 
 def _cmd_import(args: argparse.Namespace) -> int:
     from getpass import getpass
 
     from tow.bundle import import_bundle
+    from tow.i18n import t
 
     def run() -> dict[str, Any]:
-        passphrase = getpass("TOW export passphrase: ")
+        passphrase = getpass(t("cli.bundle.passphrase"))
         return import_bundle(args.input, passphrase, apply=args.apply, path_maps=args.path_map)
 
-    return _guarded(args, run, "import failed safely")
+    return _guarded(args, run, "cli.bundle.import_failed", importing=True)
 
 
 def _cmd_import_rollback(args: argparse.Namespace) -> int:
     from tow.bundle import rollback_import
 
-    return _guarded(args, lambda: rollback_import(args.checkpoint, apply=args.apply), "import rollback failed safely")
+    return _guarded(args, lambda: rollback_import(args.checkpoint, apply=args.apply), "cli.bundle.rollback_failed")
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:

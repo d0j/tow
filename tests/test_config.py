@@ -191,8 +191,13 @@ def test_the_bundle_check_and_the_loader_share_one_schema():
     assert validated(good)["allowed_save_roots"] == ["D:/media"]
     assert "interval_sec" not in good  # the caller's mapping is not filled in
     _validate_config_schema(good)
-    with pytest.raises(ExportImportError, match="allowed_save_roots must be a list of folders"):
+    with pytest.raises(ExportImportError, match="allowed_save_roots must be a list of folders") as caught:
         _validate_config_schema({"allowed_save_roots": "D:/media"})
+    # The log keeps the English text; `tow import` names the same setting in the owner's language.
+    from tow.i18n import t
+
+    reason = t("config_error.folder_list", "ru", key="allowed_save_roots")
+    assert caught.value.owner_text.text("ru") == t("cli.bundle.import_refused", "ru", reason=reason)
 
 
 def test_the_interval_and_the_port_have_one_default():
