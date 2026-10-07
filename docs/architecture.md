@@ -274,7 +274,7 @@ moved to the outbox in one locked write, so a stop between them loses nothing.
 | CSRF | Every POST/PUT/PATCH/DELETE must carry an `Origin` equal to the request's own origin. |
 | Page | CSP `default-src 'self'` (no inline script or style, no framing), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`. Flash messages travel as a server-side token, never as text in the URL. |
 | Local-only actions | Turning network access on or off and the first-start page: this computer only. |
-| Secrets at rest | `secrets.enc` (Fernet). The master key lives in `keys/`, never in data copies; night copies are signed with a key derived from it. Every start closes `keys/` and `data/` to other accounts (Windows: this account, SYSTEM and Administrators, nothing inherited; POSIX 0700) and warns when it cannot; `tow doctor` reports it. |
+| Secrets at rest | `secrets.enc` (Fernet). The master key lives in `keys/`, never in data copies; night copies are signed with a key derived from it. Every start closes the install root (the code TOW runs), `keys/` and `data/` to other accounts (Windows: this account, SYSTEM and Administrators, nothing inherited; POSIX 0700, the root only when world-writable) and warns when it cannot; `tow doctor` reports it. |
 | Outbound requests | Site addresses entered in the web UI that resolve to private, loopback or CGNAT ranges are refused (SSRF); download redirects may not leave the site's configured hosts. |
 | Folders | Downloads and backups may not go into system or profile folders on any OS (8.3 names, trailing dots and links included). |
 | Torrents | TOW only changes torrents tagged `tow`; a client add counts only after read-back. |
@@ -327,12 +327,15 @@ Stable names other modules build on.
   - `bring_to_front(pid)` — Windows only; no-op elsewhere;
   - `protected_folders()` — folders a download or backup must never go to;
   - `folder_shared(path)` → bool | None: other accounts of this computer may open it;
-    `make_private(path)` → bool: only this account (Windows: and SYSTEM, Administrators) keeps
-    access, only for a folder this account owns, read back;
+    `root_shared(path)` → bool | None: the same question for the install root (Linux, macOS:
+    every account may write in it); `make_private(path, created=False)` → bool: only this
+    account (Windows: and SYSTEM, Administrators) keeps access, only for a folder this account
+    owns or this process has just created, read back;
   - `open_url(url)` → bool;
   - `ui_language()` → the system's language tag (`ru-RU`) for commands typed in a terminal, `None` when unknown.
 - `private_folders(folders, repair=True)` — the folders that other accounts can still open,
-  after making ours private; never raises (start-up and `tow doctor`).
+  after making ours private; `private_root(root, repair=True)` — whether other accounts can
+  still change the install root; both never raise (start-up and `tow doctor`).
 - `is_plain_file(info)`, `is_plain_dir(info)`, `is_link_like(info)` — an `lstat` result that is a
   regular file or folder and no link, or one that is a link or a Windows reparse point (junction,
   mount point). Every such check goes through them; only `update_worker.py` and

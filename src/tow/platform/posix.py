@@ -522,6 +522,13 @@ class PosixBackend:
         except OSError:
             return None
 
+    def root_shared(self, path: Path) -> bool | None:
+        """Every account may write in the install root (a group permission may be deliberate)."""
+        try:
+            return bool(path.stat().st_mode & 0o002)
+        except OSError:
+            return None
+
     def make_private(self, path: Path, *, created: bool = False) -> bool:
         """``path`` becomes 0700 when this account owns it (what this process ``created`` it
         does); True when read back private."""

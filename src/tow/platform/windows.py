@@ -6,7 +6,8 @@
   41 / 6008 - it went down without a clean shutdown);
 - processes: hidden, detached starts; the whole tree stopped with taskkill;
 - Edge or Chrome for the browser sign-in; Windows, program and AppData folders;
-- keys/ and data/ for this account, SYSTEM and Administrators only (icacls, read back).
+- the install folder, keys/ and data/ for this account, SYSTEM and Administrators only (icacls,
+  read back).
 """
 
 from __future__ import annotations
@@ -688,6 +689,10 @@ class WindowsBackend:
         return protected_folders()
 
     def folder_shared(self, path: Path) -> bool | None:
+        return folder_shared(path)
+
+    def root_shared(self, path: Path) -> bool | None:
+        """The install root is closed as keys/ and data/ are: anyone else who may open it."""
         return folder_shared(path)
 
     def make_private(self, path: Path, *, created: bool = False) -> bool:

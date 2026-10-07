@@ -57,9 +57,22 @@ def _inventory(cfg: dict[str, Any], secrets: dict[str, Any], state: dict[str, An
         "qbit": None,
         "probes": [],
         "autostart": _autostart(),
+        "open_root": _open_root(),
         "open_folders": _open_folders(),
         "ok": True,
     }
+
+
+def _open_root() -> str:
+    """The install folder when other accounts of this computer can change it, else ""."""
+    from tow.paths import root
+    from tow.platform import private_root
+
+    try:
+        install = root()
+    except OSError, RuntimeError:
+        return ""
+    return str(install) if private_root(install, repair=False) else ""
 
 
 def _open_folders() -> list[str]:
@@ -212,6 +225,8 @@ def doctor_text(report: dict[str, Any] | None = None) -> str:
         t("doctor_report.messengers", lang, value=yes_no(r.get("notify_set"))),
         t("doctor_report.topics", lang, value=r.get("topics")),
     ]
+    if r.get("open_root"):
+        lines.append(t("doctor_report.open_root", lang, value=r["open_root"]))
     if r.get("open_folders"):
         lines.append(t("doctor_report.open_folders", lang, value=", ".join(map(str, r["open_folders"]))))
     for p in r.get("probes") or []:

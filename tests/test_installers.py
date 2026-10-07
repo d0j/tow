@@ -241,13 +241,21 @@ def test_install_ps1_checks_the_zip_and_never_overwrites():
         assert option in text
 
 
-def test_install_ps1_closes_keys_and_data_to_other_accounts_before_the_first_start():
+def test_install_ps1_closes_the_install_folder_before_anything_is_written_in_it():
     text = PS1.read_text(encoding="utf-8")
     grant = "/inheritance:r /grant:r \"*${sid}:(OI)(CI)F\" '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F'"
     assert grant in text
-    assert "foreach ($name in @('keys', 'data'))" in text
     assert "Join-Path $env:SystemRoot 'System32\\icacls.exe'" in text
-    assert text.index(grant) < text.index("& (Join-Path $Dir 'Start TOW.cmd')")
+    # Only a folder this run created or this account owns, never through a link.
+    assert "GetOwner([Security.Principal.SecurityIdentifier])" in text
+    assert "if (-not $New -and $owner -ne $sid) { return $false }" in text
+    assert "[IO.FileAttributes]::ReparsePoint) { return $false }" in text
+    close_root = text.index("$rootClosed = Close-Folder $Dir $created")
+    assert close_root < text.index("Invoke-WebRequest") < text.index("ExtractToDirectory")
+    # keys\ and data\ on their own when the folder stays open (another account's).
+    assert "foreach ($name in @('keys', 'data'))" in text
+    assert "if (-not (Close-Folder $folder $new))" in text
+    assert text.index("Close-Folder $folder $new") < text.index("& (Join-Path $Dir 'Start TOW.cmd')")
 
 
 @pytest.mark.allow_system

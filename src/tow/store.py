@@ -673,22 +673,31 @@ def install_folders() -> list[Path]:
 
 
 def protect_install_folders() -> list[Path]:
-    """At start: keys/ and data/ of this account become private when other accounts can open
-    them (an older install, an install in a drive root on Windows). A folder that stays open
-    (another account's, or the change failed) is named on stderr and returned; the start goes
-    on. `tow doctor` reports it too."""
+    """At start: the install root, keys/ and data/ of this account become private when other
+    accounts can get in (an older install, an install in a drive root on Windows).
+
+    The root first (``tow.platform.private_root``): through it other accounts could change the
+    code TOW runs and so read the master key. keys/ and data/ are closed on their own too, so
+    they stay private when the root cannot be changed (another account owns it) or they live
+    elsewhere. A folder that stays open (another account's, or the change failed) is named on
+    stderr and returned; the start goes on. `tow doctor` reports it too."""
     import sys
 
     from tow.i18n import t
-    from tow.platform import private_folders
+    from tow.paths import root
+    from tow.platform import private_folders, private_root
 
     try:
-        still_open = private_folders(install_folders())
+        install, folders = root(), install_folders()
     except OSError, RuntimeError:  # no install located: the command reports that itself
         return []
+    root_open = private_root(install)
+    if root_open:
+        print(t("cli.root_shared", path=str(install)), file=sys.stderr)
+    still_open = private_folders(folders)
     for folder in still_open:
         print(t("cli.folder_shared", path=str(folder)), file=sys.stderr)
-    return still_open
+    return [install, *still_open] if root_open else still_open
 
 
 def _key_folder(path: Path) -> None:

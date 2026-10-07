@@ -273,6 +273,92 @@ def test_doctor_warns_when_other_accounts_can_open_the_folders(tmp_path):
         assert doctor_report(probe=False)["open_folders"] == []
 
 
+class InstallBackend(FolderBackend):
+    """Also asked about the install root; a closed folder closes what it holds (inheritance)."""
+
+    def root_shared(self, path: Path) -> bool | None:
+        return path in self.shared
+
+    def make_private(self, path: Path, *, created: bool = False) -> bool:
+        if not super().make_private(path, created=created):
+            return False
+        self.shared = {folder for folder in self.shared if not folder.is_relative_to(path)}
+        return True
+
+
+@pytest.fixture
+def install(tmp_path, monkeypatch):
+    """A runtime install in a drive root (C:\\TOW): app/, runtime/, keys/ and data/ inside."""
+    root = tmp_path / "TOW"
+    for name in ("app", "runtime", "keys", "data"):
+        (root / name).mkdir(parents=True)
+    monkeypatch.setenv("TOW_ROOT", str(root))
+    monkeypatch.setenv("TOW_HOME", str(root / "data"))
+    return root
+
+
+def test_every_start_closes_the_install_root_and_with_it_what_it_holds(install, capsys):
+    from tow import cli
+
+    everything = {install, *(install / name for name in ("app", "runtime", "keys", "data"))}
+    backend = InstallBackend(shared=everything, fixable={install})
+    with platform.use(backend):  # type: ignore[arg-type]
+        assert cli.main(["version"]) == 0
+    assert backend.repaired == [install]  # keys/ and data/ inherit from it
+    assert backend.shared == set()
+    assert str(install) not in capsys.readouterr().err
+
+
+def test_a_root_of_another_account_stays_and_keys_and_data_are_still_closed(install, capsys):
+    from tow.i18n import t
+    from tow.store import protect_install_folders
+
+    keys, data = install / "keys", install / "data"
+    backend = InstallBackend(shared={install, keys, data}, fixable={keys, data})
+    with platform.use(backend):  # type: ignore[arg-type]
+        assert protect_install_folders() == [install]
+    assert backend.repaired == [install, keys, data]
+    err = capsys.readouterr().err
+    assert t("cli.root_shared", path=str(install)) in err
+    assert str(keys) not in err
+
+
+def test_doctor_reports_an_install_root_others_can_change(install):
+    from tow.doctor import doctor_report, doctor_text
+    from tow.i18n import t
+
+    backend = InstallBackend(shared={install}, fixable={install})
+    with platform.use(backend):  # type: ignore[arg-type]
+        report = doctor_report(probe=False)
+    assert backend.repaired == []  # it only asks
+    assert report["open_root"] == str(install)
+    assert t("doctor_report.open_root", "ru", value=str(install)) in doctor_text(report)
+    with platform.use(InstallBackend(shared=set(), fixable=set())):  # type: ignore[arg-type]
+        assert doctor_report(probe=False)["open_root"] == ""
+
+
+def test_a_drive_root_or_a_link_is_never_taken_for_the_install_root(tmp_path):
+    drive = Path(tmp_path.anchor)
+    backend = InstallBackend(shared={drive, tmp_path}, fixable={drive, tmp_path})
+    with platform.use(backend):  # type: ignore[arg-type]
+        assert platform.private_root(drive) is False
+        assert platform.private_root(tmp_path / "missing") is False
+    assert backend.repaired == []
+
+
+@pytest.mark.skipif(platform.this_os() == "windows", reason="POSIX permissions")
+@pytest.mark.parametrize(("mode", "closed"), [(0o777, True), (0o775, False), (0o755, False)])
+def test_posix_install_root_is_closed_only_when_every_account_may_write_in_it(tmp_path, mode, closed):
+    from tow.platform.posix import PosixBackend
+
+    root = tmp_path / "TOW"
+    root.mkdir()
+    root.chmod(mode)
+    with platform.use(PosixBackend("linux")):
+        assert platform.private_root(root) is False
+    assert root.stat().st_mode & 0o777 == (0o700 if closed else mode)
+
+
 @pytest.mark.skipif(platform.this_os() == "windows", reason="POSIX permissions")
 def test_posix_folder_of_this_account_becomes_0700(tmp_path):
     from tow.platform.posix import PosixBackend

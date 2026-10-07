@@ -84,13 +84,17 @@ task XML, the browser bundle routes).
 Permissions (1.21): at the same place `tow.platform.use_private_files()` sets umask 077 on Linux
 and macOS, so data/, logs, temporary files and night copies a TOW process creates are readable by
 the owner's account only (child processes inherit it). Every start then runs
-`tow.platform.private_folders()` on `keys/` and `data/`: a folder this account owns that other
-accounts can open is closed - on Windows its inherited permissions are replaced by this account,
-SYSTEM and Administrators (`icacls /inheritance:r /grant:r`, so an install in `C:\TOW` no longer
-inherits "Authenticated Users: modify" from the drive root), on Linux and macOS it becomes 0700 -
-and read back. A folder that stays open (another account owns it, the change failed) is named on
-stderr and in `tow doctor`; the start goes on. A new key folder is closed the same way, and
-`install.ps1` closes `keys\` and `data\` when it installs.
+`tow.platform.private_root()` on the install root and `tow.platform.private_folders()` on `keys/`
+and `data/`: a folder this account owns that other accounts can get into is closed - on Windows
+its inherited permissions are replaced by this account, SYSTEM and Administrators (`icacls
+/inheritance:r /grant:r`, so an install in `C:\TOW` no longer inherits "Authenticated Users:
+modify" from the drive root, and `app\`, `runtime\`, `config.yaml` and the start files inherit
+that from the root), on Linux and macOS it becomes 0700 (the root only when every account may
+write in it, so a folder shared with a group on purpose stays) - and read back. A folder owned
+by another account, also by Administrators, is never changed. A folder that stays open is named
+on stderr and in `tow doctor`; the start goes on. A new key folder is closed the same way, and
+`install.ps1` closes the install folder before it unpacks anything into it (when it creates the
+folder or this account owns it; otherwise `keys\` and `data\` alone).
 
 Python and caches (built, in the launchers and, since 1.21, `update.py`'s `launcher_env`): for a
 runtime install `UV_PYTHON_INSTALL_DIR=<root>/runtime/python`,
