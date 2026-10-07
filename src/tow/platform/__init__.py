@@ -72,7 +72,7 @@ class Backend(Protocol):
 
     def folder_shared(self, path: Path) -> bool | None: ...
 
-    def make_private(self, path: Path) -> bool: ...
+    def make_private(self, path: Path, *, created: bool = False) -> bool: ...
 
     def open_url(self, url: str) -> bool: ...
 
@@ -186,13 +186,14 @@ def use_private_files() -> bool:
     return True
 
 
-def private_folders(folders: Iterable[Path], *, repair: bool = True) -> list[Path]:
+def private_folders(folders: Iterable[Path], *, repair: bool = True, created: bool = False) -> list[Path]:
     """The folders among ``folders`` that other accounts of this computer can still open.
 
-    With ``repair`` such a folder is first made private when this account owns it: on Windows
-    only this account, SYSTEM and Administrators keep access (an install in a drive root
-    inherits "Authenticated Users: modify"), on Linux and macOS it becomes 0700. Missing
-    folders, links and unknown answers are skipped; never raises.
+    With ``repair`` such a folder is first made private when this account owns it (or this
+    process has just ``created`` it): on Windows only this account, SYSTEM and Administrators
+    keep access (an install in a drive root inherits "Authenticated Users: modify"), on Linux
+    and macOS it becomes 0700. Missing folders, links and unknown answers are skipped; never
+    raises.
     """
     backend = current()
     still_open: list[Path] = []
@@ -202,7 +203,7 @@ def private_folders(folders: Iterable[Path], *, repair: bool = True) -> list[Pat
                 continue
             if backend.folder_shared(folder) is not True:
                 continue
-            if repair and backend.make_private(folder):
+            if repair and backend.make_private(folder, created=created):
                 continue
         except AttributeError, OSError, ValueError:  # a backend without the question: unknown
             continue

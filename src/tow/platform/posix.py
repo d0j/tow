@@ -522,8 +522,10 @@ class PosixBackend:
         except OSError:
             return None
 
-    def make_private(self, path: Path) -> bool:
-        """``path`` becomes 0700 when this account owns it; True when read back private."""
+    def make_private(self, path: Path, *, created: bool = False) -> bool:
+        """``path`` becomes 0700 when this account owns it (what this process ``created`` it
+        does); True when read back private."""
+        del created
         own_uid = getattr(os, "geteuid", None)
         try:
             if own_uid is None or path.stat().st_uid != own_uid():
