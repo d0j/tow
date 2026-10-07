@@ -38,8 +38,11 @@
       <summary>
         <span id="settings-clients-title" class="settings-summary-title">{{ t('settings.clients.title') }}</span>
         {#- What is set up, not how many cards there are: "1 client" read as working when it was not. -#}
+        {#- The header's verdict on the client (header_health), as on Home's first steps: green
+            answers, red does not, grey not asked yet. -#}
         {% set ready = clients | selectattr('host') | list %}
-        <span class="pill {{ 'warn' if not ready else ('ok' if hh.qbit_tone == 'ok' else 'mut') }}">{% if not ready %}{{ t('settings.clients.not_configured') }}{% elif ready|length == 1 %}{{ ready[0].title }}{% else %}{{ t('settings.clients.count', n=ready|length) }}{% endif %}</span>
+        {% set ready_name = (ready[0].title if ready|length == 1 else t('settings.clients.count', n=ready|length)) if ready else '' %}
+        <span class="pill {{ 'warn' if not ready else hh.qbit_tone }}">{% if not ready %}{{ t('settings.clients.not_configured') }}{% elif hh.qbit_tone == 'bad' %}{{ t('settings.clients.pill_down', name=ready_name) }}{% else %}{{ ready_name }}{% endif %}</span>
       </summary>
       <div class="settings-panel">
         <div class="integration-list">

@@ -380,6 +380,11 @@ def test_get_started_and_the_header_agree_on_the_client(client, health, pill, he
 
     assert pill in page[page.index('class="empty-state first-steps"') :]
     assert re.search(rf'<span class="trk {header}" title="[^"]*">qBit', page.split('class="hdr-svc"', 1)[1])
+    # QA 1.24.1: Settings → Torrent clients stayed grey while the header was red.
+    settings = client.get("/settings").text
+    clients = settings[settings.index('id="settings-clients-title"') :]
+    shown = {"mut": "qBittorrent", "bad": "qBittorrent — не отвечает", "ok": "qBittorrent"}[header]
+    assert re.match(rf'[^<]*</span>\s*<span class="pill {header}">{shown}</span>', clients.split(">", 1)[1])
 
 
 def test_home_with_topics_has_no_checklist(client):

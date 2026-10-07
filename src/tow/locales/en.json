@@ -1503,7 +1503,8 @@
       "empty": "No clients available.",
       "add_label": "Add a torrent client",
       "add": "Add",
-      "supported": "Supported: {names}. You can connect several clients at once."
+      "supported": "Supported: {names}. You can connect several clients at once.",
+      "pill_down": "{name} — not answering"
     },
     "notify": {
       "q": "bots tg notifications channels messengers",
