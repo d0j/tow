@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from helpers import flash_of, open_network, shown, wait_for_check_job
 
+from tow.check import reconcile as check_reconcile
 from tow.check import rows as check_rows
 from tow.clock import iso_now
 from tow.log import log_event, read_events
@@ -2426,7 +2427,7 @@ def test_a_successful_check_records_when_it_last_worked(monkeypatch):
         lambda topic, run: (check_rows.stamp_result(topic, {"ok": True}), {"id": topic["id"], "ok": True})[1],
     )
     monkeypatch.setattr(check.client_factory, "from_secrets", lambda *a, **k: SimpleNamespace(ping=lambda: "ok"))
-    monkeypatch.setattr(check, "reconcile_topic", lambda *a, **k: {"events": []})
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", lambda *a, **k: {"events": []})
 
     result = check.run_check(apply=True, notify=False, how="test")
 
