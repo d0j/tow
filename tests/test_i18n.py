@@ -410,6 +410,29 @@ def test_bad_language_setting_is_refused():
         load_config()
 
 
+def test_an_unread_language_setting_is_told_once_in_the_owners_words(monkeypatch, caplog, capsys):
+    # QA: every command with a broken config.yaml printed "language setting not read (automatic
+    # is used): ConfigError" - English, a class name, and again whenever the file changed.
+    from tow import platform
+    from tow.cli import main
+    from tow.config import ConfigError, load_config
+    from tow.paths import config_path
+
+    monkeypatch.setattr(i18n, "_TOLD", set())
+    monkeypatch.setattr(i18n, "_CURRENT", i18n.ContextVar("test_language", default=None))
+    monkeypatch.setattr(platform.current(), "ui_language", lambda: "ru-RU")  # the system's: Russian
+    i18n._configured_language_of.cache_clear()
+    config_path().write_text("language: ru\nport: [broken\n", encoding="utf-8")
+    with pytest.raises(ConfigError) as broken:
+        load_config()
+    assert main(["version"]) == 0
+    config_path().write_text("language: ru\nport: [still broken\n", encoding="utf-8")
+    assert i18n._configured_language() == i18n.AUTO
+    told = [entry.getMessage() for entry in caplog.records if entry.name == "tow.i18n"]
+    assert told == [i18n.translate("config_error.language_unread", "ru", error=broken.value.text("ru"))]
+    assert "ConfigError" not in capsys.readouterr().err
+
+
 # --- a damaged language file never breaks TOW ------------------------------------------------
 
 

@@ -42,6 +42,7 @@
     "backup_time": "config.yaml: backup_time должно быть в виде «03:30»",
     "heartbeat_url": "config.yaml: heartbeat_url должно быть адресом https:// (например, от healthchecks.io)",
     "language": "config.yaml: language должно быть «auto» или кодом языка, например en или ru",
+    "language_unread": "Язык из config.yaml не прочитан, TOW выбирает его сам, пока файл не исправлен: {error}",
     "quiet_hours": "config.yaml: quiet_hours должно быть в виде «23-8» (часы, местное время)",
     "site_text": "config.yaml: trackers.{site}.{key} должно быть текстом",
     "site_true_false": "config.yaml: trackers.{site}.{key} должно быть true или false",
