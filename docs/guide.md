@@ -277,6 +277,7 @@ The left column is the text TOW shows (on Home, in a row, in a message or on a p
 | no site is set up for this link | The link belongs to an unknown site. | **Sites → +**, paste the link. |
 | the torrent was removed from the client | The torrent is gone from the client. | Check again to add it back, or **Remove from TOW**. |
 | the torrent in the client was not added by TOW — … | TOW will not change torrents it did not add. | Change it in the client, or remove it there and let TOW add it. |
+| the torrent is already in the client without the label tow — … · the torrent was added (paused), but the client did not keep the label tow on it — … | The torrent has no `tow` mark (for example the client could not set it while adding), so TOW cannot manage it. | Give it the label (tag) `tow` in the client, or remove it there and let TOW add it again. |
 | another check is running right now; press “Check” again in a minute | One check at a time. | Wait. |
 | Scheduled checks have not run since … | TOW was not running, or checks keep failing. | `tow autostart status`; look at `data/logs/run.log`. |
 | The last scheduled check is blocked: the secrets store is unavailable. · The master key is missing … | The master key is missing or wrong. | `tow keys status`; put back `keys/master.key` from your copy, or `tow keys adopt --from FILE`. |
