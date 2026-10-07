@@ -41,8 +41,60 @@ def test_who_besides_this_account_may_open_a_folder(sddl, others):
 
 def test_the_owner_of_a_folder_is_read_from_its_permissions():
     assert windows.sddl_owner(DRIVE_ROOT) == USER
-    assert windows.sddl_owner("O:DAD:PAI(A;;FA;;;SY)") == "DA"
+    assert windows.sddl_owner("O:BAD:PAI(A;;FA;;;SY)") == "S-1-5-32-544"
     assert windows.sddl_owner("garbage") is None
+
+
+BUILTIN_ADMIN = "S-1-5-21-1000000001-1000000002-1000000003-500"
+# What Windows writes for a folder only the built-in Administrator (RID 500) may open.
+ALIASED = "O:LAD:PAI(A;OICI;FA;;;LA)(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
+
+
+def test_an_account_written_as_an_alias_is_the_same_account(monkeypatch):
+    monkeypatch.setattr(windows, "_alias_sid", {"LA": BUILTIN_ADMIN}.get)
+    assert windows.sddl_owner(ALIASED) == BUILTIN_ADMIN
+    assert windows.sddl_others(ALIASED, BUILTIN_ADMIN) is False
+    assert windows.sddl_others(ALIASED, USER) is True
+    assert windows.sddl_others(ALIASED.replace("(A;OICI;FA;;;SY)", "(A;OICI;FR;;;LG)"), BUILTIN_ADMIN) is True
+    assert windows.sddl_others(f"O:{USER}D:PAI(A;OICI;FA;;;{USER.lower()})(A;;FA;;;S-1-5-18)", USER) is False
+
+
+def test_a_private_folder_of_an_aliased_account_is_left_alone(fake_windows, monkeypatch):
+    folder, acl, calls = fake_windows
+    monkeypatch.setattr(windows, "user_sid", lambda: BUILTIN_ADMIN)
+    monkeypatch.setattr(windows, "_alias_sid", {"LA": BUILTIN_ADMIN}.get)
+    acl["sddl"] = ALIASED
+    assert windows.folder_shared(folder) is False
+    acl["sddl"] = "O:LAD:AI(A;OICIID;FA;;;BA)(A;OICIID;FA;;;SY)(A;ID;0x1301bf;;;AU)"
+    monkeypatch.setattr(windows, "_run", lambda args, timeout=20: calls.append(args) or acl.update(sddl=ALIASED) or "")
+    assert windows.make_private(folder) is True  # its own folder: the owner matches, read back private
+    assert len(calls) == 1
+
+
+@pytest.mark.skipif(platform.this_os() != "windows", reason="Windows security descriptors")
+def test_windows_writes_the_builtin_administrator_as_an_alias_and_it_still_matches():
+    import ctypes
+    from ctypes import wintypes
+
+    machine = windows.sid_text("LA").rsplit("-", 1)[0]
+    assert machine.startswith("S-1-5-21-")
+    advapi32 = ctypes.WinDLL("advapi32")
+    for rid in (500, 501, 1001):
+        sid = f"{machine}-{rid}"
+        descriptor, size = ctypes.c_void_p(), wintypes.ULONG()
+        source = f"O:{sid}D:PAI(A;OICI;FA;;;{sid})(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
+        assert advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            source, 1, ctypes.byref(descriptor), ctypes.byref(size)
+        )
+        text = wintypes.LPWSTR()
+        assert advapi32.ConvertSecurityDescriptorToStringSecurityDescriptorW(
+            descriptor, 1, 0x1 | 0x4, ctypes.byref(text), None
+        )
+        written = text.value
+        ctypes.windll.kernel32.LocalFree(text)
+        ctypes.windll.kernel32.LocalFree(descriptor)
+        assert windows.sddl_owner(written) == sid, written
+        assert windows.sddl_others(written, sid) is False, written
 
 
 @pytest.fixture
