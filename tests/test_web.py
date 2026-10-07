@@ -1703,6 +1703,7 @@ def test_settings_supports_distinct_client_forms_and_ping(monkeypatch):
     monkeypatch.setattr(
         "tow.clients.factory.from_secrets", lambda cfg, secrets, client_id=None: seen.append(client_id) or FakeClient()
     )
+    monkeypatch.setattr("tow.web.services.client_answers", lambda _client_id: True)
     response = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
         "/settings/client/ping", data={"client_id": "backup"}, follow_redirects=False
     )

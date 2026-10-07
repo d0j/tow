@@ -571,7 +571,12 @@
   },
   "common": {
     "save": "Save",
-    "details": "Details"
+    "details": "Details",
+    "busy": {
+      "checking": "Checking…",
+      "copying": "Making a copy…",
+      "restoring": "Restoring…"
+    }
   },
   "doctor": {
     "title": "Diagnostics",

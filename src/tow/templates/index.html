@@ -93,7 +93,7 @@
     <input id="tracker-password-{{ credential_prompt.id }}" name="password" type="password" autocomplete="current-password" required>
     <p class="sub">{{ t('home.auth.password_note') }}</p>
     <div class="actions">
-      <button type="submit">{{ t('home.auth.save_retry') }}</button>
+      <button type="submit" data-busy-label="{{ t('common.busy.checking') }}">{{ t('home.auth.save_retry') }}</button>
       <a class="btn ghost" href="/">{{ t('home.cancel') }}</a>
     </div>
   </form>

@@ -7,7 +7,7 @@
   {%- if error_words != topic.last_error %}<details class="technical-details raw-error"><summary>{{ t('common.details') }}</summary><code>{{ topic.last_error }}</code></details>{% endif %}{% endif %}
   {% if topic.replaces_revision %}
   <form method="post" action="/topics/{{ topic.id|urlencode }}/replace-revision" data-confirm="{{ t('home.topic.replace_confirm') }}">
-    <button type="submit">{{ t('home.topic.replace') }}</button>
+    <button type="submit" data-busy-label="{{ t('common.busy.checking') }}">{{ t('home.topic.replace') }}</button>
   </form>
   {% endif %}
   {% if topic.selection_dirty %}{% set sel_text = t('home.topic.sel_dirty') %}{% elif topic.selection_verified is sameas false %}{% set sel_text = t('home.topic.sel_unverified') %}{% elif topic.selected_file_count is defined %}{% set sel_text = t('home.topic.sel_count', selected=topic.selected_file_count, total=topic.torrent_file_count or '?') %}{% elif topic.selection and topic.selection.mode != 'all' %}{% set sel_text = t('home.topic.sel_pending') %}{% else %}{% set sel_text = t('home.topic.sel_all') %}{% endif %}
