@@ -1823,7 +1823,7 @@
     "held_by_hand": "TOW was not started: the previous code or its data could not be put back completely, and it does not run on a mix. Put data and config.yaml back from {snapshot}, check out {previous}, then start TOW (tow run)",
     "ok": "TOW {version} is running and answers on 127.0.0.1:{port}",
     "aborted": "update aborted: {error}",
-    "downloading": "downloading {url}",
+    "downloading": "downloading {file} ({url})",
     "download_failed": "the download failed ({url}): {error}; nothing was updated",
     "no_release": "{ref} is not a release of TOW (nothing at {url}); nothing was updated",
     "not_verified": "the release has no checksum for the source archive; nothing was updated",
