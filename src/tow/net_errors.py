@@ -9,6 +9,8 @@ reset - and keep the raw text under a "Details" toggle.
 
 from __future__ import annotations
 
+import re
+
 from tow.i18n import t
 
 # Where the technical part of a message starts: an OS error, a requests/urllib3 repr.
@@ -79,15 +81,34 @@ def reason(raw: str) -> str | None:
     return None
 
 
+# English sentences a client library puts before its technical part: said by the client's name
+# (a Russian page showed "Failed to connect to qBittorrent. Connection Error: …").
+_LIBRARY_HEADS = (
+    ("Failed to connect to qBittorrent. Connection Error", "qBittorrent"),
+    ("Failed to connect to qBittorrent", "qBittorrent"),
+)
+# A library's own words in brackets inside a catalog text: "no connection (timed out)".
+_BRACKETED = re.compile(r"\(([\x20-\x7e]{1,160})\)")
+
+
+def _bracketed_words(match: re.Match[str], lang: str | None) -> str:
+    kind = reason(match.group(1))
+    return f"({t(_KEYS[kind], lang)})" if kind else match.group(0)
+
+
 def humanize(text: str, lang: str | None = None) -> str:
     """``text`` with its technical part said in words ("torrent client: connection refused");
-    a text without one comes back unchanged."""
+    a text without one comes back unchanged, but for a known reason in brackets."""
     value = str(text or "")
     starts = [at for marker in _MARKERS if (at := value.find(marker)) != -1]
     if not starts:
-        return value
+        return _BRACKETED.sub(lambda match: _bracketed_words(match, lang), value)
     at = min(starts)
-    head = value[:at].rstrip(" :(—–-,;")
+    head = value[:at]
+    for english, name in _LIBRARY_HEADS:
+        head = head.replace(english, name)
+    parts = [part for part in head.rstrip(" :(—–-,;.").split(": ") if part]
+    head = ": ".join(part for index, part in enumerate(parts) if not index or part != parts[index - 1])
     kind = reason(value[at:])
     phrase = t(_KEYS[kind] if kind else "doctor.reason.network", lang)
     return f"{head}: {phrase}" if head else phrase
