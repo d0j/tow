@@ -42,7 +42,12 @@
     "backup_time": "config.yaml: backup_time должно быть в виде «03:30»",
     "heartbeat_url": "config.yaml: heartbeat_url должно быть адресом https:// (например, от healthchecks.io)",
     "language": "config.yaml: language должно быть «auto» или кодом языка, например en или ru",
-    "quiet_hours": "config.yaml: quiet_hours должно быть в виде «23-8» (часы, местное время)"
+    "quiet_hours": "config.yaml: quiet_hours должно быть в виде «23-8» (часы, местное время)",
+    "site_text": "config.yaml: trackers.{site}.{key} должно быть текстом",
+    "site_true_false": "config.yaml: trackers.{site}.{key} должно быть true или false",
+    "site_number": "config.yaml: trackers.{site}.{key} должно быть целым числом",
+    "site_text_list": "config.yaml: trackers.{site}.{key} должно быть списком строк",
+    "site_login_form": "config.yaml: в trackers.{site}.login_form допустимы только user_field и pw_field (текст) и extra (имена и значения — текст)"
   },
   "monitorrent": {
     "missing": "Файл базы Monitorrent не найден.",

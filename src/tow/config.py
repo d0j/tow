@@ -213,13 +213,47 @@ def path_safe_name(name: object) -> bool:
     return text not in {".", ".."} and "/" not in text and "\\" not in text
 
 
+# The type of each setting of a site TOW reads (tow.trackers.generic); empty (null) means "not set".
+_SITE_TEXT = ("title", "url_regex", "download_href_regex", "topic_path", "download_path", "login_path", "search_path")
+_SITE_FLAGS = ("browser_auth", "page_download")
+_SITE_NUMBERS = ("fail_threshold", "cooldown_sec")
+_LOGIN_FORM_KEYS = {"user_field", "pw_field", "extra"}
+
+
+def _texts(value: object) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _login_form(value: object) -> bool:
+    if value is None:
+        return True
+    if not isinstance(value, dict) or set(value) - _LOGIN_FORM_KEYS:
+        return False
+    extra = value.get("extra")
+    return all(value.get(key) is None or isinstance(value[key], str) for key in ("user_field", "pw_field")) and (
+        extra is None
+        or (isinstance(extra, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in extra.items()))
+    )
+
+
 def _site_spec(name: object, spec: dict[str, Any]) -> None:
     if not path_safe_name(name):
         raise ConfigError("config_error.site_name")
+    site = str(name)
     for key in ("fetch_hosts", "login_hosts"):
         hosts = spec.get(key)
         if hosts is not None and (not isinstance(hosts, list) or not all(web_address(host) for host in hosts)):
-            raise ConfigError("config_error.site_hosts", site=str(name), key=key)
+            raise ConfigError("config_error.site_hosts", site=site, key=key)
+    for key, fits, code in (
+        *((key, lambda value: isinstance(value, str), "config_error.site_text") for key in _SITE_TEXT),
+        *((key, lambda value: isinstance(value, bool), "config_error.site_true_false") for key in _SITE_FLAGS),
+        *((key, lambda value: type(value) is int, "config_error.site_number") for key in _SITE_NUMBERS),
+        ("cookie_names", _texts, "config_error.site_text_list"),
+    ):
+        if spec.get(key) is not None and not fits(spec[key]):
+            raise ConfigError(code, site=site, key=key)
+    if not _login_form(spec.get("login_form")):
+        raise ConfigError("config_error.site_login_form", site=site)
 
 
 def _validate(data: dict[str, Any]) -> None:
