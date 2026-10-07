@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import ctypes
+import functools
 import json
 import ntpath
 import os
@@ -409,9 +410,30 @@ _TOKEN_USER = 1
 _SYSTEM_SID = "S-1-5-18"
 _ADMINISTRATORS_SID = "S-1-5-32-544"
 # Who besides this account may be granted a private folder: SYSTEM and Administrators, and the
-# placeholders Windows resolves to the owner itself (CREATOR OWNER, OWNER RIGHTS). SDDL aliases.
-_PRIVATE_TRUSTEES = frozenset({"SY", "BA", "CO", "OW", _SYSTEM_SID, _ADMINISTRATORS_SID})
+# placeholders Windows resolves to the owner itself (CREATOR OWNER, OWNER RIGHTS).
+_PRIVATE_TRUSTEES = frozenset({_SYSTEM_SID, _ADMINISTRATORS_SID, "S-1-3-0", "S-1-3-4"})
 _ALLOW_ACES = frozenset({"A", "OA", "XA", "ZA"})
+# Accounts SDDL writes as two letters, the same on every computer. Those of this computer or its
+# domain (LA: the built-in Administrator, LG: Guest, DA, DU…) Windows itself resolves.
+_SDDL_ALIASES = {
+    "AN": "S-1-5-7",
+    "AU": "S-1-5-11",
+    "BA": _ADMINISTRATORS_SID,
+    "BG": "S-1-5-32-546",
+    "BU": "S-1-5-32-545",
+    "CG": "S-1-3-1",
+    "CO": "S-1-3-0",
+    "IU": "S-1-5-4",
+    "LS": "S-1-5-19",
+    "NS": "S-1-5-20",
+    "NU": "S-1-5-2",
+    "OW": "S-1-3-4",
+    "PS": "S-1-5-10",
+    "RC": "S-1-5-12",
+    "SU": "S-1-5-6",
+    "SY": _SYSTEM_SID,
+    "WD": "S-1-1-0",
+}
 
 
 def _local_string(pointer: Any) -> str | None:
@@ -498,9 +520,39 @@ def _aces(text: str) -> list[list[str]] | None:
     return aces if depth == 0 else None
 
 
+@functools.lru_cache(maxsize=32)
+def _alias_sid(alias: str) -> str | None:
+    """What Windows means by an SDDL alias of this computer or domain (``LA`` → ``S-1-5-21-…-500``)."""
+    try:
+        from ctypes import wintypes
+
+        advapi32 = _dll("advapi32")
+        sid = ctypes.c_void_p()
+        if not advapi32.ConvertStringSidToSidW(alias, ctypes.byref(sid)):
+            return None
+        try:
+            text = wintypes.LPWSTR()
+            if not advapi32.ConvertSidToStringSidW(sid, ctypes.byref(text)):
+                return None
+            return _local_string(text)
+        finally:
+            _dll("kernel32").LocalFree(sid)
+    except AttributeError, OSError, ValueError, ImportError:
+        return None
+
+
+def sid_text(trustee: str) -> str:
+    """An account as SDDL writes it - ``S-1-5-…`` or an alias (``BA``, ``LA``) - as ``S-1-…`` text,
+    so the same account compares equal however it was written; an unknown alias stays itself."""
+    if trustee[:2].upper() == "S-":
+        return trustee.upper()
+    return _SDDL_ALIASES.get(trustee) or _alias_sid(trustee) or trustee
+
+
 def sddl_owner(sddl: str) -> str | None:
+    """The owner of the permissions as ``S-1-…`` text (aliases resolved)."""
     match = _SDDL.fullmatch(sddl)
-    return match.group("owner") if match else None
+    return sid_text(match.group("owner")) if match else None
 
 
 def sddl_others(sddl: str, user: str) -> bool | None:
@@ -513,7 +565,8 @@ def sddl_others(sddl: str, user: str) -> bool | None:
     aces = _aces(match.group("aces") or "")
     if aces is None:
         return None
-    return any(ace[0] in _ALLOW_ACES and ace[5] not in _PRIVATE_TRUSTEES and ace[5] != user for ace in aces)
+    allowed = _PRIVATE_TRUSTEES | {sid_text(user)}
+    return any(ace[0] in _ALLOW_ACES and sid_text(ace[5]) not in allowed for ace in aces)
 
 
 def elevated() -> bool:
@@ -539,7 +592,7 @@ def make_private(path: Path) -> bool:
     folders owned by Administrators: those too, while elevated). True when read back private."""
     user, sddl = user_sid(), folder_security(path)
     owner = sddl_owner(sddl) if sddl is not None else None
-    if user is None or owner is None or not (owner == user or (owner in {"BA", _ADMINISTRATORS_SID} and elevated())):
+    if user is None or owner is None or not (owner == sid_text(user) or (owner == _ADMINISTRATORS_SID and elevated())):
         return False
     icacls = ntpath.join(os.environ.get("SYSTEMROOT") or r"C:\Windows", "System32", "icacls.exe")
     grants = [f"*{sid}:(OI)(CI)F" for sid in (user, _SYSTEM_SID, _ADMINISTRATORS_SID)]
