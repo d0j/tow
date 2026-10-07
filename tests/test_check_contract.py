@@ -5,6 +5,7 @@ from typing import ClassVar
 import pytest
 
 from tow import check, check_transaction
+from tow.check import rows as check_rows
 from tow.notify import event_text
 from tow.store import (
     StoreCorruptionError,
@@ -1599,7 +1600,7 @@ def test_manual_check_does_not_move_the_scheduled_countdown(monkeypatch):
     _wire_fake_check(monkeypatch, FakeClient())
     clock = {"now": 1000}
     monkeypatch.setattr(check, "machine_now", lambda: SimpleNamespace(timestamp=lambda: clock["now"]))
-    monkeypatch.setattr(check, "_now", lambda: "t")
+    monkeypatch.setattr(check_rows, "now", lambda: "t")
 
     check.run_check(apply=True, notify=False, how="auto")
     clock["now"] = 5000

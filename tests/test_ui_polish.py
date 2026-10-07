@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from tow.check import rows as check_rows
 from tow.web import app
 
 ORIGIN = {"Origin": "http://127.0.0.1"}
@@ -671,7 +672,7 @@ def test_a_check_stores_its_times_as_iso_and_the_pages_write_them():
     cfg["language"] = "en"
     save_config(cfg)
     topic = {"id": "t1", "title": "Show", "url": "http://rutor.info/torrent/1/x", "save_path": "Z:\\a"}
-    check._stamp(topic, {"ok": True})
+    check_rows.stamp_result(topic, {"ok": True})
     save_state({"topics": [topic]})
     health = check.record_check_failure("synthetic failure", how="manual")
 
