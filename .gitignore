@@ -28,10 +28,4 @@ master.key
 /.update.lock
 *.jsonl
 *.towx
-/tow-local.cmd
-
-# Local rollback snapshots of old checkouts (may contain runtime data)
-docs/changes/checkpoints/
-# Accidental Windows device-name file
-nul
 .tmp-tests/
