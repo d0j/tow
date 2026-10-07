@@ -180,7 +180,8 @@ def _session_refusal(request: Request) -> Response | None:
         response = RedirectResponse(location, status_code=303, headers=no_store)
         if had_session:
             response.delete_cookie(SESSION_COOKIE, path="/")
-        return _redirect_for_fetch(request, response)
+        # A form app.js posted gets {"redirect": ...}; a page (even one fetched) the 303 itself.
+        return _redirect_for_fetch(request, response) if request.method in _WRITE_METHODS else response
     if credential is None:
         return JSONResponse({"error": i18n.t("web.login.no_password")}, status_code=503, headers=no_store)
     return JSONResponse({"error": i18n.t("web.login.again")}, status_code=401, headers=no_store)
