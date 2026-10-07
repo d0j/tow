@@ -233,23 +233,18 @@ def test_the_update_itself_starts_tow_while_it_holds_its_lock(monkeypatch):
 
 def test_the_start_scripts_refuse_an_interrupted_update_before_preparing_anything():
     windows = (ROOT / "scripts" / "tow-start.cmd").read_text(encoding="utf-8")
-    refusal = windows.index('if exist "%TOW_ROOT%\\.update-switch.json" exit /b 3')
+    refusal = windows.index("if defined TOW_CUT exit /b 3")
     assert windows.index('call "%~dp0tow-env.cmd"') < refusal < windows.index("tow-setup.cmd")
+    assert "$env:TOW_ROOT" in windows  # the path never inside the command
     posix = (ROOT / "scripts" / "tow-start").read_text(encoding="utf-8")
-    refusal = posix.index('if [ -f "$root/.update-switch.json" ]; then')
+    refusal = posix.index("if interrupted; then")
     assert refusal < posix.index("exit 3") < posix.index('"$scripts/tow" setup')
 
 
-@pytest.mark.allow_system  # the platform's start script in a temp install; it ends before setup or uv
-def test_the_start_script_refuses_an_interrupted_update(tmp_path):
-    import shutil
+def _start_script(root: Path) -> str:
+    """Run the platform's start script of the temp install ``root``: its output."""
     import subprocess
 
-    root = tmp_path / "TOW"
-    shutil.copytree(ROOT / "scripts", root / "app" / "scripts")
-    (root / "data").mkdir()
-    (root / "config.yaml").write_text("port: 18999\n", encoding="utf-8")
-    (root / ".update-switch.json").write_text("{}", encoding="utf-8")
     env = {key: value for key, value in os.environ.items() if not key.startswith(("TOW_", "UV_"))}
     if os.name == "nt":
         system = os.environ.get("SYSTEMROOT", r"C:\Windows")
@@ -258,10 +253,47 @@ def test_the_start_script_refuses_an_interrupted_update(tmp_path):
     else:
         env["PATH"] = "/usr/bin:/bin"
         argv = ["/bin/sh", str(root / "app" / "scripts" / "tow-start")]
-    done = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=60, check=False)
-    assert done.returncode == 3, done.stdout + done.stderr
-    assert "update was cut off" in done.stdout + done.stderr
+    done = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=120, check=False)
+    assert done.returncode == 3, done.stdout + done.stderr  # refused, or no uv to prepare with
     assert not (root / "app" / ".venv").exists()
+    return done.stdout + done.stderr
+
+
+@pytest.mark.allow_system  # the platform's start script in a temp install; it ends before setup or uv
+@pytest.mark.parametrize(
+    ("record", "locked", "refused"),
+    [
+        ("{}", False, True),
+        ('{"format": "tow-update-switch/v1", "phase": "switching", "old": [], "new": []}', False, True),
+        # Before: refused whenever the record existed, unlike `tow run` and `tow start`.
+        ('{"format": "tow-update-switch/v1", "phase": "accepted", "old": [], "new": []}', False, False),
+        ('{"format": "tow-update-switch/v1", "phase": "switching", "restored": true}', False, False),
+        ('{"format": "tow-update-switch/v1", "phase": "switching", "old": [], "new": []}', True, False),
+    ],
+)
+def test_the_start_script_follows_the_interrupted_update_rule(tmp_path, record, locked, refused):
+    import shutil
+
+    from tow.platform import locks
+    from tow.store import init_lock_file
+
+    root = tmp_path / "TOW"
+    shutil.copytree(ROOT / "scripts", root / "app" / "scripts")
+    (root / "data").mkdir()
+    (root / "config.yaml").write_text("port: 18999\n", encoding="utf-8")
+    (root / ".update-switch.json").write_text(record, encoding="utf-8")
+    with (root / ".update.lock").open("a+b") as handle:
+        init_lock_file(handle)
+        if locked:  # an update runs: it starts TOW itself
+            assert locks.lock(handle, wait=False)
+        try:
+            output = _start_script(root)
+        finally:
+            if locked:
+                locks.unlock(handle)
+    assert ("update was cut off" in output) is refused, output
+    if not refused:
+        assert "could not be prepared" in output  # it went on to prepare TOW (no uv here)
 
 
 def test_the_windows_start_script_prepares_offline_first_then_online():
