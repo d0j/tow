@@ -61,7 +61,7 @@ def test_cookies_from_before_this_version_stay_valid():
 
 def test_a_logout_survives_a_restart():
     cookie = issue_session(TOKEN)
-    revoke_session(cookie)
+    revoke_session(cookie, TOKEN)
     clear_sessions()  # a restarted TOW (or another TOW process) knows it too
 
     assert not session_is_valid(cookie, TOKEN)
@@ -72,9 +72,9 @@ def test_a_logout_survives_a_restart():
 
 def test_signed_out_sessions_are_forgotten_once_they_would_have_expired():
     first = issue_session(TOKEN, now=1000.0)
-    revoke_session(first, now=1000.0)
+    revoke_session(first, TOKEN, now=1000.0)
     later = 1000.0 + SESSION_TTL_SEC + 120
-    revoke_session(issue_session(TOKEN, now=later), now=later)
+    revoke_session(issue_session(TOKEN, now=later), TOKEN, now=later)
 
     stored = json.loads((data_dir() / "sessions.json").read_text(encoding="utf-8"))
     assert len(stored["revoked"]) == 1
@@ -84,11 +84,41 @@ def test_too_many_sign_outs_sign_everyone_out_instead_of_growing(monkeypatch):
     monkeypatch.setattr(auth, "_MAX_REVOKED", 3)
     keeper = issue_session(TOKEN)
     for _ in range(4):
-        revoke_session(issue_session(TOKEN))
+        revoke_session(issue_session(TOKEN), TOKEN)
 
     stored = json.loads((data_dir() / "sessions.json").read_text(encoding="utf-8"))
     assert stored == {"epoch": 1, "revoked": {}}
     assert not session_is_valid(keeper, TOKEN)
+
+
+def test_made_up_cookies_are_never_remembered_and_cannot_sign_everyone_out(monkeypatch):
+    monkeypatch.setattr(auth, "_MAX_REVOKED", 3)
+    keeper = issue_session(TOKEN)
+    session_id, expires, _signature = issue_session(TOKEN).split(".")
+    forged = [f"{session_id[:-2]}{n:02d}.{expires}.{'A' * 43}" for n in range(10)]
+    forged += [issue_session("x" * 32), issue_session(TOKEN, now=1.0)]  # another key; long expired
+
+    for cookie in forged:
+        revoke_session(cookie, TOKEN)
+
+    assert not (data_dir() / "sessions.json").exists()
+    assert session_is_valid(keeper, TOKEN)
+
+
+def test_a_forged_logout_from_this_computer_changes_nothing(password):
+    device = issue_session(lan_password_session_key(password))
+    local = TestClient(app, headers=ORIGIN)
+    session_id, expires, _signature = device.split(".")
+
+    for n in range(5):
+        local.cookies.set("tow_session", f"{session_id[:-2]}{n:02d}.{expires}.{'A' * 43}")
+        assert local.post("/logout", follow_redirects=False).status_code == 303
+
+    assert not (data_dir() / "sessions.json").exists()
+    assert session_is_valid(device, lan_password_session_key(password))
+    phone = _device(password)
+    assert phone.post("/logout", follow_redirects=False).status_code == 303  # a real one still signs out
+    assert len(json.loads((data_dir() / "sessions.json").read_text(encoding="utf-8"))["revoked"]) == 1
 
 
 def test_sign_out_everywhere_invalidates_every_session_but_not_new_ones():

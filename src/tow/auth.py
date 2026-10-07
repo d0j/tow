@@ -294,8 +294,14 @@ def session_is_valid(cookie: str | None, token: str, *, now: float | None = None
     return _revoked_key(session_id) not in revoked
 
 
-def revoke_session(cookie: str | None, *, now: float | None = None) -> None:
-    """Sign one device out (logout): remembered until its cookie would have expired anyway."""
+def revoke_session(cookie: str | None, token: str, *, now: float | None = None) -> None:
+    """Sign one device out (logout): remembered until its cookie would have expired anyway.
+
+    Only a valid session signed with ``token`` is remembered: made-up cookies (anyone may post
+    /logout) would otherwise fill the list until everyone is signed out (``_MAX_REVOKED``).
+    """
+    if not session_is_valid(cookie, token, now=now):
+        return
     parts = _parts(cookie)
     if parts is None:
         return
