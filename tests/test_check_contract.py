@@ -1389,6 +1389,30 @@ def test_client_confirmation_accepts_hybrid_v1_alias():
     assert client_ops.confirm_client_add(client, v1, r"M:\TV", require_tow_ownership=True) is True
 
 
+def test_a_read_back_reads_the_client_once(tmp_path, monkeypatch):
+    """In a ManagedClient has_hash is itself a full read with the file list: a confirmation (with
+    TOW's mark) and an ownership check each read the torrent once."""
+    from test_clients_managed import E01, TORRENT, FakeTransmission, H, _transmission
+
+    from tow.clients.managed import ManagedClient
+
+    monkeypatch.setattr(ManagedClient, "PAUSE", 0)
+    server = FakeTransmission()
+    client = _transmission(server)
+    client.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+
+    def reads(check_once):
+        before = server.calls.count("torrent-get")
+        result = check_once()
+        return result, server.calls.count("torrent-get") - before
+
+    path = str(tmp_path)
+    assert reads(lambda: client_ops.confirm_client_add(client, H, path, require_tow_ownership=True)) == (True, 1)
+    assert reads(lambda: client_ops.confirm_client_add(client, H, str(tmp_path / "x"))) == (False, 1)
+    assert reads(lambda: client_ops.client_owned_by_tow(client, H)) == (True, 1)
+    assert reads(lambda: client_ops.confirm_client_add(client, "0" * 40, path)) == (False, 1)
+
+
 @pytest.mark.parametrize(
     ("old_file", "blocked"),
     [("Сериал/Серия 01.avi", False), ("Сериал/Серия 02.avi", True)],
