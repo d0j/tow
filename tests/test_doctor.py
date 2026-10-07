@@ -255,10 +255,36 @@ def test_the_report_shows_this_oses_autostart(monkeypatch):
             return {"backend": "windows", "on": True, "where": "TOW"}
 
     monkeypatch.setattr("tow.autostart.backend", lambda: Backend())
-    assert doctor._autostart() == {"backend": "windows", "on": True, "where": "TOW"}
+    assert doctor._autostart() == {"backend": "windows", "on": True, "where": "TOW", "foreign": False}
 
     def broken():
         raise OSError("no scheduler")
 
     monkeypatch.setattr("tow.autostart.backend", broken)
     assert doctor._autostart() == {"on": False, "error": "не удалось узнать состояние автозапуска"}
+
+
+@pytest.mark.parametrize(
+    ("status", "foreign"),
+    [
+        ({"on": False, "ours": False, "stale": False, "state": "present", "where": "TOW"}, True),  # Windows
+        ({"on": False, "ours": False, "stale": False, "where": "tow.service"}, True),  # systemd, launchd
+        ({"on": False, "ours": False, "stale": True, "state": "present", "where": "TOW"}, False),  # its program is gone
+        ({"on": False, "ours": False, "stale": False, "state": "absent", "where": "TOW"}, False),
+        ({"on": True, "ours": True, "stale": False, "state": "present", "where": "TOW"}, False),
+    ],
+)
+def test_another_folders_autostart_is_never_shown_as_this_ones(monkeypatch, status, foreign):
+    """Round-3 audit: Diagnostics showed the task of another TOW folder next to this one's name."""
+    from fastapi.testclient import TestClient
+
+    from tow.i18n import t
+    from tow.web import app
+
+    class Backend:
+        def status(self):
+            return dict(status)
+
+    monkeypatch.setattr("tow.autostart.backend", lambda: Backend())
+    page = TestClient(app).get("/doctor", headers={"Accept-Language": "ru"}).text
+    assert (t("doctor.autostart_foreign", "ru", where=status["where"]) in page) is foreign

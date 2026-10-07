@@ -91,9 +91,15 @@ def _autostart() -> dict[str, Any]:
     from tow.autostart import backend
 
     try:
-        return backend().status()
+        status = backend().status()
     except Exception:  # noqa: BLE001 - a diagnostic: a failed read-back is the report's finding
         return {"on": False, "error": t("settings.service.autostart_unread")}
+    # The one autostart of this account belongs to another TOW folder (its program still there):
+    # never shown as this install's.
+    status["foreign"] = (
+        status.get("ours") is False and not status.get("stale") and status.get("state", "present") == "present"
+    )
+    return status
 
 
 def _connected_messengers(secrets: dict[str, Any]) -> list[Any]:
