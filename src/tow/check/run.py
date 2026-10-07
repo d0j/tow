@@ -228,6 +228,16 @@ def _commit_run_state(result: _RunResult, history_rebuilt: bool = False) -> None
     health["auto_at_ts"] = health["at_ts"] if how == "auto" else previous_health.get("auto_at_ts")
     health["auto_ok_at_ts"] = health["at_ts"] if how == "auto" else _last_good_scheduled_check(previous_health)
     health["clients_ok"] = pool.health()
+    if not pool.asked:  # no client was asked: keep what the last check or the diagnostics saw
+        del health["qbit"], health["client"], health["qbit_ok"], health["clients_ok"]
+        if "qbit" in previous_health:
+            health["qbit"] = previous_health["qbit"]
+        if "client" in previous_health:
+            health["client"] = previous_health["client"]
+        if "qbit_ok" in previous_health:
+            health["qbit_ok"] = previous_health["qbit_ok"]
+        if "clients_ok" in previous_health:
+            health["clients_ok"] = previous_health["clients_ok"]
     if pool.empty:
         health["clients_empty"] = dict(pool.empty)
     disk = load_state()
@@ -328,7 +338,12 @@ def _run_check(
         client_errors=pool.errors,
         default_client_id=pool.default_id,
     )
-    pool.open_default(secrets)
+    # Nothing to check (a new install, or no topic in this run): no client is asked, so one not
+    # set up yet is not logged as unreachable; the header keeps what was seen before.
+    if any(want is None or str(topic.get("id")) in want for topic in topics_of(state)):
+        pool.open_default(secrets)
+    else:
+        pool.asked = False
     # A site that said "download limit for today" is left alone until the next local day: the
     # limit is kept in the state, so the next scheduled runs do not ask it again. A manual
     # check (the owner pressed the button) still tries.

@@ -1228,7 +1228,8 @@ def test_overlap_guard_checks_all_previous_revision_hashes(monkeypatch):
 
 
 def test_qbit_down_notification_is_sent_only_after_state_commit(monkeypatch):
-    save_state({"topics": []})
+    # A paused topic: the run has something to check, so it asks the client (without the site).
+    save_state({"topics": [{"id": "t1", "title": "Show", "url": "http://rutor.info/torrent/1", "paused": True}]})
     save_download_history({"schema_version": 1, "topics": {}})
     cfg = {"trackers": {}, "client": {"id": "main", "kind": "fake"}}
     monkeypatch.setattr(check_run, "load_config", lambda: cfg)

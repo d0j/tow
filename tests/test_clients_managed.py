@@ -738,7 +738,8 @@ def test_a_dry_run_opens_clients_read_only(monkeypatch):
     from tow.clients import factory as client_factory
     from tow.store import save_state
 
-    save_state({"topics": []})
+    # A paused topic: the run has something to check, so it opens the client (not the site).
+    save_state({"topics": [{"id": "t1", "title": "Show", "url": "http://rutor.info/torrent/1", "paused": True}]})
     server = FakeDeluge()
     monkeypatch.setattr(client_factory, "default_client_id", lambda _cfg: "main")
     monkeypatch.setattr(client_factory, "from_secrets", lambda _cfg, _secrets, _id=None: _deluge(server))

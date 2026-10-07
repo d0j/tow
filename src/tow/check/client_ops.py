@@ -297,6 +297,8 @@ class ClientPool:
     # How many checks in a row each client listed nothing (before this run, and with it).
     previous_empty: dict[str, int] = field(default_factory=dict)
     empty: dict[str, int] = field(default_factory=dict)
+    # False when the run had no topic to check and asked no client: its health is not this run's.
+    asked: bool = True
 
     def _answered(self, client_id: str, client: TorrentClientAdapter) -> str:
         """Ping the client; one that lists no torrent at all, although it had TOW's at the last
