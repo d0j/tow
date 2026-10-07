@@ -15,6 +15,7 @@
       <p role="alert">{{ problem or t('login.not_set') }}</p>
       {% endif %}
       {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+      {% if again %}<p role="status">{{ t('web.login.again') }}</p>{% endif %}
       {% if not enabled %}
       {#- Sign-in is off: only this computer reaches TOW, and it needs no password - no form, the way in. -#}
       <p><a class="btn" href="/">{{ t('login.open_tow') }}</a></p>

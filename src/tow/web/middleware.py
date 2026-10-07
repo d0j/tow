@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from tow import access, i18n
-from tow.auth import AuthConfigurationError
+from tow.auth import SESSION_COOKIE, AuthConfigurationError
 from tow.bind import origin_matches_request
 from tow.bundle import MAX_BUNDLE_BYTES
 from tow.torrent import MAX_TORRENT_BYTES
@@ -152,20 +152,38 @@ def _refusal(request: Request, cfg: dict[str, Any]) -> Response | None:
     return None
 
 
+def _wants_page(request: Request) -> bool:
+    """A page or a form (posted by the browser or by app.js), not a fetch of JSON."""
+    if request.headers.get("x-tow-fetch") == "1":
+        return True
+    return not request.url.path.endswith(".json") and "text/html" in request.headers.get("accept", "").lower()
+
+
 def _session_refusal(request: Request) -> Response | None:
     """A device on the network without a valid session (blocking: decrypts the secrets). No usable
-    credential refuses everyone - the sign-in page says why."""
+    credential refuses everyone - the sign-in page says why.
+
+    A page or a form goes to the sign-in page - saying "sign in again" when the device had a
+    session that ended (expired, signed out elsewhere) - a JSON caller gets the reason as JSON,
+    and signing out always ends at the sign-in page with the cookie removed."""
     try:
         credential = access.credential(_context.secrets_or_none())
     except AuthConfigurationError:
         credential = None
     if credential is not None and access.session_is_valid(request, credential.session_key):
         return None
-    if is_browser_navigation(request):
-        return RedirectResponse("/login", status_code=303, headers={"Cache-Control": "no-store"})
+    no_store = {"Cache-Control": "no-store"}
+    had_session = bool(request.cookies.get(SESSION_COOKIE))
+    if request.url.path == "/logout" or _wants_page(request):
+        ended = had_session and credential is not None and request.url.path != "/logout"
+        location = "/login?again=1" if ended else "/login"
+        response = RedirectResponse(location, status_code=303, headers=no_store)
+        if had_session:
+            response.delete_cookie(SESSION_COOKIE, path="/")
+        return _redirect_for_fetch(request, response)
     if credential is None:
-        return Response("LAN authentication is not configured", status_code=503, headers={"Cache-Control": "no-store"})
-    return Response("authentication required", status_code=401, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"error": i18n.t("web.login.no_password")}, status_code=503, headers=no_store)
+    return JSONResponse({"error": i18n.t("web.login.again")}, status_code=401, headers=no_store)
 
 
 def _recover_before_dispatch(undo_cleanup: bool = True) -> None:
