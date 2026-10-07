@@ -40,7 +40,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - `S02E01.x264` is one episode, and "2 сезон 3 серия" is season 2.
 - A topic edited while a check runs is left to the next check.
 - The Monitorrent import skips rows that cannot make a usable topic and counts them.
-- The update from the page is refused under systemd autostart instead of stopping TOW for good.
+- The update from the page is refused under systemd or launchd autostart instead of stopping TOW for good.
 - `tow setup` works after copying the TOW folder; the autostart task with Cyrillic in its path is read correctly.
 - A data folder deleted while TOW runs is reported.
 
