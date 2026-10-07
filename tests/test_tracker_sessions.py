@@ -120,11 +120,14 @@ def test_guest_topic_page_after_a_refused_login_is_reported_once(site):
     assert site.count("/login.php") == 1
 
 
-def test_member_page_without_a_link_does_not_log_in(site):
+def test_member_page_without_a_link_is_a_page_not_understood(site):
+    """Signed in, but no link of the topic's own: the site changed its layout. Not a sign-in
+    problem (no login, no magnet fallback), amber."""
     site.pages["/viewtopic.php?t=5"] = "<html><a href='login.php?logout=1'>Выход</a>attachment removed</html>"
     with pytest.raises(TrackerError) as info:
         _tracker(**PAGE_SPEC).fetch_torrent("https://demo.example/viewtopic.php?t=5", SECRETS, "ua")
-    assert info.value.code == "tracker.no_download_link"
+    assert info.value.code == "tracker.page_not_understood"
+    assert error_class(info.value) == "tracker"
     assert site.count("/login.php") == 0
 
 
@@ -136,9 +139,22 @@ def test_removed_topic_page_is_gone_without_a_login(site):
     assert site.count("/login.php") == 0
 
 
-def test_page_with_different_download_links_is_refused(site):
+def test_the_link_in_the_topics_own_block_wins_over_one_in_a_post(site):
     site.pages["/viewtopic.php?t=5"] = (
         "<html><div class=post>Предыдущий сезон: <a href='download.php?id=111'>скачать</a></div>"
+        "<table class='attach bordered'><tr><td><a href='download.php?id=222'>Скачать .torrent</a></td></tr></table>"
+        "<div class=post>ещё <a href='download.php?id=333'>старое</a></div></html>"
+    )
+    site.pages["/download.php?id=111"] = make_torrent({**INFO, b"name": b"other"})
+    site.pages["/download.php?id=222"] = TORRENT
+    tracker = _tracker(**PAGE_SPEC, login_path="")
+    assert tracker.fetch_torrent("https://demo.example/viewtopic.php?t=5", {}, "ua", persist=False) == TORRENT
+    assert site.count("/download.php?id=111") == site.count("/download.php?id=333") == 0
+
+
+def test_page_with_different_download_links_is_refused(site):
+    site.pages["/viewtopic.php?t=5"] = (
+        "<html><table class=attach><a href='download.php?id=111'>скачать</a></table>"
         "<table class=attach><a href='download.php?id=222'>Скачать .torrent</a></table></html>"
     )
     site.pages["/download.php?id=111"] = make_torrent({**INFO, b"name": b"other"})
@@ -148,6 +164,99 @@ def test_page_with_different_download_links_is_refused(site):
         tracker.fetch_torrent("https://demo.example/viewtopic.php?t=5", {}, "ua", persist=False)
     assert info.value.code == "tracker.download_link_ambiguous"
     assert site.count("/download.php?id=111") == site.count("/download.php?id=222") == 0
+
+
+def test_a_link_in_a_post_on_a_page_without_a_download_block_is_not_taken(site):
+    site.pages["/viewtopic.php?t=5"] = (
+        "<html><div class=post_body>Season 1: <a href='download.php?id=111'>.torrent</a></div></html>"
+    )
+    site.pages["/download.php?id=111"] = make_torrent({**INFO, b"name": b"other"})
+    tracker = _tracker(**PAGE_SPEC, login_path="")
+    with pytest.raises(TrackerError) as info:
+        tracker.fetch_torrent("https://demo.example/viewtopic.php?t=5", {}, "ua", persist=False)
+    assert info.value.code == "tracker.no_download_link"
+    assert site.count("/download.php?id=111") == 0
+
+
+# --- nothing on a guest page is believed, a changed layout is not a sign-in --------------------
+
+
+def _configured_page_site() -> None:
+    _configured(**PAGE_SPEC)
+
+
+def test_guest_page_with_a_foreign_link_in_a_post_is_not_downloaded(site):
+    """An expired session hides the topic's own block; a comment links an earlier season."""
+    _configured_page_site()
+    site.pages["/viewtopic.php?t=5"] = (
+        "<html><title>Show S02</title><a href='login.php'>Вход</a>"
+        "<div class=post_body>Прошлый сезон: <a href='download.php?id=999'>скачать</a></div></html>"
+    )
+    site.pages["/download.php?id=999"] = make_torrent({**INFO, b"name": b"OTHER-TOPIC"})
+    with pytest.raises(TrackerError) as info:
+        _tracker(**PAGE_SPEC).fetch_torrent("https://demo.example/viewtopic.php?t=5", SECRETS, "ua")
+    assert info.value.code == "tracker.no_download_link"
+    assert error_class(info.value) == "tracker_auth"
+    assert site.count("/login.php") == 1
+    assert site.count("/download.php?id=999") == 0
+
+
+def test_a_changed_own_link_does_not_fall_back_to_the_description(site):
+    site.pages["/viewtopic.php?t=5"] = (
+        "<html><a href='login.php?logout=1'>Выход</a>"
+        "<div class=post_body>Season 1: <a href='download.php?id=111'>.torrent</a></div>"
+        "<table class=attach><a class=dl-link href='download.php?attach_id=222'>Скачать</a></table></html>"
+    )
+    site.pages["/download.php?id=111"] = make_torrent({**INFO, b"name": b"other"})
+    with pytest.raises(TrackerError) as info:
+        _tracker(**PAGE_SPEC).fetch_torrent("https://demo.example/viewtopic.php?t=5", SECRETS, "ua")
+    assert info.value.code == "tracker.page_not_understood"
+    assert site.count("/download.php?id=111") == 0
+
+
+def test_guest_page_with_removed_words_in_a_comment_logs_in_again(site):
+    _configured_page_site()
+    site.pages["/viewtopic.php?t=5"] = (
+        "<html><title>Show</title><a href='login.php'>Вход</a>"
+        "<div class=post_body>У меня клиент пишет: торрент не найден, перезалейте</div></html>"
+    )
+    with pytest.raises(TrackerError) as info:
+        _tracker(**PAGE_SPEC).fetch_torrent("https://demo.example/viewtopic.php?t=5", SECRETS, "ua")
+    assert info.value.code == "tracker.no_download_link"
+    assert site.count("/login.php") == 1
+
+
+def test_removed_words_in_a_post_are_not_the_sites_message(site):
+    site.pages["/viewtopic.php?t=5"] = (
+        "<html><a href='login.php?logout=1'>Выход</a><div class=post_body>Topic not found in search? "
+        "Use the new link.</div><button data-dl='222'>Скачать</button></html>"
+    )
+    with pytest.raises(TrackerError) as info:
+        _tracker(**PAGE_SPEC).fetch_torrent("https://demo.example/viewtopic.php?t=5", SECRETS, "ua")
+    assert info.value.code == "tracker.page_not_understood"
+
+
+def test_the_sites_own_removed_message_is_gone(site):
+    site.pages["/viewtopic.php?t=5"] = (
+        "<html><a href='login.php?logout=1'>Выход</a><h1>Тема не найдена</h1><div class=post>ответ</div></html>"
+    )
+    with pytest.raises(MirrorFetchError) as info:
+        _tracker(**PAGE_SPEC).fetch_torrent("https://demo.example/viewtopic.php?t=5", SECRETS, "ua")
+    assert error_class(info.value) == "gone"
+
+
+def test_a_logout_word_in_a_post_is_not_a_way_to_sign_out():
+    from tow.trackers.generic import guest_page, signed_in
+
+    page = "<html><a href='login.php'>Вход</a><div class=post>Нажмите Logout в клиенте</div></html>"
+    assert guest_page(page)
+    assert not signed_in(page)
+    member = "<html><a href='login.php?logout=1'>Выход</a><div class=post>войдите в клиент</div></html>"
+    assert signed_in(member)
+    assert not guest_page(member)
+    quoted = "<html><a href='login.php'>Вход</a><div class=post><a href='/login.php?logout=1'>x</a></div></html>"
+    assert guest_page(quoted)
+    assert not signed_in(quoted)
 
 
 def test_page_repeating_one_download_link_downloads_it(site):

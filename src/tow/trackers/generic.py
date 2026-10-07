@@ -48,10 +48,86 @@ _SIGN_IN_TITLES = frozenset(
 )
 
 
+# A way to sign out: a link to the site's logout (login.php?logout=1, /logout.php ...).
+_LOGOUT_LINK = re.compile(r"""href\s*=\s*["']?[^"'\s>]*log_?out""", re.IGNORECASE)
+_TAG = re.compile(r"<(/?)([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>")
+_ATTR = re.compile(r"""(?:^|\s)(class|id)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
+# The topic's own download block: TorrentPier's attachment table, the phpBB torrent table, a
+# download box, a .torrent or magnet link styled as the site's own.
+_OWN_BLOCK_CLASSES = frozenset({"attach", "bttbl", "dl-link", "dl-stub", "magnet-link"})
+_OWN_BLOCK_IDS = frozenset({"download"})
+# What the site's users wrote (posts, comments): a link there may be another topic's, a phrase
+# there is not the site's message.
+_USER_TEXT_CLASSES = frozenset({"post_body", "postbody", "post-body", "post", "comment", "comments"})
+# How far (in tags) an element's end is looked for; an element not closed by then is its tag alone.
+_MAX_ELEMENT_TAGS = 5000
+
+
+def _elements(page: str, classes: frozenset[str], ids: frozenset[str]) -> list[tuple[int, int]]:
+    """Where the outermost elements with one of ``classes`` (or ``ids``) are: (start, end)."""
+    wanted = {f"class:{name}" for name in classes} | {f"id:{name}" for name in ids}
+    tags = list(_TAG.finditer(page[:MAX_DOWNLOAD_PAGE_CHARS]))
+    found: list[tuple[int, int]] = []
+    taken_until = 0
+    for i, tag in enumerate(tags):
+        if tag.group(1) or tag.start() < taken_until:
+            continue
+        names: set[str] = set()
+        for attr in _ATTR.finditer(tag.group(3)):
+            value = (attr.group(2) or attr.group(3) or attr.group(4) or "").casefold()
+            if attr.group(1).casefold() == "class":
+                names.update(f"class:{word}" for word in value.split())
+            else:
+                names.add(f"id:{value.strip()}")
+        if not names & wanted:
+            continue
+        name, depth, end = tag.group(2).casefold(), 0, tag.end()
+        for other in tags[i : i + _MAX_ELEMENT_TAGS]:
+            if other.group(2).casefold() != name:
+                continue
+            depth += -1 if other.group(1) else 1
+            if depth == 0:
+                end = other.end()
+                break
+        found.append((tag.start(), end))
+        taken_until = end
+    return found
+
+
+def _without(page: str, spans: list[tuple[int, int]]) -> str:
+    out, at = [], 0
+    for start, end in spans:
+        out.append(page[at:start])
+        at = end
+    out.append(page[at:])
+    return " ".join(out)
+
+
+def site_text(page: str) -> str:
+    """The page without what its users wrote (posts, comments): the site's own words."""
+    head = page[:MAX_DOWNLOAD_PAGE_CHARS]
+    return _without(head, _elements(head, _USER_TEXT_CLASSES, frozenset()))
+
+
+def link_text(page: str) -> str:
+    """Where the topic's own .torrent or magnet link is: its download block, or - on a page
+    without one - the site's own part of the page. A link in a post may be another topic's."""
+    head = page[:MAX_DOWNLOAD_PAGE_CHARS]
+    blocks = _elements(head, _OWN_BLOCK_CLASSES, _OWN_BLOCK_IDS)
+    if blocks:
+        return "\n".join(head[start:end] for start, end in blocks)
+    return site_text(head)
+
+
+def signed_in(page: str) -> bool:
+    """The page is shown to a signed-in member: the site offers to sign out."""
+    return bool(_LOGOUT_LINK.search(site_text(page)))
+
+
 def guest_page(page: str) -> bool:
     """A page as a guest sees it: it asks to sign in and has no way to sign out."""
-    head = page[:MAX_DOWNLOAD_PAGE_CHARS]
-    return "logout" not in head.casefold() and bool(_GUEST_MARKS.search(head))
+    own = site_text(page)
+    return not _LOGOUT_LINK.search(own) and bool(_GUEST_MARKS.search(own))
 
 
 def sign_in_page(page: str, title: str) -> bool:
@@ -289,12 +365,12 @@ class GenericHttpTracker:
         return {**self._cookie_jar(secrets), **scoped}
 
     def _page_download_id(self, html: str) -> str | None:
+        """The topic's own .torrent id: from its download block (``link_text``), never from a
+        post that links another topic's torrent."""
         rx = self.spec.get("download_href_regex") or r"(?:download|dl)\.php\?(?:id|t)=(\d+)"
         pattern = validate_tracker_regex(rx, label="download", flags=re.IGNORECASE)
         try:
-            found = dict.fromkeys(
-                m.group(1) for m in pattern.finditer(html[:MAX_DOWNLOAD_PAGE_CHARS], timeout=MAX_PAGE_REGEX_SECONDS)
-            )
+            found = dict.fromkeys(m.group(1) for m in pattern.finditer(link_text(html), timeout=MAX_PAGE_REGEX_SECONDS))
         except TimeoutError as exc:
             raise TrackerSettingError("tracker.regex_timeout", what=Msg("tracker.regex_label_download")) from exc
         if len(found) > 1:
@@ -305,7 +381,7 @@ class GenericHttpTracker:
 
     def _page_magnet(self, page: str) -> tuple[str, str] | None:
         candidates: dict[tuple[frozenset[str], frozenset[str]], tuple[str, str]] = {}
-        for match in re.finditer(r"""href\s*=\s*["'](magnet:\?[^"']+)["']""", page, re.IGNORECASE):
+        for match in re.finditer(r"""href\s*=\s*["'](magnet:\?[^"']+)["']""", link_text(page), re.IGNORECASE):
             magnet = html.unescape(match.group(1))
             identity = parse_magnet_hashes(magnet)
             infohash = magnet_infohash(magnet)
@@ -426,9 +502,11 @@ class GenericHttpTracker:
         the cookies to download it with.
 
         These sites show an expired session the page as to a guest - 200, without the download
-        link - so that page counts as a refused session: the saved password logs in once more."""
+        link - so that page counts as a refused session: the saved password logs in once more.
+        Nothing on a guest page is believed (a post may link another topic's torrent or say
+        "not found"); a member's page without the topic's own link has a layout TOW does not
+        know."""
         topic_path = str(self.spec.get("topic_path") or "/forum/viewtopic.php?t={id}").format(id=tid)
-        page_html = ""
         for attempt in range(2):
             page, _host = self._get(
                 hosts, topic_path, secrets, ua, cookies, torrent_only=False, ignore_cool=ignore_cool, persist=persist
@@ -438,17 +516,22 @@ class GenericHttpTracker:
                 cookies = self._cookie_jar(load_secrets()) or cookies
             page_html = thttp.html_text(page)
             self._pages[tid] = (time.monotonic(), page_html)
+            if guest_page(page_html):
+                refreshed = (
+                    None if attempt else self._relogin(secrets, ua, cookies, ignore_cool=ignore_cool, persist=persist)
+                )
+                if refreshed is None:
+                    break
+                cookies = refreshed
+                continue
+            if says_topic_removed(site_text(page_html)):
+                raise MirrorFetchError("mirrors.topic_removed", failure="gone")
             dlid = self._page_download_id(page_html)
             if dlid:
                 return dlid, cookies
-            if says_topic_removed(page_html):
-                raise MirrorFetchError("mirrors.topic_removed", failure="gone")
-            if attempt or not guest_page(page_html):
-                break
-            refreshed = self._relogin(secrets, ua, cookies, ignore_cool=ignore_cool, persist=persist)
-            if refreshed is None:
-                break
-            cookies = refreshed
+            if signed_in(page_html):
+                raise TrackerError("tracker.page_not_understood", cls="tracker", prefix=self.name)
+            break
         raise TrackerError("tracker.no_download_link", prefix=self.name)
 
     def fetch_magnet(
