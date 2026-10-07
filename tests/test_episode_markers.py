@@ -178,3 +178,26 @@ def test_legacy_hybrid_file_event_is_repaired_without_renaming_or_reannouncing(t
     assert item["completed_observed_at"] == at
     assert (tmp_path / path).read_bytes() == b"x"
     assert reconcile_topic(topic, Client(), history, now="2026-09-11T20:01:00+00:00")["events"] == []
+
+
+@pytest.mark.parametrize("name", ["Show.S02E03.x264.mkv", "Show S02E03 x265.mkv", "Show.S02E03.x264-GRP.mkv"])
+def test_codec_after_an_episode_marker_is_not_an_episode(name):
+    assert [label.key for label in parse_episode_coverage(name)] == ["episode:s02e03"]
+
+
+def test_a_codec_cannot_turn_a_future_range_into_a_missing_episode():
+    from tow.selection import SelectionPendingError
+
+    files = (TorrentFile(0, "Show.S02E01.x264.mkv", 1),)
+    with pytest.raises(SelectionPendingError):  # "not out yet": waited for quietly
+        resolve_selection(files, normalize_policy("episodes", "S02E02-S02E10"))
+    pair = (TorrentFile(0, "Show.S02E01.x264.mkv", 1), TorrentFile(1, "Show.S02E01.rus.srt", 1))
+    assert resolve_selection(pair, normalize_policy("all")).selected_episode_keys == ("episode:s02e01",)
+
+
+def test_number_before_season_word_is_the_season():
+    from tow.episodes import parse_season_hint
+
+    assert parse_season_hint("Шоу 2 сезон 3 серия [2024, WEB-DL]") == 2
+    assert parse_season_hint("Шоу. Сезон 1 серии 1-10") == 1
+    assert parse_season_hint("Сериал: сезон 5") == 5

@@ -156,7 +156,8 @@ def parse_season_hint(title: str) -> int | None:
         return None
     patterns = (
         r"(?i)(?:^|[^\w])s(?:eason)?[ ._-]*0*(\d{1,2})(?!\d)",
-        r"(?i)\b(?:season|сезон)\s*[:№#.]?\s*0*(\d{1,2})\b",
+        # Not "2 сезон 3 серия": the number after "сезон" is the episode there.
+        r"(?i)(?<!\d\s)\b(?:season|сезон)\s*[:№#.]?\s*0*(\d{1,2})\b",
         r"(?i)\b0*(\d{1,2})\s*(?:season|сезон)\b",
         r"(?i)\[\s*0*(\d{1,2})[xх]\d{1,4}",
     )
@@ -539,8 +540,11 @@ _COVERAGE_PARSERS: tuple[Callable[[str, PurePosixPath], tuple[EpisodeLabel, ...]
 
 _EXPLICIT_MARKER_HEAD = r"s\d{1,2}+[ ._-]*+(?:e|[xх]e?)\d{1,4}+"
 _EXPLICIT_MARKERS = re.compile(
-    r"(?i)" + _EXPLICIT_MARKER_HEAD + r"(?:"
-    r"[ ._]*+(?:e|[xх]e?)\d{1,4}+"
+    # Group 1: the first marker is written S01x08 (not S01E08).
+    r"(?i)s\d{1,2}+[ ._-]*+(?:e|([xх])e?)\d{1,4}+(?:"
+    # S01E01E02 / S01E01x02 attached. After a separator only "e" continues an S01E01 marker:
+    # "S02E01.x264" is episode 1 and a codec, not episodes 1 and 264 ("S01x08.x10" stays 8 and 10).
+    r"(?:e|[xх]e?)\d{1,4}+|[ ._]++(?:e|(?(1)[xх]e?|(?!)))\d{1,4}+"
     r"|[ ._]*+"
     + _EXPLICIT_MARKER_HEAD
     + r"|\s*+[-–—~&+,]\s*+(?:(?:s\d{1,2}+[ ._-]*+)?(?:e|[xх]e?)\d{1,4}+|\d{1,4}+(?!\w))"
