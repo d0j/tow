@@ -662,7 +662,7 @@ def test_backups_are_three_cards_with_danger_restores(client, monkeypatch):
     assert cards == ["backup-night", "backup-manual", "backup-file"]
     manual = transfer.split('id="backup-manual"', 1)[1].split("</article>", 1)[0]
     assert 'data-confirm="' in manual
-    assert '<button class="danger" type="submit">Восстановить</button>' in manual
+    assert '<button class="danger" type="submit" data-busy-label="Восстановление…">Восстановить</button>' in manual
     file_card = transfer.split('id="backup-file"', 1)[1].split("</article>", 1)[0]
     assert '<button class="danger" type="submit" name="operation" value="restore" data-confirm=' in file_card
 
