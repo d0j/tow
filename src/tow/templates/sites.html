@@ -54,7 +54,9 @@
       <label for="site-regex">{{ t('sites.url_regex') }}</label>
       <input id="site-regex" name="url_regex" placeholder="^https?://rutor\.info/torrent/(\d+)" value="{{ draft.get('url_regex', '') }}"{{ invalid('site-regex') }}>
       <label for="site-dl">{{ t('sites.download_path') }}</label>
-      <input id="site-dl" name="download_path" value="{{ draft.get('download_path') or '/download/{id}' }}"{{ invalid('site-dl') }}>
+      {#- Empty, the default only shown: a pasted link fills in the site's own path, and an empty
+          field is saved as /download/{id} (routes_sites.sites_new). -#}
+      <input id="site-dl" name="download_path" value="{{ draft.get('download_path', '') }}" placeholder="/download/{id}"{{ invalid('site-dl') }}>
       <label for="site-login-path">{{ t('sites.login_path') }}</label>
       <input id="site-login-path" name="login_path" value="{{ draft.get('login_path', '') }}" placeholder="/login.php"{{ invalid('site-login-path') }}>
       <label for="site-topic-path">{{ t('sites.topic_path') }}</label>
