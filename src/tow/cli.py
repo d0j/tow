@@ -935,6 +935,10 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
 _LAYOUT_COMMANDS = frozenset({"run", "start", "stop", "restart", "autostart"})
 
 
+# Commands that start or serve TOW: they say which of its folders other accounts can get into.
+_WARN_OPEN_FOLDERS = frozenset({"run", "start", "serve"})
+
+
 # What `tow run` starts as its children: their texts go to messages and logs, not to a person.
 _BACKGROUND_COMMANDS = frozenset({"run", "serve", "check", "watchdog", "backup"})
 
@@ -986,7 +990,9 @@ def _main(argv: list[str] | None) -> int:
         use_private_files()
         use_private_temp()
         if args.cmd != "permissions":  # it reports and repairs them itself
-            protect_install_folders()
+            # Repaired before every command; said only by those that start TOW (not before each
+            # `tow status`, nor twice at the first start: setup's `keys ensure`, then `start`).
+            protect_install_folders(quiet=args.cmd not in _WARN_OPEN_FOLDERS)
         return command(args)
     except KeyboardInterrupt:
         return EXIT_INTERRUPTED
