@@ -108,6 +108,11 @@ STOP_GRACE = 300.0
 UNIT_NAME = "tow.service"
 AGENT_LABEL = "io.tow"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+# Test only (scripts/update-smoke.py): with this variable set to N, the process ends as a power
+# cut would once N entries of an archive switch have moved, so the smoke test can check the
+# start files' refusal and the recovery on a real install. Without it nothing happens.
+TEST_CUT_SWITCH = "TOW_TEST_CUT_SWITCH_AFTER"
+TEST_CUT_EXIT = 97
 
 # English texts; the install's language file (src/tow/locales, section "update") wins when it
 # has them. Read once at the start: the checkout replaces those files on the way.
@@ -1066,12 +1071,23 @@ class ArchiveCode:
             for entry in sorted(os.listdir(self.app)):
                 os.replace(self.app / entry, self.prev / entry)
                 self.moved_out.append(entry)
+                self._test_cut()
             for entry in sorted(os.listdir(self.new)):
                 os.replace(self.new / entry, self.app / entry)
                 self.moved_in.append(entry)
+                self._test_cut()
         except OSError as exc:
             raise UpdateError(self.work.text("switch_failed", error=exc, app=self.app)) from exc
         remove_tree(self.new)
+
+    def _test_cut(self) -> None:
+        """``TEST_CUT_SWITCH`` (test only): end here, with no rollback, like a power cut."""
+        after = os.environ.get(TEST_CUT_SWITCH, "")
+        if after.isdigit() and len(self.moved_out) + len(self.moved_in) == int(after):
+            self.work.say("aborted", error=f"{TEST_CUT_SWITCH}={after}: the switch is cut off here (test only)")
+            with contextlib.suppress(Exception):
+                sys.stdout.flush()
+            os._exit(TEST_CUT_EXIT)
 
     def switch_back(self, previous: str) -> None:
         """The on-disk record also works when the process was cut off mid-switch."""
