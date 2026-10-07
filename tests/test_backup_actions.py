@@ -170,7 +170,9 @@ def test_check_does_not_restore_or_create_safety_copy(copies, category):
     nights = snapshots.list_snapshots(limit=None)
     response = _client().post(_url(copies, category) + "/check", follow_redirects=False)
     assert response.status_code == 303
-    assert "прошла проверку" in flash_of(response.headers["location"])
+    # A restore point is named as one (QA 1.24.1: "The backup passed the check").
+    flash = flash_of(response.headers["location"])
+    assert flash.startswith("Точка восстановления прошла проверку" if category == "point" else "Копия прошла проверку")
     assert _live_bytes() == before
     assert restore_points.list_restore_points() == points
     assert snapshots.list_snapshots(limit=None) == nights

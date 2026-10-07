@@ -239,7 +239,8 @@ def test_failed_copy_is_recorded_and_shown(tmp_path):
 def test_a_signed_in_device_restores_a_night_copy_too(night, monkeypatch):
     # Owner's decision (01.10.2026): a device signed in from the network is the owner.
     from tow.auth import issue_session
-    from tow.snapshots import create_snapshot
+    from tow.clock import format_ui_timestamp
+    from tow.snapshots import create_snapshot, list_snapshots
 
     name = __import__("pathlib").Path(create_snapshot()["snapshot"]).name
     monkeypatch.setenv("TOW_LAN_AUTH_TOKEN", "t" * 32)
@@ -248,7 +249,10 @@ def test_a_signed_in_device_restores_a_night_copy_too(night, monkeypatch):
     save_config(cfg)
     lan = _client(client=("192.168.1.7", 50000), cookies={"tow_session": issue_session("t" * 32)})
     done = lan.post(f"/settings/backup/night/{name}/restore", follow_redirects=False)
-    assert _flash(done).startswith(f"восстановлено из {name}")
+    # The copy's date as the list shows it, not TOW's folder name (QA 1.24.1).
+    at = format_ui_timestamp(list_snapshots()[0]["created_at"])
+    assert _flash(done).startswith(f"восстановлено из ночной копии от {at}")
+    assert name not in _flash(done).split(";")[0]
     bad = _client().post("/settings/backup/night/..%5Cevil/restore", follow_redirects=False)
     assert bad.status_code in (303, 404)
 

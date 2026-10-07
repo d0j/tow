@@ -342,7 +342,7 @@ def test_settings_restore_point_routes_report_success(monkeypatch):
     restored = settings_restore_point_apply(point_id)
 
     assert created.status_code == 303
-    assert "копия создана" in shown(created.headers["location"])
+    assert "точка восстановления создана" in shown(created.headers["location"])
     assert restored.status_code == 303
     assert "доступ по сети сохранён" in shown(restored.headers["location"])
 
