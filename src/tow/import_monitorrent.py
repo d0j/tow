@@ -172,7 +172,7 @@ def _credential_warnings(
         if kind not in found:
             continue
         if destination["kind"] != kind:
-            warnings[kind] = f"monitorrent.{kind}_skipped"
+            warnings[kind] = _OTHER_KIND[kind]
         elif found[kind]["port"] is None:
             warnings[kind] = "monitorrent.bad_port"
         elif cfg.get("clients"):
@@ -300,6 +300,8 @@ def _topic_of(row: dict[str, Any], trackers: dict[str, Any]) -> dict[str, Any] |
 
 # Torrent-client connections Monitorrent keeps, by the TOW client kind they are for.
 _CLIENT_TABLES = {"qbittorrent": "qbittorrent_credentials", "transmission": "transmission_credentials"}
+# Why such a connection is not imported into a client of another kind.
+_OTHER_KIND = {"qbittorrent": "monitorrent.qbittorrent_skipped", "transmission": "monitorrent.transmission_skipped"}
 
 
 def _port(value: Any) -> int | None:
