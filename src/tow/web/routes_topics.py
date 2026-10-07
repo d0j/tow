@@ -276,7 +276,11 @@ def topics_add(
         new["content_token"] = content_token
         new["content_hash"] = prepared.infohash
     set_interval(new, interval)
+    # The request does not hold the site lock (the title was fetched, a check follows): what
+    # it decided on is read again under the persistence lock before the topic is saved.
     with services.persistence_lock():
+        if match_tracker(load_trackers(services.load_config()), url) is None:
+            return _add_refused(t("web.topics.unknown_link"), draft, "no_site")
         state = services.load_state()
         topics = state.setdefault("topics", [])
         if any(item.get("url") == url for item in topics):

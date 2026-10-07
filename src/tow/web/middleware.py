@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import re
 import socket
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -36,6 +37,20 @@ _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 # only refreshes the in-memory release cache (its own lock) after a GitHub request.
 _UNSERIALIZED_WRITES = frozenset(
     {"/login", "/content/prepare", "/content/resolve", "/content/snapshot", "/updates/check"}
+)
+# Actions that wait on the network (a client, a site, a messenger) for up to a minute: they
+# read their inputs, talk, and take the persistence lock only to save what they learned,
+# re-reading the stores under it (doctor_report, run_check, topics_add, the tracker login),
+# so another writer's change is never lost. Holding the site lock meanwhile froze every save.
+_NETWORK_ACTIONS = re.compile(
+    r"/(check"
+    r"|doctor/run"
+    r"|settings/client/ping"
+    r"|settings/notifier/[^/]+/test"
+    r"|sites/[^/]+/probe"
+    r"|topics/add"
+    r"|topics/guess-title"
+    r"|topics/[^/]+/(check|replace-revision|tracker-login|tracker-browser-auth))"
 )
 
 
@@ -168,9 +183,15 @@ def _serialized(request: Request) -> bool:
     downloads.json, the browser sign-in status, /doctor without probing, the GET form of
     /topics/{id}/tracker-browser-auth which only redirects). What a GET may write itself - the
     pending secret-undo cleanup, the owner's browser language - takes the persistence lock.
-    A slow write (a site probe, a client check) therefore no longer holds up Home.
+    A slow write (a site probe, a client check) therefore no longer holds up Home, and an
+    action that waits on the network does not hold up a save either (``_NETWORK_ACTIONS``).
     """
-    return request.method in _WRITE_METHODS and request.url.path not in _UNSERIALIZED_WRITES
+    path = request.url.path
+    return (
+        request.method in _WRITE_METHODS
+        and path not in _UNSERIALIZED_WRITES
+        and _NETWORK_ACTIONS.fullmatch(path) is None
+    )
 
 
 def _use_request_language(request: Request, cfg: dict[str, Any]) -> None:
