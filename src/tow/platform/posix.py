@@ -569,6 +569,10 @@ class PosixBackend:
             return sudo_uid
         return self.current_account()
 
+    def session_account(self) -> str | None:
+        """sudo says who ran it: the same account as ``invoking_account``."""
+        return self.invoking_account()
+
     def personal_account(self, account: str) -> bool:
         return account.isdigit() and account != "0"
 

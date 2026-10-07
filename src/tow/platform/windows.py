@@ -625,6 +625,39 @@ def elevated() -> bool:
         return False
 
 
+_WTS_CURRENT_SESSION = 0xFFFFFFFF
+_WTS_USER_NAME = 5
+_WTS_DOMAIN_NAME = 7
+
+
+def session_user_sid() -> str | None:
+    """The account signed in to this process's Windows session - the person at the screen - as
+    ``S-1-…`` text, or None. An administrator terminal opened with an administrator's password
+    from a standard account runs as the administrator; the session's account is still the
+    standard one."""
+    try:
+        from ctypes import wintypes
+
+        wtsapi32 = _dll("wtsapi32")
+        names = []
+        for info in (_WTS_DOMAIN_NAME, _WTS_USER_NAME):
+            buffer, size = wintypes.LPWSTR(), wintypes.DWORD()
+            if not wtsapi32.WTSQuerySessionInformationW(
+                None, wintypes.DWORD(_WTS_CURRENT_SESSION), info, ctypes.byref(buffer), ctypes.byref(size)
+            ):
+                return None
+            try:
+                names.append(str(buffer.value or ""))
+            finally:
+                wtsapi32.WTSFreeMemory(buffer)
+    except AttributeError, OSError, ValueError, ImportError:
+        return None
+    domain, user = names
+    if not user:
+        return None
+    return account_of(f"{domain}\\{user}" if domain else user)
+
+
 def personal_account(account: str) -> bool:
     """``account`` is a person's account (local, domain or Microsoft), not a group, SYSTEM or a
     service: only such an account is ever made the owner of an install."""
@@ -804,8 +837,12 @@ class WindowsBackend:
         return user_sid()
 
     def invoking_account(self) -> str | None:
-        """An administrator terminal of Windows runs as the account that opened it."""
+        """An administrator terminal of Windows runs as the account that opened it - unless a
+        standard account typed an administrator's password: see ``session_account``."""
         return user_sid()
+
+    def session_account(self) -> str | None:
+        return session_user_sid()
 
     def personal_account(self, account: str) -> bool:
         return personal_account(account)

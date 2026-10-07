@@ -116,6 +116,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default="status",
         help=t("cli.help.permissions_action"),
     )
+    perm.add_argument("--owner", metavar="ACCOUNT", help=t("cli.help.permissions_owner"))
     perm.add_argument("--json", action="store_true", help=as_json)
     im = sub.add_parser("import-monitorrent", help=t("cli.help.import_monitorrent"))
     im.add_argument("--json", action="store_true", help=as_json)
@@ -494,7 +495,7 @@ def _cmd_import_rollback(args: argparse.Namespace) -> int:
 def _cmd_permissions(args: argparse.Namespace) -> int:
     from tow import permissions
 
-    result = permissions.fix() if args.permissions_action == "fix" else permissions.status()
+    result = permissions.fix(args.owner) if args.permissions_action == "fix" else permissions.status()
     if args.json:
         _print(result, True)
     else:

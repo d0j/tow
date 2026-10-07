@@ -67,6 +67,9 @@ def install(tmp_path, monkeypatch):
     monkeypatch.setattr(windows, "_run", acl.run)
     monkeypatch.setattr(windows, "folder_security", lambda path: acl.sddl.get(str(path)))
     monkeypatch.setattr(windows, "user_sid", lambda: session["user"])
+    # The account signed in to the Windows session: the terminal's own, unless a standard
+    # account typed an administrator's password to open it ("console").
+    monkeypatch.setattr(windows, "session_user_sid", lambda: session.get("console", session["user"]))
     monkeypatch.setattr(windows, "elevated", lambda: session["elevated"])
     monkeypatch.setattr(windows, "account_name", lambda sid: NAMES.get(sid, sid))
     monkeypatch.setattr(windows, "account_of", lambda name: {v: k for k, v in NAMES.items()}.get(name))
@@ -157,7 +160,84 @@ def test_administrators_or_system_never_become_the_owner(install, capsys, termin
 
     assert acl.calls == []
     assert acl.owner(root) == "BA"
-    assert t("permissions.no_account") in capsys.readouterr().out
+    command = f"{permissions.fix_command(admin=False)} --owner"
+    assert t("permissions.no_account", command=command) in capsys.readouterr().out
+
+
+def test_an_administrator_password_typed_from_a_standard_account_names_no_owner(install, capsys):
+    """Round-3 audit: a standard account that opened the terminal with an administrator's
+    password made that administrator the owner, and the standard account - the one using TOW -
+    lost its own install. TOW refuses and asks for the owner."""
+    root, acl, session = install
+    session.update(user=ADMIN, console=OWNER, elevated=True, task="")
+
+    assert cli.main(["permissions", "fix"]) == 3
+
+    assert acl.calls == []
+    assert acl.owner(root) == "BA"
+    out = capsys.readouterr().out
+    command = f"{permissions.fix_command(admin=False)} --owner"
+    assert t("permissions.owner_ambiguous", terminal="PC\\admin", session="PC\\owner", command=command) in out
+
+
+def test_the_owner_can_be_named(install, capsys):
+    root, acl, session = install
+    session.update(user=ADMIN, console=OWNER, elevated=True, task="")
+
+    assert cli.main(["permissions", "fix", "--owner", "PC\\owner"]) == 0
+
+    for folder in (root, root / "keys", root / "data"):
+        assert acl.owner(folder) == OWNER
+    out = capsys.readouterr().out
+    assert t("permissions.owner_from_option", account="PC\\owner") in out
+    assert t("permissions.fixed") in out
+
+
+@pytest.mark.parametrize("name", ["BUILTIN\\Administrators", "PC\\nobody"])
+def test_a_named_owner_must_be_a_person(install, capsys, name):
+    _root, acl, session = install
+    session.update(elevated=True)
+
+    assert cli.main(["permissions", "fix", "--owner", name]) == 3
+
+    assert acl.calls == []
+    assert t("permissions.owner_not_person", name=name) in capsys.readouterr().out
+
+
+def test_an_install_a_person_owns_stays_theirs(install, capsys):
+    """Its folders are open, but the TOW folder already belongs to a person: another
+    administrator's terminal closes them for that person, never takes them over."""
+    root, acl, session = install
+    acl.sddl[str(root)] = acl.sddl[str(root)].replace("O:BA", f"O:{OWNER}")
+    session.update(user=ADMIN, elevated=True, task="")
+
+    assert cli.main(["permissions", "fix"]) == 0
+
+    for folder in (root, root / "keys", root / "data"):
+        assert acl.owner(folder) == OWNER
+    assert t("permissions.owner_from_owner", account="PC\\owner") in capsys.readouterr().out
+
+
+def test_a_data_folder_outside_the_install_is_reported_without_the_fix_advice(install, tmp_path, monkeypatch, capsys):
+    """Round-3 audit: TOW_HOME elsewhere was reported open with "run tow permissions fix",
+    which never changes a folder outside the install."""
+    _root, acl, session = install
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    acl.sddl[str(elsewhere)] = OPEN
+    monkeypatch.setenv("TOW_HOME", str(elsewhere))
+    session.update(elevated=True)
+    assert cli.main(["permissions", "fix"]) == 0
+    capsys.readouterr()
+
+    assert cli.main(["permissions"]) == 0
+
+    out = capsys.readouterr().out
+    assert t("permissions.outside", folder=t("permissions.folder_data"), path=str(elsewhere)) in out
+    assert permissions.fix_command(admin=True) not in out  # no advice to run what changes nothing
+    assert t("permissions.all_closed") not in out
+    assert acl.sddl[str(elsewhere)] == OPEN  # never changed
+    assert permissions.status()["ok"] is True
 
 
 def test_a_drive_root_is_refused(install, monkeypatch, capsys):
@@ -181,6 +261,31 @@ def test_a_closed_install_needs_nothing(install, capsys):
     assert acl.calls == []
     assert cli.main(["permissions"]) == 0
     assert t("permissions.all_closed") in capsys.readouterr().out
+
+
+@pytest.mark.skipif(platform.this_os() != "windows", reason="ctypes.wintypes")
+def test_the_session_account_is_the_one_signed_in(monkeypatch):
+    freed = []
+
+    class Wts:
+        def WTSQuerySessionInformationW(self, server, session, info, buffer, size):
+            buffer._obj.value = {7: "PC", 5: "owner"}[info]
+            return 1
+
+        def WTSFreeMemory(self, buffer):
+            freed.append(buffer.value)
+
+    monkeypatch.setattr(windows, "_dll", lambda name: Wts())
+    monkeypatch.setattr(windows, "account_of", lambda name: {"PC\\owner": OWNER}.get(name))
+    assert windows.session_user_sid() == OWNER
+    assert freed == ["PC", "owner"]
+
+    class NoAnswer(Wts):
+        def WTSQuerySessionInformationW(self, *_args):
+            return 0
+
+    monkeypatch.setattr(windows, "_dll", lambda name: NoAnswer())
+    assert windows.session_user_sid() is None
 
 
 def test_the_warnings_point_to_the_repair_command():
