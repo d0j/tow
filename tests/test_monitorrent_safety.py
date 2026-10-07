@@ -274,16 +274,46 @@ def test_preview_reports_incompatible_credentials_and_import_never_changes_sourc
     assert database.read_bytes() == source
 
 
-@pytest.mark.parametrize("value", ["not-a-number", None])
-def test_malformed_source_id_is_a_safe_failure_before_writes(database, value):
+@pytest.mark.parametrize("value", ["not-a-number", None, "1; x"])
+def test_a_row_with_a_malformed_id_is_skipped_and_counted(database, value):
     with closing(sqlite3.connect(database)) as writer, writer:
         writer.execute("UPDATE topics SET id=? WHERE id=3", (value,))
-    before = _bytes()
-    with pytest.raises(importer.MonitorrentImportError) as caught:
-        importer.import_monitorrent(database, apply=True)
-    assert caught.value.code == "monitorrent.invalid_database"
-    assert _bytes() == before
-    assert list_restore_points() == []
+    preview = importer.import_monitorrent(database)
+    assert (preview["topics_found"], preview["topics_unusable"]) == (3, 1)
+    result = importer.import_monitorrent(database, apply=True)
+    assert (result["topics_added"], result["topics_unusable"]) == (0, 1)  # 1 and 2 are watched already
+
+
+def _rows_of(database, *rows):
+    with closing(sqlite3.connect(database)) as writer, writer:
+        writer.execute("DELETE FROM topics")
+        writer.executemany("INSERT INTO topics VALUES (?, ?, ?, ?)", rows)
+
+
+def test_rows_another_way_in_would_refuse_are_skipped(database):
+    """A script link, a site TOW does not read: the .towx import refuses them; so does this one."""
+    _rows_of(
+        database,
+        (10, "Script", "javascript:alert(1)", "/d"),
+        (11, "Unknown site", "https://video.example/series/Show_A/", "/d"),
+        (12, None, "http://rutor.info/torrent/12/show_a", None),
+    )
+    result = importer.import_monitorrent(database, apply=True)
+    assert (result["topics_added"], result["topics_unusable"]) == (1, 2)
+    added = next(topic for topic in store.load_state()["topics"] if topic["id"] == "mr-12")
+    # Without a name the link stands in until the first check names it after its torrent.
+    assert (added["title"], added["save_path"]) == ("http://rutor.info/torrent/12/show_a", "")
+
+
+def test_one_title_that_is_not_utf8_skips_its_row_only(database):
+    _rows_of(database, (20, "ok", "http://rutor.info/torrent/20/x", "/d"))
+    with closing(sqlite3.connect(database)) as writer, writer:
+        writer.execute(
+            "INSERT INTO topics VALUES (21, CAST(X'C1E5F0E5E3' AS TEXT), 'http://rutor.info/torrent/21/y', '/d')"
+        )
+    result = importer.import_monitorrent(database, apply=True)
+    assert (result["topics_added"], result["topics_unusable"]) == (1, 1)
+    assert "mr-20" in {topic["id"] for topic in store.load_state()["topics"]}
 
 
 @pytest.mark.parametrize("other_kind", ["transmission", "deluge"])
