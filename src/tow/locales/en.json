@@ -69,6 +69,7 @@
       "other": "the reminder must be at most {n} characters"
     },
     "hint_reveals_password": "the reminder must not contain the password or a part of it — anyone on the network can read it",
+    "hint_needs_password": "to change only the reminder, type the current password: the reminder is checked against it",
     "record_invalid": "the saved password is damaged — set a new one on this computer",
     "token_file_missing": "the network access key file is missing",
     "token_file_unreadable": "the network access key file cannot be read",
@@ -1518,6 +1519,7 @@
       "password_set": "Set",
       "password_unset": "Not set",
       "current_password": "Current password",
+      "current_password_local": "Needed here only to change the reminder alone; a new password needs no old one on this computer.",
       "repeat_password": "Repeat the password",
       "keep_password": "Leave empty to keep the password and change only the reminder",
       "hint_label": "Reminder (optional)",

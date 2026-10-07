@@ -129,9 +129,19 @@ def test_the_reminder_never_reveals_the_password():
     assert "lan_auth" not in load_secrets()
 
     _with_password("old-horse-battery")
-    only_hint = local.post("/settings/password", data={"hint": "is old-horse-battery"}, follow_redirects=False)
-    assert "подсказка не должна содержать пароль" in _flash(only_hint)
-    assert password_hint(load_secrets()["lan_auth"]) == ""
+    for current in ("", "old-horse-battery"):
+        only_hint = local.post(
+            "/settings/password",
+            data={"current_password": current, "hint": "battery horse, old"},
+            follow_redirects=False,
+        )
+        expected = "подсказка не должна содержать пароль" if current else "введите текущий пароль"
+        assert expected in _flash(only_hint)
+        assert password_hint(load_secrets()["lan_auth"]) == ""
+    wrong = local.post(
+        "/settings/password", data={"current_password": "guess-guess", "hint": "x"}, follow_redirects=False
+    )
+    assert "текущий пароль неверный" in _flash(wrong)
 
     too_long = local.post("/settings/password", data={"hint": "x" * 121}, follow_redirects=False)
     assert "не длиннее 120" in _flash(too_long)
@@ -159,12 +169,28 @@ def test_only_the_reminder_changes_and_sessions_stay():
     old = _with_password("old-horse-battery", hint="old")
     session = issue_session(lan_password_session_key(old))
 
-    TestClient(app, headers=ORIGIN).post("/settings/password", data={"hint": "new reminder"})
+    local = TestClient(app, headers=ORIGIN)
+    assert 'name="current_password"' in local.get("/settings").text  # optional here: for the reminder alone
+    local.post("/settings/password", data={"current_password": "old-horse-battery", "hint": "new reminder"})
 
     record = load_secrets()["lan_auth"]
     assert lan_password_matches("old-horse-battery", record)
     assert password_hint(record) == "new reminder"
     assert session_is_valid(session, lan_password_session_key(record))
+
+
+def test_another_device_cannot_slip_the_password_into_the_reminder():
+    record = _with_password("Correct-Horse-Tow")
+    lan = _lan_client(record)
+
+    for hint in ("correct horse tow", "horse tow correct"):
+        response = lan.post(
+            "/settings/password",
+            data={"current_password": "Correct-Horse-Tow", "hint": hint},
+            follow_redirects=False,
+        )
+        assert "подсказка не должна содержать пароль" in _flash(response)
+    assert password_hint(load_secrets()["lan_auth"]) == ""
 
 
 def test_another_device_needs_the_current_password_and_stays_signed_in():

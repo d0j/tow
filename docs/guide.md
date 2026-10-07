@@ -248,7 +248,9 @@ Settings → **Version and updates**; the version in the corner of every page op
 - The sign-out button in the header (shown only on a device signed in over the network) ends this device's
   session.
 - **Sign out everywhere** (Settings → Network access) ends every network session; the password stays.
-- The reminder you set is visible to anyone who opens the sign-in page — never write the password into it.
+- The reminder you set is visible to anyone who opens the sign-in page — never write the password into it. TOW
+  refuses a reminder that shares four letters or digits in a row with the password; to change only the reminder,
+  type the current password (also on the computer running TOW).
 - Requests from public internet addresses are always refused. See [Remote access](../README.md#remote-access)
   for SSH tunnels and the reverse-proxy caveat.
 

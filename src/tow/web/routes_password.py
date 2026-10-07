@@ -117,6 +117,9 @@ def settings_password(
     except SecretStoreError:
         return _back("web.password.store_unavailable", "err")
     record = access.password_record(secrets)
+    # The current password, checked: from the network always; on this computer it is typed
+    # only to change the reminder alone, which is compared with it.
+    current = ""
     if not local:
         if record is None:
             return _back("web.settings.access_local_only", "err")
@@ -128,11 +131,16 @@ def settings_password(
         if not valid:
             return _back("web.password.current_wrong", "err")
         services.login_throttle.success(peer)
+        current = current_password
+    elif current_password and record is not None and not (lan_password or lan_password2):
+        if not lan_password_matches(current_password, record):
+            return _back("web.password.current_wrong", "err")
+        current = current_password
     try:
         if lan_password or lan_password2:
             new_record, changed = access.new_record(lan_password, lan_password2, hint), "password"
         elif record is not None:
-            new_record, changed = with_hint(record, hint), "hint"
+            new_record, changed = with_hint(record, hint, password=current), "hint"
         else:
             return _back("web.settings.set_password_first", "warn")
     except AuthConfigurationError as exc:

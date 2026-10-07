@@ -78,28 +78,23 @@ def password_hint(record: object) -> str:
     return hint if isinstance(hint, str) else ""
 
 
-def clean_hint(hint: str, *, password: str = "", record: object = None) -> str:
-    """The reminder as stored: one line, short, and never the password itself.
+def clean_hint(hint: str, *, password: str) -> str:
+    """The reminder as stored: one line, short, and no piece of the password.
 
-    The login page shows it to anyone on the network, so a reminder that contains the
-    new ``password``, or is a sizeable part of it, is refused; letters and digits are compared
-    without case, punctuation or spaces ("correct horse tow" reveals "correct-horse-tow"). When
-    only the reminder changes, the stored ``record`` is tried with the reminder as a whole, word
-    by word and with its words joined by the usual separators.
+    The login page shows it to anyone on the network, so a reminder that shares a run of four
+    or more letters and digits with ``password``, forwards or backwards, is refused; they are
+    compared without case, punctuation or spaces ("correct horse tow" for "Correct-Horse-Tow",
+    "dog2024" for "mydog2024!", "horse tow correct" too). A reminder needs the password to be
+    compared with (``auth.hint_needs_password`` without it).
     """
     hint = " ".join(str(hint or "").split())
     if len(hint) > MAX_HINT_LENGTH:
         raise AuthConfigurationError("auth.hint_too_long", n=MAX_HINT_LENGTH)
     if not hint:
         return ""
-    revealed = bool(password) and _reveals(_squeezed(hint), _squeezed(password))
-    if not revealed and record is not None:
-        # Each try is a full PBKDF2, so only candidates long enough to be the password.
-        words = [word for word in re.split(r"[\W_]+", hint) if word]
-        joined = {sep.join(words) for sep in ("", " ", "-", "_", ".")}
-        candidates = {hint, *hint.split(), *joined, *(c.casefold() for c in joined)}
-        revealed = any(len(c) >= _MIN_PASSWORD_LENGTH and lan_password_matches(c, record) for c in candidates)
-    if revealed:
+    if not password:
+        raise AuthConfigurationError("auth.hint_needs_password")
+    if _reveals(_squeezed(hint), _squeezed(password)):
         raise AuthConfigurationError("auth.hint_reveals_password")
     return hint
 
@@ -108,10 +103,13 @@ _MIN_REVEALING_PART = 4
 
 
 def _reveals(hint: str, password: str) -> bool:
-    """The reminder holds the password, or is itself a sizeable piece of it."""
-    if not hint or not password:
+    """The reminder and the password share a run of four characters (all of a shorter one),
+    the password read forwards or backwards."""
+    size = min(_MIN_REVEALING_PART, len(password))
+    if not hint or not size:
         return False
-    return password in hint or (len(hint) >= min(_MIN_REVEALING_PART, len(password)) and hint in password)
+    runs = {text[i : i + size] for text in (password, password[::-1]) for i in range(len(text) - size + 1)}
+    return any(run in hint for run in runs)
 
 
 def _squeezed(text: str) -> str:
@@ -127,16 +125,17 @@ def lan_password_record(password: str, hint: str = "") -> dict[str, str | int]:
     return record
 
 
-def with_hint(record: dict[str, Any], hint: str) -> dict[str, Any]:
+def with_hint(record: dict[str, Any], hint: str, *, password: str = "") -> dict[str, Any]:
     """The same password with a new reminder (sessions stay valid: the key is the digest).
 
-    The reminder field comes filled in, so most saves send it unchanged: it was checked when it
-    was set, and is not run through PBKDF2 again.
+    ``password`` is the current password, already checked against ``record`` by the caller: a
+    new reminder is compared with it (``clean_hint``). The reminder field comes filled in, so
+    most saves send it unchanged: that, and removing the reminder, need no password.
     """
     if " ".join(str(hint or "").split()) == password_hint(record):
         return dict(record)
     updated = {key: value for key, value in record.items() if key != "hint"}
-    if cleaned := clean_hint(hint, record=record):
+    if cleaned := clean_hint(hint, password=password):
         updated["hint"] = cleaned
     return updated
 
