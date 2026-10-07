@@ -672,6 +672,13 @@ def test_transmission_does_not_fetch_magnets():
         ("127.0.0.1", 9091, "http://127.0.0.1:9091"),
         ("https://nas.local", 443, "https://nas.local:443"),
         ("http://nas:9999/", 9091, "http://nas:9999"),
+        # An IPv6 address: its colons are not a port.
+        ("[fd00::5]", 9091, "http://[fd00::5]:9091"),
+        ("[::1]", 8112, "http://[::1]:8112"),
+        ("http://[fd00::5]", 9091, "http://[fd00::5]:9091"),
+        ("[fd00::5]:9999", 9091, "http://[fd00::5]:9999"),
+        ("fd00::5", 9091, "http://[fd00::5]:9091"),
+        ("nas:9091/transmission/rpc", 1, "http://nas:9091/transmission/rpc"),
     ],
 )
 def test_base_url(host, port, expected):
