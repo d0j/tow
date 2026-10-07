@@ -228,6 +228,8 @@ def _commit_run_state(result: _RunResult, history_rebuilt: bool = False) -> None
     health["auto_at_ts"] = health["at_ts"] if how == "auto" else previous_health.get("auto_at_ts")
     health["auto_ok_at_ts"] = health["at_ts"] if how == "auto" else _last_good_scheduled_check(previous_health)
     health["clients_ok"] = pool.health()
+    if pool.empty:
+        health["clients_empty"] = dict(pool.empty)
     disk = load_state()
     edited = {
         str(topic.get("id")): changed
@@ -242,6 +244,38 @@ def _commit_run_state(result: _RunResult, history_rebuilt: bool = False) -> None
 
     delivery.stage(disk, list(result.notifications), cfg=result.cfg)
     save_state(disk)
+
+
+def _wanted_ids(state: dict[str, Any], ids: list[str] | None, scheduled_scope: str) -> set[str] | None:
+    """The topics this run checks (None: all of them)."""
+    want = {str(x) for x in ids} if ids is not None else None
+    if scheduled_scope:
+        from tow.supervisor import layout
+        from tow.topic_timers import batch_ids, interval_of
+
+        selected = (
+            set(batch_ids(state, layout.read_json(layout.schedule_path())))
+            if scheduled_scope == "timer"
+            else {str(topic.get("id")) for topic in topics_of(state) if interval_of(topic) is None}
+        )
+        want = selected if want is None else want & selected
+    return want
+
+
+def _clients_expected_to_list(state: dict[str, Any], want: set[str] | None, default_id: str) -> frozenset[str]:
+    """The clients that had TOW's torrents at the last check: a topic this run checks was fine
+    then. A paused or finished one-time topic is not checked (its last result stays as it
+    was), nor is one whose own timer is not due: such a topic never says the client is
+    expected to list anything."""
+    return frozenset(
+        str(topic.get("client_id") or default_id)
+        for topic in topics_of(state)
+        if (want is None or str(topic.get("id")) in want)
+        and topic.get("hash")
+        and topic.get("last_ok") is True
+        and not topic.get("paused")
+        and not topic.get("once_done")
+    )
 
 
 def _run_check(
@@ -269,6 +303,7 @@ def _run_check(
         if apply:
             log_event(kind, **fields)
 
+    want = _wanted_ids(state, ids, scheduled_scope)
     default_id = client_factory.default_client_id(cfg)
     pool = ClientPool(
         cfg=cfg,
@@ -280,11 +315,8 @@ def _run_check(
         default_id=default_id,
         previous_qbit_ok=previous_health.get("qbit_ok"),
         previous_clients_ok=dict(previous_health.get("clients_ok") or {}),
-        expect_torrents=frozenset(
-            str(topic.get("client_id") or default_id)
-            for topic in topics_of(state)
-            if topic.get("hash") and topic.get("last_ok") is True and not topic.get("paused")
-        ),
+        expect_torrents=_clients_expected_to_list(state, want, default_id),
+        previous_empty={str(k): int(v) for k, v in as_dict(previous_health.get("clients_empty")).items()},
     )
     notifications = RunNotifications(
         enabled=notify,
@@ -297,17 +329,6 @@ def _run_check(
         default_client_id=pool.default_id,
     )
     pool.open_default(secrets)
-    want = {str(x) for x in ids} if ids is not None else None
-    if scheduled_scope:
-        from tow.supervisor import layout
-        from tow.topic_timers import batch_ids, interval_of
-
-        selected = (
-            set(batch_ids(state, layout.read_json(layout.schedule_path())))
-            if scheduled_scope == "timer"
-            else {str(topic.get("id")) for topic in topics_of(state) if interval_of(topic) is None}
-        )
-        want = selected if want is None else want & selected
     # A site that said "download limit for today" is left alone until the next local day: the
     # limit is kept in the state, so the next scheduled runs do not ask it again. A manual
     # check (the owner pressed the button) still tries.

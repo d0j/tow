@@ -270,6 +270,10 @@ def _open_client(cfg: dict[str, Any], secrets: dict[str, Any], client_id: str, *
     return adapter
 
 
+# How many checks in a row a client that lists nothing is taken for one still starting.
+EMPTY_CLIENT_CHECKS = 2
+
+
 @dataclass
 class ClientPool:
     """The torrent clients one run talks to: opened on first use, a client that does not answer
@@ -288,17 +292,28 @@ class ClientPool:
     errors: dict[str, Exception] = field(default_factory=dict)
     ok: dict[str, bool] = field(default_factory=dict)
     ping: str = ""
-    # Clients that had TOW's torrents at the last check (a topic of theirs was fine then).
+    # Clients that had TOW's torrents at the last check (a topic this run checks was fine then).
     expect_torrents: frozenset[str] = frozenset()
+    # How many checks in a row each client listed nothing (before this run, and with it).
+    previous_empty: dict[str, int] = field(default_factory=dict)
+    empty: dict[str, int] = field(default_factory=dict)
 
     def _answered(self, client_id: str, client: TorrentClientAdapter) -> str:
         """Ping the client; one that lists no torrent at all, although it had TOW's at the last
         check, is still loading them after a start (qBittorrent answers meanwhile): this run
-        must not read its torrents as removed and add them again."""
+        must not read its torrents as removed and add them again. A start takes a check or
+        two (a refusal marks the topics with an error, so the client refused last time is still
+        expected to list them); a client that still lists nothing after that was emptied, and
+        is believed."""
         answer = client.ping()
         has_any = getattr(client, "has_any_torrent", None)
-        if client_id in self.expect_torrents and callable(has_any) and has_any() is False:
-            raise TowError("check.client_empty", cls="qbit")
+        before = int(self.previous_empty.get(client_id) or 0)
+        expected = client_id in self.expect_torrents or 0 < before < EMPTY_CLIENT_CHECKS
+        if expected and callable(has_any) and has_any() is False:
+            runs = before + 1
+            self.empty[client_id] = runs
+            if runs <= EMPTY_CLIENT_CHECKS:
+                raise TowError("check.client_empty", cls="qbit")
         return answer
 
     def _client_event(self, client_id: str, kind: str, title: str = "") -> None:
