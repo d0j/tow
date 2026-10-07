@@ -14,7 +14,18 @@ body:
     attributes:
       label: TOW version
       description: "`tow version`, or http://127.0.0.1:8787/healthz"
-      placeholder: "1.21.0"
+      placeholder: "1.25.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: installed
+    attributes:
+      label: How TOW was installed
+      options:
+        - Windows zip (TOW-windows-x64.zip)
+        - install.ps1 (Windows, one line in PowerShell)
+        - install.sh (Linux, macOS)
+        - git clone
     validations:
       required: true
   - type: dropdown
