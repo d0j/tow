@@ -796,7 +796,12 @@ Applying first creates a verified restore point, then writes state and encrypted
 Both stores are read back before commit. A write/read-back failure restores the original stores; a crash leaves a
 journal for recovery on the next data lock. If recovery itself fails, the error explicitly says so and retains the
 journal. The restore point remains available; incomplete archive cleanup is reported separately from import success.
-No torrent-client or messenger request is made by this command.
+No torrent-client or messenger request is made by this command, unless `--apply --adopt` is given: then each
+imported topic whose torrent Monitorrent knew by hash and is already in the client without TOW's mark is adopted
+(`tow.adopt`: only the qBittorrent tag or the Transmission/Deluge label `tow` is added and read back - not the
+category, which can move files; files, folder, selection and state stay as they are). Topics without a known hash
+show “already in the client without the label tow” after their first check; adopt them there or with
+`tow adopt --all-unmarked`. Nothing is ever adopted without being asked.
 
 ## 8. Upgrading from the five-task layout (≤1.17)
 

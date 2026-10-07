@@ -409,6 +409,20 @@ class ManagedClient:
                 _LOG.warning("cleanup after a failed client change did not finish: %s", cleanup_error)
             raise
 
+    def adopt_torrent(self, infohash: str) -> list[str]:
+        """The owner's "adopt into TOW": TOW's mark on a torrent already in the client, and
+        nothing else - its files, folder, file selection and state stay as they are. The mark is
+        read back; returns the torrent's tags (labels) then."""
+        tags = self._owner_tags(infohash)
+        if tags is None:
+            raise self._fail("client.managed.missing")
+        if OWNER not in self._tags({"tags": tags}):
+            self._set_labels(infohash, [*tags, OWNER])
+            tags = self._owner_tags(infohash) or []
+            if OWNER not in self._tags({"tags": tags}):
+                raise self._fail("client.managed.adopt_unconfirmed")
+        return tags
+
     def stop_owned_torrent(self, infohash: str) -> dict[str, Any]:
         info = self.inspect_torrent(infohash)
         if info is None:

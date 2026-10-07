@@ -28,7 +28,12 @@ class MonitorrentImportError(TowError):
     """A safe, localized import failure; implementation errors never disclose secrets."""
 
 
-def import_monitorrent(db_path: Path, *, apply: bool = False, client_id: str | None = None) -> dict[str, Any]:
+def import_monitorrent(
+    db_path: Path, *, apply: bool = False, client_id: str | None = None, adopt: bool = False
+) -> dict[str, Any]:
+    """Preview or (``apply``) import Monitorrent's topics and logins. ``adopt`` (only when asked):
+    imported topics whose torrent is already in the client, by the hash Monitorrent kept, are
+    adopted into TOW right away (tow.adopt); the others can be after their first check."""
     path = Path(db_path)
     if not path.is_file():
         raise MonitorrentImportError("monitorrent.missing")
@@ -76,6 +81,10 @@ def import_monitorrent(db_path: Path, *, apply: bool = False, client_id: str | N
             }
             if credential_warning:
                 preview["warnings"] = [t(credential_warning)]
+            if adopt:
+                from tow.adopt import candidate_hash
+
+                preview["adopt_candidates"] = sum(1 for topic in new_topics if candidate_hash(topic))
             return preview
         from tow.restore_points import create_restore_point
 
@@ -115,7 +124,36 @@ def import_monitorrent(db_path: Path, *, apply: bool = False, client_id: str | N
         result["warnings"] = [t(credential_warning)]
     if point.get("cleanup_warning"):
         result["cleanup_warning"] = point["cleanup_warning"]
+    if adopt:
+        result.update(_adopt_imported(new_topics))
     return result
+
+
+def _adopt_imported(topics: list[dict[str, Any]]) -> dict[str, Any]:
+    """Adopt the imported topics whose torrent (by Monitorrent's hash) is in the client without
+    TOW's mark. A topic without a known hash waits for its first check (then ``tow adopt``)."""
+    from tow.adopt import AdoptError, adopt_topic, candidate_hash
+
+    adopted: list[str] = []
+    failed = 0
+    for topic in topics:
+        if not candidate_hash(topic):
+            continue
+        try:
+            adopt_topic(str(topic["id"]), how="import")
+        except AdoptError as exc:
+            if exc.code != "adopt.missing":  # not in the client: TOW adds it at its first check
+                failed += 1
+            continue
+        except Exception:  # noqa: BLE001 - the client did not answer: counted, logged by tow.adopt
+            failed += 1
+            continue
+        adopted.append(str(topic["id"]))
+    return {
+        "adopted": adopted,
+        "adopt_failed": failed,
+        "adopt_after_check": sum(1 for topic in topics if not candidate_hash(topic)),
+    }
 
 
 def _credential_warning(

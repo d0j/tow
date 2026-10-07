@@ -414,6 +414,7 @@ HISTORY_GROUPS = {
             "client_removed",
             "client_restored",
             "client_stopped",
+            "client_adopted",
         }
     ),
     "errors": frozenset(
@@ -427,6 +428,7 @@ HISTORY_GROUPS = {
             "browser_auth_failed",
             "watchdog_alert",
             "client_stop_failed",
+            "client_adopt_failed",
             "backup_cleanup_pending",
             "settings_backup_check_fail",
             "settings_backup_delete_fail",

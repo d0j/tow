@@ -69,6 +69,7 @@ ROUTES = frozenset(
         ("POST", "/topics/{tid}/edit"),
         ("POST", "/topics/{tid}/pause"),
         ("POST", "/topics/{tid}/replace-revision"),
+        ("POST", "/topics/{tid}/adopt"),
         ("POST", "/topics/{tid}/check"),
         ("POST", "/check"),
         ("GET", "/check/status"),

@@ -385,3 +385,49 @@ def test_default_port_alone_does_not_make_an_empty_client_configured(database, p
     result = importer.import_monitorrent(database, apply=True)
     assert "qbittorrent" in result["credentials_filled"]
     assert store.load_secrets()["qbittorrent"]["port"] == 8081
+
+
+HASH_A = "A1" * 20
+
+
+class _Client:
+    """A torrent client holding Monitorrent's torrent, not marked as TOW's."""
+
+    def __init__(self) -> None:
+        self.tags: dict[str, list[str]] = {HASH_A: []}
+
+    def inspect_torrent(self, h):
+        return {"hash": h, "tags": list(self.tags[h])} if h in self.tags else None
+
+    def adopt_torrent(self, h):
+        self.tags[h].append("tow")
+        return self.tags[h]
+
+
+def _with_known_hash(database, monkeypatch):
+    with closing(sqlite3.connect(database)) as writer, writer:
+        writer.execute("INSERT INTO topics VALUES (30, 'Known', 'http://rutor.info/torrent/30/known', 'M:\\new')")
+        writer.execute("INSERT INTO topics VALUES (31, 'Gone', 'http://rutor.info/torrent/31/gone', 'M:\\new')")
+        writer.execute("INSERT INTO rutororg_topics VALUES (30, ?)", (HASH_A,))
+        writer.execute("INSERT INTO rutororg_topics VALUES (31, ?)", ("B2" * 20,))
+    client = _Client()
+    monkeypatch.setattr("tow.adopt.client_factory.from_secrets", lambda cfg, secrets, client_id=None: client)
+    return client
+
+
+def test_import_adopts_existing_torrents_only_when_asked(database, monkeypatch):
+    client = _with_known_hash(database, monkeypatch)
+    assert importer.import_monitorrent(database, adopt=True)["adopt_candidates"] == 2  # a preview asks nothing
+    assert client.tags[HASH_A] == []
+    result = importer.import_monitorrent(database, apply=True, adopt=True)
+    assert result["adopted"] == ["mr-30"]  # mr-31's torrent is not in the client: its first check adds it
+    assert (result["adopt_failed"], result["adopt_after_check"]) == (0, 1)  # mr-3: no usable hash
+    assert client.tags[HASH_A] == ["tow"]
+
+
+def test_import_without_adopt_never_asks_the_client(database, monkeypatch):
+    client = _with_known_hash(database, monkeypatch)
+    monkeypatch.setattr("tow.adopt.client_factory.from_secrets", lambda *a, **k: pytest.fail("client asked"))
+    result = importer.import_monitorrent(database, apply=True)
+    assert "adopted" not in result
+    assert client.tags[HASH_A] == []

@@ -95,6 +95,7 @@ flowchart TD
 | `tow.check`, `check_steps`, `check_transaction` | A check run: fetch, decide, hand to the client, record — with a journal for the commit. |
 | `tow.trackers` | `generic.GenericHttpTracker` reads any configured site; `presets/<site>.py` adds what TOW knows about a particular site. `tow.mirrors` picks mirrors, cooldowns, redirects. |
 | `tow.clients` | Torrent adapters behind `TorrentClientAdapter`; Transmission and Deluge use `managed.ManagedClient`, while qBittorrent implements the same read-back contract separately. |
+| `tow.adopt` | Adopt into TOW: on the owner's request only, the `tow` mark on a torrent already in the client (added by hand or by Monitorrent), read back and logged; nothing else about the torrent changes. |
 | `tow.notifiers` | One module per messenger behind the `Notifier` protocol; `outbox` is the per-recipient delivery queue; `tow.delivery` groups, delays and digests. |
 | `tow.selection`, `tow.episodes`, `tow.torrent` | Which files to download; episode parsing; bencode and info-hash. |
 | `tow.content` | Encrypted, bounded metadata preparation snapshots; literal file identities for graphical selection, without transfer-task mutations or media retrieval. Explicit native magnet preview is separate from the mutating add fallback and from dry-run. A local `.torrent` only previews: it never becomes a new topic's first revision or its saved metadata. |
@@ -277,7 +278,7 @@ moved to the outbox in one locked write, so a stop between them loses nothing.
 | Secrets at rest | `secrets.enc` (Fernet). The master key lives in `keys/`, never in data copies; night copies are signed with a key derived from it. Every start closes the install root (the code TOW runs), `keys/` and `data/` to other accounts (Windows: this account, SYSTEM and Administrators, nothing inherited; POSIX 0700, the root only when world-writable) and warns when it cannot; `tow doctor` reports it. |
 | Outbound requests | Site addresses entered in the web UI that resolve to private, loopback or CGNAT ranges are refused (SSRF); download redirects may not leave the site's configured hosts. |
 | Folders | Downloads and backups may not go into system or profile folders on any OS (8.3 names, trailing dots and links included). |
-| Torrents | TOW only changes torrents tagged `tow`; a client add counts only after read-back. |
+| Torrents | TOW only changes torrents tagged `tow`; a client add counts only after read-back. A torrent it did not add gets the tag only when the owner adopts it (`tow.adopt`). |
 
 Not covered: a reverse proxy on the same host makes every request look local, and anyone with access to the
 user account (or the `keys/` folder) can read the secrets. See [SECURITY.md](../SECURITY.md).
