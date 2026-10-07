@@ -6,7 +6,8 @@ from __future__ import annotations
 import argparse
 import io
 import json
-from datetime import datetime
+import re
+from datetime import UTC, datetime
 
 import pytest
 
@@ -101,6 +102,23 @@ def test_status_is_one_line_and_json(monkeypatch, capsys):
     assert data["client"] == "qBittorrent"
 
 
+def test_status_writes_both_check_times_in_its_own_language(monkeypatch, capsys):
+    # The check stored "at" in Russian; the terminal speaks English: both times read the English way.
+    from tow.config import load_config, save_config
+    from tow.store import save_state
+
+    cfg = load_config()
+    cfg["language"] = "en"
+    save_config(cfg)
+    monkeypatch.setattr("tow.autostart.backend", lambda: type("B", (), {"status": lambda self: {"on": False}})())
+    at = datetime(2026, 10, 7, 1, 36, 49, tzinfo=UTC)
+    save_state({"topics": [], "health": {"at": "07.10.2026 04:36:49 UTC+03:00", "at_ts": int(at.timestamp())}})
+    assert cli.main(["status"]) == 0
+    line = capsys.readouterr().out
+    assert "07.10.2026" not in line
+    assert re.search(r"last check: 2026-10-07 \d\d:36:49", line), line
+
+
 @pytest.mark.parametrize(
     ("configured", "system", "expected"),
     [("auto", "ru_RU.UTF-8", "ru"), ("auto", "C", "en"), ("en", "ru_RU.UTF-8", "en")],
@@ -130,11 +148,13 @@ def test_a_typed_command_speaks_the_configured_or_the_system_language(
 
 
 def test_status_writes_the_last_and_the_next_check_the_same_way(monkeypatch, capsys):
+    from tow.clock import parse_timestamp
     from tow.i18n import format_datetime
     from tow.store import save_state
 
     monkeypatch.setattr("tow.autostart.backend", lambda: type("B", (), {"status": lambda self: {"on": True}})())
-    save_state({"topics": [], "health": {"at": "2026-10-06 22:30:56", "at_ts": 1, "check_ok": True}})
+    at_ts = int(parse_timestamp("2026-10-06 22:30:56").timestamp())  # a check stores both, the same moment
+    save_state({"topics": [], "health": {"at": "2026-10-06 22:30:56", "at_ts": at_ts, "check_ok": True}})
     assert cli.main(["status"]) == 0
     line = capsys.readouterr().out
 

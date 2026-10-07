@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
 import contextvars
 import json
 import os
@@ -703,7 +702,13 @@ def _status_view() -> dict[str, Any]:
         "client_ok": health.get("qbit_ok") if "qbit_ok" in health else None,
         "sites": len(cfg.get("trackers") or {}),
         "topics": len(state.get("topics") or []),
-        "last_check": health.get("at") or None,
+        # The check stores "at" already written in the page's language of that moment; the number
+        # beside it is written again here, in the language this command speaks, like next_check.
+        "last_check": (
+            format_ui_timestamp(datetime.fromtimestamp(health["at_ts"], UTC).isoformat())
+            if isinstance(health.get("at_ts"), int) and health["at_ts"] > 0
+            else health.get("at") or None
+        ),
         "last_check_ok": bool(health.get("check_ok", True)) if health else None,
         "next_check": format_ui_timestamp(datetime.fromtimestamp(next_at, UTC).isoformat()) if next_at else None,
         "network": as_bool(cfg.get("allow_lan")),
@@ -721,11 +726,6 @@ def _cmd_status(args: argparse.Namespace) -> int:
         return EXIT_OK
     yes_no = {True: t("cli.status.yes"), False: t("cli.status.no"), None: "?"}
     last_check = view["last_check"]
-    if last_check:  # the check writes "2026-10-06 22:30:56": shown as every other date of TOW
-        from tow.clock import format_ui_timestamp
-
-        with contextlib.suppress(TypeError, ValueError, OverflowError):
-            last_check = format_ui_timestamp(str(last_check))
     client = view["client"] or t("cli.status.none")
     if view["client_ok"] is not None:
         client += " " + (t("cli.status.answers") if view["client_ok"] else t("cli.status.not_answering"))
