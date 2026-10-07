@@ -94,6 +94,11 @@ if [ "${1:-}" = setup ]; then
 fi
 
 if [ -x "$TOW_APP/.venv/bin/tow" ]; then
+    # A moved folder: the environment's Python still points to the old place.
+    if ! "$TOW_APP/.venv/bin/python" -I -S -c '' >/dev/null 2>&1; then
+        echo "TOW's environment still belongs to the folder TOW was moved or copied from. Run \"$TOW_APP/scripts/tow\" setup first." >&2
+        exit 3
+    fi
     exec "$TOW_APP/.venv/bin/tow" "$@"
 fi
 # Not set up yet: uv runs TOW from the locked environment.
