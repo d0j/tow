@@ -150,10 +150,20 @@ def _new_topic(form: TopicForm) -> _Added:
 
 def _save_new_topic(new: dict[str, Any]) -> None:
     """The request does not hold the site lock (the title was fetched, a check follows): what
-    it decided on is read again under the persistence lock before the topic is saved."""
+    it decided on - the site, the client, the folder - is read again under the persistence lock
+    before the topic is saved."""
     with services.persistence_lock():
-        if match_tracker(load_trackers(services.load_config()), new["url"]) is None:
+        cfg = services.load_config()
+        if match_tracker(load_trackers(cfg), new["url"]) is None:
             raise Refused(t("web.topics.unknown_link"), field="no_site")
+        try:
+            selected_client = client_configuration(cfg, new["client_id"])
+        except (RuntimeError, ValueError) as exc:
+            raise Refused(t("web.topics.choose_client"), field="client") from exc
+        if not selected_client.get("enabled", True):
+            raise Refused(t("web.topics.client_disabled"), field="client")
+        if problem := _folder_refusal(new["save_path"]):
+            raise Refused(problem, field="folder")
         state = services.load_state()
         topics = state.setdefault("topics", [])
         if any(item.get("url") == new["url"] for item in topics):
