@@ -32,15 +32,14 @@ These hold in every release:
 Roughly in order of value:
 
 1. **Linux and macOS** — real-machine checks of autostart beyond the blocking CI and installer smoke tests.
-2. **qBittorrent on the shared client flow** (`clients/managed.py`) instead of its own, older transaction code.
-3. **Smaller check pipeline** — split the check into fetch, decide, apply and record steps.
-4. **Bot commands** — `/status`, `/check`, `/pause`, `/resume`, `/add` from the owner's chat via long polling (no
+2. **Smaller check pipeline** — split the check into fetch, decide, apply and record steps.
+3. **Bot commands** — `/status`, `/check`, `/pause`, `/resume`, `/add` from the owner's chat via long polling (no
    inbound port), changes confirmed with a button.
-5. **More messengers** — e-mail (SMTP), Matrix, Slack; each one module with HTTP-faked tests.
-6. **More clients** — BiglyBT through the Transmission-compatible RPC, after a full live test.
-7. **Backups** — an off-machine copy target; restoring state and history from a night copy without the key.
-8. **Internals** — one HTTP connection per tracker per run; `qbit*` health keys renamed to `client*`.
-9. **Python 3.15** — move when the final release is out.
+4. **More messengers** — e-mail (SMTP), Matrix, Slack; each one module with HTTP-faked tests.
+5. **More clients** — BiglyBT through the Transmission-compatible RPC, after a full live test.
+6. **Backups** — an off-machine copy target; restoring state and history from a night copy without the key.
+7. **Internals** — one HTTP connection per tracker per run; `qbit*` health keys renamed to `client*`.
+8. **Python 3.15** — move when the final release is out.
 
 ## Out of scope
 
