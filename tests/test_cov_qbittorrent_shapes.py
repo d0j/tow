@@ -204,7 +204,7 @@ def test_pending_release_cannot_confirm_unsafe_torrent(monkeypatch, state):
 
     monkeypatch.setattr(api, "torrents_remove_tags", remove)
     with raises_code("client.managed.error_state") as error:
-        adapter._clear_pending_tag(H)
+        adapter._clear_pending(H)
     assert error.value.params["state"] == state.casefold()
 
 

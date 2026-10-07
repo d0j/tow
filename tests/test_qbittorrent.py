@@ -124,7 +124,7 @@ def test_foreign_torrent_mutations_are_refused(monkeypatch, operation):
         elif operation == "move":
             client.set_location(infohash, "E:/moved")
         else:
-            client._clear_pending_tag(infohash)
+            client._clear_pending(infohash)
     assert api.calls == []
 
 
@@ -163,7 +163,7 @@ def test_partial_readback_cannot_confirm_skipped_files(monkeypatch):
     client = qbittorrent.QBittorrentClient("http://qbit", 8080, "user", "password")
     meta = parse_torrent_metadata(TORRENT)
     with raises_code("client.managed.wrong_selection", RuntimeError):
-        client._set_priorities_exact(meta.client_hash, meta.files, {0}, meta.name)
+        client._apply_selection(meta.client_hash, meta.files, {0}, meta.name)
 
 
 @pytest.mark.parametrize("adding", [False, True])
@@ -834,7 +834,8 @@ def test_file_mapping_matches_client_sanitized_windows_names():
         {"index": 1, "name": "Space Show_ Part A/E02_ Next.mkv", "size": 20},
     ]
 
-    assert QBittorrentClient._map_files(source, client_files, "Space Show: Part A") == {0: 0, 1: 1}
+    client = QBittorrentClient.__new__(QBittorrentClient)
+    assert client._map_files(source, client_files, "Space Show: Part A") == {0: 0, 1: 1}
 
 
 def test_add_applies_the_configured_category_and_extra_tags(monkeypatch):

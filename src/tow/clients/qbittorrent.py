@@ -3,22 +3,17 @@ from __future__ import annotations
 import contextlib
 import logging
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any, ClassVar
 from urllib.parse import quote
 
 from qbittorrentapi import Client
 
 from tow.clients import files
-from tow.clients.managed import UNSAFE_STATES, ClientError, completed_progress
+from tow.clients.managed import OWNER, PENDING, ClientError, ManagedClient
 from tow.clients.spec import TorrentClientAdapter
 from tow.errors import Msg
-from tow.folders import paths_equal
-from tow.torrent import (
-    TorrentFile,
-    parse_magnet_hashes,
-    parse_torrent_metadata,
-)
+from tow.torrent import TorrentFile, parse_magnet_hashes, parse_torrent_metadata
 
 _LOG = logging.getLogger("tow.clients")
 
@@ -48,22 +43,17 @@ def _fail(code: str, /, **params: Any) -> ClientError:
     return ClientError(code, prefix=NAME, **params)
 
 
-class QBittorrentClient:
-    kind = "qbittorrent"
-    client_kind = "qbittorrent"
-    client_id = "default"
-    add_category = ""
-    add_tags: Sequence[str] = ()
-    read_only = False  # a preview only reads: nothing to switch off
+class QBittorrentClient(ManagedClient):
+    """qBittorrent on the shared contract of ``tow.clients.managed``. Its own: the add (tags for
+    TOW's marks and the category apart, no automatic torrent management, a long timeout, a
+    repeated add accepted when it is TOW's), lookup by any of a hybrid torrent's hashes,
+    selecting every file by count, priority levels kept by a rollback, and magnet metadata."""
+
+    title = TITLE
+    kind = KIND
+    client_kind = KIND
     capabilities: ClassVar[dict[str, bool]] = {
-        "inspect": True,
-        "list_files": True,
-        "completion_time": True,
-        "add": True,
-        "stopped_add": True,
-        "file_selection": True,
-        "priority_readback": True,
-        "start_stop": True,
+        **ManagedClient.capabilities,
         "magnet_metadata": True,
         "metadata_preview": True,
     }
@@ -90,6 +80,46 @@ class QBittorrentClient:
     def has_hash(self, infohash: str) -> bool:
         rows = self._c.torrents_info(torrent_hashes=infohash.lower())
         return bool(rows)
+
+    # --- the shared contract's primitives ------------------------------------------------------
+
+    def _owner_tags(self, infohash: str) -> list[str] | None:
+        """One torrent row, no file list."""
+        rows = self._c.torrents_info(torrent_hashes=infohash.lower())
+        return self._tag_list(rows[0]) if rows else None
+
+    def _priority(self, infohash: str, file_ids: list[int], priority: int) -> None:
+        self._c.torrents_file_priority(torrent_hash=infohash.lower(), file_ids=file_ids, priority=priority)
+
+    def _set_wanted(self, infohash: str, wanted: set[int], all_ids: list[int]) -> None:
+        self._priority(infohash, all_ids, 0)
+        self._require_owned(infohash)
+        self._priority(infohash, sorted(wanted), 1)
+
+    def _stop(self, infohash: str) -> None:
+        method = getattr(self._c, "torrents_stop", None) or getattr(self._c, "torrents_pause", None)
+        if not callable(method):
+            raise _fail("client.qbittorrent.no_stop")
+        method(torrent_hashes=infohash.lower())
+
+    def _start(self, infohash: str) -> None:
+        method = getattr(self._c, "torrents_start", None) or getattr(self._c, "torrents_resume", None)
+        if not callable(method):
+            raise _fail("client.qbittorrent.no_start")
+        method(torrent_hashes=infohash.lower())
+
+    def _add_label(self, infohash: str, tags: list[str], label: str) -> None:
+        """A tag, never the category: with automatic torrent management a category moves the files."""
+        self._c.torrents_add_tags(tags=label, torrent_hashes=infohash.lower())
+
+    def _remove_label(self, infohash: str, tags: list[str], label: str) -> None:
+        remove = getattr(self._c, "torrents_remove_tags", None)
+        if not callable(remove):
+            raise _fail("client.qbittorrent.no_tag_removal")
+        remove(tags=label, torrent_hashes=infohash.lower())
+
+    def _move(self, infohash: str, save_path: str) -> None:
+        self._c.torrents_set_location(location=save_path, torrent_hashes=infohash.lower())
 
     def _resolved_hash(self, infohash: str, *, allow_full_scan: bool = True) -> str | None:
         wanted = str(infohash or "").upper()
@@ -244,11 +274,9 @@ class QBittorrentClient:
         """A stopped magnet TOW left pending without metadata is removed (and None returned) so
         it can be added again; any other torrent under the hash is kept (its hash returned)."""
         existing = self.inspect_torrent(resolved)
-        tags = {str(tag).casefold() for tag in (existing or {}).get("tags") or []}
-        state = str((existing or {}).get("state") or "").casefold()
-        if (existing or {}).get("files") or "tow-pending" not in tags:
+        if (existing or {}).get("files") or PENDING not in self._tags(existing):
             return resolved
-        if not state.startswith(("stopped", "paused")):
+        if not self._stopped(existing):
             raise _fail("client.qbittorrent.pending_magnet_active")
         delete = getattr(self._c, "torrents_delete", None)
         if not callable(delete):
@@ -294,8 +322,7 @@ class QBittorrentClient:
                 if cleanup_hash:
                     break
         inspected = self.inspect_torrent(cleanup_hash) if cleanup_hash else None
-        tags = {str(tag).strip().casefold() for tag in (inspected or {}).get("tags") or []}
-        if cleanup_hash and {"tow", "tow-pending"}.issubset(tags):
+        if cleanup_hash and {OWNER, PENDING}.issubset(self._tags(inspected)):
             self._stop(cleanup_hash)
 
     @staticmethod
@@ -327,8 +354,7 @@ class QBittorrentClient:
                 info = self.inspect_torrent(value)
             except Exception:  # noqa: BLE001 - not readable now: the add's own error stands
                 return False
-            tags = {str(tag).strip().casefold() for tag in (info or {}).get("tags") or []}
-            if {"tow", "tow-pending"}.issubset(tags):
+            if {OWNER, PENDING}.issubset(self._tags(info)):
                 return True
         return False
 
@@ -342,239 +368,111 @@ class QBittorrentClient:
         attempts: int = 50,
     ) -> tuple[str, dict[str, Any]]:
         """Wait until an accepted add is queryable with both transactional tags (the errors are
-        catalog keys)."""
+        catalog keys). Returns the hash qBittorrent lists it under, found by any of its hashes."""
         observed: dict[str, Any] | None = None
         candidates = tuple(
             dict.fromkeys(str(value).strip().upper() for value in (infohash, *aliases) if str(value or "").strip())
         )
+
+        def owned(candidate: str, *, full_scan: bool) -> str | None:
+            nonlocal observed
+            resolved = self._resolved_hash(candidate, allow_full_scan=full_scan)
+            if resolved is None:
+                return None
+            observed = self.inspect_torrent(resolved)
+            self._check_state(observed)
+            return resolved if {OWNER, PENDING}.issubset(self._tags(observed)) else None
+
         for attempt in range(attempts):
             for candidate in candidates:
-                resolved = self._resolved_hash(candidate, allow_full_scan=False)
-                if resolved is not None:
-                    observed = self.inspect_torrent(resolved)
-                    self._check_state(observed)
-                    tags = {str(tag).strip().casefold() for tag in (observed or {}).get("tags") or []}
-                    if {"tow", "tow-pending"}.issubset(tags):
-                        return resolved, observed or {}
-            if attempt % 10 == 9:
-                resolved = self._resolved_hash(candidates[0])
-                if resolved is not None:
-                    observed = self.inspect_torrent(resolved)
-                    self._check_state(observed)
-                    tags = {str(tag).strip().casefold() for tag in (observed or {}).get("tags") or []}
-                    if {"tow", "tow-pending"}.issubset(tags):
-                        return resolved, observed or {}
+                if (resolved := owned(candidate, full_scan=False)) is not None:
+                    return resolved, observed or {}
+            if attempt % 10 == 9 and (resolved := owned(candidates[0], full_scan=True)) is not None:
+                return resolved, observed or {}
             if attempt + 1 < attempts:
-                time.sleep(0.1)
+                self._sleep()
         if observed is None:
             raise _fail(visibility_error)
         raise _fail(ownership_error)
 
-    @classmethod
-    def _padding_like_name(cls, value: object) -> bool:
-        return files.padding_like(value)
-
-    @classmethod
-    def _map_files(
-        cls,
-        source_files: tuple[TorrentFile, ...],
-        client_files: list[dict[str, Any]],
-        root_name: str,
-    ) -> dict[int, int]:
-        return files.map_files(
-            source_files,
-            client_files,
-            root_name,
-            fail=lambda path: _fail("client.managed.file_unmatched", path=path),
-        )
-
     def _inspect_with_files(self, infohash: str) -> dict[str, Any]:
+        """Up to 20 reads. Unlike the shared wait, a torrent in an error state is returned too:
+        the step after it reports that state."""
         for _attempt in range(20):
             inspected = self.inspect_torrent(infohash)
             if inspected is not None and inspected.get("files"):
                 return inspected
-            time.sleep(0.1)
+            self._sleep()
         raise _fail("client.managed.no_files")
 
-    def _require_owned(self, infohash: str) -> None:
-        """Re-read the owner tag right before every mutation: one torrent row, no file list."""
-        rows = self._c.torrents_info(torrent_hashes=infohash.lower())
-        tags = {tag.casefold() for tag in self._tag_list(rows[0])} if rows else set()
-        if "tow" not in tags:
-            raise _fail("client.managed.not_owned")
-
-    def _stop(self, infohash: str) -> None:
-        method = getattr(self._c, "torrents_stop", None) or getattr(self._c, "torrents_pause", None)
-        if not callable(method):
-            raise _fail("client.qbittorrent.no_stop")
-        method(torrent_hashes=infohash.lower())
-
-    def _wait_stopped(self, infohash: str) -> dict[str, Any]:
-        last: dict[str, Any] | None = None
-        for attempt in range(50):
-            last = self.inspect_torrent(infohash)
-            if last is not None:
-                state = str(last.get("state") or "").casefold()
-                if state.startswith(("stopped", "paused")):
-                    return last
-                if state in {"error", "missingfiles", "unknown"}:
-                    raise _fail("client.managed.error_state", state=state)
-            if attempt < 49:
-                time.sleep(0.1)
-        raise _fail("client.managed.stop_unconfirmed")
-
-    def adopt_torrent(self, infohash: str) -> list[str]:
-        """The owner's "adopt into TOW": the tag "tow" on a torrent already in qBittorrent, and
-        nothing else. Not its category: with automatic torrent management a category moves the
-        files. The tag is read back; returns the torrent's tags then."""
-
-        def tags_now() -> list[str] | None:
-            rows = self._c.torrents_info(torrent_hashes=infohash.lower())
-            return self._tag_list(rows[0]) if rows else None
-
-        tags = tags_now()
-        if tags is None:
-            raise _fail("client.managed.missing")
-        if "tow" not in {tag.casefold() for tag in tags}:
-            self._c.torrents_add_tags(tags="tow", torrent_hashes=infohash.lower())
-            tags = tags_now() or []
-            if "tow" not in {tag.casefold() for tag in tags}:
-                raise _fail("client.managed.adopt_unconfirmed")
-        return tags
-
-    def stop_owned_torrent(self, infohash: str) -> dict[str, Any]:
-        """G1: stop a torrent TOW added itself (tag "tow"), on the owner's explicit request."""
-        info = self.inspect_torrent(infohash)
-        if info is None:
-            raise _fail("client.managed.missing")
-        tags = {str(tag).strip().casefold() for tag in info.get("tags") or []}
-        if "tow" not in tags:
-            raise _fail("client.managed.not_owned_stop")
-        if str(info.get("state") or "").casefold().startswith(("stopped", "paused")):
-            return info
-        self._stop(infohash)
-        return self._wait_stopped(infohash)
-
-    def _start(self, infohash: str) -> None:
-        method = getattr(self._c, "torrents_start", None) or getattr(self._c, "torrents_resume", None)
-        if not callable(method):
-            raise _fail("client.qbittorrent.no_start")
-        method(torrent_hashes=infohash.lower())
-
-    @staticmethod
-    def _check_state(info: dict[str, Any] | None) -> None:
-        state = str((info or {}).get("state") or "").casefold()
-        if state in UNSAFE_STATES:
-            raise _fail("client.managed.error_state", state=state)
-
-    def _wait_started(self, infohash: str) -> dict[str, Any]:
-        last: dict[str, Any] | None = None
-        for _attempt in range(50):
-            last = self.inspect_torrent(infohash)
-            if last is not None:
-                state = str(last.get("state") or "").casefold()
-                self._check_state(last)
-                if state and not state.startswith(("stopped", "paused")):
-                    return last
-                if state.startswith(("stopped", "paused")) and completed_progress(last.get("progress")):
-                    return last
-            time.sleep(0.1)
-        raise _fail("client.managed.start_unconfirmed")
-
-    def _clear_pending_tag(self, infohash: str) -> dict[str, Any]:
-        self._require_owned(infohash)
-        remove = getattr(self._c, "torrents_remove_tags", None)
-        if not callable(remove):
-            raise _fail("client.qbittorrent.no_tag_removal")
-        remove(tags="tow-pending", torrent_hashes=infohash.lower())
-        for attempt in range(50):
-            inspected = self.inspect_torrent(infohash)
-            self._check_state(inspected)
-            tags = {str(tag).strip().casefold() for tag in (inspected or {}).get("tags") or []}
-            if "tow" in tags and "tow-pending" not in tags:
-                return inspected or {}
-            if attempt < 49:
-                time.sleep(0.1)
-        raise _fail("client.managed.pending_not_cleared")
-
-    def _set_priorities_exact(
-        self,
-        infohash: str,
-        source_files: tuple[TorrentFile, ...],
-        selected_indices: set[int],
-        root_name: str,
+    def _apply_selection(
+        self, infohash: str, source_files: tuple[TorrentFile, ...], selected: set[int], root_name: str
     ) -> dict[str, Any]:
+        """Every file of a torrent without padding is selected by count, not by name: qBittorrent
+        may show a name the torrent spells in another encoding. Anything else is the shared,
+        name-and-size matched selection."""
+        every = {row.index for row in source_files if not row.is_pad}
+        if selected != every or any(row.is_pad or self._padding_like(row.path) for row in source_files):
+            return super()._apply_selection(infohash, source_files, selected, root_name)
+
+        def fail() -> ClientError:
+            return _fail("client.managed.wrong_selection")
+
         inspected = self._inspect_with_files(infohash)
         rows = list(inspected.get("files") or [])
-        files.priorities(rows, fail=lambda: _fail("client.managed.wrong_selection"))
-        valid_source = {row.index for row in source_files if not row.is_pad}
-        if selected_indices == valid_source:
-            if any(row.is_pad or self._padding_like_name(row.path) for row in source_files):
-                mapping = self._map_files(source_files, list(inspected.get("files") or []), root_name)
-                mapped_ids = set(mapping.values())
-                all_client_ids = sorted(
-                    int(row["index"]) for row in inspected.get("files") or [] if isinstance(row.get("index"), int)
-                )
-                selected_ids = sorted(mapping.values())
-                self._require_owned(infohash)
-                self._c.torrents_file_priority(torrent_hash=infohash.lower(), file_ids=all_client_ids, priority=0)
-                self._require_owned(infohash)
-                self._c.torrents_file_priority(torrent_hash=infohash.lower(), file_ids=selected_ids, priority=1)
-                verified = self._inspect_with_files(infohash)
-                files.verify_selection(
-                    rows,
-                    list(verified.get("files") or []),
-                    set(selected_ids),
-                    fail=lambda: _fail("client.managed.wrong_selection"),
-                    ignored={
-                        row["index"]
-                        for row in rows
-                        if row["index"] not in mapped_ids and self._padding_like_name(row.get("name"))
-                    },
-                )
-                self._require_owned(infohash)
-                return verified
-            client_rows = [
-                row
-                for row in inspected.get("files") or []
-                if isinstance(row.get("index"), int) and not self._padding_like_name(row.get("name"))
-            ]
-            if len(client_rows) != len(valid_source):
-                raise _fail("client.managed.wrong_selection")
-            ids = sorted(int(row["index"]) for row in client_rows)
-            self._require_owned(infohash)
-            self._c.torrents_file_priority(torrent_hash=infohash.lower(), file_ids=ids, priority=1)
-            verified = self._inspect_with_files(infohash)
-            files.verify_selection(
-                rows,
-                list(verified.get("files") or []),
-                set(ids),
-                fail=lambda: _fail("client.managed.wrong_selection"),
-                ignored={row["index"] for row in rows if self._padding_like_name(row.get("name"))},
-            )
-            self._require_owned(infohash)
-            return verified
-        mapping = self._map_files(source_files, list(inspected.get("files") or []), root_name)
-        all_ids = sorted(int(row["index"]) for row in inspected.get("files") or [] if isinstance(row.get("index"), int))
-        if any(int(index) not in mapping for index in selected_indices):
-            # Like add_torrent_selected: a clear refusal, not a bare KeyError.
-            raise _fail("client.managed.bad_selection")
-        selected_ids = sorted(mapping[int(index)] for index in selected_indices)
-        if not selected_ids:
-            raise _fail("client.managed.bad_selection")
+        files.priorities(rows, fail=fail)
+        ids = sorted(
+            int(row["index"])
+            for row in rows
+            if isinstance(row.get("index"), int) and not self._padding_like(row.get("name"))
+        )
+        if len(ids) != len(every):
+            raise fail()
         self._require_owned(infohash)
-        self._c.torrents_file_priority(torrent_hash=infohash.lower(), file_ids=all_ids, priority=0)
-        self._require_owned(infohash)
-        self._c.torrents_file_priority(torrent_hash=infohash.lower(), file_ids=selected_ids, priority=1)
+        self._priority(infohash, ids, 1)
         verified = self._inspect_with_files(infohash)
         files.verify_selection(
             rows,
             list(verified.get("files") or []),
-            set(selected_ids),
-            fail=lambda: _fail("client.managed.wrong_selection"),
+            set(ids),
+            fail=fail,
+            ignored={row["index"] for row in rows if self._padding_like(row.get("name"))},
         )
         self._require_owned(infohash)
         return verified
+
+    def _ignored_padding(
+        self,
+        rows: list[dict[str, Any]],
+        mapped_ids: set[int],
+        source_files: tuple[TorrentFile, ...],
+        selected: set[int],
+    ) -> set[int]:
+        """Only when every file is wanted: a partial selection first sets every file qBittorrent
+        lists to skipped, so even a padding file must read back so."""
+        if selected != {row.index for row in source_files if not row.is_pad}:
+            return set()
+        return super()._ignored_padding(rows, mapped_ids, source_files, selected)
+
+    def _restore_selection(self, infohash: str, previous: dict[int, int], before_rows: list[dict[str, Any]]) -> None:
+        """qBittorrent's priority levels (1 normal, 6 high, 7 maximal) come back as they were, one
+        request per level, and are read back exactly."""
+
+        def fail() -> ClientError:
+            return _fail("client.managed.wrong_selection")
+
+        for priority in sorted(set(previous.values())):
+            self._require_owned(infohash)
+            self._priority(infohash, sorted(index for index, value in previous.items() if value == priority), priority)
+        restored = list(self._inspect_with_files(infohash).get("files") or [])
+        restored_priorities = files.priorities(restored, fail=fail)
+        files.verify_selection(before_rows, restored, {i for i, p in previous.items() if p > 0}, fail=fail)
+        if restored_priorities != previous:
+            raise fail()
+
+    def _stop_after_add(self, added: dict[str, Any]) -> bool:
+        """qBittorrent is asked to stop every torrent TOW adds, even one it lists stopped."""
+        return True
 
     def add_torrent_selected(
         self,
@@ -583,18 +481,9 @@ class QBittorrentClient:
         infohash: str,
         selected_indices: list[int] | tuple[int, ...],
     ) -> dict[str, Any]:
-        metadata = parse_torrent_metadata(content)
-        if metadata.client_hash.casefold() != str(infohash).casefold():
-            raise _fail("client.managed.hash_changed_add")
-        destination = str(save_path or "").strip()
-        if not destination:
-            raise _fail("client.managed.no_folder")
-        selected = {int(index) for index in selected_indices}
-        valid = {row.index for row in metadata.files if not row.is_pad}
-        if not selected or not selected.issubset(valid):
-            raise _fail("client.managed.bad_selection")
+        metadata, destination, selected = self._check_add(content, save_path, infohash, selected_indices)
         # G8: the owner's optional category and extra tags; "tow"/"tow-pending" stay first.
-        extra_tags = [tag for tag in self.add_tags if tag not in {"tow", "tow-pending"}]
+        extra_tags = [tag for tag in self.add_tags if tag not in {OWNER, PENDING}]
         category = str(self.add_category or "").strip()
         if category:
             with contextlib.suppress(Exception):  # it may exist already; the add reports real problems
@@ -603,7 +492,7 @@ class QBittorrentClient:
             "torrent_files": content,
             "save_path": destination,
             "use_auto_torrent_management": False,
-            "tags": ",".join(["tow", "tow-pending", *extra_tags]),
+            "tags": ",".join([OWNER, PENDING, *extra_tags]),
             **({"category": category} if category else {}),
             "is_stopped": True,
             "content_layout": "Original",
@@ -623,109 +512,14 @@ class QBittorrentClient:
             # request added the torrent. It is this add when it is there now with both TOW marks.
             if not self._added_by_this_add((infohash, *aliases)):
                 raise
-        owned_hash: str | None = None
-        release_requested = False
-        try:
-            owned_hash, added = self._wait_for_ownership(
-                infohash,
-                visibility_error="client.managed.not_visible",
-                ownership_error="client.managed.no_owner_mark",
-                aliases=aliases,
-            )
-            if not paths_equal(str(added.get("save_path") or ""), destination):
-                raise _fail("client.managed.wrong_folder")
-            self._require_owned(owned_hash)
-            self._stop(owned_hash)
-            self._wait_stopped(owned_hash)
-            self._set_priorities_exact(owned_hash, metadata.files, selected, metadata.name)
-            self._require_owned(owned_hash)
-            self._start(owned_hash)
-            self._wait_started(owned_hash)
-            release_requested = True
-            return self._clear_pending_tag(owned_hash)
-        except Exception:
-            if owned_hash is not None and not release_requested:
-                try:
-                    self._require_owned(owned_hash)
-                    self._stop(owned_hash)
-                except Exception as cleanup_error:  # noqa: BLE001 - the original failure is re-raised; this must not hide it
-                    _LOG.warning("cleanup after a failed client change did not finish: %s", cleanup_error)
-            raise
-
-    def configure_torrent_selection(
-        self,
-        content: bytes,
-        infohash: str,
-        selected_indices: list[int] | tuple[int, ...],
-        *,
-        ensure_started: bool = False,
-    ) -> dict[str, Any]:
-        metadata = parse_torrent_metadata(content)
-        valid_hashes = {metadata.client_hash.casefold()}
-        if metadata.hash_v1:
-            valid_hashes.add(metadata.hash_v1.casefold())
-        if str(infohash).casefold() not in valid_hashes:
-            raise _fail("client.managed.hash_changed_selection")
-        before = self._inspect_with_files(infohash)
-        tags = {str(tag).strip().casefold() for tag in before.get("tags") or []}
-        if "tow" not in tags:
-            raise _fail("client.managed.not_owned")
-        pending = "tow-pending" in tags
-        previous = files.priorities(
-            list(before.get("files") or []), fail=lambda: _fail("client.managed.wrong_selection")
+        # Not stopped again when this fails: a torrent without both marks may not be TOW's.
+        owned_hash, added = self._wait_for_ownership(
+            infohash,
+            visibility_error="client.managed.not_visible",
+            ownership_error="client.managed.no_owner_mark",
+            aliases=aliases,
         )
-        was_stopped = str(before.get("state") or "").casefold().startswith(("stopped", "paused"))
-        release_requested = False
-        try:
-            self._require_owned(infohash)
-            self._stop(infohash)
-            self._wait_stopped(infohash)
-            verified = self._set_priorities_exact(
-                infohash,
-                metadata.files,
-                {int(index) for index in selected_indices},
-                metadata.name,
-            )
-            if pending or not was_stopped or ensure_started:
-                self._require_owned(infohash)
-                self._start(infohash)
-                verified = self._wait_started(infohash)
-            if pending:
-                release_requested = True
-                verified = self._clear_pending_tag(infohash)
-            return verified
-        except Exception:
-            if release_requested:
-                raise
-            try:
-                self._require_owned(infohash)
-                self._stop(infohash)
-                self._wait_stopped(infohash)
-                for priority in sorted(set(previous.values())):
-                    ids = sorted(index for index, value in previous.items() if value == priority)
-                    if ids:
-                        self._require_owned(infohash)
-                        self._c.torrents_file_priority(torrent_hash=infohash.lower(), file_ids=ids, priority=priority)
-                restored = self._inspect_with_files(infohash)
-                restored_rows = list(restored.get("files") or [])
-                restored_priorities = files.priorities(
-                    restored_rows, fail=lambda: _fail("client.managed.wrong_selection")
-                )
-                files.verify_selection(
-                    list(before.get("files") or []),
-                    restored_rows,
-                    {i for i, p in previous.items() if p > 0},
-                    fail=lambda: _fail("client.managed.wrong_selection"),
-                )
-                if restored_priorities != previous:
-                    raise _fail("client.managed.wrong_selection")
-                if not was_stopped:
-                    self._require_owned(infohash)
-                    self._start(infohash)
-                    self._wait_started(infohash)
-            except Exception as cleanup_error:  # noqa: BLE001 - the original failure is re-raised; this must not hide it
-                _LOG.warning("cleanup after a failed client change did not finish: %s", cleanup_error)
-            raise
+        return self._finish_add(owned_hash, added, destination, metadata, selected)
 
     def inspect_torrent(self, infohash: str) -> dict[str, Any] | None:
         rows = self._c.torrents_info(torrent_hashes=infohash.lower())
@@ -766,14 +560,6 @@ class QBittorrentClient:
         if isinstance(raw_tags, str):
             return sorted({part.strip() for part in raw_tags.split(",") if part.strip()})
         return sorted({str(part).strip() for part in (raw_tags or []) if str(part).strip()})
-
-    def set_location(self, infohash: str, save_path: str) -> str:
-        dest = (save_path or "").strip()
-        if not dest:
-            raise _fail("client.managed.no_folder")
-        self._require_owned(infohash)
-        self._c.torrents_set_location(location=dest, torrent_hashes=infohash.lower())
-        return "ok"
 
 
 def from_secrets(secrets: dict[str, Any]) -> TorrentClientAdapter:
