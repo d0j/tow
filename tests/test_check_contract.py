@@ -9,7 +9,9 @@ from tow.check import client_ops
 from tow.check import notices as check_notices
 from tow.check import reconcile as check_reconcile
 from tow.check import rows as check_rows
+from tow.check import run as check_run
 from tow.check import topic as topic_step
+from tow.clients import factory as client_factory
 from tow.notify import event_text
 from tow.store import (
     StoreCorruptionError,
@@ -91,8 +93,8 @@ class FakeClient:
 def _wire_fake_check(monkeypatch, client):
     tracker = FakeTracker()
     cfg = {"trackers": {}, "client": {"id": "main", "kind": "fake"}}
-    monkeypatch.setattr(check, "load_config", lambda: cfg)
-    monkeypatch.setattr(check, "load_trackers", lambda cfg: {"fake": tracker})
+    monkeypatch.setattr(check_run, "load_config", lambda: cfg)
+    monkeypatch.setattr(check_run, "load_trackers", lambda cfg: {"fake": tracker})
     monkeypatch.setattr(topic_step, "match_tracker", lambda trackers, url: tracker)
     monkeypatch.setattr(
         topic_step,
@@ -104,8 +106,8 @@ def _wire_fake_check(monkeypatch, client):
             files=(TorrentFile(0, "Show.mkv", 1),),
         ),
     )
-    monkeypatch.setattr(check.client_factory, "default_client_id", lambda cfg: "main")
-    monkeypatch.setattr(check.client_factory, "from_secrets", lambda cfg, secrets, client_id=None: client)
+    monkeypatch.setattr(client_factory, "default_client_id", lambda cfg: "main")
+    monkeypatch.setattr(client_factory, "from_secrets", lambda cfg, secrets, client_id=None: client)
     monkeypatch.setattr(check_reconcile, "reconcile_topic", lambda *args, **kwargs: {"events": [], "summary": {}})
     return tracker
 
@@ -148,7 +150,7 @@ def test_pending_add_retry_is_recorded_as_recovered_add(monkeypatch):
     client = PendingClient()
     _wire_fake_check(monkeypatch, client)
     events = []
-    monkeypatch.setattr(check, "log_event", lambda kind, **fields: events.append((kind, fields)))
+    monkeypatch.setattr(check_run, "log_event", lambda kind, **fields: events.append((kind, fields)))
 
     result = check.run_check(apply=True, notify=False, how="test")
 
@@ -188,7 +190,7 @@ def test_owned_add_retry_without_pending_tag_is_still_recorded_as_recovered_add(
     client.present = True
     _wire_fake_check(monkeypatch, client)
     events = []
-    monkeypatch.setattr(check, "log_event", lambda kind, **fields: events.append((kind, fields)))
+    monkeypatch.setattr(check_run, "log_event", lambda kind, **fields: events.append((kind, fields)))
 
     result = check.run_check(apply=True, notify=False, how="test")
 
@@ -319,7 +321,7 @@ def test_existing_hash_uses_matching_page_magnet_when_torrent_link_disappears(mo
 
     monkeypatch.setattr(tracker, "fetch_magnet", fetch_magnet, raising=False)
     logged_events = []
-    monkeypatch.setattr(check, "log_event", lambda kind, **fields: logged_events.append((kind, fields)))
+    monkeypatch.setattr(check_run, "log_event", lambda kind, **fields: logged_events.append((kind, fields)))
     result = check.run_check(apply=apply, notify=False, ids=["existing-magnet"], how="manual")
     row = result["results"][0]
     assert row["ok"] is True
@@ -602,9 +604,11 @@ def test_dry_run_is_preview_without_authoritative_writes(monkeypatch, tmp_path: 
     client = FakeClient()
     tracker = _wire_fake_check(monkeypatch, client)
     log_calls = []
-    for module in (check, topic_step, check_notices):
+    for module in (check_run, topic_step, check_notices):
         monkeypatch.setattr(module, "log_event", lambda *args, **kwargs: log_calls.append((args, kwargs)))
-    monkeypatch.setattr(check, "save_state", lambda state: (_ for _ in ()).throw(AssertionError("dry-run saved state")))
+    monkeypatch.setattr(
+        check_run, "save_state", lambda state: (_ for _ in ()).throw(AssertionError("dry-run saved state"))
+    )
     monkeypatch.setattr(
         check_reconcile,
         "save_download_history",
@@ -702,7 +706,9 @@ def test_apply_store_failure_restores_history_and_state(monkeypatch):
     history_file = Path(load_download_history.__globals__["download_history_path"]())
     state_before = state_file.read_bytes()
     history_before = history_file.read_bytes()
-    monkeypatch.setattr(check, "save_state", lambda _state: (_ for _ in ()).throw(OSError("state store unavailable")))
+    monkeypatch.setattr(
+        check_run, "save_state", lambda _state: (_ for _ in ()).throw(OSError("state store unavailable"))
+    )
 
     with pytest.raises(OSError, match="state store unavailable"):
         check.run_check(apply=True, notify=False, how="test")
@@ -735,7 +741,7 @@ def test_recover_check_transaction_restores_history_committed_marker():
 def test_blocked_check_records_attempt_for_home_timer(monkeypatch):
     save_state({"topics": []})
     events = []
-    monkeypatch.setattr(check, "log_event", lambda *args, **kwargs: events.append((args, kwargs)))
+    monkeypatch.setattr(check_run, "log_event", lambda *args, **kwargs: events.append((args, kwargs)))
 
     health = check.record_check_failure("legacy plaintext TOW secrets require explicit migrate")
 
@@ -810,9 +816,9 @@ def test_notification_is_not_sent_before_state_history_commit(monkeypatch):
     deliveries = []
     logged = []
     monkeypatch.setattr(check_notices, "_audited_send", lambda *args, **kwargs: deliveries.append(kwargs) or True)
-    monkeypatch.setattr(check, "log_event", lambda kind, **kwargs: logged.append(kind))
+    monkeypatch.setattr(check_run, "log_event", lambda kind, **kwargs: logged.append(kind))
     monkeypatch.setattr(
-        check,
+        check_run,
         "save_state",
         lambda _state: (_ for _ in ()).throw(OSError("state store unavailable")),
     )
@@ -831,14 +837,14 @@ def test_an_added_message_lost_with_a_failed_commit_is_sent_by_the_next_run(monk
     save_download_history({"schema_version": 1, "topics": {}})
     client = FakeClient()
     _wire_fake_check(monkeypatch, client)
-    real_save = check.save_state
-    monkeypatch.setattr(check, "save_state", lambda _state: (_ for _ in ()).throw(OSError("disk full")))
+    real_save = check_run.save_state
+    monkeypatch.setattr(check_run, "save_state", lambda _state: (_ for _ in ()).throw(OSError("disk full")))
     with pytest.raises(OSError, match="disk full"):
         check.run_check(apply=True, notify=True, how="test")
     assert client.present is True  # the client has it...
     assert load_state()["topics"][0].get("hash") is None  # ...TOW does not know
 
-    monkeypatch.setattr(check, "save_state", real_save)
+    monkeypatch.setattr(check_run, "save_state", real_save)
     sent = []
     monkeypatch.setattr(
         check_notices, "_audited_send", lambda _s, *, text, **_k: sent.append(text.split("\n")[0]) or True
@@ -1225,11 +1231,11 @@ def test_qbit_down_notification_is_sent_only_after_state_commit(monkeypatch):
     save_state({"topics": []})
     save_download_history({"schema_version": 1, "topics": {}})
     cfg = {"trackers": {}, "client": {"id": "main", "kind": "fake"}}
-    monkeypatch.setattr(check, "load_config", lambda: cfg)
-    monkeypatch.setattr(check, "load_trackers", lambda _cfg: {})
-    monkeypatch.setattr(check.client_factory, "default_client_id", lambda _cfg: "main")
+    monkeypatch.setattr(check_run, "load_config", lambda: cfg)
+    monkeypatch.setattr(check_run, "load_trackers", lambda _cfg: {})
+    monkeypatch.setattr(client_factory, "default_client_id", lambda _cfg: "main")
     monkeypatch.setattr(
-        check.client_factory,
+        client_factory,
         "from_secrets",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("offline")),
     )
@@ -1239,7 +1245,7 @@ def test_qbit_down_notification_is_sent_only_after_state_commit(monkeypatch):
         save_state(state)
         order.append("commit")
 
-    monkeypatch.setattr(check, "save_state", committed)
+    monkeypatch.setattr(check_run, "save_state", committed)
     monkeypatch.setattr(
         check_notices,
         "_audited_send",
@@ -1255,11 +1261,11 @@ def test_repeated_qbit_down_notification_is_suppressed_until_recovery(monkeypatc
     save_state({"topics": [], "health": {"qbit_ok": False}})
     save_download_history({"schema_version": 1, "topics": {}})
     cfg = {"trackers": {}, "client": {"id": "main", "kind": "fake"}}
-    monkeypatch.setattr(check, "load_config", lambda: cfg)
-    monkeypatch.setattr(check, "load_trackers", lambda _cfg: {})
-    monkeypatch.setattr(check.client_factory, "default_client_id", lambda _cfg: "main")
+    monkeypatch.setattr(check_run, "load_config", lambda: cfg)
+    monkeypatch.setattr(check_run, "load_trackers", lambda _cfg: {})
+    monkeypatch.setattr(client_factory, "default_client_id", lambda _cfg: "main")
     monkeypatch.setattr(
-        check.client_factory,
+        client_factory,
         "from_secrets",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("offline")),
     )
@@ -1606,7 +1612,7 @@ def test_manual_check_does_not_move_the_scheduled_countdown(monkeypatch):
     save_download_history({"schema_version": 1, "topics": {}})
     _wire_fake_check(monkeypatch, FakeClient())
     clock = {"now": 1000}
-    monkeypatch.setattr(check, "machine_now", lambda: SimpleNamespace(timestamp=lambda: clock["now"]))
+    monkeypatch.setattr(check_run, "machine_now", lambda: SimpleNamespace(timestamp=lambda: clock["now"]))
     monkeypatch.setattr(check_rows, "now", lambda: "t")
 
     check.run_check(apply=True, notify=False, how="auto")
@@ -1913,7 +1919,7 @@ def test_a_daily_limit_is_kept_until_the_next_local_day(monkeypatch):
     save_download_history({"schema_version": 1, "topics": {}})
     tracker = _wire_fake_check(monkeypatch, FakeClient())
     day = {"today": "2026-10-01"}
-    monkeypatch.setattr(check, "_today", lambda: day["today"])
+    monkeypatch.setattr(check_run, "_today", lambda: day["today"])
     fetches = []
 
     def limited(*_args, **_kwargs):

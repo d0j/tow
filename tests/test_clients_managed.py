@@ -704,12 +704,13 @@ def test_deluge_in_a_preview_does_not_attach_the_web_ui_to_a_daemon():
 
 def test_a_dry_run_opens_clients_read_only(monkeypatch):
     from tow import check
+    from tow.clients import factory as client_factory
     from tow.store import save_state
 
     save_state({"topics": []})
     server = FakeDeluge()
-    monkeypatch.setattr(check.client_factory, "default_client_id", lambda _cfg: "main")
-    monkeypatch.setattr(check.client_factory, "from_secrets", lambda _cfg, _secrets, _id=None: _deluge(server))
+    monkeypatch.setattr(client_factory, "default_client_id", lambda _cfg: "main")
+    monkeypatch.setattr(client_factory, "from_secrets", lambda _cfg, _secrets, _id=None: _deluge(server))
     out = check.run_check(apply=False, notify=False)
     assert out["qbit"].startswith("down: Deluge")
     assert "web.connect" not in server.calls

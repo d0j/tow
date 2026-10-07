@@ -15,6 +15,7 @@ from test_check_pipeline import NEW, OLD, Client, Tracker, _topic, _wire
 from test_clients_managed import E01, TORRENT, FakeDeluge, FakeTransmission, H, K, Torrent, _deluge, _transmission
 
 from tow import adopt, check, cli
+from tow.errors import TowError
 from tow.paths import data_dir
 from tow.store import check_run_lock, load_state, save_download_history, save_state
 from tow.web import app
@@ -111,7 +112,7 @@ def test_a_mark_the_client_does_not_keep_is_reported():
 
     server = Forgetful()
     _by_hand(server, [], running=True)
-    with pytest.raises(check.TowError) as raised:
+    with pytest.raises(TowError) as raised:
         _transmission(server).adopt_torrent(H)
     assert raised.value.code == "client.managed.adopt_unconfirmed"
 

@@ -11,7 +11,10 @@ import pytest
 from tow import check
 from tow.check import apply as check_apply
 from tow.check import reconcile as check_reconcile
+from tow.check import run as check_run
 from tow.check import topic as topic_step
+from tow.clients import factory as client_factory
+from tow.notify import NotificationBatch
 from tow.store import load_state, save_download_history, save_state
 from tow.torrent import TorrentFile
 
@@ -81,8 +84,8 @@ class Client:
 
 def _wire(monkeypatch, clients: dict[str, Client], tracker: Any) -> None:
     cfg = {"trackers": {}, "client": {"id": "main", "kind": "fake"}}
-    monkeypatch.setattr(check, "load_config", lambda: cfg)
-    monkeypatch.setattr(check, "load_trackers", lambda cfg: {"fake": tracker})
+    monkeypatch.setattr(check_run, "load_config", lambda: cfg)
+    monkeypatch.setattr(check_run, "load_trackers", lambda cfg: {"fake": tracker})
     monkeypatch.setattr(topic_step, "match_tracker", lambda trackers, url: tracker)
     monkeypatch.setattr(
         topic_step,
@@ -91,9 +94,9 @@ def _wire(monkeypatch, clients: dict[str, Client], tracker: Any) -> None:
             infohash=NEW, client_hash=NEW, name="Show", is_multi=True, files=(TorrentFile(0, "Show/e01.mkv", 1),)
         ),
     )
-    monkeypatch.setattr(check.client_factory, "default_client_id", lambda cfg: "main")
+    monkeypatch.setattr(client_factory, "default_client_id", lambda cfg: "main")
     monkeypatch.setattr(
-        check.client_factory, "from_secrets", lambda cfg, secrets, client_id=None: clients[client_id or "main"]
+        client_factory, "from_secrets", lambda cfg, secrets, client_id=None: clients[client_id or "main"]
     )
     monkeypatch.setattr(check_apply, "free_space_problem", lambda *a, **k: None)
     monkeypatch.setattr(check_reconcile, "reconcile_topic", lambda *a, **k: {"events": [], "summary": {}})
@@ -227,10 +230,10 @@ def test_check_failure_reason_comes_from_the_error_not_its_words(lang):
     from tow.store import MissingMasterKeyError, SecretStoreError
 
     i18n.use(lang)
-    assert check._check_failure_code(MissingMasterKeyError("store.no_master_key")) == "secrets_migration_required"
-    assert check._check_failure_code(SecretStoreError("legacy plaintext secrets")) == "secrets_migration_required"
-    assert check._check_failure_code(TowError("check.daily_limit")) == "quota"
-    assert check._check_failure_code(RuntimeError("the master key of the client")) == "error"
+    assert check_run._check_failure_code(MissingMasterKeyError("store.no_master_key")) == "secrets_migration_required"
+    assert check_run._check_failure_code(SecretStoreError("legacy plaintext secrets")) == "secrets_migration_required"
+    assert check_run._check_failure_code(TowError("check.daily_limit")) == "quota"
+    assert check_run._check_failure_code(RuntimeError("the master key of the client")) == "error"
 
 
 # --- owner edits made while the check runs -------------------------------------------------------
@@ -297,14 +300,14 @@ def test_selection_changed_during_the_check_is_left_to_the_next_check(monkeypatc
 
 def _notified(monkeypatch) -> list[tuple[Any, Any]]:
     seen: list[tuple[Any, Any]] = []
-    real = check.NotificationBatch.queue
+    real = NotificationBatch.queue
 
     def spy(self, topic, **kw):
         seen.append((topic.get("id"), kw.get("kind")))
         return real(self, topic, **kw)
 
-    monkeypatch.setattr(check.NotificationBatch, "queue", spy)
-    monkeypatch.setattr(check, "flush_notifications", lambda *a, **k: None)
+    monkeypatch.setattr(NotificationBatch, "queue", spy)
+    monkeypatch.setattr(check_run, "flush_notifications", lambda *a, **k: None)
     return seen
 
 

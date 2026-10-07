@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from tow.check import run as check_run
 from tow.store import save_state
 from tow.watchdog import run_watchdog
 
@@ -536,7 +537,7 @@ def test_the_health_check_can_ask_for_one_install(monkeypatch):
 def test_a_scheduled_check_failing_every_run_is_reported(clock, monkeypatch):
     from tow import check
 
-    monkeypatch.setattr(check, "machine_now", lambda: datetime.fromtimestamp(clock.t, UTC))
+    monkeypatch.setattr(check_run, "machine_now", lambda: datetime.fromtimestamp(clock.t, UTC))
     good = int(clock.t) - 600
     save_state({"topics": [], "health": {"auto_at_ts": good, "at_ts": good}})
     for _ in range(3):
@@ -557,7 +558,7 @@ def test_failed_attempts_do_not_keep_the_schedule_looking_fresh(clock, monkeypat
     from tow.config import load_config
 
     interval = int(load_config()["interval_sec"])
-    monkeypatch.setattr(check, "machine_now", lambda: datetime.fromtimestamp(clock.t, UTC))
+    monkeypatch.setattr(check_run, "machine_now", lambda: datetime.fromtimestamp(clock.t, UTC))
     old = int(clock.t) - 3 * interval
     save_state({"topics": [], "health": {"auto_at_ts": old, "at_ts": old}})
     check.record_check_failure(RuntimeError("x"), how="auto")  # one fresh but failed attempt

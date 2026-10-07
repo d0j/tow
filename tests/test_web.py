@@ -10,6 +10,7 @@ from helpers import flash_of, open_network, shown, wait_for_check_job
 
 from tow.check import reconcile as check_reconcile
 from tow.check import rows as check_rows
+from tow.check import run as check_run
 from tow.clock import iso_now
 from tow.log import log_event, read_events
 from tow.store import (
@@ -2415,6 +2416,7 @@ def test_a_successful_check_records_when_it_last_worked(monkeypatch):
     from types import SimpleNamespace
 
     from tow import check
+    from tow.clients import factory as client_factory
 
     # A later health write must not make the topic depend on the wall-clock second.
     success_at = "01.01.2026 10:00:00 UTC"
@@ -2422,11 +2424,11 @@ def test_a_successful_check_records_when_it_last_worked(monkeypatch):
     monkeypatch.setattr(check_rows, "now", lambda: next(stamps))
     _topic_state(save_path=r"M:\TV", hash="H")
     monkeypatch.setattr(
-        check,
+        check_run,
         "check_topic",
         lambda topic, run: (check_rows.stamp_result(topic, {"ok": True}), {"id": topic["id"], "ok": True})[1],
     )
-    monkeypatch.setattr(check.client_factory, "from_secrets", lambda *a, **k: SimpleNamespace(ping=lambda: "ok"))
+    monkeypatch.setattr(client_factory, "from_secrets", lambda *a, **k: SimpleNamespace(ping=lambda: "ok"))
     monkeypatch.setattr(check_reconcile, "reconcile_topic", lambda *a, **k: {"events": []})
 
     result = check.run_check(apply=True, notify=False, how="test")
