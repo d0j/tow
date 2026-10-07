@@ -280,13 +280,50 @@ def test_removed_topic_answer_is_gone_and_sends_no_password(site):
     assert site.count("/login.php") == 0
 
 
-def test_cloudflare_check_with_status_200_is_cloudflare_without_a_login(site):
-    site.pages["/dl.php?t=5"] = CF_PAGE
+def _cf(status: int = 403, **headers: str) -> httpx.Response:
+    return httpx.Response(status, text=CF_PAGE, headers={"content-type": "text/html", **headers})
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        lambda: _cf(403),
+        lambda: _cf(503),
+        lambda: httpx.Response(200, text="<html>x</html>", headers={"cf-mitigated": "challenge"}),
+    ],
+)
+def test_cloudflare_check_is_cloudflare_without_a_login(site, answer):
+    site.pages["/dl.php?t=5"] = answer()
     tracker = _tracker(download_path="/dl.php?t={id}")
     with pytest.raises(MirrorFetchError) as info:
         tracker.fetch_torrent("https://demo.example/viewtopic.php?t=5", SECRETS, "ua")
     assert error_class(info.value) == "cloudflare"
     assert site.count("/login.php") == 0
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        # A film called "Just a Moment" on a site behind Cloudflare (its pages carry the jsd script).
+        (
+            "<html><head><title>Just a Moment (2025) WEB-DL :: NNM-Club</title>"
+            "<script src='/cdn-cgi/challenge-platform/scripts/jsd/main.js'></script></head>"
+            "<body><a href='login.php?logout=1'>Выход</a><a href='download.php?id=222'>.torrent</a></body></html>"
+        ),
+        # A post quoting Cloudflare's check code.
+        (
+            "<html><head><title>Cloudflare bypass FAQ</title></head><body><a href='login.php?logout=1'>x</a>"
+            "<pre>window._cf_chl_opt = {cvId: '3'}</pre><a href='download.php?id=222'>.torrent</a></body></html>"
+        ),
+        # The check's title on a page that is not the check (status 200, no header).
+        CF_PAGE.replace("</body>", "<a href='download.php?id=222'>.torrent</a></body>"),
+    ],
+)
+def test_an_ordinary_topic_page_is_not_a_cloudflare_check(site, page):
+    site.pages["/viewtopic.php?t=5"] = page
+    site.pages["/download.php?id=222"] = TORRENT
+    tracker = _tracker(**PAGE_SPEC, login_path="")
+    assert tracker.fetch_torrent("https://demo.example/viewtopic.php?t=5", {}, "ua", persist=False) == TORRENT
 
 
 def test_cloudflare_script_on_an_ordinary_page_is_not_a_check(site):
@@ -301,7 +338,7 @@ def test_cloudflare_script_on_an_ordinary_page_is_not_a_check(site):
 
 def test_cloudflare_or_sign_in_page_never_becomes_the_title(site):
     tracker = _tracker(login_path="")
-    site.pages["/viewtopic.php?t=5"] = CF_PAGE
+    site.pages["/viewtopic.php?t=5"] = _cf(403)
     with pytest.raises(MirrorFetchError) as info:
         tracker.fetch_title("https://demo.example/viewtopic.php?t=5", {}, "ua", persist=False)
     assert error_class(info.value) == "cloudflare"
