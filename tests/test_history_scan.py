@@ -182,6 +182,22 @@ def test_identical_blob_names_include_all_historical_aliases(repository, monkeyp
     assert "runtime/secret-looking paths" in output
 
 
+def test_the_synthetic_stores_of_the_journal_fixtures_are_not_runtime_paths(repository, monkeypatch):
+    commit(repository, "tests/journal_fixtures/case/home/.tow-site-transaction/secrets.bin")
+    commit(repository, "tests/journal_fixtures/case/home/state.json", b"{}")
+    code, output = scan(repository, monkeypatch)
+    assert code == 0
+    assert "runtime/secret-looking paths: none" in output
+    # Only that folder: the same names anywhere else, a look-alike folder too, still need review.
+    commit(repository, "fixtures/tests/journal_fixtures/state.json", b"[]")
+    commit(repository, "tests/journal_fixtures_extra/secrets.enc", b"x")
+    code, output = scan(repository, monkeypatch)
+    assert code == 1
+    assert "fixtures/tests/journal_fixtures/state.json" in output
+    assert "tests/journal_fixtures_extra/secrets.enc" in output
+    assert "home/state.json" not in output
+
+
 def test_a_source_module_name_is_not_a_runtime_store(repository, monkeypatch):
     commit(repository, "src/tow/download_history.py")
     code, output = scan(repository, monkeypatch)
