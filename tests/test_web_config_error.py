@@ -29,6 +29,21 @@ def _local() -> TestClient:
     return TestClient(app, client=("127.0.0.1", 50000))
 
 
+def test_the_page_gives_one_instruction_and_the_cli_says_the_error_once(broken_config, capsys, caplog):
+    """Round-3 audit: the page said "start TOW again" and "reload this page: TOW reads the file
+    again by itself"; a command printed the error twice (the unread language, then itself)."""
+    from tow import cli, i18n
+
+    text = _local().get("/", headers={**HTML, "Accept-Language": "en"}).text
+    assert "start TOW again" not in text
+    assert "reads the file again by itself" in text
+    i18n._configured_language_of.cache_clear()
+    assert cli.main(["status"]) == 3
+    err = capsys.readouterr().err
+    assert err.count("config.yaml") == 1
+    assert not [entry for entry in caplog.records if entry.name == "tow.i18n"]
+
+
 def test_a_page_names_the_file_the_place_and_the_way_back(broken_config):
     response = _local().get("/", headers={**HTML, "Accept-Language": "en"})
     assert response.status_code == 503
