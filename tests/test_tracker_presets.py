@@ -13,7 +13,7 @@ import yaml
 
 import tow.trackers.presets as package
 from tow import guess, i18n, notify, title
-from tow.check import _download_limited
+from tow.check.topic import _download_limited
 from tow.trackers import GenericHttpTracker, presets
 from tow.trackers.presets import SitePreset
 from tow.web.views import _search_href

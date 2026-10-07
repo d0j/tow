@@ -2422,7 +2422,7 @@ def test_a_successful_check_records_when_it_last_worked(monkeypatch):
     _topic_state(save_path=r"M:\TV", hash="H")
     monkeypatch.setattr(
         check,
-        "_check_topic",
+        "check_topic",
         lambda topic, run: (check_rows.stamp_result(topic, {"ok": True}), {"id": topic["id"], "ok": True})[1],
     )
     monkeypatch.setattr(check.client_factory, "from_secrets", lambda *a, **k: SimpleNamespace(ping=lambda: "ok"))

@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from helpers import multi_file_torrent
 
 from tow import content
-from tow.check import _selection_plan
+from tow.check.topic import _selection_plan
 from tow.selection import normalize_policy
 from tow.store import load_state, save_state
 from tow.torrent import parse_torrent_metadata

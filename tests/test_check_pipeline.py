@@ -9,6 +9,8 @@ from typing import Any, ClassVar
 import pytest
 
 from tow import check
+from tow.check import apply as check_apply
+from tow.check import topic as topic_step
 from tow.store import load_state, save_download_history, save_state
 from tow.torrent import TorrentFile
 
@@ -80,9 +82,9 @@ def _wire(monkeypatch, clients: dict[str, Client], tracker: Any) -> None:
     cfg = {"trackers": {}, "client": {"id": "main", "kind": "fake"}}
     monkeypatch.setattr(check, "load_config", lambda: cfg)
     monkeypatch.setattr(check, "load_trackers", lambda cfg: {"fake": tracker})
-    monkeypatch.setattr(check, "match_tracker", lambda trackers, url: tracker)
+    monkeypatch.setattr(topic_step, "match_tracker", lambda trackers, url: tracker)
     monkeypatch.setattr(
-        check,
+        topic_step,
         "parse_torrent_metadata",
         lambda blob: SimpleNamespace(
             infohash=NEW, client_hash=NEW, name="Show", is_multi=True, files=(TorrentFile(0, "Show/e01.mkv", 1),)
@@ -92,7 +94,7 @@ def _wire(monkeypatch, clients: dict[str, Client], tracker: Any) -> None:
     monkeypatch.setattr(
         check.client_factory, "from_secrets", lambda cfg, secrets, client_id=None: clients[client_id or "main"]
     )
-    monkeypatch.setattr(check, "free_space_problem", lambda *a, **k: None)
+    monkeypatch.setattr(check_apply, "free_space_problem", lambda *a, **k: None)
     monkeypatch.setattr(check, "reconcile_topic", lambda *a, **k: {"events": [], "summary": {}})
 
 
@@ -149,7 +151,7 @@ def test_free_space_is_judged_only_for_a_client_on_this_computer(monkeypatch, st
     client = Client()
     _wire(monkeypatch, {"main": client}, Tracker())
     full = TowError("check.low_disk", needed=1.0, free=0.1, path="/media")
-    monkeypatch.setattr(check, "free_space_problem", lambda *a, **k: full)
+    monkeypatch.setattr(check_apply, "free_space_problem", lambda *a, **k: full)
     row = check.run_check(apply=True, notify=False, how="test")["results"][0]
     assert row["ok"] is remote
     assert client.adds == ([(NEW, "/media/tv")] if remote else [])
