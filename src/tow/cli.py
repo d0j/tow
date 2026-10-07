@@ -631,11 +631,19 @@ def _cmd_restore_snapshot(args: argparse.Namespace) -> int:
 
 
 def _cmd_watchdog(args: argparse.Namespace) -> int:
+    from tow.i18n import t
+    from tow.store import load_state
+    from tow.supervisor import data_lost
     from tow.watchdog import run_watchdog
 
     report = run_watchdog()
+    # Only `tow run` notices a deleted data folder (it knows the one it started with); by hand
+    # its note says it, as Home does, until topics are watched again.
+    if (lost := data_lost()) is not None and not load_state().get("topics"):
+        report["data_lost"] = True
+        report["alerts"].append(t("watchdog.alert.data_lost", folder=lost["folder"]))
     _print(report, args.json)
-    return 0 if report["service_ok"] and report["checks_ok"] else 2
+    return 0 if report["service_ok"] and report["checks_ok"] and not report.get("data_lost") else 2
 
 
 def _interrupted_update() -> bool:

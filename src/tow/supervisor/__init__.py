@@ -153,7 +153,53 @@ def _watchdog_pass(wake_ts: float | None) -> Any:
         # Said once (and in run.log): the folder TOW goes on with now is the one watched next.
         LOG.error("the data folder was deleted or replaced while TOW ran: restore a night copy")
         _remember_data_folder()
+        _note_data_lost()
+    else:
+        _forget_data_lost()
     return report
+
+
+DATA_LOST = "data-lost.json"
+
+
+def data_lost() -> dict[str, Any] | None:
+    """{at, folder} when the watchdog found the data folder deleted or replaced while TOW ran;
+    Home and ``tow watchdog`` say so until topics are watched again (a night copy restored, or
+    a new start). Kept in the new data folder; None without one."""
+    from tow.diagnostic_json import read_object
+    from tow.paths import data_dir
+
+    try:
+        value = read_object(data_dir(create=False) / DATA_LOST)
+    except OSError, UnicodeError, ValueError, TypeError, RecursionError:
+        return None
+    return value if isinstance(value.get("folder"), str) else None
+
+
+def _note_data_lost() -> None:
+    from tow.diagnostic_json import encode_object
+    from tow.paths import data_dir
+    from tow.store import atomic_write_text
+
+    try:
+        folder = data_dir()
+        atomic_write_text(folder / DATA_LOST, encode_object({"at": int(time.time()), "folder": str(folder)}))
+    except OSError as exc:
+        LOG.warning("data folder loss not noted for Home: %s", type(exc).__name__)
+
+
+def _forget_data_lost() -> None:
+    """Topics are watched again: the note has done its job."""
+    from tow.paths import data_dir
+    from tow.store import load_state
+
+    if data_lost() is None:
+        return
+    try:
+        if load_state().get("topics"):
+            (data_dir(create=False) / DATA_LOST).unlink(missing_ok=True)
+    except Exception as exc:  # noqa: BLE001 - the watchdog duty goes on; the next pass retries (logged)
+        LOG.warning("data folder loss note not removed: %s", type(exc).__name__)
 
 
 def _send(text: str) -> bool:

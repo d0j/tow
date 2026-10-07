@@ -175,6 +175,48 @@ def test_the_supervisor_says_a_lost_data_folder_once(monkeypatch, caplog):
     assert caplog.text.count("data folder was deleted or replaced") == 1
 
 
+def test_a_lost_data_folder_is_said_on_home_in_history_and_by_tow_watchdog(monkeypatch, capsys):
+    """Round-3 audit: the alert went to the messengers only - History showed an empty
+    "watchdog alert" line and Home the page of a new install. Home says it (with the way back)
+    until topics are watched again, History shows the alert, `tow watchdog` reports it."""
+    import json
+
+    from fastapi.testclient import TestClient
+
+    from tow import cli, supervisor, watchdog
+    from tow.i18n import t
+    from tow.log import format_event
+    from tow.paths import data_dir
+    from tow.store import save_state
+    from tow.web import app
+
+    reports = iter([{"data_lost": True}, {}, {}])
+    monkeypatch.setattr(watchdog, "run_watchdog", lambda **kwargs: next(reports))
+    monkeypatch.setattr(supervisor, "_expire_undo", lambda: None)
+    monkeypatch.setattr(supervisor, "_data_seen", {"id": "old"})
+    supervisor._watchdog_pass(None)
+    supervisor._watchdog_pass(None)  # the next pass: no topics yet, the note stays
+    said = t("watchdog.alert.data_lost", folder=str(data_dir()))
+    assert supervisor.data_lost() == {"at": supervisor.data_lost()["at"], "folder": str(data_dir())}
+
+    assert said in TestClient(app).get("/", headers={"Accept": "text/html"}).text
+
+    monkeypatch.setattr(
+        watchdog, "run_watchdog", lambda **kwargs: {"service_ok": True, "checks_ok": True, "alerts": []}
+    )
+    assert cli.main(["watchdog", "--json"]) == 2
+    report = json.loads(capsys.readouterr().out)
+    assert (report["data_lost"], report["alerts"]) == (True, [said])
+
+    detail = format_event({"kind": "watchdog_alert", "alerts": [said], "delivered": False, "how": "auto"})["detail"]
+    assert said in detail
+
+    save_state({"topics": [{"id": "t", "title": "Show", "url": "http://rutor.info/torrent/1", "save_path": "M:\\s"}]})
+    supervisor._watchdog_pass(None)
+    assert supervisor.data_lost() is None
+    assert said not in TestClient(app).get("/", headers={"Accept": "text/html"}).text
+
+
 def test_deploy_marker_counts_only_while_fresh_and_in_progress(tmp_path, monkeypatch):
     from tow import watchdog
 

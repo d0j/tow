@@ -72,6 +72,7 @@ from tow.store import (
 from tow.store_transaction import commit as commit_stores
 from tow.store_transaction import recover as recover_store_transaction
 from tow.store_transaction import transaction as store_transaction
+from tow.supervisor import data_lost
 from tow.supervisor.layout import install_id, next_check_at, topic_timer_status
 from tow.title import guess_topic_title
 from tow.undo import apply as apply_undo
@@ -98,6 +99,7 @@ __all__ = [
     "content_metadata",
     "create_restore_point",
     "create_snapshot",
+    "data_lost",
     "delete_restore_point",
     "delete_snapshot",
     "doctor_report",
