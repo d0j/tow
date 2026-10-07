@@ -355,6 +355,10 @@ def _qbittorrent(server: FakeQbit, monkeypatch: pytest.MonkeyPatch) -> qbittorre
 
 # --- the shared contract, for every client ----------------------------------------------------
 
+# What restoring a selection or a start looks like on each fake server.
+WRITES = {"torrent-set", "torrent-start", "core.set_torrent_options", "core.resume_torrents"}
+WRITES |= {"torrents_file_priority", "torrents_start"}
+
 
 @pytest.fixture(params=["qbittorrent", "transmission", "deluge"])
 def client(request, monkeypatch):
@@ -366,6 +370,13 @@ def client(request, monkeypatch):
         return _transmission(server), server
     server = FakeDeluge()
     return _deluge(server), server
+
+
+def _overlay(adapter, monkeypatch, **fields: Any) -> None:
+    """The adapter reads ``fields`` (a state, a progress) over what its client reports: values
+    no client answers with, for the judgment every client shares."""
+    real = adapter.inspect_torrent
+    monkeypatch.setattr(adapter, "inspect_torrent", lambda infohash: (info := real(infohash)) and {**info, **fields})
 
 
 def _wanted(info: dict) -> list[bool]:
@@ -533,6 +544,86 @@ def test_selection_read_back_mismatch_is_an_error(client, tmp_path, monkeypatch)
     with pytest.raises(ClientError, match="не тот выбор"):
         adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
     assert not server.torrents[K].running
+
+
+@pytest.mark.parametrize("state", ["stoppedDL", "pausedDL"])
+@pytest.mark.parametrize(
+    "progress",
+    [
+        None,
+        True,
+        False,
+        -1,
+        0.9,
+        1.1,
+        float("inf"),
+        float("-inf"),
+        float("nan"),
+        "bad",
+        [],
+        {},
+        [1],
+        {"value": 1},
+        10**1000,
+    ],
+)
+def test_stopped_invalid_progress_never_confirms_start(client, tmp_path, monkeypatch, state, progress):
+    adapter, server = client
+    server.torrents[K] = Torrent(TORRENT, str(tmp_path), ["tow"], paused=True)
+    _overlay(adapter, monkeypatch, state=state, progress=progress)
+    with pytest.raises(ClientError) as error:
+        adapter._wait_started(H)
+    assert error.value.code == "client.managed.start_unconfirmed"
+
+
+@pytest.mark.parametrize("state", ["stoppedUP", "stoppedDL", "pausedDL"])
+@pytest.mark.parametrize("progress", [1, 1.0, "1.0"])
+def test_completed_stopped_torrent_can_confirm_start(client, tmp_path, monkeypatch, state, progress):
+    adapter, server = client
+    server.torrents[K] = Torrent(TORRENT, str(tmp_path), ["tow"], paused=True)
+    _overlay(adapter, monkeypatch, state=state, progress=progress)
+    info = adapter._wait_started(H)
+    assert (info["state"], info["progress"]) == (state, progress)
+
+
+@pytest.mark.parametrize("state", ["error", "missingFiles", "unknown"])
+def test_ownership_wait_preserves_unsafe_state(client, tmp_path, monkeypatch, state):
+    adapter, _ = client
+    _overlay(adapter, monkeypatch, state=state)  # the add lands in a state TOW must not go on from
+    with pytest.raises(ClientError) as error:
+        adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert error.value.code == "client.managed.error_state"
+    assert error.value.params["state"] == state.casefold()
+
+
+def test_rollback_requires_confirmed_stop_before_restoring_files(client, tmp_path, monkeypatch, caplog):
+    adapter, server = client
+    adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])  # running, E01 only
+    torrent = server.torrents[K]
+    real_stop = adapter._stop
+    steps: list[str] = []
+
+    def stop(infohash):
+        if steps:
+            steps.append("stop ignored")
+            return
+        steps.append("stop")
+        real_stop(infohash)
+
+    def set_wanted(_infohash, _wanted, _ids):
+        steps.append("selection ignored")
+        torrent.running = True  # ... and the client started the torrent again
+
+    monkeypatch.setattr(adapter, "_stop", stop)
+    monkeypatch.setattr(adapter, "_set_wanted", set_wanted)
+    server.calls.clear()
+    with pytest.raises(ClientError) as error:
+        adapter.configure_torrent_selection(TORRENT, H, [E02])
+    assert error.value.code == "client.managed.wrong_selection"
+    assert steps == ["stop", "selection ignored", "stop ignored"]
+    assert not WRITES.intersection(server.calls), server.calls  # no files restored, no start
+    assert torrent.wanted == [index == E01 for index in range(3)]
+    assert str(adapter._fail("client.managed.stop_unconfirmed")) in caplog.text
 
 
 # --- client specifics -----------------------------------------------------------------------

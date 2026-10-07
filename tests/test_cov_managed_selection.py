@@ -133,48 +133,7 @@ def client() -> FakeClient:
     return FakeClient()
 
 
-@pytest.mark.parametrize(
-    "progress",
-    [
-        None,
-        True,
-        False,
-        -1,
-        0.9,
-        1.1,
-        float("inf"),
-        float("-inf"),
-        float("nan"),
-        "bad",
-        [],
-        {},
-        [1],
-        {"value": 1},
-        10**1000,
-    ],
-)
-def test_stopped_invalid_progress_never_confirms_start(client, progress):
-    client.seed(tags=[OWNER], state="stoppedDL")
-    client.torrents[H]["progress"] = progress
-    with pytest.raises(ClientError) as error:
-        client._wait_started(H)
-    assert error.value.code == "client.managed.start_unconfirmed"
-
-
-@pytest.mark.parametrize("progress", [1, 1.0, "1.0"])
-def test_completed_stopped_torrent_can_confirm_start(client, progress):
-    client.seed(tags=[OWNER], state="stoppedUP")
-    client.torrents[H]["progress"] = progress
-    assert client._wait_started(H)["state"] == "stoppedUP"
-
-
-@pytest.mark.parametrize("state", ["error", "missingFiles", "unknown"])
-def test_ownership_wait_preserves_unsafe_state(client, state):
-    client.seed(tags=[OWNER, PENDING], state=state)
-    with pytest.raises(ClientError) as error:
-        client._wait_owned(H)
-    assert error.value.code == "client.managed.error_state"
-    assert error.value.params["state"] == state.casefold()
+# The start, ownership and rollback waits every client shares: test_clients_managed.py.
 
 
 def test_ownership_wait_preserves_inspection_error(client, monkeypatch):
@@ -187,32 +146,6 @@ def test_ownership_wait_preserves_inspection_error(client, monkeypatch):
     with pytest.raises(ClientError) as error:
         client._wait_owned(H)
     assert error.value is original
-
-
-def test_rollback_requires_confirmed_stop_before_restoring_files(client, monkeypatch, caplog):
-    client.seed(tags=[OWNER], state="downloading", wanted={E01})
-    real_stop = client._stop
-    stops = 0
-
-    def stop(infohash):
-        nonlocal stops
-        stops += 1
-        if stops == 1:
-            real_stop(infohash)
-        else:
-            client.calls.append(("stop ignored",))
-
-    def set_wanted(_hash, _wanted, _ids):
-        client.calls.append(("selection ignored",))
-        client.torrents[H]["state"] = "downloading"
-
-    monkeypatch.setattr(client, "_stop", stop)
-    monkeypatch.setattr(client, "_set_wanted", set_wanted)
-    with pytest.raises(ClientError) as error:
-        client.configure_torrent_selection(TORRENT, H, [E02])
-    assert error.value.code == "client.managed.wrong_selection"
-    assert client.calls == [("stop",), ("selection ignored",), ("stop ignored",)]
-    assert _msg("client.managed.stop_unconfirmed") in caplog.text
 
 
 def test_rollback_reports_unconfirmed_restart_without_hiding_original(client, monkeypatch, caplog):
