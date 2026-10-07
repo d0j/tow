@@ -269,7 +269,10 @@ registration is taken over (or turned off).
   logon trigger for the owner; IgnoreNew, no battery limits, no time limit, restart on failure
   (1 min × 999). "Start without signing in": principal `S4U` (the owner's account, no stored
   password) with a boot trigger plus the logon trigger; Windows may require an elevated prompt
-  for it, and network shares are not reachable that way. Read back from `schtasks /Query /XML`.
+  for it, and network shares are not reachable that way. Read back with `Export-ScheduledTask`
+  through PowerShell as base64 of UTF-8 (`schtasks /Query /XML` writes the ANSI code page: a
+  Cyrillic folder on an English Windows came back as `?`); a missing task is told by the error's
+  category, not by its translated text.
 - **Linux:** systemd user unit `~/.config/systemd/user/tow.service` (`$XDG_CONFIG_HOME` honoured):
   `ExecStart="<app>/.venv/bin/tow" run`, `WorkingDirectory=<TOW>`, `Environment="TOW_ROOT=<TOW>"`,
   `Environment=TOW_AUTOSTART=systemd` (a unit without it, written by 1.24.1 or older, still counts

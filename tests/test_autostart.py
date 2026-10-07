@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import plistlib
@@ -59,11 +60,13 @@ class Scheduler:
     def __call__(self, argv):
         argv = [str(a) for a in argv]
         self.calls.append(argv)
+        if argv[0] == "powershell" and "Export-ScheduledTask -TaskName 'TOW' -TaskPath '\\'" in argv[-1]:
+            xml = self.tasks.get("TOW")
+            if not xml:
+                return CommandResult(0, "absent\r\n")
+            return CommandResult(0, "xml:" + base64.b64encode(xml.encode("utf-8")).decode("ascii") + "\r\n")
         if argv[0] == "schtasks":
             op = argv[1]
-            if op == "/Query":
-                xml = self.tasks.get(argv[3])
-                return CommandResult(0, xml) if xml else NOT_FOUND
             if op == "/Create":
                 if self.create_fails:
                     return CommandResult(1, "", "ERROR: Access is denied.")
@@ -182,8 +185,32 @@ def test_a_changed_task_is_not_on(install):
 def test_an_unreadable_query_is_an_error_not_absent(install):
     task = WindowsTask(install, lambda _argv: CommandResult(1, "", "ERROR: RPC server unavailable"))
     assert task.status()["state"] == "error"
+    assert task.status()["error"] == "ERROR: RPC server unavailable"
     assert WindowsTask(install, lambda _argv: CommandResult(0, "not xml")).status()["state"] == "error"
+    assert WindowsTask(install, lambda _argv: CommandResult(0, "xml:%%%")).status()["state"] == "error"
+    # A missing task is told by the error's category, never by a translated message.
+    assert WindowsTask(install, lambda _argv: CommandResult(1, "", "не найден")).status()["state"] == "error"
     assert parse_task("<<") is None
+
+
+def test_a_cyrillic_install_folder_reads_back_as_its_own_task(tmp_path):
+    # QA: on an English Windows schtasks wrote the task's XML in the ANSI code page: "Иван"
+    # came back as "????", the task never matched this install and autostart said it failed.
+    root = tmp_path / "Иван" / "TOW"
+    program = root / "app" / ".venv" / "Scripts" / "pythonw.exe"
+    program.parent.mkdir(parents=True)
+    program.write_bytes(b"")
+    (root / "config.yaml").write_text("port: 8787\n", encoding="utf-8")
+    install = Install(root=root, app=root / "app", home=tmp_path / "home", user="owner")
+    scheduler = Scheduler()
+    result = WindowsTask(install, scheduler).enable()
+    assert result["ok"] is True
+    assert result["status"]["ours"] is True
+    query = next(call for call in scheduler.calls if call[0] == "powershell")
+    assert query[1:4] == ["-NoProfile", "-NonInteractive", "-Command"]
+    assert "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($xml))" in query[4]
+    assert "'ObjectNotFound'" in query[4]
+    assert scheduler.ran("schtasks", "/Query") == []
 
 
 # --- Linux ------------------------------------------------------------------------------------

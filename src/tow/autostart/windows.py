@@ -1,11 +1,12 @@
 """Windows: one Task Scheduler task "TOW" running ``pythonw.exe -m tow run``.
 
 Created from XML and read back from XML, which is locale-independent: the LIST output is
-translated by Windows.
+translated by Windows. Read back through PowerShell in UTF-8 (``WindowsTask.query``).
 """
 
 from __future__ import annotations
 
+import base64
 import os
 import uuid
 import xml.etree.ElementTree as ET
@@ -16,7 +17,6 @@ from typing import Any
 from tow.autostart import TASK_NAME, CommandResult, Install, Runner, refusal
 
 ARGUMENTS = "-m tow run"
-_MISSING = ("cannot find", "not found", "не удается найти", "не найден", "не удаётся найти")
 
 
 def principal() -> str:
@@ -139,13 +139,32 @@ class WindowsTask:
     # --- reading ------------------------------------------------------------------------------
 
     def query(self, name: str = TASK_NAME) -> dict[str, Any]:
-        """A task by name: state absent / present / error, and its parsed XML."""
-        result = self.run(["schtasks", "/Query", "/TN", name, "/XML"])
-        if not result.ok:
-            lowered = result.text.lower()
-            state = "absent" if any(marker in lowered for marker in _MISSING) else "error"
-            return {"name": name, "state": state, "error": result.text[:300] if state == "error" else ""}
-        parsed = parse_task(result.stdout)
+        """A task by name: state absent / present / error, and its parsed XML.
+
+        Read through PowerShell, the XML as base64 of its UTF-8: ``schtasks /Query /XML`` writes
+        the ANSI code page (best fit), so a Cyrillic folder on an English Windows came back as
+        "?" and the task never read back as TOW's own. A missing task is told by the error's
+        category, not by the translated text of a message.
+        """
+        quoted = name.replace("'", "''")
+        script = (
+            "$ErrorActionPreference = 'Stop'; "
+            f"try {{ $xml = Export-ScheduledTask -TaskName '{quoted}' -TaskPath '\\' }} "
+            "catch { if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { 'absent'; exit 0 }; "
+            "[Console]::Error.WriteLine($_.Exception.Message); exit 1 }; "
+            "'xml:' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($xml))"
+        )
+        result = self.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script])
+        answer = result.stdout.strip()
+        if result.ok and answer == "absent":
+            return {"name": name, "state": "absent", "error": ""}
+        if not result.ok or not answer.startswith("xml:"):
+            return {"name": name, "state": "error", "error": (result.text or "no answer")[:300]}
+        try:
+            raw = base64.b64decode(answer[4:], validate=True).decode("utf-8")
+        except ValueError:
+            raw = ""
+        parsed = parse_task(raw)
         if parsed is None:
             return {"name": name, "state": "error", "error": "task XML unreadable"}
         return {"name": name, "state": "present", **parsed}
