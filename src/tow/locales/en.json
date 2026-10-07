@@ -679,7 +679,7 @@
     },
     "s5": {
       "title": "5. Checks and the clock in the header",
-      "text": "Topics without an individual timer are checked automatically every <b>{interval}</b> (Settings → Checks). The header clock shows the next global check; a topic's own timer replaces that interval for that topic. The running TOW service restarts the web server if it fails. Every 10 minutes the watchdog checks the schedule and reports downtime and its cause; it does not restart TOW."
+      "text": "Topics without a personal timer are checked automatically every <b>{interval}</b> (Settings → Checks). The header clock shows the next global check; a topic's own timer replaces that interval for that topic. The running TOW service restarts the web server if it fails. Every 10 minutes the watchdog checks the schedule and reports downtime and its cause; it does not restart TOW."
     },
     "s6": {
       "title": "6. Backups",
@@ -868,7 +868,7 @@
       "stopped": "Scheduler stopped or status unavailable",
       "waiting": "Waiting for the updated schedule",
       "queued": "Waiting for a check; another job or a site limit may delay it",
-      "running": "Individual check in progress"
+      "running": "Personal-timer check in progress"
     },
     "releases": {
       "badge": "New {version}",
@@ -1493,7 +1493,7 @@
       "title": "Checks",
       "check_topics": "Global timer",
       "show_undo": "Show “Undo” for",
-      "check_hint": "Active topics without their own timer are checked every {interval}. Set an individual timer when adding or editing a topic.",
+      "check_hint": "Active topics without their own timer are checked every {interval}. Set a personal timer when adding or editing a topic.",
       "undo_hint": "How long the Undo button stays after a change."
     },
     "access": {
