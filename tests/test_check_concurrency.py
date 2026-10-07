@@ -10,6 +10,7 @@ from test_check_contract import FakeClient, _wire_fake_check
 from tow import check
 from tow.check import client_ops
 from tow.check import notices as check_notices
+from tow.check import reconcile as check_reconcile
 from tow.notify import event_text
 from tow.store import load_state, persistence_lock, save_state
 
@@ -284,13 +285,13 @@ def test_a_pass_without_history_changes_skips_the_two_file_journal(monkeypatch):
     assert journals == []
     assert load_state()["health"]["at_ts"]  # the state was still committed
 
-    real_reconcile = check._reconcile_all
+    real_reconcile = check_reconcile._reconcile_all
 
     def records_history(state, results, run, history, records, want):
         real_reconcile(state, results, run, history, records, want)
         history.setdefault("topics", {})["t"] = {"items": {"x": {"label": "S01E01"}}}
 
-    monkeypatch.setattr(check, "_reconcile_all", records_history)
+    monkeypatch.setattr(check_reconcile, "_reconcile_all", records_history)
     check.run_check(apply=True, notify=False)
     assert journals == [1]  # a history change goes through the two-file journal
     from tow.store import load_download_history
@@ -320,7 +321,7 @@ def test_reconcile_does_not_hold_the_data_lock(monkeypatch):
             history.setdefault("topics", {})["t"] = {"items": {"x": {"label": "S01E05"}}}
         return {"events": [], "summary": {}}
 
-    monkeypatch.setattr(check, "reconcile_topic", reconcile)
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", reconcile)
     check.run_check(apply=True, notify=False)
     assert seen == {"free": True}
     assert load_state()["topics"][0]["title"] == "Переименовано"
@@ -344,7 +345,7 @@ def test_a_corrupt_download_history_does_not_block_the_check(monkeypatch):
         history.setdefault("topics", {})[topic["id"]] = {"items": {}, "last_scan_at": now}
         return {"events": [], "summary": {}}
 
-    monkeypatch.setattr(check, "reconcile_topic", reconcile)
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", reconcile)
     out = check.run_check(apply=True, notify=False)
     assert out["results"][0]["ok"] is True
     assert list(download_history_path().parent.glob("download_history.json.corrupt-*"))  # kept aside
@@ -374,8 +375,8 @@ def test_an_applying_check_prunes_the_history_and_writes_it_once(monkeypatch):
     )
     _wire_fake_check(monkeypatch, FakeClient())
     writes = []
-    real = check.save_download_history
-    monkeypatch.setattr(check, "save_download_history", lambda data: writes.append(1) or real(data))
+    real = check_reconcile.save_download_history
+    monkeypatch.setattr(check_reconcile, "save_download_history", lambda data: writes.append(1) or real(data))
     check.run_check(apply=True, notify=False)
     assert set(load_download_history()["topics"]) == {"deleted-lately"}
     assert writes == [1]
@@ -394,7 +395,7 @@ def test_a_history_quarantined_earlier_with_nothing_to_record_is_still_written(m
 
 
 def test_merge_history_takes_only_what_the_reconcile_changed():
-    from tow.check import _merge_history
+    from tow.check.reconcile import _merge_history
 
     seen = {"schema_version": 1, "topics": {"a": {"n": 1}, "b": {"n": 1}, "gone": {"n": 1}}}
     reconciled = {"schema_version": 1, "topics": {"a": {"n": 2}, "b": {"n": 1}, "new": {"n": 1}}}
@@ -406,7 +407,7 @@ def test_merge_history_takes_only_what_the_reconcile_changed():
 def test_a_new_scan_time_alone_does_not_count_as_a_history_change():
     import copy
 
-    from tow.check import _merge_history
+    from tow.check.reconcile import _merge_history
 
     before = {"topics": {"t": {"last_scan_at": "10:00", "items": {"a": {"status": "completed"}}}}}
     after = {"topics": {"t": {"last_scan_at": "10:30", "items": {"a": {"status": "completed"}}}}}
@@ -420,7 +421,7 @@ def test_a_new_scan_time_alone_does_not_count_as_a_history_change():
 def test_what_the_merge_reports_as_a_change():
     import copy
 
-    from tow.check import _merge_history
+    from tow.check.reconcile import _merge_history
 
     seen = {"schema_version": 1, "topics": {"a": {"n": 1}, "gone": {"n": 1}}}
     # A topic dropped by the reconcile but already gone from the disk: nothing changes.

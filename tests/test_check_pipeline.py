@@ -10,6 +10,7 @@ import pytest
 
 from tow import check
 from tow.check import apply as check_apply
+from tow.check import reconcile as check_reconcile
 from tow.check import topic as topic_step
 from tow.store import load_state, save_download_history, save_state
 from tow.torrent import TorrentFile
@@ -95,7 +96,7 @@ def _wire(monkeypatch, clients: dict[str, Client], tracker: Any) -> None:
         check.client_factory, "from_secrets", lambda cfg, secrets, client_id=None: clients[client_id or "main"]
     )
     monkeypatch.setattr(check_apply, "free_space_problem", lambda *a, **k: None)
-    monkeypatch.setattr(check, "reconcile_topic", lambda *a, **k: {"events": [], "summary": {}})
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", lambda *a, **k: {"events": [], "summary": {}})
 
 
 def _topic(**extra: Any) -> dict[str, Any]:

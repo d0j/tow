@@ -7,6 +7,7 @@ import pytest
 from test_check_contract import FakeClient, _wire_fake_check
 
 from tow import bundle, check
+from tow.check import reconcile as check_reconcile
 from tow.check import topic as topic_step
 from tow.progress import reconcile_topic
 from tow.selection import normalize_policy
@@ -67,7 +68,7 @@ def prepare(monkeypatch, tmp_path, *, add_error=None, selection_mode="files"):
             infohash=HASH.upper(), client_hash=HASH.upper(), name="ShowRoot", files=(TorrentFile(0, CANONICAL, 1),)
         ),
     )
-    monkeypatch.setattr(check, "reconcile_topic", reconcile_topic)
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", reconcile_topic)
     return client, tracker
 
 

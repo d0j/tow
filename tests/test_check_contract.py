@@ -7,6 +7,7 @@ import pytest
 from tow import check, check_transaction
 from tow.check import client_ops
 from tow.check import notices as check_notices
+from tow.check import reconcile as check_reconcile
 from tow.check import rows as check_rows
 from tow.check import topic as topic_step
 from tow.notify import event_text
@@ -105,7 +106,7 @@ def _wire_fake_check(monkeypatch, client):
     )
     monkeypatch.setattr(check.client_factory, "default_client_id", lambda cfg: "main")
     monkeypatch.setattr(check.client_factory, "from_secrets", lambda cfg, secrets, client_id=None: client)
-    monkeypatch.setattr(check, "reconcile_topic", lambda *args, **kwargs: {"events": [], "summary": {}})
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", lambda *args, **kwargs: {"events": [], "summary": {}})
     return tracker
 
 
@@ -525,7 +526,7 @@ def test_reconciliation_failure_isolated_per_topic(monkeypatch):
             raise RuntimeError("inspect failed")
         return {"events": [], "summary": {}}
 
-    monkeypatch.setattr(check, "reconcile_topic", reconcile)
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", reconcile)
 
     out = check.run_check(apply=True, notify=False, how="test")
 
@@ -562,7 +563,7 @@ def test_check_aggregates_file_notifications_per_topic(monkeypatch):
     client = FakeClient()
     _wire_fake_check(monkeypatch, client)
     monkeypatch.setattr(
-        check,
+        check_reconcile,
         "reconcile_topic",
         lambda *args, **kwargs: {"events": ["new_file"] * 5, "summary": {}},
     )
@@ -605,7 +606,7 @@ def test_dry_run_is_preview_without_authoritative_writes(monkeypatch, tmp_path: 
         monkeypatch.setattr(module, "log_event", lambda *args, **kwargs: log_calls.append((args, kwargs)))
     monkeypatch.setattr(check, "save_state", lambda state: (_ for _ in ()).throw(AssertionError("dry-run saved state")))
     monkeypatch.setattr(
-        check,
+        check_reconcile,
         "save_download_history",
         lambda history: (_ for _ in ()).throw(AssertionError("dry-run saved history")),
     )
@@ -696,7 +697,7 @@ def test_apply_store_failure_restores_history_and_state(monkeypatch):
         history.setdefault("topics", {})["topic-1"] = {"items": {"new": {"completed": True}}}
         return {"events": [], "summary": {}}
 
-    monkeypatch.setattr(check, "reconcile_topic", reconcile)
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", reconcile)
     state_file = Path(load_state.__globals__["state_path"]())
     history_file = Path(load_download_history.__globals__["download_history_path"]())
     state_before = state_file.read_bytes()
@@ -802,7 +803,7 @@ def test_notification_is_not_sent_before_state_history_commit(monkeypatch):
     save_download_history({"schema_version": 1, "topics": {}})
     _wire_fake_check(monkeypatch, FakeClient())
     monkeypatch.setattr(
-        check,
+        check_reconcile,
         "reconcile_topic",
         lambda *args, **kwargs: {"events": ["new_file"], "summary": {}},
     )
@@ -870,7 +871,7 @@ def test_once_mode_stops_tracker_polling_but_keeps_client_reconciliation(monkeyp
     tracker = _wire_fake_check(monkeypatch, client)
     reconciliations = []
     monkeypatch.setattr(
-        check,
+        check_reconcile,
         "reconcile_topic",
         lambda *args, **kwargs: reconciliations.append(args[0]["id"]) or {"events": [], "summary": {}},
     )
@@ -906,7 +907,7 @@ def test_paused_topic_never_fetches_tracker_even_for_manual_id(monkeypatch):
     tracker = _wire_fake_check(monkeypatch, client)
     reconciliations = []
     monkeypatch.setattr(
-        check,
+        check_reconcile,
         "reconcile_topic",
         lambda *args, **kwargs: reconciliations.append(args[0]["id"]) or {"events": [], "summary": {}},
     )
@@ -1298,7 +1299,7 @@ def test_tracker_and_reconcile_failures_are_both_persisted(monkeypatch):
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("tracker failed")),
     )
     monkeypatch.setattr(
-        check,
+        check_reconcile,
         "reconcile_topic",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("inspect failed")),
     )
@@ -1648,7 +1649,7 @@ def test_cleared_move_pending_is_persisted_by_the_check(monkeypatch):
         topic.pop("move_pending", None)  # the client finished moving
         return {"events": [], "summary": {}}
 
-    monkeypatch.setattr(check, "reconcile_topic", reconcile)
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", reconcile)
     check.run_check(apply=True, notify=False, how="test")
 
     assert "move_pending" not in load_state()["topics"][0]
@@ -1750,7 +1751,7 @@ def test_torrent_removed_from_client_makes_the_topic_red(monkeypatch):
         history.setdefault("topics", {})[str(topic["id"])] = {"items": {}, "client_present": False}
         return {"events": [], "summary": {}}
 
-    monkeypatch.setattr(check, "reconcile_topic", removed)
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", removed)
     _seed_watched_topic()
 
     check.run_check(apply=True, notify=False, how="test")
@@ -1844,7 +1845,7 @@ def test_hash_label_migration_relabels_history_instead_of_a_new_revision(monkeyp
         seen_by_reconcile.append(history["topics"]["t1"]["items"]["ep1"]["source_hash"])
         return {"events": [], "summary": {}}
 
-    monkeypatch.setattr(check, "reconcile_topic", reconcile)
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", reconcile)
 
     result = check.run_check(apply=True, notify=False, how="test")
 
@@ -1974,7 +1975,7 @@ def _season_reconcile(monkeypatch, *, complete, events):
         summary = {"completed": 12 if complete else 11, "expected": 12, "is_complete": complete}
         return {"events": events, "summary": summary}
 
-    monkeypatch.setattr(check, "reconcile_topic", reconcile)
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", reconcile)
 
 
 def test_season_complete_is_announced_once_when_the_last_episode_lands(monkeypatch):
@@ -2049,7 +2050,9 @@ def test_progress_only_pass_never_asks_the_tracker(monkeypatch):
     tracker = _wire_fake_check(monkeypatch, client)
     reconciled = []
     monkeypatch.setattr(
-        check, "reconcile_topic", lambda topic, *a, **k: reconciled.append(topic["id"]) or {"events": [], "summary": {}}
+        check_reconcile,
+        "reconcile_topic",
+        lambda topic, *a, **k: reconciled.append(topic["id"]) or {"events": [], "summary": {}},
     )
     _seed_watched_topic(last_check="earlier")
 
