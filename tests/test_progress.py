@@ -1,4 +1,4 @@
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import ClassVar
 
 import pytest
@@ -22,6 +22,49 @@ def test_client_absolute_paths_cannot_be_interpreted_as_relative_files(tmp_path:
     for name in ("/Show/S01E01.mkv", r"\Show\S01E01.mkv", r"\\server\share\S01E01.mkv", r"C:\Show\S01E01.mkv"):
         assert safe_relative_path(str(tmp_path), name) is None
     assert safe_relative_path(str(tmp_path), "Show/S01E01.mkv") == "Show/S01E01.mkv"
+
+
+def _count_resolves(monkeypatch) -> list[Path]:
+    resolved: list[Path] = []
+    original = Path.resolve
+
+    def counting(self, *args, **kwargs):
+        resolved.append(self)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", counting)
+    return resolved
+
+
+def test_client_file_names_are_checked_without_touching_the_disk(tmp_path: Path, monkeypatch):
+    resolved = _count_resolves(monkeypatch)
+    folder = str(tmp_path / "asleep")  # need not exist: nothing is looked up
+    assert safe_relative_path(folder, r"Show\Season 1\./S01E01.mkv") == "Show/Season 1/S01E01.mkv"
+    assert safe_relative_path(folder, "Show/Pilot: Part 1.mkv") == "Show/Pilot: Part 1.mkv"
+    for name in ("Show/../../x.mkv", "", "./", "C:x.mkv"):
+        assert safe_relative_path(folder, name) is None
+    if PurePath("C:x.mkv").drive:  # a drive on this system: never a name inside the folder
+        assert safe_relative_path(folder, "Show/C:x.mkv") is None
+    assert resolved == []
+
+
+def test_a_pass_looks_at_the_disk_only_for_files_it_must_confirm(tmp_path: Path, monkeypatch):
+    client = FakeClient()
+    client.progress = 1.0
+    (tmp_path / "Show").mkdir()
+    (tmp_path / "Show" / "S01E01.mkv").write_bytes(b"0123456789")
+    topic = {"id": "asleep", "title": "Show [1 из 1]", "hash": "ABC", "save_path": str(tmp_path)}
+    history = {"topics": {"asleep": {"baseline_at": "2026-09-12T20:00:00+03:00", "items": {}}}}
+    resolved = _count_resolves(monkeypatch)
+
+    first = reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
+    assert first["summary"]["completed"] == 1
+    assert resolved.count(tmp_path) == 1  # the folder once, then the file inside it
+    resolved.clear()
+
+    again = reconcile_topic(topic, client, history, "2026-09-12T21:30:00+03:00")
+    assert again["summary"]["completed"] == 1
+    assert resolved == []  # confirmed within the day and still complete: no disk access at all
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), "nan", "inf"])
