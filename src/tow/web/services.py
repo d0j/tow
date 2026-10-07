@@ -29,6 +29,7 @@ from tow.content import read as read_content
 from tow.doctor import doctor_report
 from tow.lifecycle import request_restart, service_status, set_autostart
 from tow.log import log_event
+from tow.mirrors import prefer_host
 from tow.notify import send as notify_send
 from tow.ratelimit import LoginThrottle
 from tow.releases import release_status
@@ -94,6 +95,7 @@ __all__ = [
     "night_cleanup_status",
     "notify_send",
     "persistence_lock",
+    "prefer_host",
     "prepare_content",
     "prepare_magnet_content",
     "read_content",
