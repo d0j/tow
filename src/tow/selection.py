@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
+import functools
 import re
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
@@ -31,7 +32,6 @@ class SelectionPendingError(SelectionError):
 
 MAX_RULE_TEXT = 8192
 MAX_RULES = 500
-_MAX_CLASS_CHAR_CACHE = 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,43 +332,16 @@ def _literal_union(literals: Iterable[str]) -> str:
 
 def _class_filter(classes: Iterable[str]) -> Callable[[set[str]], bool]:
     """At least one path character must match this necessary class union."""
-    match = re.compile("|".join(fnmatch.translate(part) for part in classes)).match
-    cache: dict[str, bool] = {}
-
-    def possible(characters: set[str]) -> bool:
-        for char in characters:
-            present = cache.get(char)
-            if present is None:
-                present = bool(match(char))
-                # Bound preparation state, not accepted Unicode characters.
-                if len(cache) < _MAX_CLASS_CHAR_CACHE:
-                    cache[char] = present
-            if present:
-                return True
-        return False
-
-    return possible
+    # fnmatch decides membership; the cache bounds work, never which characters count.
+    member = functools.lru_cache(maxsize=1024)(re.compile("|".join(map(fnmatch.translate, classes))).match)
+    return lambda characters: any(map(member, characters))
 
 
-def _class_filters(rows: Iterable[tuple[str, ...]]) -> tuple[Callable[[set[str]], bool], ...]:
+def _class_filters(rows: Iterable[tuple[str, ...]]) -> list[Callable[[set[str]], bool]]:
+    """Every rule needs its own n-th class, so a path needs a character in their union."""
     classes = tuple(rows)
-    counts = Counter(part for parts in classes for part in parts)
-    choices: list[tuple[str, ...]] = []
-    for part, count in counts.items():
-        if count == len(classes):
-            choices.append((part,))
-            if len(choices) == 8:
-                break
-    # Each rule needs its own class at this position. Their union is weaker,
-    # but still necessary even when no whole class is shared by all rules.
-    minimum = min((len(parts) for parts in classes), default=0)
-    for position in range(min(minimum, 8)):
-        if len(choices) == 8:
-            break
-        union = tuple(sorted({parts[position] for parts in classes}))
-        if union not in choices:
-            choices.append(union)
-    return tuple(_class_filter(parts) for parts in choices)
+    width = min((len(parts) for parts in classes), default=0)
+    return [_class_filter(dict.fromkeys(parts[n] for parts in classes)) for n in range(min(width, 8))]
 
 
 def _file_mask_matcher(patterns: Iterable[str]) -> Callable[[str], bool]:

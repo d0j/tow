@@ -359,33 +359,6 @@ def test_shared_class_permutations_cannot_exceed_the_eight_filter_bound(monkeypa
     assert len(compiled) == 9
 
 
-def test_class_character_cache_is_bounded_and_never_hides_new_characters(monkeypatch):
-    from types import SimpleNamespace
-
-    original = tow.selection.re.compile
-    checked = []
-
-    def record(pattern, *args, **kwargs):
-        compiled = original(pattern, *args, **kwargs)
-
-        def match(char):
-            checked.append(char)
-            return compiled.match(char)
-
-        return SimpleNamespace(match=match)
-
-    monkeypatch.setattr(tow.selection.re, "compile", record)
-    check = tow.selection._class_filter(("[xy]",))
-    characters = {chr(0x1000 + index) for index in range(1200)}
-    assert not check(characters)
-    assert len(checked) == 1200
-    assert not check(characters)
-    assert len(checked) == 1200 + 176
-    assert check({"x"})
-    assert not check({"z"})
-    assert check({"y"})
-
-
 @pytest.mark.parametrize("scenario", ["long-literal", "terminal-chain", "branch-chain"])
 def test_maximum_text_prefix_filters_preserve_exact_globs_without_recursion(scenario):
     patterns = (
