@@ -1635,7 +1635,8 @@
       "file_save": "Save file",
       "file_choose": "Choose a file:",
       "file_restore_confirm": "Restore TOW from this file? The current state is saved automatically before it is replaced.",
-      "file_note": "Restoring needs the original <code>keys/master.key</code> — it is not in the archive, so keep it separately. Before replacing data, TOW checks the file and saves the current state. <a href=\"{more}\">More</a>."
+      "file_note": "Restoring needs the original <code>keys/master.key</code> — it is not in the archive, so keep it separately. Before replacing data, TOW checks the file and saves the current state. <a href=\"{more}\">More</a>.",
+      "night_restore_access": "Network access and its password stay as they are now."
     },
     "log": {
       "q": "log journal events failure diagnostics",
@@ -2090,7 +2091,9 @@
       "member_config": "the settings",
       "member_restore_point": "a backup made with the button",
       "point_checked": "The restore point passed the check; current data is unchanged.",
-      "restored_night": "restored from the nightly backup of {at}; the previous state is saved in {path}"
+      "restored_night": "restored from the nightly backup of {at}; the previous state is saved in {path}",
+      "access_kept": "network access stays as it was",
+      "access_off": "network access is off now: the settings in force could not be read. Turn it on again in Settings → Network access"
     },
     "settings": {
       "no_such_client": "no such client",

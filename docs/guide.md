@@ -198,7 +198,8 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
   future-dated copies are protected. An optional size budget can shorten history, but not delete these copies.
 - Both saved-copy lists offer **Check**, **Restore** and **Delete**. Deletion requires confirmation for the
   dated copy and cannot be undone; it removes only that copy, not current settings, torrents or history.
-- Before any restore TOW checks the copy and saves the current state; network access settings stay as they are.
+- Before any restore TOW checks the copy and saves the current state; network access settings stay as they are
+  (when the settings in force cannot be read, a night restore leaves network access off and says so).
   Restoring a night copy keeps the event log (History) as it is: what happened after the copy stays listed.
 - Folders: Settings → Backups → Backup folders. Another drive or a network share (`\\server\share`) is fine; a
   network share is chosen on the computer running TOW, not from another device.

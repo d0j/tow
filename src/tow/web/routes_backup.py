@@ -242,6 +242,7 @@ def settings_backup_restore(name: str) -> Response:
     # A signed-in device on the network is the owner (owner's decision, 01.10.2026).
     from tow.snapshots import SnapshotError, restore_snapshot, snapshot_path
 
+    lan_before = _network_access()
     try:
         result = restore_snapshot(snapshot_path(name), apply=True)
     except SnapshotError as exc:
@@ -252,9 +253,21 @@ def settings_backup_restore(name: str) -> Response:
     except KeyError, TypeError, ValueError:
         at = name
     message = t("web.backup.restored_night", at=at, path=result["safety_copy"])
+    # The restore keeps this install's network access and password; only when the settings in
+    # force could not be read does it make TOW local-only (snapshots._keep_local_access).
+    turned_off = lan_before is not False and _network_access() is False
+    message += "; " + t("web.backup.access_off" if turned_off else "web.backup.access_kept")
     if result.get("cleanup_warning"):
         return _backup_redirect(f"{message} · {t('backup.snapshot.restore_cleanup_warning')}", "warn")
-    return _backup_redirect(message)
+    return _backup_redirect(message, "warn" if turned_off else "ok")
+
+
+def _network_access() -> bool | None:
+    """Whether network access is on (None: the settings cannot be read)."""
+    try:
+        return as_bool(services.load_config().get("allow_lan"))
+    except OSError, ValueError:
+        return None
 
 
 @router.post("/settings/restore-points")
