@@ -96,6 +96,8 @@ class Deps:
     # tree: only for a web server of this install left behind by a supervisor that died.
     port_owner: Callable[[int], dict[str, Any] | None] = field(default=lambda _port: None)
     stop_pid: Callable[[int], bool] = field(default=lambda _pid: False)
+    # The web server on the port answers /healthz as this install (layout.install_id).
+    own_server: Callable[[int], bool] = field(default=lambda _port: False)
 
 
 @dataclass
@@ -191,9 +193,10 @@ class Supervisor:
         """Why this supervisor must not start (another program holds the port), or None.
 
         A web server this install's previous supervisor started and left behind (it was killed
-        or crashed) is stopped first: it is the pid that supervisor recorded in status.json and
-        its command line is ``-m tow serve`` with this install's log. Anything else on the port
-        is never touched.
+        or crashed) is stopped first: it is the pid that supervisor recorded in status.json, and
+        it answers /healthz as this install or its command line is ``-m tow serve`` with this
+        install's log (a copy of the folder has its own). Anything else on the port is never
+        touched.
         """
         if not self.deps.port_open(self.port):
             return None
@@ -204,10 +207,7 @@ class Supervisor:
         return t("supervisor.port_busy", port=self.port)
 
     def _own_server_command(self, command: str) -> bool:
-        def norm(text: str) -> str:
-            return os.path.normcase(text.replace('"', ""))
-
-        return "-m tow serve" in norm(command) and norm(str(self.home / "serve.log")) in norm(command)
+        return layout.own_server_command(command, self.home)
 
     def _take_over_orphan(self) -> bool:
         recorded = layout.read_json(self._status_file).get("server")
@@ -216,9 +216,11 @@ class Supervisor:
             return False
         owner = self.deps.port_owner(self.port) or {}
         # On Windows the venv's python.exe is a launcher: the listener is its child.
-        if pid not in (owner.get("pid"), owner.get("parent")) or not self._own_server_command(
-            str(owner.get("cmd") or "")
-        ):
+        if pid not in (owner.get("pid"), owner.get("parent")):
+            return False
+        # The answer first: a command line read in another code page may have lost the folder's
+        # letters; a hung server is still known by its command line.
+        if not self.deps.own_server(self.port) and not self._own_server_command(str(owner.get("cmd") or "")):
             return False
         LOG.warning("a web server of this install was left running (pid %s): stopping it", pid)
         self.deps.stop_pid(pid)

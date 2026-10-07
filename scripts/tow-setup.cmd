@@ -13,10 +13,11 @@ set "TOW_REBUILD="
 cd /d "%TOW_APP%" || exit /b 3
 if /i "%TOW_ROOT%"=="%TOW_APP%" "%TOW_UV%" sync --frozen
 if /i "%TOW_ROOT%"=="%TOW_APP%" exit /b %ERRORLEVEL%
-rem Never under a running TOW: Windows lets .venv be renamed while its programs run.
-if exist ".venv\Scripts\python.exe" ".venv\Scripts\python.exe" -c "import sys; from tow.supervisor.layout import busy; sys.exit(4 if busy() else 0)" >nul 2>&1
+rem Never under a running TOW: Windows lets .venv be renamed while its programs run. Another
+rem program or TOW folder on the port is only named (setup_check prints it); an older .venv has busy().
+if exist ".venv\Scripts\python.exe" ".venv\Scripts\python.exe" -c "import sys; from tow.supervisor import layout as l; sys.exit(l.setup_check() if hasattr(l, 'setup_check') else 4 if l.busy() else 0)" 2>nul
 rem Only exit 4 means busy: a moved Python launcher may return 103 (base Python not found).
-if "%ERRORLEVEL%"=="4" (echo TOW setup: TOW is running. Stop it first ^(tow.cmd stop^), then run setup again.& exit /b 3)
+if "%ERRORLEVEL%"=="4" (echo TOW setup: TOW is running from this folder. Stop it first ^(tow.cmd stop^), then run setup again.& exit /b 3)
 rem .venv holds absolute paths: built again when its Python no longer runs (a moved folder) or is
 rem not the one inside the install (an install from before 1.18).
 if exist ".venv\Scripts\python.exe" ".venv\Scripts\python.exe" -c "import os,sys; base=os.path.normcase(os.path.realpath(sys.base_prefix)); managed=os.path.normcase(os.path.realpath(os.environ['UV_PYTHON_INSTALL_DIR'])); sys.exit(os.path.commonpath([base,managed]) != managed)" >nul 2>&1 || set "TOW_REBUILD=1"

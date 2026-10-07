@@ -103,6 +103,21 @@ def test_another_tow_run_that_took_over_is_waited_for():
     assert result["ok"] is True
 
 
+def test_only_this_installs_page_counts_as_started(monkeypatch):
+    # QA 2.10.2026: a copy of the folder ran on the same port; `tow start` of this one said
+    # "TOW is running" while its own `tow run` had ended with "port in use".
+    asked = []
+    monkeypatch.setattr(
+        "tow.watchdog.healthy", lambda port, install=None: asked.append(install) or install == "another-copy"
+    )
+    deps = starter.default_deps()
+    assert deps.healthy(18990) is False
+    assert asked == [layout.install_id()]
+    deps.running, deps.spawn, deps.alive, deps.sleep = (lambda: None), (lambda: 4242), (lambda _pid: False), print
+    result = starter.start(18990, wait=120, deps=deps)
+    assert (result["ok"], result["state"]) == (False, "exited")
+
+
 def test_a_page_that_never_answers_times_out():
     machine = Machine(answers_after=None)
     result = starter.start(18990, wait=10, deps=machine.deps())

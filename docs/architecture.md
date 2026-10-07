@@ -41,8 +41,8 @@ flowchart TD
   supervisor restarts it after a pause that doubles from 1 s to 5 min. It never outlives the supervisor: stopped
   on every way out of the loop, `--parent-pid` makes it stop when the supervisor is gone, a Windows job object
   and Linux `PR_SET_PDEATHSIG` end it with a killed supervisor. A server a dead supervisor left on the port (the
-  pid in `status.json`, `-m tow serve` of this install) is stopped by the next `tow run`; nothing else on the
-  port is ever touched.
+  pid in `status.json`, answering `/healthz` as this install or `-m tow serve` of this install) is stopped by
+  the next `tow run`; nothing else on the port is ever touched.
 - The schedule is the supervisor's own: checks every `interval_sec` after its last scheduled start
   (`data/run/schedule.json`), the night copy once per local day (a copy older than the latest slot is due; DST
   neither skips nor repeats a night). The watchdog duty only reports.

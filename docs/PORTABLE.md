@@ -184,8 +184,11 @@ blocks for long.
   not a failure to retry).
 - **The port.** If something listens on the port, `tow run` first checks whether it is a web
   server this install's previous supervisor left behind (killed, crashed): the pid recorded in
-  `data/run/status.json` (or, on Windows, the venv launcher's child of it) running
-  `-m tow serve --log-file <this install>/data/logs/serve.log`. Only that is stopped, and TOW
+  `data/run/status.json` (or, on Windows, the venv launcher's child of it) that answers
+  `/healthz` as this install, or runs `-m tow serve --log-file <this install>/data/logs/serve.log`
+  (a hung one). `/healthz` names the install only to this computer: `install`, a hash of the code
+  folder (`layout.install_id`), so a copy of the folder on the same port is another install. Only
+  that is stopped, and TOW
   starts. Anything else on the port is never touched: `tow run` says so and exits 3 — or 0 when
   launchd started it (`TOW_AUTOSTART=launchd`), because launchd would retry it every minute
   without a limit; the reason is in `run.log`.
@@ -666,13 +669,17 @@ launchers' environment and Python 3.11 syntax.
   version of `.python-version`, into `runtime\python`), rebuilds a `.venv` whose Python no longer
   runs (moved folder) or lives outside `runtime\python` (an install from before 1.18) — renamed
   first, so with TOW still running nothing is removed and setup says "stop TOW" — then
-  `uv sync --frozen --no-dev`. In a checkout: `uv sync --frozen`.
+  `uv sync --frozen --no-dev`. In a checkout: `uv sync --frozen`. Before that it asks
+  `layout.setup_check`: TOW of this install running (its lock, or its web server on the port)
+  stops the setup; another program or another TOW folder on the port is only named with the port
+  (`cli.setup.port_other`) and the setup goes on.
 - `scripts/tow` (POSIX sh, mode 100755): the same for Linux and macOS (`./tow setup` without
   `--no-registry`), follows a symlink to itself (e.g. `~/bin/tow`).
 - `tow start` (1.22, `tow.supervisor.starter`): when this install's `tow run` runs, only the
   page opens; otherwise `python -m tow run` (`pythonw.exe` on Windows) starts detached and
   hidden (`platform.spawn_detached`: it outlives the window or terminal; its early output goes
-  to `data/logs/run-stderr.log`), and the page opens once `/healthz` answers (`--wait`, 120 s).
+  to `data/logs/run-stderr.log`), and the page opens once `/healthz` answers as this install
+  (`--wait`, 120 s; another TOW folder on the same port does not count).
   A `tow run` that ends before it answers (another program on the port, a broken config) is
   reported at once with the log - unless another `tow run` took over meanwhile.
   `--no-browser` or `TOW_NO_BROWSER=1` opens no browser; on Linux without `DISPLAY` /

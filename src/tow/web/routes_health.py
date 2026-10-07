@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Form
+from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse, Response
 
-from tow import __version__
+from tow import __version__, access
 from tow.web import _context, services
 from tow.web.templating import header_health
 from tow.web.text import t
@@ -69,8 +69,11 @@ def updates_log() -> Response:
 
 
 @router.get("/healthz", response_model=None)
-def healthz() -> dict[str, Any]:
-    return {"ok": True, "version": __version__}
+def healthz(request: Request) -> dict[str, Any]:
+    answer: dict[str, Any] = {"ok": True, "version": __version__}
+    if access.is_local(request):  # which install answers: for tow start / setup / run on this computer
+        answer["install"] = services.install_id()
+    return answer
 
 
 @router.get("/health.json", response_model=None)

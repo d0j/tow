@@ -548,7 +548,63 @@ def test_busy_sees_the_supervisor_or_an_old_server_on_the_port(monkeypatch):
     assert layout.busy() is False
     assert asked == [8787]
     monkeypatch.setattr(_os, "port_open", lambda port: True)  # a web server left on the port
+    monkeypatch.setattr("tow.watchdog.healthy", lambda port, install=None: install == layout.install_id())
     assert layout.busy() is True
+
+
+class _PortOwner:
+    def __init__(self, command: str):
+        self.command = command
+
+    def port_owner(self, port):
+        return {"pid": 50, "cmd": self.command, "parent": 49, "parent_cmd": ""}
+
+
+def test_another_program_or_tow_folder_on_the_port_is_not_this_tow_running(monkeypatch, capsys):
+    # 2.10.2026 (QA): a copy of the folder still running on the port made `tow setup` say
+    # "TOW is running. Stop it first" - it was not, and stopping this TOW changed nothing.
+    from tow import platform
+    from tow.supervisor import _os
+
+    monkeypatch.setattr(layout, "running", lambda: None)
+    monkeypatch.setattr(_os, "port_open", lambda port: True)
+    other_copy = []
+    monkeypatch.setattr(
+        "tow.watchdog.healthy", lambda port, install=None: other_copy.append(install) or install is None
+    )
+    with platform.use(_PortOwner('"C:\\Other TOW\\python.exe" -m tow serve --log-file C:\\Other TOW\\serve.log')):
+        assert layout.port_holder(8787) == "other"
+        assert layout.busy() is False
+        assert layout.setup_check() == 0
+    assert other_copy[0] == layout.install_id()  # asked as this install, answered as another
+    out = capsys.readouterr().out
+    assert "8787" in out
+    assert "другой папкой TOW" in out  # the terminal language (the tests run in Russian)
+
+
+def test_a_hung_web_server_of_this_install_still_counts_as_running(monkeypatch):
+    from tow import platform
+    from tow.supervisor import _os
+
+    monkeypatch.setattr(layout, "running", lambda: None)
+    monkeypatch.setattr(_os, "port_open", lambda port: True)
+    monkeypatch.setattr("tow.watchdog.healthy", lambda port, install=None: False)  # no answer at all
+    own = f'"python.exe" -m tow serve --log-file "{layout.logs_dir() / "serve.log"}" --parent-pid 1'
+    with platform.use(_PortOwner(own)):
+        assert layout.port_holder(8787) == "ours"
+        assert layout.setup_check() == 4
+    monkeypatch.setattr(_os, "port_open", lambda port: False)
+    assert layout.port_holder(8787) is None
+    assert layout.setup_check() == 0
+
+
+def test_the_install_id_names_the_folder_without_showing_it(monkeypatch, tmp_path):
+    first = layout.install_id()
+    assert first == layout.install_id()  # stable
+    assert len(first) == 16
+    assert str(layout.install_root()) not in first
+    monkeypatch.setattr(layout, "repo_root", lambda: tmp_path / "copy" / "app")
+    assert layout.install_id() != first  # a copy of the folder is another install
 
 
 # --- a web server ends with its supervisor (tow serve --parent-pid) ----------------------------

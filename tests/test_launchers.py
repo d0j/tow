@@ -130,11 +130,12 @@ def test_setup_takes_no_options_and_never_runs_under_a_running_tow():
     assert "shift /1" in windows  # a plain shift moves %0 too, and %~dp0 stops naming scripts\
     for text in (windows, posix):
         assert "Usage:" in text
-        assert "from tow.supervisor.layout import busy" in text
-        assert "TOW is running. Stop it first" in text
+        assert "l.setup_check()" in text
+        assert "else 4 if l.busy() else 0" in text  # an older .venv still refuses
+        assert "TOW is running from this folder. Stop it first" in text
     # the check comes before anything is moved or removed
-    assert windows.index("import busy") < windows.index('move ".venv" ".venv-old"')
-    assert posix.index("import busy") < posix.index("rm -rf .venv")
+    assert windows.index("setup_check") < windows.index('move ".venv" ".venv-old"')
+    assert posix.index("setup_check") < posix.index("rm -rf .venv")
 
 
 def test_windows_setup_does_not_treat_a_broken_moved_python_as_a_running_service():
