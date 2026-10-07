@@ -84,6 +84,23 @@ def test_first_start_offers_the_password_and_this_pc_sets_it():
     assert local.get("/setup", follow_redirects=False).headers["location"] == "/"
 
 
+def test_a_second_first_start_window_is_told_its_password_was_not_saved():
+    _fresh_install()
+    first, second = TestClient(app, headers=ORIGIN), TestClient(app, headers=ORIGIN)
+    assert "Добро пожаловать в TOW" in first.get("/setup").text
+    assert "Добро пожаловать в TOW" in second.get("/setup").text  # both opened before either saved
+    data = {"lan_password": "pony-river-lamp", "lan_password2": "pony-river-lamp"}
+    first.post("/setup", data=data, follow_redirects=False)
+
+    late = second.post(
+        "/setup", data={"lan_password": "other-pass-99", "lan_password2": "other-pass-99"}, follow_redirects=False
+    )
+
+    assert late.headers["location"].startswith("/settings?open=access")
+    assert "пароль уже задан в другом окне; этот не сохранён" in _flash(late)
+    assert lan_password_matches("pony-river-lamp", load_secrets()["lan_auth"])
+
+
 def test_first_start_can_be_put_off():
     _fresh_install()
     local = TestClient(app, headers=ORIGIN)

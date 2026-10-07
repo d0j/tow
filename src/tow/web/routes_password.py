@@ -75,6 +75,9 @@ def setup_save(
         services.log_event("setup_skipped", how="manual")
         return flash_redirect("/", "setup.skipped", "ok")
     if not first_run(cfg):
+        if access.password_is_set(_context.secrets_or_none()):
+            # Two windows set up at once: the first password stays; this one is said to be dropped.
+            return flash_redirect("/settings?open=access", "setup.already_set", "warn")
         return RedirectResponse("/settings?open=access", status_code=303)
     try:
         record = access.new_record(lan_password, lan_password2, hint)
