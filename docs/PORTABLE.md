@@ -573,7 +573,10 @@ supported state versions and readable containers. Both encrypted stores must hav
 expected format and cipher, decrypt with the local master key, and contain a readable object;
 settings undo must contain its secrets object. Validation never quarantines or rewrites source
 files. A new copy that does not read back or is hash-correct but unusable is recorded as a failure,
-removed (never listed or counted for retention) and cannot prune older copies. Missing optional stores and valid legacy containers remain supported. This follows
+removed (never listed or counted for retention) and cannot prune older copies. A new copy checks the live
+stores before it takes the data lock and keeps the hash of the bytes that passed; under the lock a store copied
+with that hash is proven, one that changed in between is checked from the copy, and the read-back compares
+hashes only, so saves wait for the copy itself, not for parsing. Missing optional stores and valid legacy containers remain supported. This follows
 the separation of cryptographic verification and archive consistency checks described in
 [Borg's check documentation](https://borgbackup.readthedocs.io/en/stable/usage/check.html),
 with application-format checks supplied by TOW's own readers.
