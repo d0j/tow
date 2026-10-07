@@ -2232,7 +2232,20 @@
     "state_newer": "state.json was written by a newer TOW (data version {found}; this TOW knows {known}). Update TOW or restore a backup made by this version; nothing was changed.",
     "state_bad_version": "state.json has a data version this TOW cannot read ({found}); nothing was changed. Restore it from a restore point or a backup.",
     "no_master_key": "The master key is missing, so the saved passwords and tokens cannot be opened. Put the key file back as keys/master.key in the install (or point TOW_MASTER_KEY_FILE at it), or bring it in with: tow keys adopt --from FILE. On a new install without saved secrets, run: tow keys ensure",
-    "key_path_outside_data": "A relative TOW_MASTER_KEY_FILE path must stay inside the TOW data folder. Use an absolute path for an external key file."
+    "key_path_outside_data": "A relative TOW_MASTER_KEY_FILE path must stay inside the TOW data folder. Use an absolute path for an external key file.",
+    "key_unreadable": "The master key file cannot be read. Check that keys/master.key (or the file TOW_MASTER_KEY_FILE names) is there and that this account may open it.",
+    "key_empty": "The master key file is empty, so the saved passwords and tokens cannot be opened. Put the key back from your copy: tow keys adopt --from FILE",
+    "key_invalid": "The master key is damaged or not a TOW key file. Put back the key the passwords and tokens were saved with: tow keys adopt --from FILE",
+    "no_cryptography": "The cryptography package is missing from TOW's environment, so the saved passwords and tokens cannot be opened. Rebuild the environment: tow setup",
+    "secrets_write_failed": "The passwords and tokens could not be saved. Check the free space and the access to the data folder, then try again.",
+    "secrets_damaged": "The file of saved passwords and tokens is damaged and cannot be read. Restore it from a restore point or a backup.",
+    "secrets_unsupported": "The file of saved passwords and tokens is in a format this TOW does not know (written by a newer version or another program). Update TOW or restore the file from a backup made by this version.",
+    "secrets_wrong_key": "The master key in use does not open the saved passwords and tokens. Put back the key they were saved with: tow keys adopt --from FILE",
+    "legacy_unreadable": "The old unencrypted {file} cannot be read. Correct or restore it, then run: {command}",
+    "legacy_left": "The data folder holds both the encrypted {encrypted} and the old unencrypted {file}, and TOW uses neither while both are there. Delete {file}: the passwords and tokens are kept in {encrypted}.",
+    "migrate_needed": "The passwords and tokens are still in the old unencrypted {file}. Encrypt them: {command}",
+    "readback_mismatch": "The passwords and tokens were written, but did not read back the same. Try again; if it happens again, check the disk and the data folder.",
+    "legacy_remains": "The passwords and tokens were encrypted into {encrypted}, but the old unencrypted {file} could not be deleted. Delete it by hand."
   },
   "not_found": {
     "title": "Page not found",
