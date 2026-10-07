@@ -63,7 +63,8 @@ def test_generic_cli_launcher_uses_runtime_env():
     assert last.startswith('if /i "%~1"=="setup" (call "%~dp0tow-setup.cmd" %*)')
     assert last.index('if exist "%TOW_EXE%" ("%TOW_EXE%" %*)') < last.index('"%TOW_UV%" run --frozen --no-dev')
     exits = [line for line in text.splitlines() if "exit /b" in line and not line.startswith("rem ")]
-    assert exits == ["if defined TOW_MOVED exit /b 3"]  # the one refusal, before TOW runs
+    # The refusals, before TOW runs: a moved folder, an update cut off while it replaced the code.
+    assert exits == ["if defined TOW_MOVED exit /b 3", "if defined TOW_CUT exit /b 3"]
 
 
 @pytest.mark.allow_system  # the launcher in a temp install whose environment was left behind by a move
