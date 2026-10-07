@@ -10,7 +10,8 @@ their home modules, so a test replaces one in one place and every page sees it::
 
 Pure helpers (formatting, parsing, validation, constants, error types) are imported from their
 own modules as usual; anything that reads or writes the install's data, talks to a client or a
-site, or changes the service belongs here.
+site, or changes the service belongs here. ``tests/test_web_boundary.py`` lists the pure helpers
+the route and action modules import and refuses any other way out of ``tow.web``.
 """
 
 from __future__ import annotations

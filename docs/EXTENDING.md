@@ -158,7 +158,10 @@ The web package (`src/tow/web/`):
    `@router.get(...)` / `@router.post(...)` returning `-> Response`; for JSON, `-> dict[str, Any]` and
    `response_model=None`.
 2. Read or change data, clients, sites or the service only through `services`. A read-modify-write of the state
-   gets `@services.locked_state_mutation` under the route decorator.
+   gets `@services.locked_state_mutation` under the route decorator. From outside `tow.web` a route module (and
+   a `*_actions.py` module) imports only the pure helpers `tests/test_web_boundary.py` lists; a new way out goes
+   into `services`. A form with more than a few checks is handed to an action module, so the route only reads
+   the form and answers.
 3. Answer an action with `flash_redirect(url, "text.key", "ok" | "warn" | "err")`: the text stays on the server,
    only a token goes into the URL. A page is a template in `src/tow/templates/` rendered with
    `TEMPLATES.TemplateResponse(request, "name.html", {...})`; its texts are catalog keys.
