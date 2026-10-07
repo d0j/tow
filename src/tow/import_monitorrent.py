@@ -9,9 +9,11 @@ database is always closed.
 from __future__ import annotations
 
 import contextlib
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from tow.clients.factory import client_configuration, client_configurations, client_secret_block
 from tow.clients.spec import get
@@ -65,8 +67,9 @@ def import_monitorrent(
         new_topics, skipped = _merge_plan(state, topics)
         for topic in new_topics:
             topic["client_id"] = destination_id
-        credential_warning = _credential_warning(cfg, destination, found)
-        skipped_credentials = ["qbittorrent"] if credential_warning else []
+        credential_warnings = _credential_warnings(cfg, destination, found)
+        skipped_credentials = sorted(credential_warnings)
+        warnings = [t(key) for key in dict.fromkeys(credential_warnings[kind] for kind in skipped_credentials)]
         if not apply:
             preview = {
                 "preview": True,
@@ -75,12 +78,13 @@ def import_monitorrent(
                 "topics_found": len(rows),
                 "topics_new": len(new_topics),
                 "topics_already_watched": skipped,
-                "topics_unusable": unusable,
+                "topics_unusable": len(unusable),
+                "topics_unusable_names": unusable,
                 "credentials_found": sorted(found),
                 "credentials_skipped": skipped_credentials,
             }
-            if credential_warning:
-                preview["warnings"] = [t(credential_warning)]
+            if warnings:
+                preview["warnings"] = warnings
             if adopt:
                 from tow.adopt import candidate_hash
 
@@ -115,13 +119,14 @@ def import_monitorrent(
         "restore_point": point["id"],
         "topics_added": len(new_topics),
         "topics_already_watched": skipped,
-        "topics_unusable": unusable,
+        "topics_unusable": len(unusable),
+        "topics_unusable_names": unusable,
         "credentials_filled": sorted(filled),
         "credentials_kept": sorted(kept),
         "credentials_skipped": skipped_credentials,
     }
-    if credential_warning:
-        result["warnings"] = [t(credential_warning)]
+    if warnings:
+        result["warnings"] = warnings
     if point.get("cleanup_warning"):
         result["cleanup_warning"] = point["cleanup_warning"]
     if adopt:
@@ -156,20 +161,26 @@ def _adopt_imported(topics: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _credential_warning(
+def _credential_warnings(
     cfg: dict[str, Any], destination: dict[str, Any], found: dict[str, dict[str, Any]]
-) -> str | None:
-    """Never fill a secret block also read by an incompatible client adapter."""
-    if "qbittorrent" not in found:
-        return None
-    if destination["kind"] != "qbittorrent":
-        return "monitorrent.qbittorrent_skipped"
-    if cfg.get("clients"):
-        ref = str(destination.get("secrets_ref") or destination["id"])
-        for other in client_configurations(cfg):
-            if str(other.get("secrets_ref") or other["id"]) == ref and other["kind"] != destination["kind"]:
-                return "monitorrent.shared_credentials"
-    return None
+) -> dict[str, str]:
+    """{client kind: why its connection is not imported}: only into a destination client of its
+    own kind, never into a secret block also read by an incompatible client adapter, never with
+    a port that is not a number."""
+    warnings: dict[str, str] = {}
+    for kind in _CLIENT_TABLES:
+        if kind not in found:
+            continue
+        if destination["kind"] != kind:
+            warnings[kind] = f"monitorrent.{kind}_skipped"
+        elif found[kind]["port"] is None:
+            warnings[kind] = "monitorrent.bad_port"
+        elif cfg.get("clients"):
+            ref = str(destination.get("secrets_ref") or destination["id"])
+            for other in client_configurations(cfg):
+                if str(other.get("secrets_ref") or other["id"]) == ref and other["kind"] != destination["kind"]:
+                    warnings[kind] = "monitorrent.shared_credentials"
+    return warnings
 
 
 def _rows(con: sqlite3.Connection, sql: str) -> list[sqlite3.Row]:
@@ -197,24 +208,64 @@ def _plain(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
+# Every site plugin of Monitorrent keeps its topics' hashes in its own table (rutracker_topics,
+# nnmclub_topics, ...): joined-table inheritance from ``topics``.
+_PLUGIN_TABLE = re.compile(r"[A-Za-z0-9]+(?:_[A-Za-z0-9]+)*_topics")
+# Optional columns of ``topics``: an older Monitorrent has no download_dir and no paused.
+_OPTIONAL_COLUMNS = ("download_dir", "paused")
+
+
 def _read_topics(con: sqlite3.Connection) -> list[dict[str, Any]]:
     """Every row of Monitorrent's topics (with its hash where Monitorrent keeps one), unchecked."""
     hashes: dict[Any, str] = {}
-    for table in ("kinozal_topics", "rutororg_topics"):
-        for row in _rows(con, f"SELECT id, hash FROM {table}"):
+    tables = [str(row["name"]) for row in _rows(con, "SELECT name FROM sqlite_master WHERE type = 'table'")]
+    for table in sorted(name for name in tables if isinstance(name, str) and _PLUGIN_TABLE.fullmatch(name)):
+        for row in _rows(con, f'SELECT id, hash FROM "{table}"'):
             if isinstance(row["hash"], str) and row["hash"]:
                 hashes[row["id"]] = row["hash"].upper()
+    present = {str(row["name"]) for row in _rows(con, "PRAGMA table_info(topics)")}
+    columns = ["id", "display_name", "url", *(name for name in _OPTIONAL_COLUMNS if name in present)]
     return [
-        {**dict(row), "hash": hashes.get(row["id"])}
-        for row in _rows(con, "SELECT id, display_name, url, download_dir FROM topics")
+        {**dict(row), "hash": hashes.get(row["id"])} for row in _rows(con, f"SELECT {', '.join(columns)} FROM topics")
     ]
 
 
-def _usable_topics(rows: list[dict[str, Any]], trackers: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
+def _usable_topics(rows: list[dict[str, Any]], trackers: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
     """The rows that become topics the way a link added by hand does (the topic page's link, a
-    site TOW reads, a plain id), and how many could not; one bad row never stops the others."""
-    topics = [topic for row in rows if (topic := _topic_of(row, trackers)) is not None]
-    return topics, len(rows) - len(topics)
+    site TOW reads, a plain id), and the names (else links) of those that could not; one bad
+    row never stops the others."""
+    topics: list[dict[str, Any]] = []
+    unusable: list[str] = []
+    for row in rows:
+        topic = _topic_of(row, trackers)
+        if topic is not None:
+            topics.append(topic)
+        else:
+            unusable.append(_plain(row.get("display_name")).strip() or _plain(row.get("url")).strip() or "?")
+    return topics, unusable
+
+
+# Addresses Monitorrent kept that the sites have left: the same topic on today's address.
+_MOVED_HOSTS = {
+    "nnm-club.me": "https://nnmclub.to",
+    "nnm-club.to": "https://nnmclub.to",
+    "nnm-club.ru": "https://nnmclub.to",
+    "nnmclub.me": "https://nnmclub.to",
+    "rutor.org": "http://rutor.info",
+}
+
+
+def _current_url(url: str) -> str:
+    """A topic link on the address its site uses now (nnm-club.me -> nnmclub.to)."""
+    try:
+        parts = urlsplit(url.strip())
+        host = (parts.hostname or "").removeprefix("www.")
+    except ValueError:
+        return url
+    moved = _MOVED_HOSTS.get(host)
+    if not moved:
+        return url
+    return moved + parts.path + (f"?{parts.query}" if parts.query else "")
 
 
 def _topic_of(row: dict[str, Any], trackers: dict[str, Any]) -> dict[str, Any] | None:
@@ -223,7 +274,7 @@ def _topic_of(row: dict[str, Any], trackers: dict[str, Any]) -> dict[str, Any] |
         return None
     if any(isinstance(row.get(key), _Undecodable) for key in ("display_name", "url", "download_dir")):
         return None
-    url = canon_watch_url(_plain(row.get("url")))
+    url = canon_watch_url(_current_url(_plain(row.get("url"))))
     topic_id = f"mr-{raw_id}"
     if not web_address(url) or not SAFE_ID.fullmatch(topic_id):
         return None
@@ -232,7 +283,7 @@ def _topic_of(row: dict[str, Any], trackers: dict[str, Any]) -> dict[str, Any] |
             return None  # no site TOW reads: it could never be checked
     except TowError:
         return None
-    return {
+    topic: dict[str, Any] = {
         "id": topic_id,
         # Without a name the link stands in; the first check names the topic after its torrent.
         "title": _plain(row.get("display_name")).strip() or url,
@@ -242,17 +293,39 @@ def _topic_of(row: dict[str, Any], trackers: dict[str, Any]) -> dict[str, Any] |
         "selection": {"mode": "all", "value": ""},
         "tracking_mode": "watch",
     }
+    if row.get("paused") in (1, True, "1"):
+        topic["paused"] = True  # paused in Monitorrent: not checked until the owner resumes it
+    return topic
+
+
+# Torrent-client connections Monitorrent keeps, by the TOW client kind they are for.
+_CLIENT_TABLES = {"qbittorrent": "qbittorrent_credentials", "transmission": "transmission_credentials"}
+
+
+def _port(value: Any) -> int | None:
+    """A port as Monitorrent kept it (a number, or a text of one); None when it is not one."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if 0 < value < 65536 else None
+    text = _plain(value).strip()
+    return int(text) if text.isdigit() and 0 < int(text) < 65536 else None
 
 
 def _read_credentials(con: sqlite3.Connection) -> dict[str, dict[str, Any]]:
+    """What Monitorrent keeps for TOW: the torrent-client connections, the Kinozal login and
+    Telegram. A client connection whose port is not a number is left out (``bad_port``)."""
     found: dict[str, dict[str, Any]] = {}
-    if q := next(iter(_rows(con, "SELECT host, port, username, password FROM qbittorrent_credentials")), None):
-        found["qbittorrent"] = {
-            "host": _plain(q["host"]),
-            "port": int(q["port"] or 8080),
-            "username": _plain(q["username"]),
-            "password": _plain(q["password"]),
-        }
+    for kind, table in _CLIENT_TABLES.items():
+        if q := next(iter(_rows(con, f"SELECT host, port, username, password FROM {table}")), None):
+            spec = get(kind)
+            port = _port(q["port"]) if q["port"] not in (None, "") else (spec.default_port if spec else None)
+            found[kind] = {
+                "host": _plain(q["host"]),
+                "port": port,
+                "username": _plain(q["username"]),
+                "password": _plain(q["password"]),
+            }
     if k := next(iter(_rows(con, "SELECT c_uid, c_pass, username, password FROM kinozal_credentials")), None):
         found["kinozal"] = {
             "uid": _plain(k["c_uid"]),
@@ -288,16 +361,18 @@ def _fill_credentials(
     """Fill only empty slots; what TOW already has is kept (it was set up on purpose)."""
     filled: list[str] = []
     kept: list[str] = []
-    if "qbittorrent" in found:
+    for kind in _CLIENT_TABLES:
+        if kind not in found:
+            continue
         block = client_secret_block(cfg, secrets, client_id, ensure=True)
-        spec = get("qbittorrent")
-        default_port = spec.default_port if spec is not None else 8080
+        spec = get(kind)
+        default_port = spec.default_port if spec is not None else None
         configured_port = block.get("port") not in (None, "", default_port, str(default_port))
         if configured_port or any(block.get(key) for key in ("host", "username", "password")):
-            kept.append("qbittorrent")
+            kept.append(kind)
         else:
-            block.update(found["qbittorrent"])
-            filled.append("qbittorrent")
+            block.update(found[kind])
+            filled.append(kind)
     if "kinozal" in found:
         trackers = secrets.setdefault("trackers", {})
         if any((trackers.get("kinozal") or {}).get(key) for key in ("uid", "pass", "username", "password")):
