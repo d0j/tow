@@ -360,6 +360,12 @@ def test_installers_run_the_release_smokes_before_a_tag():
     assert jobs["update"]["strategy"] == release["jobs"]["update"]["strategy"]
     assert jobs["update"]["steps"][-1]["run"] == release["jobs"]["update"]["steps"][-1]["run"]
     assert "git archive --format=tar.gz --prefix=tow/ -o tow-source.tar.gz HEAD" in _runs(jobs["update"])
+    # Weekly and by hand (never on a pull request) every large selection scenario is measured;
+    # the gate measures only the costliest of each kind.
+    selection = jobs["selection"]
+    assert selection["if"] == "github.event_name != 'pull_request'"
+    assert selection["steps"][-1]["env"] == {"TOW_SELECTION_WORK": "all"}
+    assert "tests/test_selection_work_bounds.py" in selection["steps"][-1]["run"]
 
 
 def test_ci_keeps_the_required_check_names_and_audits_once():

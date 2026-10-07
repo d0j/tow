@@ -106,6 +106,9 @@ def pytest_configure(config):
     """
     global _session_home
     seed = config.getoption("--test-seed", default=None)
+    worker = getattr(config, "workerinput", None)  # a pytest-xdist worker: the controller's seed
+    if seed is None and worker is not None:
+        seed = worker["tow_seed"]
     config._tow_seed = seed if seed is not None else int.from_bytes(os.urandom(3))
     _session_home = Path(tempfile.mkdtemp(prefix="tow-test-session-"))
     session_config = _session_home / "config.yaml"
@@ -116,6 +119,13 @@ def pytest_configure(config):
     for name in _CREDENTIAL_ENV:
         os.environ.pop(name, None)
     os.environ["TOW_MASTER_KEY"] = _test_master_key()
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_configure_node(node):
+    """Every pytest-xdist worker shuffles with the controller's seed: the workers must collect
+    the tests in the same order, and the seed printed at the end must repeat the run."""
+    node.workerinput["tow_seed"] = node.config._tow_seed
 
 
 def pytest_unconfigure(config):

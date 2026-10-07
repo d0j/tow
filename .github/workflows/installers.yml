@@ -6,7 +6,8 @@ name: installers
 # pull requests that touch the installers, the updater or what the bundle is built from, once a
 # week (a new runner image or a new release of uv or Python), and by hand. Not a required check:
 # the path filter would leave it pending on other pull requests. install.sh itself is tested on
-# every commit by ci.yml.
+# every commit by ci.yml. Weekly and by hand it also measures the work of all 45 large file
+# selection scenarios (the gate measures the costliest of each kind).
 
 on:
   pull_request:
@@ -66,6 +67,23 @@ jobs:
       - name: install.ps1 on Windows PowerShell 5.1, uninstall, reinstall around the data, purge
         shell: pwsh
         run: ./scripts/install-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Port 18878
+
+  selection:
+    name: selection work (all scenarios)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Install Python from .python-version
+        run: uv python install --no-bin --no-registry
+      - name: Every scenario of tests/selection_work_probe.py within its counted work bound
+        env:
+          TOW_SELECTION_WORK: all
+        run: uv run --frozen pytest -q -p no:cacheprovider tests/test_selection_work_bounds.py
 
   update:
     name: update (${{ matrix.os }})

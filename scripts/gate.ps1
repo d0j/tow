@@ -5,9 +5,10 @@
 .DESCRIPTION
     Runs from any location; works on the checkout that contains this script.
     Full gate: uv.lock, ruff format + check, mypy, compileall, whitespace of every tracked file,
-    pytest in a random order (the seed is printed) with branch coverage and its threshold
-    (pyproject [tool.coverage]), then the wheel smoke. On success it records the tree it passed
-    on, so the pre-push hook lets exactly that content through without running it again.
+    pytest on every core (pytest-xdist) in a random order (the seed is printed) with branch
+    coverage and its threshold (pyproject [tool.coverage]), then the wheel smoke. On success it
+    records the tree it passed on, so the pre-push hook lets exactly that content through
+    without running it again.
     -Quick skips the test suite and the wheel smoke; it only collects the tests (every test
     module must import).
     -Staged checks what the next commit contains (the index), not the working tree: the
@@ -139,17 +140,21 @@ try {
         }
     }
     else {
+        # pytest-xdist (a locked dev dependency) spreads the suite over every core; the workers
+        # share one shuffle seed (tests/conftest.py), and tests that share an expensive module
+        # fixture stay together (--dist loadgroup, `xdist_group`).
+        $parallel = @('-n', 'auto', '--dist', 'loadgroup')
         # pytest-cov is not a locked dependency (an offline lock cannot add it): `uv run --with`
         # brings it in from uv's cache or the network; without either, coverage is skipped.
         Invoke-Tool --with $PytestCov python -c 'import pytest_cov' 2>$null
         if ($LASTEXITCODE -eq 0) {
-            Step 'pytest (random order, branch coverage, threshold in pyproject)' {
-                Invoke-Tool --with $PytestCov pytest -q -ra -p no:cacheprovider --test-order random --cov --cov-report=
+            Step 'pytest (parallel, random order, branch coverage, threshold in pyproject)' {
+                Invoke-Tool --with $PytestCov pytest -q -ra -p no:cacheprovider @parallel --test-order random --cov --cov-report=
             }
         }
         else {
             Skip 'coverage' "$PytestCov is not available offline"
-            Step 'pytest (random order)' { Invoke-Tool pytest -q -ra -p no:cacheprovider --test-order random }
+            Step 'pytest (parallel, random order)' { Invoke-Tool pytest -q -ra -p no:cacheprovider @parallel --test-order random }
         }
         Test-Wheel
     }

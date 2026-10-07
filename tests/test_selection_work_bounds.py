@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import os
 import random
 import subprocess
 import sys
@@ -416,6 +417,15 @@ def test_a_seasonless_video_prevents_guessing_that_another_season_is_in_the_futu
 # 20,000 files makes ten million or more. The deadline only stops a probe that hangs.
 WORK_BUDGET = {"episodes": 2_500_000, "files": 4_000_000, "paths": 4_000_000}
 PROBE_DEADLINE_SEC = 600
+# All 45 scenarios take one to two minutes. The gate runs the costliest of each kind; the weekly
+# installers workflow runs every one (TOW_SELECTION_WORK=all).
+REPRESENTATIVE = ("episodes-metadata-limit", "files-distinct", "paths-nested-multi-class")
+SCENARIOS = tuple(selection_work_probe.SCENARIOS) if os.environ.get("TOW_SELECTION_WORK") == "all" else REPRESENTATIVE
+
+
+def test_the_representative_scenarios_are_scenarios_of_every_kind():
+    assert set(REPRESENTATIVE) <= set(selection_work_probe.SCENARIOS)
+    assert {name.split("-", 1)[0] for name in REPRESENTATIVE} == set(WORK_BUDGET)
 
 
 @pytest.fixture(scope="module")
@@ -424,7 +434,7 @@ def probe_results() -> dict[str, dict]:
     selection_file = str(Path(tow.selection.__file__).resolve())
     try:
         result = subprocess.run(
-            [sys.executable, "-I", "-B", str(probe), selection_file],
+            [sys.executable, "-I", "-B", str(probe), selection_file, *SCENARIOS],
             capture_output=True,
             text=True,
             timeout=PROBE_DEADLINE_SEC,
@@ -435,13 +445,15 @@ def probe_results() -> dict[str, dict]:
         output = exc.stdout.decode() if isinstance(exc.stdout, bytes) else exc.stdout or ""
         failure = f"the probe did not finish within {PROBE_DEADLINE_SEC} s"
     results = {row["name"]: row for row in map(json.loads, output.splitlines())}
-    for name in selection_work_probe.SCENARIOS:
+    for name in SCENARIOS:
         results.setdefault(name, {"ok": False, "error": failure or "not run", "calls": None})
     return results
 
 
+# One probe for the module: with pytest-xdist all of its tests go to one worker (--dist loadgroup).
+@pytest.mark.xdist_group("selection-work")
 @pytest.mark.allow_system
-@pytest.mark.parametrize("name", list(selection_work_probe.SCENARIOS))
+@pytest.mark.parametrize("name", SCENARIOS)
 def test_large_rules_and_torrents_finish_within_a_counted_work_bound(probe_results, name):
     result = probe_results[name]
     assert result["ok"], result["error"]

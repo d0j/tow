@@ -1,6 +1,7 @@
 """Large selection scenarios in one isolated interpreter, each with the work it took.
 
-Run by tests/test_selection_work_bounds.py: ``python -I -B selection_work_probe.py <selection.py>``.
+Run by tests/test_selection_work_bounds.py: ``python -I -B selection_work_probe.py <selection.py>
+[scenario...]`` (all of them without names).
 Prints one JSON line per scenario: its name, ``ok`` or the error, and ``calls`` - every call
 the code of tow.selection made while the scenario ran (``sys.monitoring`` CALL events: Python
 and C functions, a regex match included). The count depends only on the code and the input,
@@ -195,14 +196,18 @@ def measure(function: Callable[[], None]) -> dict[str, object]:
 
 
 def main() -> None:
+    """``selection_work_probe.py <selection.py> [scenario...]``: the named scenarios, or all."""
     assert Path(selection.__file__).resolve() == Path(sys.argv[1])
+    names = sys.argv[2:] or list(SCENARIOS)
+    unknown = sorted(set(names) - set(SCENARIOS))
+    assert not unknown, f"unknown scenarios: {unknown}"
     sys.monitoring.use_tool_id(_TOOL, "tow-selection-work")
     sys.monitoring.register_callback(_TOOL, sys.monitoring.events.CALL, _count)
     for layout in LAYOUTS:  # build the fixtures outside the measured work
         for extra in ("", "z000", "["):
             _parsed(layout, extra)
-    for name, function in SCENARIOS.items():
-        print(json.dumps({"name": name, **measure(function)}), flush=True)
+    for name in names:
+        print(json.dumps({"name": name, **measure(SCENARIOS[name])}), flush=True)
 
 
 if __name__ == "__main__":
