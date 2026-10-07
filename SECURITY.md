@@ -8,7 +8,7 @@ with an older release.
 | Version | Supported |
 |---|---|
 | Latest stable release | yes |
-| Older releases | no — update with `deploy.ps1 -Ref <tag>` or `tow update --ref <tag>` |
+| Older releases | no — update in Settings → Version and updates, or with `Update TOW.cmd` (Windows) or `update-tow` (Linux, macOS) in the TOW folder |
 
 ## Reporting a vulnerability
 
