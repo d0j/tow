@@ -155,9 +155,6 @@ def test_a_client_that_answers_check_shows_as_answering_at_once(legacy_qbit, mon
     _client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
     health = load_state()["health"]
     assert (health["qbit_ok"], health["clients_ok"], health["check_ok"]) == (True, {"default": True}, True)
-    from tow.web import _context
-
-    _context.begin()
     assert header_health()["qbit_tone"] == "ok"
 
 

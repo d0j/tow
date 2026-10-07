@@ -50,11 +50,9 @@ def test_round_three_words(client, monkeypatch):
     from starlette.requests import Request
 
     from tow.config import load_config
-    from tow.web import _context
     from tow.web.views import backup_view
 
     monkeypatch.setattr("tow.snapshots.status", lambda: {"last_ok_at": 1_790_000_000})
-    _context.begin()
     view = backup_view(load_config(), Request({"type": "http", "headers": [], "query_string": b""}))
     at = format_ui_timestamp(datetime.fromtimestamp(1_790_000_000, UTC).isoformat())
     assert "2026" in at
