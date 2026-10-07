@@ -22,6 +22,7 @@ from typing import Any
 from tow.browser_auth import browser_auth
 from tow.check import record_check_failure, run_check
 from tow.config import load_config, save_config
+from tow.content import metadata as content_metadata
 from tow.content import read as read_content
 from tow.doctor import doctor_report
 from tow.lifecycle import request_restart, service_status, set_autostart
@@ -65,6 +66,7 @@ __all__ = [
     "cleanup_secret_undo",
     "client_answers",
     "content_context_title",
+    "content_metadata",
     "create_restore_point",
     "delete_restore_point",
     "delete_snapshot",

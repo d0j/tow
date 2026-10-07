@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from tow.episodes import parse_season_hint
 from tow.errors import TowError
 from tow.selection import SelectionPendingError, normalize_policy, resolve_selection
-from tow.torrent import MAX_TORRENT_BYTES, TorrentPathConflictError, parse_torrent_metadata
+from tow.torrent import MAX_TORRENT_BYTES, TorrentPathConflictError
 from tow.web import services
 
 router = APIRouter()
@@ -92,7 +92,8 @@ async def content_resolve(
         from tow.guess import canon_watch_url
 
         link = canon_watch_url(url.strip())
-        metadata = parse_torrent_metadata(services.read_content(token, link, client_id))
+        # Parsed once per prepared torrent, not decrypted and parsed twice per rule change.
+        metadata = services.content_metadata(token, link, client_id)
         context = services.content_context_title(topic_id, link, client_id, title)
         policy = normalize_policy(mode, value, tracking_mode)
         try:
