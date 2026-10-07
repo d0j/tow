@@ -97,7 +97,7 @@ def _change_topic_delete(client, monkeypatch):
 
 
 def _change_topic_add(client, monkeypatch):
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda _url: "")
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda _url: "")
     monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: {"results": []})
     save_state({"topics": [_topic("keep", 5)], "mirrors": {}, "recent_save_roots": [r"M:\a"]})
     return lambda: client.post("/topics/add", data={"url": RUTOR_URL, "title": "New", "save_path": r"M:\a"})

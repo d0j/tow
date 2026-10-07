@@ -21,13 +21,15 @@ from typing import Any
 
 from tow.adopt import adopt_topic
 from tow.browser_auth import browser_auth
-from tow.check import record_check_failure, run_check
+from tow.check import await_relocation, client_owned_by_tow, record_check_failure, run_check
+from tow.clients.factory import from_secrets as client_from_secrets
 from tow.config import load_config, save_config
 from tow.content import metadata as content_metadata
 from tow.content import read as read_content
 from tow.doctor import doctor_report
 from tow.lifecycle import request_restart, service_status, set_autostart
 from tow.log import log_event
+from tow.notify import send as notify_send
 from tow.ratelimit import LoginThrottle
 from tow.releases import release_status
 from tow.restore_points import (
@@ -54,6 +56,7 @@ from tow.store import (
 )
 from tow.store_transaction import recover as recover_store_transaction
 from tow.supervisor.layout import install_id, next_check_at, topic_timer_status
+from tow.title import guess_topic_title
 from tow.undo import cleanup as cleanup_secret_undo
 from tow.web_update import log_tail as web_update_log
 from tow.web_update import start as start_web_update
@@ -61,12 +64,15 @@ from tow.web_update import status as web_update_status
 
 __all__ = [
     "adopt_topic",
+    "await_relocation",
     "browser_auth",
     "check_portable_bundle",
     "check_restore_point",
     "check_snapshot",
     "cleanup_secret_undo",
     "client_answers",
+    "client_from_secrets",
+    "client_owned_by_tow",
     "content_context_title",
     "content_metadata",
     "create_restore_point",
@@ -74,6 +80,7 @@ __all__ = [
     "delete_snapshot",
     "doctor_report",
     "export_portable_bundle",
+    "guess_topic_title",
     "install_id",
     "list_restore_points",
     "load_config",
@@ -85,6 +92,7 @@ __all__ = [
     "login_throttle",
     "next_check_at",
     "night_cleanup_status",
+    "notify_send",
     "persistence_lock",
     "prepare_content",
     "prepare_magnet_content",

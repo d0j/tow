@@ -147,8 +147,9 @@ The web package (`src/tow/web/`):
 - `services.py` — the only way out of the package: config, state, secrets and history, checks, the service,
   restore points, diagnostics, browser sign-in, the log; also `login_throttle` and `locked_state_mutation`.
 - Helpers: `_context.py` (what a request reads once), `views.py` (flash messages, Home rows), `text.py`,
-  `templating.py`, `site_form.py`, `site_store.py` (several stores in one transaction). Anything another module
-  uses has a name without a leading underscore (`tests/test_module_boundaries.py`).
+  `templating.py`, `site_form.py`, `site_store.py` (several stores in one transaction), `topic_actions.py` (what
+  the topic add and edit forms do; the record itself comes from `tow.topic_form`). Anything another module uses
+  has a name without a leading underscore (`tests/test_module_boundaries.py`).
 
 **Steps:**
 

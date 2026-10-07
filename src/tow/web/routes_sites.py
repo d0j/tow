@@ -94,10 +94,8 @@ def sites(request: Request) -> Response:
 
 @router.post("/topics/guess-title")
 def topics_guess_title(url: str = Form("")) -> Response:
-    from tow.title import guess_topic_title
-
     try:
-        title = guess_topic_title(url.strip())
+        title = services.guess_topic_title(url.strip())
     except Exception as exc:  # noqa: BLE001 - a title guess never fails the form: the owner types one
         logging.getLogger("tow.web").warning("title not guessed: %s", type(exc).__name__)
         title = ""

@@ -255,7 +255,7 @@ def test_adding_a_topic_from_the_network_can_pick_a_new_folder(monkeypatch):
     save_config(cfg)
     monkeypatch.setenv("TOW_LAN_AUTH_TOKEN", "t" * 32)
     monkeypatch.setattr("tow.web.services.run_check", lambda **kw: {"qbit": "ok", "results": []})
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda *args, **kw: "Synthetic series")
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda *args, **kw: "Synthetic series")
 
     save_state({"topics": [{"id": "a", "url": "http://rutor.info/torrent/1/x", "save_path": r"M:\TV"}]})
     lan = TestClient(

@@ -727,7 +727,7 @@ def test_add_edit_undo_delete(monkeypatch):
 
 
 def test_add_and_edit_round_trip_selection_and_once_mode(monkeypatch):
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda _url: "")  # no real tracker request
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda _url: "")  # no real tracker request
     monkeypatch.setattr("tow.web.services.run_check", lambda **kw: {"qbit": "ok", "results": []})
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
 
@@ -892,7 +892,7 @@ def test_edit_path_moves_in_client(monkeypatch):
         def inspect_torrent(self, infohash: str) -> dict:
             return {"hash": "AA" * 20, "save_path": r"M:\TV", "tags": ["tow"]}
 
-    monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *a, **k: Fake())
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *a, **k: Fake())
     c = TestClient(app, headers={"Origin": "http://127.0.0.1"})
     c.post(
         "/topics/add",
@@ -931,7 +931,7 @@ def test_edit_path_records_move_in_progress(monkeypatch):
         def inspect_torrent(self, infohash: str) -> dict:
             return {"hash": "AA" * 20, "save_path": r"M:\anime", "state": "moving", "tags": ["tow"]}
 
-    monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *a, **k: MovingClient())
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *a, **k: MovingClient())
     c = TestClient(app, headers={"Origin": "http://127.0.0.1"})
     c.post(
         "/topics/add",
@@ -958,7 +958,7 @@ def test_edit_path_records_move_in_progress(monkeypatch):
 
 
 def test_add_runs_check_apply(monkeypatch):
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda _url: "")  # no real tracker request
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda _url: "")  # no real tracker request
     seen: dict = {}
 
     def fake(**kw):
@@ -1415,7 +1415,7 @@ def test_password_login_magnet_fallback_restores_only_submitted_credentials(monk
 
 
 def test_manual_add_bypasses_mirror_cooldown_and_reports_tracker_error(monkeypatch):
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda _url: "")  # no real tracker request
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda _url: "")  # no real tracker request
     seen: dict = {}
 
     def fake(**kw):
@@ -1521,7 +1521,7 @@ def test_topic_check_reports_recovered_client_add(monkeypatch):
 def test_add_fills_title_from_page(monkeypatch):
     monkeypatch.setattr("tow.web.services.run_check", lambda **kw: {"qbit": "ok", "results": []})
     monkeypatch.setattr(
-        "tow.title.guess_topic_title",
+        "tow.web.services.guess_topic_title",
         lambda url, **k: "Сериал Д [01x01-05 из 10]",
     )
     r = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
@@ -1539,7 +1539,7 @@ def test_add_fills_title_from_page(monkeypatch):
 
 def test_add_replaces_slug_title(monkeypatch):
     monkeypatch.setattr("tow.web.services.run_check", lambda **kw: {"qbit": "ok", "results": []})
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda url, **k: "Сериал Д [01x01-05 из 10]")
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda url, **k: "Сериал Д [01x01-05 из 10]")
     url = "http://rutor.info/torrent/1234568/serial-d-01x01-05-iz-10-2026-webrip-1080p-ot-exkinoray"
     r = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
         "/topics/add",
@@ -1556,7 +1556,7 @@ def test_add_replaces_slug_title(monkeypatch):
 
 def test_add_cdn_becomes_rutor_topic(monkeypatch):
     monkeypatch.setattr("tow.web.services.run_check", lambda **kw: {"qbit": "ok", "results": []})
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda url, **k: "Сериал Д")
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda url, **k: "Сериал Д")
     r = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
         "/topics/add",
         data={"url": "https://d.rutor.info/download/1234568", "title": "", "save_path": r"M:\TV\Show"},
@@ -1602,7 +1602,7 @@ def test_add_empty_path_without_history(monkeypatch):
 
 
 def test_guess_title_json(monkeypatch):
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda url, **k: "Hello World")
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda url, **k: "Hello World")
     r = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
         "/topics/guess-title",
         data={"url": "http://rutor.info/torrent/1/hello_world"},
@@ -1892,7 +1892,7 @@ def test_edit_path_refuses_client_move_without_tow_ownership(monkeypatch):
         def inspect_torrent(self, infohash: str) -> dict:
             return {"hash": "AA" * 20, "save_path": r"M:\\TV", "tags": []}
 
-    monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *a, **k: Fake())
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *a, **k: Fake())
     c = TestClient(app, headers={"Origin": "http://127.0.0.1"})
     c.post(
         "/topics/add",
@@ -1924,7 +1924,7 @@ def test_add_secret_gate_is_not_reported_as_success(monkeypatch):
 
     sent = []
     monkeypatch.setattr("tow.web.services.run_check", blocked)
-    monkeypatch.setattr("tow.notify.send", lambda *args, **kwargs: sent.append((args, kwargs)))
+    monkeypatch.setattr("tow.web.services.notify_send", lambda *args, **kwargs: sent.append((args, kwargs)))
     c = TestClient(app, headers={"Origin": "http://127.0.0.1"})
 
     response = c.post(
