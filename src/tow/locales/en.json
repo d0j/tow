@@ -746,6 +746,7 @@
       "step3": "TOW checks the topic at once and, if the client is reachable, hands it to the client; you get the message “… — added to the torrent client”.",
       "dot": "<b>The dot</b> in a row is the result of the last check: green — all fine, blue — something new found, yellow — the site is temporarily unavailable (TOW will try again), red — your help is needed (the reason is under the name; open the row — click or tap it, or press Enter — for the full text), grey — not checked yet.",
       "icon": "<b>The site icon</b> shows the site alone: a torrent client or folder error does not color it.",
+      "adopt": "<b>Adopt into TOW</b> — when a check finds the topic's torrent already in the client without TOW's mark (added by hand or by another program), the row turns red and its edit panel offers “Adopt into TOW”: TOW marks that torrent as its own (the tag or label tow) and manages it from the next check. Its files, folder and state stay as they are.",
       "step1": "Home → <b>+</b> → paste the link to the <b>topic page</b> on the site."
     },
     "s3": {
@@ -773,7 +774,8 @@
     },
     "s7": {
       "title": "7. Access from a phone or laptop",
-      "text": "On this computer TOW opens without a password. From other devices — only with a password (Settings → Network access); a device stays signed in for 90 days. Access and the password can only be changed on this computer."
+      "text": "On this computer TOW opens without a password. From other devices — only with a password (Settings → Network access); a device stays signed in for 90 days. Access and the password can only be changed on this computer.",
+      "sign_out": "On a phone or laptop, the exit icon in the header signs that device out; Settings → Network access → “Sign out everywhere” signs out every device."
     },
     "s8": {
       "title": "8. Where the data is",
@@ -782,6 +784,11 @@
       "state": "— topics and their state.",
       "log": "— the log.",
       "note": "An empty password field in a form means “keep as is”; saved passwords are never shown."
+    },
+    "s9": {
+      "title": "9. Updates and access to the TOW folder",
+      "update": "<b>Updates</b> — Settings → Version and updates says when a new release is out; the <b>Update</b> button installs it from the page. The update makes a safety copy first and goes back by itself if the new version does not start. “More: history, rollback and log” → “Install another version or roll back” installs an earlier version (from 1.22.21). Without the page: “Update TOW” in the TOW folder.",
+      "permissions": "<b>Who can get into the TOW folder</b> — if TOW warns at start that other accounts of this computer can open its folders, run <code>{launcher} permissions</code> in a terminal in the TOW folder to see why, and <code>{launcher} permissions fix</code> to close them (in a terminal opened with “Run as administrator” when another account owns the folder)."
     }
   },
   "history": {

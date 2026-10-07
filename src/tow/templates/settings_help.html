@@ -21,6 +21,7 @@
   </ol>
   <p>{{ tm('help.s2.dot') }}<br>
   {{ tm('help.s2.icon') }}</p>
+  <p id="adopt">{{ tm('help.s2.adopt') }}</p>
 
   <h2>{{ t('help.s3.title') }}</h2>
   <ol>
@@ -46,7 +47,7 @@
   <p>{{ t('help.s6.note') }}</p>
 
   <h2>{{ t('help.s7.title') }}</h2>
-  <p>{{ t('help.s7.text') }}</p>
+  <p>{{ t('help.s7.text') }} {{ t('help.s7.sign_out') }}</p>
 
   <h2>{{ t('help.s8.title') }}</h2>
   <ul>
@@ -56,5 +57,9 @@
     <li><code>data{{ os_sep() }}tow.jsonl</code> {{ t('help.s8.log') }}</li>
   </ul>
   <p>{{ t('help.s8.note') }}</p>
+
+  <h2 id="updates">{{ t('help.s9.title') }}</h2>
+  <p>{{ tm('help.s9.update') }}</p>
+  <p>{{ tm('help.s9.permissions', launcher=os_launcher()) }}</p>
 </article>
 {% endblock %}

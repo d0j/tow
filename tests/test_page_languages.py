@@ -73,6 +73,7 @@ RU_ALLOWED = {
     # what the owner must type or press elsewhere, exactly like this
     "Start",  # Telegram's button
     "newbot",  # the /newbot command
+    *("permissions", "fix"),  # `tow permissions fix` in the guide
     *("allow", "callmebot", "send", "messages"),  # CallMeBot's activation phrase
     # keyboard keys named in the help
     *("Enter", "Esc", "Tab", "Ctrl", "Shift"),
