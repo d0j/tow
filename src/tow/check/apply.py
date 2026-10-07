@@ -8,12 +8,11 @@ from typing import TYPE_CHECKING, Any
 
 from tow.check.client_ops import (
     assert_client_can_add,
-    client_owned_by_tow,
     client_unreachable,
     confirm_client_add,
     info_confirms,
+    info_is_pending_tow_add,
     info_owned_by_tow,
-    is_pending_tow_add,
 )
 from tow.check_steps import client_identities, is_owned_add_recovery, store_revision
 from tow.clients.spec import TorrentClientAdapter
@@ -92,7 +91,7 @@ def _accept_existing_torrent(
     topic: Topic,
     run: CheckRun,
     row: dict[str, Any],
-    topic_client: TorrentClientAdapter,
+    info: dict[str, Any] | None,
     *,
     h: str,
     dest: str,
@@ -102,9 +101,8 @@ def _accept_existing_torrent(
     migrated: bool,
 ) -> bool:
     """The revision is already in the client (or only its hash label changed): verify it
-    without touching it and return whether its file selection is TOW-verified (one read of
-    the torrent decides both its mark and its folder)."""
-    info = topic_client.inspect_torrent(h)
+    without touching it and return whether its file selection is TOW-verified (``info``, the
+    one read of the torrent, decides both its mark and its folder)."""
     if not info_owned_by_tow(info, h):
         # Never green: TOW can change nothing about a torrent without its mark (the file
         # selection, the next revision), and it may be TOW's own add whose marking failed. The
@@ -388,14 +386,17 @@ def _hand_to_client(
     by, whether its file selection is TOW-verified)."""
     topic, run, row, old = work.topic, work.run, work.row, work.old
     operation_id = str(work.operation_id)
-    exists = client.has_hash(h)
-    pending_recovery = exists and is_pending_tow_add(client, h)
+    # One read of the torrent decides whether it is there, an unfinished add of TOW's and TOW's
+    # own (a torrent the client does not have reports None).
+    info = client.inspect_torrent(h)
+    exists = info is not None
+    pending_recovery = info_is_pending_tow_add(info, h)
     if migrates and exists and not needs_selection_update:
         verified = _accept_existing_torrent(
             topic,
             run,
             row,
-            client,
+            info,
             h=h,
             dest=dest,
             plan=plan,
@@ -421,7 +422,7 @@ def _hand_to_client(
             client_id=work.client_id,
         )
         return added, True
-    if needs_selection_update or (h != old and client_owned_by_tow(client, h)):
+    if needs_selection_update or (h != old and info_owned_by_tow(info, h)):
         _update_client_selection(
             topic,
             run,
@@ -443,7 +444,7 @@ def _hand_to_client(
         topic,
         run,
         row,
-        client,
+        info,
         h=h,
         dest=dest,
         plan=plan,
