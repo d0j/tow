@@ -9,7 +9,7 @@ from tow.web import app
 
 @pytest.mark.parametrize("language", ["ru", "en"])
 @pytest.mark.parametrize("custom_minutes", [None, 30])
-def test_settings_explains_global_and_individual_timers(language, custom_minutes):
+def test_settings_explains_global_and_personal_timers(language, custom_minutes):
     from tow.config import load_config, save_config
     from tow.store import load_state, save_state
 
@@ -37,7 +37,7 @@ def test_settings_explains_global_and_individual_timers(language, custom_minutes
     else:
         assert '<label for="interval_min">Global timer</label>' in interval
         assert "Active topics without their own timer are checked every 2 h." in interval
-        assert "Set an individual timer when adding or editing a topic." in interval
+        assert "Set a personal timer when adding or editing a topic." in interval
         assert "Every watched topic is checked" not in interval
 
 
