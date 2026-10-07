@@ -8,7 +8,8 @@
     pytest in a random order (the seed is printed) with branch coverage and its threshold
     (pyproject [tool.coverage]), then the wheel smoke. On success it records the tree it passed
     on, so the pre-push hook lets exactly that content through without running it again.
-    -Quick skips the test suite and the wheel smoke.
+    -Quick skips the test suite and the wheel smoke; it only collects the tests (every test
+    module must import).
     -Staged checks what the next commit contains (the index), not the working tree: the
     staged files are exported to a temp directory and checked there (the pre-commit hook).
     The wheel smoke builds the wheel into a temp directory, checks it carries every
@@ -129,7 +130,15 @@ try {
     else {
         Step 'whitespace (tracked files)' { git diff --check $EmptyTree }
     }
-    if (-not $Quick) {
+    if ($Quick) {
+        # Without the suite, at least every test module imports and every test is found: a broken
+        # import in a test file used to pass the pre-commit gate and fail only the full one.
+        Step 'pytest --collect-only' {
+            $collected = Invoke-Tool pytest --collect-only -q -p no:cacheprovider 2>&1
+            if ($LASTEXITCODE -ne 0) { $collected | Write-Host } else { $collected | Select-Object -Last 1 | Write-Host }
+        }
+    }
+    else {
         # pytest-cov is not a locked dependency (an offline lock cannot add it): `uv run --with`
         # brings it in from uv's cache or the network; without either, coverage is skipped.
         Invoke-Tool --with $PytestCov python -c 'import pytest_cov' 2>$null

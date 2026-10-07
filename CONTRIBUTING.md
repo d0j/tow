@@ -26,7 +26,7 @@ autostart from it.
 
 ```sh
 pwsh scripts/gate.ps1            # everything: uv.lock, ruff format + check, mypy, compileall, whitespace, pytest, wheel
-pwsh scripts/gate.ps1 -Quick     # without tests and the wheel
+pwsh scripts/gate.ps1 -Quick     # without the test run and the wheel (the tests are only collected)
 pwsh scripts/gate.ps1 -Staged    # only what the next commit contains
 ```
 
