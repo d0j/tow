@@ -257,10 +257,11 @@ def test_rotation_and_append_are_serialized_between_processes(tmp_path):
     with reaped(*processes):
         for process in processes:
             process.start()
-        assert {ready.get(timeout=10) for _ in processes} == set(markers)
+        # Generous waits: under a parallel suite, six spawned interpreters may take long to start.
+        assert {ready.get(timeout=120) for _ in processes} == set(markers)
         start.set()
         for process in processes:
-            process.join(timeout=15)
+            process.join(timeout=120)
             assert process.exitcode == 0
 
     rows = []
