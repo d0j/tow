@@ -1,0 +1,15 @@
+#!/bin/sh
+# After `git commit --amend` or `git rebase` ($1 says which): the rewritten commits are content no
+# pre-commit gate saw as a whole (a rebase replays commits onto another base without the hook).
+# The quick gate - lock, format, lint, types, compile, whitespace, every test collected - runs on
+# the result. Git ignores this hook's exit status, so a failure cannot undo the rewrite: it is
+# reported loudly instead. The pre-push hook still refuses what the full gate has not passed.
+# Git runs hooks in the top folder of the working tree. Enabled by: git config core.hooksPath .githooks
+echo "post-rewrite: git $1 rewrote commits; running the quick gate on the result" >&2
+if ! pwsh -NoProfile -File scripts/gate.ps1 -Quick </dev/null >&2; then
+    echo "post-rewrite: ************************************************************" >&2
+    echo "post-rewrite: THE QUICK GATE FAILED AFTER git $1 - the commits do not pass it." >&2
+    echo "post-rewrite: fix them before pushing: pwsh scripts/gate.ps1 -Quick" >&2
+    echo "post-rewrite: ************************************************************" >&2
+fi
+exit 0
