@@ -255,7 +255,15 @@ def client_answers(client_id: str | None, timeout: float = 3.0) -> bool:
     """Whether anything accepts a connection at the client's saved address, one try within
     ``timeout``: the manual "Check" fails fast instead of waiting out the client library's
     retries (qBittorrent: about 24 s on Windows when nothing listens). True when there is no
-    address to try - the client's own check then says what is missing."""
+    address to try - the client's own check then says what is missing.
+
+    This try is the whole fast path; the client adapters get no "check" mode of their own. A
+    shorter connect timeout for qBittorrent's library would have nothing left to shorten once
+    this connect succeeded, and its retries cannot be switched off through its public options:
+    the request manager always sends a failed request twice (that is how it follows a Web UI
+    moved between HTTP and HTTPS; the count is the private ``_retries``). What remains slow is
+    a program that accepts the connection and never answers, bounded by the 8 s read timeout
+    of each try."""
     import socket
     from urllib.parse import urlparse
 
