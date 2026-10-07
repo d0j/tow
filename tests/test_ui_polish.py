@@ -233,6 +233,27 @@ def test_site_form_starts_with_the_link_and_folds_the_patterns(client):
     assert "details.add summary" not in _rules(CSS)
 
 
+def test_site_download_path_starts_empty_so_a_pasted_link_fills_it(client, monkeypatch):
+    """1.24.0 kept the template's /download/{id} as if the owner had typed it: a pasted forum
+    link left every topic of the new site downloading from a wrong address."""
+    from tow.config import load_config
+
+    monkeypatch.setattr("tow.web.services.doctor_report", lambda **_kw: {"probes": []})  # the probe after an add
+    page = client.get("/sites").text
+    field = re.search(r'<input id="site-dl"[^>]*>', page)
+    assert field is not None
+    assert 'value=""' in field.group(0)
+    assert 'placeholder="/download/{id}"' in field.group(0)
+    # What the browser posts after the guess fills it, and an empty field without a link.
+    client.post("/sites/new", data={"from_url": "https://tracker-qa.example/viewtopic.php?t=101", "download_path": ""})
+    assert load_config()["trackers"]["tracker_qa"]["download_path"] == "/download.php?id={id}"
+    client.post(
+        "/sites/new",
+        data={"name": "plain", "url_regex": r"^https://plain\.example/t/(\d+)", "fetch_hosts": "https://plain.example"},
+    )
+    assert load_config()["trackers"]["plain"]["download_path"] == "/download/{id}"
+
+
 def test_home_add_form_has_a_heading(client):
     assert '<h2 id="add-topic-title" class="add-title">Добавить раздачу</h2>' in client.get("/").text
 
