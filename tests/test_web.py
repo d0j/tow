@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from helpers import flash_of, open_network, shown, wait_for_check_job
 
+from tow.check import rows as check_rows
 from tow.clock import iso_now
 from tow.log import log_event, read_events
 from tow.store import (
@@ -2417,12 +2418,12 @@ def test_a_successful_check_records_when_it_last_worked(monkeypatch):
     # A later health write must not make the topic depend on the wall-clock second.
     success_at = "01.01.2026 10:00:00 UTC"
     stamps = iter([success_at, "01.01.2026 10:00:01 UTC"])
-    monkeypatch.setattr(check, "_now", lambda: next(stamps))
+    monkeypatch.setattr(check_rows, "now", lambda: next(stamps))
     _topic_state(save_path=r"M:\TV", hash="H")
     monkeypatch.setattr(
         check,
         "_check_topic",
-        lambda topic, run: (check._stamp(topic, {"ok": True}), {"id": topic["id"], "ok": True})[1],
+        lambda topic, run: (check_rows.stamp_result(topic, {"ok": True}), {"id": topic["id"], "ok": True})[1],
     )
     monkeypatch.setattr(check.client_factory, "from_secrets", lambda *a, **k: SimpleNamespace(ping=lambda: "ok"))
     monkeypatch.setattr(check, "reconcile_topic", lambda *a, **k: {"events": []})
@@ -2438,11 +2439,9 @@ def test_a_successful_check_records_when_it_last_worked(monkeypatch):
 
 @pytest.mark.parametrize("status", ["failed", "skipped"])
 def test_a_failed_or_skipped_check_keeps_the_previous_success_time(monkeypatch, status):
-    from tow import check
-
     topic = {"last_ok_at": "previous success"}
-    monkeypatch.setattr(check, "_now", lambda: "current attempt")
-    check._stamp(topic, {"ok": status == "skipped", "status": status})
+    monkeypatch.setattr(check_rows, "now", lambda: "current attempt")
+    check_rows.stamp_result(topic, {"ok": status == "skipped", "status": status})
     assert topic["last_check"] == "current attempt"
     assert topic["last_ok_at"] == "previous success"
 

@@ -7,7 +7,9 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple, cast
 
-from tow import check_transaction, download_history, errors
+from tow import check_transaction, download_history
+from tow.check import rows
+from tow.check.rows import fail_row, row_error, set_error, stamp_result
 from tow.check_steps import (
     changed_owner_fields,
     client_identities,
@@ -56,6 +58,17 @@ from tow.title import title_is_placeholder as _title_placeholder
 from tow.torrent import TorrentPathConflictError, parse_magnet_hashes, parse_torrent_metadata, windows_path_key
 from tow.trackers import GenericHttpTracker, load_trackers, match_tracker, presets
 
+__all__ = [
+    "FREE_SPACE_MARGIN",
+    "PREVIOUS_REVISION_ACTIVE",
+    "await_relocation",
+    "blocked_by_previous_revision",
+    "client_owned_by_tow",
+    "free_space_problem",
+    "record_check_failure",
+    "run_check",
+]
+
 _LOG = logging.getLogger("tow.check")
 
 
@@ -79,19 +92,6 @@ def _fail_log(
         **error_fields(error),
         how=how,
     )
-
-
-def _set_error(row: dict[str, Any], error: BaseException | str) -> None:
-    """A failed row keeps the error's text (the language of the moment), its record (code and
-    values, rendered again in the reader's language) and its class."""
-    row["error"] = str(error)
-    row["error_record"] = errors.record_of(error) if isinstance(error, BaseException) else None
-    row["error_class"] = error_class(error)
-
-
-def _row_error(row: dict[str, Any]) -> Any:
-    """The row's error as a value a message can carry (the typed error's record, else its text)."""
-    return errors.as_value(row.get("error_record"), str(row.get("error") or ""))
 
 
 def _client_info_matches_hash(info: dict[str, Any], infohash: str) -> bool:
@@ -254,12 +254,6 @@ def _current_tracker_title(
         return ""
 
 
-def _now() -> str:
-    """When a check ran, as stored: an ISO time with its offset. The pages write it in their own
-    language when they show it (TOW 1.24 and before stored it already written out)."""
-    return iso_now()
-
-
 def _check_failure_code(error: str | BaseException) -> str:
     """The header clock's reason: by the error's type (its text is in the owner's language);
     only a plain text (from an older caller) is matched by its words."""
@@ -400,34 +394,6 @@ def _progress_only_row(topic: Topic) -> dict[str, Any]:
         "status": "skipped",
         "skipped": t("check.progress_only", owner_language()),
     }
-
-
-def _fail_row(topic: Topic, row: dict[str, Any], error: TowError) -> None:
-    row.update({"ok": False, "status": "failed"})
-    _set_error(row, error)
-    _stamp(topic, row)
-
-
-def _stamp(topic: Topic, row: dict[str, Any]) -> None:
-    """The check's result on the topic: ``last_error`` keeps the text (older TOW versions read
-    it), ``last_error_code``/``_params`` the typed error Home and History render in the reader's
-    language, ``last_error_class`` its status class."""
-    topic["last_ok"] = bool(row.get("ok"))
-    topic["last_error"] = row.get("error")
-    record = row.get("error_record") if row.get("error") else None
-    if isinstance(record, dict):
-        topic["last_error_code"] = record["code"]
-        topic["last_error_params"] = record.get("params") or {}
-    else:
-        topic.pop("last_error_code", None)
-        topic.pop("last_error_params", None)
-    topic["last_error_class"] = (
-        str(row.get("error_class") or error_class(str(row.get("error") or ""))) if row.get("error") else ""
-    )
-    topic["last_check"] = _now()
-    if row.get("ok") and row.get("status") != "skipped":
-        topic["last_ok_at"] = topic["last_check"]  # G3: when it last really worked
-    topic["last_changed"] = bool(row.get("ok") and row.get("changed"))
 
 
 def _without_scan_time(record: Any) -> Any:
@@ -683,9 +649,9 @@ def _skip_row(
         return True
     if not tr:
         error = TowError("check.no_tracker")
-        _set_error(row, error)
+        set_error(row, error)
         _fail_log(topic, url, error, how=how, persist=apply)
-        _stamp(topic, row)
+        stamp_result(topic, row)
         return True
     row["tracker"] = tr.name
     mirror_state = mirror_of(state, tr.name)
@@ -706,9 +672,9 @@ def _skip_row(
         return True
     else:
         return False
-    _set_error(row, error)
+    set_error(row, error)
     _fail_log(topic, url, error, tr, how=how, persist=apply)
-    _stamp(topic, row)
+    stamp_result(topic, row)
     return True
 
 
@@ -725,6 +691,8 @@ def _mark_preview(
 
 # The code of "the previous revision still runs in the client" (Home offers to stop it).
 PREVIOUS_REVISION_ACTIVE = "check.previous_revision_active"
+
+
 _LEGACY_PREVIOUS_REVISION = "previous torrent revision is still active"
 
 
@@ -1182,7 +1150,7 @@ def _check_topic(topic: Topic, run: _CheckRun) -> CheckRow:
         _topic_failed(work, TowError("content.path_conflict"))
     except Exception as error:  # noqa: BLE001 - any failure of one topic is its result, never the run's end
         _topic_failed(work, error)
-    _stamp(topic, row)
+    stamp_result(topic, row)
     return row
 
 
@@ -1568,7 +1536,7 @@ def _topic_failed(work: _TopicCheck, error: Exception) -> None:
     """The topic's check failed: the row says why, the log and (once) the owner hear of it."""
     topic, run, row, tr = work.topic, work.run, work.row, work.tracker
     row["ok"] = False
-    _set_error(row, error)
+    set_error(row, error)
     row["status"] = "failed"
     if work.operation_id:
         run.record(
@@ -1612,7 +1580,7 @@ def _reconcile_one(
     if topic_client is None:
         if checked_ok:
             # B4: without its client the topic is not "ok" - TOW cannot see its torrent.
-            _fail_row(topic, row, _client_unreachable(run, client_id))
+            fail_row(topic, row, _client_unreachable(run, client_id))
         return
     history_topics = history.setdefault("topics", {})
     topic_key = str(topic.get("id"))
@@ -1630,14 +1598,14 @@ def _reconcile_one(
         else:
             history_topics.pop(topic_key, None)
         mark_reconcile_failure(row, exc)
-        _stamp(topic, row)
+        stamp_result(topic, row)
         topic["last_error_class"] = str(row["reconcile_error"] or "error")
         run.queue_notification(
             topic,
             kind="error",
             operation_id=new_operation_id("reconcile-error"),
             tracker=str(row.get("tracker") or ""),
-            error=_row_error(row),
+            error=row_error(row),
             error_cls=topic["last_error_class"],
         )
         run.record(
@@ -1687,7 +1655,7 @@ def _reconcile_one(
     _note_season_complete(topic, row, run, history_topics.get(topic_key), reconcile)
     if checked_ok and (history_topics.get(topic_key) or {}).get("client_present") is False:
         # B4: the torrent was removed from the client; "раздача исчезла" was sent once.
-        _fail_row(topic, row, TowError("check.removed_from_client"))
+        fail_row(topic, row, TowError("check.removed_from_client"))
 
 
 def _note_season_complete(
@@ -1983,7 +1951,7 @@ def _commit_run_state(result: _RunResult, history_rebuilt: bool = False) -> None
         qbit=pool.ping,
         client=pool.ping,
         qbit_ok=pool.default_ok,
-        at=_now(),
+        at=rows.now(),
         at_ts=int(machine_now().timestamp()),
     )
     state["health"] = health
