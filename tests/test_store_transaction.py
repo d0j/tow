@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from tow import site_journal, store_transaction
+from tow import journal, site_journal, store_transaction
 from tow.config import load_config, save_config
 from tow.paths import config_path
 from tow.store import (
@@ -201,14 +201,14 @@ def _unfinished_journal():
 
 def test_recovery_never_rereads_a_backup_after_it_has_been_verified(monkeypatch):
     root, original = _unfinished_journal()
-    real_write = site_journal.atomic_write_bytes
+    real_write = journal.atomic_write_bytes
 
     def change_later_backup(path, content):
         if path == config_path():
             (root / "state.bin").write_bytes(b"changed after verification")
         return real_write(path, content)
 
-    monkeypatch.setattr(site_journal, "atomic_write_bytes", change_later_backup)
+    monkeypatch.setattr(journal, "atomic_write_bytes", change_later_backup)
     _next_process_takes_the_lock()
     assert _store_bytes() == original
     assert not root.exists()
@@ -351,7 +351,7 @@ def test_site_backup_write_is_verified_before_a_transaction_can_start(monkeypatc
 
 def test_failed_site_restore_keeps_its_journal_and_can_be_retried(monkeypatch):
     root, original = _unfinished_journal()
-    real_write = site_journal.atomic_write_bytes
+    real_write = journal.atomic_write_bytes
 
     def failing(path, content):
         if path == state_path():
@@ -359,7 +359,7 @@ def test_failed_site_restore_keeps_its_journal_and_can_be_retried(monkeypatch):
         return real_write(path, content)
 
     with monkeypatch.context() as patched:
-        patched.setattr(site_journal, "atomic_write_bytes", failing)
+        patched.setattr(journal, "atomic_write_bytes", failing)
         with pytest.raises(RuntimeError, match="recovery write failed"):
             _next_process_takes_the_lock()
     assert (root / "MANIFEST.json").exists()
