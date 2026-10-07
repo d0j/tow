@@ -24,6 +24,8 @@ from typing import Any
 import pytest
 from test_update import SCRIPT, Fake, updater
 
+from tow.log import scrub_text
+
 REPO = "d0j/tow"
 
 
@@ -164,7 +166,9 @@ def test_the_latest_release_is_downloaded_checked_and_switched_to(install, githu
     assert leftovers(install) == []
     record = state(install)
     assert (record["status"], record["target"], record["previous"]) == ("ok", "v1.23.0", "v1.22.0")
-    assert lines[0] == f"downloading {github.url}/{REPO}/releases/download/v1.23.0/SHA256SUMS"
+    assert lines[0] == f"downloading SHA256SUMS ({github.url}/{REPO}/releases/download/v1.23.0/SHA256SUMS)"
+    # The web log keeps only the host of a URL: the file is still named there.
+    assert scrub_text(lines[0]).startswith("downloading SHA256SUMS (http://127.0.0.1:")
     assert "TOW update: v1.22.0 -> v1.23.0 (latest) in" in lines[2]
     assert lines[-1] == "TOW 1.23.0 is running and answers on 127.0.0.1:18999"
     assert f"/{REPO}/archive/refs/tags/v1.23.0.tar.gz" in github.asked  # GitHub's archive of the tag

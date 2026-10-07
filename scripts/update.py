@@ -150,7 +150,7 @@ TEXTS = {
     ),
     "ok": "TOW {version} is running and answers on 127.0.0.1:{port}",
     "aborted": "update aborted: {error}",
-    "downloading": "downloading {url}",
+    "downloading": "downloading {file} ({url})",
     "download_failed": "the download failed ({url}): {error}; nothing was updated",
     "no_release": "{ref} is not a release of TOW (nothing at {url}); nothing was updated",
     "not_verified": "the release has no checksum for the source archive; nothing was updated",
@@ -985,7 +985,8 @@ class ArchiveCode:
     # -- the archive ---------------------------------------------------------------------------
 
     def _fetch(self, url: str, destination: Path, *, required: bool) -> bool:
-        self.work.say("downloading", url=url)
+        # The file on its own: the web log keeps only the host of a URL.
+        self.work.say("downloading", file=url.rsplit("/", 1)[-1], url=url)
         try:
             found = self.sys.download(url, destination)
         except UpdateError as exc:
