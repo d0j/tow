@@ -62,7 +62,10 @@ def _runtime_app() -> Path:
     app = repo_root().resolve()
     if app != (root() / "app").resolve() or not (app / "scripts" / "update.py").is_file():
         raise WebUpdateError("releases.not_runtime")
-    if not platform.is_windows() and os.environ.get("TOW_AUTOSTART") in {"systemd", "launchd"}:
+    from tow.autostart import service_manager
+
+    # systemd and launchd end every process of TOW's service with it: the updater too.
+    if not platform.is_windows() and service_manager() is not None:
         raise WebUpdateError("releases.detached_unavailable")
     return app
 

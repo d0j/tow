@@ -7,7 +7,9 @@ a busy port with 3, which is not retried in a loop (``RestartPreventExitStatus=3
 
 A stop by systemd (``systemctl --user stop``, a shutdown) signals ``tow run`` alone
 (``KillMode=mixed``): it lets a running job finish for a while, stops its web server and exits;
-only what is left after ``TimeoutStopSec`` is killed.
+only what is left after ``TimeoutStopSec`` is killed. Everything the unit started ends with it,
+also a process started detached, so an update is started from a terminal, not from the web page
+(``TOW_AUTOSTART=systemd``, ``tow.autostart.service_manager``).
 """
 
 from __future__ import annotations
@@ -88,8 +90,13 @@ class SystemdUser:
     def command(self) -> Path:
         return self.install.venv_bin("tow")
 
-    def unit(self) -> str:
+    def unit(self, *, marked: bool = True) -> str:
+        """The unit TOW writes; ``marked=False`` is the one of TOW 1.24.1 and older, which did
+        not tell ``tow run`` that systemd started it (still counted as on: it works)."""
         root = self.install.root
+        # TOW_AUTOSTART: stopping the unit ends every process it started, so the web page does
+        # not start an update from it (tow.web_update); the terminal command does it.
+        marker = "Environment=TOW_AUTOSTART=systemd\n" if marked else ""
         # No After=network-online.target: the user manager has no such unit (it is a system
         # one); TOW waits for the network itself.
         return (
@@ -100,6 +107,7 @@ class SystemdUser:
             "Type=simple\n"
             f"WorkingDirectory={_path_value(root)}\n"
             f"Environment={_env_quoted(f'TOW_ROOT={root}')}\n"
+            f"{marker}"
             f"ExecStart={_quoted(self.command)} run\n"
             "Restart=on-failure\n"
             "RestartSec=60\n"
@@ -148,7 +156,7 @@ class SystemdUser:
             status["stale"] = not status["ours"] and not (registered and Path(registered).exists())
             enabled = self.run(["systemctl", "--user", "is-enabled", UNIT_NAME])
             status["enabled"] = enabled.stdout.strip()
-            status["on"] = unit == self.unit() and enabled.stdout.strip() == "enabled"
+            status["on"] = unit in (self.unit(), self.unit(marked=False)) and enabled.stdout.strip() == "enabled"
             status["without_login"] = status["on"] and self.linger()
         elif desktop is not None:
             status["where"] = str(self.desktop_path)

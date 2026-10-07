@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import os
 import subprocess
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -133,6 +133,37 @@ def backend(name: str | None = None, *, runner: Runner | None = None, install: I
     return SystemdUser(install, runner)
 
 
+def _cgroup() -> str:
+    try:
+        return Path("/proc/self/cgroup").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def service_manager(environ: Mapping[str, str] | None = None, cgroup: Callable[[], str] | None = None) -> str | None:
+    """``systemd`` or ``launchd`` when this process runs in TOW's own autostart service, else None.
+
+    Stopping that service ends every process it started, however detached: a web update
+    started from it would be ended together with the TOW it stops. The unit and the agent say
+    so (``TOW_AUTOSTART``); a unit an older TOW wrote does not, so systemd's
+    ``INVOCATION_ID`` with this process in the ``tow.service`` control group (or that group
+    unknown) counts too, and launchd's ``XPC_SERVICE_NAME`` of TOW's agent.
+    """
+    env = os.environ if environ is None else environ
+    named = env.get("TOW_AUTOSTART", "")
+    if named in ("systemd", "launchd"):
+        return named
+    if env.get("XPC_SERVICE_NAME") == AGENT_LABEL:
+        return "launchd"
+    if env.get("INVOCATION_ID"):
+        groups = (cgroup or _cgroup)()  # looked up at call time: tests replace the module's reader
+        # A terminal of a desktop also runs in a service of its own (gnome-terminal-server):
+        # only TOW's unit counts.
+        if not groups.strip() or any(line.rstrip().endswith(f"/{UNIT_NAME}") for line in groups.splitlines()):
+            return "systemd"
+    return None
+
+
 def refusal(key: str, **params: Any) -> dict[str, Any]:
     from tow.i18n import t
 
@@ -165,4 +196,5 @@ __all__ = [
     "backend",
     "default_runner",
     "platform_name",
+    "service_manager",
 ]

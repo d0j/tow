@@ -360,8 +360,11 @@ class PosixBackend:
         require_breakaway: bool = False,
     ) -> int:
         """Start ``argv`` in its own session, so it outlives this process and its terminal."""
-        if require_breakaway and os.environ.get("TOW_AUTOSTART") in {"systemd", "launchd"}:
-            raise OSError("the updater needs an independent service-manager job")
+        if require_breakaway:
+            from tow.autostart import service_manager
+
+            if service_manager() is not None:
+                raise OSError("the updater needs an independent service-manager job")
         with _common.output_to(log_path) as output:
             process = subprocess.Popen(
                 list(argv),

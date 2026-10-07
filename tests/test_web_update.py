@@ -404,6 +404,21 @@ def test_service_manager_cannot_kill_a_posix_web_updater(install, monkeypatch):
     assert not install[1]
 
 
+def test_a_web_server_of_an_older_systemd_unit_does_not_start_an_update(install, monkeypatch):
+    # The unit of TOW 1.24.1 sets only TOW_ROOT: systemd's own variable and the control group
+    # tell that stopping tow.service would end the updater with it.
+    install[2].name = "linux"
+    monkeypatch.delenv("TOW_AUTOSTART", raising=False)
+    monkeypatch.setenv("INVOCATION_ID", "0123456789abcdef")
+    monkeypatch.setattr(
+        "tow.autostart._cgroup", lambda: "0::/user.slice/user-1000.slice/user@1000.service/app.slice/tow.service\n"
+    )
+    assert web_update.status()["supported"] is False
+    with pytest.raises(web_update.WebUpdateError, match=r"releases\.detached_unavailable"):
+        web_update.start("1.22.21")
+    assert not install[1]
+
+
 def test_development_checkout_never_installs(monkeypatch):
     assert web_update.status()["supported"] is False
     with pytest.raises(web_update.WebUpdateError, match=r"releases\.not_runtime"):
