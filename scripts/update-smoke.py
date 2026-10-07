@@ -15,7 +15,10 @@ command `tow update --ref <tag>` prints, with the updater's local options --sour
    the archive's files, app.prev the previous code; data/, keys/master.key and config.yaml stay;
 3. this archive's own updater installs the broken copy: rolled back to this archive;
 4. the updater copy it left in runtime/ (what "Update TOW.cmd" runs after a cut-off switch)
-   installs this archive again.
+   installs this archive again;
+5. an update to this archive is cut off mid-switch (the updater's test-only variable
+   TOW_TEST_CUT_SWITCH_AFTER ends it like a power cut): the start file refuses to start the
+   half-switched code, and the runtime/ copy puts the previous code back, then installs it.
 
 TOW is stopped at the end. The install is a new folder under RUNNER_TEMP (else the temp folder),
 removed unless --keep. Standard library only (the workflows run it with
@@ -62,6 +65,11 @@ if _smoke_os.environ.get("TOW_ROOT"):
     (_smoke_data / "{ADDED}").write_text("added by the broken copy\\n", encoding="utf-8")
 raise SystemExit("{BROKEN_MARK}")
 """
+# The updater's test-only hook (scripts/update.py TEST_CUT_SWITCH): the process ends, like a power
+# cut, after this many entries of the switch moved - app/ then holds part of each version.
+CUT_VARIABLE = "TOW_TEST_CUT_SWITCH_AFTER"
+CUT_AFTER = 3
+CUT_EXIT = 97
 SKIPPED_PARTS = frozenset({".venv", "__pycache__"})
 # What `tow update --ref <tag>` prints first: "<base python>" "<app>/scripts/update.py" --ref <tag>
 COMMAND_RE = re.compile(r'^\s*"([^"]+)"\s+"([^"]+update\.py)"\s+--ref\s', re.MULTILINE)
@@ -210,6 +218,7 @@ class Smoke:
             env=env or self.env,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE if capture else None,
+            stderr=subprocess.STDOUT if capture else None,  # a refusal may go to stderr
             text=True,
             encoding="utf-8",
             errors="replace",
@@ -248,6 +257,13 @@ class Smoke:
 
     # --- the install ---------------------------------------------------------------------------
 
+    @staticmethod
+    def start_file() -> str:
+        """The start file a user double-clicks: the bundle's, or the one install.sh writes."""
+        if WINDOWS:
+            return "Start TOW.cmd"
+        return "Start TOW.command" if sys.platform == "darwin" else "start-tow"
+
     def install_previous(self) -> str:
         if WINDOWS:
             check_sums(self.previous, [ZIP_NAME])
@@ -257,7 +273,6 @@ class Smoke:
             config = self.root / "config.yaml"
             text = re.sub(r"(?m)^port:.*$", f"port: {self.port}", config.read_text(encoding="utf-8"))
             config.write_text(text, encoding="utf-8")
-            start = self.root / "Start TOW.cmd"
         else:
             check_sums(self.previous, ["install.sh", SOURCE_NAME])
             env = dict(self.env)
@@ -266,7 +281,7 @@ class Smoke:
             installer = str(self.previous / "install.sh")
             code, _ = self.run(["sh", installer, "--dir", str(self.root), "--port", str(self.port)], env=env)
             expect(code == 0, f"the previous release's install.sh exited with {code}")
-            start = self.root / ("Start TOW.command" if sys.platform == "darwin" else "start-tow")
+        start = self.root / self.start_file()
         code, _ = self.run([str(start)])
         expect(code == 0, f"{start.name} exited with {code}")
         expect(self.wait(True, 120), f"the previous release does not answer on {self.port}")
@@ -300,6 +315,26 @@ class Smoke:
             ]
         )
         return code
+
+    def cut_off_switch(self, command: list[str], ref: str, archive: Path) -> None:
+        """The update ends like a power cut after CUT_AFTER entries of the switch moved (the
+        updater's test-only variable): no rollback, the switch record stays."""
+        env = dict(self.env)
+        env[CUT_VARIABLE] = str(CUT_AFTER)
+        say(f"update with {command[1]} to {archive.name}, cut off after {CUT_AFTER} entries")
+        argv = [*command, "--ref", ref, "--source", str(archive), "--sums", str(write_sums(archive))]
+        code, _ = self.run([*argv, "--health-timeout", "60", "--wait-minutes", "3"], env=env)
+        expect(code == CUT_EXIT, f"the cut-off update exited with {code}, not {CUT_EXIT}")
+        expect((self.root / ".update-switch.json").is_file(), "the cut-off update left no switch record")
+        expect(not self.wait(True, 5), "TOW answers although the update was cut off with TOW stopped")
+
+    def check_start_refused(self) -> None:
+        start = self.root / self.start_file()
+        code, output = self.run([str(start)], capture=True)
+        expect(code == 3, f"{start.name} exited with {code} over a cut-off switch, not 3")
+        expect("update was cut off" in output, f"{start.name} did not say the update was cut off")
+        expect(not self.wait(True, 5), f"{start.name} started TOW over a cut-off switch")
+        say(f"{start.name} refuses to start the half-switched code")
 
     def state(self) -> dict[str, object]:
         try:
@@ -385,6 +420,12 @@ class Smoke:
         say(f"4. the updater copy in runtime/ installs {ref}")
         copy = self.root / "runtime" / "update.py"
         expect(copy.is_file() and sha256(copy) == target["scripts/update.py"], "runtime/update.py is not this updater")
+        code = self.update([own[0], str(copy)], ref, good, health_timeout=180)
+        self.check_updated(code, target_version, target, kept)
+
+        say(f"5. an update to {ref} cut off mid-switch: the start file refuses, the next update recovers")
+        self.cut_off_switch(own, ref, good)
+        self.check_start_refused()
         code = self.update([own[0], str(copy)], ref, good, health_timeout=180)
         self.check_updated(code, target_version, target, kept)
 

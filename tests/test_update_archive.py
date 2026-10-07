@@ -545,6 +545,36 @@ def test_a_hard_crash_in_the_archive_switch_is_recovered_on_next_run(install, gi
     assert recovered.calls == ["spawn tow run 1.22.0"]
 
 
+def test_the_test_only_cut_ends_the_switch_like_a_power_cut(install, github, monkeypatch):
+    # scripts/update-smoke.py cuts a real update off with TOW_TEST_CUT_SWITCH_AFTER; unset (every
+    # other test), the variable does nothing.
+    github.release("v1.23.0", tarball("1.23.0"))
+    ended: list[int] = []
+
+    def exit_now(code: int) -> None:
+        ended.append(code)
+        raise Crash()
+
+    monkeypatch.setattr(updater.os, "_exit", exit_now)
+    killed(monkeypatch)  # the real os._exit runs no rollback either
+    monkeypatch.setenv(updater.TEST_CUT_SWITCH, "4")
+    with pytest.raises(Crash):
+        run(Machine(install["app"], github), "v1.23.0")
+
+    assert ended == [updater.TEST_CUT_EXIT]
+    assert (install["root"] / ".update-switch.json").exists()
+    # The three old entries moved out, the first new one in: the start files must refuse this.
+    assert names(install["root"] / "app.prev") == [".venv", "marker-1.22.0", "pyproject.toml"]
+    assert names(install["app"]) == ["README.md"]
+    monkeypatch.delenv(updater.TEST_CUT_SWITCH)
+
+    recovered = Machine(install["app"], github, supervisor=False)
+    code, _lines = run(recovered, "not-a-tag")
+    assert code == 2
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+    assert not (install["root"] / ".update-switch.json").exists()
+
+
 def _cut_off_switch(install, github, monkeypatch) -> None:
     """An update to v1.23.0 killed after it moved the first entries of the code."""
     github.release("v1.23.0", tarball("1.23.0"))

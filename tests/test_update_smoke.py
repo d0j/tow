@@ -128,6 +128,19 @@ def test_the_environment_is_a_new_computer_s(smoke, monkeypatch):
     assert not {"TOW_MASTER_KEY_FILE", "UV_CACHE_DIR", "VIRTUAL_ENV"} & set(env)
 
 
+def test_the_cut_off_switch_uses_the_updaters_test_hook(smoke):
+    # Before: the smoke test never cut a real switch off, so the start files' refusal and the
+    # recovery by the runtime/ copy ran only against fakes.
+    from test_update import updater
+
+    assert smoke.CUT_VARIABLE == updater.TEST_CUT_SWITCH
+    assert smoke.CUT_EXIT == updater.TEST_CUT_EXIT
+    assert smoke.CUT_VARIABLE.startswith("TOW_TEST_")
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert source.index("self.cut_off_switch(") < source.index("self.check_start_refused()")
+    assert smoke.Smoke.start_file() in {"Start TOW.cmd", "Start TOW.command", "start-tow"}
+
+
 def test_never_on_the_live_port(smoke, tmp_path):
     with pytest.raises(SystemExit):
         smoke.main(["--previous", str(tmp_path), "--source", str(tmp_path / "a.tar.gz"), "--port", "8787"])

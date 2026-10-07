@@ -15,6 +15,13 @@ on:
       - "install/**"
       - "src/tow/update*"
       - "src/tow/web_update.py"
+      # What the updater relies on in the code it installs and starts: the state format it reads
+      # (store.py), the interrupted-update rule (layout.py), `tow update` and `tow run` (cli.py),
+      # its texts (locales).
+      - "src/tow/store.py"
+      - "src/tow/supervisor/layout.py"
+      - "src/tow/cli.py"
+      - "src/tow/locales/**"
       - "pyproject.toml"
       - "uv.lock"
       - ".python-version"
