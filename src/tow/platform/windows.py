@@ -569,14 +569,6 @@ def sddl_others(sddl: str, user: str) -> bool | None:
     return any(ace[0] in _ALLOW_ACES and sid_text(ace[5]) not in allowed for ace in aces)
 
 
-def elevated() -> bool:
-    """This process runs with the Administrators group enabled (an elevated session)."""
-    try:
-        return bool(_dll("shell32").IsUserAnAdmin())
-    except AttributeError, OSError:
-        return False
-
-
 def folder_shared(path: Path) -> bool | None:
     """Other accounts of this computer may open ``path`` (None: unknown)."""
     user, sddl = user_sid(), folder_security(path)
@@ -585,14 +577,18 @@ def folder_shared(path: Path) -> bool | None:
     return sddl_others(sddl, user)
 
 
-def make_private(path: Path) -> bool:
+def make_private(path: Path, *, created: bool = False) -> bool:
     """Only this account, SYSTEM and Administrators may open ``path``: the inherited permissions
     (``Authenticated Users: modify`` of a drive root) are replaced, the change goes on to what
-    the folder holds. Only a folder this account owns is changed (an elevated process creates
-    folders owned by Administrators: those too, while elevated). True when read back private."""
+    the folder holds. Only a folder this account owns is changed, or one this process has just
+    ``created`` (an elevated process creates folders owned by Administrators): a folder that
+    Administrators own may be another account's, which would lose its access. True when read
+    back private."""
     user, sddl = user_sid(), folder_security(path)
     owner = sddl_owner(sddl) if sddl is not None else None
-    if user is None or owner is None or not (owner == sid_text(user) or (owner == _ADMINISTRATORS_SID and elevated())):
+    if user is None or owner is None:
+        return False
+    if owner != sid_text(user) and not (created and owner == _ADMINISTRATORS_SID):
         return False
     icacls = ntpath.join(os.environ.get("SYSTEMROOT") or r"C:\Windows", "System32", "icacls.exe")
     grants = [f"*{sid}:(OI)(CI)F" for sid in (user, _SYSTEM_SID, _ADMINISTRATORS_SID)]
@@ -694,8 +690,8 @@ class WindowsBackend:
     def folder_shared(self, path: Path) -> bool | None:
         return folder_shared(path)
 
-    def make_private(self, path: Path) -> bool:
-        return make_private(path)
+    def make_private(self, path: Path, *, created: bool = False) -> bool:
+        return make_private(path, created=created)
 
     def open_url(self, url: str) -> bool:
         return _common.open_url(url)

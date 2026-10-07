@@ -700,7 +700,7 @@ def _key_folder(path: Path) -> None:
     from tow.platform import private_folders
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    private_folders([path.parent])
+    private_folders([path.parent], created=True)
 
 
 _NEW_KEY_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)

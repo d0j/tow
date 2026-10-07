@@ -143,16 +143,17 @@ def test_a_folder_of_another_account_is_never_changed(fake_windows):
     assert calls == []
 
 
-@pytest.mark.parametrize(("is_elevated", "changed"), [(True, True), (False, False)])
-def test_a_folder_owned_by_administrators_is_changed_only_by_an_elevated_process(
-    fake_windows, monkeypatch, is_elevated, changed
-):
-    # An elevated session creates folders owned by Administrators, not by the account itself.
+@pytest.mark.parametrize(("created", "changed"), [(True, True), (False, False)])
+def test_a_folder_owned_by_administrators_is_changed_only_when_this_process_created_it(fake_windows, created, changed):
+    # An elevated session creates folders owned by Administrators, not by the account itself;
+    # such a folder may also be another account's, made by its own elevated session: changing
+    # it would leave only this account (and Administrators) in.
     folder, acl, calls = fake_windows
     acl["sddl"] = DRIVE_ROOT.replace(f"O:{USER}", "O:BA")
-    monkeypatch.setattr(windows, "elevated", lambda: is_elevated)
-    assert windows.make_private(folder) is changed
+    assert windows.make_private(folder, created=created) is changed
     assert bool(calls) is changed
+    acl["sddl"] = DRIVE_ROOT.replace(f"O:{USER}", f"O:{OTHER}")
+    assert windows.make_private(folder, created=True) is False  # another account's, never
 
 
 def test_a_change_that_does_not_read_back_private_is_a_failure(fake_windows, monkeypatch):
@@ -176,12 +177,15 @@ class FolderBackend:
         self.shared = set(shared)
         self.fixable = set(fixable)
         self.repaired: list[Path] = []
+        self.created: list[Path] = []
 
     def folder_shared(self, path: Path) -> bool | None:
         return path in self.shared
 
-    def make_private(self, path: Path) -> bool:
+    def make_private(self, path: Path, *, created: bool = False) -> bool:
         self.repaired.append(path)
+        if created:
+            self.created.append(path)
         if path in self.fixable:
             self.shared.discard(path)
             return True
@@ -251,7 +255,7 @@ def test_a_new_key_folder_is_made_private(tmp_path):
     backend = FolderBackend(shared={key.parent}, fixable={key.parent})
     with platform.use(backend):  # type: ignore[arg-type]
         generate_master_key(key)
-    assert backend.repaired == [key.parent]
+    assert backend.repaired == backend.created == [key.parent]  # made by this process
     assert key.is_file()
 
 
