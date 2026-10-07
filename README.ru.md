@@ -103,6 +103,7 @@ curl -LsSf https://github.com/d0j/tow/releases/latest/download/install.sh | sh
 | `tow autostart on\|off\|status` | запуск вместе с системой |
 | `tow check --apply` | проверить все раздачи сейчас |
 | `tow doctor` | опросить торрент-клиент и сайты сейчас |
+| `tow permissions [fix]` | кто может войти в папку TOW; `fix` закрывает её (от имени администратора, если она чужая) |
 | `tow import-monitorrent --db ФАЙЛ` | для перехода с Monitorrent: показать, что перенесётся из его базы; с `--apply` — перенести; `--client ID` — в какой клиент |
 
 Коды выхода: `0` — готово · `1` — ошибка в команде · `2` — сделано частично (для `tow doctor`: что-то не

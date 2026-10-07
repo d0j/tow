@@ -330,7 +330,10 @@ Stable names other modules build on.
     `root_shared(path)` → bool | None: the same question for the install root (Linux, macOS:
     every account may write in it); `make_private(path, created=False)` → bool: only this
     account (Windows: and SYSTEM, Administrators) keeps access, only for a folder this account
-    owns or this process has just created, read back;
+    owns or this process has just created, read back; for `tow permissions` (`tow.permissions`):
+    `elevated()`, `folder_owner(path)`, `shared_for(path, account)`, `account_name` / `account_of`,
+    `personal_account(account)` and `hand_over(path, account)` (owner and permissions of one
+    folder, administrator only, read back);
   - `open_url(url)` → bool;
   - `ui_language()` → the system's language tag (`ru-RU`) for commands typed in a terminal, `None` when unknown.
 - `private_folders(folders, repair=True)` — the folders that other accounts can still open,

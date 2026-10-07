@@ -108,6 +108,15 @@ def _build_parser() -> argparse.ArgumentParser:
     d = sub.add_parser("doctor", help=t("cli.help.doctor"), description=t("cli.help.doctor"))
     d.add_argument("--json", action="store_true", help=as_json)
     d.add_argument("--notify", action="store_true", help=t("cli.help.doctor_notify"))
+    perm = sub.add_parser("permissions", help=t("cli.help.permissions"), description=t("cli.help.permissions_long"))
+    perm.add_argument(
+        "permissions_action",
+        nargs="?",
+        choices=("status", "fix"),
+        default="status",
+        help=t("cli.help.permissions_action"),
+    )
+    perm.add_argument("--json", action="store_true", help=as_json)
     im = sub.add_parser("import-monitorrent", help=t("cli.help.import_monitorrent"))
     im.add_argument("--json", action="store_true", help=as_json)
     im.add_argument("--db", required=True, type=Path, help=t("cli.help.monitorrent_db"))
@@ -406,6 +415,19 @@ def _cmd_import_rollback(args: argparse.Namespace) -> int:
     from tow.bundle import rollback_import
 
     return _guarded(args, lambda: rollback_import(args.checkpoint, apply=args.apply), "cli.bundle.rollback_failed")
+
+
+def _cmd_permissions(args: argparse.Namespace) -> int:
+    from tow import permissions
+
+    result = permissions.fix() if args.permissions_action == "fix" else permissions.status()
+    if args.json:
+        _print(result, True)
+    else:
+        print(permissions.text(result))
+    if args.permissions_action == "status":
+        return EXIT_OK
+    return EXIT_OK if result.get("ok") else EXIT_CANNOT_RUN
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
@@ -806,6 +828,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "import": _cmd_import,
     "import-rollback": _cmd_import_rollback,
     "doctor": _cmd_doctor,
+    "permissions": _cmd_permissions,
     "check": _cmd_check,
     "serve": _cmd_serve,
     "watchdog": _cmd_watchdog,
@@ -868,7 +891,8 @@ def _main(argv: list[str] | None) -> int:
 
     use_private_files()
     use_private_temp()
-    protect_install_folders()
+    if args.cmd != "permissions":  # it reports and repairs them itself
+        protect_install_folders()
     try:
         return command(args)
     except KeyboardInterrupt:

@@ -591,10 +591,102 @@ def make_private(path: Path, *, created: bool = False) -> bool:
         return False
     if owner != sid_text(user) and not (created and owner == _ADMINISTRATORS_SID):
         return False
-    icacls = ntpath.join(os.environ.get("SYSTEMROOT") or r"C:\Windows", "System32", "icacls.exe")
-    grants = [f"*{sid}:(OI)(CI)F" for sid in (user, _SYSTEM_SID, _ADMINISTRATORS_SID)]
-    _run([icacls, str(path), "/inheritance:r", "/grant:r", *grants, "/Q"], timeout=120)
+    _close(path, user)
     return folder_shared(path) is False
+
+
+def _icacls() -> str:
+    """icacls.exe of Windows itself, never one of the current folder."""
+    return ntpath.join(os.environ.get("SYSTEMROOT") or r"C:\Windows", "System32", "icacls.exe")
+
+
+def _close(path: Path, account: str) -> None:
+    """``account``, SYSTEM and Administrators get full control of ``path``, nothing inherited;
+    what the folder holds inherits that."""
+    grants = [f"*{sid}:(OI)(CI)F" for sid in (account, _SYSTEM_SID, _ADMINISTRATORS_SID)]
+    _run([_icacls(), str(path), "/inheritance:r", "/grant:r", *grants, "/Q"], timeout=120)
+
+
+# --- handing a folder back to its owner (tow permissions fix) -----------------------------------
+
+
+def elevated() -> bool:
+    """This process runs with the Administrators group enabled (an administrator terminal)."""
+    try:
+        return bool(_dll("shell32").IsUserAnAdmin())
+    except AttributeError, OSError:
+        return False
+
+
+def personal_account(account: str) -> bool:
+    """``account`` is a person's account (local, domain or Microsoft), not a group, SYSTEM or a
+    service: only such an account is ever made the owner of an install."""
+    return sid_text(account).startswith(("S-1-5-21-", "S-1-12-1-"))
+
+
+def folder_owner(path: Path) -> str | None:
+    """The owner of ``path`` as ``S-1-…`` text, or None."""
+    sddl = folder_security(path)
+    return sddl_owner(sddl) if sddl is not None else None
+
+
+def account_name(account: str) -> str:
+    """``DOMAIN\\name`` of a SID for a person to read; the SID itself when Windows cannot say."""
+    try:
+        from ctypes import wintypes
+
+        advapi32 = _dll("advapi32")
+        sid = ctypes.c_void_p()
+        if not advapi32.ConvertStringSidToSidW(account, ctypes.byref(sid)):
+            return account
+        try:
+            name, domain = ctypes.create_unicode_buffer(256), ctypes.create_unicode_buffer(256)
+            size, domain_size, use = wintypes.DWORD(256), wintypes.DWORD(256), wintypes.DWORD()
+            if not advapi32.LookupAccountSidW(
+                None, sid, name, ctypes.byref(size), domain, ctypes.byref(domain_size), ctypes.byref(use)
+            ):
+                return account
+            return f"{domain.value}\\{name.value}" if domain.value else name.value
+        finally:
+            _dll("kernel32").LocalFree(sid)
+    except AttributeError, OSError, ValueError, ImportError:
+        return account
+
+
+def account_of(name: str) -> str | None:
+    """The SID of an account written as ``DOMAIN\\name``, ``name`` or ``S-1-…``, or None."""
+    if name[:2].upper() == "S-":
+        return sid_text(name)
+    try:
+        from ctypes import wintypes
+
+        advapi32 = _dll("advapi32")
+        sid = ctypes.create_string_buffer(68)  # SECURITY_MAX_SID_SIZE
+        domain = ctypes.create_unicode_buffer(256)
+        size, domain_size, use = wintypes.DWORD(68), wintypes.DWORD(256), wintypes.DWORD()
+        if not advapi32.LookupAccountNameW(
+            None, name, sid, ctypes.byref(size), domain, ctypes.byref(domain_size), ctypes.byref(use)
+        ):
+            return None
+        text = wintypes.LPWSTR()
+        if not advapi32.ConvertSidToStringSidW(sid, ctypes.byref(text)):
+            return None
+        return _local_string(text)
+    except AttributeError, OSError, ValueError, ImportError:
+        return None
+
+
+def hand_over(path: Path, account: str) -> bool:
+    """``account`` becomes the owner of ``path`` (the folder itself, not what it holds) and the
+    folder is closed for it as at every start: ``account``, SYSTEM and Administrators, nothing
+    inherited. Needs an administrator terminal. True when read back so."""
+    account = sid_text(account)
+    if not personal_account(account):
+        return False
+    _run([_icacls(), str(path), "/setowner", f"*{account}", "/Q"], timeout=120)
+    _close(path, account)
+    sddl = folder_security(path)
+    return sddl is not None and sddl_owner(sddl) == account and sddl_others(sddl, account) is False
 
 
 class WindowsBackend:
@@ -697,6 +789,37 @@ class WindowsBackend:
 
     def make_private(self, path: Path, *, created: bool = False) -> bool:
         return make_private(path, created=created)
+
+    def elevated(self) -> bool:
+        return elevated()
+
+    def current_account(self) -> str | None:
+        return user_sid()
+
+    def invoking_account(self) -> str | None:
+        """An administrator terminal of Windows runs as the account that opened it."""
+        return user_sid()
+
+    def personal_account(self, account: str) -> bool:
+        return personal_account(account)
+
+    def folder_owner(self, path: Path) -> str | None:
+        return folder_owner(path)
+
+    def shared_for(self, path: Path, account: str, *, root: bool = False) -> bool | None:
+        """Accounts other than `account`, SYSTEM and Administrators may open `path`."""
+        del root  # the root is closed as keys/ and data/ are
+        sddl = folder_security(path)
+        return None if sddl is None else sddl_others(sddl, account)
+
+    def account_name(self, account: str) -> str:
+        return account_name(account)
+
+    def account_of(self, name: str) -> str | None:
+        return account_of(name)
+
+    def hand_over(self, path: Path, account: str) -> bool:
+        return hand_over(path, account)
 
     def open_url(self, url: str) -> bool:
         return _common.open_url(url)

@@ -30,7 +30,9 @@ otherwise.
   Every start closes the TOW folder to other accounts of the computer, so they can neither change the program
   in it nor open `keys/` and `data/` (Windows: only your account, SYSTEM and Administrators; Linux and macOS:
   `keys/` and `data/` 0700, the folder itself 0700 when every account may write in it), and warns, also in
-  `tow doctor`, when it cannot. Night copies are signed; a modified copy is not restored.
+  `tow doctor`, when it cannot. A folder another account owns (an install made from an administrator terminal)
+  is never changed at start; `tow permissions fix`, run once as administrator, gives it to your account and closes
+  it. Night copies are signed; a modified copy is not restored.
 - **Outbound requests.** Site addresses entered in the UI may not point at this computer or the home network;
   download redirects may not leave the site's configured hosts.
 - **Your torrents and folders.** TOW changes only torrents it added (tag `tow`) and refuses system and profile

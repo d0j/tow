@@ -92,7 +92,10 @@ modify" from the drive root, and `app\`, `runtime\`, `config.yaml` and the start
 that from the root), on Linux and macOS it becomes 0700 (the root only when every account may
 write in it, so a folder shared with a group on purpose stays) - and read back. A folder owned
 by another account, also by Administrators, is never changed. A folder that stays open is named
-on stderr and in `tow doctor`; the start goes on. A new key folder is closed the same way, and
+on stderr and in `tow doctor`; the start goes on. `tow permissions` says why; `tow permissions
+fix`, run once in an administrator terminal, makes the account autostart runs as (else the one
+that opened the terminal, never Administrators) the owner of the root, `keys/` and `data/`,
+closes them as above and reads them back, touching nothing outside the root. A new key folder is closed the same way, and
 `install.ps1` closes the install folder before it unpacks anything into it (when it creates the
 folder or this account owns it; otherwise `keys\` and `data\` alone).
 
