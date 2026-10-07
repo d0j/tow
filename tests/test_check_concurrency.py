@@ -11,6 +11,8 @@ from tow import check
 from tow.check import client_ops
 from tow.check import notices as check_notices
 from tow.check import reconcile as check_reconcile
+from tow.clients import factory as client_factory
+from tow.clock import iso_now
 from tow.notify import event_text
 from tow.store import load_state, persistence_lock, save_state
 
@@ -232,7 +234,7 @@ def test_a_second_client_that_is_down_is_reported(monkeypatch):
             raise RuntimeError("Transmission: нет связи")
 
     monkeypatch.setattr(
-        check.client_factory,
+        client_factory,
         "from_secrets",
         lambda cfg, secrets, client_id=None: Down() if client_id == "nas" else main,
     )
@@ -280,7 +282,7 @@ def test_a_pass_without_history_changes_skips_the_two_file_journal(monkeypatch):
         journals.append(1)
         return real()
 
-    monkeypatch.setattr(check.check_transaction, "check_store_transaction", counting)
+    monkeypatch.setattr(check_transaction, "check_store_transaction", counting)
     check.run_check(apply=True, notify=False)  # nothing new in the history
     assert journals == []
     assert load_state()["health"]["at_ts"]  # the state was still committed
@@ -369,7 +371,7 @@ def test_an_applying_check_prunes_the_history_and_writes_it_once(monkeypatch):
             "schema_version": 1,
             "topics": {
                 "deleted-long-ago": {"last_scan_at": "2020-01-01T00:00:00+00:00", "items": {}},
-                "deleted-lately": {"last_scan_at": check.iso_now(), "items": {}},
+                "deleted-lately": {"last_scan_at": iso_now(), "items": {}},
             },
         }
     )

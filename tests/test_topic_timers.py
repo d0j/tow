@@ -12,7 +12,9 @@ from test_supervisor import T0, make
 from tow import check, cli, topic_timers
 from tow.bundle import ExportImportError, _validate_state_topic
 from tow.check import reconcile as check_reconcile
+from tow.check import run as check_run
 from tow.check_steps import merge_check_results, owner_fields
+from tow.clients import factory as client_factory
 from tow.errors import TowError
 from tow.store import load_state, save_state, validate_state_bytes
 from tow.supervisor import layout
@@ -226,7 +228,7 @@ def fake_pipeline(monkeypatch, items):
             "topics": items,
             "mirrors": {},
             "health": {"auto_at_ts": 100, "auto_ok_at_ts": 99},
-            "daily_limit": {"rutor": check._today()},
+            "daily_limit": {"rutor": check_run._today()},
         }
     )
     seen = []
@@ -235,9 +237,9 @@ def fake_pipeline(monkeypatch, items):
         seen.append((item["id"], set(run.quota)))
         return {"id": item["id"], "ok": True}
 
-    monkeypatch.setattr(check, "check_topic", row)
-    monkeypatch.setattr(check, "_progress_only_row", lambda item: {"id": item["id"], "ok": True})
-    monkeypatch.setattr(check.client_factory, "from_secrets", lambda *_a, **_k: SimpleNamespace(ping=lambda: "ok"))
+    monkeypatch.setattr(check_run, "check_topic", row)
+    monkeypatch.setattr(check_run, "_progress_only_row", lambda item: {"id": item["id"], "ok": True})
+    monkeypatch.setattr(client_factory, "from_secrets", lambda *_a, **_k: SimpleNamespace(ping=lambda: "ok"))
     monkeypatch.setattr(check_reconcile, "reconcile_topic", lambda *_a, **_k: {"events": []})
     return seen
 
