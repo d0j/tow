@@ -96,7 +96,9 @@ def test_a_static_file_runs_no_recovery(monkeypatch):
     assert client.get("/static/app.css").status_code == 200
     assert calls == []
     assert client.get("/healthz").status_code == 200
-    assert calls == ["recovery", "pending"]
+    assert calls == ["recovery"]  # the liveness answer reads no state for the undo pre-check
+    assert client.get("/health.json").status_code == 200
+    assert calls == ["recovery", "recovery", "pending"]
 
 
 def _in_a_request(function):

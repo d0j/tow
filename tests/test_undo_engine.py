@@ -254,7 +254,7 @@ def _settings_undo(ts: str) -> None:
 def test_an_expired_undo_takes_its_secrets_with_it_before_the_next_request(client):
     _settings_undo((datetime.now(UTC) - timedelta(hours=2)).isoformat())
 
-    assert client.get("/healthz").status_code == 200
+    assert client.get("/health.json").status_code == 200
 
     assert not secret_undo_path().exists()
     assert "undo" not in load_state()
@@ -264,7 +264,7 @@ def test_an_expired_undo_takes_its_secrets_with_it_before_the_next_request(clien
 def test_a_live_undo_keeps_its_secrets(client):
     _settings_undo(iso_now())
 
-    assert client.get("/healthz").status_code == 200
+    assert client.get("/health.json").status_code == 200
 
     assert secret_undo_path().exists()
     assert load_state()["undo"]["kind"] == "settings"
@@ -307,7 +307,7 @@ def test_a_snapshot_that_cannot_be_removed_is_retried_for_every_kind(client, mon
     assert load_state()["secret_undo_cleanup_pending"]["reference"] == "settings-v1"
     assert secret_undo_path().exists()
 
-    client.get("/healthz")  # the retry before the next request
+    client.get("/health.json")  # the retry before the next request
 
     assert "secret_undo_cleanup_pending" not in load_state()
     assert not secret_undo_path().exists()

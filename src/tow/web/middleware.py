@@ -167,12 +167,14 @@ def _session_refusal(request: Request) -> Response | None:
     return Response("authentication required", status_code=401, headers={"Cache-Control": "no-store"})
 
 
-def _recover_before_dispatch() -> None:
+def _recover_before_dispatch(undo_cleanup: bool = True) -> None:
     """An interrupted site transaction is rolled back and a pending secret-undo cleanup retried
     before the request reads anything (blocking: may wait for the persistence lock, which a
-    scheduled check holds while it reads and commits)."""
+    scheduled check holds while it reads and commits). The rollback looks for its journal only;
+    the cleanup's pre-check reads the whole state, so /healthz (polled by monitors, reading
+    nothing) leaves it to the next page."""
     services.recover_store_transaction()
-    if site_store.secret_undo_cleanup_pending():
+    if undo_cleanup and site_store.secret_undo_cleanup_pending():
         services.cleanup_secret_undo()
 
 
@@ -253,7 +255,7 @@ async def secure(request: Request, call_next: Callable[[Request], Awaitable[Resp
     async def dispatch() -> Response:
         if not static:  # a static file reads no data: it needs no recovery
             try:
-                await run_in_threadpool(_recover_before_dispatch)
+                await run_in_threadpool(_recover_before_dispatch, path != "/healthz")
             except RuntimeError:
                 return Response("TOW site transaction recovery unavailable", status_code=503)
         if request.method in _WRITE_METHODS and not path.startswith("/updates/") and path not in {"/login", "/logout"}:
