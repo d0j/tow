@@ -16,6 +16,7 @@ How TOW thinks, what each screen and colour means, and what to do about each mes
 - [Updates](#updates)
 - [Password and network access](#password-and-network-access)
 - [Troubleshooting](#troubleshooting)
+- [Command line](#command-line)
 - [Where things are](#where-things-are)
 
 ## Concepts
@@ -37,8 +38,8 @@ client to add, start, stop or move a torrent. It only ever changes torrents it a
 
 | Screen | What is there |
 |---|---|
-| **Home** | Your topics: status dot, site icon, name, folder, latest event, progress. **+** adds a topic. Click a row to edit it. Until the first topic is added, Home shows three first steps: the torrent client, a messenger (optional), a topic link. |
-| **Sites** | Trackers and their mirrors, sign-in state, pause and check per site. **+** adds a site: paste a link to any topic of it first, the rest fills in; patterns and paths are under **Advanced**. |
+| **Home** | Your topics: status dot, site icon, name, folder, latest event, progress. **+** adds a topic. Click a row to edit it. Filters and search hide rows; when nothing matches, **Show all topics** clears them. Until the first topic is added, Home shows three first steps: the torrent client, a messenger (optional), a topic link. |
+| **Sites** | Trackers and their mirrors, sign-in state, pause and check per site (the icons in its row). **+** adds a site: paste a link to any topic of it first, the rest fills in; patterns and paths are under **Advanced**. |
 | **Settings** | Language, torrent clients, notifications, checks, network access and password, version and updates, the TOW service, backups, the log. |
 | **History** | Downloads, errors, changes and notifications, with filters and search. |
 | **Diagnostics** | The pulse icon in the header: the connection to the torrent client and to every site. The **?** icon opens the in-app **Guide**. |
@@ -136,7 +137,7 @@ manual checks and progress checks do not reset it.
 - **Mirrors.** TOW starts with the main mirror and moves on until one returns the `.torrent`; that one becomes the
   main mirror. Click a mirror on **Sites** to make it the main one.
 - **Cooldown.** A mirror that fails three times in a row rests for an hour; the others keep working. The site's
-  **Check** button ends the pause.
+  check icon in its row (“Check the site's mirrors”) ends the pause.
 - **Daily limit.** When a site says the download limit for today is reached, TOW leaves that site alone until
   tomorrow and does not try other mirrors (they share the limit).
 - **Sign-in.** Sites that need it get a login and password on **Sites**, stored encrypted. A site that only allows
@@ -153,9 +154,9 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
 
 - One message per topic per check: added, new version, new episodes, download complete, removed, back in the
   client. An error in the same check is added to the message, not hidden.
-- Errors are sent when they appear or change kind, not on every check; “… — working again” follows the recovery.
+- Errors are sent when they appear or change kind, not on every check; “… — works again” follows the recovery.
   A site that does not answer (yellow) is reported once it fails three checks in a row, so a mirror that drops out
-  now and then does not send “error” and “working again” every other check.
+  now and then does not send “error” and “works again” every other check.
   When one site fails the same way for several topics, you get one message for the site.
 - Every message goes to every connected messenger. An undelivered message waits in a queue and goes first next time.
 - Optional in `config.yaml`: `quiet_hours: "23-8"` (held and sent together afterwards), `daily_digest_hour: 9`,
@@ -170,7 +171,7 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
   `history_keep_days` (730 by default), files of the current version are never dropped.
 - **Undo.** After a change (an edit, a delete, a settings save, a password change) its message carries **Undo**
   with the time left; on later pages the button stays in the header. It lasts a short time (Settings → Checks,
-  “Show Undo for”) and puts back the last change, as one step. Removing a topic
+  “Show “Undo” for”) and puts back the last change, as one step. Removing a topic
   (**Remove from TOW**) removes the topic from TOW only: the torrent and its files stay in the client, and its
   history stays.
 - A network error is said in words (connection refused, no answer in time, address not found…); the raw text is
@@ -180,7 +181,7 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
 
 | Kind | Made | Restore | Holds |
 |---|---|---|---|
-| Nightly backup | Daily schedule (03:30 by default); keep 7 days by default | Settings → Backups → Nightly backups | settings, topics, history, encrypted passwords |
+| Nightly backup | Daily schedule (03:30 by default), or **Back up now** in that card; keep 7 days by default | Settings → Backups → Nightly backups | settings, topics, history, encrypted passwords |
 | Restore point | **Create a backup** in Settings, and automatically before risky changes; last 10 kept | Settings → Backups → Backups made by hand | the same |
 | TOW file (`.towx`) | Settings → Backups → TOW file → **Save file** | Same card, **Choose a file** | the same, in one encrypted file |
 | Export | `tow export --output tow.towx` (asks a passphrase, 12+ characters) | `tow import --input tow.towx --apply` | the same, protected by your passphrase |
@@ -219,6 +220,8 @@ Settings → **Version and updates**; the version in the corner of every page op
 - **Check for updates** asks GitHub for the latest stable release. With **Check for updates automatically** on, TOW
   asks by itself at most every 12 hours while a page is open, and Home shows a small notice when a new version is
   out. Nothing is installed without you, and nothing about your topics or settings is sent.
+- When TOW is already the latest release, the check says so, and an update (`Update TOW.cmd`, `update-tow`)
+  says “… is the latest release: nothing to update” and changes nothing.
 - **Update** installs it after you confirm. TOW first saves and checks a `.towx` archive of your data, then stops,
   takes a snapshot of `data/` and `config.yaml`, switches the code, starts again and checks that the new version
   answers and reads your data. The page reconnects and shows the result; **Reload page** opens the new interface.
@@ -269,7 +272,7 @@ The left column is the text TOW shows (on Home, in a row, in a message or on a p
 | The torrent client is unavailable: new versions are not added. · torrent client unreachable | TOW cannot reach the client's Web UI. | Start the client, check its Web UI is on; Settings → Torrent clients → **Check**. |
 | Sign in to *site* (topics: *n*): open the topic's row. · the page has no torrent link — sign in to the site | The site wants a signed-in user for the `.torrent`. | Open the row → **Sign in**, or enter the login on **Sites**. |
 | *site*: no mirror answered: … · no connection | Every mirror failed. | Usually temporary. If it lasts, open the site in a browser and add a working mirror on **Sites**. |
-| *site*: all mirrors are paused · the site is paused | Mirrors are resting after failures, or you paused the site. | Wait an hour, or press **Check** in the site's row. |
+| *site*: all mirrors are paused · the site is paused | Mirrors are resting after failures, or you paused the site. | Wait an hour, or press the check icon in the site's row on **Sites**. |
 | the site is behind a Cloudflare check — open it in a browser | The site shows a browser challenge. | TOW does not bypass it. Try another mirror or wait. |
 | daily download limit reached | The site's download quota for today is used up. | Nothing; TOW tries again tomorrow. |
 | the previous version of the torrent is still active on the same file: … | A new version overlaps a torrent that is still seeding. | **Stop the previous one and add** in the row, or stop it in the client. |
@@ -278,9 +281,11 @@ The left column is the text TOW shows (on Home, in a row, in a message or on a p
 | not enough disk space: … GB needed, … GB free | The target drive is too full (measured only for a torrent client on this computer). | Free space or choose another folder. |
 | no site is set up for this link | The link belongs to an unknown site. | **Sites → +**, paste the link. |
 | the torrent was removed from the client | The torrent is gone from the client. | Check again to add it back, or **Remove from TOW**. |
-| the torrent in the client was not added by TOW — … | TOW will not change torrents it did not add. | Change it in the client, or remove it there and let TOW add it. |
-| the torrent is already in the client without the label tow — … · the torrent was added (paused), but the client did not keep the label tow on it — … | The torrent has no `tow` mark: you added it yourself, Monitorrent did before the move, or the client could not set the mark while adding. TOW does not change such a torrent. | Open the topic and choose **Adopt into TOW** (or `tow adopt --all-unmarked` for many): TOW marks the torrent, changes nothing else, and manages it from the next check. Or remove it in the client and let TOW add it again. |
+| the torrent in the client was not added by TOW — … | The torrent has no `tow` mark, and TOW does not change torrents it did not add. | If it is the topic's torrent, open the topic and choose **Adopt into TOW** (or `tow adopt ID`): TOW marks it and changes nothing else. Or change it in the client, or remove it there and let TOW add it. |
+| the torrent is already in the client without the label tow — … · the torrent was added (paused), but the client did not keep the label tow on it — … | The torrent has no `tow` mark: you added it yourself, Monitorrent did before the move, or the client could not set the mark while adding. TOW does not change such a torrent. | Open the topic and choose **Adopt into TOW** (or `tow adopt --all-unmarked` for many): TOW marks the torrent, changes nothing else, and manages it from the next check. After the second message the button appears once the next check has found the torrent. Or remove it in the client and let TOW add it again. |
 | another check is running right now; press “Check” again in a minute | One check at a time. | Wait. |
+| TOW cannot read its settings file config.yaml (a page instead of TOW) | `config.yaml` has an error; the page names the line. | Correct `config.yaml` in the TOW folder at that place and reload the page: TOW reads it again by itself. If that does not work, copy `config.yaml` back from the newest nightly backup (`backup/night`) and reload. |
+| TOW is not started: port 8787 is already in use by another program. | Another program (often a second TOW) uses the port. | Stop that program, or set another `port:` in `config.yaml` and start TOW again. |
 | Scheduled checks have not run since … | TOW was not running, or checks keep failing. | `tow autostart status`; look at `data/logs/run.log`. |
 | The last scheduled check is blocked: saved passwords and tokens cannot be opened. … · The master key is missing … | The master key is missing or wrong. | `tow keys status`; put back `keys/master.key` from your copy, or `tow keys adopt --from FILE`. |
 | state.json was written by a newer TOW … | You went back to an older version. | Update TOW again, or restore a backup made by this version. |
@@ -291,6 +296,30 @@ The left column is the text TOW shows (on Home, in a row, in a message or on a p
 
 Still stuck: **Diagnostics** checks the client and every site; `tow doctor` does the same from the command
 line. Logs are in `data/logs/`. When you report a bug, remove personal data first.
+
+## Command line
+
+`tow` is the launcher in the TOW folder: `app\scripts\tow.cmd` on Windows, `~/TOW/app/scripts/tow` on macOS and
+Linux. The everyday commands are in the [README](../README.md#usage); `tow --help` and `tow COMMAND --help` explain
+every one. The others:
+
+| Command | Does |
+|---|---|
+| `tow version` | prints the version |
+| `tow start --no-browser` | starts TOW in the background without opening the page (also `TOW_NO_BROWSER=1`) |
+| `tow check` | a preview of a check that changes nothing; `--apply` hands what it finds to the client and saves it, `--dry-run` keeps it a preview even with `--apply`, `--notify` also sends the messages |
+| `tow doctor --notify` | asks the torrent client and the sites, and sends the report to the messengers too |
+| `tow watchdog` | is TOW up and are the checks running (a diagnostic; it changes nothing) |
+| `tow backup` | makes a nightly backup now (as **Back up now** does) |
+| `tow access status` | whether network access is on; `on` / `off` change it after `tow restart` |
+| `tow export --output FILE` | the settings, topics, history, passwords and tokens in one file protected by a passphrase; `--include-log` adds the log, `--force` replaces an existing file |
+| `tow import --input FILE` | a preview of restoring that file; `--apply` restores it; `--path-map OLD=NEW` changes the start of the topics' folders (another computer; can be given several times) |
+| `tow import-rollback --checkpoint FOLDER` | puts back what an import replaced (a preview unless `--apply`) |
+| `tow secrets status` | where the passwords and tokens are and which key opens them (`migrate` and `generate-key`: see `--help`) |
+
+Commands typed in a terminal answer in the language chosen in Settings → Language, or, when it is automatic, in
+the operating system's language. Messages and the texts scheduled checks record use the language of messages: the
+chosen one, or the one your browser last asked for.
 
 ## Where things are
 
