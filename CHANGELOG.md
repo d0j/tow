@@ -3,6 +3,12 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [1.24.1] — 2026-10-07
+
+### Fixed
+
+- `tow status` writes the last and the next check in the same language and format.
+
 ## [1.24.0] — 2026-10-07
 
 ### Added
