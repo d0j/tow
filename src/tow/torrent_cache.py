@@ -16,13 +16,22 @@ from cryptography.fernet import InvalidToken
 from tow.content import MAX_RECORD_BYTES
 from tow.errors import TowError
 from tow.guess import canon_watch_url
-from tow.paths import data_dir
-from tow.store import atomic_write_bytes, load_state, master_fernet, persistence_lock, save_state
+from tow.paths import data_dir, state_path
+from tow.store import (
+    FileStamp,
+    atomic_write_bytes,
+    file_stamp,
+    load_state,
+    master_fernet,
+    persistence_lock,
+    save_state,
+)
 from tow.torrent import MAX_TORRENT_BYTES, parse_magnet_hashes, parse_torrent_metadata
 
 MAX_BYTES = 256 * 1024 * 1024
 MAX_RECORDS = 2048
 _NAME = re.compile(r"[0-9a-f]{64}\.bin")
+_ORPHAN = re.compile(r"\.[0-9a-f]{64}\.bin\.[a-z0-9_]{8}\.tmp")
 
 
 def _folder(*, create: bool = False) -> Path:
@@ -39,7 +48,28 @@ def _path(url: str, *, create: bool = False) -> Path:
 
 
 def _used(url: str) -> bool:
-    return bool(_matching(load_state(quarantine=False), url))
+    return url in _watched()
+
+
+# Every watched URL, and whether a topic of it carries the "metadata unavailable" mark, by the
+# state file it was read from: a check asks once per topic, and reading the whole state for each
+# (and normalising every URL in it) cost 2000 x 2000 URLs at 2000 topics. Every user of it holds
+# the data lock, as every writer of the state does.
+_watched_index: tuple[FileStamp, dict[str, bool]] | None = None
+
+
+def _watched() -> dict[str, bool]:
+    global _watched_index
+    stamp = file_stamp(state_path())
+    if stamp is not None and _watched_index is not None and _watched_index[0] == stamp:
+        return _watched_index[1]
+    urls: dict[str, bool] = {}
+    for topic in load_state(quarantine=False).get("topics", []):
+        url = canon_watch_url(str(topic.get("url") or ""))
+        urls[url] = urls.get(url, False) or topic.get("metadata_cache_unavailable") is True
+    if stamp is not None and file_stamp(state_path()) == stamp:
+        _watched_index = (stamp, urls)
+    return urls
 
 
 def _matching(state: dict[str, Any], url: str) -> list[dict[str, Any]]:
@@ -51,10 +81,10 @@ def read(url: str) -> bytes | None:
     url = canon_watch_url(url)
     with persistence_lock():
         _folder()  # refuse redirected storage even for a cold lookup
-        topics = _matching(load_state(quarantine=False), url)
-        if not topics:
+        watched = _watched()
+        if url not in watched:
             return None
-        if any(topic.get("metadata_cache_unavailable") is True for topic in topics):
+        if watched[url]:
             raise TowError("content.cache_invalid")
         return _read_record(url)
 
@@ -72,7 +102,7 @@ def _read_record(url: str) -> bytes | None:
             opened = os.fstat(stream.fileno())
             if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino):
                 raise TowError("content.unavailable")
-            encrypted = stream.read(MAX_RECORD_BYTES + 1)
+            encrypted = stream.read(info.st_size + 1)  # one byte more shows a file that grew
         if len(encrypted) != info.st_size:
             raise TowError("content.unavailable")
         try:
@@ -93,9 +123,8 @@ def remember(blob: bytes, url: str) -> None:
     parse_torrent_metadata(blob)
     url = canon_watch_url(url)
     with persistence_lock():
-        state = load_state(quarantine=False)
-        topics = _matching(state, url)
-        if not topics:
+        watched = _watched()
+        if url not in watched:
             return
         try:
             try:
@@ -109,14 +138,16 @@ def remember(blob: bytes, url: str) -> None:
         except TowError, OSError, RuntimeError, ValueError:
             # Unreadable storage cannot prove that the retained copy matches this
             # evidence. Persist the refusal before later access can recover.
-            _mark_unavailable(state, topics, True)
+            _mark_unavailable(url, True)
             raise
-        _mark_unavailable(state, topics, False)
+        if watched[url]:
+            _mark_unavailable(url, False)
 
 
-def _mark_unavailable(state: dict[str, Any], topics: list[dict[str, Any]], unavailable: bool) -> None:
+def _mark_unavailable(url: str, unavailable: bool) -> None:
+    state = load_state(quarantine=False)
     changed = False
-    for topic in topics:
+    for topic in _matching(state, url):
         if unavailable and topic.get("metadata_cache_unavailable") is not True:
             topic["metadata_cache_unavailable"] = True
             changed = True
@@ -136,16 +167,21 @@ def _remember(blob: bytes, url: str) -> None:
             raise TowError("content.too_large")
         path = _path(url, create=True)
         total = count = 0
-        for item in path.parent.iterdir():
-            info = item.lstat()
-            if re.fullmatch(r"\.[0-9a-f]{64}\.bin\.[a-z0-9_]{8}\.tmp", item.name) and stat.S_ISREG(info.st_mode):
-                item.unlink()  # orphaned atomic writes; every writer holds this lock
-                continue
-            if not _NAME.fullmatch(item.name) or not stat.S_ISREG(info.st_mode) or item.is_junction():
-                raise TowError("content.unavailable")
-            if item != path:
-                total += info.st_size
-                count += 1
+        # One directory listing with the entries' own types and sizes (on Windows no call per
+        # file): a lstat and a junction test per file made a first check of 2000 topics spend
+        # about 40 s listing. The folder's modification time cannot stand in for a listing: on
+        # NTFS it often stays the same across files created in the same clock tick.
+        with os.scandir(path.parent) as entries:
+            for entry in entries:
+                info = entry.stat(follow_symlinks=False)
+                if _ORPHAN.fullmatch(entry.name) and stat.S_ISREG(info.st_mode):
+                    os.unlink(entry.path)  # orphaned atomic writes; every writer holds this lock
+                    continue
+                if not _NAME.fullmatch(entry.name) or not stat.S_ISREG(info.st_mode) or entry.is_junction():
+                    raise TowError("content.unavailable")
+                if entry.name != path.name:
+                    total += info.st_size
+                    count += 1
         if total + len(encrypted) > MAX_BYTES or count + 1 > MAX_RECORDS:
             raise TowError("content.full")
         atomic_write_bytes(path, encrypted)
@@ -174,9 +210,8 @@ def observe_magnet(url: str, magnet: str) -> None:
         return
     with persistence_lock():
         url = canon_watch_url(url)
-        state = load_state(quarantine=False)
-        topics = _matching(state, url)
-        if not topics:
+        watched = _watched()
+        if url not in watched:
             return
         try:
             blob = _read_record(url)
@@ -186,6 +221,7 @@ def observe_magnet(url: str, magnet: str) -> None:
                 if (v1 and metadata.hash_v1 not in v1) or (v2 and metadata.hash_v2 not in v2):
                     _path(url).unlink()
         except TowError, OSError, RuntimeError, ValueError:
-            _mark_unavailable(state, topics, True)
+            _mark_unavailable(url, True)
             raise
-        _mark_unavailable(state, topics, False)
+        if watched[url]:
+            _mark_unavailable(url, False)

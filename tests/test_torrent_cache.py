@@ -23,7 +23,7 @@ def watch(url=URL, tid="test-topic"):
     save_state(state)
 
 
-def test_one_state_snapshot_per_cache_operation(monkeypatch):
+def test_the_state_is_read_once_per_version_for_cache_operations(monkeypatch):
     watch()
     reads = []
     original = torrent_cache.load_state
@@ -31,9 +31,61 @@ def test_one_state_snapshot_per_cache_operation(monkeypatch):
     torrent_cache.remember(blob(), URL)
     assert len(reads) == 1
     torrent_cache.read(URL)
-    assert len(reads) == 2
     torrent_cache.remember(blob(), URL)
-    assert len(reads) == 3
+    torrent_cache.observe_magnet(URL, "magnet:?xt=urn:btih:" + parse_torrent_metadata(blob()).hash_v1)
+    assert len(reads) == 1
+    watch(URL + "2", "other-topic")  # the URL of the first topic is no longer watched
+    assert torrent_cache.read(URL) is None
+    assert len(reads) == 2
+
+
+def test_a_check_of_many_topics_reads_the_state_once(monkeypatch):
+    from tow import guess
+
+    urls = [f"{URL}{n}" for n in range(40)]
+    state = load_state()
+    state["topics"] = [{"id": f"t{n}", "url": url, "title": "Test"} for n, url in enumerate(urls)]
+    save_state(state)
+    normalised = []
+    monkeypatch.setattr(
+        torrent_cache, "canon_watch_url", lambda url: normalised.append(url) or guess.canon_watch_url(url)
+    )
+    for url in urls:
+        torrent_cache.remember(blob(), url)
+    assert len(normalised) == 2 * len(urls)  # every topic of the state once, and every call
+    assert sorted(torrent_cache.read(url) == blob() for url in urls) == [True] * len(urls)
+
+
+def test_a_record_is_read_by_its_size_not_by_the_largest_allowed(monkeypatch):
+    watch()
+    torrent_cache.remember(blob(), URL)
+    asked = []
+    original = torrent_cache.Path.open
+
+    class Counting:
+        def __init__(self, handle):
+            self.handle = handle
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self.handle.close()
+
+        def fileno(self):
+            return self.handle.fileno()
+
+        def read(self, size=-1):
+            asked.append(size)
+            return self.handle.read(size)
+
+    def opened(self, *args, **kwargs):
+        handle = original(self, *args, **kwargs)
+        return Counting(handle) if self.suffix == ".bin" else handle
+
+    monkeypatch.setattr(torrent_cache.Path, "open", opened)
+    assert torrent_cache.read(URL) == blob()
+    assert asked == [torrent_cache._path(URL).stat().st_size + 1]
 
 
 def test_drafts_do_not_create_durable_metadata():
