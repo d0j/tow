@@ -144,10 +144,10 @@ def test_every_template_tracker_regex_passes_the_guard():
     ],
 )
 def test_diagnostics_name_the_guards_findings_in_words(raw, key):
+    from tow.doctor import reason_text
     from tow.i18n import t
-    from tow.web.routes_sites import _doctor_reason
 
-    assert _doctor_reason(raw) == t(key, "ru")
+    assert reason_text(raw) == t(key, "ru")
 
 
 @pytest.mark.parametrize(("pattern", "href"), [(r"^https://tracker\.example/t/\d+$", ""), ("", r"dl\.php\?id=\d+")])

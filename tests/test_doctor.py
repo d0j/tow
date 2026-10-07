@@ -288,3 +288,27 @@ def test_another_folders_autostart_is_never_shown_as_this_ones(monkeypatch, stat
     monkeypatch.setattr("tow.autostart.backend", lambda: Backend())
     page = TestClient(app).get("/doctor", headers={"Accept-Language": "ru"}).text
     assert (t("doctor.autostart_foreign", "ru", where=status["where"]) in page) is foreign
+
+
+def test_tow_doctor_says_its_findings_in_the_owners_words(monkeypatch):
+    """Round-3 audit: `tow doctor` in Russian printed "cloudflare", "redirect outside configured
+    mirror" and the client library's English as they came."""
+    from tow import doctor
+    from tow.i18n import t
+
+    monkeypatch.setattr(doctor, "owner_language", lambda: "ru")
+    report = {
+        "ok": False,
+        "qbit": "FAIL [WinError 10061] No connection could be made",
+        "probes": [
+            {"tracker": "a", "host": "https://a.example", "ok": False, "error": "cloudflare"},
+            {"tracker": "a", "host": "https://b.example", "ok": False, "error": "redirect outside configured mirror"},
+            {"tracker": "a", "host": "https://c.example", "ok": False, "error": "http 503"},
+        ],
+    }
+    text = doctor.doctor_text(report)
+    for key in ("doctor.reason.cloudflare", "doctor.reason.redirect", "doctor.reason.refused"):
+        assert t(key, "ru") in text
+    assert t("doctor.reason.http", "ru", code="503") in text
+    assert "outside configured mirror" not in text
+    assert "No connection" not in text

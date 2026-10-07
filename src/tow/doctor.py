@@ -203,6 +203,43 @@ def _summarize(report: dict[str, Any]) -> None:
     )
 
 
+# The raw probe and ping results in the owner's words (M4; the page keeps the raw text in a
+# tooltip). Checked in order; the first phrase found in the lower-cased text wins.
+_REASONS = (
+    ("secrets missing", "doctor.reason.client_not_set"),
+    ("10061", "doctor.reason.refused"),
+    ("connection refused", "doctor.reason.refused"),
+    ("actively refused", "doctor.reason.refused"),
+    ("timed out", "doctor.reason.timeout"),
+    ("timeout", "doctor.reason.timeout"),
+    ("getaddrinfo", "doctor.reason.no_address"),
+    ("name or service not known", "doctor.reason.no_address"),
+    ("11001", "doctor.reason.no_address"),
+    ("could not be resolved", "doctor.reason.no_address"),  # tow.net_guard: the name is not in DNS
+    ("no usable address", "doctor.reason.no_address"),
+    ("non-public address", "doctor.reason.home_address"),
+    ("cloudflare", "doctor.reason.cloudflare"),
+    ("redirect", "doctor.reason.redirect"),
+    ("certificate", "doctor.reason.certificate"),
+    ("ssl", "doctor.reason.certificate"),
+    ("10054", "doctor.reason.reset"),
+    ("connection reset", "doctor.reason.reset"),
+)
+
+
+def reason_text(raw: str, lang: str | None = None) -> str:
+    """A probe's or the client ping's raw failure ("cloudflare", "http 503", a library's
+    message) in the owner's words; an unknown one as it is."""
+    text = str(raw or "").strip()
+    low = text.lower()
+    if low.startswith("http ") and low[5:].strip().isdigit():
+        return t("doctor.reason.http", lang, code=low[5:].strip())
+    for phrase, key in _REASONS:
+        if phrase in low:
+            return t(key, lang)
+    return text or t("doctor.reason.unknown", lang)
+
+
 def doctor_text(report: dict[str, Any] | None = None) -> str:
     """The report in plain lines (printed, and sent to the messengers with ``--notify``)."""
     r = report or doctor_report()
@@ -217,7 +254,7 @@ def doctor_text(report: dict[str, Any] | None = None) -> str:
     if raw_ping is None:
         ping = t("doctor_report.not_asked", lang)
     elif str(raw_ping).startswith("FAIL"):
-        ping = t("doctor_report.answer_no", lang, reason=str(raw_ping).removeprefix("FAIL").strip())
+        ping = t("doctor_report.answer_no", lang, reason=reason_text(str(raw_ping).removeprefix("FAIL"), lang))
     else:
         ping = t("doctor_report.answer_yes", lang, version=raw_ping)
     sites = ", ".join(str(name) for name in r.get("trackers") or []) or "—"
@@ -236,7 +273,7 @@ def doctor_text(report: dict[str, Any] | None = None) -> str:
     if r.get("open_folders"):
         lines.append(t("doctor_report.open_folders", lang, value=", ".join(map(str, r["open_folders"]))))
     for p in r.get("probes") or []:
-        mark = t("doctor_report.probe_ok", lang) if p.get("ok") else p.get("error")
+        mark = t("doctor_report.probe_ok", lang) if p.get("ok") else reason_text(str(p.get("error") or ""), lang)
         lines.append(t("doctor_report.probe", lang, tracker=p.get("tracker"), host=p.get("host"), result=mark))
     return "\n".join(lines)
 

@@ -31,6 +31,7 @@ from tow.config import load_config, save_config
 from tow.content import metadata as content_metadata
 from tow.content import read as read_content
 from tow.doctor import doctor_report
+from tow.doctor import reason_text as doctor_reason
 from tow.lifecycle import request_restart, service_status, set_autostart
 from tow.locations import check_writable as folder_write_problem
 from tow.locations import free_bytes
@@ -102,6 +103,7 @@ __all__ = [
     "data_lost",
     "delete_restore_point",
     "delete_snapshot",
+    "doctor_reason",
     "doctor_report",
     "export_portable_bundle",
     "folder_write_problem",

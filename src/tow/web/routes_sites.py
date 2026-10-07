@@ -213,41 +213,6 @@ def sites_prefer(name: str, host: str = Form()) -> Response:
     return flash_redirect("/sites", "web.sites.preferred" if ok else "web.sites.no_mirror", "ok" if ok else "err")
 
 
-# M4: the doctor's raw probe and ping results in the owner's words (the raw text stays in a
-# tooltip). Checked in order; the first phrase found in the lower-cased text wins.
-_DOCTOR_REASONS = (
-    ("secrets missing", "doctor.reason.client_not_set"),
-    ("10061", "doctor.reason.refused"),
-    ("connection refused", "doctor.reason.refused"),
-    ("actively refused", "doctor.reason.refused"),
-    ("timed out", "doctor.reason.timeout"),
-    ("timeout", "doctor.reason.timeout"),
-    ("getaddrinfo", "doctor.reason.no_address"),
-    ("name or service not known", "doctor.reason.no_address"),
-    ("11001", "doctor.reason.no_address"),
-    ("could not be resolved", "doctor.reason.no_address"),  # tow.net_guard: the name is not in DNS
-    ("no usable address", "doctor.reason.no_address"),
-    ("non-public address", "doctor.reason.home_address"),
-    ("cloudflare", "doctor.reason.cloudflare"),
-    ("redirect", "doctor.reason.redirect"),
-    ("certificate", "doctor.reason.certificate"),
-    ("ssl", "doctor.reason.certificate"),
-    ("10054", "doctor.reason.reset"),
-    ("connection reset", "doctor.reason.reset"),
-)
-
-
-def _doctor_reason(raw: str) -> str:
-    text = str(raw or "").strip()
-    low = text.lower()
-    if low.startswith("http ") and low[5:].strip().isdigit():
-        return t("doctor.reason.http", code=low[5:].strip())
-    for phrase, key in _DOCTOR_REASONS:
-        if phrase in low:
-            return t(key)
-    return text or t("doctor.reason.unknown")
-
-
 def _doctor_view(report: dict[str, Any] | None) -> dict[str, Any] | None:
     if not report:
         return report
@@ -258,14 +223,16 @@ def _doctor_view(report: dict[str, Any] | None) -> dict[str, Any] | None:
         failed = raw.startswith("FAIL")
         view["qbit_ok"] = not failed
         view["qbit_text"] = (
-            t("doctor.client_fail", reason=_doctor_reason(raw[4:])) if failed else t("doctor.client_ok", value=raw)
+            t("doctor.client_fail", reason=services.doctor_reason(raw[4:]))
+            if failed
+            else t("doctor.client_ok", value=raw)
         )
     view["probes"] = [
         {
             **probe,
             "text": t("doctor.probe_ok", status=probe.get("status") or "")
             if probe.get("ok")
-            else _doctor_reason(str(probe.get("error") or "")),
+            else services.doctor_reason(str(probe.get("error") or "")),
         }
         for probe in report.get("probes") or []
         if isinstance(probe, dict)
