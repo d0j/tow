@@ -6,8 +6,8 @@ import os
 import re
 import sys
 import threading
-from collections.abc import Iterable, Iterator, Mapping
-from contextlib import contextmanager, suppress
+from collections.abc import Generator, Iterable, Iterator, Mapping
+from contextlib import closing, contextmanager, suppress
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -460,6 +460,65 @@ HISTORY_GROUPS = {
 
 
 _KIND_RE = re.compile(r'"kind":\s*"([A-Za-z0-9_]+)"')
+# The fields event_title looks up a topic's current name by (a superset: either id field).
+_TITLE_REF_RE = re.compile(r'"(topic_id|topic|hash)":\s*"((?:[^"\\]|\\.)*)"')
+_BLOCK_BYTES = 256 * 1024
+
+
+def _lines_newest_first(path: Path, *, live: bool) -> Generator[str]:
+    """The lines of one log file from its end, read in blocks: the history page usually needs
+    only the newest events, not the whole file (the live one can be tens of MiB)."""
+    try:
+        if live:
+            with _log_file_lock():  # the size between two appends: no half-written line
+                handle = path.open("rb")
+                end = handle.seek(0, os.SEEK_END)
+        else:
+            handle = path.open("rb")
+            end = handle.seek(0, os.SEEK_END)
+    except OSError:
+        return
+    # The bytes up to ``end`` never change: the log is only appended to and rotated by renaming.
+    with handle:
+        rest = b""
+        while end > 0:
+            start = max(0, end - _BLOCK_BYTES)
+            try:
+                handle.seek(start)
+                block = handle.read(end - start) + rest
+            except OSError:
+                return
+            end = start
+            lines = block.split(b"\n")
+            rest = lines.pop(0) if start > 0 else b""  # maybe the end of a line in the block before
+            for line in reversed(lines):
+                if line.strip():
+                    yield line.decode("utf-8", "replace")
+
+
+def _title_refs(needle: str, title_index: Mapping[str, str] | None) -> tuple[set[str], set[str]]:
+    """(topic ids, hashes) whose current name contains the search text."""
+    ids: set[str] = set()
+    hashes: set[str] = set()
+    for key, title in (title_index or {}).items():
+        if needle in title.casefold():
+            kind, _, value = key.partition(":")
+            (ids if kind == "id" else hashes).add(value)
+    return ids, hashes
+
+
+def _may_match(line: str, needle: str, refs: tuple[set[str], set[str]]) -> bool:
+    """Whether a raw line can be a search result, without parsing it: the text is in the line
+    (written by json.dumps exactly as the full test writes the record again), or the line names
+    a topic whose current name has it. Escaped text is parsed: it may hide the needle."""
+    if needle in line.casefold() or "\\u" in line:
+        return True
+    ids, hashes = refs
+    for match in _TITLE_REF_RE.finditer(line):
+        value = match.group(2)
+        if "\\" in value or value in ids or value.upper() in hashes:
+            return True
+    return False
 
 
 def history_events(
@@ -468,41 +527,37 @@ def history_events(
     """Newest first, across the current log and its rotated files (G7)."""
     kinds = HISTORY_GROUPS.get(group) or frozenset().union(*HISTORY_GROUPS.values())
     needle = text.strip().casefold()
+    # A quote or a backslash in the search text is escaped in the raw line: no shortcut then.
+    shortcut = bool(needle) and '"' not in needle and "\\" not in needle
+    refs = _title_refs(needle, title_index) if shortcut else (set(), set())
     path = log_path()
     files = [path, *(path.with_name(f"{path.name}.{index}") for index in range(1, BACKUPS + 1))]
     out: list[dict[str, Any]] = []
     for index, candidate in enumerate(files):
         # Only the live file is being written: rotated files are read without the log lock,
         # so a running check is not held up by the history page.
-        try:
-            if index == 0:
-                with _log_file_lock():
-                    text = candidate.read_text(encoding="utf-8", errors="replace") if candidate.is_file() else ""
-            else:
-                text = candidate.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        for line in reversed(text.splitlines()):
-            kind = _KIND_RE.search(line)
-            if kind is None or kind.group(1) not in kinds:
-                continue  # most lines are other events: no JSON parsing for them
-            if needle and not title_index and needle not in line.casefold() and "\\u" not in line:
-                continue
-            try:
-                record = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(record, dict) or record.get("kind") not in kinds:
-                continue
-            if (
-                needle
-                and needle not in json.dumps(record, ensure_ascii=False).casefold()
-                and needle not in event_title(record, title_index).casefold()
-            ):
-                continue
-            out.append(record)
-            if len(out) >= limit:
-                return out
+        with closing(_lines_newest_first(candidate, live=index == 0)) as lines:
+            for line in lines:
+                kind = _KIND_RE.search(line)
+                if kind is None or kind.group(1) not in kinds:
+                    continue  # most lines are other events: no JSON parsing for them
+                if shortcut and not _may_match(line, needle, refs):
+                    continue
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(record, dict) or record.get("kind") not in kinds:
+                    continue
+                if (
+                    needle
+                    and needle not in json.dumps(record, ensure_ascii=False).casefold()
+                    and needle not in event_title(record, title_index).casefold()
+                ):
+                    continue
+                out.append(record)
+                if len(out) >= limit:
+                    return out
     return out
 
 
