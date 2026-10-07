@@ -413,7 +413,7 @@ def test_tracker_login_reports_unavailable_secret_store(no_check, monkeypatch, c
 
     response = client.post("/topics/t1/tracker-login", data={"username": "u", "password": "p"}, follow_redirects=False)
 
-    assert _flash(response) == "логин не сохранён: хранилище паролей недоступно"
+    assert _flash(response) == "логин не сохранён: сохранённые пароли и токены не открываются — см. Настройки"
     assert _query(response)["credential_topic"] == "t1"
     assert not encrypted_secrets_path().exists()
 
@@ -719,7 +719,7 @@ def test_site_undo_with_invalid_secret_snapshot_is_refused(client, snapshot):
     response = client.post("/undo", follow_redirects=False)
 
     assert _path(response) == "/sites"
-    assert _flash(response) == "не удалось вернуть сохранённые пароли"
+    assert _flash(response) == "не удалось вернуть сохранённые пароли и токены"
     assert "ghost" not in load_config()["trackers"]
     assert load_secrets() == {}
 
@@ -763,10 +763,15 @@ def test_settings_undo_restores_scoped_secret_interval_and_flash_ttl(client):
         (
             {"telegram": {"token": "now"}},
             ["a", "b", "c"],
-            "не удалось вернуть сохранённые пароли",
+            "не удалось вернуть сохранённые пароли и токены",
             {"telegram": {"token": "now"}},
         ),
-        ({"clients": "broken"}, ["clients", "main"], "не удалось вернуть сохранённые пароли", {"clients": "broken"}),
+        (
+            {"clients": "broken"},
+            ["clients", "main"],
+            "не удалось вернуть сохранённые пароли и токены",
+            {"clients": "broken"},
+        ),
     ],
     ids=["missing-key-is-removed", "empty-scope", "scope-too-deep", "target-not-a-mapping"],
 )
@@ -966,7 +971,7 @@ def test_topic_check_blocked_by_secret_store(monkeypatch, client):
 
     response = client.post("/topics/t1/check", follow_redirects=False)
 
-    assert _flash(response) == "проверка заблокирована: хранилище паролей недоступно"
+    assert _flash(response) == "проверка заблокирована: сохранённые пароли и токены не открываются — см. Настройки"
 
 
 @pytest.mark.parametrize(
@@ -1015,7 +1020,10 @@ def test_check_all_preview_counts_results(monkeypatch, client):
 @pytest.mark.parametrize(
     ("error", "flash"),
     [
-        (SecretStoreError("secret gate"), "проверка заблокирована: хранилище паролей недоступно"),
+        (
+            SecretStoreError("secret gate"),
+            "проверка заблокирована: сохранённые пароли и токены не открываются — см. Настройки",
+        ),
         (ValueError("bad state"), "проверка не выполнена: ValueError"),
     ],
 )
