@@ -156,7 +156,9 @@ def _read_record(token: str, url: str, client_id: str) -> tuple[bytes, bool, flo
             opened = os.fstat(stream.fileno())
             if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino):
                 raise TowError("content.unavailable")
-            encrypted = stream.read(MAX_RECORD_BYTES + 1)
+            # Its own size plus one byte (a file that grew is refused below): a read of the limit
+            # would allocate 60 MiB for every record, the size of a small torrent's record.
+            encrypted = stream.read(info.st_size + 1)
         if len(encrypted) != info.st_size:
             raise TowError("content.unavailable")
         record = json.loads(master_fernet().decrypt(encrypted, ttl=TTL))
