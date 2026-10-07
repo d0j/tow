@@ -893,11 +893,11 @@ def _main(argv: list[str] | None) -> int:
     from tow.platform import use_private_files
     from tow.store import protect_install_folders
 
-    use_private_files()
-    use_private_temp()
-    if args.cmd != "permissions":  # it reports and repairs them itself
-        protect_install_folders()
     try:
+        use_private_files()
+        use_private_temp()
+        if args.cmd != "permissions":  # it reports and repairs them itself
+            protect_install_folders()
         return command(args)
     except KeyboardInterrupt:
         return EXIT_INTERRUPTED
@@ -913,11 +913,14 @@ def _main(argv: list[str] | None) -> int:
         from tow.store import SecretStoreError, StateVersionError
         from tow.yaml_guard import YamlLimitError
 
-        reason = (
-            str(exc)
-            if isinstance(exc, (ConfigError, SecretStoreError, StateVersionError, YamlLimitError))
-            else t("cli.command_failed")
-        )
+        if isinstance(exc, (ConfigError, SecretStoreError, StateVersionError, YamlLimitError)):
+            reason = str(exc)
+        elif isinstance(exc, OSError) and exc.filename:
+            # A folder TOW cannot write (data\ read-only, a full disk, a missing drive): named,
+            # with the system's own words - a path and an OS message hold no password.
+            reason = t("cli.folder_failed", path=exc.filename, error=exc.strerror or type(exc).__name__)
+        else:
+            reason = t("cli.command_failed")
         if getattr(args, "json", False):  # a script asked for JSON: it gets JSON on failure too
             print(json.dumps({"ok": False, "error": reason}, ensure_ascii=False))
         else:

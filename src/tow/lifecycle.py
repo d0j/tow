@@ -126,7 +126,9 @@ def request_restart(*, reason: str = "settings") -> dict[str, Any]:
 
     if layout.running() is None:
         # A web server started by hand (``tow serve``) has nobody to start it again.
-        return {"ok": False, "error": "TOW does not run as `tow run`: restart it by hand"}
+        from tow.i18n import t
+
+        return {"ok": False, "error": t("settings.service.not_supervised")}
     operation_id = f"restart-{uuid.uuid4().hex[:12]}"
     port = port_of(load_config())
     marker = {
