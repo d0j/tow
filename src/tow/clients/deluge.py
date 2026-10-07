@@ -259,6 +259,13 @@ class DelugeClient(ManagedClient):
         label = PENDING if PENDING in folded else (OWNER if OWNER in folded else "")
         self._call("label.set_torrent", infohash.lower(), label)
 
+    def _keeps_owner_label(self, tags: list[str]) -> None:
+        """Deluge keeps one label per torrent: TOW's would replace the owner's, so a torrent with
+        a label of its own is adopted only when the owner says so (``tow adopt --replace-label``)."""
+        own = [tag for tag in tags if tag.casefold() not in {OWNER, PENDING}]
+        if own:
+            raise self._fail("client.deluge.adopt_has_label", label=own[0])
+
     def _move(self, infohash: str, save_path: str) -> None:
         self._call("core.move_storage", [infohash.lower()], save_path)
 

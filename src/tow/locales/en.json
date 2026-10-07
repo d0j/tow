@@ -283,7 +283,7 @@
     "client_cannot_update": "the chosen torrent client cannot change the file selection safely",
     "link_unavailable_selection": "the torrent file is not available (sign in to the site), and changing the file selection needs it",
     "once_unconfirmed": "torrent client: the one-time topic is not confirmed in the chosen client",
-    "not_owned_partial": "the torrent in the client was not added by TOW — TOW cannot check a partial file selection there",
+    "not_owned_partial": "the torrent in the client was not added by TOW (it has no label tow), so TOW cannot check a partial file selection there — open the topic and choose “Adopt into TOW” (or give it the label tow in the client), or remove it there and TOW adds it again",
     "not_owned_existing": "the torrent is already in the client without the label tow, so TOW cannot manage it — open the topic and choose “Adopt into TOW” (or give it the label tow in the client), or remove it there and TOW adds it again",
     "not_owned_priorities": "the torrent in the client was not added by TOW — its file selection was not changed",
     "migration_unconfirmed": "torrent client: the torrent under its new hash was not confirmed by reading it back",
@@ -307,7 +307,8 @@
     "no_torrent": "the topic has no torrent in the client to adopt — check it first",
     "unsupported": "this torrent client cannot take TOW's mark",
     "missing": "the torrent is not in the torrent client",
-    "unconfirmed": "the torrent client did not keep TOW's mark (read-back)"
+    "unconfirmed": "the torrent client did not keep TOW's mark (read-back)",
+    "topic_changed": "the topic's link or torrent client was changed meanwhile: the torrent now has the label tow but is not recorded as this topic's — remove the label in the client if it is not this topic's"
   },
   "cli": {
     "command_failed": "the command could not be completed; check the settings and try again",
@@ -381,6 +382,7 @@
       "adopt_ids": "topic ids",
       "adopt_all": "every topic whose torrent is in its client without the label tow (listed first)",
       "adopt_yes": "do not ask for confirmation",
+      "adopt_replace_label": "Deluge keeps one label per torrent: replace the owner's own label with tow (without it such a torrent is not adopted)",
       "monitorrent_adopt": "with --apply: also adopt the imported topics whose torrent is already in the client (by the hash Monitorrent kept)",
       "check": "check the topics now (a preview that changes nothing unless --apply)",
       "check_apply": "hand what is found to the torrent client and save the result",
@@ -468,7 +470,10 @@
       "already": "{id}: already TOW's",
       "failed": "{id}: not taken under TOW's management: {error}",
       "busy": "A check is running right now; run the command again in a minute.",
-      "nothing_asked": "Name the topics (their ids) or use --all-unmarked."
+      "nothing_asked": "Name the topics (their ids) or use --all-unmarked.",
+      "unknown": "TOW has no topic {id}.",
+      "unreachable": "The torrent client {client} did not answer: {error}. Its topics were not looked at.",
+      "list_only": "Nothing was changed: with --json, add --yes to adopt the topics listed."
     },
     "bundle": {
       "passphrase": "TOW export passphrase: ",
@@ -595,7 +600,8 @@
       "magnet_v2_only": "Deluge does not support magnet links for BitTorrent v2 only",
       "magnet_timeout": "magnet link data not received in {seconds} s — no peers",
       "magnet_data_mismatch": "the received magnet link data do not match the hash",
-      "not_attached_preview": "Deluge: the Web UI is not connected to the daemon; a preview does not connect it — run a real check or connect it in Deluge's Connection Manager"
+      "not_attached_preview": "Deluge: the Web UI is not connected to the daemon; a preview does not connect it — run a real check or connect it in Deluge's Connection Manager",
+      "adopt_has_label": "the torrent has your label “{label}”, and Deluge keeps one label per torrent: TOW's label tow would replace it — nothing was changed. To replace it, run tow adopt --replace-label with this topic's id"
     }
   },
   "common": {
