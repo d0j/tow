@@ -111,9 +111,24 @@ def test_pending_secret_undo_cleanup_still_runs():
     state["secret_undo_cleanup_pending"] = {"reference": "settings-v1", "attempts": 0}
     save_state(state)
 
-    assert TestClient(app).get("/healthz").status_code == 200
+    assert TestClient(app).get("/health.json").status_code == 200
 
     assert "secret_undo_cleanup_pending" not in load_state()
+
+
+def test_the_liveness_answer_reads_no_state(monkeypatch):
+    """QA 1.24.1: every /healthz (a monitor polls it) copied the whole state for the pending
+    undo cleanup's pre-check. It still rolls back an interrupted transaction (a journal look),
+    and the next page does the cleanup."""
+    calls = []
+    monkeypatch.setattr("tow.web.services.recover_store_transaction", lambda: calls.append("recovery"))
+    monkeypatch.setattr("tow.web.site_store.secret_undo_cleanup_pending", lambda: pytest.fail("state read"))
+    client = TestClient(app)
+    assert client.get("/healthz").json()["ok"] is True
+    assert calls == ["recovery"]
+    monkeypatch.setattr("tow.web.site_store.secret_undo_cleanup_pending", lambda: calls.append("cleanup") and False)
+    assert client.get("/health.json").status_code == 200
+    assert calls == ["recovery", "recovery", "cleanup"]
 
 
 def test_a_slow_write_does_not_hold_up_pages(monkeypatch):

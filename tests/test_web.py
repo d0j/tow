@@ -276,7 +276,7 @@ def test_http_recovery_precedes_pending_undo_cleanup(monkeypatch):
     monkeypatch.setattr("tow.web.site_store.secret_undo_cleanup_pending", lambda: True)
     c = TestClient(app)
 
-    response = c.get("/healthz")
+    response = c.get("/health.json")
 
     assert response.status_code == 200
     assert calls[:2] == ["recovery", "cleanup"]

@@ -1486,7 +1486,7 @@ def test_pending_secret_undo_cleanup_is_left_alone(client, pending, undo):
         extra["undo"] = {**undo, "ts": iso_now()}
     _seed(**extra)
 
-    assert client.get("/healthz").status_code == 200
+    assert client.get("/health.json").status_code == 200
 
     assert load_state()["secret_undo_cleanup_pending"] == pending
     assert secret_undo_path().exists()
@@ -1495,7 +1495,7 @@ def test_pending_secret_undo_cleanup_is_left_alone(client, pending, undo):
 def test_pending_secret_undo_cleanup_failure_counts_attempts(client):
     _seed(secret_undo_cleanup_pending={"reference": "unknown-ref", "attempts": "garbage"})
 
-    assert client.get("/healthz").status_code == 200
+    assert client.get("/health.json").status_code == 200
 
     pending = load_state()["secret_undo_cleanup_pending"]
     assert pending["attempts"] == 1
@@ -1508,7 +1508,7 @@ def test_pending_secret_undo_cleanup_succeeds(client):
     save_secret_undo({"telegram": {"token": "old"}})
     _seed(secret_undo_cleanup_pending={"reference": "settings-v1", "attempts": 1})
 
-    assert client.get("/healthz").status_code == 200
+    assert client.get("/health.json").status_code == 200
 
     assert "secret_undo_cleanup_pending" not in load_state()
     assert not secret_undo_path().exists()
