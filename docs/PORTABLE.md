@@ -209,7 +209,8 @@ blocks for long.
   along; on Linux the server asks the kernel for SIGTERM when its parent dies
   (`prctl(PR_SET_PDEATHSIG)`, `platform.die_with_parent`); and everywhere `--parent-pid` makes the
   server check every 2 s that the supervisor still runs and stop when it does not (ending the
-  process 15 s later if a request hangs).
+  process 15 s later if a request hangs); on Linux and macOS by its own parent pid changing
+  (re-parented), which a reused pid cannot hide.
 - **Schedule** (`tow.supervisor.schedule`, tested with a fake clock):
   - check every `interval_sec` after the last *scheduled* one: the supervisor's own last start,
     kept in `data/run/schedule.json` (`check_started_at`), so a restart keeps the cadence;
@@ -244,8 +245,8 @@ blocks for long.
   operation on `data/service-restart.json`: stopping → starting → ready/failed; a new server that
   exits three times before it answers is "failed"); `tow stop` and the updater stop TOW. A stop
   lets a running job finish (up to 10 minutes, then it is stopped), then stops the web server and
-  exits 0. SIGTERM (systemd, launchd) and Ctrl+C stop it the same way with a 20-second job limit
-  (all in all about 50 s: `SIGNAL_STOP_BUDGET_SEC`, which systemd's `TimeoutStopSec` and launchd's
+  exits 0. SIGTERM (systemd, launchd), SIGHUP (its terminal closed) and Ctrl+C stop it the same
+  way with a 20-second job limit (all in all about 50 s: `SIGNAL_STOP_BUDGET_SEC`, which systemd's `TimeoutStopSec` and launchd's
   `ExitTimeOut` exceed).
 - **Status and logs.** `data/run/status.json` is rewritten only when something changes (server
   state and pid, restarts, the running job, the next due times, the last wake) — never on a

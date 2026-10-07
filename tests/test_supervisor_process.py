@@ -51,6 +51,41 @@ def test_run_starts_serves_and_stops_on_request(run_env):
     assert "started" in (layout.logs_dir() / "run.log").read_text(encoding="utf-8")
 
 
+def test_closing_the_terminal_of_tow_run_stops_it_cleanly(run_env, monkeypatch):
+    # SIGHUP (Linux, macOS: the terminal of `tow run` closed) ended it at once, leaving its web
+    # server and a running job; it is now a stop like SIGTERM, and both are restored afterwards.
+    import signal
+
+    hangup = getattr(signal, "SIGHUP", 1)
+    monkeypatch.setattr(signal, "SIGHUP", hangup, raising=False)
+    handlers: dict[int, object] = {}
+    installed = []
+
+    def fake_signal(number, handler):
+        installed.append((number, handler))
+        previous = handlers.get(number, signal.SIG_DFL)
+        handlers[number] = handler
+        return previous
+
+    monkeypatch.setattr(signal, "signal", fake_signal)
+    monkeypatch.setattr(signal, "getsignal", lambda number: handlers.get(number, signal.SIG_DFL))
+    world = World(clock=Clock())
+    deps = world.deps()
+    ticks = {"n": 0}
+
+    def sleep(seconds):
+        ticks["n"] += 1
+        world.clock.advance(seconds)
+        if ticks["n"] == 3:
+            handlers[hangup](hangup, None)  # the terminal closes
+
+    deps.sleep = sleep
+    assert run_supervisor(deps) == 0
+    assert world.stopped == [world.servers()[0].pid]  # its web server stopped, not left behind
+    assert {number for number, _ in installed} == {signal.SIGTERM, hangup}
+    assert handlers == {signal.SIGTERM: signal.SIG_DFL, hangup: signal.SIG_DFL}  # restored
+
+
 def test_a_second_run_is_refused_while_one_holds_the_lock(run_env, capsys):
     held = layout.InstanceLock()
     assert held.acquire()
@@ -628,6 +663,22 @@ def test_the_server_stops_when_its_parent_is_gone():
     assert server.should_exit is True
     assert sleeps == [2.0, 2.0, 7.0]  # two polls while it lived, then the grace
     assert exits == [0]
+
+
+def test_on_linux_and_macos_a_reused_parent_pid_does_not_hide_its_end(monkeypatch):
+    # The parent ended and its pid went to a new process: "is 4242 alive" says yes for ever; the
+    # server's own parent pid (re-parented to init / a subreaper) says it is gone.
+    from tow.supervisor.parent import _parent_check
+
+    monkeypatch.setattr("tow.platform.current", lambda: SimpleNamespace(process_alive=lambda pid: True))
+    parent = {"pid": 4242}
+    check = _parent_check(4242, parent=lambda: parent["pid"], windows=False)
+    assert check(4242) is True
+    parent["pid"] = 1  # re-parented: tow run has ended, whatever runs as 4242 now
+    assert check(4242) is False
+    # Started through something in between, or on Windows (the creator's pid stays): asked by pid.
+    assert _parent_check(4242, parent=lambda: 777, windows=False)(4242) is True
+    assert _parent_check(4242, parent=lambda: 4242, windows=True)(4242) is True
 
 
 def test_serve_with_a_parent_watches_it(monkeypatch):
