@@ -678,7 +678,8 @@ def format_event(rec: Mapping[str, Any], *, title_index: Mapping[str, str] | Non
     if len(h) == 40 and re.fullmatch(r"[0-9a-fA-F]{40}", h):
         bits.append(h[:8])
     if rec.get("path"):
-        bits.append(str(rec["path"])[:80])
+        path = str(rec["path"])
+        bits.append(path if len(path) <= 80 else "…" + path[-79:])  # the folder's own name is at the end
     u = scrub_text(str(rec.get("url") or "")).strip()
     if u and not u.startswith(("***",)):
         bits.append(u[:90])
