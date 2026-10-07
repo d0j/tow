@@ -101,8 +101,11 @@ def test_guest_topic_page_logs_in_again_once_and_downloads(site):
             return "<html><a href='login.php?logout=1'>Выход</a><a href='download.php?id=77'>.torrent</a></html>"
         return "<html><title>Show</title><body>Войдите, чтобы скачать</body></html>"
 
+    def download(request: httpx.Request) -> bytes | str:
+        return TORRENT if "bb_session=fresh" in request.headers.get("cookie", "") else "<html>Войдите</html>"
+
     site.pages["/viewtopic.php?t=5"] = topic
-    site.pages["/download.php?id=77"] = TORRENT
+    site.pages["/download.php?id=77"] = download
     blob = _tracker(**PAGE_SPEC).fetch_torrent("https://demo.example/viewtopic.php?t=5", SECRETS, "ua")
     assert blob == TORRENT
     assert site.count("/login.php") == 1

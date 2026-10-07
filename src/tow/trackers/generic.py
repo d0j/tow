@@ -434,7 +434,8 @@ class GenericHttpTracker:
                 hosts, topic_path, secrets, ua, cookies, torrent_only=False, ignore_cool=ignore_cool, persist=persist
             )
             if persist:
-                cookies = self._cookie_jar(load_secrets())
+                # A login during the fetch saved its session: the download goes with it.
+                cookies = self._cookie_jar(load_secrets()) or cookies
             page_html = thttp.html_text(page)
             self._pages[tid] = (time.monotonic(), page_html)
             dlid = self._page_download_id(page_html)
