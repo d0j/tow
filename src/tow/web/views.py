@@ -9,7 +9,7 @@ import threading
 import time
 from collections.abc import Mapping
 from contextlib import suppress
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote, unquote
 
@@ -456,12 +456,15 @@ def topic_progress_summary(topic: Mapping[str, Any], history: Mapping[str, Any])
     }
 
 
+def _epoch_time(value: float) -> str:
+    return format_ui_timestamp(datetime.fromtimestamp(value, UTC).isoformat())
+
+
 def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
     """Night copies: folder, last result, the newest copies; folders of both kinds of copies."""
     from tow.backup_retention import retention_settings
     from tow.config import as_bool
     from tow.locations import LOCATIONS, free_bytes, is_default, resolve
-    from tow.pulse import clock
     from tow.snapshots import list_snapshots, status, status_failed
 
     folders = {}
@@ -495,11 +498,14 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
         "total_size": format_bytes(sum(row["bytes"] for row in copies)),
         "automatic": as_bool(cfg.get("backup_enabled"), True),
         "retention": retention,
-        "last_ok": clock(last_ok) if isinstance(last_ok, (int, float)) else (snapshots[0]["at"] if snapshots else ""),
+        # Written as the list of copies writes them (the year too, in every language).
+        "last_ok": _epoch_time(last_ok)
+        if isinstance(last_ok, (int, float))
+        else (snapshots[0]["at"] if snapshots else ""),
         "failed": status_failed(st),
         "read_error": st.get("read_error") is True,
         "error": str(st.get("last_error") or ""),
-        "error_at": clock(failed_at) if isinstance(failed_at, (int, float)) else "",
+        "error_at": _epoch_time(failed_at) if isinstance(failed_at, (int, float)) else "",
         "cleanup_pending": night_cleanup["pending"] is True,
         "cleanup_read_error": night_cleanup["read_error"],
         "cleanup_unrecorded": night_cleanup["pending"] is None,
