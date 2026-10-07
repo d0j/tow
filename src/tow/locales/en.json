@@ -1621,6 +1621,7 @@
     "skipped": "the password can be set later in Settings → Network access",
     "saved": "password saved",
     "saved_lan": "password saved; access from other devices works after TOW restarts",
+    "already_set": "a password was already set, in another window; this one was not saved. Sign in with that password, or change it here",
     "what": "TOW watches topics on torrent sites. When a topic gets a new version, TOW hands it to your torrent client (qBittorrent, Transmission or Deluge) and can tell you about it in a messenger. TOW itself downloads nothing and does not move files.",
     "next_title": "Next steps",
     "step_client": "Connect your torrent client: Settings → Torrent clients.",
