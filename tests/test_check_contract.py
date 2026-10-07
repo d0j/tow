@@ -1411,6 +1411,36 @@ def test_a_read_back_reads_the_client_once(tmp_path, monkeypatch):
     assert reads(lambda: client_ops.confirm_client_add(client, H, str(tmp_path / "x"))) == (False, 1)
     assert reads(lambda: client_ops.client_owned_by_tow(client, H)) == (True, 1)
     assert reads(lambda: client_ops.confirm_client_add(client, "0" * 40, path)) == (False, 1)
+    assert reads(lambda: client_ops._active_revision_overlap(client, H, ())) == ("", 1)
+    assert reads(lambda: client_ops._active_revision_overlap(client, "0" * 40, ())) == ("", 1)
+
+
+def test_handing_a_torrent_already_there_to_the_client_reads_it_once(monkeypatch):
+    """Whether it is there, an unfinished add of TOW's and TOW's own: one read, not four."""
+    from test_check_pipeline import NEW, OLD, Client, Tracker, _topic, _wire
+
+    from tow.store import save_download_history
+
+    save_download_history({"schema_version": 1, "topics": {}})
+
+    reads: list[str] = []
+
+    class Counting(Client):
+        def has_hash(self, h):
+            raise AssertionError("asked has_hash")
+
+        def inspect_torrent(self, h):
+            reads.append(h)
+            return super().inspect_torrent(h)
+
+    client = Counting()
+    client.put(NEW, "/media/tv", tags=[])
+    save_state({"topics": [_topic(hash=OLD)]})
+    _wire(monkeypatch, {"main": client}, Tracker())
+    row = check.run_check(apply=True, notify=False, how="test")["results"][0]
+    assert load_state()["topics"][0]["last_error_code"] == "check.not_owned_existing"
+    assert row["ok"] is False
+    assert sorted(reads) == [OLD, NEW]  # the previous revision's overlap guard, then the new one
 
 
 @pytest.mark.parametrize(

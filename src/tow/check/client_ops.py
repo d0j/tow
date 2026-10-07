@@ -114,9 +114,9 @@ def await_relocation(
 
 
 def _active_revision_overlap(client: TorrentClientAdapter, old_hash: str, new_files: tuple[Any, ...]) -> str:
-    if not old_hash or not client.has_hash(old_hash):
+    if not old_hash:
         return ""
-    info = client.inspect_torrent(old_hash)
+    info = client.inspect_torrent(old_hash)  # None when the client does not have it: one read
     if not info or not _client_info_matches_hash(info, old_hash):
         return ""
     state = str(info.get("state") or "").casefold()
@@ -241,9 +241,9 @@ def assert_client_can_add(
         raise TowError("check.client_cannot_select")
 
 
-def is_pending_tow_add(topic_client: TorrentClientAdapter, h: str) -> bool:
-    """The torrent is still marked tow-pending: an earlier run added it but did not finish."""
-    existing_info = topic_client.inspect_torrent(h)
+def info_is_pending_tow_add(existing_info: dict[str, Any] | None, h: str) -> bool:
+    """The client's report says the torrent is still marked tow-pending: an earlier run added it
+    but did not finish."""
     existing_tags = {str(tag).strip().casefold() for tag in (existing_info or {}).get("tags") or []}
     return bool(
         existing_info and _client_info_matches_hash(existing_info, h) and {"tow", "tow-pending"}.issubset(existing_tags)
