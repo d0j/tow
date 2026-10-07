@@ -219,12 +219,32 @@ def test_rate_limit_is_waited_out(http):
     assert sleeps == [2.0]
 
 
-def test_retry_after_is_capped(http):
-    set_handler, _, sleeps = http
+def test_a_wait_longer_than_the_cap_is_left_to_the_next_delivery(http):
+    set_handler, seen, sleeps = http
     answers = iter([httpx.Response(429, json={"retry_after": 600}), httpx.Response(204)])
     set_handler(lambda _r: next(answers))
-    notifiers.send_all(DISCORD, "x")
-    assert sleeps == [base.MAX_RETRY_AFTER]
+    ((ok, _reason),) = notifiers.send_all(DISCORD, "x").values()
+    assert not ok
+    assert (len(seen), sleeps) == (1, [])  # no request inside the wait the service asked for
+    assert [item["text"] for item in load_state()["notify_outbox"]["discord"]["items"]] == ["x"]
+
+
+def test_telegram_wait_under_parameters_is_honoured(http):
+    set_handler, seen, sleeps = http
+    answers = iter(
+        [
+            httpx.Response(429, json={"ok": False, "error_code": 429, "parameters": {"retry_after": 30}}),
+            httpx.Response(429, json={"ok": False, "error_code": 429, "parameters": {"retry_after": 2}}),
+            httpx.Response(200, json={"ok": True}),
+        ]
+    )
+    set_handler(lambda _r: next(answers))
+    telegram = {"telegram": {"token": TG_TOKEN, "chat_ids": ["1"]}}
+    ((ok, _reason),) = notifiers.send_all(telegram, "x").values()
+    assert (not ok, len(seen), sleeps) == (True, 1, [])  # 30 s: not waited out inside this delivery
+    ((ok, _reason),) = notifiers.flush(telegram).values()
+    assert ok
+    assert sleeps == [2.0]
 
 
 def test_network_error_is_retried_then_succeeds(http):
@@ -253,10 +273,10 @@ def test_a_huge_messenger_answer_is_not_read_into_memory(http):
             yield b"x" * (1024 * 1024)
 
     set_handler(lambda _r: httpx.Response(200, content=endless()))
-    with pytest.raises(base.DeliveryError):
-        base.request("POST", DISCORD_URL, what="Discord", json={"content": "x"})
-    assert len(seen) == 3  # retried like a broken connection, then given up
-    assert len(read) <= 3 * (base.MAX_RESPONSE_BYTES // (1024 * 1024) + 1)
+    response = base.request("POST", DISCORD_URL, what="Discord", json={"content": "x"})
+    assert (response.status_code, response.content) == (200, b"")  # delivered: the rest is not read
+    assert len(seen) == 1
+    assert len(read) <= base.MAX_RESPONSE_BYTES // (1024 * 1024) + 1
 
 
 def test_a_normal_answer_is_read_whole(http):
@@ -264,6 +284,78 @@ def test_a_normal_answer_is_read_whole(http):
     set_handler(lambda _r: httpx.Response(200, json={"ok": True, "result": {"message_id": 1}}))
     response = base.request("POST", DISCORD_URL, what="Discord", json={"content": "x"})
     assert base.json_or_empty(response) == {"ok": True, "result": {"message_id": 1}}
+
+
+# --- a delivered message is never sent again by TOW itself ----------------------------------
+
+
+def test_delivered_message_with_an_oversized_answer_leaves_the_queue(http):
+    set_handler, seen, _ = http
+    big = b"{" + b" " * (base.MAX_RESPONSE_BYTES + 10) + b"}"
+    set_handler(lambda _r: httpx.Response(200, content=big))
+    assert notifiers.send_all(DISCORD, "серия 1") == {"discord": (True, "")}
+    notifiers.flush(DISCORD)
+    assert len(seen) == 1
+    assert "notify_outbox" not in load_state()
+
+
+def test_telegram_200_with_an_unreadable_answer_is_delivered(http):
+    set_handler, seen, _ = http
+    set_handler(lambda _r: httpx.Response(200, content=b"\xff" * 10))
+    telegram = {"telegram": {"token": TG_TOKEN, "chat_ids": ["1"]}}
+    assert list(notifiers.send_all(telegram, "x").values()) == [(True, "")]
+    assert len(seen) == 1
+
+
+def test_no_answer_after_sending_is_not_sent_again_at_once(http):
+    """The service got the POST but its answer timed out: it may have arrived. TOW does not post
+    it again within this delivery; it keeps it, says why, and the next delivery sends it once."""
+    set_handler, seen, sleeps = http
+
+    def accepted_then_slow(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("answer too slow", request=request)
+
+    set_handler(accepted_then_slow)
+    ((ok, reason),) = notifiers.send_all(DISCORD, "серия 1").values()
+    assert not ok
+    assert "возможно, оно дошло" in reason
+    assert (len(seen), sleeps) == (1, [])
+    assert [item["text"] for item in load_state()["notify_outbox"]["discord"]["items"]] == ["серия 1"]
+    set_handler(lambda _r: httpx.Response(204))
+    assert notifiers.flush(DISCORD) == {"discord": (True, "")}
+    assert len(seen) == 2
+
+
+def test_one_delivery_ends_well_inside_the_queue_lease(http, monkeypatch):
+    """A slow service cannot keep one message's retries going past the lease, after which another
+    dispatcher would take the message over and send it as well."""
+    from tow.notifiers import outbox
+
+    set_handler, seen, sleeps = http
+    clock = [0.0]
+    monkeypatch.setattr(base.time, "monotonic", lambda: clock[0])
+
+    def slow_503(_request: httpx.Request) -> httpx.Response:
+        clock[0] += 40.0  # each attempt takes 40 s
+        return httpx.Response(503)
+
+    set_handler(slow_503)
+    with pytest.raises(base.DeliveryError):
+        base.request("POST", DISCORD_URL, what="Discord", json={"content": "x"})
+    assert (len(seen), sleeps) == (2, [1.0])  # a third attempt would end after the budget
+    # The last attempt starts within the budget: connecting, writing and the first byte take at
+    # most 10 s each (http_client's timeout), the body ANSWER_SECONDS.
+    assert base.REQUEST_BUDGET_SEC + 3 * 10.0 + base.ANSWER_SECONDS < outbox.LEASE_SEC
+
+
+def test_telegram_parts_are_measured_as_telegram_counts():
+    from tow.notifiers import telegram
+    from tow.notifiers.outbox import parts_for
+
+    parts = parts_for(telegram, "\U0001f3ac" * 3000)
+    assert len(parts) == 2
+    assert all(len(part.encode("utf-16-le")) // 2 <= 4096 for part in parts)
+    assert "".join(parts) == "\U0001f3ac" * 3000
 
 
 # --- the queue -----------------------------------------------------------------------------

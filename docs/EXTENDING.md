@@ -60,11 +60,12 @@ Every client follows the same read-back contract. Transmission and Deluge use th
 A messenger module declares `KIND`, `TITLE`, `ORDER`, `MAX_LEN`, `STEPS`, `NOTE`, `FIELDS` (each a `Field`: `text`,
 `secret` or `list`, with a placeholder and an error key) and `send(settings, text)`, which raises `DeliveryError`
 with a reason that holds no tokens or addresses. Optional: `STORAGE`, `targets(settings)`, `MAX_BYTES`,
-`CHUNK_PAUSE`, `suggestion(field)` — see the `Notifier` docstring.
+`MAX_UTF16`, `CHUNK_PAUSE`, `suggestion(field)` — see the `Notifier` docstring.
 
 Everything else is shared: the settings card, encrypted storage, **Check** and **Disconnect** with undo, the bell
-in the header, and delivery (`notifiers/outbox.py`): retries on network errors, 429 (honouring `Retry-After`) and
-5xx; a per-channel queue of up to 50 messages; long messages split by lines; one channel failing never blocks the
+in the header, and delivery (`notifiers/outbox.py`): retries on a refused connection, 429 (honouring `Retry-After`)
+and 5xx, never after a request that went out without an answer (it may have arrived; it waits in the queue);
+a 2xx answer is a delivered message, whatever its body; a per-channel queue of up to 50 messages; long messages split by lines; one channel failing never blocks the
 others. Use `notifiers.base.request()` for HTTP. Tests replace HTTP; no test talks to a real service.
 
 ## Site
