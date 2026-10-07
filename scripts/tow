@@ -71,6 +71,21 @@ if [ "${1:-}" = setup ]; then
     if [ -e .venv/bin/python ] && ! .venv/bin/python -c "$inside" >/dev/null 2>&1; then
         rm -rf .venv
     fi
+    # A copied install (docs/PORTABLE.md 3) may hold uv's minor-version link
+    # runtime/python/cpython-X.Y-* as a plain folder (a copy that followed links, a stick without
+    # links): uv cannot make the link again. Only that entry, only a plain folder, only here.
+    for entry in "$TOW_ROOT"/runtime/python/cpython-*; do
+        version=${entry##*/cpython-}
+        version=${version%%-*}
+        case $version in
+            *.*.* | *[!0-9.]*) continue ;;
+            *.*) ;;
+            *) continue ;;
+        esac
+        if [ -d "$entry" ] && [ ! -L "$entry" ]; then
+            rm -rf -- "$entry"
+        fi
+    done
     # The Python of .python-version, into runtime/python; no copies on PATH.
     "$uv" python install --no-bin
     "$uv" sync --frozen --no-dev
