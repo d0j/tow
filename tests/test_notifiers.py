@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from helpers import flash_of
 
 from tow import notifiers
+from tow.check import notices as check_notices
 from tow.notifiers import base
 from tow.notifiers.outbox import chunks
 from tow.store import load_secrets, load_state, save_secrets
@@ -900,7 +901,7 @@ def test_a_dispatcher_stopped_after_the_hand_over_loses_nothing_and_repeats_noth
 
 
 def test_a_check_delivery_is_audited_per_message(http, monkeypatch):
-    from tow import check, delivery
+    from tow import delivery
     from tow.store import save_state
 
     set_handler, seen, _ = http
@@ -908,9 +909,11 @@ def test_a_check_delivery_is_audited_per_message(http, monkeypatch):
     save_secrets(DISCORD)
     save_state({"notify_pending": _pending("серия 1", "серия 2")})
     logged = []
-    monkeypatch.setattr(check, "log_event", lambda kind, **fields: logged.append((kind, fields.get("operation_id"))))
+    monkeypatch.setattr(
+        check_notices, "log_event", lambda kind, **fields: logged.append((kind, fields.get("operation_id")))
+    )
 
-    delivery.dispatch(lambda **kwargs: check._audited_send(DISCORD, **kwargs))
+    delivery.dispatch(lambda **kwargs: check_notices._audited_send(DISCORD, **kwargs))
 
     assert len(seen) == 1  # both went out together, once
     assert [entry for entry in logged if entry[0] == "bot_delivery_succeeded"] == [

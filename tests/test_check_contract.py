@@ -6,6 +6,7 @@ import pytest
 
 from tow import check, check_transaction
 from tow.check import client_ops
+from tow.check import notices as check_notices
 from tow.check import rows as check_rows
 from tow.check import topic as topic_step
 from tow.notify import event_text
@@ -567,7 +568,7 @@ def test_check_aggregates_file_notifications_per_topic(monkeypatch):
     )
     sent = []
     monkeypatch.setattr(
-        check,
+        check_notices,
         "_audited_send",
         lambda secrets, *, text, operation_id, topic=None, how="auto": sent.append(text.split("\n")[0]) or True,
     )
@@ -600,7 +601,7 @@ def test_dry_run_is_preview_without_authoritative_writes(monkeypatch, tmp_path: 
     client = FakeClient()
     tracker = _wire_fake_check(monkeypatch, client)
     log_calls = []
-    for module in (check, topic_step):
+    for module in (check, topic_step, check_notices):
         monkeypatch.setattr(module, "log_event", lambda *args, **kwargs: log_calls.append((args, kwargs)))
     monkeypatch.setattr(check, "save_state", lambda state: (_ for _ in ()).throw(AssertionError("dry-run saved state")))
     monkeypatch.setattr(
@@ -807,7 +808,7 @@ def test_notification_is_not_sent_before_state_history_commit(monkeypatch):
     )
     deliveries = []
     logged = []
-    monkeypatch.setattr(check, "_audited_send", lambda *args, **kwargs: deliveries.append(kwargs) or True)
+    monkeypatch.setattr(check_notices, "_audited_send", lambda *args, **kwargs: deliveries.append(kwargs) or True)
     monkeypatch.setattr(check, "log_event", lambda kind, **kwargs: logged.append(kind))
     monkeypatch.setattr(
         check,
@@ -838,7 +839,9 @@ def test_an_added_message_lost_with_a_failed_commit_is_sent_by_the_next_run(monk
 
     monkeypatch.setattr(check, "save_state", real_save)
     sent = []
-    monkeypatch.setattr(check, "_audited_send", lambda _s, *, text, **_k: sent.append(text.split("\n")[0]) or True)
+    monkeypatch.setattr(
+        check_notices, "_audited_send", lambda _s, *, text, **_k: sent.append(text.split("\n")[0]) or True
+    )
     out = check.run_check(apply=True, notify=True, how="test")
     assert out["results"][0]["added"] is True
     assert len(sent) == 1
@@ -1237,7 +1240,7 @@ def test_qbit_down_notification_is_sent_only_after_state_commit(monkeypatch):
 
     monkeypatch.setattr(check, "save_state", committed)
     monkeypatch.setattr(
-        check,
+        check_notices,
         "_audited_send",
         lambda *_args, **_kwargs: order.append("send") or True,
     )
@@ -1261,7 +1264,7 @@ def test_repeated_qbit_down_notification_is_suppressed_until_recovery(monkeypatc
     )
     sent = []
     monkeypatch.setattr(
-        check,
+        check_notices,
         "_audited_send",
         lambda *_args, **_kwargs: sent.append(True) or True,
     )
@@ -1655,7 +1658,7 @@ def _capture_sends(monkeypatch):
     sent: list[str] = []
     # First line only: the topic link (G4) follows on its own line.
     monkeypatch.setattr(
-        check, "_audited_send", lambda _secrets, *, text, **_kwargs: sent.append(text.split("\n")[0]) or True
+        check_notices, "_audited_send", lambda _secrets, *, text, **_kwargs: sent.append(text.split("\n")[0]) or True
     )
     return sent
 

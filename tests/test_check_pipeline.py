@@ -303,7 +303,7 @@ def _notified(monkeypatch) -> list[tuple[Any, Any]]:
         return real(self, topic, **kw)
 
     monkeypatch.setattr(check.NotificationBatch, "queue", spy)
-    monkeypatch.setattr(check, "_flush_notifications", lambda *a, **k: None)
+    monkeypatch.setattr(check, "flush_notifications", lambda *a, **k: None)
     return seen
 
 
