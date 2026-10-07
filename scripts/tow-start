@@ -18,7 +18,24 @@ app=$(dirname -- "$scripts")
 root=$(dirname -- "$app")
 
 # An update cut off while it replaced the code leaves its record: app/ may hold half of the new code.
-if [ -f "$root/.update-switch.json" ]; then
+# The rule of `tow run` (tow.supervisor.layout.interrupted_update): not when the record says the
+# switch is finished (accepted, or the previous code and data restored), nor while an update holds
+# .update.lock (it starts TOW itself; flock, or perl where there is no flock, as on macOS).
+interrupted() {
+    [ -f "$root/.update-switch.json" ] || return 1
+    if grep -Eq '"phase": *"accepted"|"restored": *true' "$root/.update-switch.json" 2>/dev/null; then
+        return 1
+    fi
+    [ -f "$root/.update.lock" ] || return 0
+    if command -v flock >/dev/null 2>&1; then
+        flock -n "$root/.update.lock" true 2>/dev/null || return 1
+    elif command -v perl >/dev/null 2>&1; then
+        perl -MFcntl=:flock -e 'open(my $f, "<", $ARGV[0]) or exit 0; exit(flock($f, LOCK_EX | LOCK_NB) ? 0 : 1)' \
+            "$root/.update.lock" 2>/dev/null || return 1
+    fi
+    return 0
+}
+if interrupted; then
     echo "TOW was not started: an update was cut off while it replaced the code in $root. Run the update there again (update-tow, or \"Update TOW.command\" on macOS): it puts the previous version back first." >&2
     exit 3
 fi

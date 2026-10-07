@@ -434,9 +434,11 @@ same steps, with the code from the release instead of git.
   by entry, so a terminal whose current folder is `app` does not block it - then `uv sync`
   builds a new `app/.venv` (online; the cache has the old wheels). A switch journal in
   `<TOW>/.update-switch.json` lets the next update restore the old code after a hard process
-  interruption. While that record is there and no update holds `.update.lock`, `tow run`,
-  `tow start` and the start files refuse to start TOW (`app/` may hold half of the new code)
-  and say to run the update again. Ctrl+C, Ctrl+Break or a closed terminal do not cut the
+  interruption. While that record is there, does not say the switch is finished (`accepted`
+  or `restored`) and no update holds `.update.lock`, `tow run`, `tow start` and the start
+  files refuse to start TOW (`app/` may hold half of the new code) and say to run the update
+  again; the start files read the record and the lock with PowerShell, or with grep and
+  `flock` (`perl` where there is none), since the code in `app/` may not run. Ctrl+C, Ctrl+Break or a closed terminal do not cut the
   switch off: it finishes or rolls back first. The updater is copied to `<TOW>/runtime/update.py` before moving files so the
   launchers can run it even if `app/scripts` is temporarily absent. A rollback moves back the
   entries recorded on disk (the failed code goes to `app.failed/` and is removed), so the old
