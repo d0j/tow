@@ -8,8 +8,10 @@ import json
 import os
 import re
 import stat
+import threading
 import time
 import uuid
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -97,6 +99,34 @@ def read(token: str, url: str, client_id: str) -> bytes:
     return _read(token, url, client_id)[0]
 
 
+# The parsed torrent of the last few records: every rule change of the content picker resolves
+# against the same prepared torrent, and decrypting and parsing it (up to 60 MB) each time cost
+# a second or more. An entry ends a little before its record does (TTL from its creation).
+_PARSED: OrderedDict[str, tuple[str, str, float, TorrentMetadata]] = OrderedDict()
+_PARSED_MAX = 8
+_PARSED_LOCK = threading.Lock()
+
+
+def metadata(token: str, url: str, client_id: str) -> TorrentMetadata:
+    """The prepared torrent of ``token``, parsed (``read`` and ``parse_torrent_metadata``)."""
+    now = time.time()
+    with _PARSED_LOCK:
+        for key in [key for key, entry in _PARSED.items() if entry[2] <= now]:
+            del _PARSED[key]
+        hit = _PARSED.get(token)
+        if hit is not None:
+            if (hit[0], hit[1]) != (url, client_id):
+                raise TowError("content.changed")
+            _PARSED.move_to_end(token)
+            return hit[3]
+    _blob, _from_site, created, parsed = _read_record(token, url, client_id)
+    with _PARSED_LOCK:
+        _PARSED[token] = (url, client_id, created + TTL - 5, parsed)
+        while len(_PARSED) > _PARSED_MAX:
+            _PARSED.popitem(last=False)
+    return parsed
+
+
 def site_revision(token: str, url: str, client_id: str) -> bytes | None:
     """A new topic's first revision, when the site itself provided the prepared bytes.
 
@@ -108,6 +138,13 @@ def site_revision(token: str, url: str, client_id: str) -> bytes | None:
 
 
 def _read(token: str, url: str, client_id: str) -> tuple[bytes, bool]:
+    blob, from_site, _created, _parsed = _read_record(token, url, client_id)
+    return blob, from_site
+
+
+def _read_record(token: str, url: str, client_id: str) -> tuple[bytes, bool, float, TorrentMetadata]:
+    """(the torrent, whether the site provided it, when the record was written, the torrent
+    parsed - which also proves it is one)."""
     if not re.fullmatch(r"[0-9a-f]{32}", token):
         raise TowError("content.expired")
     try:
@@ -130,8 +167,7 @@ def _read(token: str, url: str, client_id: str) -> tuple[bytes, bool]:
         blob = base64.b64decode(record["blob"], validate=True)
         if len(blob) > MAX_TORRENT_BYTES:
             raise TowError("content.too_large")
-        parse_torrent_metadata(blob)
-        return blob, record.get("source") == "site"
+        return blob, record.get("source") == "site", info.st_mtime, parse_torrent_metadata(blob)
     except (OSError, InvalidToken, ValueError, KeyError, TypeError) as exc:
         raise TowError("content.expired") from exc
 

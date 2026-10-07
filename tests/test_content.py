@@ -506,6 +506,7 @@ def test_every_content_boundary_hides_unexpected_exception_text(monkeypatch, end
         raise kind("private path and tracker credential")
 
     monkeypatch.setattr(services, "read_content", fail)
+    monkeypatch.setattr(services, "content_metadata", fail)
     monkeypatch.setattr(services, "prepare_content", fail)
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
     response = client.post(
@@ -529,6 +530,7 @@ def test_content_errors_render_catalog_instead_of_exception_string(monkeypatch, 
         raise DiagnosticError("content.changed")
 
     monkeypatch.setattr(services, "read_content", fail)
+    monkeypatch.setattr(services, "content_metadata", fail)
     monkeypatch.setattr(services, "prepare_content", fail)
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
     response = client.post(
@@ -582,6 +584,32 @@ def test_choose_files_is_offered_without_script_only_to_keep_a_manual_selection(
         select = page.select_one(f"#edit-selection-mode-{tid}")
         assert bool(select.select('option[value="exact"][selected]')) is offered
         assert select["data-exact-option"]
+
+
+def test_rule_changes_decrypt_and_parse_the_prepared_torrent_once(monkeypatch):
+    """QA 1.24.1: every rule change of the picker (/content/resolve) decrypted and parsed the
+    prepared torrent twice. It is now parsed once per record, kept for a few records, and gone
+    with its record's lifetime."""
+    import tow.content
+
+    reads = []
+    real = content._read_record
+    monkeypatch.setattr(content, "_read_record", lambda *args: reads.append(args) or real(*args))
+    monkeypatch.setattr(content, "_PARSED", tow.content.OrderedDict())
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    token = content.prepare(blob(), URL, "main")["token"]
+    for mode, value in (("all", ""), ("files", "*.mkv"), ("all", "")):
+        response = client.post(
+            "/content/resolve", data={"token": token, "url": URL, "client_id": "main", "mode": mode, "value": value}
+        )
+        assert response.status_code == 200, response.text
+    assert len(reads) == 1
+    other = client.post("/content/resolve", data={"token": token, "url": URL, "client_id": "other", "mode": "all"})
+    assert other.json()["code"] == "content.changed"  # a cached torrent is still only its own link's
+    monkeypatch.setattr(content.time, "time", lambda: 10**10)  # the record's lifetime is over
+    expired = client.post("/content/resolve", data={"token": token, "url": URL, "client_id": "main", "mode": "all"})
+    assert expired.json()["code"] == "content.expired"
+    assert len(content._PARSED) == 0
 
 
 def test_add_and_edit_read_the_prepared_torrent_once(monkeypatch):
