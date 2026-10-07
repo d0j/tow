@@ -735,9 +735,15 @@ def _client_unreachable(run: Any, client_id: str) -> TowError:
     return TowError("check.client_unreachable", reason=reason)
 
 
-def _withdrawn_meanwhile(topic: Topic, row: dict[str, Any], old: str) -> bool:
-    """The owner paused or deleted the topic after this run started (its copy is from the
-    start): look at the state now, right before the client is changed, and skip it then."""
+def _client_marks(topic: Topic) -> tuple[str, ...]:
+    """What the client is changed with: the folder, the client and the file selection."""
+    return tuple(repr(topic.get(key)) for key in ("save_path", "client_id", "selection"))
+
+
+def _withdrawn_meanwhile(topic: Topic, row: dict[str, Any], old: str, started: tuple[str, ...] | None) -> bool:
+    """The owner paused or deleted the topic, or changed its folder, client or file selection,
+    after this run started (its copy is from the start): look at the state now, right before
+    the client is changed, and skip it then - the next check works with what is saved."""
     try:
         current = next(
             (t for t in load_state(quarantine=False).get("topics") or [] if str(t.get("id")) == str(topic.get("id"))),
@@ -745,9 +751,16 @@ def _withdrawn_meanwhile(topic: Topic, row: dict[str, Any], old: str) -> bool:
         )
     except StoreCorruptionError:
         return False  # the commit will fail closed on its own
-    if current is not None and not current.get("paused"):
+    edited = current is not None and started is not None and _client_marks(current) != started
+    if current is not None and not current.get("paused") and not edited:
         return False
-    key = "check.deleted_meanwhile" if current is None else "check.paused_meanwhile"
+    key = (
+        "check.deleted_meanwhile"
+        if current is None
+        else "check.paused_meanwhile"
+        if current.get("paused")
+        else "check.edited_meanwhile"
+    )
     row.update({"ok": True, "hash": old, "changed": False, "status": "skipped", "skipped": t(key, owner_language())})
     return True
 
@@ -1106,6 +1119,7 @@ class _TopicCheck:
     client_id: str
     client: TorrentClientAdapter | None  # None: the client did not answer this run
     operation_id: str | None = None  # set once a client operation has started
+    started: tuple[str, ...] | None = None  # the topic's _client_marks when its check began
 
 
 class _Fetched(NamedTuple):
@@ -1127,11 +1141,12 @@ def _check_topic(topic: Topic, run: _CheckRun) -> CheckRow:
     if _skip_row(topic, row, tr, old=old, quota=run.quota, state=run.state, how=run.how, apply=run.apply):
         return row
     assert tr is not None  # _skip_row handled "no tracker"
+    started = _client_marks(topic)
     client_id, topic_client = run.get_client_for(topic)
     topic["client_id"] = client_id
     row["client_id"] = client_id
     row["client_kind"] = topic_client.client_kind if topic_client is not None else None
-    work = _TopicCheck(topic, run, tr, url, row, old, client_id, topic_client)
+    work = _TopicCheck(topic, run, tr, url, row, old, client_id, topic_client, started=started)
     try:
         _check_revision(work)
     except TorrentPathConflictError:
@@ -1185,7 +1200,7 @@ def _check_revision(work: _TopicCheck) -> None:
         updates_selection=needs_selection_update,
     )
     if run.apply and (h != old or needs_selection_update):
-        if _withdrawn_meanwhile(topic, row, old):
+        if _withdrawn_meanwhile(topic, row, old, work.started):
             return
         _apply_revision(
             work,

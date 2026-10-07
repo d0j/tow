@@ -83,11 +83,11 @@ def test_a_selection_edit_during_the_check_reaches_the_client_next_time(monkeypa
     new = {"mode": "episodes", "value": "1-3"}
     # No hash yet, so the edit form sets no selection_dirty: only `selection` changes.
     _during_fetch(monkeypatch, tracker, lambda topic: topic.update(selection=new))
-    check.run_check(apply=True, notify=False)
+    out = check.run_check(apply=True, notify=False)
     topic = load_state()["topics"][0]
-    assert topic["hash"] == "HASH-NEW"  # added with the selection the check started with...
-    assert topic["selection"] == new  # ...the owner's selection is kept...
-    assert topic["selection_dirty"] is True  # ...and applied by the next check
+    assert not topic.get("hash")  # nothing added with the selection the check started with...
+    assert out["results"][0]["status"] == "skipped"  # ...the next check adds it...
+    assert topic["selection"] == new  # ...with the owner's selection
 
 
 def test_an_undo_of_a_selection_edit_during_the_check_is_not_lost(monkeypatch):
@@ -110,9 +110,8 @@ def test_an_undo_of_a_selection_edit_during_the_check_is_not_lost(monkeypatch):
     tracker.fetch_torrent = fetch
     check.run_check(apply=True, notify=False)
     topic = load_state()["topics"][0]
-    assert topic["hash"] == "HASH-NEW"  # added with "all", the selection the check started with
-    assert topic["selection"] == {"mode": "episodes", "value": "1-3"}
-    assert topic["selection_dirty"] is True
+    assert not topic.get("hash")  # not added with "all", the selection the check started with
+    assert topic["selection"] == {"mode": "episodes", "value": "1-3"}  # the next check uses this one
 
 
 def test_a_move_started_during_the_check_is_kept(monkeypatch):

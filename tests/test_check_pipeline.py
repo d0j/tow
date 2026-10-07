@@ -134,6 +134,65 @@ def test_torrent_with_the_tow_mark_already_there_is_accepted(monkeypatch, stores
     assert not load_state()["topics"][0].get("last_error")
 
 
+# --- owner edits made while the check runs -------------------------------------------------------
+
+
+def _edit_saved_topic(**changes: Any) -> Any:
+    from tow.store import persistence_lock
+
+    def edit() -> None:
+        with persistence_lock():
+            state = load_state()
+            state["topics"][0].update(changes)
+            save_state(state)
+
+    return edit
+
+
+def test_folder_moved_during_the_check_is_left_to_the_next_check(monkeypatch, stores):
+    """The owner moves the topic to /media/new while the check fetches: the new revision went
+    to /media/old while the saved topic said /media/new."""
+    save_state({"topics": [_topic(hash=OLD, save_path="/media/old")]})
+    client = Client()
+    client.put(OLD, "/media/old", tags=["tow"])
+    moved = _edit_saved_topic(save_path="/media/new", move_pending={"from": "/media/old", "to": "/media/new"})
+    _wire(monkeypatch, {"main": client}, Tracker(during_fetch=moved))
+    row = check.run_check(apply=True, notify=False, how="test")["results"][0]
+    assert client.adds == []
+    assert row["status"] == "skipped"
+    assert row["skipped"].startswith("во время проверки изменились папка")
+    saved = load_state()["topics"][0]
+    assert (saved["hash"], saved["save_path"]) == (OLD, "/media/new")
+    # The next check adds the new revision where the topic now says.
+    _wire(monkeypatch, {"main": client}, Tracker())
+    check.run_check(apply=True, notify=False, how="test")
+    assert client.adds == [(NEW, "/media/new")]
+
+
+def test_client_switched_during_the_first_check_is_left_to_the_next_check(monkeypatch, stores):
+    save_state({"topics": [_topic(hash=None)]})
+    main, second = Client("main"), Client("second")
+    _wire(monkeypatch, {"main": main, "second": second}, Tracker(during_fetch=_edit_saved_topic(client_id="second")))
+    check.run_check(apply=True, notify=False, how="test")
+    saved = load_state()["topics"][0]
+    assert main.adds == []
+    assert (saved["client_id"], saved.get("hash")) == ("second", None)
+    _wire(monkeypatch, {"main": main, "second": second}, Tracker())
+    check.run_check(apply=True, notify=False, how="test")
+    assert (main.adds, second.adds) == ([], [(NEW, "/media/tv")])
+    assert load_state()["topics"][0]["hash"] == NEW
+
+
+def test_selection_changed_during_the_check_is_left_to_the_next_check(monkeypatch, stores):
+    save_state({"topics": [_topic(hash=None)]})
+    client = Client()
+    changed = _edit_saved_topic(selection={"mode": "files", "value": "*.mkv"}, selection_dirty=True)
+    _wire(monkeypatch, {"main": client}, Tracker(during_fetch=changed))
+    check.run_check(apply=True, notify=False, how="test")
+    assert client.adds == []
+    assert load_state()["topics"][0]["selection"] == {"mode": "files", "value": "*.mkv"}
+
+
 # --- when the owner hears of an error ----------------------------------------------------------
 
 
