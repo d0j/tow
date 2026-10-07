@@ -281,9 +281,10 @@ def test_the_add_button_shows_a_busy_state_while_the_topic_is_checked(client):
     assert button is not None
     assert button.group(1) == "Проверка…"
     assert '<p class="field-hint busy-note" data-busy-note role="status" hidden>' in page
-    submit = JS[JS.index('document.addEventListener("submit"') :]
-    assert 'b.setAttribute("aria-busy", "true")' in submit
-    assert 'form.setAttribute("aria-busy", "true")' in submit
+    busy = JS[JS.index("const showBusy") : JS.index('document.addEventListener("submit"')]
+    assert 'b.setAttribute("aria-busy", "true")' in busy
+    assert 'form.setAttribute("aria-busy", "true")' in busy
+    assert "showBusy(form, b);" in JS[JS.index('document.addEventListener("submit"') :]
     # A failed request gives the button back.
     failure = JS[JS.index("} catch (error) {") : JS.index('document.addEventListener("submit"')]
     assert 'submitter?.removeAttribute("aria-busy")' in failure
