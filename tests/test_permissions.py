@@ -6,6 +6,7 @@ each folder's owner and permissions in a dictionary."""
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -13,6 +14,7 @@ import pytest
 
 from tow import cli, permissions, platform
 from tow.i18n import t
+from tow.paths import launcher
 from tow.platform import windows
 from tow.platform.windows import WindowsBackend
 
@@ -43,7 +45,7 @@ class FakeAcl:
             dacl = "PAI" + "".join(f"(A;OICI;FA;;;{sid})" for sid in sids)
             inherited = "AI" + "".join(f"(A;OICIID;FA;;;{sid})" for sid in sids)
             for other, text in self.sddl.items():
-                if other.startswith(path + "\\") and "D:P" not in text:
+                if other != path and Path(other).is_relative_to(path) and "D:P" not in text:
                     self.sddl[other] = text.split("D:")[0] + "D:" + inherited
         self.sddl[path] = f"O:{owner}D:{dacl}"
         return "Successfully processed 1 files; Failed processing 0 files"
@@ -85,8 +87,10 @@ def test_status_says_who_owns_the_open_folders_and_what_to_run(install, capsys):
         t("permissions.needs_admin", owner="BUILTIN\\Administrators", command=permissions.fix_command(admin=True))
         in out
     )
-    assert permissions.fix_command(admin=True).startswith(f'"{root}\\')
-    assert permissions.fix_command(admin=True).endswith('" permissions fix')
+    # The launcher of this install, quoted, inside its root (whatever separator the tests' OS uses).
+    assert permissions.fix_command(admin=True) == f'"{root / launcher(windows=True)}" permissions fix'
+    assert permissions.fix_command(admin=True).startswith(f'"{root}{os.sep}')
+    assert launcher(windows=True).endswith("tow.cmd")
     assert acl.calls == []  # a status changes nothing, and the start-up repair is not run for it
 
 
