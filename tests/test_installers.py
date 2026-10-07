@@ -293,7 +293,21 @@ def test_install_ps1_refuses_foreign_data_folder_even_with_purge(tmp_path):
     )
     assert done.returncode != 0
     assert "no TOW install" in done.stderr
+    # A sentence, not a PowerShell error record (QA: "At ...install.ps1:72 char:...", CategoryInfo).
+    assert done.stderr.strip().startswith("TOW: no TOW install in ")
+    assert "CategoryInfo" not in done.stderr
+    assert "char:" not in done.stderr
     assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+def test_install_ps1_prints_a_runnable_autostart_hint_and_the_real_port():
+    text = PS1.read_text(encoding="utf-8")
+    # A quoted path alone is only a string in PowerShell: `& ` runs it.
+    assert 'Write-Host "  Autostart: & `"$launcher`" autostart on"' in text
+    # A reinstall around kept data shows the port of its config.yaml, not 8787 whatever it says.
+    assert "'(?m)^port:\\s*(\\d+)\\s*$'" in text
+    assert '$page = "http://127.0.0.1:$shown"' in text
+    assert "if ($PSCommandPath) { exit 1 }" in text  # a file run fails; `irm | iex` keeps its window
 
 
 # --- the release workflow ----------------------------------------------------------------------

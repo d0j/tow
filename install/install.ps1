@@ -236,14 +236,30 @@ function Install-Tow {
         & $launcher autostart on
         if ($LASTEXITCODE -ne 0) { Say 'autostart is not on (the reason is above)' }
     }
-    $page = "http://127.0.0.1:$(if ($Port) { $Port } else { 8787 })"
+    # The port of config.yaml: a reinstall around kept data keeps its own (8787 is only the default).
+    $shown = $Port
+    if (-not $shown) {
+        $shown = 8787
+        $configured = [regex]::Match([IO.File]::ReadAllText((Join-Path $Dir 'config.yaml')), '(?m)^port:\s*(\d+)\s*$')
+        if ($configured.Success) { $shown = [int]$configured.Groups[1].Value }
+    }
+    $page = "http://127.0.0.1:$shown"
     Write-Host ''
     Write-Host "TOW is installed in $Dir and running: $page"
     Write-Host "  Start:     double-click `"Start TOW.cmd`" in $Dir"
     Write-Host "  Stop:      `"Stop TOW.cmd`"    Update: `"Update TOW.cmd`""
-    if (-not $Autostart) { Write-Host "  Autostart: `"$launcher`" autostart on" }
+    # `& ` first: PowerShell runs a quoted path only as a command.
+    if (-not $Autostart) { Write-Host "  Autostart: & `"$launcher`" autostart on" }
     Write-Host "  Back up:   $Dir\keys\master.key (it opens your saved passwords)"
     Write-Host "  Remove:    & ([scriptblock]::Create((irm https://github.com/$repo/releases/latest/download/install.ps1))) -Uninstall -Dir `"$Dir`""
 }
 
-Install-Tow -Dir $Dir -Version $Version -Port $Port -Autostart $Autostart.IsPresent -Uninstall $Uninstall.IsPresent -Yes $Yes.IsPresent -Purge $Purge.IsPresent -AdoptData $AdoptData.IsPresent
+try {
+    Install-Tow -Dir $Dir -Version $Version -Port $Port -Autostart $Autostart.IsPresent -Uninstall $Uninstall.IsPresent -Yes $Yes.IsPresent -Purge $Purge.IsPresent -AdoptData $AdoptData.IsPresent
+}
+catch {
+    # A refusal is a sentence, not a PowerShell error record with its script position.
+    $host.UI.WriteErrorLine($_.Exception.Message)
+    # Run as a file its exit code says so; under `irm | iex` an exit would close the window.
+    if ($PSCommandPath) { exit 1 }
+}
