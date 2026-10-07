@@ -16,7 +16,7 @@ def lan_owner(monkeypatch):
     cfg.update(bind="0.0.0.0", allow_lan=True)
     save_config(cfg)
     monkeypatch.setenv("TOW_LAN_AUTH_TOKEN", "s" * 32)
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda *args, **kw: "Synthetic series")
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda *args, **kw: "Synthetic series")
     monkeypatch.setattr("tow.web.services.run_check", lambda **kw: {"qbit": "ok", "results": []})
     return TestClient(
         app,

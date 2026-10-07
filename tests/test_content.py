@@ -195,7 +195,7 @@ def test_rule_preview_uses_same_engine_without_state_changes():
 
 
 def test_edit_without_new_preparation_preserves_manual_policy():
-    from tow.web.routes_topics import _selection_form
+    from tow.topic_form import selection_policy as _selection_form
 
     original = stored_policy(exact())
     result = _selection_form("exact", "", "once", None, "", original)
@@ -204,7 +204,7 @@ def test_edit_without_new_preparation_preserves_manual_policy():
 
 
 def test_manual_form_does_not_accept_paths_from_browser():
-    from tow.web.routes_topics import _selection_form
+    from tow.topic_form import selection_policy as _selection_form
 
     with pytest.raises(TowError):
         _selection_form("exact", "", "watch", parse_torrent_metadata(blob()), json.dumps([{"path": FILES[0].path}]))
@@ -652,7 +652,7 @@ def test_add_and_edit_read_the_prepared_torrent_once(monkeypatch):
     real = content._read
     monkeypatch.setattr(content, "_read", lambda *args: reads.append(args) or real(*args))
     monkeypatch.setattr(services, "run_check", lambda **_kwargs: {"results": []})
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda *_args, **_kwargs: "Show")
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda *_args, **_kwargs: "Show")
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
     form = {"url": url, "title": "Show", "save_path": "D:/TV", "selection_mode": "exact", "selection_indices": "[1]"}
     token = content.prepare(blob(), url, client_id)["token"]

@@ -136,7 +136,7 @@ def test_get_forms_keep_their_submitter_enabled():
 @pytest.fixture
 def no_check(monkeypatch):
     monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: pytest.fail("a refused add runs no check"))
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda _url: "")
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda _url: "")
 
 
 def test_an_unknown_site_is_explained_once_with_the_next_step(client, no_check):

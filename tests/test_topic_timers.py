@@ -302,7 +302,7 @@ def test_owner_edit_is_preserved_during_result_merge():
 
 
 def test_api_add_edit_clear_and_omission(monkeypatch):
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda *_a, **_k: "Synthetic series")
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda *_a, **_k: "Synthetic series")
     monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: {"qbit": "ok", "results": []})
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
     data = {

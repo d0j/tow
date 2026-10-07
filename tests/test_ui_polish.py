@@ -127,7 +127,7 @@ def test_added_but_the_check_failed_is_amber_only_for_transport_trouble(client, 
         return {"results": [{"id": kw["ids"][0], "ok": False, "error": "boom", "error_class": cls}]}
 
     monkeypatch.setattr("tow.web.services.run_check", check)
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda _url: "")
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda _url: "")
     _seed_rutor(topics=[])
     response = client.post(
         "/topics/add", data={"url": "http://rutor.info/torrent/77/x", "save_path": "Z:\\a"}, follow_redirects=False

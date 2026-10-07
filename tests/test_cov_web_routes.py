@@ -59,7 +59,7 @@ def client():
 def no_check(monkeypatch):
     """Any unexpected tracker/client check fails the test."""
     monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: pytest.fail("run_check must not be called"))
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda _url: "")
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda _url: "")
 
 
 def _query(response) -> dict[str, str]:
@@ -133,6 +133,7 @@ class FakeClient:
 
 def _use_client(monkeypatch, fake: FakeClient) -> None:
     monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *_a, **_k: fake)
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a, **_k: fake)
     monkeypatch.setattr("tow.check.client_ops.RELOCATION_WAIT_SEC", 0.0)
 
 
@@ -265,7 +266,9 @@ def test_a_refused_add_logs_no_failed_check(no_check, client, monkeypatch, form)
     """QA 1.24.1: an add refused because the site was not there yet was logged in History as
     "Check failed · no site": no check ran and nothing was added. The form says why, at once
     (before the site's page is asked for a title)."""
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda *_a, **_k: pytest.fail("no title fetch for a refusal"))
+    monkeypatch.setattr(
+        "tow.web.services.guess_topic_title", lambda *_a, **_k: pytest.fail("no title fetch for a refusal")
+    )
     response = client.post("/topics/add", data=form, follow_redirects=False)
 
     assert response.status_code == 303
@@ -293,7 +296,7 @@ def test_add_of_already_watched_url_is_refused(no_check, client):
     ],
 )
 def test_add_reports_whether_the_client_confirmed_a_torrent(monkeypatch, client, added, flash):
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda _url: "")
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda _url: "")
     monkeypatch.setattr(
         "tow.web.services.run_check", lambda **kw: {"results": [{"id": kw["ids"][0], "ok": True, "added": added}]}
     )
@@ -307,7 +310,7 @@ def test_add_reports_whether_the_client_confirmed_a_torrent(monkeypatch, client,
 
 
 def test_add_keeps_observation_when_check_crashes_and_telegram_fails(monkeypatch, client):
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda _url: "")
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda _url: "")
 
     def crash(**_kw):
         raise RuntimeError("storage exploded")
@@ -316,7 +319,7 @@ def test_add_keeps_observation_when_check_crashes_and_telegram_fails(monkeypatch
         raise RuntimeError("telegram unreachable")
 
     monkeypatch.setattr("tow.web.services.run_check", crash)
-    monkeypatch.setattr("tow.notify.send", telegram_down)
+    monkeypatch.setattr("tow.web.services.notify_send", telegram_down)
 
     response = client.post(
         "/topics/add", data={"url": RUTOR_URL, "title": "Show", "save_path": r"M:\anime"}, follow_redirects=False
@@ -330,7 +333,7 @@ def test_add_keeps_observation_when_check_crashes_and_telegram_fails(monkeypatch
 
 
 def test_undo_of_add_removes_only_the_observation(monkeypatch, client):
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda _url: "")
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda _url: "")
     monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: {"results": []})
     _seed(_topic("keep", url="http://rutor.info/torrent/5/other"))
     client.post("/topics/add", data={"url": RUTOR_URL, "title": "New", "save_path": r"M:\a"}, follow_redirects=False)
@@ -1050,11 +1053,11 @@ def test_guess_title_never_fails_the_form(monkeypatch, client, caplog):
     def tracker_down(_url):
         raise RuntimeError("secret=must-not-be-logged")
 
-    monkeypatch.setattr("tow.title.guess_topic_title", tracker_down)
+    monkeypatch.setattr("tow.web.services.guess_topic_title", tracker_down)
     assert client.post("/topics/guess-title", data={"url": RUTOR_URL}).json() == {"ok": False, "title": ""}
     assert "must-not-be-logged" not in caplog.text
 
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda url: f"title for {url}")
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda url: f"title for {url}")
     assert client.post("/topics/guess-title", data={"url": f"  {RUTOR_URL} "}).json() == {
         "ok": True,
         "title": f"title for {RUTOR_URL}",

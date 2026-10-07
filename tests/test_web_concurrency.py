@@ -296,7 +296,7 @@ def test_adding_a_topic_does_not_hold_up_saves(monkeypatch):
     from tow.config import load_config
 
     monkeypatch.setattr("tow.web.middleware._SITE_HTTP_LOCK", asyncio.Lock())
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda *_a, **_k: "")
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda *_a, **_k: "")
     entered, release = _slow_network(monkeypatch, "run_check", {"results": []})
     with TestClient(app, headers={"Origin": "http://127.0.0.1"}) as client:
         _while_running(
@@ -317,10 +317,10 @@ def test_adding_a_topic_does_not_hold_up_saves(monkeypatch):
 def test_a_site_deleted_while_a_topic_is_added_is_not_added_to(monkeypatch):
     """The add no longer holds the site lock while it fetches the title: the site is looked up
     again under the persistence lock before the topic is saved."""
-    import tow.web.routes_topics
+    import tow.web.topic_actions
     from tow.config import load_config, save_config
 
-    real = tow.web.routes_topics.match_tracker
+    real = tow.web.topic_actions.match_tracker
     calls = []
 
     def site_goes_away(trackers, url):
@@ -332,8 +332,8 @@ def test_a_site_deleted_while_a_topic_is_added_is_not_added_to(monkeypatch):
             return None
         return real(trackers, url)
 
-    monkeypatch.setattr("tow.web.routes_topics.match_tracker", site_goes_away)
-    monkeypatch.setattr("tow.title.guess_topic_title", lambda *_a, **_k: "")
+    monkeypatch.setattr("tow.web.topic_actions.match_tracker", site_goes_away)
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda *_a, **_k: "")
     monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: pytest.fail("no check for a refused add"))
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
     response = client.post(
