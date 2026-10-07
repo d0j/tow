@@ -304,6 +304,8 @@ registration is taken over (or turned off).
    folder that no longer exists is taken over in step 4);
 2. `tow stop`, then move or copy the whole `<TOW>` folder;
 3. in the new place: `<app>/scripts/tow setup` (`tow.cmd setup`) — `.venv` holds absolute paths;
+   a copy turns uv's link `runtime/python/cpython-X.Y-*` into a plain folder, which setup removes
+   (only that entry, only when it is not a link) so that uv can make the link again;
 4. `tow autostart on` (and `tow run`, or let the autostart start it).
 
 ## 4. Update: `tow update --ref <tag>` (`scripts/update.py`)

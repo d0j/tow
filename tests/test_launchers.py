@@ -138,6 +138,60 @@ def test_setup_takes_no_options_and_never_runs_under_a_running_tow():
     assert posix.index("setup_check") < posix.index("rm -rf .venv")
 
 
+def _python_folders(root: Path) -> Path:
+    python = root / "runtime" / "python"
+    for name in ("cpython-3.14.2-windows-x86_64-none", "cpython-3.13-windows-x86_64-none", "other-3.14-x"):
+        (python / name / "keep").mkdir(parents=True)
+    (root / "outside" / "cpython-3.12-windows-x86_64-none").mkdir(parents=True)
+    return python
+
+
+def test_setup_removes_a_copied_minor_version_link_before_uv_installs_python():
+    # QA 2.10.2026: after copying an install (PORTABLE.md 3) `tow setup` failed: uv's link
+    # runtime\python\cpython-3.14-* had been copied as a real folder (os error 145).
+    windows = (ROOT / "scripts" / "tow-setup.cmd").read_text(encoding="utf-8")
+    posix = (ROOT / "scripts" / "tow").read_text(encoding="utf-8")
+    assert windows.index('findstr /r /i "^d[^l]*cpython-[0-9]*\\.[0-9]*-"') < windows.index('" python install')
+    assert '"%TOW_ROOT%\\runtime\\python\\cpython-*"' in windows  # only inside the install
+    assert posix.index('"$TOW_ROOT"/runtime/python/cpython-*') < posix.index('"$uv" python install')
+
+
+@pytest.mark.allow_system  # cmd.exe / sh on a temp layout: the script's own lines
+def test_the_copied_link_folder_is_removed_and_nothing_else(tmp_path):
+    import os
+    import shutil
+    import subprocess
+
+    python = _python_folders(tmp_path)
+    if os.name == "nt":
+        target = python / "cpython-3.14.2-windows-x86_64-none"
+        link = python / "cpython-3.14-windows-x86_64-none"
+        subprocess.run(["cmd.exe", "/d", "/c", "mklink", "/J", str(link), str(target)], check=True, capture_output=True)
+        line = next(
+            row
+            for row in (ROOT / "scripts" / "tow-setup.cmd").read_text(encoding="utf-8").splitlines()
+            if row.startswith("for /d %%D in") and "findstr" in row
+        )
+        script = tmp_path / "clean.cmd"
+        script.write_text(f"@echo off\r\n{line}\r\nexit /b 0\r\n", encoding="ascii")
+        env = {**os.environ, "TOW_ROOT": str(tmp_path)}
+        subprocess.run(["cmd.exe", "/d", "/c", str(script)], check=True, env=env, capture_output=True, timeout=60)
+        assert link.is_junction()  # a real link stays
+        assert (link / "keep").is_dir()
+    else:
+        text = (ROOT / "scripts" / "tow").read_text(encoding="utf-8")
+        start = text.index('    for entry in "$TOW_ROOT"/runtime/python/cpython-*; do')
+        block = text[start : text.index("    done\n", start) + len("    done\n")]
+        (python / "cpython-3.14-linux-x86_64-gnu").symlink_to(python / "cpython-3.14.2-windows-x86_64-none")
+        sh = shutil.which("sh") or "/bin/sh"
+        subprocess.run([sh, "-euc", block], check=True, env={**os.environ, "TOW_ROOT": str(tmp_path)}, timeout=60)
+        assert (python / "cpython-3.14-linux-x86_64-gnu").is_symlink()
+    assert not (python / "cpython-3.13-windows-x86_64-none").exists()  # the copied link: removed
+    assert (python / "cpython-3.14.2-windows-x86_64-none" / "keep").is_dir()  # a full version stays
+    assert (python / "other-3.14-x" / "keep").is_dir()
+    assert (tmp_path / "outside" / "cpython-3.12-windows-x86_64-none").is_dir()
+
+
 def test_windows_setup_does_not_treat_a_broken_moved_python_as_a_running_service():
     windows = (ROOT / "scripts" / "tow-setup.cmd").read_text(encoding="utf-8")
     # cmd's `if errorlevel 4` also matches 103: a relocated venv cannot find its old base.
