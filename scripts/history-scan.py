@@ -22,11 +22,18 @@ metadata and reader calls have 120 seconds. An exceeded budget or a native failu
 clean result. Raw matches, author email addresses and native error details are not printed;
 path hints are redacted and escaped; match totals count each blob once, even with aliases.
 
+Attribution trailers (Co-Authored-By, "Generated with", names of code assistants and models) are
+counted in blobs and in commit messages, never printed: the project has one author.
+
+Pull-request refs (refs/pull/*) are not fetched by a normal clone; to include them, scan a
+`git clone --mirror` of the repository.
+
 Needs Git 2.36 or later (`cat-file --batch-command`): an unsupported command is an incomplete
 scan, not an empty history. https://git-scm.com/docs/git-cat-file#_batch_output
 """
 
 import argparse
+import codecs
 import collections
 import contextlib
 import json
@@ -53,6 +60,9 @@ RISKY_PATH = re.compile(
 # The only author/committer addresses public history may carry: GitHub's private ones.
 NOREPLY_EMAIL = re.compile(rb"[^@\s]+@users\.noreply\.github\.com|noreply@github\.com", re.IGNORECASE)
 DISPLAY_EMAIL = regex.compile(rb"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", regex.VERSION0)
+# Assistant and model names, kept in ROT13 so that this file does not name them itself.
+ASSISTANT_NAMES = codecs.decode("pynhqr|naguebcvp|bcranv|pungtcg|tcg-[0-9]|pbcvybg|trzvav|pbqrk", "rot13").encode()
+ATTRIBUTION = re.compile(rb"(?i)co-authored-by\s*:|generated with\b|\b(?:" + ASSISTANT_NAMES + rb")\b")
 PATTERNS = {
     "telegram bot token": re.compile(rb"\b\d{8,10}:[A-Za-z0-9_-]{35}\b"),
     "telegram chat id": re.compile(rb"chat_ids?\W{0,6}-?\d{6,}"),
@@ -64,6 +74,7 @@ PATTERNS = {
     "private IP": re.compile(rb"\b(?:192\.168|10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b"),
     "user profile path": re.compile(rb"(?i)C:\\\\?Users\\\\?[A-Za-z0-9._-]+"),
     "email": re.compile(rb"[A-Za-z0-9._%+-]+@(?!users\.noreply\.github\.com|example\.)[A-Za-z0-9.-]+\.[a-z]{2,}"),
+    "attribution trailer": ATTRIBUTION,
 }
 SEARCH_PATTERNS = {label: regex.compile(pattern.pattern, regex.VERSION0) for label, pattern in PATTERNS.items()}
 
@@ -253,6 +264,7 @@ def scan(repo, max_blob_bytes):
     paths = historical_paths(repo)
     authors = git(repo, "log", "--all", "--format=%an%x00").split(b"\0")
     exposed_commits, exposed_addresses = exposed_identities(git(repo, "log", "--all", "--format=%ae%x00%ce"))
+    attributed = attributed_messages(git(repo, "log", "--all", "--format=%B%x00"))
     hits, totals = collections.defaultdict(collections.Counter), collections.Counter()
     risky_paths, skipped = set(), []
     scanned = 0
@@ -291,12 +303,13 @@ def scan(repo, max_blob_bytes):
         "author/committer e-mails not on GitHub's noreply domain:",
         f"{exposed_addresses} in {exposed_commits} commits" if exposed_commits else "none",
     )
+    print("attribution trailers in commit messages:", f"{attributed} commits" if attributed else "none")
     for oid, size in skipped:
         print(f"unscanned blob: {oid.decode('ascii')} ({size} bytes)")
     if skipped:
         print("scan incomplete: blob budget exceeded; increase --max-blob-bytes to review these objects")
         return 2
-    review = bool(hits or risky_paths or exposed_commits)
+    review = bool(hits or risky_paths or exposed_commits or attributed)
     print("scan complete: review required" if review else "scan complete: no pattern candidates")
     return 1 if review else 0
 
@@ -313,6 +326,12 @@ def exposed_identities(log):
         commits += bool(exposed)
         addresses |= exposed
     return commits, len(addresses)
+
+
+def attributed_messages(log):
+    """How many commit messages carry an attribution trailer or an assistant's name; the
+    messages themselves are never printed."""
+    return sum(1 for message in log.split(b"\0") if ATTRIBUTION.search(message))
 
 
 def positive_int(value):
