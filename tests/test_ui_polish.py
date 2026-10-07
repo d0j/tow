@@ -254,6 +254,30 @@ def test_site_download_path_starts_empty_so_a_pasted_link_fills_it(client, monke
     assert load_config()["trackers"]["plain"]["download_path"] == "/download/{id}"
 
 
+def test_site_name_field_says_its_rule_before_the_browser_refuses_it(client):
+    """QA 1.24.1: a Cyrillic name met only the browser's "Please match the requested format"."""
+    rule = "Только строчные латинские буквы, цифры и _, без пробелов: rutor, kinozal_tv."
+    page = client.get("/sites").text
+    field = re.search(r'<input id="site-name"[^>]*>', page)
+    assert field is not None
+    assert f'title="{rule}"' in field.group(0)
+    assert 'aria-describedby="site-name-hint"' in field.group(0)
+    assert f'<p class="field-hint" id="site-name-hint">{rule}</p>' in page
+    edit = re.search(r'<input id="site-new-name-[^"]+"[^>]*>', page)
+    assert edit is not None
+    assert f'title="{rule}"' in edit.group(0)
+    from tow.i18n import translate
+
+    assert translate("sites.name_hint", "en").startswith("Small Latin letters, digits and _ only")
+    refused = client.post(
+        "/sites/new", data={"name": "сайт", "fetch_hosts": "https://a.example"}, follow_redirects=False
+    )
+    page = client.get(refused.headers["location"]).text
+    field = re.search(r'<input id="site-name"[^>]*>', page)
+    assert field is not None
+    assert 'aria-describedby="add-error site-name-hint"' in field.group(0)
+
+
 def test_home_add_form_has_a_heading(client):
     assert '<h2 id="add-topic-title" class="add-title">Добавить раздачу</h2>' in client.get("/").text
 
