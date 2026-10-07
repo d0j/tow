@@ -703,12 +703,19 @@ def protect_install_folders(*, quiet: bool = False) -> list[Path]:
     except OSError, RuntimeError:  # no install located: the command reports that itself
         return []
     root_open = private_root(install)
-    if root_open and not quiet:
-        print(t("cli.root_shared", path=str(install)), file=sys.stderr)
     still_open = private_folders(folders)
-    for folder in still_open if not quiet else ():
-        print(t("cli.folder_shared", path=str(folder)), file=sys.stderr)
-    return [install, *still_open] if root_open else still_open
+    warned = [install, *still_open] if root_open else still_open
+    if not quiet and not _OPEN_FOLDERS_SAID:  # once per process: `tow serve` repairs twice
+        if root_open:
+            print(t("cli.root_shared", path=str(install)), file=sys.stderr)
+        for folder in still_open:
+            print(t("cli.folder_shared", path=str(folder)), file=sys.stderr)
+        _OPEN_FOLDERS_SAID.extend(warned)
+    return warned
+
+
+# The open folders this process has named on stderr already (protect_install_folders).
+_OPEN_FOLDERS_SAID: list[Path] = []
 
 
 def _key_folder(path: Path) -> None:

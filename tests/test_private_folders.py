@@ -220,16 +220,20 @@ def test_a_backend_without_the_question_is_unknown(tmp_path):
         assert platform.private_folders([tmp_path]) == []
 
 
-def test_every_start_closes_keys_and_data_and_warns_about_what_stays_open(tmp_path, capsys):
+def test_every_start_closes_keys_and_data_and_warns_about_what_stays_open(tmp_path, capsys, monkeypatch):
     from tow import cli
     from tow.paths import data_dir, keys_dir
+    from tow.store import protect_install_folders
 
+    monkeypatch.setattr("tow.store._OPEN_FOLDERS_SAID", [])
     keys_dir().mkdir()
     keys, data = keys_dir(), data_dir()
     backend = FolderBackend(shared={keys, data}, fixable={keys})
     with platform.use(backend):  # type: ignore[arg-type]
-        assert cli.main(["version"]) == 0
-    assert backend.repaired == [keys, data]
+        assert cli.main(["version"]) == 0  # every command repairs; only a start says what stays open
+        assert backend.repaired == [keys, data]
+        assert capsys.readouterr().err == ""
+        protect_install_folders()  # what `tow start`, `tow run` and `tow serve` do
     err = capsys.readouterr().err
     assert str(data) in err
     assert str(keys) not in err
@@ -309,10 +313,11 @@ def test_every_start_closes_the_install_root_and_with_it_what_it_holds(install, 
     assert str(install) not in capsys.readouterr().err
 
 
-def test_a_root_of_another_account_stays_and_keys_and_data_are_still_closed(install, capsys):
+def test_a_root_of_another_account_stays_and_keys_and_data_are_still_closed(install, capsys, monkeypatch):
     from tow.i18n import t
     from tow.store import protect_install_folders
 
+    monkeypatch.setattr("tow.store._OPEN_FOLDERS_SAID", [])  # this process has said nothing yet
     keys, data = install / "keys", install / "data"
     backend = InstallBackend(shared={install, keys, data}, fixable={keys, data})
     with platform.use(backend):  # type: ignore[arg-type]
@@ -321,6 +326,24 @@ def test_a_root_of_another_account_stays_and_keys_and_data_are_still_closed(inst
     err = capsys.readouterr().err
     assert t("cli.root_shared", path=str(install)) in err
     assert str(keys) not in err
+
+
+def test_open_folders_are_said_once_and_only_by_what_starts_tow(install, capsys, monkeypatch):
+    """Round-3 audit: the warnings came before every command (`tow status` too) and twice at
+    the first start (setup's `keys ensure`, then `start`; `tow serve` said them twice)."""
+    from tow import cli
+    from tow.i18n import t
+    from tow.store import protect_install_folders
+
+    monkeypatch.setattr("tow.store._OPEN_FOLDERS_SAID", [])
+    backend = InstallBackend(shared={install}, fixable=set())
+    with platform.use(backend):  # type: ignore[arg-type]
+        assert cli.main(["version"]) == 0
+        assert capsys.readouterr().err == ""  # repaired where it can be, not said
+        assert protect_install_folders() == [install]
+        assert protect_install_folders() == [install]
+    assert capsys.readouterr().err.count(t("cli.root_shared", path=str(install))) == 1
+    assert sorted(cli._WARN_OPEN_FOLDERS) == ["run", "serve", "start"]
 
 
 def test_doctor_reports_an_install_root_others_can_change(install):
