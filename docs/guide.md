@@ -275,7 +275,7 @@ The left column is the text TOW shows (on Home, in a row, in a message or on a p
 | the previous version of the torrent is still active on the same file: … | A new revision overlaps a torrent that is still seeding. | **Stop the previous one and add** in the row, or stop it in the client. |
 | waiting for episodes (…) | The episodes you chose are not in the torrent yet. | Nothing; they are added when they appear. |
 | the selection matches no file of the torrent · episode *N* is in several seasons — write it as S01E05 | The selection cannot be applied safely. | Edit the topic's selection. |
-| not enough disk space: … GB needed, … GB free | The target drive is too full. | Free space or choose another folder. |
+| not enough disk space: … GB needed, … GB free | The target drive is too full (measured only for a torrent client on this computer). | Free space or choose another folder. |
 | no site is set up for this link | The link belongs to an unknown site. | **Sites → +**, paste the link. |
 | the torrent was removed from the client | The torrent is gone from the client. | Check again to add it back, or **Remove from TOW**. |
 | the torrent in the client was not added by TOW — … | TOW will not change torrents it did not add. | Change it in the client, or remove it there and let TOW add it. |
