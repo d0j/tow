@@ -537,10 +537,11 @@ if (fromUrl) {
     }
     set("site-href-rx", j.download_href_regex || "");
     if (msg) {
-      msg.textContent = (j.exists
+      const said = j.exists
         ? t("js.guess.exists", { name: j.name }) + (j.need_login ? ` — ${t("js.guess.can_save_login")}` : "")
-        : t("js.guess.filled", { name: j.name }) + (j.need_login ? ` — ${t("js.guess.need_login")}` : ""))
-        + (kept ? ` ${t("js.guess.kept_typed")}` : "");
+        : t("js.guess.filled", { name: j.name }) + (j.need_login ? ` — ${t("js.guess.need_login")}` : "");
+      // Two sentences: "…a login is needed. Fields you had filled in yourself were kept."
+      msg.textContent = kept ? `${said.replace(/[.\s]+$/, "")}. ${t("js.guess.kept_typed")}` : said;
     }
     } catch {
       if (msg && sequence === guessSequence) msg.textContent = t("js.guess.failed");
