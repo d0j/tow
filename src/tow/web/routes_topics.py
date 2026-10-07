@@ -174,7 +174,6 @@ def topics_delete(tid: str) -> Response:
 
 
 @router.post("/topics/{tid}/edit")
-@services.locked_state_mutation
 def topics_edit(
     tid: str,
     title: str = Form(""),

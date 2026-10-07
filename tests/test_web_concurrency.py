@@ -393,6 +393,113 @@ def test_a_client_removed_while_a_topic_is_added_is_not_used(monkeypatch):
     assert "выберите торрент-клиент" in page
 
 
+def test_a_folder_move_in_the_client_does_not_hold_the_data_lock(monkeypatch):
+    """Round-3 audit: an edit that moves the folder held the persistence lock while the client
+    moved it (up to 20 s): a finishing check waited. The check's result saved meanwhile is kept,
+    and the edit's own change is saved after the move."""
+    import asyncio
+
+    monkeypatch.setattr("tow.web.middleware._SITE_HTTP_LOCK", asyncio.Lock())
+    h = "AA" * 20
+    save_state(
+        {
+            "topics": [
+                {"id": "t", "title": "Show", "url": "http://rutor.info/torrent/1", "save_path": "M:\\old", "hash": h}
+            ]
+        }
+    )
+    entered, release = threading.Event(), threading.Event()
+
+    class Mover:
+        def set_location(self, infohash: str, save_path: str) -> str:
+            return "ok"
+
+        def inspect_torrent(self, infohash: str) -> dict:
+            return {"hash": h, "save_path": "M:\\new", "tags": ["tow"]}
+
+    def slow_move(*_args, **_kwargs):
+        entered.set()
+        release.wait(10)
+        return "done"
+
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a, **_k: Mover())
+    monkeypatch.setattr("tow.web.services.await_relocation", slow_move)
+    edited = {}
+    with TestClient(app, headers={"Origin": "http://127.0.0.1"}) as client:
+        editor = threading.Thread(
+            target=lambda: edited.update(
+                response=client.post(
+                    "/topics/t/edit",
+                    data={"title": "Renamed", "url": "http://rutor.info/torrent/1", "save_path": "M:\\new"},
+                    follow_redirects=False,
+                )
+            ),
+            daemon=True,
+        )
+        editor.start()
+        try:
+            assert entered.wait(5)
+            saved = threading.Event()
+
+            def a_check_finishes() -> None:
+                with persistence_lock():
+                    state = load_state()
+                    state["topics"][0]["last_ok"] = True
+                    save_state(state)
+                saved.set()
+
+            threading.Thread(target=a_check_finishes, daemon=True).start()
+            assert saved.wait(5), "a check's save waited for the client to move the folder"
+            pause = client.post("/topics/t/pause", follow_redirects=False)
+            assert pause.status_code == 303
+            assert editor.is_alive()
+        finally:
+            release.set()
+            editor.join(10)
+    assert edited["response"].status_code == 303
+    topic = load_state()["topics"][0]
+    assert (topic["title"], topic["save_path"]) == ("Renamed", "M:\\new")
+    assert (topic["last_ok"], topic["paused"]) == (True, True)  # both changes made meanwhile are kept
+    assert "move_pending" not in topic
+
+
+def test_a_new_link_drops_the_offer_to_adopt_the_old_torrent():
+    """Round-3 audit: the hash a check found unmarked survived a link edit, so "Adopt" stayed
+    offered and would have marked the OLD link's torrent as the new link's revision."""
+    from tow.adopt import unmarked_hash
+
+    h = "AB" * 20
+    save_state(
+        {
+            "topics": [
+                {
+                    "id": "t1",
+                    "title": "Show",
+                    "url": "http://rutor.info/torrent/1",
+                    "save_path": "M:\\s",
+                    "last_ok": False,
+                    "last_error": "x",
+                    "last_error_class": "qbit",
+                    "last_error_code": "check.not_owned_existing",
+                    "last_error_params": {"hash": h},
+                }
+            ]
+        }
+    )
+    assert unmarked_hash(load_state()["topics"][0]) == h
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    response = client.post(
+        "/topics/t1/edit",
+        data={"url": "http://rutor.info/torrent/999", "title": "Other", "save_path": "M:\\s"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    saved = load_state()["topics"][0]
+    assert saved["url"] == "http://rutor.info/torrent/999"
+    assert unmarked_hash(saved) == ""
+    assert saved["last_error"] == "x"  # the last check's finding is kept until the next check
+
+
 def test_network_actions_are_the_only_writes_outside_the_site_lock():
     from starlette.requests import Request
 
@@ -410,6 +517,8 @@ def test_network_actions_are_the_only_writes_outside_the_site_lock():
         "/topics/add",
         "/topics/guess-title",
         "/topics/t1/check",
+        "/topics/t1/edit",
+        "/topics/t1/adopt",
         "/topics/t1/replace-revision",
         "/topics/t1/tracker-login",
         "/topics/t1/tracker-browser-auth",
@@ -422,7 +531,6 @@ def test_network_actions_are_the_only_writes_outside_the_site_lock():
         "/sites/new",
         "/sites/rutor",
         "/sites/rutor/delete",
-        "/topics/t1/edit",
         "/topics/t1/pause",
         "/topics/t1/check/extra",
         "/settings/restore-points",
