@@ -23,7 +23,7 @@ from tow.jsonish import as_dict
 from tow.trackers import load_trackers, match_tracker
 from tow.web import _context, services
 from tow.web.text import t, tm
-from tow.web.views import flash_ttl_sec
+from tow.web.views import flash_ttl_sec, stored_ui_time
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = PACKAGE_DIR / "static"
@@ -108,7 +108,7 @@ def header_health() -> dict[str, Any]:
         "bot": bot,
         "bot_ok": bot_ok,
         "sites": site_tones,
-        "at": h.get("at") or "",
+        "at": stored_ui_time(h.get("at")),  # stored as an ISO time (older: already written out)
         "at_ts": int(h.get("at_ts") or 0),
         # The countdown runs to next_from_ts + interval_sec: the real next scheduled check
         # (tow run's own plan), never a manual check or a progress pass; 0 when none is known.

@@ -23,7 +23,7 @@ from tow.check_steps import (
 )
 from tow.clients import factory as client_factory
 from tow.clients.spec import TorrentClientAdapter
-from tow.clock import format_ui_timestamp, iso_now, machine_now
+from tow.clock import iso_now, machine_now
 from tow.config import load_config
 from tow.episodes import parse_season_hint
 from tow.errors import Msg, TowError
@@ -255,7 +255,9 @@ def _current_tracker_title(
 
 
 def _now() -> str:
-    return format_ui_timestamp(machine_now())
+    """When a check ran, as stored: an ISO time with its offset. The pages write it in their own
+    language when they show it (TOW 1.24 and before stored it already written out)."""
+    return iso_now()
 
 
 def _check_failure_code(error: str | BaseException) -> str:
@@ -304,7 +306,7 @@ def record_check_failure(error: str | BaseException, *, how: str = "auto") -> He
             {
                 "check_ok": False,
                 "check_error": code,
-                "at": format_ui_timestamp(now),
+                "at": now.isoformat(timespec="seconds"),
                 "at_ts": int(now.timestamp()),
                 # The header countdown runs from the last scheduled *attempt*...
                 "auto_at_ts": int(now.timestamp()) if how == "auto" else previous.get("auto_at_ts"),

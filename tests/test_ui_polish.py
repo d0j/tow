@@ -657,6 +657,33 @@ def test_a_topics_check_times_are_written_in_the_pages_language():
     assert format_ui_timestamp(datetime(2026, 10, 6, 5, 0, 0, tzinfo=UTC), "en") in panel
 
 
+def test_a_check_stores_its_times_as_iso_and_the_pages_write_them():
+    """The check stored "at" and "last_check" already written in the page language of that
+    moment; it stores ISO times now, and every page writes them in its own language."""
+    from datetime import datetime
+
+    from tow import check
+    from tow.clock import format_ui_timestamp
+    from tow.config import load_config, save_config
+    from tow.store import load_state, save_state
+
+    cfg = load_config()
+    cfg["language"] = "en"
+    save_config(cfg)
+    topic = {"id": "t1", "title": "Show", "url": "http://rutor.info/torrent/1/x", "save_path": "Z:\\a"}
+    check._stamp(topic, {"ok": True})
+    save_state({"topics": [topic]})
+    health = check.record_check_failure("synthetic failure", how="manual")
+
+    stored = load_state()
+    for value in (stored["topics"][0]["last_check"], stored["topics"][0]["last_ok_at"], stored["health"]["at"]):
+        assert datetime.fromisoformat(value).utcoffset() is not None
+    web = TestClient(app, headers=ORIGIN)
+    assert web.get("/health.json").json()["at"] == format_ui_timestamp(health["at"], "en")
+    panel = web.get("/topics/t1/edit-panel").text
+    assert format_ui_timestamp(stored["topics"][0]["last_ok_at"], "en") in panel
+
+
 def test_stored_times_that_are_not_dates_stay_as_they_are():
     from tow.web.views import stored_ui_time
 
