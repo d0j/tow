@@ -8,7 +8,7 @@ import stat
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 from tow.clients.files import map_files, normalize_path
@@ -51,22 +51,24 @@ def _get(value: Any, key: str, default: Any = None) -> Any:
 CONFIRMATION_REUSE_SEC = 24 * 3600
 
 
-def safe_relative_path(save_path: str, client_file_name: str, *, base: Path | None = None) -> str | None:
-    """``base`` is ``Path(save_path).resolve()`` when the caller already has it."""
+def safe_relative_path(save_path: str, client_file_name: str) -> str | None:
+    """The client's name of a file as a path inside its save folder, or None when it is not one.
+
+    Decided from the text alone: it runs for every file of every torrent on every pass, and
+    resolving each path woke sleeping drives and a NAS for nothing. A link inside the folder
+    that leads out of it is caught where a file is looked at on disk (filesystem_confirmation).
+    """
     raw = str(client_file_name or "").replace("\\", "/")
     if raw.startswith("/"):
         return None
     parts = [part for part in raw.split("/") if part not in ("", ".")]
     if not parts or any(part == ".." for part in parts) or ":" in parts[0]:
         return None
-    rel = "/".join(parts)
-    base = base or Path(save_path).resolve()
-    target = (base / Path(*parts)).resolve()
-    try:
-        target.relative_to(base)
-    except ValueError:
+    folder = PurePath(save_path)
+    # Each part must stay one plain name below the folder ("C:x" is a drive on Windows).
+    if folder.joinpath(*parts).parts != (*folder.parts, *parts):
         return None
-    return rel
+    return "/".join(parts)
 
 
 def filesystem_confirmation(
@@ -412,9 +414,7 @@ def _preferred_season(topic: Topic, selected_episode_keys: list[str]) -> int | N
     return parse_season_hint(str(topic.get("title") or ""))
 
 
-def _client_files(
-    files: list[Any], evidence_save_path: str, base: Path | None = None
-) -> list[tuple[Any, str, int | None, bool]]:
+def _client_files(files: list[Any], evidence_save_path: str) -> list[tuple[Any, str, int | None, bool]]:
     """(row, safe relative path, size, selected) for every usable client file row."""
     prepared: list[tuple[Any, str, int | None, bool]] = []
     for row in files:
@@ -423,7 +423,7 @@ def _client_files(
             selected = priority is None or int(priority) != 0
         except TypeError, ValueError:
             continue
-        rel = safe_relative_path(evidence_save_path, str(_get(row, "name", "") or ""), base=base)
+        rel = safe_relative_path(evidence_save_path, str(_get(row, "name", "") or ""))
         if not rel:
             continue
         size = _get(row, "size")
@@ -833,7 +833,6 @@ class _ReconcilePass:
     now: str
     initial_baseline: bool
     evidence_save_path: str
-    evidence_base: Path | None
     current_client_paths: set[str]
     events: list[str]
     index: _HistoryIndex = field(init=False)
@@ -841,6 +840,16 @@ class _ReconcilePass:
     observed_completed_episode_keys: set[str] = field(default_factory=set)
     completed_file_labels: list[str] = field(default_factory=list)
     seen_identities: set[str] = field(default_factory=set)
+    _evidence_base: tuple[Path | None] | None = field(default=None, init=False)
+
+    def evidence_base(self) -> Path | None:
+        """The save folder resolved once per pass, and only when a file is looked at on disk."""
+        if self._evidence_base is None:
+            try:
+                self._evidence_base = (Path(self.evidence_save_path).resolve(),)
+            except OSError, ValueError:
+                self._evidence_base = (None,)
+        return self._evidence_base[0]
 
     def __post_init__(self) -> None:
         self.index = _HistoryIndex(self.items)
@@ -1049,7 +1058,9 @@ def _file_confirmed(
         and isinstance(confirmed_ts, (int, float))
         and 0 <= time.time() - float(confirmed_ts) < CONFIRMATION_REUSE_SEC
     )
-    confirmed = True if fresh else filesystem_confirmation(work.evidence_save_path, rel, size, base=work.evidence_base)
+    confirmed = (
+        True if fresh else filesystem_confirmation(work.evidence_save_path, rel, size, base=work.evidence_base())
+    )
     if confirmed is True and not fresh:
         item["confirmed_ts"] = int(time.time())
     return confirmed
@@ -1151,13 +1162,9 @@ def reconcile_topic(
     current_source_hash = str(topic.get("hash") or "").casefold()
     _mark_superseded(items, current_source_hash, has_files=bool(files))
     evidence_save_path = _check_save_path(topic, info)
-    try:
-        evidence_base: Path | None = Path(evidence_save_path).resolve()  # once, not 4x per file (F4)
-    except OSError, ValueError:
-        evidence_base = None
     selected_episode_keys = [str(value) for value in topic.get("selected_episode_keys") or []]
     preferred_season = _preferred_season(topic, selected_episode_keys)
-    prepared_all = _client_files(files, evidence_save_path, evidence_base)
+    prepared_all = _client_files(files, evidence_save_path)
     prepared, expected = _selected_files(
         topic,
         record,
@@ -1176,7 +1183,6 @@ def reconcile_topic(
         now=now,
         initial_baseline=initial_baseline,
         evidence_save_path=evidence_save_path,
-        evidence_base=evidence_base,
         current_client_paths={rel.casefold() for _row, rel, _size, _selected in prepared_all},
         events=events,
     )
