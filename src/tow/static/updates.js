@@ -75,8 +75,11 @@
   let pollTimer = null;
   let rollbackVersion = "";
   let busy = false;
-  const dateLabel = (value, key) => {
+  const dateLabel = (value, key, label) => {
     if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "";
+    // The server's own writing of the time (<field>_label: the page's language and the zone,
+    // as every other date of the page); the pattern below only for an older server.
+    if (typeof label === "string" && label) return t(key, { when: label });
     const date = new Date(value * 1000);
     if (!Number.isFinite(date.getTime())) return "";
     // The language's own pattern (_meta.datetime), as the server writes dates in the page.
@@ -111,7 +114,7 @@
       status.textContent = available ? t("js.releases.available", { version: data.latest }) :
         (data.ok ? t(data.comparable === false ? "js.releases.unknown_build" : "js.releases.current") : t("js.releases.unavailable"));
       if (available && !data.ok) status.textContent += " · " + t("js.releases.stale");
-      const checked = dateLabel(data.checked_at, "js.releases.checked");
+      const checked = dateLabel(data.checked_at, "js.releases.checked", data.checked_at_label);
       if (checked) status.textContent += " · " + checked;
       if (data.checks_enabled === false) status.textContent =
         (data.latest ? status.textContent + " · " : "") + t("js.releases.disabled");
@@ -212,7 +215,10 @@
         if (job.backup_cleanup_pending === true) {
           progress.textContent += " · " + t("js.releases.backup_cleanup_pending");
         }
-        for (const label of [dateLabel(job.started_at, "js.releases.started"), dateLabel(job.finished_at, "js.releases.finished")]) {
+        for (const label of [
+          dateLabel(job.started_at, "js.releases.started", job.started_at_label),
+          dateLabel(job.finished_at, "js.releases.finished", job.finished_at_label),
+        ]) {
           if (label) progress.textContent += " · " + label;
         }
         if (history) {
