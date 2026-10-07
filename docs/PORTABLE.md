@@ -718,8 +718,11 @@ Built so far (this workstream):
   `publish` job (the only one with `contents: write`) creates the release as a draft if it is
   missing (notes from CHANGELOG.md; existing notes are never changed), uploads
   `TOW-windows-x64.zip`, `install.ps1`, `install.sh`, `tow-source.tar.gz` and `SHA256SUMS` with
-  `gh`, downloads them again and checks them against `SHA256SUMS`, and only then publishes it as
-  the latest release. The files of a public release are never replaced.
+  `gh`, downloads them again and checks them against `SHA256SUMS`, and only then publishes it -
+  as the latest release only when it is the highest stable version (a fix to an older line is
+  not what `releases/latest` gives). Every job after `source` checks out the commit `source`
+  checked (its output), never the tag again, and the source archive must record that commit;
+  uv's cache is off. The files of a public release are never replaced.
 - `tests/test_starter.py` (`tow start` with a fake clock), `tests/test_update_archive.py`
   (update.py without git against a local web server that plays GitHub: checksums, the
   fallback to the release's copy, refusals, rollback of a cut-off switch, one `app.prev`),

@@ -458,6 +458,39 @@ def test_release_archive_and_publish_use_a_pinned_linux_runner():
     assert jobs["source"]["runs-on"] == jobs["publish"]["runs-on"] == "ubuntu-24.04"
 
 
+def test_release_jobs_build_and_publish_the_commit_the_source_job_checked():
+    # Before: each later job checked out the tag again (a tag moved in between built unchecked
+    # code), uv's cache came from other runs, and every stable tag became "latest", an older
+    # line's fix too.
+    import yaml
+
+    text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    jobs = yaml.safe_load(text)["jobs"]
+    assert jobs["source"]["outputs"] == {"commit": "${{ steps.tag.outputs.commit }}"}
+    assert any(step.get("id") == "tag" and "GITHUB_OUTPUT" in step["run"] for step in jobs["source"]["steps"])
+    checkouts = setups = 0
+    for name, job in jobs.items():
+        for step in job["steps"]:
+            uses = step.get("uses", "")
+            if uses.startswith("actions/checkout@"):
+                checkouts += 1
+                want = "${{ env.TAG }}" if name == "source" else "${{ needs.source.outputs.commit }}"
+                assert step["with"]["ref"] == want, name
+                if name != "source":
+                    assert "source" in job["needs"], name
+            if uses.startswith("astral-sh/setup-uv@"):
+                setups += 1
+                assert step["with"]["enable-cache"] is False, name
+    assert checkouts == len(jobs)
+    assert setups == 2
+    publish = "\n".join(step.get("run", "") for step in jobs["publish"]["steps"])
+    assert "--latest=$latest" in publish
+    assert "\nlatest=true\n" not in publish
+    assert "sort -V | tail -n 1" in publish
+    assert '[ "$highest" != "$TAG" ] || latest=true' in publish
+    assert "git get-tar-commit-id" in text
+
+
 def test_the_smoke_scripts_never_use_the_live_port():
     for name in ("bundle-smoke.ps1", "install-smoke.sh", "install-smoke.ps1", "update-smoke.py"):
         text = (ROOT / "scripts" / name).read_text(encoding="utf-8")
