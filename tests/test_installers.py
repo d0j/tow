@@ -398,6 +398,9 @@ def test_the_release_workflow_tests_everything_before_it_uploads():
     assert '[ "$message" = "TOW ${TAG#v}" ]' in source
     assert "actions/workflows/ci.yml/runs?head_sha=$COMMIT" in source
     assert "completed/success" in source
+    # Any ci run of the same content counts (the pull request's): the run on main is not awaited.
+    assert 'TREE=$(git rev-parse "$COMMIT^{tree}")' in source
+    assert "select(.head_commit.tree_id == env.TREE)" in source
     assert jobs["source"]["steps"][0]["with"]["fetch-depth"] == 0
     # Write access only where the release is touched, and only after every test passed.
     writers = [name for name, job in jobs.items() if job.get("permissions", {}).get("contents") == "write"]

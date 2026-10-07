@@ -114,7 +114,8 @@ Pull requests that touch the installers, the updater or the dependencies also ru
 workflow: the Windows bundle and `install.ps1`, and the update of the latest release to the pull request
 (`scripts/update-smoke.py`: a broken copy must roll back, then the real update) on Windows and Linux.
 
-Merge the release commit through a pull request and wait for `ci` on `main`. Fetch `origin/main` and create
+Merge the release commit through a pull request that is up to date with `main` (its last `ci` run then
+covers the merge; otherwise wait for `ci` on `main`). Fetch `origin/main` and create
 an annotated tag on the merge commit with the message `TOW X.Y.Z`
 (`git tag -a vX.Y.Z -m "TOW X.Y.Z" origin/main`). Publish it with:
 
@@ -130,7 +131,8 @@ post-commit mirror alone is not enough: it cannot copy a later GitHub merge or a
 commit. Git's full pre-push gate still applies.
 
 The release workflow does not run the gate again: it requires the tag on `origin/main` and a passed `ci`
-run of its commit, builds and tests the bundle and the installers, updates the latest release to the tag,
+run of its content (on its commit or any commit with the same tree, such as the head of the merged pull
+request: the run of the same content on `main` is not waited for), builds and tests the bundle and the installers, updates the latest release to the tag,
 then uploads everything to a draft release, reads it back and only then publishes it. Wait for it to
 finish before updating a runtime installation.
 

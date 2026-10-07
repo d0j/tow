@@ -10,7 +10,8 @@ name: release
 #   tow-source.tar.gz     GitHub's source archive of the tag (what install.sh and updates use)
 #   SHA256SUMS            the SHA-256 of every file above
 # The quality gate is not run again: the tag must be an annotated "TOW X.Y.Z" on origin/main
-# whose commit passed the `ci` workflow (its four-OS gate). Nothing is uploaded unless the
+# whose content passed the `ci` workflow (its four-OS gate) - on that commit or on any commit with
+# the same tree, such as the head of the pull request it merged. Nothing is uploaded unless the
 # bundle, both installers and the update of the latest published release to this tag
 # (scripts/update-smoke.py) passed on the runners.
 
@@ -66,21 +67,30 @@ jobs:
           [ "$(git rev-parse HEAD)" = "$commit" ] || { echo "the checkout is not $TAG ($commit)" >&2; exit 1; }
           echo "COMMIT=$commit" >> "$GITHUB_ENV"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
-      - name: The ci workflow passed on the tagged commit
+      - name: The ci workflow passed on the tagged content
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          # A finished successful run is enough; one still running is waited for (a tag pushed
-          # right after the merge); none, or only failed ones, stop the release.
+          # The content is what was checked, not the commit: a run of ci on any commit with the
+          # tagged commit's tree counts - usually the pull request's last run, as the merge of an
+          # up-to-date pull request has its head's tree. Then the run of the same content on
+          # main (about 30 runner minutes) is not waited for. A finished successful run is
+          # enough; one still running is waited for (a tag pushed right after the merge); none,
+          # or only failed ones, stop the release.
+          TREE=$(git rev-parse "$COMMIT^{tree}")
+          export TREE
           for attempt in $(seq 1 90); do
-            verdict=$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$COMMIT&per_page=100" --jq '
-              [.workflow_runs[] | "\(.status)/\(.conclusion)"]
+            verdict=$( {
+              gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$COMMIT&per_page=100" --jq '.workflow_runs[]'
+              gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?per_page=100" --jq '.workflow_runs[] | select(.head_commit.tree_id == env.TREE)'
+            } | jq -rs '
+              [.[] | "\(.status)/\(.conclusion)"]
               | if any(. == "completed/success") then "passed"
                 elif length == 0 then "none"
                 elif all(startswith("completed/")) then "failed"
                 else "running" end')
-            echo "ci on $COMMIT: $verdict"
+            echo "ci on $COMMIT (tree $TREE): $verdict"
             case $verdict in
               passed) exit 0 ;;
               failed) echo "ci did not pass on $COMMIT (a cancelled run: re-run it, then this)" >&2; exit 1 ;;
