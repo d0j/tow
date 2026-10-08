@@ -297,6 +297,8 @@ class ClientPool:
     # How many checks in a row each client listed nothing (before this run, and with it).
     previous_empty: dict[str, int] = field(default_factory=dict)
     empty: dict[str, int] = field(default_factory=dict)
+    # The clients this run pinged: only their count is this run's, the others keep theirs.
+    pinged: set[str] = field(default_factory=set)
     # False when the run had no topic to check and asked no client: its health is not this run's.
     asked: bool = True
 
@@ -307,6 +309,7 @@ class ClientPool:
         two (a refusal marks the topics with an error, so the client refused last time is still
         expected to list them); a client that still lists nothing after that was emptied, and
         is believed."""
+        self.pinged.add(client_id)
         answer = client.ping()
         has_any = getattr(client, "has_any_torrent", None)
         before = int(self.previous_empty.get(client_id) or 0)
@@ -380,6 +383,12 @@ class ClientPool:
     @property
     def default_ok(self) -> bool:
         return not str(self.ping).startswith("down")
+
+    def empty_counts(self) -> dict[str, int]:
+        """Every client's 'listed nothing' count after this run: a client this run did not ask
+        keeps its earlier one (a check of another client's topic must not restart its count)."""
+        kept = {k: v for k, v in self.previous_empty.items() if k not in self.pinged and v > 0}
+        return {**kept, **self.empty}
 
     def health(self) -> dict[str, bool]:
         """Every client's state for the header: the earlier ones, then what this run saw."""
