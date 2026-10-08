@@ -28,7 +28,7 @@
   "config_error": {
     "mapping": "config.yaml must be a mapping of settings (name: value)",
     "syntax": "config.yaml cannot be read: the YAML is broken at line {line}, column {column}.",
-    "whole_number": "config.yaml: {key} must be a whole number {low}..{high}",
+    "whole_number": "config.yaml: {key} must be a whole number from {low} to {high}",
     "true_false": "config.yaml: {key} must be true or false",
     "folder_list": "config.yaml: {key} must be a list of folders",
     "folder": "config.yaml: {key} must be a folder path",
@@ -37,7 +37,7 @@
     "bind": "config.yaml: bind must be a text address such as 127.0.0.1",
     "user_agent": "config.yaml: user_agent must be text",
     "trackers": "config.yaml: trackers must map each site name to its settings",
-    "client": "config.yaml: client must be a mapping (kind, ...)",
+    "client": "config.yaml: client must be a mapping (kind, …)",
     "clients": "config.yaml: clients must be a mapping or a list",
     "backup_time": "config.yaml: backup_time must look like \"03:30\"",
     "heartbeat_url": "config.yaml: heartbeat_url must be an https:// address (e.g. from healthchecks.io)",
@@ -647,7 +647,7 @@
   "doctor_report": {
     "ok": "all good: {value}",
     "yes": "yes",
-    "no": "NO",
+    "no": "no",
     "yes_plain": "yes",
     "no_plain": "no",
     "not_asked": "not asked",
@@ -710,7 +710,7 @@
     "no_topic_number": "no topic number in the link"
   },
   "help": {
-    "back": "← settings",
+    "back": "← Settings",
     "title": "TOW guide",
     "intro": {
       "text": "TOW watches topics on torrent sites. When a topic page gets a new version, TOW hands it to your <b>torrent client</b> (qBittorrent, Transmission or Deluge) and tells the connected messengers. TOW itself downloads nothing and does not move files — the client does that."
@@ -943,12 +943,12 @@
     "releases": {
       "badge": "New {version}",
       "disabled": "Automatic update checks are off",
-      "unknown_build": "A stable release was found, but this build's version cannot be compared.",
+      "unknown_build": "A stable release was found, but this build's version cannot be compared",
       "available": "TOW {version} is available",
-      "current": "You have the latest version.",
-      "unavailable": "Could not check for updates. TOW keeps working; try again later.",
+      "current": "You have the latest version",
+      "unavailable": "Could not check for updates. TOW keeps working; try again later",
       "stale": "could not refresh; showing the last successful check",
-      "checked": "checked: {when}",
+      "checked": "Checked: {when}",
       "checking": "Checking for updates…",
       "confirm": "Install TOW {version}? TOW first saves and verifies a restore point, then restarts. If the new version fails its health check, the updater tries to restore the previous version and data.",
       "previous": "Back to {version}",
@@ -1273,8 +1273,8 @@
       "busy_service": "{what}: service busy ({code})",
       "delivery_unknown": "{what}: the message was sent but no answer came ({error}) — it may have arrived; it is kept for the next delivery",
       "required": "{field}: fill in this field",
-      "summary": "notifications: {channels}",
-      "summary_none": "notifications: not connected",
+      "summary": "Notifications: {channels}",
+      "summary_none": "Notifications: not connected",
       "dropped": {
         "one": "({n} more old message did not fit in the queue)",
         "other": "({n} more old messages did not fit in the queue)"
@@ -1674,8 +1674,8 @@
       "use_default": "Use the default folder",
       "manual_title": "Backups made by hand",
       "saved_count": {
-        "one": "{n} saved",
-        "other": "{n} saved"
+        "one": "Saved: {n}",
+        "other": "Saved: {n}"
       },
       "create": "Create a backup",
       "list_error": "The list of backups is not available right now.",
@@ -1689,7 +1689,7 @@
       "retention_legacy": "Currently the legacy rule applies (copies kept: {count}). Saving this field switches to retention by days.",
       "delete_warning": "Only this backup will be permanently deleted. Current settings, topics, history and other backups stay unchanged. This cannot be undone.",
       "manual_restore_confirm": "Restore the settings and history from this backup? TOW saves its current state automatically before replacing it.",
-      "manual_empty": "No saved backups.",
+      "manual_empty": "No saved backups",
       "manual_note": "Before restoring, TOW checks the backup and saves its current state. The network settings stay as they are now. The last 10 backups are kept.",
       "file_title": "TOW file",
       "file_intro": "A full encrypted copy to keep or to move together with the original master key.",
@@ -1838,7 +1838,7 @@
     "local_edits": "the code in {app} has local changes; nothing was updated",
     "busy": "another update is running ({lock})",
     "too_old": "{ref} is TOW {version}: an install managed by `tow run` goes no further back than v1.18.0 (older versions have no `tow run`); nothing was updated",
-    "start": "TOW update: {previous} -> {target} ({ref}) in {root}",
+    "start": "TOW update: {previous} → {target} ({ref}) in {root}",
     "stopping": "stopping TOW…",
     "not_stopped": "TOW did not stop within {minutes} min; it was stopped forcibly",
     "port_busy": "port {port} is still in use after stopping TOW",
@@ -1847,7 +1847,7 @@
     "sync_failed": "uv sync failed: {error}",
     "unhealthy": "the new version did not answer as {version} within {seconds} s",
     "failed": "update failed: {error}; restoring {previous}",
-    "rollback_step": "rollback - {step}: {result}",
+    "rollback_step": "rollback — {step}: {result}",
     "rolled_back": "the previous version is back and answers",
     "rollback_failed": "the previous version did not come back: start TOW by hand (tow run) and look at data/logs",
     "data_restored": "data and config were put back from the update snapshot (the new version had changed them)",
@@ -1961,7 +1961,7 @@
     },
     "header": {
       "client": "client",
-      "secrets_migration": "passwords and tokens cannot be opened",
+      "secrets_migration": "Passwords and tokens cannot be opened",
       "connected": "Connected",
       "disconnected": "No connection"
     },

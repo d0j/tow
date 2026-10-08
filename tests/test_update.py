@@ -316,7 +316,7 @@ def test_a_failing_rollback_step_does_not_stop_the_others(install):
     assert steps["uv sync"]["ok"] is False
     assert "network unreachable" in steps["uv sync"]["error"]
     assert steps["start the previous version"]["ok"] is True
-    assert any(line.startswith("rollback - uv sync: ") for line in lines)
+    assert any(line.startswith("rollback — uv sync: ") for line in lines)
     assert record["status"] == "failed"  # a failed environment rebuild cannot prove rollback complete
 
 

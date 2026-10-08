@@ -127,7 +127,7 @@ TEXTS = {
         "{ref} is TOW {version}: an install managed by `tow run` goes no further back than v1.18.0"
         " (older versions have no `tow run`); nothing was updated"
     ),
-    "start": "TOW update: {previous} -> {target} ({ref}) in {root}",
+    "start": "TOW update: {previous} → {target} ({ref}) in {root}",
     "stopping": "stopping TOW…",
     "not_stopped": "TOW did not stop within {minutes} min; it was stopped forcibly",
     "port_busy": "port {port} is still in use after stopping TOW",
@@ -136,7 +136,7 @@ TEXTS = {
     "sync_failed": "uv sync failed: {error}",
     "unhealthy": "the new version did not answer as {version} within {seconds} s",
     "failed": "update failed: {error}; restoring {previous}",
-    "rollback_step": "rollback - {step}: {result}",
+    "rollback_step": "rollback — {step}: {result}",
     "rolled_back": "the previous version is back and answers",
     "rollback_failed": "the previous version did not come back: start TOW by hand (tow run) and look at data/logs",
     "data_restored": "data and config were put back from the update snapshot (the new version had changed them)",

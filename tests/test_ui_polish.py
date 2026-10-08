@@ -473,7 +473,7 @@ def test_diagnostics_and_the_guide_are_reached_from_settings_not_the_header(clie
     for page in ("/doctor", "/settings/help"):
         text = client.get(page).text
         assert re.search(r'<a href="/settings" class="ico on"', _header(text))  # Settings stays lit
-        assert '<a href="/settings">← настройки</a>' in text  # and the way back is on the page
+        assert '<a href="/settings">← Настройки</a>' in text  # and the way back is on the page
     assert 'aria-current="page"' not in _header(client.get("/doctor").text)
 
 

@@ -138,7 +138,7 @@ def test_pages_ok():
         "Файл TOW",
         "Восстановить",
         "Уведомления",
-        "← настройки",
+        "← Настройки",
     ):
         assert essential in text, essential
     assert re.search(r"раз в <b>\d+ (ч|мин)</b>", text)  # the real interval, not a hard-coded one
@@ -437,7 +437,7 @@ def test_settings_renders_when_secret_store_requires_migration(monkeypatch):
 
     assert response.status_code == 200
     assert "пароли и токены не открываются" in response.text.lower()
-    assert 'title="пароли и токены не открываются"' in response.text
+    assert 'title="Пароли и токены не открываются"' in response.text
     assert "экспорт / импорт" in response.text
     health = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/health.json")
     assert health.json()["check_ok"] is False
@@ -1637,7 +1637,7 @@ def test_header_dots_follow_health():
     assert "hdr-svc" in t
     assert 'title="qBittorrent: Нет связи"' in t
     # No messenger connected: the header says so (it used to call it "бот молчит").
-    assert 'class="trk trk-ico mut" href="/settings?open=bots" title="уведомления: не подключены"' in t
+    assert 'class="trk trk-ico mut" href="/settings?open=bots" title="Уведомления: не подключены"' in t
     assert 'title="Kinozal"' in t
     assert "trk bad" in t
     assert "trk ok" in t
