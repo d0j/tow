@@ -11,6 +11,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - `tow backup`, `restore-snapshot`, `import-rollback`, `password`, `update`, `secrets`, `keys`, `run`, `stop` and
   `restart` explain themselves with `--help`, as `tow --help` promises; in Russian the help no longer mixes in
   English words ("usage:", "options", "show this help message and exit").
+- The Guide in Settings says that rutor's mirrors rest 30 minutes, that the check icon in a site's row ends the
+  pause, that a check you start still tries a site at its daily limit, and where both logs are.
 
 ## [1.28.0] — 2026-10-08
 
