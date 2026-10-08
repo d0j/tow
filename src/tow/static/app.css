@@ -910,10 +910,11 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .row-wrap > .row-ops { position: absolute; top: .38rem; right: .7rem; }
 summary:focus-visible, select:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
 /* A2: the progress link ("3/10") lives outside <summary> too (a link inside the summary's button
-   is not reachable as a link, axe nested-interactive). It is laid over the summary with the
+   is not reachable as a link, axe nested-interactive). It is laid over the closed row with the
    summary's own columns, so it sits where the progress cell is; the cell keeps the same words
-   unseen. Where anchor positioning is known the layer follows the summary of its own row (also
-   while the row is open); elsewhere it covers the closed row, and an open row shows the words. */
+   unseen. An open row shows the words, and app.js opens the episodes on a click on them.
+   (Anchor positioning followed the summary of an open row too, but it cost a layout on every
+   scroll frame of a 2000-row Home.) */
 .row-progress {
   position: absolute; inset: 0 0 1px 0; pointer-events: none;
   display: grid; grid-template-columns: 1.3rem minmax(0,1.6fr) 5.5rem minmax(0,1fr) minmax(9rem,1.3fr) 5rem 6.4rem;
@@ -923,14 +924,7 @@ summary:focus-visible, select:focus-visible { outline: 2px solid var(--acc); out
 .row-wrap:has(> .row-progress) .topic-progress { visibility: hidden; }
 .row-wrap:has(> details[open]) > .row-progress { display: none; }
 .row-wrap:has(> details[open]) .topic-progress { visibility: visible; }
-@supports (anchor-scope: --row-summary) {
-  .row-wrap { anchor-scope: --row-summary; }
-  .row-wrap > details.row-edit > summary { anchor-name: --row-summary; }
-  .row-progress { position-anchor: --row-summary; top: anchor(top); bottom: anchor(bottom); left: anchor(left); right: anchor(right); }
-  .row-wrap:has(> details[open]) > .row-progress { display: grid; }
-  .row-wrap:has(> details[open]) .topic-progress { visibility: hidden; }
-}
-.progress-ghost { font-weight: 700; white-space: nowrap; color: var(--acc); }
+.progress-ghost { font-weight: 700; white-space: nowrap; color: var(--acc); cursor: pointer; }
 .progress-ghost.complete { color: var(--ok); }
 @media (max-width: 720px) {
   .row-ops-slot { display: none; }
@@ -941,11 +935,7 @@ summary:focus-visible, select:focus-visible { outline: 2px solid var(--acc); out
     content: attr(data-label) / ""; color: var(--mut); margin-right: .3em; flex: 0 0 auto;
     font: 400 12px/1.5 "Segoe UI", system-ui, sans-serif;
   }
-  @supports (anchor-scope: --row-summary) {
-    .row-wrap:has(> details[open]) > .row-progress { display: flex; }
-  }
 }
-
 /* M2: the row icons' one sprite takes no room. */
 svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 /* One icon set (templates/_icons.html): the same stroke everywhere, three sizes - the header

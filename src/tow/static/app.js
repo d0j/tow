@@ -911,7 +911,9 @@ if (downloadPop && downloadBody) {
       e.preventDefault();
       e.stopPropagation();
       downloadBody.replaceChildren(Object.assign(document.createElement("div"), { className: "mut", textContent: t("js.downloads.loading") }));
-      downloadOpener = e.currentTarget;
+      // The focus comes back to the link, or to its row's summary when the row is open (the
+      // link is then hidden and its words in the summary were clicked).
+      downloadOpener = e.currentTarget.getClientRects().length ? e.currentTarget : e.currentTarget.closest(".row-wrap")?.querySelector("summary");
       downloadBaseUrl = link.href;
       loadedDownloads = [];
       downloadPop.showModal();
@@ -921,6 +923,15 @@ if (downloadPop && downloadBody) {
         downloadBody.replaceChildren(Object.assign(document.createElement("div"), { className: "mut", textContent: error.message || t("js.downloads.open_failed") }));
       }
     });
+  });
+  // An open row shows its progress as words in its summary (the link covers only a closed row,
+  // A2): a click on them opens the same episodes instead of folding the row.
+  document.addEventListener("click", (event) => {
+    const words = event.target.closest?.(".progress-ghost");
+    const link = words?.closest(".row-wrap")?.querySelector(":scope > .row-progress > a.download-details");
+    if (!link) return;
+    event.preventDefault();
+    link.click();
   });
   document.getElementById("download-close")?.addEventListener("click", () => downloadPop.close());
   downloadPop.addEventListener("close", () => downloadOpener?.focus());
