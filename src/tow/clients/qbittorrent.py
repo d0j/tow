@@ -480,6 +480,8 @@ class QBittorrentClient(ManagedClient):
         save_path: str | None,
         infohash: str,
         selected_indices: list[int] | tuple[int, ...],
+        *,
+        start: bool = True,
     ) -> dict[str, Any]:
         metadata, destination, selected = self._check_add(content, save_path, infohash, selected_indices)
         # G8: the owner's optional category and extra tags; "tow"/"tow-pending" stay first.
@@ -519,7 +521,7 @@ class QBittorrentClient(ManagedClient):
             ownership_error="client.managed.no_owner_mark",
             aliases=aliases,
         )
-        return self._finish_add(owned_hash, added, destination, metadata, selected)
+        return self._finish_add(owned_hash, added, destination, metadata, selected, start=start)
 
     def inspect_torrent(self, infohash: str) -> dict[str, Any] | None:
         rows = self._c.torrents_info(torrent_hashes=infohash.lower())
