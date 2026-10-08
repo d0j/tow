@@ -188,6 +188,34 @@ def test_each_row_cell_says_its_column_to_a_screen_reader(client, lang, labels):
     assert "position: relative" in _desktop_rules()[".topic-event"]  # the hidden text stays in its cell
 
 
+def test_the_focus_comes_back_to_the_row_or_control_after_an_action(client):
+    """A5: every row or header action reloads the page and the focus went back to its start.
+    The rows have ids; app.js keeps the row and the action for this tab just before the next
+    page opens and that page focuses the same button, the row's summary, the neighbouring row
+    (a deleted row), the same header button or the message."""
+    from bs4 import BeautifulSoup
+
+    _seed()
+    home = BeautifulSoup(client.get("/").text, "html.parser")
+    assert [row["id"] for row in home.select("#topics > .row-wrap")] == ["row-t1", "row-t2"]
+    sites = BeautifulSoup(client.get("/sites").text, "html.parser")
+    assert all(row["id"].startswith("site-row-") for row in sites.select(".row-wrap"))
+    submit = JS[JS.index("const submitPostForm") : JS.index("const showBusy")]
+    assert submit.index("rememberFocus(form, nextUrl);") < submit.index("window.location.assign(nextUrl);")
+    restore = JS[JS.index("const restoreFocus") : JS.index("const submitPostForm")]
+    for step in (
+        'buttonOf(row.querySelector(":scope > .row-ops"))',
+        'row.querySelector(":scope > details > summary")',
+        "[saved.next, saved.previous]",
+        'buttonOf(document.querySelector("header.app"))',
+        'document.getElementById("flash")',
+        'document.getElementById("add-error")',
+    ):
+        assert step in restore, step
+    assert "sessionStorage" in restore
+    assert JS.rstrip().endswith("restoreFocus();")  # after the rows are sorted and filtered
+
+
 def test_links_inside_running_text_are_underlined(client):
     """A7: "More" in the Backups note was told from its sentence by colour only (axe
     link-in-text-block)."""
