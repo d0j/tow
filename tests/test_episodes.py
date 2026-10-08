@@ -482,3 +482,39 @@ def test_a_name_parsed_again_gives_the_same_coverage_and_progress():
     first = summarize_completion(items, expected)
     assert summarize_completion(items, expected) == first
     assert first["completed"] == 8
+
+
+def test_a_range_of_a_hundred_episodes_is_expanded_and_a_longer_one_is_not():
+    assert len(parse_episode_coverage("Show.S01E01-E100.mkv")) == 100
+    assert [label.key for label in parse_episode_coverage("Show.S01E01-E101.mkv")] == ["episode:s01e01"]
+    assert len(parse_episode_coverage("Show E01-100.mkv")) == 100
+    assert [label.key for label in parse_episode_coverage("Show E01-101.mkv")] == ["episode:e01", "episode:e101"]
+    assert len(parse_episode_coverage("ShowA.S01E01-E100&S02E01-E100.mkv")) == 200
+    assert parse_episode_coverage("ShowA.S01E01-E100&S02E01-E100&S03E01.mkv") == ()
+
+
+def test_twenty_thousand_names_of_long_ranges_resolve_in_bounded_time_and_memory():
+    # The fuzzing reproducer: every name of a 20,000-file torrent declares 1000 episodes. Expanded
+    # and kept, they took 27 s and 1.5 GiB for "all files" and minutes for an episode rule.
+    import time
+
+    from tow import episodes
+    from tow.selection import normalize_policy, resolve_selection
+    from tow.torrent import TorrentFile
+
+    episodes._known_coverage.cache_clear()
+    for span in (999, 99):
+        files = tuple(
+            TorrentFile(i, f"Show.S01E{1 + i % 9000:04d}-E{1 + i % 9000 + span:04d} p{i}.mkv", 1) for i in range(20000)
+        )
+        coverages = resolve_episode_coverages(file.path for file in files)
+        assert sum(map(len, coverages)) == len(files)  # each counts as its first episode
+        began = time.perf_counter()
+        for policy in (normalize_policy("all", ""), normalize_policy("episodes", "*")):
+            plan = resolve_selection(files, policy)
+            assert len(plan.selected_indices) == len(files)
+            assert len(plan.selected_episode_keys) == 9000
+        assert time.perf_counter() - began < 20  # ~1.5 s for both; minutes before
+    assert episodes._known_coverage("Show.S01E01-E050.mkv") is None  # a long range is not kept ...
+    assert len(parse_episode_coverage("Show.S01E01-E050.mkv")) == 50  # ... and still parsed whole
+    assert len(parse_episode_coverage("Show.S01E01-E050.mkv")) == 50
