@@ -124,3 +124,94 @@ def test_paths_fail_closed_without_explicit_or_project_runtime(monkeypatch, tmp_
     with pytest.raises(RuntimeError, match="TOW_ROOT"):
         paths.config_path()
     assert not root.exists()
+
+
+# --- password records and the token file, refused when they are not what TOW wrote -----------
+
+# A record as an earlier TOW stored it (synthetic password): it must keep verifying after updates.
+GOLDEN = {
+    "scheme": "pbkdf2-sha256",
+    "iterations": 600_000,
+    "salt": "AAECAwQFBgcICQoLDA0ODw==",
+    "digest": "yeWmkBNPsWPt9qA251x0-kkTuSLy7W4nx6GDDBvlLmI=",
+}
+
+
+def _record(password: str, *, salt: bytes = bytes(16), iterations: int = 100_000, digest_bytes: int = 32) -> dict:
+    import base64
+    import hashlib
+
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations, digest_bytes)
+    return {
+        "scheme": "pbkdf2-sha256",
+        "iterations": iterations,
+        "salt": base64.urlsafe_b64encode(salt).decode("ascii"),
+        "digest": base64.urlsafe_b64encode(digest).decode("ascii"),
+    }
+
+
+def test_a_stored_password_record_still_verifies():
+    assert lan_password_matches("golden-record-42", GOLDEN)
+    assert not lan_password_matches("golden-record-43", GOLDEN)
+
+
+def test_no_password_never_matches_and_never_raises():
+    empty = _record("")  # even a record made for the empty password
+    for record in (GOLDEN, empty, None, {}):
+        assert lan_password_matches(None, record) is False
+        assert lan_password_matches("", record) is False
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        _record("golden-record-42", salt=bytes(15)),  # salt one byte short
+        _record("golden-record-42", salt=bytes(17)),
+        _record("golden-record-42", salt=bytes(8)),
+        _record("golden-record-42", digest_bytes=31),  # digest one byte short
+        _record("golden-record-42", iterations=99_999),  # below the floor
+        {**GOLDEN, "iterations": 2_000_001},  # above the ceiling (never computed)
+        {**GOLDEN, "scheme": "pbkdf2-sha1"},
+        {**GOLDEN, "salt": "not base64!"},
+    ],
+)
+def test_a_malformed_password_record_is_refused(record):
+    from tow.auth import lan_password_session_key
+
+    assert lan_password_matches("golden-record-42", record) is False
+    with pytest.raises(AuthConfigurationError):
+        lan_password_session_key(record)
+
+
+def test_a_password_record_at_the_iteration_bounds_is_accepted():
+    assert lan_password_matches("golden-record-42", _record("golden-record-42", iterations=100_000))
+
+
+def test_a_symlinked_access_key_file_is_refused(monkeypatch, tmp_path):
+    import os
+
+    real = tmp_path / "real.token"
+    real.write_text(TOKEN, encoding="utf-8")
+    link = tmp_path / "lan.token"
+    try:
+        os.symlink(real, link)
+    except (OSError, NotImplementedError) as exc:  # no symlink privilege on this host
+        pytest.skip(f"symlinks unavailable: {exc}")
+    monkeypatch.delenv("TOW_LAN_AUTH_TOKEN", raising=False)
+    monkeypatch.setenv("TOW_LAN_AUTH_TOKEN_FILE", str(link))
+    with pytest.raises(AuthConfigurationError) as error:
+        load_lan_auth_token()
+    assert error.value.code == "auth.token_file_missing"
+
+
+def test_a_missing_access_key_file_says_so(monkeypatch, tmp_path):
+    monkeypatch.delenv("TOW_LAN_AUTH_TOKEN", raising=False)
+    monkeypatch.setenv("TOW_LAN_AUTH_TOKEN_FILE", str(tmp_path / "missing.token"))
+    with pytest.raises(AuthConfigurationError) as error:
+        load_lan_auth_token()
+    assert error.value.code == "auth.token_file_missing"
+    (tmp_path / "folder.token").mkdir()
+    monkeypatch.setenv("TOW_LAN_AUTH_TOKEN_FILE", str(tmp_path / "folder.token"))
+    with pytest.raises(AuthConfigurationError) as error:
+        load_lan_auth_token()
+    assert error.value.code == "auth.token_file_missing"

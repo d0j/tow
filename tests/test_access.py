@@ -191,3 +191,47 @@ def test_the_session_cookie_is_issued_the_same_way_everywhere(monkeypatch, schem
     assert "samesite=lax" in cookie
     assert "path=/" in cookie
     assert ("secure" in cookie.split("; ")) is (scheme == "https")
+
+
+# --------------------------------------------------------------------------- signing out
+
+
+def _signed_in_lan() -> tuple[TestClient, str]:
+    open_network()
+    record = lan_password_record("a-long-password")
+    save_secrets({"lan_auth": record})
+    cookie = issue_session(lan_password_session_key(record))
+    return _lan(cookies={SESSION_COOKIE: cookie}), cookie
+
+
+def test_signing_out_revokes_the_session_not_only_the_cookie():
+    lan, cookie = _signed_in_lan()
+    assert lan.get("/settings").status_code == 200
+
+    assert lan.post("/logout", follow_redirects=False).status_code == 303
+
+    replayed = _lan(cookies={SESSION_COOKIE: cookie})  # the old cookie, kept by someone
+    assert replayed.get("/settings", follow_redirects=False).status_code != 200
+
+
+def test_the_device_that_signs_out_everywhere_stays_signed_in():
+    lan, cookie = _signed_in_lan()
+    other = _lan(cookies={SESSION_COOKIE: issue_session(lan_password_session_key(load_secrets()["lan_auth"]))})
+    assert other.get("/settings").status_code == 200
+
+    answer = lan.post("/settings/sessions/sign-out", follow_redirects=False)
+
+    assert answer.status_code == 303
+    assert answer.cookies.get(SESSION_COOKIE) not in (None, cookie)  # a new session for this device
+    assert lan.get("/settings", follow_redirects=False).status_code == 200
+    assert other.get("/settings", follow_redirects=False).status_code != 200  # every other one signs in again
+    assert _lan(cookies={SESSION_COOKIE: cookie}).get("/settings", follow_redirects=False).status_code != 200
+
+
+def test_a_damaged_password_record_is_not_a_password():
+    assert access.password_record({"lan_auth": DAMAGED}) is None
+    assert access.password_is_set({"lan_auth": DAMAGED}) is False
+    assert access.password_record({"lan_auth": {**DAMAGED, "iterations": 600_000}}) is None
+    record = lan_password_record("a-long-password")
+    assert access.password_record({"lan_auth": record}) == record
+    assert access.password_record(None) is None
