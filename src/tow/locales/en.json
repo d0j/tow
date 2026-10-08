@@ -693,7 +693,8 @@
     "owner_ambiguous": "This terminal runs as {terminal}, but {session} is signed in to this computer: TOW cannot tell which of them uses this install, so it changes nothing. Name the account that uses TOW, for example: {command} \"{session}\"",
     "owner_not_person": "“{name}” is not a person's account on this computer (a group, SYSTEM or an unknown name): TOW changes nothing. Write it as on the sign-in screen, or as COMPUTER\\name.",
     "failed": "Could not close {path}: checked afterwards, it is still open or belongs to another account.",
-    "still_open": "TOW could not close them although they are yours; check the folder's permissions in Explorer or with icacls."
+    "still_open": "TOW could not close them although they are yours; check the folder's permissions in Explorer or with icacls.",
+    "owner_needs_admin": "Nothing was changed: only an administrator can give TOW's folders to an account named with --owner. Open a terminal with “Run as administrator” (or use sudo) and run: {command} --owner ACCOUNT"
   },
   "folders": {
     "protected": "TOW does not save to Windows, program and AppData folders — this protects against harmful files",
