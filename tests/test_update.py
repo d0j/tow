@@ -793,3 +793,11 @@ def test_tow_update_prints_how_to_run_it(capsys, tmp_path, monkeypatch):
     assert "deploy.ps1" not in out
     assert ("Update TOW.cmd" if os.name == "nt" else "update-tow") in out or "Update TOW.command" in out
     assert "latest" in out
+    # A release it cannot go to is refused here too, never offered as a command that is refused.
+    assert cli.main(["update", "--ref", "v1.21.0"]) == 1
+    out = capsys.readouterr().out
+    assert "v1.21.0" in out
+    assert "v1.22.0" in out
+    assert "update.py" not in out
+    assert "TOW.cmd" not in out
+    assert "update-tow" not in out

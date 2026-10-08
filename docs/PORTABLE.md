@@ -509,12 +509,14 @@ same steps, with the code from the release instead of git.
 
 - `--ref` is a release tag or `latest` (resolved through GitHub's `/releases/latest`
   redirect); the target must be **v1.22.0 or newer** (an older `update.py` needs git, so it
-  could not update this install again). `tow update --ref` says so for such an install.
+  could not update this install again), refused before anything is downloaded; `tow update
+  --ref` refuses such a tag too (exit code 1) and prints no command for it.
   `latest` that is the installed version changes nothing (it says so, exit code 0), and one
   older than the installed version is refused; a release named by its tag installs again or
   goes back.
 - Before TOW stops: the release's `SHA256SUMS` (required; without a matching source checksum
-  nothing is changed), then GitHub's archive of the tag
+  nothing is changed; when neither it nor the tag's archive exists, the tag is named as not a
+  release of TOW), then GitHub's archive of the tag
   (`archive/refs/tags/<tag>.tar.gz`); if its SHA-256 differs from the `tow-source.tar.gz` line,
   the copy uploaded with the release is taken and checked instead; neither matching is a
   refusal. Downloads go through the system's proxy settings, with the system's certificates plus

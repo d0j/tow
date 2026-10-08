@@ -344,6 +344,7 @@
       "how": "TOW updates itself with the install's base Python (the update replaces this environment). Run:",
       "or_windows": "or, on Windows:",
       "archive": "This install has no git: the update downloads the release from GitHub (a release tag from v1.22.0, or latest).",
+      "archive_too_old": "{ref} cannot be installed here: an install without git goes no further back than v1.22.0 (older versions cannot update it again). Nothing was changed.",
       "archive_file": "Or, simpler: run “{file}” in the TOW folder (to this version: “{file}” {ref})."
     },
     "keys": {
