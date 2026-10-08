@@ -68,6 +68,7 @@ class Topic(TypedDict, total=False):
     # the latest result (the Home status colour, AGENTS.md)
     last_ok: bool
     last_ok_at: str
+    site_ok_at: str  # the last check whose site step worked (the client's may have failed)
     last_check: str
     last_changed: bool
     last_error: str | None
@@ -94,6 +95,7 @@ class Health(TypedDict, total=False):
     auto_at_ts: int | None
     auto_ok_at_ts: int | None
     history_rebuilt_at: int
+    ping_failed: dict[str, int]  # client -> when Settings' "Check" found it not answering
 
 
 class MirrorState(TypedDict, total=False):

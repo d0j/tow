@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import socket
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,8 +19,10 @@ from fastapi.templating import Jinja2Templates
 from tow import __version__, access, i18n, paths, platform, undo
 from tow.auth import SESSION_COOKIE, password_hint
 from tow.clients.factory import client_name
+from tow.clock import parse_timestamp
 from tow.config import interval_sec_of, port_of
 from tow.jsonish import as_dict
+from tow.status import site_check_tone
 from tow.web import _context, services
 from tow.web.text import t, tm
 from tow.web.views import flash_ttl_sec, stored_ui_time
@@ -51,6 +54,64 @@ def _default_client_label() -> str:
         return t("web.header.client")
 
 
+def _when(value: object) -> datetime | None:
+    """A stored ISO time; None for none (or a text an old TOW wrote)."""
+    try:
+        return parse_timestamp(str(value)) if value else None
+    except TypeError, ValueError, OverflowError:
+        return None
+
+
+def _later(at: datetime | None, than: datetime | None) -> bool:
+    return at is not None and (than is None or at > than)
+
+
+def site_tones() -> tuple[dict[str, str], list[str]]:
+    """Every site's tone for the header and Sites, and the sites Home has topics on (in order).
+
+    The tone is what the latest observation of the site says - a check that asked it or a
+    Diagnostics probe of its mirrors, whichever came later (a probe without a time is older
+    than any check): "ok" it answered, "warn" transport trouble (a mirror down or paused,
+    Cloudflare, a sign-in, the day's limit), "mut" not asked yet. Once per request."""
+    return _context.memo("site_tones", _site_tones)
+
+
+def _site_tones() -> tuple[dict[str, str], list[str]]:
+    state = _context.state()
+    checked: dict[str, tuple[datetime | None, str]] = {}
+    watched: dict[str, None] = {}
+    for topic in state.get("topics") or []:
+        name = _context.site_name(topic.get("url") or "")
+        if name is None:
+            continue
+        watched.setdefault(name)
+        tone = site_check_tone(topic)
+        if tone is None:
+            continue
+        at = _when(topic.get("last_check"))
+        if name not in checked or _later(at, checked[name][0]):
+            checked[name] = (at, tone)
+    probed: dict[str, tuple[datetime | None, bool]] = {}
+    for probe in as_dict(state.get("doctor")).get("probes") or []:
+        if not isinstance(probe, dict):
+            continue
+        name = str(probe.get("tracker") or "")
+        at, answered = probed.get(name, (None, False))
+        when = _when(probe.get("at"))
+        probed[name] = (when if _later(when, at) else at, answered or bool(probe.get("ok")))
+    tones: dict[str, str] = {}
+    for name in {*watched, *checked, *probed}:
+        check, probe = checked.get(name), probed.get(name)
+        if check is not None and (probe is None or not _later(probe[0], check[0])):
+            tones[name] = check[1]
+        elif probe is not None:
+            # A mirror that does not answer is transport trouble: amber, never red (AGENTS.md).
+            tones[name] = "ok" if probe[1] else "warn"
+        else:
+            tones[name] = "mut"
+    return tones, list(watched)
+
+
 def header_health() -> dict[str, Any]:
     state = _context.state()
     h = state.get("health") or {}
@@ -64,21 +125,13 @@ def header_health() -> dict[str, Any]:
         qbit_ok = False
     elif not h and doc.get("qbit"):
         qbit_ok = True
-    site_tones: dict[str, str] = {}
+    from tow.clients.factory import default_client_id
+
+    # Settings' "Check" found the main client not answering after the last check: say so now.
+    ping_failed = default_client_id(cfg) in as_dict(h.get("ping_failed"))
+    qbit_ok = qbit_ok and not ping_failed
     _context.trackers()  # a site whose link pattern is broken fails the header, as it always did
-    for topic in state.get("topics") or []:
-        name = _context.site_name(topic.get("url") or "")
-        if name is not None and name not in site_tones:
-            site_tones[name] = "mut"
-    for p in doc.get("probes") or []:
-        name = str(p.get("tracker") or "")
-        if name not in site_tones:
-            continue
-        if p.get("ok"):
-            site_tones[name] = "ok"
-        elif site_tones[name] != "ok":
-            # A mirror that does not answer is transport trouble: amber, never red (AGENTS.md).
-            site_tones[name] = "warn"
+    tones, watched = site_tones()
     from tow.notifiers import health as notify_health
     from tow.notifiers import summary as notify_summary
 
@@ -96,7 +149,7 @@ def header_health() -> dict[str, Any]:
     check_ok = bool(h.get("check_ok", True)) and not secret_store_error
     check_error = str(h.get("check_error") or ("secrets_migration_required" if secret_store_error else ""))
     # Grey until a check or the diagnostics have asked the client at all: "not asked" is not "down".
-    qbit_known = "qbit_ok" in h or bool(doc.get("qbit"))
+    qbit_known = "qbit_ok" in h or bool(doc.get("qbit")) or ping_failed
     return {
         "qbit_ok": qbit_ok,
         "qbit_tone": ("ok" if qbit_ok else "bad") if qbit_known else "mut",
@@ -106,7 +159,7 @@ def header_health() -> dict[str, Any]:
         "client_label": client_label,
         "bot": bot,
         "bot_ok": bot_ok,
-        "sites": site_tones,
+        "sites": {name: tones.get(name, "mut") for name in watched},
         "at": stored_ui_time(h.get("at")),  # stored as an ISO time (older: already written out)
         "at_ts": int(h.get("at_ts") or 0),
         # The countdown runs to next_from_ts + interval_sec: the real next scheduled check

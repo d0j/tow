@@ -50,7 +50,8 @@ def _last_event(history_record: dict[str, Any]) -> dict[str, Any]:
 
 
 def _tracker_tone(topic: dict[str, Any]) -> str:
-    """The site icon shows the site only: a torrent-client or folder error is not the site's fault."""
+    """The site icon shows the site only: a torrent-client or folder error is not the site's
+    fault - the site is green when it answered (in this check, or once before)."""
     error = str(topic.get("last_error") or "")
     if error:
         cls = str(topic.get("last_error_class") or error_class(error))
@@ -58,10 +59,28 @@ def _tracker_tone(topic: dict[str, Any]) -> str:
             return "warn"
         if cls in SITE_ERROR_CLASSES:
             return "bad"
-        return "ok" if topic.get("last_ok_at") else "mut"
+        return "ok" if topic.get("last_ok_at") or topic.get("site_ok_at") else "mut"
     if topic.get("last_ok"):
         return "ok"
     return "mut"
+
+
+def site_check_tone(topic: dict[str, Any]) -> str | None:
+    """What the topic's latest check says about its site, for the site's own colour (the
+    header, Sites): "warn" for transport trouble, a sign-in or the day's limit, "ok" when the
+    site answered, None when that check did not reach the site."""
+    error = str(topic.get("last_error") or "")
+    cls = str(topic.get("last_error_class") or error_class(error)) if error else ""
+    if cls in SITE_WARNING_CLASSES:
+        return "warn"
+    checked = topic.get("last_check")
+    if not checked:
+        return None
+    if topic.get("site_ok_at") == checked:
+        return "ok"
+    if cls in SITE_ERROR_CLASSES - {"no_tracker"}:
+        return "ok"  # the site answered - about this topic (removed, not a torrent)
+    return None
 
 
 def project_home_status(topic: dict[str, Any], history_record: dict[str, Any] | None) -> HomeStatus:

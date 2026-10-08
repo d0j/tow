@@ -55,4 +55,6 @@ def stamp_result(topic: Topic, row: dict[str, Any]) -> None:
     topic["last_check"] = now()
     if row.get("ok") and row.get("status") != "skipped":
         topic["last_ok_at"] = topic["last_check"]  # G3: when it last really worked
+    if row.get("site_answered"):
+        topic["site_ok_at"] = topic["last_check"]  # the site's part worked, the client's may not
     topic["last_changed"] = bool(row.get("ok") and row.get("changed"))

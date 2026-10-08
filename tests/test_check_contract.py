@@ -1851,6 +1851,20 @@ def test_client_coming_back_is_reported(monkeypatch):
     assert sent == ["Торрент-клиент снова доступен"]
 
 
+def test_a_check_records_that_the_site_answered_when_the_client_failed(monkeypatch):
+    client = FakeClient(add_error="qBittorrent refused the torrent")
+    _wire_fake_check(monkeypatch, client)
+    save_state({"topics": [{"id": "t1", "title": "Show", "url": "https://tracker/1", "save_path": r"M:\TV"}]})
+    save_download_history({"schema_version": 1, "topics": {}})
+
+    check.run_check(apply=True, notify=False, ids=["t1"], how="manual")
+
+    topic = load_state()["topics"][0]
+    assert topic["last_ok"] is False
+    assert topic["site_ok_at"] == topic["last_check"]
+    assert "last_ok_at" not in topic
+
+
 def test_torrent_removed_from_client_makes_the_topic_red(monkeypatch):
     client = FakeClient()
     _wire_fake_check(monkeypatch, client)
