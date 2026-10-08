@@ -28,7 +28,8 @@ from tow.browser_auth import browser_auth
 from tow.check import await_relocation, client_owned_by_tow, record_check_failure, run_check
 from tow.check.space import folder_free
 from tow.clients.factory import from_secrets as client_from_secrets
-from tow.config import load_config, save_config
+from tow.config import load_config
+from tow.config import save_config as _save_config
 from tow.content import metadata as content_metadata
 from tow.content import read as read_content
 from tow.doctor import doctor_report, stale_autostart
@@ -38,7 +39,7 @@ from tow.lifecycle import request_restart, service_status, set_autostart
 from tow.locations import check_writable as folder_write_problem
 from tow.locations import free_bytes
 from tow.log import history_events, log_event, read_events
-from tow.mirrors import prefer_host
+from tow.mirrors import prefer_host as _prefer_host
 from tow.notifiers import test as test_notifier
 from tow.notify import send as notify_send
 from tow.ratelimit import LoginThrottle
@@ -65,13 +66,14 @@ from tow.snapshots import (
 )
 from tow.snapshots import cleanup_status as night_cleanup_status
 from tow.store import (
+    StoreWriteError,
     load_download_history,
     load_secrets,
     load_state,
     persistence_lock,
-    save_secrets,
-    save_state,
 )
+from tow.store import save_secrets as _save_secrets
+from tow.store import save_state as _save_state
 from tow.store_transaction import commit as commit_stores
 from tow.store_transaction import recover as recover_store_transaction
 from tow.store_transaction import transaction as store_transaction
@@ -354,3 +356,27 @@ def locked_state_mutation[**P, R](function: Callable[P, R]) -> Callable[P, R]:
             return function(*args, **kwargs)
 
     return wrapped
+
+
+def _single_file_write[**P, R](function: Callable[P, R]) -> Callable[P, R]:
+    """A save of one store (no journal) that fails with an OSError - another program keeps the
+    file open longer than the replace retries, the disk is full - raises ``StoreWriteError``:
+    the app answers it with a message to try again (``tow.web.app``), never a server error. An
+    ``except OSError`` around the call still catches it."""
+
+    @wraps(function)
+    def wrapped(*args: P.args, **kwargs: P.kwargs) -> R:
+        try:
+            return function(*args, **kwargs)
+        except StoreWriteError:
+            raise
+        except OSError as exc:
+            raise StoreWriteError(exc.errno, exc.strerror or type(exc).__name__) from exc
+
+    return wrapped
+
+
+save_state = _single_file_write(_save_state)
+save_config = _single_file_write(_save_config)
+save_secrets = _single_file_write(_save_secrets)
+prefer_host = _single_file_write(_prefer_host)

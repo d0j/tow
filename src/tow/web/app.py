@@ -12,6 +12,7 @@ import contextlib
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from html import escape
+from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler
@@ -22,7 +23,7 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from tow import access
 from tow.config import ConfigError
-from tow.store import StoreCorruptionError
+from tow.store import StoreCorruptionError, StoreWriteError
 from tow.web import (
     middleware,
     routes_auth,
@@ -86,6 +87,23 @@ async def _store_corruption(_request: Request, exc: StoreCorruptionError) -> Res
     # The stored error can contain a local path or a damaged value. The browser needs only a
     # stable failure message; recovery details remain with the local diagnostic tools.
     return Response(t("web.data_unavailable"), status_code=503)
+
+
+def _back_to(request: Request) -> str:
+    """The page the owner acted on (the Referer of this site, without its message), else Home."""
+    referer = urlsplit(request.headers.get("referer") or "")
+    if referer.netloc != request.url.netloc or not referer.path.startswith("/"):
+        return "/"
+    query = urlencode([(key, value) for key, value in parse_qsl(referer.query) if key != "flash"])
+    return referer.path + (f"?{query}" if query else "")
+
+
+async def _store_write_failed(request: Request, exc: StoreWriteError) -> Response:
+    """A single-file save failed (another program keeps the data file open longer than the
+    retries, the disk is full): the stores are as they were - say so and to try again, on the
+    page the owner acted on, instead of a server error."""
+    _CONFIG_LOG.warning("a data file could not be written: %s %s", type(exc.__cause__ or exc).__name__, exc.errno)
+    return flash_redirect(_back_to(request), "web.data_busy", "err")
 
 
 async def _http_error(request: Request, exc: StarletteHTTPException) -> Response:
@@ -170,6 +188,7 @@ def create_app() -> FastAPI:
     # first, so it sits inside the security middleware, which sees every response.
     app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.exception_handler(StoreCorruptionError)(_store_corruption)
+    app.exception_handler(StoreWriteError)(_store_write_failed)
     app.exception_handler(access.LocalOnly)(_local_only)
     app.exception_handler(StarletteHTTPException)(_http_error)
     app.middleware("http")(middleware.secure)

@@ -66,6 +66,11 @@ class StoreReadError(StoreCorruptionError):
     """A store could not be read right now (I/O error); the file itself is left alone."""
 
 
+class StoreWriteError(OSError):
+    """A store could not be written right now (another program keeps it open, the disk is
+    full); the store is as it was. Raised by the web pages' single-file saves."""
+
+
 class StateVersionError(TowError, StoreCorruptionError):
     """state.json has a data version this TOW does not know (``store.*``): it is neither read
     nor written, so a newer TOW's data is never corrupted by an older one."""
@@ -371,7 +376,7 @@ def _writer_lock(path: Path) -> Iterator[None]:
         yield
 
 
-def replace_with_retry(source: Path, target: Path, *, attempts: int = 8) -> None:
+def replace_with_retry(source: Path, target: Path, *, attempts: int = 10) -> None:
     """os.replace, retrying briefly while a reader has the target open (Windows sharing violation)."""
     for attempt in range(attempts):
         try:
@@ -380,7 +385,7 @@ def replace_with_retry(source: Path, target: Path, *, attempts: int = 8) -> None
         except PermissionError:
             if attempt == attempts - 1:
                 raise
-            time.sleep(0.02 * 2**attempt)  # 20 ms ... ~2.5 s in total
+            time.sleep(min(0.02 * 2**attempt, 1.0))  # 20 ms ... 1 s, ~4.3 s in total
 
 
 _write_generation = 0

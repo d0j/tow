@@ -1953,6 +1953,7 @@
   },
   "web": {
     "data_unavailable": "TOW data is unavailable; check the installation on this computer",
+    "data_busy": "TOW could not write its data file just now — another program may be keeping it open (an antivirus or a backup tool). Try again in a moment.",
     "config_unreadable": {
       "title": "TOW cannot read its settings file config.yaml",
       "recover": "Correct config.yaml in the TOW folder at the place named above and reload this page: TOW reads the file again by itself. If that does not work, copy config.yaml back from the newest nightly backup (the folder backup/night in the TOW folder, unless you chose another one) and reload the page.",

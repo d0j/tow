@@ -233,8 +233,10 @@ def test_replace_gives_up_after_retries_and_leaves_store_and_no_temp_file(monkey
     with pytest.raises(PermissionError):
         save_state({"topics": [{"id": "new"}]})
 
-    assert len(sleeps) == 7  # 8 attempts, back-off between them
+    assert len(sleeps) == 9  # 10 attempts, back-off between them
     assert sleeps == sorted(sleeps)
+    assert max(sleeps) == 1.0
+    assert 4.0 < sum(sleeps) < 5.0  # a reader holding the file a few seconds is waited for
     assert state_path().read_bytes() == before
     assert _temp_leftovers(state_path().parent) == []
 

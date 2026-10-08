@@ -33,6 +33,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The temporary file of a save that TOW was stopped in the middle of (`data/.state.json.*.tmp`, a full copy of the
   state, and those of the secrets, the download history and `config.yaml`) is removed the next time TOW saves
   anything, once it is a few seconds old. Before, such files stayed forever.
+- Pausing, editing or deleting a topic, pausing a site, choosing its mirror or saving a setting while another program
+  (an antivirus, a backup tool) keeps TOW's data file open says that the file could not be written and to try again,
+  on the same page; TOW also waits a little longer (about 4 s) for the file. Before, it was a server error.
 
 ## [1.28.1] — 2026-10-08
 
