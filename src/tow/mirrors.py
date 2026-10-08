@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
+import httpcore
 import httpx
 
 from tow import http as thttp
@@ -65,8 +66,9 @@ def _rebuild_fetch_error(code: str, failure: str, cls: str, params: dict[str, An
     return MirrorFetchError(code, failure=failure, cls=cls, **params)
 
 
-# Failures that describe the requested topic, not the mirror's health.
-_TOPIC_LEVEL_CODES = frozenset({"auth", "http_topic", "too_large", "gone"})
+# Failures that describe the requested topic, not the mirror's health; nor does TOW's own
+# failure on an answer it got (``local``): neither counts towards the mirror cooldown.
+_NOT_HOST_HEALTH_CODES = frozenset({"auth", "http_topic", "too_large", "gone", "local"})
 
 
 def says_topic_removed(content: bytes | str) -> bool:
@@ -315,12 +317,29 @@ def _mark_host_ok(tracker: str, bucket: dict[str, Any], host: str, *, persist: b
         _save_bucket(tracker, bucket, host)
 
 
+# What a host that does not answer well raises: the network library's errors, the socket's,
+# a body that never ends. Anything else is TOW failing on an answer it got (``local``).
+_TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
+    httpx.HTTPError,
+    httpx.StreamError,
+    httpcore.NetworkError,
+    httpcore.TimeoutException,
+    httpcore.ProtocolError,
+    httpcore.ProxyError,
+    httpcore.UnsupportedProtocol,
+    OSError,
+    thttp.ResponseTooSlowError,
+)
+
+
 def _failure_code(error: Exception) -> str:
     if isinstance(error, MirrorFetchError):
         return error.failure
     if isinstance(error, thttp.ResponseTooLargeError):
         return "too_large"
-    return "transport"
+    if isinstance(error, _TRANSPORT_ERRORS):
+        return "transport"
+    return "local"
 
 
 def pick_and_get(
@@ -385,8 +404,9 @@ def pick_and_get(
             if code == "quota":
                 break
             # Only host-health failures count towards the mirror cooldown; a missing or
-            # oversized topic must not pause the whole tracker for every other topic.
-            if code not in _TOPIC_LEVEL_CODES:
+            # oversized topic, or TOW failing on a good answer, must not pause the whole
+            # tracker for every other topic.
+            if code not in _NOT_HOST_HEALTH_CODES:
                 n = int(b["fail"].get(host) or 0) + 1
                 b["fail"][host] = n
                 if n >= fail_threshold:
@@ -401,6 +421,11 @@ def pick_and_get(
         else auth_err or _deciding_failure(failures)
     )
     failure = _failure_code(selected_err)
+    if failure == "local":
+        # A mirror answered and TOW failed on the answer: red, never "no mirror answered".
+        raise MirrorFetchError(
+            "mirrors.local", failure=failure, cls="error", tracker=tracker, error=type(selected_err).__name__
+        ) from selected_err
     raise MirrorFetchError(
         "mirrors.all_failed",
         failure=failure,

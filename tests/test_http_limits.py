@@ -87,3 +87,21 @@ def test_a_page_title_without_an_html_content_type_is_read_with_the_same_rules(m
         "tow.trackers.match_tracker", lambda trackers, url: type("T", (), {"spec": {"fetch_hosts": ["x"]}})()
     )
     assert title._title_from_page("https://t.example/1") == TITLE
+
+
+def test_a_raw_utf8_header_survives_the_bounded_response():
+    # A site sends the .torrent's Cyrillic file name as raw UTF-8 bytes in Content-Disposition:
+    # rebuilding the response from the decoded text raised UnicodeEncodeError on every download.
+    disposition = 'attachment; filename="Кириллица.Сериал.torrent"'.encode()
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers=[(b"Content-Type", b"application/x-bittorrent"), (b"Content-Disposition", disposition)],
+            content=b"d4:infod4:name1:aee",
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(answer)) as c:
+        response = thttp.get_limited(c, "https://t.example/download/108", max_bytes=1024)
+    assert response.content == b"d4:infod4:name1:aee"
+    assert (b"Content-Disposition", disposition) in response.headers.raw

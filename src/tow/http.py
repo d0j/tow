@@ -158,10 +158,13 @@ def request_limited(c: httpx.Client, method: str, url: str, *, max_bytes: int, *
         # response decode those bytes a second time (NNMClub serves gzip),
         # producing ``incorrect header check``.  Content-Length describes the
         # encoded wire body as well, so it must not survive reconstruction.
+        # The headers are copied as the bytes the server sent: a value with raw UTF-8
+        # (a Cyrillic file name in Content-Disposition) decodes to text httpx cannot
+        # encode back as ASCII, and rebuilding from that text failed every download.
         decoded_headers = [
             (name, value)
-            for name, value in response.headers.multi_items()
-            if name.lower() not in {"content-encoding", "content-length", "transfer-encoding"}
+            for name, value in response.headers.raw
+            if name.lower() not in {b"content-encoding", b"content-length", b"transfer-encoding"}
         ]
         return httpx.Response(
             status_code=response.status_code,
