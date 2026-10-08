@@ -25,6 +25,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   call trackers sites; update errors point to **How to update** and the **Update log**; jargon such as
   "read-back", "Turnstile" and "contacts peers" is gone; Diagnostics names autostart as Settings does; the Home
   sort is **Errors first**, like its filter.
+- Small text fixes: "Saved: N" instead of "N saved", a capital letter in the bell's label and in **← Settings**,
+  "Checked:" after the version status, dashes, arrows and ellipses in the updater and config messages, "no"
+  instead of "NO" in the diagnostics report.
 
 ### Removed
 

@@ -826,7 +826,7 @@ def test_doctor_text_is_words_and_counts_a_missing_client(monkeypatch):
     text = doctor.doctor_text(report)
 
     assert report["ok"] is False
-    assert "всё в порядке: НЕТ" in text
+    assert "всё в порядке: нет" in text
     assert "сайты: rutor, nnmclub" in text
     assert "адрес торрент-клиента указан: нет" in text
     assert "торрент-клиент отвечает: нет — no address given" in text

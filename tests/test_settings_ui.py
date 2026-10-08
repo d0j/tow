@@ -96,7 +96,7 @@ def test_settings_ui_is_sectioned_and_explains_actions():
     assert 'name="operation" value="restore"' in page
     assert "uv run --frozen tow export" not in page
     assert "uv run --frozen tow import" not in page
-    assert "Сохранённых копий нет." in page
+    assert "Сохранённых копий нет</span>" in page
     assert 'action="/settings/restore-points"' in page
     assert "Перед восстановлением TOW проверит копию" in page
     assert ">Сохранить файл</button>" in page
@@ -150,7 +150,7 @@ def test_settings_renders_saved_restore_points(monkeypatch):
     page = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text
     transfer = page.split('id="acc-transfer"', 1)[1].split('id="acc-log"', 1)[0]
 
-    assert "1 сохранено" in transfer
+    assert "Сохранено: 1" in transfer
     assert "24.09.2026" in transfer
     assert "4,0 КБ" in transfer
     assert 'action="/settings/restore-points/20260924T091524Z-deadbeef/restore"' in transfer

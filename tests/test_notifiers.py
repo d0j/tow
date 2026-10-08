@@ -437,7 +437,7 @@ def test_undelivered_message_waits_and_goes_first_next_time(http):
     assert len(seen) == 3  # three attempts
     assert sleeps == list(base.RETRY_DELAYS)
     assert [item["text"] for item in load_state()["notify_outbox"]["discord"]["items"]] == ["серия 1"]
-    assert notifiers.summary(DISCORD, load_state()) == "уведомления: Discord ✗"
+    assert notifiers.summary(DISCORD, load_state()) == "Уведомления: Discord ✗"
 
     seen.clear()
     set_handler(lambda _r: httpx.Response(204))
@@ -506,7 +506,7 @@ def test_disabled_channel_is_skipped(http):
     assert notifiers.send_all(secrets, "x") == {}
     assert seen == []
     assert notifiers.health(secrets, {}) is None
-    assert notifiers.summary(secrets, {}) == "уведомления: не подключены"
+    assert notifiers.summary(secrets, {}) == "Уведомления: не подключены"
 
 
 # --- settings -------------------------------------------------------------------------------
@@ -718,7 +718,7 @@ def test_header_bell_changes_colour():
     assert 'trk-ico ok"' in bell()  # connected, no failure yet: green
     save_state({"topics": [], "notify_status": {"discord": {"ok": False, "at": 1, "error": "x"}}})
     assert 'trk-ico bad"' in bell()  # last delivery failed: red
-    assert 'title="уведомления: Discord ✗"' in bell()
+    assert 'title="Уведомления: Discord ✗"' in bell()
 
 
 # --- delivery guarantees (1.14) -------------------------------------------------------------
@@ -743,7 +743,7 @@ def test_telegram_recipients_are_independent(http):
     sent_to_111 = [dict(httpx.QueryParams(r.content.decode())) for r in seen if b"chat_id=111" in r.content]
     assert [row["text"] for row in sent_to_111] == ["серия 2"]  # no repeats for the chat that works
     assert not [r for r in seen if b"chat_id=222" in r.content]  # held until the settings change
-    assert notifiers.summary(secrets, load_state()) == "уведомления: Telegram ✗"
+    assert notifiers.summary(secrets, load_state()) == "Уведомления: Telegram ✗"
 
 
 def test_a_long_message_resumes_where_it_broke(http, monkeypatch):

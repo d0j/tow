@@ -75,7 +75,7 @@ Step by step, with what each screen shows: [docs/install.md](docs/install.md). A
 
 > [!IMPORTANT]
 > The first start creates `TOW/keys/master.key`. It encrypts every saved password and token and is not part of any
-> backup. **Copy it somewhere safe now** — without it, saved logins cannot be restored.
+> backup. **Copy it somewhere safe now** — without it, saved passwords and tokens cannot be restored.
 
 ## Usage
 
