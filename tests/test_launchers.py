@@ -436,6 +436,45 @@ def test_the_copied_link_folder_is_removed_and_nothing_else(tmp_path):
     assert (tmp_path / "outside" / "cpython-3.12-windows-x86_64-none").is_dir()
 
 
+@pytest.mark.allow_system  # cmd.exe / sh on a temp layout: the script's own lines
+def test_a_moved_installs_link_to_the_old_folder_goes_and_its_target_stays(tmp_path):
+    # Audit 10.2026: after a move runtime\python\cpython-3.14-* still pointed at the old folder.
+    import os
+    import shutil
+    import subprocess
+
+    python = _python_folders(tmp_path)
+    old = tmp_path / "old TOW" / "runtime" / "python" / "cpython-3.14.2-windows-x86_64-none"
+    (old / "keep").mkdir(parents=True)
+    link = python / "cpython-3.14-windows-x86_64-none"
+    if os.name == "nt":
+        subprocess.run(["cmd.exe", "/d", "/c", "mklink", "/J", str(link), str(old)], check=True, capture_output=True)
+        line = next(
+            row
+            for row in (ROOT / "scripts" / "tow-setup.cmd").read_text(encoding="utf-8").splitlines()
+            if row.startswith("if defined TOW_REBUILD for /d %%D in") and "findstr" in row
+        )
+        script = tmp_path / "clean.cmd"
+        script.write_text(f"@echo off\r\n{line}\r\nexit /b 0\r\n", encoding="ascii")
+        env = {**os.environ, "TOW_ROOT": str(tmp_path)}
+        env.pop("TOW_REBUILD", None)
+        subprocess.run(["cmd.exe", "/d", "/c", str(script)], check=True, env=env, capture_output=True, timeout=60)
+        assert link.is_junction()  # an environment that is not rebuilt keeps it
+        env["TOW_REBUILD"] = "1"
+        subprocess.run(["cmd.exe", "/d", "/c", str(script)], check=True, env=env, capture_output=True, timeout=60)
+    else:
+        text = (ROOT / "scripts" / "tow").read_text(encoding="utf-8")
+        start = text.index('    for entry in "$TOW_ROOT"/runtime/python/cpython-*; do')
+        block = text[start : text.index("    done\n", start) + len("    done\n")]
+        link.symlink_to(old)
+        sh = shutil.which("sh") or "/bin/sh"
+        subprocess.run([sh, "-euc", block], check=True, env={**os.environ, "TOW_ROOT": str(tmp_path)}, timeout=60)
+    assert not os.path.lexists(link)  # the link alone
+    assert (old / "keep").is_dir()  # never what it points to
+    assert (python / "cpython-3.14.2-windows-x86_64-none" / "keep").is_dir()
+    assert (python / "other-3.14-x" / "keep").is_dir()
+
+
 def test_windows_setup_does_not_treat_a_broken_moved_python_as_a_running_service():
     windows = (ROOT / "scripts" / "tow-setup.cmd").read_text(encoding="utf-8")
     # cmd's `if errorlevel 4` also matches 103: a relocated venv cannot find its old base.

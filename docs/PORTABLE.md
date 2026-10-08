@@ -361,7 +361,10 @@ gone, so Diagnostics, Settings → TOW service, `tow status` and `tow doctor` sa
 2. `tow stop`, then move or copy the whole `<TOW>` folder;
 3. in the new place: `<app>/scripts/tow setup` (`tow.cmd setup`) — `.venv` holds absolute paths;
    a copy turns uv's link `runtime/python/cpython-X.Y-*` into a plain folder, which setup removes
-   (only that entry, only when it is not a link) so that uv can make the link again;
+   (only that entry, only when it is not a link) so that uv can make the link again; a move
+   keeps the link pointing at the old folder (an absolute path), so setup removes the link
+   itself - on Windows when it builds the environment again, elsewhere when the link points
+   outside the install - never what it points to, and uv makes it again here;
 4. `tow autostart on` (and `tow run`, or let the autostart start it).
 
 **Where the folder can live, and what can lead it elsewhere:**

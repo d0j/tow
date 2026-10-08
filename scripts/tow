@@ -129,6 +129,13 @@ if [ "${1:-}" = setup ]; then
         esac
         if [ -d "$entry" ] && [ ! -L "$entry" ]; then
             rm -rf -- "$entry"
+        elif [ -L "$entry" ]; then
+            # A moved install keeps the link to the old folder (an absolute path): the link alone
+            # goes when it points outside this install, and uv makes it again here.
+            case $(readlink -- "$entry") in
+                "$TOW_ROOT"/runtime/python/* | cpython-*) ;;
+                *) rm -f -- "$entry" ;;
+            esac
         fi
     done
     # The Python of .python-version, into runtime/python; no copies on PATH.
