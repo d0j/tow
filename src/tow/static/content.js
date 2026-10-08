@@ -88,7 +88,7 @@
     // decides, counting files already there, and waits for room instead of failing). Compared
     // with the chosen files once their sizes are known; a folder this computer does not see
     // shows nothing.
-    const folder = field("save_path"), spaceHint = form.querySelector("[data-space-hint]");
+    const folder = field("save_path"), spaceHint = form.querySelector?.("[data-space-hint]") ?? null;
     let free = null, margin = 0n, spaceTimer = null, spaceAsked = 0;
     const showSpace = () => {
       if (!spaceHint) return;
@@ -108,9 +108,9 @@
       spaceHint.hidden = false;
     };
     const askSpace = async () => {
-      const asked = ++spaceAsked, path = folder?.value.trim() || "";
+      const asked = ++spaceAsked, path = String(folder?.value ?? "").trim();
       let reply = null;
-      if (path) {
+      if (path && spaceHint && typeof fetch === "function") {
         try {
           const response = await fetch(`/content/space?path=${encodeURIComponent(path)}`, { headers: { Accept: "application/json" } });
           reply = response.ok ? await response.json() : null;
