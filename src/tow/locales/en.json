@@ -1104,6 +1104,7 @@
     "kind": {
       "downloaded": "sent to the client",
       "check_fail": "check failed",
+      "check_site_skipped": "site not asked",
       "content_cache_failed": "could not save or refresh torrent metadata",
       "qbit_unreachable": "client unreachable",
       "qbit_move": "move",
@@ -1257,6 +1258,7 @@
       "qbit_down": "torrent client unreachable"
     },
     "check_result": "checked: {n}, without errors: {ok}",
+    "site_skipped": "topics not checked: {n}",
     "check_preview": "preview, nothing changed"
   },
   "login": {

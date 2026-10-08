@@ -5,6 +5,13 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Changed
+
+- Topics a check does not ask because of their site (all mirrors resting, the daily limit reached, the site frozen)
+  are one line per site and check in History and the event log ("site not asked · topics not checked: 150"), not one
+  "check failed" line per topic; each topic keeps its error on Home. With 150 topics on a resting site these lines
+  were half of `tow.jsonl`, and its rotation kept hours of history instead of days.
+
 ### Fixed
 
 - Restore points, exports and the web update are no longer refused ("plaintext secret-shaped field outside
