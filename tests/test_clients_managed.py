@@ -1066,3 +1066,147 @@ def test_clients_say_whether_they_list_any_torrent(tmp_path, make):
     assert adapter.has_any_torrent() is False
     adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
     assert adapter.has_any_torrent() is True
+
+
+# --- the owner's mark is read again before every write (mutation survivors) ------------------
+
+
+STOPS = {"torrent-stop", "torrents_stop", "core.pause_torrents"}
+
+
+def _owner_unmarks(server: Any) -> None:
+    """The owner takes TOW's mark off in the client; what TOW writes afterwards is recorded anew."""
+    server.torrents[K].labels = []
+    server.calls.clear()
+
+
+def test_a_mark_removed_right_after_the_add_is_not_stopped_by_tow(client, tmp_path, monkeypatch):
+    """The client started the new torrent anyway, and the owner took it over meanwhile: TOW does
+    not stop what is no longer its own."""
+    adapter, server = client
+
+    def started_anyway_and_unmarked(_added):
+        server.torrents[K].running = True
+        _owner_unmarks(server)
+        return True
+
+    monkeypatch.setattr(adapter, "_stop_after_add", started_anyway_and_unmarked)
+    with pytest.raises(ClientError) as error:
+        adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert error.value.code == "client.managed.not_owned"
+    assert not STOPS.union(WRITES).intersection(server.calls), server.calls
+    assert server.torrents[K].running
+
+
+def test_a_mark_removed_after_the_selection_stops_the_add_before_its_start(client, tmp_path, monkeypatch):
+    adapter, server = client
+    select = adapter._apply_selection
+
+    def select_then_unmarked(*args):
+        verified = select(*args)
+        _owner_unmarks(server)
+        return verified
+
+    monkeypatch.setattr(adapter, "_apply_selection", select_then_unmarked)
+    with pytest.raises(ClientError) as error:
+        adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert error.value.code == "client.managed.not_owned"
+    assert not WRITES.intersection(server.calls), server.calls  # never started: no longer TOW's
+    assert not server.torrents[K].running
+
+
+def test_a_mark_removed_during_a_selection_change_is_not_started_again(client, tmp_path, monkeypatch):
+    adapter, server = client
+    adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])  # running
+    select = adapter._apply_selection
+
+    def select_then_unmarked(*args):
+        verified = select(*args)
+        _owner_unmarks(server)
+        return verified
+
+    monkeypatch.setattr(adapter, "_apply_selection", select_then_unmarked)
+    with pytest.raises(ClientError) as error:
+        adapter.configure_torrent_selection(TORRENT, H, [E02])
+    assert error.value.code == "client.managed.not_owned"
+    assert not WRITES.intersection(server.calls), server.calls
+    assert not server.torrents[K].running
+
+
+def test_a_mark_removed_before_the_rollback_leaves_the_files_alone(client, tmp_path, monkeypatch):
+    adapter, server = client
+    adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])  # running, E01 only
+    torrent = server.torrents[K]
+    stop, set_wanted = adapter._stop, adapter._set_wanted
+    stops: list[str] = []
+    ignored: list[set[int]] = []
+
+    def stop_and_maybe_unmarked(infohash):
+        stop(infohash)
+        stops.append(infohash)
+        if len(stops) == 2:  # the rollback's stop: the owner took the torrent over meanwhile
+            _owner_unmarks(server)
+
+    def selection_ignored_once(infohash, wanted, all_ids):
+        if not ignored:
+            ignored.append(set(wanted))  # the client ignores the new selection: the change fails
+            return
+        set_wanted(infohash, wanted, all_ids)
+
+    monkeypatch.setattr(adapter, "_stop", stop_and_maybe_unmarked)
+    monkeypatch.setattr(adapter, "_set_wanted", selection_ignored_once)
+    with pytest.raises(ClientError) as error:
+        adapter.configure_torrent_selection(TORRENT, H, [E02])
+    assert error.value.code == "client.managed.wrong_selection"
+    assert len(stops) == 2
+    assert not WRITES.intersection(server.calls), server.calls  # no file restored, no start
+    assert torrent.wanted == [index == E01 for index in range(3)]
+    assert not torrent.running
+
+
+def test_transmission_never_marks_a_torrent_the_owner_added_meanwhile(tmp_path):
+    class OwnerAddsFirst(FakeTransmission):
+        def handler(self, request: httpx.Request) -> httpx.Response:
+            if json.loads(request.content).get("method") == "torrent-add" and K not in self.torrents:
+                self.torrents[K] = Torrent(TORRENT, "/owner", ["mine"], paused=False)  # after TOW looked
+            return super().handler(request)
+
+    server = OwnerAddsFirst()
+    with pytest.raises(ClientError) as error:
+        _transmission(server).add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert error.value.code == "client.managed.already_there"
+    calls = server.calls[server.calls.index("torrent-add") + 1 :]
+    assert not {"torrent-set", "torrent-stop", "torrent-start"}.intersection(calls), calls
+    torrent = server.torrents[K]
+    assert (torrent.labels, torrent.running, torrent.path) == (["mine"], True, "/owner")
+
+
+@pytest.mark.parametrize("wanted", [2, -1, "1", None])
+def test_transmission_reads_a_wanted_flag_outside_0_and_1_as_unknown(tmp_path, monkeypatch, wanted):
+    server = FakeTransmission()
+    adapter = _transmission(server)
+    adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    original = server._row
+
+    def row(torrent):
+        result = original(torrent)
+        result["fileStats"][E02]["wanted"] = wanted
+        return result
+
+    monkeypatch.setattr(server, "_row", row)
+    info = adapter.inspect_torrent(H)
+    assert info["files"][E02]["priority"] is None
+    assert info["files"][E01]["priority"] == 1
+    with pytest.raises(ClientError) as error:
+        adapter.configure_torrent_selection(TORRENT, H, [E02])
+    assert error.value.code == "client.managed.wrong_selection"
+
+
+def test_deluge_add_without_a_torrent_id_is_refused_and_marks_nothing(tmp_path, monkeypatch):
+    server = FakeDeluge()
+    monkeypatch.setattr(server, "m_core_add_torrent_file", lambda *_args: None)  # the daemon took nothing
+    with pytest.raises(ClientError) as error:
+        _deluge(server).add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert error.value.code == "client.deluge.add_refused"
+    assert "label.set_torrent" not in server.calls
+    assert server.torrents == {}
