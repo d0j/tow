@@ -4,6 +4,7 @@ line-length = 120
 # keep 3.11 syntax even when formatted (parser tests enforce the same minimum).
 [per-file-target-version]
 "scripts/update.py" = "py311"
+"scripts/root_files.py" = "py311"
 "src/tow/update_worker.py" = "py311"
 "src/tow/platform/locks.py" = "py311"
 

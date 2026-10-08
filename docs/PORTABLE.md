@@ -176,6 +176,9 @@ The owner's guide is [install.md](install.md); the README links the stable relea
   files hold their own logic (`app/` may be half-switched): they run `update.py` with the Python
   `app/.venv/pyvenv.cfg` names (by its folder name in `runtime/python`, so a moved folder finds
   it), else with the newest `cpython-3.X.Y` there by number, never a link or a pre-release.
+  The three Windows start files come from `scripts/root_files.py`, which `build-bundle.py` writes
+  into the zip and `update.py` writes into `<TOW>` again (§4): up to 1.28.1 an update never
+  replaced them, so an install that began with an older zip kept that zip's files.
 - **Installers** refuse a folder that holds an install (they name the update file) or anything
   but what an uninstall keeps: `data/`, `keys/`, `config.yaml`, `backup/` and the `.tow-install`
   marker. Around those they install again and change nothing of them (an existing `config.yaml`
@@ -494,7 +497,8 @@ before the update does the same).
    so and how to start TOW by hand). If TOW was stopped and nothing started it, it is started
    again.
 8. On success: prune old update snapshots — the newest 5 of `update-*-before-*` and deploy.ps1's
-   `data-*-before-*`; night copies, key copies and anything `pre-runtime` are never touched.
+   `data-*-before-*`; night copies, key copies and anything `pre-runtime` are never touched. An
+   install without git then gets the start files of the new version (below).
 
 **An install without git** (the bundle and both installers; `app/.git` absent, 1.22): the
 same steps, with the code from the release instead of git.
@@ -531,6 +535,20 @@ same steps, with the code from the release instead of git.
   `.venv` is in its place again and its absolute paths are right. One `app.prev` is kept after
   a success. An install with an older root launcher can run the base Python with
   `<TOW>/runtime/update.py --ref <tag>` to recover an interrupted switch.
+- The Windows bundle's start files (`Start TOW.cmd`, `Stop TOW.cmd`, `Update TOW.cmd`, when
+  `<TOW>` has any of them) are TOW's: an update writes them again from
+  `app/scripts/root_files.py` - after the snapshot, before anything moves (from the code that
+  runs the update, so a switch cut off later is undone with current files), and after a success
+  from the new code - each one only when it differs, through a temporary file and a rename; then
+  `runtime/update.py` from the new `app/scripts/update.py`. The log says which were written
+  (`update-state.json`: `root_files`); a failure is said and does not fail the update. Changes
+  made to them by hand are not kept. `cmd.exe` reads a running batch file again after each
+  command from the byte where it stopped, so the new `Update TOW.cmd` (the one running this
+  update) holds, exactly at the end of the old file's `update.py` line, a line that ends the
+  old run with the update's exit code (`pause & exit /b`; a run of the new file passes over it,
+  `TOW_FILE_RUN`). An `Update TOW.cmd` without that line (`--ref "%TOW_REF%"`) is not one TOW
+  wrote and is left as it is. A version without `scripts/root_files.py` (going back before it)
+  leaves the files as they are; they still start it.
 - `--source FILE` (and `--sums FILE`) take a local archive instead of a download.
 
 An update that finds such a record undoes the cut-off one first (stop TOW, move the recorded

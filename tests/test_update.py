@@ -531,6 +531,8 @@ def test_the_updater_runs_on_python_3_11():
     import ast
 
     ast.parse(SCRIPT.read_text(encoding="utf-8"), feature_version=(3, 11))
+    # It loads the start files of the bundle from this module, with the same Python.
+    ast.parse((SCRIPT.parent / "root_files.py").read_text(encoding="utf-8"), feature_version=(3, 11))
 
 
 def test_python_3_10_is_told_the_version_it_needs(monkeypatch, capsys):

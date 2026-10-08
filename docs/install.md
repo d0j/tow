@@ -153,7 +153,8 @@ turn autostart on again in the new place (`app\scripts\tow.cmd autostart on`, ma
 
 An update stops TOW, keeps a copy of your data and settings in `backup/`, puts in the new version, starts it and
 checks it. If anything fails, the previous version comes back by itself. It needs the internet. When TOW is
-already the latest release, it says so and does nothing. It goes back
+already the latest release, it says so and does nothing. On Windows it also puts the new version's `Start TOW.cmd`,
+`Stop TOW.cmd` and `Update TOW.cmd` in the TOW folder (changes made to them by hand are not kept). It goes back
 only to a version that can read your data: not before v1.23.0 once v1.23 has run (it says so and changes
 nothing).
 
@@ -196,6 +197,7 @@ that the folder is your former TOW install.
 | "… has data without a TOW install marker" | The folder holds data of an older TOW installer, or another program's `data` and `config.yaml`. If it is your former TOW folder, run the installer again with `-AdoptData` / `--adopt-data`; otherwise choose another folder. |
 | "… longer than 110 characters and Windows long paths are off" | The path of the TOW folder is too long for Windows without long paths: preparing TOW there fails. Move the folder to a short path such as `C:\TOW` (installer: `-Dir C:\TOW`), or turn on long paths (`LongPathsEnabled`). |
 | "TOW was not started: an update was cut off while it replaced the code …" (or "TOW cannot run: …") | An update stopped half-way: the computer turned off, or the updater was killed. Run the update again (`Update TOW.cmd`, `Update TOW.command` or `update-tow`): it puts the previous version back first, then installs the release. |
+| Running `Update TOW.cmd` again after a cut-off update says "can't open file …\app\scripts\update.py" | The TOW folder still has the update file of an older zip (up to 1.28.1 an update did not replace it). Open PowerShell in the TOW folder and run the copy of the updater the cut-off update left, with TOW's Python (the folder in `runtime\python` whose name starts with `cpython-3.` and has three numbers): `& ".\runtime\python\cpython-3.14.8-windows-x86_64-none\python.exe" runtime\update.py --ref latest`. It puts the previous version back, installs the release and writes the current start files. |
 | "TOW: TOW_ROOT=… is not the folder of this TOW, so it is ignored" | A `TOW_ROOT` variable is left from a move or another install. TOW uses its own folder; remove the variable (Windows: **Edit environment variables for your account**; Linux, macOS: your shell profile). |
 | "TOW's environment still belongs to the folder TOW was moved or copied from" (or "TOW did not run: its environment runs the code in …") | The folder was moved or copied. Double-click the start file, which prepares it, or run `app\scripts\tow.cmd setup` (macOS, Linux: `~/TOW/app/scripts/tow setup`). |
 | TOW does not start with the computer after the folder was moved or copied | The autostart still names the old folder. Turn it on in the new folder: `app\scripts\tow.cmd autostart on` (macOS, Linux: `app/scripts/tow autostart on`). After a move, Diagnostics and `tow status` say so too. |

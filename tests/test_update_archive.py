@@ -960,3 +960,112 @@ def test_sums_are_read_as_sha256sum_writes_them():
     digest = "ab" * 32
     text = f"{digest}  tow-source.tar.gz\n{digest.upper()} *TOW-windows-x64.zip\nnot a line\n"
     assert updater.parse_sums(text) == {"tow-source.tar.gz": digest, "TOW-windows-x64.zip": digest}
+
+
+# "Update TOW.cmd" as the v1.22.0 zip wrote it: it runs app\scripts\update.py and nothing else.
+UPDATE_CMD_1_22_0 = "".join(
+    line + "\r\n"
+    for line in (
+        "@echo off",
+        r'rem TOW: double-click to update it to the latest release (or, in a terminal: "Update TOW.cmd" v1.23.0).',
+        "title TOW update",
+        "setlocal",
+        r'set "TOW_REF=%~1"',
+        r'if not defined TOW_REF set "TOW_REF=latest"',
+        r'set "TOW_PY="',
+        (
+            r'for /d %%D in ("%~dp0runtime\python\cpython-3*") do if exist "%%~fD\python.exe" '
+            r'set "TOW_PY=%%~fD\python.exe"'
+        ),
+        r"if not defined TOW_PY exit /b 3",
+        r'"%TOW_PY%" "%~dp0app\scripts\update.py" --ref "%TOW_REF%"',
+        r'set "TOW_CODE=%ERRORLEVEL%"',
+        "pause",
+        r"exit /b %TOW_CODE%",
+    )
+).encode("ascii")
+ROOT_FILES_SOURCE = (Path(SCRIPT).parent / "root_files.py").read_bytes()
+
+
+def _old_zip_files(root: Path) -> None:
+    (root / "Start TOW.cmd").write_bytes(b'@echo off\r\ncall "%~dp0app\\scripts\\tow-start.cmd" %*\r\n')
+    (root / "Stop TOW.cmd").write_bytes(b'@echo off\r\ncall "%~dp0app\\scripts\\tow.cmd" stop\r\n')
+    (root / "Update TOW.cmd").write_bytes(UPDATE_CMD_1_22_0)
+
+
+def _root_files() -> Any:
+    return updater._load_module(Path(SCRIPT).parent / "root_files.py")
+
+
+def test_an_update_writes_the_start_files_of_the_new_version(install, github):
+    # Before: a zip install that began at v1.22 kept its 1.22 "Update TOW.cmd" for good, so the
+    # recovery of a cut-off update ("run the update again") failed: can't open app\scripts\update.py.
+    root = install["root"]
+    _old_zip_files(root)
+    (root / "runtime").mkdir()
+    (root / "runtime" / "update.py").write_text("# the copy of an older updater\n", encoding="utf-8")
+    new_updater = b"# the updater of 1.23.0\n"
+    extra = {"scripts/root_files.py": ROOT_FILES_SOURCE, "scripts/update.py": new_updater}
+    github.release("v1.23.0", tarball("1.23.0", extra=extra))
+    machine = Machine(install["app"], github, windows=True)
+
+    code, lines = run(machine, "v1.23.0")
+
+    assert code == 0, lines
+    module = _root_files()
+    files = module.rendered()
+    assert (root / "Start TOW.cmd").read_bytes() == files["Start TOW.cmd"]
+    assert (root / "Stop TOW.cmd").read_bytes() == files["Stop TOW.cmd"]
+    update_cmd = (root / "Update TOW.cmd").read_bytes()
+    assert b"runtime\\update.py" in update_cmd  # what recovers a cut-off update
+    # The 1.22 file that ran this update goes on at the end of its update.py line: there it finds
+    # the line that ends it with the update's exit code.
+    resume = module.resume_offset(UPDATE_CMD_1_22_0)
+    assert update_cmd[resume:].startswith(module.crlf(module.RESUME).encode("ascii"))
+    assert update_cmd == module.update_file(resume)
+    assert (root / "runtime" / "update.py").read_bytes() == new_updater
+    assert "the start files were written again from TOW 1.23.0: Start TOW.cmd, Stop TOW.cmd, Update TOW.cmd" in lines
+    assert state(install)["root_files"] == ["Start TOW.cmd", "Stop TOW.cmd", "Update TOW.cmd"]
+    assert not [path.name for path in root.iterdir() if path.name.endswith(".tmp")]
+
+
+def test_the_start_files_are_written_before_the_switch_so_a_cut_off_one_recovers(install, github, monkeypatch):
+    root = install["root"]
+    _old_zip_files(root)
+    (install["app"] / "scripts").mkdir()
+    (install["app"] / "scripts" / "root_files.py").write_bytes(ROOT_FILES_SOURCE)
+    github.release("v1.23.0", tarball("1.23.0"))
+    real = updater.os.replace
+
+    def cut(source, destination):
+        result = real(source, destination)
+        if Path(source).parent.name == "app.new":
+            raise Crash()
+        return result
+
+    monkeypatch.setattr(updater.os, "replace", cut)
+    killed(monkeypatch)
+    with pytest.raises(Crash):
+        run(Machine(install["app"], github, windows=True), "v1.23.0")
+
+    assert (root / ".update-switch.json").exists()
+    assert b"runtime\\update.py" in (root / "Update TOW.cmd").read_bytes()
+    assert (root / "runtime" / "update.py").is_file()
+
+
+def test_start_files_are_left_alone_where_they_are_not_the_bundles(install, github):
+    # install.sh writes its own (no "Start TOW.cmd"), and an "Update TOW.cmd" TOW did not write
+    # may be the one running: neither is replaced.
+    extra = {"scripts/root_files.py": ROOT_FILES_SOURCE}
+    github.release("v1.23.0", tarball("1.23.0", extra=extra))
+    code, lines = run(Machine(install["app"], github, windows=True), "v1.23.0")
+    assert code == 0, lines
+    assert not (install["root"] / "Start TOW.cmd").exists()
+
+    github.release("v1.24.0", tarball("1.24.0", extra=extra))
+    (install["root"] / "Update TOW.cmd").write_bytes(b"@echo off\r\necho my own\r\n")
+    code, lines = run(Machine(install["app"], github, windows=True), "v1.24.0")
+    assert code == 0, lines
+    assert (install["root"] / "Update TOW.cmd").read_bytes() == b"@echo off\r\necho my own\r\n"
+    assert "Update TOW.cmd was left as it is: it is not a file TOW wrote" in lines
+    assert (install["root"] / "Start TOW.cmd").is_file()

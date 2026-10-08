@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import io
 import os
 import re
@@ -52,67 +53,22 @@ LEFT_OUT = ("tests/", ".github/", ".githooks/")
 CACHE_DROPPED = ("interpreter-v", "builds-v", "sdists-v", "environments-v", ".tmp", "git-v")
 DOCS = "https://github.com/d0j/tow/blob/main/docs/install.md"
 
-START_CMD = r"""@echo off
-rem TOW: double-click to start it. Its page opens in your browser (http://127.0.0.1:8787).
-rem The first start prepares TOW inside this folder, without the internet. Everything stays in
-rem this folder. Stop: "Stop TOW.cmd". Help: README.txt
-title TOW
-call "%~dp0app\scripts\tow-start.cmd" %*
-set "TOW_CODE=%ERRORLEVEL%"
-if not "%TOW_CODE%"=="0" echo.
-if not "%TOW_CODE%"=="0" echo TOW did not start: the reason is above. The logs are in "%~dp0data\logs".
-if not "%TOW_CODE%"=="0" pause
-exit /b %TOW_CODE%
-"""
 
-STOP_CMD = r"""@echo off
-rem TOW: double-click to stop it (a check that is running finishes first).
-title TOW
-call "%~dp0app\scripts\tow.cmd" stop
-set "TOW_CODE=%ERRORLEVEL%"
-if not "%TOW_CODE%"=="0" pause
-timeout /t 3 /nobreak >nul 2>&1
-exit /b %TOW_CODE%
-"""
+def _root_files():
+    """scripts/root_files.py: the start files, shared with update.py (which writes them again after
+    an update), loaded by its path: this script also runs without scripts/ on sys.path (tests)."""
+    spec = importlib.util.spec_from_file_location("tow_root_files", Path(__file__).resolve().parent / "root_files.py")
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
-UPDATE_CMD = r"""@echo off
-rem TOW: double-click to update it to the latest release (or, in a terminal: "Update TOW.cmd" v1.23.0).
-rem It stops TOW, keeps a copy of the data and settings, switches the code, starts TOW and checks
-rem it; if anything fails, the previous version comes back by itself. It needs the internet.
-title TOW update
-setlocal
-set "TOW_REF=%~1"
-if not defined TOW_REF set "TOW_REF=latest"
-set "TOW_PYS=%~dp0runtime\python"
-set "TOW_CFG=%~dp0app\.venv\pyvenv.cfg"
-set "TOW_RE=^cpython-3\.[0-9][0-9]*\.[0-9][0-9]*-"
-set "TOW_PY="
-rem The Python the environment was made from (app\.venv\pyvenv.cfg "home"), by its folder name in
-rem runtime\python, so a moved folder still finds it.
-if exist "%TOW_CFG%" for /f "usebackq tokens=1,* delims== " %%A in ("%TOW_CFG%") do if /i "%%A"=="home" ^
-if exist "%TOW_PYS%\%%~nxB\python.exe" set "TOW_PY=%TOW_PYS%\%%~nxB\python.exe"
-rem Else the newest cpython-3.X.Y there by number (3.14.10 after 3.14.8), never a link (uv's
-rem cpython-3.X junction) and never a pre-release: set /a keeps the highest key, the name is kept
-rem in TOW_V<X>_<Y>, and call reads the one of the highest key (no block, no label).
-set /a "TOW_BEST=0"
-rem A line that ends in ^ goes on in the next one, which must not start with a space.
-if not defined TOW_PY for /f "delims=" %%D in ('dir /b /ad-l "%TOW_PYS%\cpython-3.*" 2^>nul ^| findstr "%TOW_RE%"') do ^
-if exist "%TOW_PYS%\%%D\python.exe" for /f "tokens=3,4 delims=-." %%a in ("%%D") do set "TOW_V%%a_%%b=%%D" & ^
-set /a "TOW_K=%%a*1000+%%b, TOW_BEST+=(TOW_K-TOW_BEST)&((TOW_BEST-TOW_K)>>31)"
-set /a "TOW_X=TOW_BEST/1000, TOW_Y=TOW_BEST%%1000"
-if not defined TOW_PY if not "%TOW_BEST%"=="0" call set "TOW_PYDIR=%%TOW_V%TOW_X%_%TOW_Y%%%"
-if not defined TOW_PY if defined TOW_PYDIR set "TOW_PY=%TOW_PYS%\%TOW_PYDIR%\python.exe"
-if not defined TOW_PY echo TOW's Python is not in "%~dp0runtime\python": start TOW once with "Start TOW.cmd" first.
-if not defined TOW_PY pause
-if not defined TOW_PY exit /b 3
-set "TOW_UPDATE=%~dp0app\scripts\update.py"
-if exist "%~dp0.update-switch.json" set "TOW_UPDATE=%~dp0runtime\update.py"
-if not exist "%TOW_UPDATE%" set "TOW_UPDATE=%~dp0runtime\update.py"
-"%TOW_PY%" "%TOW_UPDATE%" --ref "%TOW_REF%"
-set "TOW_CODE=%ERRORLEVEL%"
-pause
-exit /b %TOW_CODE%
-"""
+
+_ROOT = _root_files()
+START_CMD, STOP_CMD, UPDATE_CMD = _ROOT.START_CMD, _ROOT.STOP_CMD, _ROOT.UPDATE_CMD
+ROOT_FILES: dict[str, str] = _ROOT.ROOT_FILES
+crlf = _ROOT.crlf
 
 README_TXT = """TOW - torrent topic watcher
 
@@ -131,16 +87,9 @@ Help: {docs}
 Инструкция: {docs_ru}
 """
 
-ROOT_FILES = {"Start TOW.cmd": START_CMD, "Stop TOW.cmd": STOP_CMD, "Update TOW.cmd": UPDATE_CMD}
-
 
 def say(text: str) -> None:
     print(f"build-bundle: {text}", flush=True)
-
-
-def crlf(text: str) -> str:
-    """Windows line ends: cmd.exe reads labels and blocks reliably only with them."""
-    return text.replace("\r\n", "\n").replace("\n", "\r\n")
 
 
 def readme() -> str:
@@ -345,6 +294,7 @@ REQUIRED = (
     "app/scripts/tow-setup.cmd",
     "app/scripts/tow-start.cmd",
     "app/scripts/update.py",
+    "app/scripts/root_files.py",
     "app/src/tow/cli.py",
     "runtime/bin/uv.exe",
 )
