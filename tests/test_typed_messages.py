@@ -200,3 +200,12 @@ def test_a_reconcile_failure_does_not_persist_secret_from_client_error():
     check_steps.mark_reconcile_failure(row, RuntimeError("password=hunter2 in client reply"))
     assert "hunter2" not in str(row)
     assert "password=***" in row["error"]
+
+
+def test_a_plural_of_a_number_too_large_for_a_float_is_the_other_form():
+    # float(10**400) raised OverflowError out of every page that rendered such a stored value.
+    assert i18n._category("ru", 10**400) == "other"
+    assert i18n._category("ru", -(10**400)) == "other"
+    assert i18n._category("ru", 21) == "one"
+    stored = {"code": "notifier.common.dropped", "params": {"n": 10**400}}
+    assert str(10**400) in errors.render(stored, "ru")
