@@ -382,3 +382,20 @@ def test_tow_doctor_says_its_findings_in_the_owners_words(monkeypatch):
     assert t("doctor.reason.http", "ru", code="503") in text
     assert "outside configured mirror" not in text
     assert "No connection" not in text
+
+
+@pytest.mark.parametrize("status", [404, 403, 410])
+def test_a_mirror_that_answers_with_a_missing_page_answers(monkeypatch, status):
+    # QA r5: a tracker giving 404 at "/" was summarised as "0 of 2 mirrors answer" and "not a
+    # single mirror answers" while the table said "HTTP error 404": an answer is an answer.
+    trackers = {"a": {"fetch_hosts": ["http://a1", "http://a2"]}}
+    _doctor_with(monkeypatch, state={}, trackers=trackers, responses={"http://a1": status, "http://a2": status})
+    monkeypatch.setattr(
+        "tow.doctor.client_factory.from_secrets", lambda *a, **k: type("C", (), {"ping": lambda s: "5.2"})()
+    )
+
+    report = doctor_report(probe=True)
+
+    assert [(probe["ok"], probe["status"]) for probe in report["probes"]] == [(True, status), (True, status)]
+    assert report["ok"] is True
+    assert report["degraded"] == []

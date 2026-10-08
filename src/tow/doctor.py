@@ -162,10 +162,13 @@ def doctor_report(*, probe: bool = True, names: list[str] | None = None) -> dict
                     if is_cloudflare(r.status_code, text, r.headers):
                         row["error"] = "cloudflare"
                         out["ok"] = False
-                    elif r.status_code >= 400:
-                        row["error"] = f"http {r.status_code}"
+                    elif r.status_code >= 500 or r.status_code == 429:
+                        row["error"] = f"http {r.status_code}"  # the host itself is in trouble
                         out["ok"] = False
                     else:
+                        # A page that is not there is an answer (many trackers give 404 at "/"):
+                        # the mirror is reachable, its status is shown. As for a check (tow.
+                        # mirrors), only no connection, Cloudflare and a host error count against it.
                         row["ok"] = True
                         row["status"] = r.status_code
                 except Exception as e:  # noqa: BLE001 - a diagnostic: any failure is the report's finding
