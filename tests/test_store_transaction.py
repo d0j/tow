@@ -366,3 +366,28 @@ def test_failed_site_restore_keeps_its_journal_and_can_be_retried(monkeypatch):
     _next_process_takes_the_lock()
     assert _store_bytes() == original
     assert not root.exists()
+
+
+def test_a_transaction_begun_beside_an_unfinished_one_restores_the_stores_first():
+    """Inside the data lock no recovery hook runs: the new transaction itself restores what the
+    unfinished one left, before it copies anything."""
+    _seed_site()
+    original = _store_bytes()
+    with persistence_lock():
+        root = store_transaction.begin_unlocked()
+        save_state({"topics": [{"id": "half-written"}]})  # the unfinished transaction's write
+        with store_transaction.transaction():
+            assert _store_bytes() == original
+        assert _store_bytes() == original
+    assert not root.exists()
+
+
+def test_recover_inside_the_data_lock_restores_an_unfinished_transaction():
+    _seed_site()
+    original = _store_bytes()
+    with persistence_lock():
+        root = store_transaction.begin_unlocked()
+        config_path().write_bytes(b"changed: true\n")  # the unfinished transaction's write
+        store_transaction.recover()  # the lock is held already: no hook ran, recover itself must
+        assert _store_bytes() == original
+    assert not root.exists()
