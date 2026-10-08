@@ -192,8 +192,9 @@ blocks for long.
   `data/run/status.json` (or, on Windows, the venv launcher's child of it) that answers
   `/healthz` as this install, or runs `-m tow serve --log-file <this install>/data/logs/serve.log`
   (a hung one). `/healthz` names the install only to this computer: `install`, a hash of the code
-  folder (`layout.install_id`), so a copy of the folder on the same port is another install. Only
-  that is stopped, and TOW
+  folder and the install root (`layout.install_id`), so a copy of the folder on the same port is
+  another install - also a copy whose `.venv` still runs the original's code, whose copied
+  `status.json` names the original's server. Only that is stopped, and TOW
   starts. Anything else on the port is never touched: `tow run` says so and exits 3 — or 0 when
   launchd started it (`TOW_AUTOSTART=launchd`), because launchd would retry it every minute
   without a limit; the reason is in `run.log`.
