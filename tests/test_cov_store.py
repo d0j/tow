@@ -429,6 +429,44 @@ def test_every_recovery_step_exists():
         assert callable(getattr(importlib.import_module(module), name)), (module, name)
 
 
+def test_the_temporaries_of_a_killed_write_are_removed_when_the_lock_is_taken():
+    """A writer killed between its temporary file and the replace left it there forever (the
+    state's is a full copy of the state)."""
+    from tow.paths import config_path
+
+    data, config_folder = data_dir(), config_path().parent
+    stale = [
+        data / ".state.json.ab12cd_3.tmp",
+        data / ".download_history.json.x9y8z7w6.tmp",
+        data / ".secrets.enc.k2j3h4g5.tmp",
+        data / ".secrets-undo.enc.q1w2e3r4.tmp",
+        config_folder / f".{config_path().name}.a1b2c3d4.tmp",
+    ]
+    kept = [
+        data / ".state.json.fresh123.tmp",  # young: may still be written
+        data / ".state.json.AB12CD34.tmp",  # not what tempfile makes
+        data / ".state.json.ab12cd34.tmp.bak",
+        data / "state.json.ab12cd34.tmp",
+        data / ".restore-point-status.json.ab12cd34.tmp",  # not a store
+        data / ".state.json..tmp",
+    ]
+    old = os.path.getmtime(data) - 3600
+    for path in stale + kept:
+        path.write_bytes(b"{}")
+        if path.name != ".state.json.fresh123.tmp":
+            os.utime(path, (old, old))
+    folder = data / ".state.json.dir12345.tmp"
+    folder.mkdir()
+    os.utime(folder, (old, old))
+
+    with persistence_lock():
+        pass
+
+    assert [path.name for path in stale if path.exists()] == []
+    assert [path.name for path in kept if not path.exists()] == []
+    assert folder.is_dir()
+
+
 def test_failing_recovery_hook_blocks_the_writer_but_releases_the_lock(monkeypatch):
     def broken():
         raise RuntimeError("journal unrecoverable")

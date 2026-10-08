@@ -30,6 +30,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A topic whose link or torrent client you change while a check runs no longer gets the old link's torrent: the
   check saves nothing for it, hands nothing to the client once it sees the change, and the next check adds the new
   link's torrent. Before, the topic kept the old torrent's hash and the next check filed it as a previous version.
+- The temporary file of a save that TOW was stopped in the middle of (`data/.state.json.*.tmp`, a full copy of the
+  state, and those of the secrets, the download history and `config.yaml`) is removed the next time TOW saves
+  anything, once it is a few seconds old. Before, such files stayed forever.
 
 ## [1.28.1] — 2026-10-08
 

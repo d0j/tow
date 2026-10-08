@@ -18,18 +18,13 @@ state, secrets and secret undo of ``tow.store_transaction``).
 from __future__ import annotations
 
 import hashlib
-import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from tow.platform import is_link_like
-from tow.store import atomic_write_bytes, decode_json_bytes
-
-# What tempfile adds between the prefix and the suffix atomic_write_bytes() gives it (eight
-# of these characters today), then that suffix.
-_TEMPORARY = re.compile(r"[a-z0-9_]+\.tmp")
+from tow.store import atomic_write_bytes, decode_json_bytes, is_temporary_of
 
 
 def digest(content: bytes) -> str:
@@ -82,11 +77,7 @@ class Journal:
         """A leftover of an interrupted atomic_write_bytes() of one of the journal's own files:
         ``.<own name>.<random letters>.tmp``. Any other ``*.tmp`` is not the journal's, so it is
         never deleted (``check_folder`` refuses the folder instead)."""
-        for own in self.names:
-            prefix = f".{own}."
-            if name.startswith(prefix) and _TEMPORARY.fullmatch(name[len(prefix) :]):
-                return True
-        return False
+        return is_temporary_of(name, self.names)
 
     def check_folder(self) -> None:
         """Only plain files with the journal's own names (or their temporaries) in a plain folder."""
