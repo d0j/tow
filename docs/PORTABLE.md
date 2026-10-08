@@ -176,6 +176,10 @@ The owner's guide is [install.md](install.md); the README links the stable relea
   files hold their own logic (`app/` may be half-switched): they run `update.py` with the Python
   `app/.venv/pyvenv.cfg` names (by its folder name in `runtime/python`, so a moved folder finds
   it), else with the newest `cpython-3.X.Y` there by number, never a link or a pre-release.
+  `Start TOW.cmd` checks the switch record itself first (the rule of `tow-start.cmd`, §4: `app\scripts`
+  may be gone or half of either version) and that `app\scripts\tow-start.cmd` is there; `Stop TOW.cmd`
+  says so when `app\scripts\tow.cmd` is missing - each with the reason and what to do, never a bare
+  "The system cannot find the path specified".
   The three Windows start files come from `scripts/root_files.py`, which `build-bundle.py` writes
   into the zip and `update.py` writes into `<TOW>` again (§4): up to 1.28.1 an update never
   replaced them, so an install that began with an older zip kept that zip's files.

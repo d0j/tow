@@ -20,6 +20,10 @@ ignore = [
     "RUF003",
 ]
 
+[lint.per-file-ignores]
+# The start files' cmd lines: cmd.exe cannot continue a quoted PowerShell command or message on the next line.
+"scripts/root_files.py" = ["E501"]
+
 [lint.mccabe]
 # No function may exceed this. The few that still do carry `# noqa: C901 - <reason>` and are
 # listed in tests/test_complexity_budget.py, whose list may only shrink.

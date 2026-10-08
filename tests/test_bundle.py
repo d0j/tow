@@ -152,6 +152,60 @@ def test_an_update_file_written_again_while_it_runs_ends_cleanly(tmp_path):
         os.rmdir(link)  # the junction only, never the Python it points to
 
 
+@pytest.mark.allow_system  # cmd.exe (and its PowerShell check) on a temp layout
+@pytest.mark.skipif(sys.platform != "win32", reason="cmd.exe")
+@pytest.mark.parametrize(
+    ("name", "record", "scripts", "said"),
+    [
+        (
+            "Start TOW.cmd",
+            "switching",
+            False,
+            "TOW was not started: an update was cut off while it replaced the code in",
+        ),
+        (
+            "Start TOW.cmd",
+            "switching",
+            True,
+            "TOW was not started: an update was cut off while it replaced the code in",
+        ),
+        ("Start TOW.cmd", None, False, "its code is incomplete"),
+        ("Start TOW.cmd", "accepted", True, "app script: start"),
+        ("Stop TOW.cmd", "switching", False, "TOW cannot run: an update was cut off while it replaced the code in"),
+        ("Stop TOW.cmd", None, False, "its code is incomplete"),
+        ("Stop TOW.cmd", None, True, "app script: stop"),
+    ],
+)
+def test_the_start_and_stop_files_say_when_an_update_was_cut_off(tmp_path, name, record, scripts, said):
+    # Before: after a cut that moved app\scripts away, "The system cannot find the path specified."
+    # and then "TOW did not start: the reason is above" - with no reason above.
+    import json
+    import subprocess
+
+    root = tmp_path / "my TOW (1) & co"
+    root.mkdir()
+    (root / name).write_bytes(bundle.crlf(bundle.ROOT_FILES[name]).encode("ascii"))
+    if record:
+        switch = {"format": "tow-update-switch/v1", "phase": record, "old": [], "new": []}
+        (root / ".update-switch.json").write_text(json.dumps(switch), encoding="utf-8")
+    if scripts:
+        (root / "app" / "scripts").mkdir(parents=True)
+        for script, what in (("tow-start.cmd", "start"), ("tow.cmd", "%1")):
+            (root / "app" / "scripts" / script).write_bytes(f"@echo app script: {what}\r\n".encode("ascii"))
+
+    done = subprocess.run(
+        f'cmd.exe /d /s /c ""{root / name}""', capture_output=True, stdin=subprocess.DEVNULL, timeout=120, check=False
+    )
+
+    output = (done.stdout + done.stderr).decode("ascii", "replace")
+    assert said in output, output
+    assert "cannot find the path" not in output
+    assert "the reason is above" not in output
+    if record == "switching":
+        assert f'"{root}"' in output  # the folder, without a trailing backslash
+    assert done.returncode == (0 if said.startswith("app script") else 3), output
+
+
 def test_the_readme_says_how_to_start_stop_and_keep_the_key_in_both_languages():
     text = bundle.readme()
     for line in ("Start TOW.cmd", "Stop TOW.cmd", "Update TOW.cmd", "keys\\master.key", "http://127.0.0.1:8787"):
