@@ -249,6 +249,33 @@ def test_a_tow_root_of_another_folder_is_ignored_by_the_launchers(tmp_path, give
     assert ("is ignored" in done.stderr) is ignored
 
 
+@pytest.mark.allow_system  # sh on a temp install whose code folder is named in another case
+@pytest.mark.parametrize("name", ["app", "App", "APP"])
+def test_the_posix_launcher_finds_an_install_whose_code_folder_is_app_in_any_case(tmp_path, name):
+    # Audit 08.10.2026: scripts/tow compared the name exactly while tow.paths ignores the case:
+    # an install in "App" got the code folder as its root (data/ and keys/ inside App/).
+    import os
+    import shutil
+    import subprocess
+
+    if os.name == "nt":
+        pytest.skip("scripts/tow is the Linux and macOS launcher (tow-env.cmd compares with /i)")
+    root = tmp_path / "TOW"
+    shutil.copytree(ROOT / "scripts", root / name / "scripts")
+    (root / "data").mkdir()
+    bin_dir = root / name / ".venv" / "bin"
+    bin_dir.mkdir(parents=True)
+    (bin_dir / "python").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    (bin_dir / "tow").write_text('#!/bin/sh\necho "root=$TOW_ROOT"\n', encoding="utf-8")
+    for item in bin_dir.iterdir():
+        item.chmod(0o755)
+    env = {key: value for key, value in os.environ.items() if not key.startswith(("TOW_", "UV_"))}
+    argv = ["/bin/sh", str(root / name / "scripts" / "tow"), "status"]
+    done = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=60, check=False)
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert f"root={root.resolve()}" in done.stdout.splitlines()
+
+
 def test_setup_installs_python_and_the_environment_inside_the_install():
     for name in ("tow-setup.cmd", "tow"):
         text = (ROOT / "scripts" / name).read_text(encoding="utf-8")
@@ -266,7 +293,7 @@ def test_setup_installs_python_and_the_environment_inside_the_install():
 def test_posix_launcher_mirrors_the_windows_one():
     text = (ROOT / "scripts" / "tow").read_text(encoding="utf-8")
     assert text.startswith("#!/bin/sh\n")
-    assert '[ "$(basename -- "$TOW_APP")" = app ]' in text
+    assert 'case $(basename -- "$TOW_APP") in\n        [Aa][Pp][Pp])' in text  # any case, like tow.paths
     assert '[ -f "$parent/config.yaml" ] || [ -d "$parent/data" ]' in text
     for line in (
         'export UV_PYTHON_INSTALL_DIR="$TOW_ROOT/runtime/python"',
