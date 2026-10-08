@@ -44,8 +44,8 @@ Steps (each one checked; nothing is reported as done without its read-back):
    previous code, put back data and config if the new version changed them, start the previous
    one and check it - and the report says which step failed. The previous one is started only
    when its code and the data are both back, never on a mix;
-8. on success prune old update snapshots (the newest 5; night copies, key copies and anything
-   else in backup/ are never touched);
+8. on success prune old update snapshots (the newest 5 and the oldest one; night copies, key
+   copies and anything else in backup/ are never touched);
 9. an install without git: the Windows bundle's start files ("Start TOW.cmd", "Stop TOW.cmd",
    "Update TOW.cmd", scripts/root_files.py) are written again from the code before the switch
    and from the new code after it, and ``runtime/update.py`` from the new code: an install
@@ -1571,7 +1571,9 @@ class Update:
         return True
 
     def prune(self) -> None:
-        """Only update snapshots (and deploy.ps1's data-*-before-*), newest ``keep`` stay."""
+        """Only update snapshots (and deploy.ps1's data-*-before-*): the newest ``keep`` stay, and the
+        oldest one - the data from before the first update, which a few cut-off and repeated
+        updates otherwise pushed out."""
         backup = self.root / "backup"
         if not backup.is_dir():
             return
@@ -1579,9 +1581,12 @@ class Update:
         for folder in backup.iterdir():
             match = SNAPSHOT_RE.match(folder.name)
             if folder.is_dir() and match and "pre-runtime" not in folder.name:
-                found.append((match.group(1), folder))
-        for _stamp, folder in sorted(found, reverse=True)[self.keep :]:
-            shutil.rmtree(folder, ignore_errors=True)
+                found.append((match.group(1), folder.name, folder))
+        newest = sorted(found, reverse=True)
+        oldest = newest[-1:] if self.keep > 0 else []
+        for item in newest[self.keep :]:
+            if item not in oldest:
+                shutil.rmtree(item[2], ignore_errors=True)
 
     # --- the start files of an install without git ------------------------------------------
 

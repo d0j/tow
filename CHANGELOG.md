@@ -23,6 +23,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   for the source archive". `tow update --ref v1.21.0` says the same instead of suggesting a command that is refused.
 - An update that refuses to go back to a version that cannot read the data names the version to go back to at most
   (v1.23.0 for today's data) instead of "the version that wrote it".
+- An update keeps the oldest update snapshot in `backup/` besides the newest five: a few cut-off and repeated updates
+  no longer delete the only copy of the data from before the first update.
 
 ## [1.28.1] — 2026-10-08
 

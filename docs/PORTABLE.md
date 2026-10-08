@@ -502,7 +502,9 @@ before the update does the same).
    so and how to start TOW by hand). If TOW was stopped and nothing started it, it is started
    again.
 8. On success: prune old update snapshots — the newest 5 of `update-*-before-*` and deploy.ps1's
-   `data-*-before-*`; night copies, key copies and anything `pre-runtime` are never touched. An
+   `data-*-before-*` stay, and the oldest of them (the data from before the first update, which
+   a few cut-off and repeated updates would otherwise push out); night copies, key copies and
+   anything `pre-runtime` are never touched. An
    install without git then gets the start files of the new version (below).
 
 **An install without git** (the bundle and both installers; `app/.git` absent, 1.22): the
