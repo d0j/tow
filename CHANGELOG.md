@@ -17,6 +17,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   changes nothing; before, the option was ignored without a word.
 - A moment when Windows held `data/sessions.json` for another writer no longer signs every device on the network
   out at the next sign-in; only a damaged file is reset.
+- With many sites the header no longer makes the page wider than the screen and pushes Settings off it: the site
+  names scroll sideways between the sections and the controls, and the keyboard reaches them.
 
 ## [1.27.1] — 2026-10-08
 
