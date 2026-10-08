@@ -51,13 +51,18 @@ def test_run_starts_serves_and_stops_on_request(run_env):
     assert "started" in (layout.logs_dir() / "run.log").read_text(encoding="utf-8")
 
 
-def test_closing_the_terminal_of_tow_run_stops_it_cleanly(run_env, monkeypatch):
+@pytest.mark.parametrize("name", ["SIGHUP", "SIGBREAK"])
+def test_closing_the_terminal_of_tow_run_stops_it_cleanly(run_env, monkeypatch, name):
     # SIGHUP (Linux, macOS: the terminal of `tow run` closed) ended it at once, leaving its web
     # server and a running job; it is now a stop like SIGTERM, and both are restored afterwards.
+    # Audit 08.10.2026: the same for SIGBREAK (Windows: Ctrl+Break in its console).
     import signal
 
     hangup = getattr(signal, "SIGHUP", 1)
+    brk = getattr(signal, "SIGBREAK", 21)
     monkeypatch.setattr(signal, "SIGHUP", hangup, raising=False)
+    monkeypatch.setattr(signal, "SIGBREAK", brk, raising=False)
+    received = {"SIGHUP": hangup, "SIGBREAK": brk}[name]
     handlers: dict[int, object] = {}
     installed = []
 
@@ -77,13 +82,13 @@ def test_closing_the_terminal_of_tow_run_stops_it_cleanly(run_env, monkeypatch):
         ticks["n"] += 1
         world.clock.advance(seconds)
         if ticks["n"] == 3:
-            handlers[hangup](hangup, None)  # the terminal closes
+            handlers[received](received, None)  # the terminal closes, or Ctrl+Break
 
     deps.sleep = sleep
     assert run_supervisor(deps) == 0
     assert world.stopped == [world.servers()[0].pid]  # its web server stopped, not left behind
-    assert {number for number, _ in installed} == {signal.SIGTERM, hangup}
-    assert handlers == {signal.SIGTERM: signal.SIG_DFL, hangup: signal.SIG_DFL}  # restored
+    assert {number for number, _ in installed} == {signal.SIGTERM, hangup, brk}
+    assert handlers == dict.fromkeys((signal.SIGTERM, hangup, brk), signal.SIG_DFL)  # restored
 
 
 def test_variables_that_lead_a_portable_install_elsewhere_are_named(monkeypatch, tmp_path):

@@ -23,6 +23,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Linux and macOS: `scripts/tow` finds an install whose code folder is named `App` (any case), as TOW itself
   does; before, it took such an install for a development checkout, and setup put Python and uv's cache outside
   the folder.
+- Windows: Ctrl+Break in the console of `tow run` stops TOW cleanly, as Ctrl+C does, instead of ending it at once.
 
 ## [1.27.0] — 2026-10-08
 
