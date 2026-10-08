@@ -1064,7 +1064,10 @@ def test_guess_title_never_fails_the_form(monkeypatch, client, caplog):
     }
 
 
-def test_site_guess_reports_errors_and_existing_sites(client):
+def test_site_guess_reports_errors_and_existing_sites(client, monkeypatch):
+    pages = []
+    page = '<table class="attach"><tr><td><a href="dl.php?t=5">.torrent</a></td></tr></table>'
+    monkeypatch.setattr("tow.guess._topic_page", lambda url: pages.append(url) or page)
     magnet = client.post("/sites/guess", data={"url": "magnet:?xt=urn:btih:x"}).json()
     assert magnet["ok"] is False
     assert "magnet" in magnet["error"]
@@ -1074,6 +1077,8 @@ def test_site_guess_reports_errors_and_existing_sites(client):
 
     fresh = client.post("/sites/guess", data={"url": "https://fresh.example/viewtopic.php?t=5"}).json()
     assert (fresh["ok"], fresh["name"], fresh["exists"]) == (True, "fresh", False)
+    assert fresh["download_path"] == "/dl.php?t={id}"  # the topic page's own link
+    assert pages == ["https://fresh.example/viewtopic.php?t=5"]
 
 
 def test_site_guess_never_exposes_internal_parser_errors(client, monkeypatch):

@@ -50,6 +50,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   as the Guide says.
 - A check of a topic's row adds its torrent back when it was removed from the client, as the Guide says (stopped,
   with its files chosen, confirmed, then started); scheduled checks and Check all only report it.
+- Adding a forum site from a topic link (Sites → +) takes the download path from the topic page's own .torrent link
+  (dl.php?t=… instead of a guessed download.php?id=…), and a site on an IP address or localhost is named by its
+  port (site_8080) instead of "0".
 ### Security
 
 - A device on the home network can no longer fill the TOW folder through the sign-in page: every form is
