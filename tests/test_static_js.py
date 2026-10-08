@@ -105,6 +105,15 @@ def test_escape_folds_the_open_add_form():
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_escape_folds_an_open_row_back_to_its_summary():
+    script = Path(__file__).parent / "js" / "escape_closes_row.mjs"
+    result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=30, check=True)
+    verdict = json.loads(result.stdout.strip().splitlines()[-1])
+    assert all(verdict.values()), verdict
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_a_slow_action_button_says_it_is_working_and_recovers_after_a_failure():
     script = Path(__file__).parent / "js" / "busy_label.mjs"
     result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=30, check=True)

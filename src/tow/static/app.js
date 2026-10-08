@@ -467,6 +467,19 @@ document.addEventListener("keydown", (event) => {
   document.querySelector('a.plus[href="#new"]')?.focus();
 });
 
+// Esc folds an open row (Home: a topic, Sites: a site) whose edit panel holds the focus, and the
+// focus goes back to the row's summary (A15); what was typed stays. A list, a menu or a dialog
+// that is open takes the Esc first.
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+  if (document.querySelector("dialog[open]")) return;
+  const row = document.activeElement?.closest?.("details.row-edit[open]");
+  if (!row) return;
+  event.preventDefault();
+  row.open = false;
+  row.querySelector(":scope > summary")?.focus();
+});
+
 document.querySelectorAll("a.plus, a[data-open-new]").forEach((a) => {
   a.addEventListener("click", (e) => {
     e.preventDefault();

@@ -31,6 +31,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   the row's toggle. It looks and sits as before.
 - A screen reader hears each Home cell with its column ("Site: Kinozal, Folder: …"), on a desktop too, and finds
   the version at the end of the page as its footer.
+- Esc folds an open Home or Sites row from inside its edit panel and puts the focus back on the row; what was
+  typed stays.
 
 ## [1.27.1] — 2026-10-08
 
