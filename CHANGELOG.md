@@ -21,6 +21,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - On an install without git, `Update TOW.cmd v1.21.0` says that such an install goes no further back than v1.22.0,
   and a tag that does not exist (`v9.9.9`) that it is not a release of TOW: both said "the release has no checksum
   for the source archive". `tow update --ref v1.21.0` says the same instead of suggesting a command that is refused.
+- An update that refuses to go back to a version that cannot read the data names the version to go back to at most
+  (v1.23.0 for today's data) instead of "the version that wrote it".
 
 ## [1.28.1] — 2026-10-08
 
