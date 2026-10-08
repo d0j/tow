@@ -14,6 +14,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - One icon set on every page (the same line width and sizes); Settings is a gear.
 - The header keeps the sections and the page's own actions: Diagnostics, the Guide and **Sign out on this
   device** moved to the end of Settings.
+- Messages about a copy made with **Create a backup** call it a restore point everywhere; a damaged data file
+  points to Settings → Backups.
 
 ### Removed
 
