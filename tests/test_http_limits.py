@@ -1,5 +1,7 @@
 """Bounded HTTP bodies: size and total time."""
 
+import re
+
 import httpx
 import pytest
 
@@ -105,3 +107,27 @@ def test_a_raw_utf8_header_survives_the_bounded_response():
         response = thttp.get_limited(c, "https://t.example/download/108", max_bytes=1024)
     assert response.content == b"d4:infod4:name1:aee"
     assert (b"Content-Disposition", disposition) in response.headers.raw
+
+
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+@pytest.mark.parametrize(
+    "charset",
+    ["unicode_escape", "raw_unicode_escape", "utf-7", "undefined", "idna", "punycode", "charmap", "base64", "rot_13"],
+)
+def test_a_charset_that_is_no_page_encoding_is_not_used(charset):
+    # "undefined" raised a plain UnicodeError (a 500 on /sites/guess); the escapes and UTF-7 gave
+    # lone surrogates that no state file can hold, so every topic's check results were lost.
+    page = f'<meta charset="{charset}"><title>{TITLE} \\udfff +2//f-</title>'.encode("cp1251")
+    for content_type in ("text/html", f"text/html; charset={charset}"):
+        text = thttp.html_text(_response(page, content_type))
+        assert TITLE in text
+        assert not _LONE_SURROGATE.search(text)
+
+
+def test_the_fuzzed_pages_decode_without_an_error_or_a_lone_surrogate():
+    undefined = b"<meta charset=undefined><a href=dl.php?t=1>\xcf</a>"
+    assert thttp.html_text(_response(undefined, "text/html")) == "<meta charset=undefined><a href=dl.php?t=1>П</a>"
+    escapes = b'<meta charset="unicode_escape"><h1>Show \udfff</h1>'
+    assert thttp.html_text(_response(escapes, "text/html")) == escapes.decode("ascii")

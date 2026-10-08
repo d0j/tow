@@ -18,6 +18,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A number in `config.yaml` written with non-ASCII digits ("²") or thousands of digits is named as a wrong value,
   and a `config.yaml` saved in another encoding (Notepad's ANSI) says to save it as UTF-8: before, both gave a
   server error on every page.
+- A tracker page that names a charset that is no text encoding (`undefined`, `unicode_escape`, `utf-7`, `base64`…)
+  is read as UTF-8 or windows-1251: before, filling in a new site from its topic link failed with a server error,
+  and a page title with half a character lost the check results of every topic.
 
 ## [1.28.0] — 2026-10-08
 
