@@ -746,6 +746,31 @@ def test_the_windows_task_is_read_as_utf8_from_powershell(tmp_path):
         assert system.autostart_kind() is None
 
 
+def test_a_cyrillic_command_line_is_read_whole_on_windows(tmp_path, monkeypatch):
+    # On a Russian Windows PowerShell wrote cp866 and Python read cp1251: the web server a dead
+    # supervisor left in C:\Users\Иван\TOW never matched this install, so the port stayed taken.
+    app = tmp_path / "Иван" / "TOW" / "app"
+    command = f'"{app / ".venv" / "Scripts" / "python.exe"}" -m tow serve --log-file x'
+    seen: dict[str, Any] = {}
+
+    def powershell(argv, **options):
+        seen.update(options, argv=list(argv))
+        utf8 = "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)" in argv[-1]
+        raw = (command + "\r\n").encode("utf-8" if utf8 else "cp866")
+        decoded = raw.decode(options.get("encoding") or "cp1251", options.get("errors") or "strict")
+        return subprocess.CompletedProcess(argv, 0, decoded, "")
+
+    monkeypatch.setattr(updater.subprocess, "run", powershell)
+
+    class Windows(updater.System):
+        windows = True
+
+    assert Windows(app).command_line(4300) == command
+    assert seen["argv"][0] == "powershell"
+    assert "ProcessId=4300" in seen["argv"][-1]
+    assert (seen["encoding"], seen["errors"]) == ("utf-8", "replace")
+
+
 def test_tow_update_prints_how_to_run_it(capsys, tmp_path, monkeypatch):
     from tow import cli, paths
 

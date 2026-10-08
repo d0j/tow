@@ -316,6 +316,8 @@ class System:
     # --- processes and time ------------------------------------------------------------------
 
     def _run(self, argv: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None, timeout=600):
+        # UTF-8, not the locale's code page: git and uv write UTF-8, and every PowerShell
+        # command here makes its output UTF-8 (or base64), so a Cyrillic folder comes back whole.
         try:
             done = subprocess.run(
                 argv,
@@ -323,6 +325,7 @@ class System:
                 env=env,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 errors="replace",
                 timeout=timeout,
                 check=False,
@@ -456,9 +459,16 @@ class System:
         return True
 
     def command_line(self, pid: int) -> str:
-        """The command line of a running process ("" when it is gone or cannot be read)."""
+        """The command line of a running process ("" when it is gone or cannot be read).
+
+        PowerShell writes the console's OEM code page unless told otherwise (cp866 on a Russian
+        Windows), so C:\\Users\\Иван\\TOW came back garbled and TOW's own server never matched.
+        """
         if self.windows:
-            script = f"(Get-CimInstance Win32_Process -Filter 'ProcessId={int(pid)}').CommandLine"
+            script = (
+                "try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch { }; "
+                f"(Get-CimInstance Win32_Process -Filter 'ProcessId={int(pid)}').CommandLine"
+            )
             code, output = self._run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], timeout=60)
         else:
             code, output = self._run(["ps", "-o", "command=", "-p", str(int(pid))], timeout=30)
