@@ -79,6 +79,10 @@
   {%- if undo_in_flash %}<form method="post" action="/undo" class="flash-undo" id="undo-form" data-ttl="{{ undo_left_sec() }}"><button class="ghost sm" type="submit" data-keep title="{{ t('base.undo.title', what=undo_label()) }}">{{ t('base.undo.button') }} <span class="undo-left" data-undo-left aria-hidden="true"></span></button></form>{% endif -%}
   <button type="button" class="flash-x" aria-label="{{ t('base.close') }}">{{ icon('close', 'sm') }}</button></div>{% endif %}
   {% block body %}{% endblock %}
+  {#- Empty live regions: app.js puts an action's message here a moment after the page opens,
+      so a screen reader says it (A8). -#}
+  <div class="sr-only" id="announce" role="status"></div>
+  <div class="sr-only" id="announce-alert" role="alert"></div>
 </main>
   {#- The version is the page's footer (a landmark, A12); still `body > .app-version` for the CSS. -#}
   <footer class="app-version" data-page-version="{{ h.ver }}">

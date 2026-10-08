@@ -35,6 +35,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   typed stays.
 - After pausing, checking, saving or removing a topic or a site, or an action in the header, the focus comes back
   to the same row and button (a removed row's neighbour, else the message) instead of the start of the page.
+- A screen reader announces the message an action leaves (an error as an alert), and the message and its Undo
+  no longer vanish while the pointer or the focus is on them: they go once both have left.
 
 ## [1.27.1] — 2026-10-08
 

@@ -239,6 +239,26 @@ document.querySelectorAll("dialog.credential-prompt[open]").forEach((dialog) => 
   dialog.showModal();
 });
 
+// A9: a message or an undo button whose time is up does not vanish under the pointer or the
+// focus (WCAG 2.2.1): it goes once both have left it.
+const whenUnused = (element, done) => {
+  let due = false;
+  const used = () => element.matches(":hover") || element.contains(document.activeElement);
+  const check = () => window.setTimeout(() => {
+    if (due && element.isConnected && !used()) {
+      due = false;
+      done();
+    }
+  }, 0);
+  element.addEventListener("pointerleave", check);
+  element.addEventListener("focusout", check);
+  return () => {
+    if (!element.isConnected) return;
+    if (used()) due = true;
+    else done();
+  };
+};
+
 const flash = document.getElementById("flash");
 if (flash) {
   const hideFlash = () => {
@@ -251,17 +271,29 @@ if (flash) {
   };
   flash.querySelector(".flash-x")?.addEventListener("click", hideFlash);
   const ttl = Number(flash.dataset.ttl);
-  if (ttl > 0) window.setTimeout(hideFlash, ttl * 1000);
+  if (ttl > 0) window.setTimeout(whenUnused(flash, hideFlash), ttl * 1000);
+  // A8: a status present when the page opens is not announced by a screen reader. Its words go
+  // to an empty live region of the page a moment later (an error to the alert one); the message
+  // itself stays as it was drawn, without its own role, so it is said once.
+  const words = flash.querySelector(":scope > span")?.textContent.trim();
+  const live = document.getElementById(flash.getAttribute("role") === "alert" ? "announce-alert" : "announce");
+  if (words && live) {
+    flash.removeAttribute("role");
+    window.setTimeout(() => { live.textContent = words; }, 400);
+  }
 }
 const undoForm = document.getElementById("undo-form");
 if (undoForm) {
   // The undo lasts a while (Settings → Checks): the button counts it down, then goes away.
   const ends = Date.now() + Number(undoForm.dataset.ttl) * 1000;
   const left = undoForm.querySelector("[data-undo-left]");
+  // In a message the whole message counts: the pointer over its words keeps its undo too.
+  const removeUndo = whenUnused(undoForm.closest("#flash") || undoForm, () => undoForm.remove());
   const tickUndo = () => {
     const ms = ends - Date.now();
     if (!(ms > 0)) {
-      undoForm.remove();
+      if (left) left.textContent = "0:00";
+      removeUndo();
       return;
     }
     const s = Math.ceil(ms / 1000);
