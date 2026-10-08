@@ -61,6 +61,48 @@ def test_start_runs_the_apps_start_script_and_stop_the_launcher():
     assert (ROOT / "scripts" / "tow-start.cmd").is_file()
 
 
+@pytest.mark.allow_system  # cmd.exe on a temp layout: the file's own lines, Python replaced by echo
+@pytest.mark.skipif(sys.platform != "win32", reason="cmd.exe")
+def test_update_takes_the_environments_python_else_the_newest_real_one(tmp_path):
+    # It took the alphabetically last cpython-3* folder: 3.14.8 after 3.14.10, or uv's junction.
+    import subprocess
+
+    root = tmp_path / "my TOW (1) & co"
+    python = root / "runtime" / "python"
+    for name in (
+        "cpython-3.14.8-windows-x86_64-none",
+        "cpython-3.14.10-windows-x86_64-none",
+        "cpython-3.9.20-windows-x86_64-none",
+        "cpython-3.15.0a1-windows-x86_64-none",
+        "cpython-3.14.11+freethreaded-windows-x86_64-none",
+    ):
+        (python / name).mkdir(parents=True)
+        (python / name / "python.exe").write_bytes(b"MZ")
+    link = python / "cpython-3.14.99-windows-x86_64-none"
+    target = python / "cpython-3.14.8-windows-x86_64-none"
+    subprocess.run(["cmd.exe", "/d", "/c", "mklink", "/J", str(link), str(target)], check=True, capture_output=True)
+    lines = bundle.UPDATE_CMD.replace('"%TOW_PY%" "%TOW_UPDATE%" --ref "%TOW_REF%"', 'echo picked:"%TOW_PY%"')
+    script = root / "Update TOW.cmd"
+    text = "\n".join(line for line in lines.splitlines() if not line.endswith("pause"))
+    script.write_bytes(bundle.crlf(text + "\n").encode("ascii"))
+
+    def picked() -> str:
+        done = subprocess.run(f'cmd.exe /d /s /c ""{script}""', capture_output=True, timeout=60, check=False)
+        found = re.search(rb'picked:"[^"]*\\([^"\\]+)\\python\.exe"', done.stdout)
+        return found.group(1).decode("ascii") if found else done.stdout.decode("ascii", "replace")
+
+    assert picked() == "cpython-3.14.10-windows-x86_64-none"
+    cfg = root / "app" / ".venv" / "pyvenv.cfg"
+    cfg.parent.mkdir(parents=True)
+    # Made in another place (moved since): found by its folder name in this runtime\python.
+    cfg.write_text(
+        "home = D:\\old place\\cpython-3.14.8-windows-x86_64-none\nversion_info = 3.14.8\n", encoding="utf-8"
+    )
+    assert picked() == "cpython-3.14.8-windows-x86_64-none"
+    cfg.write_text("home = D:\\old\\cpython-3.13.1-windows-x86_64-none\n", encoding="utf-8")
+    assert picked() == "cpython-3.14.10-windows-x86_64-none"
+
+
 def test_the_readme_says_how_to_start_stop_and_keep_the_key_in_both_languages():
     text = bundle.readme()
     for line in ("Start TOW.cmd", "Stop TOW.cmd", "Update TOW.cmd", "keys\\master.key", "http://127.0.0.1:8787"):
