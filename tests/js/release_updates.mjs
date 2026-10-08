@@ -102,7 +102,9 @@ const floating = {
   contains: (element) => element === floating,
   classList: { toggle: (_name, value) => { obstructing = value; } },
 };
+let probes = 0;
 const elementsFromPoint = (x, y) => {
+  probes += 1;
   const hit = visible && !closed && x > controlRect.left && x < controlRect.right && y > controlRect.top && y < controlRect.bottom;
   return hit ? [floating, control, page] : [floating, page];
 };
@@ -127,29 +129,44 @@ await flush();
 assert.equal(frames.length, 1); // badge discovery and initial layout are coalesced
 frames.shift()();
 assert.equal(obstructing, false);
+// A scroll, a resize or a burst of changes is looked at once it has settled (one timer, then one
+// frame): one hit test costs ~14 ms on a 2000-row Home, and 15 points ran on every frame.
+const settled = () => {
+  assert.equal(frames.length, 0);
+  const [id, callback] = [...timers.entries()].pop();
+  timers.delete(id);
+  callback();
+  assert.equal(frames.length, 1);
+  frames.shift()();
+};
 controlRect = { left: 240, right: 310, top: 650, bottom: 690 };
-listeners.scroll(); listeners.resize();
-assert.equal(frames.length, 1);
-frames.shift()();
+const timersBefore = timers.size;
+for (let n = 0; n < 30; n++) { listeners.scroll(); listeners.resize(); }
+assert.equal(timers.size, timersBefore + 1); // one pending look, not thirty
+settled();
 assert.equal(obstructing, true);
-visible = false; listeners.toggle(); frames.shift()();
+visible = false; listeners.toggle(); settled();
 assert.equal(obstructing, false); // hidden controls are not obstacles
-visible = true; closed = true; listeners.resizeObserver(); frames.shift()();
+visible = true; closed = true; listeners.resizeObserver(); settled();
 assert.equal(obstructing, false); // collapsed details do not obscure the indicator
-controlRect = { left: 245, right: 255, top: 660, bottom: 670 }; closed = false; listeners.resize(); frames.shift()();
+controlRect = { left: 245, right: 255, top: 660, bottom: 670 }; closed = false; listeners.resize(); settled();
 assert.equal(obstructing, true); // a small control inside the badge, away from its corners
 controlRect = { left: 240, right: 310, top: 650, bottom: 690 };
-closed = false; listeners.toggle(); frames.shift()();
+closed = false; listeners.toggle(); settled();
 assert.equal(obstructing, true);
 controlRect = { left: 0, right: 20, top: 0, bottom: 20 };
 const text = { nodeType: 3 };
+const quiet = timers.size;
 listeners.mutationObserver([{ type: "childList", addedNodes: [text], removedNodes: [text] }]);
 listeners.mutationObserver([{ type: "attributes", attributeName: "class", oldValue: "bad", target: { getAttribute: () => "bad" } }]);
 assert.equal(frames.length, 0); // a countdown's text or an unchanged class does not measure the page
-listeners.mutationObserver([{ type: "childList", addedNodes: [{ nodeType: 1 }], removedNodes: [] }]); frames.shift()();
+assert.equal(timers.size, quiet);
+for (let n = 0; n < 50; n++) listeners.mutationObserver([{ type: "childList", addedNodes: [{ nodeType: 1 }], removedNodes: [] }]);
+settled();
 assert.equal(obstructing, false); // dynamic row changes also restore the indicator
 controlRect = { left: 300, right: 320, top: 650, bottom: 690 };
-listeners.scroll(); frames.shift()();
+listeners.scroll(); settled();
 assert.equal(obstructing, false); // touching edges are not overlaps
 assert.equal(measuredControls, 0); // QA 1.24.1: every control of the page was measured on each frame
+assert.ok(probes <= 5 * 8, probes); // at most five points a look (there were 15), eight looks
 console.log(JSON.stringify({ confirmed: true, singleJob: true, lostResponse: true, rollback: true, explicitReload: true, offline: true, nonObstructingOverlay: true }));

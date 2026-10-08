@@ -6,10 +6,14 @@
   // Capture the loaded document's version, not the newer server's polling response.
   const pageVersion = document.querySelector("[data-page-version]")?.dataset?.pageVersion || "";
   let framePending = false;
-  // What lies under the version badge: the browser's own hit test at a few points inside it
-  // (corners, edges, middle) - not every control of the page measured on each scroll frame (a
-  // Home of 2000 rows has 12 000). Hidden controls and closed accordions are not hit at all.
-  // Status pills count too: the badge covered "No saved backups" and the edge of a card.
+  let settleTimer = 0;
+  // What lies under the version badge: the browser's own hit test at a few points of it (the
+  // middle first, then the corners; the first control found ends the look) - not every control
+  // of the page measured on each scroll frame (a Home of 2000 rows has 12 000). Hidden controls
+  // and closed accordions are not hit at all. Status pills count too: the badge covered "No
+  // saved backups" and the edge of a card. One hit test costs ~14 ms on that Home, so the page
+  // is looked at when a scroll, a resize or a burst of changes (typing a search hides and shows
+  // rows, a sort moves them all) has settled, not on every frame of it (15 points per frame).
   const CONTROLS = "button,input,select,textarea,a,summary,td,.flash,.pill";
   const positionOverlay = () => {
     if (!overlay || framePending) return;
@@ -17,18 +21,24 @@
     window.requestAnimationFrame(() => {
       framePending = false;
       const box = overlay.getBoundingClientRect();
-      const xs = [box.left + 1, (box.left * 3 + box.right) / 4, (box.left + box.right) / 2, (box.left + box.right * 3) / 4, box.right - 1];
-      const ys = [box.top + 1, (box.top + box.bottom) / 2, box.bottom - 1];
-      const obstructing = box.width > 2 && box.height > 2 && xs.some((x) => ys.some((y) =>
-        document.elementsFromPoint(x, y).some((element) => !overlay.contains(element) && element.closest?.(CONTROLS))));
+      const points = [
+        [(box.left + box.right) / 2, (box.top + box.bottom) / 2], [box.left + 1, box.top + 1], [box.right - 1, box.top + 1],
+        [box.left + 1, box.bottom - 1], [box.right - 1, box.bottom - 1],
+      ];
+      const obstructing = box.width > 2 && box.height > 2 && points.some(([x, y]) =>
+        document.elementsFromPoint(x, y).some((element) => !overlay.contains(element) && element.closest?.(CONTROLS)));
       overlay.classList.toggle("is-obstructing", obstructing);
     });
   };
+  const afterChanges = () => {
+    window.clearTimeout(settleTimer);
+    settleTimer = window.setTimeout(positionOverlay, 150);
+  };
   if (overlay) {
-    window.addEventListener("scroll", positionOverlay, { passive: true, capture: true });
-    window.addEventListener("resize", positionOverlay);
-    document.addEventListener("toggle", positionOverlay, true);
-    if (typeof ResizeObserver !== "undefined") new ResizeObserver(positionOverlay).observe(document.body);
+    window.addEventListener("scroll", afterChanges, { passive: true, capture: true });
+    window.addEventListener("resize", afterChanges);
+    document.addEventListener("toggle", afterChanges, true);
+    if (typeof ResizeObserver !== "undefined") new ResizeObserver(afterChanges).observe(document.body);
     const main = document.querySelector("main");
     if (main && typeof MutationObserver !== "undefined") {
       // Countdowns rewrite their text every second; measuring every control for that would
@@ -36,7 +46,7 @@
       const moved = (record) => record.type === "attributes" ?
         record.target.getAttribute(record.attributeName) !== record.oldValue :
         [...record.addedNodes, ...record.removedNodes].some((node) => node.nodeType === 1);
-      new MutationObserver((records) => { if (records.some(moved)) positionOverlay(); }).observe(main, {
+      new MutationObserver((records) => { if (records.some(moved)) afterChanges(); }).observe(main, {
         childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ["hidden", "open", "class"],
       });
     }
