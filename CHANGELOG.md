@@ -28,6 +28,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   server starts again (one older file is kept).
 - Windows: an error of Task Scheduler or PowerShell when autostart is turned on or off is shown readable in a
   non-English Windows, instead of garbled letters.
+- Windows: an update of an install in a folder with Cyrillic letters (such as `C:\Users\Иван\TOW`) recognises
+  the web server a stopped TOW left behind and stops it, instead of failing with "port … is still in use after
+  stopping TOW".
 
 ## [1.27.0] — 2026-10-08
 
