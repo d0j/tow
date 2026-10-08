@@ -167,6 +167,26 @@ def test_an_undo_says_so_when_other_devices_could_not_be_signed_out(monkeypatch)
     assert load_secrets()["lan_auth"] == old  # the undo itself is done
 
 
+def test_an_undo_from_the_network_with_an_unreadable_sessions_file_is_done_not_an_error(monkeypatch):
+    """The device that undid a password change could not be given a new session (data/sessions.json
+    unreadable): /undo answered 500 although the undo was done. It signs in again instead."""
+    old = _with_password()
+    new = _change_password(_local())
+    owner = _device(new)
+
+    def sessions_unreadable() -> int:
+        raise auth.AuthConfigurationError("auth.sessions_unreadable")
+
+    monkeypatch.setattr("tow.auth._signing_epoch", sessions_unreadable)
+
+    response = owner.post("/undo", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert "прежний пароль" in flash_of(response.headers["location"])
+    assert "tow_session" not in response.cookies
+    assert load_secrets()["lan_auth"] == old  # the undo itself is done
+
+
 def test_an_access_undo_written_before_1_19_still_works_and_its_lan_auth_flag_is_ignored():
     from tow.clock import iso_now
     from tow.paths import config_path

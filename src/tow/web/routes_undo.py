@@ -23,9 +23,11 @@ def undo_last(request: Request) -> Response:
     if outcome.signed_out and not local:
         # The password came back and every device was signed out; this one, which undid it, stays
         # signed in (as after a password change), with a session for the password now in force.
+        # No session can be issued (data/sessions.json unreadable): the undo is done all the same,
+        # and the device signs in again, where the sign-in page names the problem.
         try:
             session_key = services.network_credential(services.load_secrets()).session_key
+            services.set_session_cookie(response, request, session_key)
         except AuthConfigurationError, SecretStoreError:
             return response
-        services.set_session_cookie(response, request, session_key)
     return response
