@@ -28,6 +28,7 @@
   "config_error": {
     "mapping": "config.yaml должен содержать настройки в виде «имя: значение»",
     "syntax": "Не удаётся прочитать config.yaml: ошибка в записи YAML в строке {line}, позиция {column}.",
+    "encoding": "Не удаётся прочитать config.yaml: файл сохранён не в кодировке UTF-8. Откройте его в текстовом редакторе и сохраните в UTF-8 (в Блокноте: «Сохранить как», «Кодировка: UTF-8»).",
     "whole_number": "config.yaml: {key} должно быть целым числом от {low} до {high}",
     "true_false": "config.yaml: {key} должно быть true или false",
     "folder_list": "config.yaml: {key} должно быть списком папок",

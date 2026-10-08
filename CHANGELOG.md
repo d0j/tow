@@ -15,6 +15,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   pause, that a check you start still tries a site at its daily limit, and where both logs are.
 - A session cookie with a non-ASCII digit (such as "²") is treated as no session: before, every page before sign-in
   and signing out answered with a server error.
+- A number in `config.yaml` written with non-ASCII digits ("²") or thousands of digits is named as a wrong value,
+  and a `config.yaml` saved in another encoding (Notepad's ANSI) says to save it as UTF-8: before, both gave a
+  server error on every page.
 
 ## [1.28.0] — 2026-10-08
 

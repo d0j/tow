@@ -49,6 +49,14 @@ def _file_key(path: Path) -> tuple[str, int, int, int]:
     return (str(path), stat.st_mtime_ns, stat.st_size, stat.st_ino)
 
 
+def _config_text(path: Path) -> str:
+    """config.yaml as text: a file saved in another encoding (Notepad's "ANSI") is named so."""
+    try:
+        return read_yaml_text(path)
+    except UnicodeDecodeError as exc:
+        raise ConfigError("config_error.encoding") from exc
+
+
 def _parsed_config_file(path: Path) -> Any:
     return _parsed_config_version(path)[1]
 
@@ -61,7 +69,7 @@ def _parsed_config_version(path: Path) -> tuple[tuple[str, int, int, int], Any]:
         cached = _cache
     if cached is not None and cached[0] == key:
         return key, copy.deepcopy(cached[1])
-    data = load_yaml(read_yaml_text(path), loader=_SAFE_LOADER)
+    data = load_yaml(_config_text(path), loader=_SAFE_LOADER)
     with _CACHE_LOCK:
         _cache = (key, data)
     return key, copy.deepcopy(data)
@@ -201,7 +209,8 @@ LANGUAGE_UNREAD = "config_error.language_unread"
 
 def _int_field(data: dict[str, Any], key: str, low: int, high: int) -> None:
     value = data.get(key)
-    if isinstance(value, str) and value.strip().isdigit():
+    # ASCII digits, and few of them: str.isdigit() takes "²" and int() refuses 4300+ digits.
+    if isinstance(value, str) and re.fullmatch(r"[0-9]{1,18}", value.strip()):
         value = int(value.strip())
     if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
         raise ConfigError("config_error.whole_number", key=key, low=low, high=high)
@@ -424,7 +433,7 @@ def _set_top_level_int(key: str, value: int) -> None:
     ``key`` changed, the whole config is rewritten from the parsed data instead.
     """
     path = config_path()
-    text = read_yaml_text(path)
+    text = _config_text(path)
     line = f"{key}: {value}"
     new, count = re.subn(rf"(?m)^{re.escape(key)}:[ \t]*[^\s#]*", line, text, count=1)
     if not count:
