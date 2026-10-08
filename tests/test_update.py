@@ -382,7 +382,7 @@ def test_a_failed_snapshot_changes_nothing_and_starts_tow_again(install, monkeyp
     assert head(install) == before
     assert state(install)["status"] == "failed"
     assert fake.calls[-1] == "spawn tow run 1.20.0"
-    assert any("the snapshot failed" in line for line in lines)
+    assert any("the update snapshot failed" in line for line in lines)
 
 
 def test_a_target_older_than_one_process_is_refused(install):

@@ -131,18 +131,18 @@ TEXTS = {
     "stopping": "stopping TOW…",
     "not_stopped": "TOW did not stop within {minutes} min; it was stopped forcibly",
     "port_busy": "port {port} is still in use after stopping TOW",
-    "snapshot": "data and config snapshot: {path}",
-    "snapshot_failed": "the snapshot failed ({error}); nothing was updated",
+    "snapshot": "update snapshot: {path}",
+    "snapshot_failed": "the update snapshot failed ({error}); nothing was updated",
     "sync_failed": "uv sync failed: {error}",
     "unhealthy": "the new version did not answer as {version} within {seconds} s",
     "failed": "update failed: {error}; restoring {previous}",
     "rollback_step": "rollback - {step}: {result}",
     "rolled_back": "the previous version is back and answers",
     "rollback_failed": "the previous version did not come back: start TOW by hand (tow run) and look at data/logs",
-    "data_restored": "data and config were put back from the snapshot (the new version had changed them)",
+    "data_restored": "data and config were put back from the update snapshot (the new version had changed them)",
     "held_retry": (
         "TOW was not started: the previous code or its data could not be put back completely, and it does not run"
-        " on a mix. Run the update again: it puts back the previous version and the copy {snapshot} first"
+        " on a mix. Run the update again: it puts back the previous version and the update snapshot {snapshot} first"
     ),
     "held_by_hand": (
         "TOW was not started: the previous code or its data could not be put back completely, and it does not run"
@@ -179,8 +179,8 @@ TEXTS = {
     "recovering": "an earlier update was cut off while it replaced the code: putting back TOW {version} first",
     "recovery_failed": "the cut-off update could not be undone: {error}; run the update again to retry",
     "newer_data": (
-        "the data changed after the update was cut off ({path}): putting back the copy from before it ({snapshot})"
-        " would lose that, so nothing was changed. To go back to TOW {version} and that copy anyway, run: {command}"
+        "the data changed after the update was cut off ({path}): putting back the update snapshot ({snapshot}) would"
+        " lose that, so nothing was changed. To go back to TOW {version} and that snapshot anyway, run: {command}"
     ),
 }
 
