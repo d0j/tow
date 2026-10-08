@@ -105,7 +105,10 @@ by another account, also by Administrators, is never changed. A folder that stay
 on stderr and in `tow doctor`; the start goes on. `tow permissions` says why; `tow permissions
 fix`, run once in an administrator terminal, makes the account autostart runs as (else the one
 that opened the terminal, never Administrators) the owner of the root, `keys/` and `data/`,
-closes them as above and reads them back, touching nothing outside the root. A new key folder is closed the same way, and
+closes them as above and reads them back, touching nothing outside the root. `--owner ACCOUNT`
+(`PC\name` or `name`) names that account when TOW cannot tell it (an administrator password of
+another account opened the terminal); outside an administrator terminal it is refused and
+nothing changes. A new key folder is closed the same way, and
 `install.ps1` closes the install folder before it unpacks anything into it (when it creates the
 folder or this account owns it; otherwise `keys\` and `data\` alone).
 
@@ -127,8 +130,10 @@ interpreter normally inside `runtime/python`; old interpreters remain available 
 No external uv executable, system Python, PATH or registry registration is updated.
 
 Prerequisites (1.22):
-- the Windows bundle: nothing (uv, Python and every wheel are inside; the first start is
-  offline). `install.ps1` / `install.sh`: the network once (GitHub; on Linux and macOS also
+- the Windows bundle: 64-bit Windows 10 or 11 on x64, nothing else (uv, Python and every wheel
+  are inside; the first start is offline). `install.ps1` refuses 32-bit Windows and Windows on
+  ARM (also from an x64-emulated or 32-bit PowerShell there) before it writes anything: the zip
+  holds x64 programs. `install.ps1` / `install.sh`: the network once (GitHub; on Linux and macOS also
   Python's and the wheels' downloads by uv), `curl` or `wget`, `tar` and a SHA-256 tool on
   Linux and macOS.
 - a git install: `git` (`tow update` switches tags), `uv` ≥ 0.12 (`[tool.uv]
@@ -172,7 +177,13 @@ The owner's guide is [install.md](install.md); the README links the stable relea
   `app/.venv/pyvenv.cfg` names (by its folder name in `runtime/python`, so a moved folder finds
   it), else with the newest `cpython-3.X.Y` there by number, never a link or a pre-release.
 - **Installers** refuse a folder that holds an install (they name the update file) or anything
-  else; a failed install leaves the folder as it found it (absent or empty). `--port` /
+  but what an uninstall keeps: `data/`, `keys/`, `config.yaml`, `backup/` and the `.tow-install`
+  marker. Around those they install again and change nothing of them (an existing `config.yaml`
+  stays; `--port` / `-Port` only rewrites its `port:`). Kept data without the marker (an older
+  installer, or another program's `data/` and `config.yaml`) is refused unless `--adopt-data` /
+  `-AdoptData` says it is the owner's former TOW folder. A failed install removes only what it
+  added: a folder it created is removed, kept data and a kept `config.yaml` stay as they were,
+  and an empty folder is left empty. `--port` /
   `-Port` (or `TOW_INSTALL_PORT`) sets `port:`. `--uninstall` / `-Uninstall` asks (`--yes`),
   turns autostart off, stops TOW, removes the Linux menu entry that names this folder and
   keeps `data/`, `keys/`, `config.yaml`, `backup/` unless `--purge`. `install.sh` reads
@@ -187,7 +198,8 @@ The owner's guide is [install.md](install.md); the README links the stable relea
 ## 2. One supervised service: `tow run`
 
 `tow run` (package `tow.supervisor`) manages TOW on every OS since 1.18: a web-server child,
-scheduled child jobs for checks and night copies, and watchdog duties. (The five Windows tasks of 1.17 — TOW-serve, -check,
+scheduled child jobs (the global check, personal timers, progress, disk space, night copies) and
+watchdog duties. (The five Windows tasks of 1.17 — TOW-serve, -check,
 -progress, -backup, -watchdog — are gone since 1.21; see §8.) It ticks once a second and never
 blocks for long.
 
@@ -232,9 +244,17 @@ blocks for long.
     `health.auto_at_ts` only until there is one; never `health.at_ts`, which every manual check
     and progress pass moves (in 1.18–1.20 an install whose first check was manual got no
     scheduled check again). The first one two minutes after start. The child is
-    `tow check --apply --notify --json` (`how="auto"`). The header countdown and Home's "checks are
+    `tow check --apply --notify --global-only --json` (`how="auto"`): the topics without a personal
+    timer. The header countdown and Home's "checks are
     late" use the same real next check (`status.json` → `next.check` while `tow run` runs);
-  - progress every 30 minutes: `tow check --apply --notify --progress-only --json`;
+  - personal timers: when a topic's own interval is due, the overdue topics go into one child,
+    `tow check --apply --notify --timer-only --json` (`how="timer"`); its start is saved in
+    `schedule.json` (`timer_attempts`, `timer_batch`) before it is spawned;
+  - progress every 30 minutes, the first five minutes after start:
+    `tow check --apply --notify --progress-only --json`;
+  - disk space every 5 minutes, only while a topic (not paused) waits in its client for disk space:
+    `tow check --apply --notify --space-only --json` asks the client alone and starts the torrent
+    once it fits;
   - night copy once per local calendar day at `backup_time` (config, default `"03:30"`; an
     unquoted YAML `03:30` is read too). A copy is due only when the newest good one is older than
     the latest slot — never because 24 hours have passed (the autumn DST day has 25, and 1.18–1.20
@@ -252,14 +272,15 @@ blocks for long.
     messengers too while their tokens are still readable) with the way back: a night copy.
     `tow watchdog` makes the same pass by hand as a diagnostic; it changes nothing either;
   - jobs run one at a time (a check also holds `check_run_lock` against a check from the web
-    page), each with a time limit (check 1 h, progress 10 min, night copy 30 min); output goes to
-    `data/logs/<job>-last.log`.
+    page), each with a time limit (check and timer 1 h, progress and space 10 min, night copy
+    30 min); output goes to
+    `data/logs/<job>-last.log` (`check`, `timer`, `progress`, `space`, `backup`).
 - **Sleep and wake.** A wall clock that jumped ahead of the monotonic one (or a loop that stood
   still for more than five minutes) means the machine slept: overdue jobs run at once, a server
   still starting gets a fresh grace, and the watchdog duty measures lateness from the wake.
 - **Control without signals.** Other processes write `data/run/control/restart` or
   `data/run/control/stop` (JSON with who and an operation id); the supervisor polls them every
-  second. `tow restart` and Settings → "Restart TOW" restart the web server (Settings follows the
+  second. `tow restart` and Settings → TOW service → "Restart" restart the web server (Settings follows the
   operation on `data/service-restart.json`: stopping → starting → ready/failed; a new server that
   exits three times before it answers is "failed"); `tow stop` and the updater stop TOW. A stop
   lets a running job finish (up to 10 minutes, then it is stopped), then stops the web server and
@@ -539,8 +560,8 @@ holds back for 30 minutes while it says `in_progress`. Texts come from the catal
 | what | Windows | Linux / macOS |
 |---|---|---|
 | update | `<TOW>\app\scripts\deploy.ps1 -Ref v1.21.0` | `<python> <TOW>/app/scripts/update.py --ref v1.21.0` |
-| update an install without git | `<TOW>\Update TOW.cmd` (`latest`, or a tag) | `<TOW>/update-tow` · `Update TOW.command` |
-| go back to an earlier version (≥ v1.18.0) | `deploy.ps1 -Ref v1.20.0` | `<python> <TOW>/app/scripts/update.py --ref v1.20.0` |
+| update an install without git | `<TOW>\Update TOW.cmd` (`latest`, or a tag) | Linux `<TOW>/update-tow`, macOS `<TOW>/Update TOW.command` (the same) |
+| go back to an earlier version (≥ v1.18.0 that reads the data: ≥ v1.23.0 once v1.23 ran) | `deploy.ps1 -Ref v1.23.0` | `<python> <TOW>/app/scripts/update.py --ref v1.23.0` |
 | restore a night copy | `tow.cmd restore-snapshot --path <copy>` (check), then `--apply` | `./tow restore-snapshot --path <copy>`, then `--apply` |
 | put back an update snapshot by hand | `tow.cmd stop`; copy `<snapshot>\data\*` over `<TOW>\data\` and `<snapshot>\config.yaml` over `<TOW>\config.yaml` | `./tow stop`; `cp -a <snapshot>/data/. <TOW>/data/` and `cp <snapshot>/config.yaml <TOW>/` |
 | Python and environment (after a move, a fresh clone) | `tow.cmd stop`, `tow.cmd setup` | `./tow stop`, `./tow setup` |
@@ -717,6 +738,17 @@ launchers' environment and Python 3.11 syntax.
   secrets refuse every device on the network (the sign-in page says why) and never fall back to
   the key; the password is then set again on the computer running TOW. The key file stays out
   of update snapshots and night copies like the master key.
+- Who may ask (1.28, `tow.web.middleware`): the web server ignores `X-Forwarded-For` /
+  `X-Forwarded-Proto` (uvicorn `proxy_headers=False`, no `forwarded_allow_ips`), so a request is
+  judged by its connection. A peer with a public address is refused whatever `Host` says. From
+  this computer `Host` must be `localhost` or a loopback address (`127.0.0.1`, `[::1]`): any
+  device on the network can answer LLMNR or mDNS for the computer's own name. From other devices
+  it must be a non-public IP address, the computer's plain name, `<name>.local` or the name set as
+  `bind`; anything else gets 403 "untrusted host". A write must state its size (a chunked body,
+  or an upload without `Content-Length`: 411) and a form stays under 512 KiB (413); the `.towx`
+  import and the `.torrent` preview are uploads with their own limits. The sign-in form takes only
+  `application/x-www-form-urlencoded` (415). Wrong passwords lock a device out after 5 in 10 minutes (30 s, doubling with each
+  further one up to an hour), and every device after 30 from all of them (up to 15 minutes).
 - `scripts/tow.cmd <command>`: the venv's `tow.exe`, else (not set up yet)
   `uv run --frozen --no-dev --project app tow`; the exit code is TOW's. An environment that is
   not this folder's own (the start files' question: TOW's code and, in an install, the base
@@ -726,7 +758,8 @@ launchers' environment and Python 3.11 syntax.
   version of `.python-version`, into `runtime\python`), rebuilds a `.venv` whose Python no longer
   runs (moved folder) or lives outside `runtime\python` (an install from before 1.18) — renamed
   first, so with TOW still running nothing is removed and setup says "stop TOW" — then
-  `uv sync --frozen --no-dev`. In a checkout: `uv sync --frozen`. Before that it asks
+  `uv sync --frozen --no-dev` and, last, `tow keys ensure` (a new install gets its master key and
+  the note to keep a copy; one in use is left alone). In a checkout: `uv sync --frozen`. Before that it asks
   `layout.setup_check`: TOW of this install running (its lock, or its web server on the port)
   stops the setup; another program or another TOW folder on the port is only named with the port
   (`cli.setup.port_other`) and the setup goes on.
@@ -839,9 +872,11 @@ Since 1.21 the five-task layout is gone from TOW (`tow install-task`, the old Se
 action, the per-task launchers, `restore-snapshot.ps1`, `windows_task.py`; `tow autostart
 migrate` only points to v1.20.0). Consequences:
 
-- **Minimum rollback target: v1.18.0.** `deploy.ps1` / `update.py` go back to any version from
-  v1.18.0 on (they all use `tow run`) and refuse anything older before they stop TOW. To go
-  back to the five tasks, deploy v1.20.0 first and follow that version's PORTABLE.md
+- **Minimum rollback target: v1.18.0.** `deploy.ps1` / `update.py` go back to a version from
+  v1.18.0 on (they all use `tow run`) only when it can read the data: once v1.23 ran,
+  `data/state.json` has format 2 and nothing before v1.23.0 is accepted (§4, step 1). Anything
+  else is refused before they stop TOW. Going back to the five tasks is therefore possible only
+  for data no v1.23 or later wrote: deploy v1.20.0 first and follow that version's PORTABLE.md
   (`tow autostart off`, `tow install-task`, `schtasks /Run /TN TOW-serve`, then
   `deploy.ps1 -Ref v1.17.1`).
 - **An install that still runs the five tasks** takes the steps above with v1.20.0 first: 1.21

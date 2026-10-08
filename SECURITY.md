@@ -8,7 +8,7 @@ with an older release.
 | Version | Supported |
 |---|---|
 | Latest stable release | yes |
-| Older releases | no — update in Settings → Version and updates, or with `Update TOW.cmd` (Windows) or `update-tow` (Linux, macOS) in the TOW folder |
+| Older releases | no — update in Settings → Version and updates, or with `Update TOW.cmd` (Windows), `Update TOW.command` (macOS) or `update-tow` (Linux) in the TOW folder |
 
 ## Reporting a vulnerability
 
@@ -24,7 +24,10 @@ otherwise.
 
 - **Access.** Requests from this computer need no password (from any account on it, see below); other devices need
   the password and a session, and only after network access is turned on. Requests from public internet addresses
-  are refused. Writes require a matching `Origin` (CSRF); pages are served with a strict Content-Security-Policy.
+  are refused, and so is a `Host` TOW does not answer (DNS rebinding): on this computer only `localhost` and
+  loopback addresses, from other devices an IP address of the home network or the VPN, the computer's plain name or
+  `name.local`. Writes require a matching `Origin` (CSRF) and a stated size (forms at most 512 KiB); pages are
+  served with a strict Content-Security-Policy.
 - **Secrets at rest.** Site logins, client passwords, messenger tokens, cookies and the password record are
   encrypted in `data/secrets.enc` with the master key in `keys/master.key`, which no backup or export contains.
   Every start closes the TOW folder to other accounts of the computer, so they can neither change the program
@@ -45,9 +48,10 @@ otherwise.
 - "This computer" means every account on it, not only yours. Another person signed in to the same computer, or a
   program running under another account, opens the TOW page on 127.0.0.1 without a password, like you do. Give TOW
   a computer whose other accounts you trust.
-- Wrong passwords from the network are slowed per device and, after 30 failures in ten minutes from any devices,
-  for all of them: someone on your home network who keeps guessing can lock your other devices out of the sign-in
-  page for up to 15 minutes at a time. This computer needs no password and is not affected.
+- Wrong passwords from the network lock that device out after 5 failures in ten minutes (30 seconds, doubling with
+  each further failure up to an hour) and, after 30 failures in ten minutes from any devices, all of them: someone
+  on your home network who keeps guessing can lock your other devices out of the sign-in page for up to 15 minutes
+  at a time. This computer needs no password and is not affected.
 - TOW ignores `X-Forwarded-For` and similar headers: it judges a request by the address of the connection, so
   behind a reverse proxy every request comes from the proxy's address. A proxy on the same machine makes every
   request look local: TOW asks no password and cannot tell an internet client from you. A proxy on another device

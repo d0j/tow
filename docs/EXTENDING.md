@@ -14,11 +14,14 @@ itself, plus its texts in the language files; a contract test checks every modul
 
 ## Torrent client
 
-**Today:** qBittorrent, Transmission 3.0+, Deluge 2.x (`READY = True`); a µTorrent placeholder (`READY = False`).
+**Today:** qBittorrent, Transmission 3.0+, Deluge 2.x, all `READY = True`. A module with `READY = False` is found
+but not offered in Settings.
 
 A client module declares:
 
-- `KIND`, `TITLE`, `SHORT` (header label), `ORDER`, `SECRETS_KEY`, `READY`, `DEFAULT_PORT`;
+- `KIND`, `TITLE` (the name everywhere: Settings, the header and `tow status` show `client_name()`, which is the
+  client's own title in the settings, else `TITLE`), `SHORT` (a short name the settings search and the log also
+  recognise), `ORDER`, `SECRETS_KEY`, `READY`, `DEFAULT_PORT`;
 - `FIELDS` — the settings card fields (address, port, login, password by default);
 - `STEPS` — how to turn on the Web UI in the client; `NOTE` — its quirks (language-file keys `client.<kind>.*`);
 - `from_secrets(secrets)` → an object satisfying `TorrentClientAdapter`.
@@ -178,8 +181,10 @@ are enforced by `tests/test_ui_standard.py` and the CSP.
 ## Periodic work and the runtime
 
 Everything TOW does on its own is managed by one supervisor, `tow run` (`tow.supervisor`): the web server is its child,
-scheduled checks, the progress pass and the night copy are child jobs on a schedule, the watchdog is a pass every
-10 minutes inside the process. New background work goes there too, never into a task of the OS:
+the global check (`--global-only`), the personal timers (`--timer-only`), the progress pass, the disk-space pass
+(every 5 minutes while a topic waits for space, `--space-only`) and the night copy are child jobs on a schedule, the
+watchdog is a pass every 10 minutes inside the process. New background work goes there too, never into a task of
+the OS:
 
 - a new periodic job is an entry in `JOB_ARGS` (`tow/supervisor/core.py`) and its timing in
   `tow/supervisor/schedule.py`, tested with a fake clock in `tests/test_supervisor.py`; a short pass can run in a

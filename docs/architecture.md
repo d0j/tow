@@ -12,18 +12,22 @@ flowchart TD
     CLI["tow stop / tow restart / Settings"] -. "data/run/control/{stop,restart}" .-> RUN
     RUN["tow run — supervisor<br/>(tow.supervisor, ticks every second)"]
     RUN -->|child, /healthz every 10 s, restart with backoff| SERVE["tow serve<br/>uvicorn + FastAPI (tow.web)"]
-    RUN -->|child, every interval_sec| CHECK["tow check --apply --notify"]
+    RUN -->|child, every interval_sec| CHECK["tow check --apply --notify --global-only"]
+    RUN -->|child, when a personal timer is due| TIMER["tow check --apply --notify --timer-only"]
     RUN -->|child, every 30 min| PROG["tow check --progress-only"]
     RUN -->|child, every 5 min while a torrent waits for disk space| SPACE["tow check --space-only"]
     RUN -->|child, daily at backup_time| NIGHT["night copy (tow.snapshots)"]
     RUN -->|in-process, every 10 min| WD["watchdog duties<br/>lateness, alerts, heartbeat, outbox"]
     SERVE --> DATA[("data/ · config.yaml · keys/")]
     CHECK --> DATA
+    TIMER --> DATA
     PROG --> DATA
     SPACE --> DATA
     NIGHT --> DATA
     CHECK --> TRK["tracker sites"]
+    TIMER --> TRK
     CHECK --> CL["torrent client Web UI"]
+    TIMER --> CL
     CHECK --> MSG["messengers"]
     BROWSER["browser (this PC, or LAN with password)"] --> SERVE
 ```
@@ -154,7 +158,7 @@ plus ten regexes, never a Python dispatch per file and mask.
     download_history.json  files of every revision
     secrets.enc            passwords, tokens, cookies, password record — Fernet, master key
     secrets-undo.enc       the secrets before the last undoable change
-    sessions.json          revoked network sessions
+    sessions.json          revoked network sessions and the "Sign out everywhere" counter
     tow.jsonl              structured events — rotated
     restore-points/        restore points (.towx)
     logs/                  process and job output (including serve.log) — rotated
@@ -169,8 +173,12 @@ plus ten regexes, never a Python dispatch per file and mask.
 ```
 
 `tow.paths.root()` finds the install: `TOW_ROOT`; else the parent of an `app` code folder that has `config.yaml`
-or `data/` next to it; else the development checkout itself. Nothing is written outside the install except the
-autostart entry, and that only on request.
+or `data/` next to it; else the development checkout itself. A `TOW_ROOT` that names another folder than the install
+whose code runs (a variable left from a move) is ignored, with a note, so TOW never starts empty in the old place.
+An install whose `.venv` runs another folder's code (a copy, while the original is still there) is refused before
+anything is written (`tow.paths.foreign_code()`, exit code 3): run setup in the copy first. Details:
+[PORTABLE.md](PORTABLE.md#1-one-folder). Nothing is written outside the install except the autostart entry, and
+that only on request.
 
 Download folder history is a convenience, not an access allowlist: every authorized owner device
 may enter a new absolute client folder. Syntax, protected-system-folder and optional UNC checks
@@ -268,9 +276,10 @@ moved to the outbox in one locked write, so a stop between them loses nothing.
 
 | Concern | How |
 |---|---|
-| Who may ask | A loopback peer (this computer) needs no password. Other peers are refused unless network access is on, and then need a session. Peers with a public internet address are always refused, whatever `Host` says. |
-| Host header | Only `localhost`, non-public IP literals, this computer's name (`<name>`, `<name>.local`) and the configured bind name are accepted (DNS rebinding). |
-| Password | PBKDF2-SHA256, 600 000 iterations, in the encrypted secrets; optional reminder, never containing the password. Login attempts are throttled per address and globally. |
+| Who may ask | A loopback peer (this computer) needs no password. Other peers are refused unless network access is on, and then need a session. Peers with a public internet address are always refused, whatever `Host` says. The peer is the connection's address: `X-Forwarded-For` / `X-Forwarded-Proto` are ignored (uvicorn `proxy_headers=False`). |
+| Host header | From this computer only `localhost` and loopback IP literals (`127.0.0.1`, `[::1]`): the computer's own name can be answered on the network through LLMNR or mDNS. From other devices `localhost`, non-public IP literals, this computer's name (`<name>`, `<name>.local`) and the configured bind name. Anything else is 403 "untrusted host" (DNS rebinding). |
+| Request bodies | A write states its size: a chunked body, or an upload without `Content-Length`, is 411; a form over 512 KiB is 413 (the `.towx` import and the `.torrent` preview have their own limits). `POST /login` takes only `application/x-www-form-urlencoded` (415). Checked from the headers, before Starlette parses a form. |
+| Password | PBKDF2-SHA256, 600 000 iterations, in the encrypted secrets; at least 8 characters; optional reminder, never containing the password. Wrong passwords lock a device out after 5 in 10 minutes (30 s, doubling up to 1 h) and every device after 30 from all of them (up to 15 min). |
 | Sessions | `tow_session` cookie: HttpOnly, SameSite=Lax, 90 days, signed with a key derived from the password record (a new password signs every device out); revocations survive restarts. |
 | CSRF | Every POST/PUT/PATCH/DELETE must carry an `Origin` equal to the request's own origin. |
 | Page | CSP `default-src 'self'` (no inline script or style, no framing), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`. Flash messages travel as a server-side token, never as text in the URL. |
