@@ -446,8 +446,9 @@ if (topicTimerNodes.length) {
   };
   // Each second only the timers on screen are drawn, and only what changed is written (500
   // timers rewrote their text, tooltip and label every second: ~20 ms/s on a 2000-topic Home).
-  // A timer coming into view is drawn at once. The value is visible text; its meaning is the
-  // tooltip and the hidden words before it (no aria-label on a span without a role).
+  // A timer coming into view is drawn when the scroll pauses. The value is visible text; its
+  // meaning is the tooltip and the hidden words before it (no aria-label on a span without a
+  // role).
   const p = (n) => String(n).padStart(2, "0");
   const drawn = new Map();
   const onScreen = typeof IntersectionObserver === "undefined" ? null : new Set();
@@ -480,16 +481,16 @@ if (topicTimerNodes.length) {
     }
   };
   if (onScreen) {
+    // Timers that come into view are drawn once the scroll pauses (or at the next tick): drawing
+    // them on every scroll frame cost a layout per frame.
+    let arrived = 0;
     const watcher = new IntersectionObserver((entries) => {
-      const now = serverNow + performance.now() - sampledAt;
       entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          onScreen.add(entry.target);
-          drawTimer(entry.target, now);
-        } else {
-          onScreen.delete(entry.target);
-        }
+        if (entry.isIntersecting) onScreen.add(entry.target);
+        else onScreen.delete(entry.target);
       });
+      window.clearTimeout(arrived);
+      arrived = window.setTimeout(tickTimers, 150);
     });
     topicTimerNodes.forEach((node) => watcher.observe(node));
   }
