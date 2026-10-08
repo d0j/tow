@@ -53,6 +53,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Adding a forum site from a topic link (Sites → +) takes the download path from the topic page's own .torrent link
   (dl.php?t=… instead of a guessed download.php?id=…), and a site on an IP address or localhost is named by its
   port (site_8080) instead of "0".
+- After a new version of a topic, Home's latest event names the new episode, not one of the episodes the version
+  carried over.
 ### Security
 
 - A device on the home network can no longer fill the TOW folder through the sign-in page: every form is
