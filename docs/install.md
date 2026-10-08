@@ -137,7 +137,9 @@ TOW/
   runtime/         its Python and libraries
 ```
 
-Move or copy the whole folder: the start file prepares it again in the new place.
+Move or copy the whole folder: the start file prepares it again in the new place. If TOW starts with the computer,
+turn autostart on again in the new place (`app\scripts\tow.cmd autostart on`, macOS and Linux:
+`app/scripts/tow autostart on`): it still names the old folder.
 
 ## Start, stop, update
 
@@ -147,7 +149,7 @@ Move or copy the whole folder: the start file prepares it again in the new place
 | Stop | `Stop TOW.cmd` | `Stop TOW.command` | `~/TOW/stop-tow` |
 | Start with the computer | `app\scripts\tow.cmd autostart on` | `~/TOW/app/scripts/tow autostart on` | the same |
 | Update to the latest release | `Update TOW.cmd` | `Update TOW.command` | `~/TOW/update-tow` |
-| Go back to an earlier release | PowerShell in the TOW folder: `& ".\Update TOW.cmd" v1.25.0` | `~/TOW/update-tow v1.25.0` | the same |
+| Go back to an earlier release | PowerShell in the TOW folder: `& ".\Update TOW.cmd" v1.25.0` | `~/TOW/"Update TOW.command" v1.25.0` | `~/TOW/update-tow v1.25.0` |
 
 An update stops TOW, keeps a copy of your data and settings in `backup/`, puts in the new version, starts it and
 checks it. If anything fails, the previous version comes back by itself. It needs the internet. When TOW is
@@ -170,7 +172,8 @@ passwords cannot be read, not even from a backup.
 
 It asks before it removes anything, turns autostart off and stops TOW. Your `data`, `keys`, `config.yaml` and
 `backup` stay in the folder unless you say otherwise (or add `-Purge` / `--purge`). `-Dir` / `--dir` names another
-folder than the default. Or simply stop TOW, turn autostart off and delete the folder.
+folder than the default (`TOW` in your user folder): for the zip extracted to `C:\TOW`, add `-Dir C:\TOW`. Or simply
+stop TOW, turn autostart off and delete the folder.
 
 What stays is picked up again: installing into the same folder later keeps your data, key and settings. To delete
 what stayed, run the remove command again with `-Purge` / `--purge`.
@@ -192,6 +195,11 @@ that the folder is your former TOW install.
 | "… is not empty: choose another folder" | The folder holds other files. Install into a new or empty folder (`-Dir` / `--dir`). |
 | "… has data without a TOW install marker" | The folder holds data of an older TOW installer, or another program's `data` and `config.yaml`. If it is your former TOW folder, run the installer again with `-AdoptData` / `--adopt-data`; otherwise choose another folder. |
 | "… longer than 110 characters and Windows long paths are off" | The path of the TOW folder is too long for Windows without long paths: preparing TOW there fails. Move the folder to a short path such as `C:\TOW` (installer: `-Dir C:\TOW`), or turn on long paths (`LongPathsEnabled`). |
+| "TOW was not started: an update was cut off while it replaced the code …" (or "TOW cannot run: …") | An update stopped half-way: the computer turned off, or the updater was killed. Run the update again (`Update TOW.cmd`, `Update TOW.command` or `update-tow`): it puts the previous version back first, then installs the release. |
+| "TOW: TOW_ROOT=… is not the folder of this TOW, so it is ignored" | A `TOW_ROOT` variable is left from a move or another install. TOW uses its own folder; remove the variable (Windows: **Edit environment variables for your account**; Linux, macOS: your shell profile). |
+| "TOW's environment still belongs to the folder TOW was moved or copied from" (or "TOW did not run: its environment runs the code in …") | The folder was moved or copied. Double-click the start file, which prepares it, or run `app\scripts\tow.cmd setup` (macOS, Linux: `~/TOW/app/scripts/tow setup`). |
+| TOW does not start with the computer after the folder was moved or copied | The autostart still names the old folder. Turn it on in the new folder: `app\scripts\tow.cmd autostart on` (macOS, Linux: `app/scripts/tow autostart on`). After a move, Diagnostics and `tow status` say so too. |
+| A page that says only "untrusted host" | TOW does not answer that address. On the computer use <http://127.0.0.1:8787> or <http://localhost:8787>; from another device the computer's IP address, its plain name or `name.local`, not `name.lan` or a Tailscale MagicDNS name ([Remote access](../README.md#remote-access)). |
 
 ## Manual install with git
 
