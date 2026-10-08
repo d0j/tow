@@ -80,9 +80,16 @@ def test_a_moved_install_says_to_run_setup_instead_of_a_trampoline_error(tmp_pat
     (root / "data").mkdir()
     env = {key: value for key, value in os.environ.items() if not key.startswith(("TOW_", "UV_"))}
     if os.name == "nt":
-        scripts = root / "app" / ".venv" / "Scripts"
+        # What a moved install really has: the environment's own launcher, whose base Python
+        # (pyvenv.cfg "home") stayed in the old folder. A made-up python.exe is not a program,
+        # and Windows could hold it for minutes - the test then hung instead of tow.cmd.
+        import sys
+
+        venv = root / "app" / ".venv"
+        scripts = venv / "Scripts"
         scripts.mkdir(parents=True)
-        (scripts / "python.exe").write_bytes(b"not a program: its base Python stayed in the old folder")
+        shutil.copy2(Path(sys.prefix) / "Scripts" / "python.exe", scripts / "python.exe")
+        (venv / "pyvenv.cfg").write_text(f"home = {tmp_path / 'old' / 'runtime' / 'python'}\n", encoding="utf-8")
         (scripts / "tow.exe").write_bytes(b"")
         argv = ["cmd.exe", "/d", "/c", str(root / "app" / "scripts" / "tow.cmd"), "status"]
     else:
