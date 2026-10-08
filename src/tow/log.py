@@ -6,7 +6,7 @@ import os
 import re
 import sys
 import threading
-from collections.abc import Generator, Iterable, Iterator, Mapping
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import closing, contextmanager, suppress
 from pathlib import Path
 from typing import Any
@@ -465,9 +465,10 @@ _TITLE_REF_RE = re.compile(r'"(topic_id|topic|hash)":\s*"((?:[^"\\]|\\.)*)"')
 _BLOCK_BYTES = 256 * 1024
 
 
-def _lines_newest_first(path: Path, *, live: bool) -> Generator[str]:
+def _lines_newest_first(path: Path, *, live: bool, skip: Callable[[bytes], bool] | None = None) -> Generator[str]:
     """The lines of one log file from its end, read in blocks: the history page usually needs
-    only the newest events, not the whole file (the live one can be tens of MiB)."""
+    only the newest events, not the whole file (the live one can be tens of MiB). ``skip``: a
+    test of a block's whole lines (raw) that says none of them is wanted."""
     try:
         if live:
             with _log_file_lock():  # the size between two appends: no half-written line
@@ -491,6 +492,8 @@ def _lines_newest_first(path: Path, *, live: bool) -> Generator[str]:
             end = start
             lines = block.split(b"\n")
             rest = lines.pop(0) if start > 0 else b""  # maybe the end of a line in the block before
+            if skip is not None and skip(block[len(rest) + 1 :] if start > 0 else block):
+                continue
             for line in reversed(lines):
                 if line.strip():
                     yield line.decode("utf-8", "replace")
@@ -505,6 +508,47 @@ def _title_refs(needle: str, title_index: Mapping[str, str] | None) -> tuple[set
             kind, _, value = key.partition(":")
             (ids if kind == "id" else hashes).add(value)
     return ids, hashes
+
+
+@functools.cache
+def _ascii_folds() -> dict[str, frozenset[bytes]]:
+    """For each ASCII character, the non-ASCII characters (UTF-8) whose casefold holds it: ß and
+    ẞ fold to "ss", the Kelvin sign to "k", ﬁ to "fi". Only these let a line with no ASCII copy of
+    the search text still hold it once folded. They are all in the Basic Multilingual Plane
+    (a test checks every code point of this Python's Unicode), which is read in a few ms."""
+    found: dict[str, set[bytes]] = {}
+    ascii_char = re.compile(r"[\x00-\x7f]")
+    for start in range(0x80, 0x10000, 256):
+        chunk = "".join(map(chr, range(start, start + 256)))
+        if not ascii_char.search(chunk.casefold()):
+            continue  # nearly every chunk: checked as a whole
+        for char in chunk:
+            for folded in char.casefold():
+                if folded.isascii():
+                    found.setdefault(folded, set()).add(char.encode("utf-8"))
+    return {char: frozenset(encoded) for char, encoded in found.items()}
+
+
+def _block_without(needle: str, refs: tuple[set[str], set[str]]) -> Callable[[bytes], bool] | None:
+    """A test that no line of a raw block can pass ``_may_match`` (None: no such cheap test).
+
+    For an ASCII search text and no topic named by it, ``_may_match`` takes a line only when the
+    text is in its casefold or the line has an escape. A line's ASCII bytes are its ASCII
+    characters (UTF-8 never uses them inside a longer character), so the text can be in the
+    casefold only if it is in the block's bytes with ASCII lowered, or if the block has one of
+    the few characters that fold to letters of the text: one pass over the bytes instead of a
+    decode and a casefold of every line (a search with no result read 25 MB line by line).
+    """
+    if refs[0] or refs[1] or not needle.isascii():
+        return None
+    target = needle.encode("ascii")
+    folds = _ascii_folds()
+    folding = tuple({encoded for char in set(needle) for encoded in folds.get(char, ())})
+
+    def without(block: bytes) -> bool:
+        return target not in block.lower() and b"\\u" not in block and not any(item in block for item in folding)
+
+    return without
 
 
 def _may_match(line: str, needle: str, refs: tuple[set[str], set[str]]) -> bool:
@@ -532,13 +576,14 @@ def history_events(
     # A quote or a backslash in the search text is escaped in the raw line: no shortcut then.
     shortcut = bool(needle) and '"' not in needle and "\\" not in needle
     refs = _title_refs(needle, title_index) if shortcut else (set(), set())
+    skip = _block_without(needle, refs) if shortcut else None
     path = log_path()
     files = [path, *(path.with_name(f"{path.name}.{index}") for index in range(1, BACKUPS + 1))]
     out: list[dict[str, Any]] = []
     for index, candidate in enumerate(files):
         # Only the live file is being written: rotated files are read without the log lock,
         # so a running check is not held up by the history page.
-        with closing(_lines_newest_first(candidate, live=index == 0)) as lines:
+        with closing(_lines_newest_first(candidate, live=index == 0, skip=skip)) as lines:
             for line in lines:
                 kind = _KIND_RE.search(line)
                 if kind is None or kind.group(1) not in kinds:
