@@ -21,6 +21,12 @@ set "TOW_HERE=%TOW_ROOT%"
 rem Ready: the environment runs, and it is this folder's own (not the one of a moved or copied folder).
 if exist "%TOW_APP%\.venv\Scripts\python.exe" "%TOW_APP%\.venv\Scripts\python.exe" -c "import os, sys, tow; here = os.path.realpath(os.environ['TOW_HERE']).lower() + os.sep; sys.exit(0 if all(os.path.realpath(p).lower().startswith(here) for p in (tow.__file__, sys.base_prefix)) else 1)" >nul 2>&1 && set "TOW_READY=1"
 if not defined TOW_READY set "TOW_PREPARED=1"
+rem docs/PORTABLE.md 3: without Windows long paths, a folder path over 110 characters lets files deep in
+rem app\.venv and runtime\ pass 260 characters, and setup fails somewhere inside uv or Python. Said first.
+set "TOW_LONG="
+if not defined TOW_READY if not "%TOW_ROOT:~110,1%"=="" set "TOW_LONG=1"
+if defined TOW_LONG "%SystemRoot%\System32\reg.exe" query "HKLM\SYSTEM\CurrentControlSet\Control\FileSystem" /v LongPathsEnabled 2>nul | findstr /c:"0x1" >nul && set "TOW_LONG="
+if defined TOW_LONG echo The path of this folder is longer than 110 characters and Windows long paths are off: preparing TOW may fail. Move the folder to a shorter path such as C:\TOW, or turn long paths on (LongPathsEnabled; docs/PORTABLE.md, section 3).
 if not defined TOW_READY echo Preparing TOW in "%TOW_ROOT%" - the first time takes a minute or two...
 rem Files from a downloaded zip carry the "Mark of the Web", and Windows would ask about each one.
 if not defined TOW_READY powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-ChildItem -LiteralPath $env:TOW_HERE -Recurse -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue" >nul 2>&1

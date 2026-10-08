@@ -345,7 +345,8 @@ gone, so Diagnostics, Settings → TOW service, `tow status` and `tow doctor` sa
   not clear them: a start by hand and a start by the OS must use the same data.
 - Windows without long paths enabled (`LongPathsEnabled`): an install folder longer than about
   110 characters lets paths deep in `app\.venv` pass the 260-character limit, and setup or a
-  package import fails. Choose a shorter folder, or enable long paths.
+  package import fails. Choose a shorter folder, or enable long paths. `install.ps1` refuses such
+  a folder before it writes anything, and the Windows start file says so before it prepares TOW.
 - The folder needs a file system with links: uv links `runtime/python/cpython-X.Y-*` to the
   full version (a junction on Windows, a symlink elsewhere). FAT32 and exFAT (many USB sticks)
   have none, and `tow setup` cannot complete there (not verified on every uv version); use NTFS

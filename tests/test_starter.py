@@ -353,6 +353,47 @@ def test_the_start_script_follows_the_interrupted_update_rule(tmp_path, record, 
         assert "could not be prepared" in output  # it went on to prepare TOW (no uv here)
 
 
+@pytest.mark.allow_system  # the Windows start script in a temp install; it ends before setup (no uv)
+@pytest.mark.skipif(os.name != "nt", reason="cmd.exe")
+def test_the_windows_start_script_warns_of_a_long_folder_without_long_paths(tmp_path):
+    # docs/PORTABLE.md 3: over 110 characters setup failed deep inside uv or Python, unexplained.
+    import shutil
+    import subprocess
+    import winreg
+
+    warning = "longer than 110 characters and Windows long paths are off"
+    if len(str(tmp_path)) > 100:
+        pytest.skip("the temp folder itself is too long for the short case")
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\FileSystem") as key:
+            enabled = winreg.QueryValueEx(key, "LongPathsEnabled")[0] == 1
+    except OSError:
+        enabled = False
+    text = (ROOT / "scripts" / "tow-start.cmd").read_text(encoding="utf-8")
+    lines = [line for line in text.splitlines() if "TOW_LONG" in line and not line.startswith("rem ")]
+    assert len(lines) == 4
+    assert text.index("if defined TOW_LONG echo") < text.index('call "%~dp0tow-setup.cmd"')  # before setup
+    for name, long in (("TOW", False), ("T" * max(1, 112 - len(str(tmp_path))), True)):
+        root = tmp_path / name
+        assert (len(str(root)) > 110) is long
+        shutil.copytree(ROOT / "scripts", root / "app" / "scripts")
+        (root / "data").mkdir()
+        (root / "config.yaml").write_text("port: 18999\n", encoding="utf-8")
+        output = _start_script(root)  # this machine's own setting
+        assert (warning in output) is (long and not enabled), output
+        # Long paths off: the same lines asking a key that does not exist (read only).
+        absent = [
+            line.replace(r"HKLM\SYSTEM\CurrentControlSet\Control\FileSystem", r"HKCU\Software\TOW-absent-key")
+            for line in lines
+        ]
+        check = tmp_path / f"check-{long}.cmd"
+        check.write_text("@echo off\r\n" + "\r\n".join(absent) + "\r\n", encoding="ascii")
+        env = {**os.environ, "TOW_ROOT": str(root)}
+        argv = ["cmd.exe", "/d", "/c", str(check)]
+        done = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=60, check=False)
+        assert (warning in done.stdout) is long, done.stdout + done.stderr
+
+
 @pytest.mark.allow_system  # the platform's launcher in a temp install; it ends before uv (none on PATH)
 @pytest.mark.parametrize(
     ("record", "args", "refused"),
