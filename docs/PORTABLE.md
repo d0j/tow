@@ -427,13 +427,14 @@ fail safely rather than using a replacement fallback; choose a supported local f
 restore archives are preserved during rotation. Failure to delete an old copy retains the verified new copy
 and reports a cleanup warning.
 
-`app/scripts/update.py`: standard library only, Python 3.11 syntax, run by the install's **base**
+`app/scripts/update.py`: standard library only, Python 3.11 syntax (ci compiles it, the web update
+worker and its lock module with a real Python 3.11 on one runner), run by the install's **base**
 Python (the one `app/.venv/pyvenv.cfg` names), not the venv, so `uv sync` can replace venv files
 on Windows. `tow update --ref <tag>` prints the exact command; on Windows
 `app\scripts\deploy.ps1 -Ref <tag>` (`-HealthTimeoutSec` 90, `-CheckWaitMinutes`, `-KeepSnapshots`;
-Windows PowerShell 5.1 or 7, ASCII, `-LiteralPath`; `powershell -ExecutionPolicy Bypass -File …` where
-the execution policy refuses scripts) finds that Python (or any Python 3.11+ through `py -3`) and runs it. uv, Python and uv's cache come
-from one resolver, `launcher_env`, the same as the launchers give: `runtime/bin/uv` before uv on
+Windows PowerShell 5.1 or 7, ASCII, `-LiteralPath`; `powershell -ExecutionPolicy Bypass -File …`
+where the execution policy refuses scripts) finds that Python (or any Python 3.11+ through
+`py -3`) and runs it. uv, Python and uv's cache come from one resolver, `launcher_env`, the same as the launchers give: `runtime/bin/uv` before uv on
 PATH, `UV_PYTHON_INSTALL_DIR`, `UV_PYTHON_BIN_DIR`, `UV_CACHE_DIR` under `<TOW>/runtime`,
 `UV_PROJECT_ENVIRONMENT=app/.venv`, `UV_MANAGED_PYTHON=1` (so an install whose Python is still
 outside `runtime/` gets it there on its first update, which needs the network; `tow setup`

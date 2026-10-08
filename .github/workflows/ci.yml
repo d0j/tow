@@ -22,10 +22,12 @@ jobs:
         os: [windows-latest, ubuntu-latest, ubuntu-26.04, macos-latest]
         include:
           # Keep the protected check name stable, but pin the older LTS runner. The dependency
-          # audit reads uv.lock, the same on every OS: it runs here only.
+          # audit reads uv.lock, the same on every OS: it runs here only, and so does the
+          # compile of the base-Python files with a real Python 3.11.
           - os: ubuntu-latest
             runner: ubuntu-24.04
             audit: true
+            py311: true
     runs-on: ${{ matrix.runner || matrix.os }}
     timeout-minutes: 30
     steps:
@@ -38,6 +40,14 @@ jobs:
           enable-cache: true
       - name: Install Python from .python-version
         run: uv python install --no-bin --no-registry
+      # update.py, the web update worker and its lock module run on the install's base Python,
+      # which may be any 3.11+. ast.parse(feature_version=(3, 11)) in the tests still accepts
+      # 3.12 syntax such as f"{d["a"]}"; Python 3.11 itself does not.
+      - name: Compile the base-Python files with Python 3.11
+        if: matrix.py311
+        run: |
+          uv python install 3.11 --no-bin --no-registry
+          "$(uv python find --no-project 3.11)" -m py_compile scripts/update.py src/tow/update_worker.py src/tow/platform/locks.py
       - name: Sync locked environment
         run: uv sync --frozen
       - name: Quality gate${{ matrix.audit && ' (with dependency audit)' || '' }}
