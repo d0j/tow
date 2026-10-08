@@ -25,8 +25,13 @@ _DOWNLOAD_PATH = re.compile(
 )
 
 
+# A lone surrogate (half a UTF-16 pair) is no text: no file or page can hold it.
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
 def _clean(s: str) -> str:
-    s = unquote(s or "").replace("\xa0", " ").strip()
+    """Every title TOW takes from a page or a link passes here: one line of real text."""
+    s = _LONE_SURROGATE.sub("�", unquote(s or "")).replace("\xa0", " ").strip()
     s = re.sub(r"\s+", " ", s)
     if s.lower().endswith(".torrent"):
         s = s[: -len(".torrent")].rstrip()
