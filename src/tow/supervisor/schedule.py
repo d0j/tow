@@ -7,6 +7,8 @@ in microseconds):
   start, kept in ``data/run/schedule.json``; ``health.auto_at_ts`` until there is one), the
   first two minutes after start;
 - ``progress`` every 30 minutes (completions from the torrent clients, no site traffic);
+- ``space``    every 5 minutes, only while a topic's revision waits in its client for disk
+  space (``tow.check.space``: the client alone is asked, it starts the torrent once it fits);
 - ``backup``   once per local calendar day at ``backup_time`` (default 03:30); a slot that
   passed without a good copy (the machine was off or asleep, or the copy failed) is caught up
   at once, a failed copy is tried again six hours later (or at the next slot, if sooner);
@@ -35,6 +37,7 @@ __all__ = ["DEFAULT_BACKUP_TIME", "Schedule", "WakeDetector", "local_day", "loca
 CHECK_FIRST_DELAY_SEC = 120
 PROGRESS_EVERY_SEC = 30 * 60
 PROGRESS_FIRST_DELAY_SEC = 5 * 60
+SPACE_EVERY_SEC = 5 * 60
 WATCHDOG_EVERY_SEC = 10 * 60
 WATCHDOG_FIRST_DELAY_SEC = 60
 # A failed night copy is tried again after this long (not at every start or tick).
@@ -67,6 +70,7 @@ class Schedule:
     backup_enabled: bool = True
     topic_timers: dict[str, dict[str, Any]] = field(default_factory=dict)
     timer_attempts: dict[str, Any] = field(default_factory=dict)
+    space_waiting: bool = False  # a topic waits for disk space: the space pass is due too
     _corrected: dict[str, tuple[float, float]] = field(default_factory=dict, init=False, repr=False)
 
     def _clamp(self, ts: float, now: float, *, source: str) -> float:
@@ -156,6 +160,8 @@ class Schedule:
         timers = self.timer_due(now)
         if timers:
             due_at["timer"] = min(timers.values())
+        if self.space_waiting:
+            due_at["space"] = self._every_due_at("space", SPACE_EVERY_SEC, SPACE_EVERY_SEC, now)
         return [(name, now - at) for name, at in due_at.items() if at <= now]
 
     def started(self, name: str, now: float) -> None:
@@ -179,6 +185,8 @@ class Schedule:
         timers = self.timer_due(now)
         if timers:
             result["timer"] = min(timers.values())
+        if self.space_waiting:
+            result["space"] = self._every_due_at("space", SPACE_EVERY_SEC, SPACE_EVERY_SEC, now)
         return result
 
 

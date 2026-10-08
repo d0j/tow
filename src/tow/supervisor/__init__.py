@@ -101,6 +101,7 @@ def _stop(child: Any) -> bool:
 
 def _facts() -> dict[str, Any]:
     from tow.diagnostic_json import epoch
+    from tow.records import topics_of
     from tow.snapshots import list_snapshots
     from tow.snapshots import status as backup_status
     from tow.store import load_state
@@ -119,6 +120,11 @@ def _facts() -> dict[str, Any]:
         "last_backup_ok": last_ok,
         "topic_timers": active_policies(state),
         "timer_policies": all_policies(state),
+        # A revision waits in its client for disk space (tow.check.space): the space pass runs.
+        "space_waiting": any(
+            isinstance(topic.get("waiting_space"), dict) and topic.get("waiting_space") and not topic.get("paused")
+            for topic in topics_of(state)
+        ),
     }
 
 
