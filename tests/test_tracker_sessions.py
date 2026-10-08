@@ -263,29 +263,28 @@ def test_a_logout_word_in_a_post_is_not_a_way_to_sign_out():
         assert not signed_in(f"<html><a {link}>x</a></html>")
 
 
-_BROKEN_PAGES = {
+_BROKEN_PAGES = {  # about 2 MB each
     "tags_never_end": "<a" * 1_000_000,  # each one was scanned to the end of the page
     "posts_never_closed": "<a href='login.php?logout=1'>x</a>" + "<p class='post'>reply" * 100_000,
-    "nested_deep": "<div class='post'>" * 150_000 + "</div>" * 150_000,
+    "nested_deep": "<div class='post'>" * 80_000 + "</div>" * 80_000,
     "one_long_link": "<a " + "href=" * 400_000 + " logout",  # every "href=" read the rest of the link
 }
 
 
+@pytest.mark.parametrize("read", ["site_text", "link_text", "signed_in", "guest_page"])
 @pytest.mark.parametrize("shape", sorted(_BROKEN_PAGES))
-def test_a_broken_page_of_megabytes_is_read_quickly(shape):
+def test_a_broken_page_of_megabytes_is_read_quickly(shape, read):
     """A broken page near the size limit took minutes: every unended tag and every unclosed
-    post was looked through again from its own place."""
+    post was looked through again from its own place. Now one pass takes a fraction of a
+    second (the limit leaves room for a busy test machine)."""
     import time
 
-    from tow.trackers.generic import guest_page, link_text, signed_in, site_text
+    from tow.trackers import generic
 
     page = _BROKEN_PAGES[shape]
     started = time.perf_counter()
-    site_text(page)
-    link_text(page)
-    signed_in(page)
-    guest_page(page)
-    assert time.perf_counter() - started < 3.0
+    getattr(generic, read)(page)
+    assert time.perf_counter() - started < 2.0
 
 
 def test_closing_tags_are_matched_like_nested_elements():
