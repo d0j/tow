@@ -55,6 +55,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   port (site_8080) instead of "0".
 - After a new version of a topic, Home's latest event names the new episode, not one of the episodes the version
   carried over.
+- A failed check of a topic TOW already had (the row's check, "Stop the previous one and add") no longer says
+  "Added to TOW, …", and a successful "Adopt into TOW" says the torrent was adopted instead of "No changes".
 ### Security
 
 - A device on the home network can no longer fill the TOW folder through the sign-in page: every form is

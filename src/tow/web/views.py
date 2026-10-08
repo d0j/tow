@@ -196,15 +196,19 @@ def row_class(row: CheckRow) -> str:
     return str(row.get("error_class") or error_class(str(row.get("error") or "")))
 
 
-def manual_check_flash(row: CheckRow | None, *, topic_id: str, tracker_name: str = "") -> RedirectResponse | None:
+def manual_check_flash(
+    row: CheckRow | None, *, topic_id: str, tracker_name: str = "", new_topic: bool = False
+) -> RedirectResponse | None:
+    """A failed check by hand, in words: "added to TOW, ..." only for the first check of a
+    topic just added (``new_topic``); a check of a topic TOW already had says the check failed."""
     if not row or row.get("ok"):
         return None
     error = humanize(str(row.get("error") or t("web.check.not_confirmed")).strip())
     cls = row_class(row)
     if cls == "qbit":
-        flash = t("web.check.added_client_refused", error=error)
+        flash = t("web.check.added_client_refused" if new_topic else "web.check.client_refused", error=error)
     else:
-        flash = t("web.check.added_check_failed", error=error)
+        flash = t("web.check.added_check_failed" if new_topic else "web.check.check_failed", error=error)
     # The status-colour contract (AGENTS.md): a site that does not answer is amber, not an error.
     kind = "warn" if cls in TRACKER_WARNING_CLASSES else "err"
     return home_redirect(flash, kind, credential_topic=topic_id if cls == "tracker_auth" and tracker_name else None)
