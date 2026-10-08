@@ -8,12 +8,14 @@ import hashlib
 import io
 import json
 import logging
+import lzma
 import math
 import os
 import re
 import shutil
 import uuid
 import zipfile
+import zlib
 from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -506,13 +508,26 @@ def _validate_member_name(name: str) -> None:
         raise ExportImportError(f"unsupported or unsafe bundle member: {name}")
 
 
+# What zipfile raises for a damaged archive besides BadZipFile: a negative seek (ValueError), an
+# unknown version or method (NotImplementedError), a broken deflate or LZMA stream, a cut one.
+_ARCHIVE_ERRORS = (
+    OSError,
+    RuntimeError,
+    ValueError,
+    EOFError,
+    zipfile.BadZipFile,
+    zlib.error,
+    lzma.LZMAError,
+)
+
+
 def _unzip_payload(payload: bytes) -> dict[str, bytes]:
     if len(payload) > MAX_BUNDLE_BYTES:
         raise ExportImportError("decrypted export bundle is too large", reason="too_large")
     try:
         archive = zipfile.ZipFile(io.BytesIO(payload), "r")
         infos = archive.infolist()
-    except (OSError, zipfile.BadZipFile) as exc:
+    except _ARCHIVE_ERRORS as exc:
         raise ExportImportError("invalid export bundle archive") from exc
     names = [info.filename for info in infos]
     if len(names) != len(set(names)):
@@ -532,7 +547,7 @@ def _unzip_payload(payload: bytes) -> dict[str, bytes]:
                 members[info.filename] = handle.read(info.file_size or 1)
     except ExportImportError:
         raise
-    except (OSError, RuntimeError, zipfile.BadZipFile) as exc:
+    except _ARCHIVE_ERRORS as exc:
         raise ExportImportError("cannot read export bundle archive") from exc
     finally:
         archive.close()
