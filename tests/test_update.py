@@ -249,11 +249,17 @@ def test_a_successful_update(install):
     snapshot = Path(record["snapshot"])
     kept = sorted(p.relative_to(snapshot).as_posix() for p in snapshot.rglob("*") if p.is_file())
     assert kept == ["SNAPSHOT.json", "config.yaml", "data/state.json"]  # no key, token, session, profile
-    # five newest update/deploy snapshots stay; night copies, key copies and pre-runtime are never touched
+    # five newest update/deploy snapshots stay, and the oldest one (the data from before the first
+    # update, which cut-off and repeated updates pushed out); night copies, key copies and
+    # pre-runtime are never touched
     names = snapshots(install)
     assert snapshot.name in names
     assert [n for n in names if "-before-" in n] == sorted(
-        [snapshot.name, *[f"update-2026090{i}-000000-before-v0.9.{i - 1}" for i in (1, 2, 3, 4)]]
+        [
+            snapshot.name,
+            *[f"update-2026090{i}-000000-before-v0.9.{i - 1}" for i in (1, 2, 3, 4)],
+            "data-20260801-000000-before-v0.8.0",
+        ]
     )
     assert {"night", "key-copy", "data-20250101-000000-pre-runtime"} <= set(names)
 
