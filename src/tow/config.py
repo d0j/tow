@@ -39,20 +39,32 @@ _SAFE_LOADER = SAFE_LOADER
 # Writers replace the file atomically, so (mtime, size, file id) changes with every write.
 _CACHE_LOCK = threading.Lock()
 _cache: tuple[tuple[str, int, int, int], Any] | None = None
+# load_config's checked result for the same file version: checking every site (204 sites:
+# ~25 ms) on every request is the same work again. Callers get their own deep copy.
+_validated_cache: tuple[tuple[str, int, int, int], dict[str, Any]] | None = None
+
+
+def _file_key(path: Path) -> tuple[str, int, int, int]:
+    stat = path.stat()
+    return (str(path), stat.st_mtime_ns, stat.st_size, stat.st_ino)
 
 
 def _parsed_config_file(path: Path) -> Any:
+    return _parsed_config_version(path)[1]
+
+
+def _parsed_config_version(path: Path) -> tuple[tuple[str, int, int, int], Any]:
+    """(the file version read, a fresh copy of what it parses to)."""
     global _cache
-    stat = path.stat()
-    key = (str(path), stat.st_mtime_ns, stat.st_size, stat.st_ino)
+    key = _file_key(path)
     with _CACHE_LOCK:
         cached = _cache
     if cached is not None and cached[0] == key:
-        return copy.deepcopy(cached[1])
+        return key, copy.deepcopy(cached[1])
     data = load_yaml(read_yaml_text(path), loader=_SAFE_LOADER)
     with _CACHE_LOCK:
         _cache = (key, data)
-    return copy.deepcopy(data)
+    return key, copy.deepcopy(data)
 
 
 # Limits the UI, the scheduler and the store share (one place for every bound).
@@ -133,11 +145,16 @@ def flash_ttl(value: object) -> int:
 
 
 def load_config() -> dict[str, Any]:
+    global _validated_cache
     path = config_path()
     if not path.is_file():
         raise FileNotFoundError(f"TOW config not found: {path}; create it or set TOW_CONFIG")
+    with _CACHE_LOCK:
+        known = _validated_cache
+    if known is not None and known[0] == _file_key(path):
+        return copy.deepcopy(known[1])
     try:
-        data = _parsed_config_file(path)
+        key, data = _parsed_config_version(path)
     except YamlLimitError:
         raise
     except yaml.YAMLError as exc:
@@ -148,7 +165,10 @@ def load_config() -> dict[str, Any]:
         data = {}
     if not isinstance(data, dict):
         raise ConfigError("config_error.mapping")
-    return validated(data)
+    result = validated(data)  # a wrong value raises every time: only a checked config is kept
+    with _CACHE_LOCK:
+        _validated_cache = (key, result)
+    return copy.deepcopy(result)
 
 
 def validated(raw: dict[str, Any]) -> dict[str, Any]:
