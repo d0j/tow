@@ -123,6 +123,12 @@ function Install-Tow {
     if ($env:PROCESSOR_ARCHITECTURE -eq 'x86' -and -not $env:PROCESSOR_ARCHITEW6432) {
         throw 'TOW: TOW needs 64-bit Windows'
     }
+    # The zip holds x64 programs (uv, Python, the packages); Windows on ARM is not supported. A
+    # PowerShell running under x64 emulation reports AMD64, so the machine's own value counts too.
+    $machine = (Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment' -Name PROCESSOR_ARCHITECTURE -ErrorAction SilentlyContinue).PROCESSOR_ARCHITECTURE
+    if (@($env:PROCESSOR_ARCHITECTURE, $env:PROCESSOR_ARCHITEW6432, $machine) -contains 'ARM64') {
+        throw 'TOW: the Windows zip is for x64 PCs; Windows on ARM is not supported'
+    }
     # docs/PORTABLE.md 3: without Windows long paths, a folder path over 110 characters lets files
     # deep in app\.venv and runtime\ pass 260 characters, and the first start fails inside uv or Python.
     $longPaths = (Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled -ErrorAction SilentlyContinue).LongPathsEnabled
