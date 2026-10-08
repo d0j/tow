@@ -36,6 +36,12 @@ NOTE = "client.qbittorrent.note"
 NAME = "qBittorrent"
 # Seconds an add may take (reading a large .torrent); other requests keep the 8 s timeout.
 ADD_TIMEOUT_SEC = 60
+# A check's observations (reconcile asks about every topic's torrent) read one listing of all
+# torrents for this long, not one request per torrent; any change TOW makes drops it, and a
+# read-back never uses it (inspect_torrent always asks the client).
+LISTING_SEC = 60.0
+# The Web API version, which qbittorrent-api asks before every add, start and stop.
+WEB_API_VERSION_SEC = 600.0
 
 
 def _fail(code: str, /, **params: Any) -> ClientError:
@@ -66,6 +72,49 @@ class QBittorrentClient(ManagedClient):
             password=password,
             REQUESTS_ARGS={"timeout": 8},
         )
+        self._listing: tuple[float, dict[str, list[Any]]] | None = None
+        self._web_api: tuple[float, str] | None = None
+        if callable(getattr(type(self._c), "app_web_api_version", None)):  # the library's client
+            asked = self._c.app_web_api_version
+            self._c.app_web_api_version = self._cached_web_api_version(asked)  # type: ignore[method-assign]
+
+    def _cached_web_api_version(self, asked: Any) -> Any:
+        """qbittorrent-api asks the Web API version before every add, start and stop (30 times
+        in a check of 200 topics): one answer serves the adapter for WEB_API_VERSION_SEC."""
+
+        def web_api_version(**kwargs: Any) -> str:
+            if kwargs:
+                return str(asked(**kwargs))
+            now = time.monotonic()
+            if self._web_api is None or now - self._web_api[0] > WEB_API_VERSION_SEC:
+                self._web_api = (now, str(asked()))
+            return self._web_api[1]
+
+        return web_api_version
+
+    def _changing(self) -> None:
+        """TOW is about to change the client: the listing no longer says how it is."""
+        self._listing = None
+
+    def _listed(self, infohash: str) -> list[Any]:
+        """The rows of one listing of every torrent under the id ``infohash`` (what asking
+        ``torrents/info?hashes=`` for it returns)."""
+        now = time.monotonic()
+        if self._listing is None or now - self._listing[0] > LISTING_SEC:
+            index: dict[str, list[Any]] = {}
+            for row in self._c.torrents_info() or []:
+                index.setdefault(str(getattr(row, "hash", "") or "").upper(), []).append(row)
+            self._listing = (now, index)
+        return self._listing[1].get(str(infohash or "").upper(), [])
+
+    def observe_torrent(self, infohash: str) -> dict[str, Any] | None:
+        """``inspect_torrent`` for an observation (reconcile): the torrent's row from the
+        run's listing, its files asked. A torrent the listing does not show (or shows twice)
+        is asked on its own before it counts as gone. Never for a read-back."""
+        rows = self._listed(infohash)
+        if len(rows) != 1:
+            return self.inspect_torrent(infohash)
+        return self._report(rows[0], self._c.torrents_files(torrent_hash=infohash.lower()), infohash)
 
     def ping(self) -> str:
         ver = str(self._c.app.version)
@@ -89,6 +138,7 @@ class QBittorrentClient(ManagedClient):
         return self._tag_list(rows[0]) if rows else None
 
     def _priority(self, infohash: str, file_ids: list[int], priority: int) -> None:
+        self._changing()
         self._c.torrents_file_priority(torrent_hash=infohash.lower(), file_ids=file_ids, priority=priority)
 
     def _set_wanted(self, infohash: str, wanted: set[int], all_ids: list[int]) -> None:
@@ -97,12 +147,14 @@ class QBittorrentClient(ManagedClient):
         self._priority(infohash, sorted(wanted), 1)
 
     def _stop(self, infohash: str) -> None:
+        self._changing()
         method = getattr(self._c, "torrents_stop", None) or getattr(self._c, "torrents_pause", None)
         if not callable(method):
             raise _fail("client.qbittorrent.no_stop")
         method(torrent_hashes=infohash.lower())
 
     def _start(self, infohash: str) -> None:
+        self._changing()
         method = getattr(self._c, "torrents_start", None) or getattr(self._c, "torrents_resume", None)
         if not callable(method):
             raise _fail("client.qbittorrent.no_start")
@@ -110,15 +162,18 @@ class QBittorrentClient(ManagedClient):
 
     def _add_label(self, infohash: str, tags: list[str], label: str) -> None:
         """A tag, never the category: with automatic torrent management a category moves the files."""
+        self._changing()
         self._c.torrents_add_tags(tags=label, torrent_hashes=infohash.lower())
 
     def _remove_label(self, infohash: str, tags: list[str], label: str) -> None:
+        self._changing()
         remove = getattr(self._c, "torrents_remove_tags", None)
         if not callable(remove):
             raise _fail("client.qbittorrent.no_tag_removal")
         remove(tags=label, torrent_hashes=infohash.lower())
 
     def _move(self, infohash: str, save_path: str) -> None:
+        self._changing()
         self._c.torrents_set_location(location=save_path, torrent_hashes=infohash.lower())
 
     def _resolved_hash(self, infohash: str, *, allow_full_scan: bool = True) -> str | None:
@@ -160,6 +215,7 @@ class QBittorrentClient(ManagedClient):
         destination = str(save_path or "").strip()
         expected = str(infohash or "").strip().upper()
         btih, btmh = self._magnet_identity(magnet_url, destination, expected)
+        self._changing()
         lookup_hash = expected[:40] if len(expected) == 64 else expected
         resolved = self._resolved_hash(lookup_hash)
         if resolved is not None:
@@ -281,6 +337,7 @@ class QBittorrentClient(ManagedClient):
         delete = getattr(self._c, "torrents_delete", None)
         if not callable(delete):
             raise _fail("client.qbittorrent.cannot_recreate_magnet")
+        self._changing()
         self._api_ok(
             delete(delete_files=False, torrent_hashes=resolved.lower()),
             action="client.qbittorrent.action_remove_magnet",
@@ -484,6 +541,7 @@ class QBittorrentClient(ManagedClient):
         start: bool = True,
     ) -> dict[str, Any]:
         metadata, destination, selected = self._check_add(content, save_path, infohash, selected_indices)
+        self._changing()
         # G8: the owner's optional category and extra tags; "tow"/"tow-pending" stay first.
         extra_tags = [tag for tag in self.add_tags if tag not in {OWNER, PENDING}]
         category = str(self.add_category or "").strip()
@@ -527,8 +585,9 @@ class QBittorrentClient(ManagedClient):
         rows = self._c.torrents_info(torrent_hashes=infohash.lower())
         if not rows:
             return None
-        torrent = rows[0]
-        files = self._c.torrents_files(torrent_hash=infohash.lower())
+        return self._report(rows[0], self._c.torrents_files(torrent_hash=infohash.lower()), infohash)
+
+    def _report(self, torrent: Any, files: Any, infohash: str) -> dict[str, Any]:
         normalized_files = [
             {
                 "index": getattr(row, "index", None),
