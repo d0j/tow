@@ -232,3 +232,36 @@ def test_home_and_the_header_name_the_same_sites_after_the_lookup_is_kept(monkey
     second = client.get("/", headers={"Accept": "text/html"}).text
     assert first.count('class="topic-tracker"') == second.count('class="topic-tracker"') == 20
     assert _in_a_request(header_health)["sites"] == {"rutor": "mut"}
+
+
+def test_a_site_title_is_built_once_per_request_and_follows_a_saved_config(monkeypatch):
+    """Home names a site in every row: the titles are built once per request, give what the
+    site's settings say (else its key, also for a name no site has), and a config saved during
+    the request is shown at once."""
+    from tow.config import load_config, save_config
+    from tow.web import _context
+    from tow.web.templating import site_title
+
+    cfg = load_config()
+    cfg["trackers"] = {"plain": {"url_regex": r"^x(\d+)"}, "named": {"url_regex": r"^y(\d+)", "title": "Named"}}
+    save_config(cfg)
+    loads = []
+    original = _context.config
+
+    def counting():
+        loads.append(1)
+        return original()
+
+    monkeypatch.setattr(_context, "config", counting)
+
+    def request():
+        before = [site_title(name) for name in ("plain", "named", "gone", 7)] * 50
+        changed = load_config()
+        changed["trackers"]["named"]["title"] = "Renamed"
+        save_config(changed)
+        return before, site_title("named")
+
+    before, after = _in_a_request(request)
+    assert before[:4] == ["plain", "Named", "gone", "7"]
+    assert after == "Renamed"
+    assert len(loads) == 2  # once before the save, once after it
