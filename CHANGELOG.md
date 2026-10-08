@@ -61,6 +61,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   addresses of the home network.
 - A tracker's answer to the sign-in is read like a topic page, at most 4 MiB: a site (or a page between TOW and
   it) can no longer make TOW read an answer of any size into memory.
+- Pages are faster with many topics and sites: with 2000 topics and 200 sites Home, Settings, History, a history
+  search and the header's status poll take a fraction of the time they took.
 
 ## [1.27.1] — 2026-10-08
 
