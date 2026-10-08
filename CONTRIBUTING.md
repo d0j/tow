@@ -28,7 +28,11 @@ autostart from it.
 pwsh scripts/gate.ps1            # everything: uv.lock, ruff format + check, mypy, compileall, whitespace, pytest, wheel
 pwsh scripts/gate.ps1 -Quick     # without the test run and the wheel (the tests are only collected)
 pwsh scripts/gate.ps1 -Staged    # only what the next commit contains
+pwsh scripts/gate.ps1 -Audit     # also checks the locked dependencies for known vulnerabilities (network)
 ```
+
+Coverage needs `pytest-cov`, which is not in the lock: the gate brings it from uv's cache or the network, and
+without either it runs the tests without coverage and says so (`gate: SKIPPED coverage`).
 
 The hooks run it for you: **pre-commit** runs `-Staged`, **post-rewrite** runs `-Quick` after an amend or a
 rebase (git ignores its result, so it can only warn, loudly), **pre-push** requires the full gate on exactly the
