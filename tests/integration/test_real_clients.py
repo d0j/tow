@@ -141,6 +141,19 @@ class Raw:
         else:
             self.adapter._call("core.force_recheck", [infohash.lower()])
 
+    def listing(self) -> list[Any]:
+        """Every torrent in the client (hash, name, state, mark), for a failure message."""
+        try:
+            if self.kind == "qbittorrent":
+                return [(t.hash, t.name, t.state, t.tags) for t in self.adapter._c.torrents_info()]
+            if self.kind == "transmission":
+                fields = ["hashString", "name", "status", "percentDone", "labels"]
+                return list(self.adapter._rpc("torrent-get", fields=fields).get("torrents") or [])
+            keys = ["hash", "name", "state", "progress", "label"]
+            return list((self.adapter._call("core.get_torrents_status", {}, keys) or {}).values())
+        except Exception as exc:  # noqa: BLE001 - only a failure message: the client's own error is shown
+            return [f"the client's torrent list is unreadable: {type(exc).__name__}: {exc}"]
+
     def remove(self, infohash: str) -> None:
         if self.kind == "qbittorrent":
             self.adapter._c.torrents_delete(delete_files=False, torrent_hashes=infohash.lower())
@@ -354,8 +367,9 @@ def configure_install(kind: str, site: Site, downloads: Path) -> None:
     save_state({"topics": [topic]})
 
 
-def check_apply(capsys) -> dict[str, Any]:
-    """`tow check --apply` as the owner runs it (in this process: the guard is off here)."""
+def check_apply(capsys, raw: Raw, *, ok: bool = True) -> dict[str, Any]:
+    """`tow check --apply` as the owner runs it (in this process: the guard is off here). The
+    whole report and the client's torrent list are in the message when it is not as expected."""
     from tow import cli
 
     capsys.readouterr()
@@ -363,13 +377,22 @@ def check_apply(capsys) -> dict[str, Any]:
     out = capsys.readouterr().out
     report = json.loads(out[out.index("{") :])
     rows = report.get("results") or []
-    assert (code, [bool(row.get("ok")) for row in rows]) == (0, [True]), out
+    expected = (0, [True]) if ok else (2, [False])
+    assert (code, [bool(row.get("ok")) for row in rows]) == expected, f"{out}; the client holds: {raw.listing()!r}"
     return rows[0]
 
 
 @pytest.mark.parametrize("kind", KINDS)
 def test_tow_check_apply_hands_each_new_version_to_the_real_client(kind, tmp_path, capsys):
+    """A new version whose files the previous one still seeds is refused (G1) until the owner
+    stops the previous one with TOW's own action, "Stop the previous one and add"
+    (POST /topics/<id>/replace-revision): it stops it (kept in the client) and adds the new one."""
+    from fastapi.testclient import TestClient
+    from helpers import shown
+
+    from tow.check import PREVIOUS_REVISION_ACTIVE
     from tow.store import load_state
+    from tow.web import app
 
     adapter = adapter_for(kind)
     raw = Raw(kind, adapter)
@@ -383,34 +406,58 @@ def test_tow_check_apply_hands_each_new_version_to_the_real_client(kind, tmp_pat
 
     def held(version: Torrent) -> dict[str, Any]:
         info = adapter.inspect_torrent(version.infohash)
-        assert info is not None, f"the client does not hold {version.infohash}"
-        assert OWNER in tags(info), summary(info)
-        assert PENDING not in tags(info), summary(info)
+        listing = f"the client holds: {raw.listing()!r}"
+        assert info is not None, f"the client does not hold {version.infohash}; {listing}"
+        assert OWNER in tags(info), f"{summary(info)}; {listing}"
+        assert PENDING not in tags(info), f"{summary(info)}; {listing}"
         return info
+
+    def topic() -> dict[str, Any]:
+        return load_state()["topics"][0]
 
     with local_site() as site:
         configure_install(kind, site, downloads)
         try:
             site.torrent = first.content
-            row = check_apply(capsys)
+            row = check_apply(capsys, raw)
             assert str(row.get("hash")).upper() == first.infohash, row
             info = held(first)
             assert wanted(info) == {"Show.S01E01.mkv": True, "Show.S01E02.mkv": True, "notes.txt": False}
-            assert str(load_state()["topics"][0]["hash"]).upper() == first.infohash
+            assert not stopped(info), summary(info)  # started: it seeds its files
+            assert str(topic()["hash"]).upper() == first.infohash
 
-            # The site replaces the topic's torrent with a new version: the next check hands it over.
+            # The site replaces the topic's torrent with a new version. The first one still seeds
+            # the same files: the check refuses to add beside it and says why.
             site.torrent = second.content
-            row = check_apply(capsys)
-            assert str(row.get("hash")).upper() == second.infohash, row
-            assert row.get("changed") is True, row
+            check_apply(capsys, raw, ok=False)
+            assert topic().get("last_error_code") == PREVIOUS_REVISION_ACTIVE, topic()
+            assert adapter.inspect_torrent(second.infohash) is None, raw.listing()
+            assert str(topic()["hash"]).upper() == first.infohash
+
+            # The owner's way forward: "Stop the previous one and add" - TOW stops the first
+            # version (it stays in the client) and checks the topic again, which adds the new one.
+            browser = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+            response = browser.post(f"/topics/{topic()['id']}/replace-revision", follow_redirects=False)
+            said = shown(response.headers.get("location", ""))
+            assert response.status_code == 303, said
             info = held(second)
             assert wanted(info) == {
                 "Show.S01E01.mkv": True,
                 "Show.S01E02.mkv": True,
                 "Show.S01E03.mkv": True,
                 "notes.txt": False,
-            }
-            assert str(load_state()["topics"][0]["hash"]).upper() == second.infohash
+            }, f"{summary(info)}; {said}"
+            previous = adapter.inspect_torrent(first.infohash)
+            assert previous is not None, f"the previous version was removed, not stopped; {raw.listing()!r}"
+            assert stopped(previous), summary(previous)
+            assert str(topic()["hash"]).upper() == second.infohash, (topic(), said)
+            assert not topic().get("last_error_code"), (topic(), said)
+
+            # And a check by hand afterwards finds everything as it should be.
+            row = check_apply(capsys, raw)
+            assert str(row.get("hash")).upper() == second.infohash, row
+            held(second)
+            assert stopped(adapter.inspect_torrent(first.infohash)), raw.listing()
             assert "/download/1" in site.asked
         finally:
             for version in (first, second):
