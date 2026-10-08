@@ -135,12 +135,15 @@ def test_the_launcher_runs_only_an_environment_of_its_own_folder(monkeypatch, tm
     import sys
 
     code = ROOT  # where the imported tow lives (src/tow of this checkout)
+    # Another folder's Python: a sibling of the install, never inside it (CI keeps its temp folder
+    # next to the checkout, inside the "install" these cases pretend code.parent is).
+    elsewhere = code.parent.parent / f"{code.parent.name}-elsewhere" / "python"
     here, app, base = {
-        "checkout": (code, code, tmp_path / "elsewhere" / "python"),
+        "checkout": (code, code, elsewhere),
         "install": (code.parent, code, code.parent / "runtime" / "python"),
         "copy": (tmp_path / "TOW", tmp_path / "TOW" / "app", tmp_path / "TOW" / "runtime" / "python"),
-        "python_outside": (code.parent, code, tmp_path / "elsewhere" / "python"),
-        "not_installed": (code, code, tmp_path / "elsewhere" / "python"),
+        "python_outside": (code.parent, code, elsewhere),
+        "not_installed": (code, code, elsewhere),
     }[case]
     monkeypatch.setenv("TOW_HERE", str(here))
     monkeypatch.setenv("TOW_APP", str(app))
