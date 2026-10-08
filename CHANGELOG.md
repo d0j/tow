@@ -27,6 +27,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   no longer delete the only copy of the data from before the first update.
 - After the TOW folder was moved, `tow setup` (and the first start in the new place) makes uv's link
   `runtime\python\cpython-3.14-…` again inside the folder: it still pointed at the old folder.
+- A topic whose link or torrent client you change while a check runs no longer gets the old link's torrent: the
+  check saves nothing for it, hands nothing to the client once it sees the change, and the next check adds the new
+  link's torrent. Before, the topic kept the old torrent's hash and the next check filed it as a previous version.
 
 ## [1.28.1] — 2026-10-08
 

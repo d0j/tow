@@ -132,6 +132,69 @@ def test_a_move_started_during_the_check_is_kept(monkeypatch):
     assert topic["save_path"] == r"N:\TV"
 
 
+def _after_the_client_changed(monkeypatch, edit):
+    """``edit`` the topic on disk after the check changed the client, before its commit."""
+    original = check_reconcile.queue_recoveries
+
+    def queue(*args, **kwargs):
+        with persistence_lock():
+            state = load_state()
+            edit(state["topics"][0])
+            save_state(state)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(check_reconcile, "queue_recoveries", queue)
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [{"url": "https://tracker/2"}, {"client_id": "nas"}],
+    ids=["link", "client"],
+)
+def test_a_new_link_or_client_during_the_check_keeps_nothing_of_the_old_torrent(monkeypatch, edit):
+    """The check added the old link's torrent; the owner gave the topic another link (or client)
+    before the check saved: the topic got the old torrent's hash, and the next check filed it
+    as the new link's previous revision."""
+    save_state({"topics": [{**TOPIC, "client_id": "main", "previous_hashes": []}]})
+    client = FakeClient()
+    _wire_fake_check(monkeypatch, client)
+    _after_the_client_changed(monkeypatch, lambda topic: topic.update(edit))
+    out = check.run_check(apply=True, notify=False)
+    assert client.add_calls == 1  # the old link's torrent did reach the client
+    topic = load_state()["topics"][0]
+    assert {key: topic[key] for key in edit} == edit
+    assert topic["hash"] is None  # the next check adds the new link's torrent
+    assert topic["previous_hashes"] == []
+    assert not topic.get("last_ok")
+    for key in ("selection_hash", "selected_files", "torrent_file_count", "last_changed", "last_check"):
+        assert key not in topic
+    assert out["results"][0]["note"].startswith("во время проверки изменились ссылка или торрент-клиент")
+
+
+def test_the_same_client_written_down_meanwhile_keeps_the_check(monkeypatch):
+    """A topic saved without a client: an edit that writes down the client the check used is no
+    change of client."""
+    save_state({"topics": [dict(TOPIC)]})
+    _wire_fake_check(monkeypatch, FakeClient())
+    _after_the_client_changed(monkeypatch, lambda topic: topic.update(client_id="main", title="Моё"))
+    out = check.run_check(apply=True, notify=False)
+    topic = load_state()["topics"][0]
+    assert (topic["hash"], topic["title"]) == ("HASH-NEW", "Моё")
+    assert "note" not in out["results"][0]
+
+
+def test_a_new_link_before_the_add_hands_nothing_to_the_client(monkeypatch):
+    save_state({"topics": [dict(TOPIC)]})
+    client = FakeClient()
+    tracker = _wire_fake_check(monkeypatch, client)
+    _during_fetch(monkeypatch, tracker, lambda topic: topic.update(url="https://tracker/2"))
+    out = check.run_check(apply=True, notify=False)
+    assert client.add_calls == 0
+    assert out["results"][0]["skipped"].startswith("во время проверки изменились ссылка, папка")
+    topic = load_state()["topics"][0]
+    assert (topic["url"], topic["hash"]) == ("https://tracker/2", None)
+
+
 def test_a_check_ends_a_move_only_when_it_sees_the_client_at_the_new_folder():
     from tow.progress import _check_save_path
 

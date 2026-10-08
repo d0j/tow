@@ -149,12 +149,13 @@ def _mark_preview(
 
 
 def _client_marks(topic: Topic) -> tuple[str, ...]:
-    """What the client is changed with: the folder, the client and the file selection."""
-    return tuple(repr(topic.get(key)) for key in ("save_path", "client_id", "selection"))
+    """What the client is changed with: the link (which torrent), the folder, the client and
+    the file selection."""
+    return tuple(repr(topic.get(key)) for key in ("url", "save_path", "client_id", "selection"))
 
 
 def _withdrawn_meanwhile(topic: Topic, row: dict[str, Any], old: str, started: tuple[str, ...] | None) -> bool:
-    """The owner paused or deleted the topic, or changed its folder, client or file selection,
+    """The owner paused or deleted the topic, or changed its link, folder, client or file selection,
     after this run started (its copy is from the start): look at the state now, right before
     the client is changed, and skip it then - the next check works with what is saved."""
     try:

@@ -254,7 +254,10 @@ def _commit_run_state(result: _RunResult, history_rebuilt: bool = False) -> None
         for topic in topics_of(disk)
         if (changed := changed_owner_fields(result.started.get(str(topic.get("id"))), topic))
     }
-    merge_check_results(disk, state, edited=edited)
+    dropped = merge_check_results(disk, state, edited=edited)
+    for row in result.results:
+        if str(row.get("id")) in dropped:
+            row["note"] = t("check.identity_changed_meanwhile", owner_language())
     disk["health"] = health
     _store_daily_limits(disk, _daily_limits(result.limited_today, result.quota, result.results, result.today))
     # Staged in the same write as the result: a TOW stopped before sending loses nothing.

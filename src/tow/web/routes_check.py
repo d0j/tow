@@ -88,6 +88,8 @@ def _check_topic(tid: str, *, adopted: bool = False) -> Response:
     row = topic_check_row(tid, out)
     if row is None:
         return flash_redirect("/", "web.topics.not_found", "err")
+    if row.get("note"):  # its link or client changed meanwhile: nothing of this check was saved
+        return flash_redirect("/", "web.check.no_changes_reason", "warn", reason=row["note"])
     if row and not row.get("ok"):
         state = services.load_state()
         topic = next((item for item in state.get("topics") or [] if str(item.get("id")) == str(tid)), None)
