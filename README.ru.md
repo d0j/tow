@@ -2,8 +2,8 @@
 
 # TOW
 
-**Наблюдатель за раздачами.** Следит за раздачами на трекерах, в которых заменяют `.torrent`, и добавляет каждую новую
-версию в ваш торрент-клиент.
+**Наблюдатель за раздачами.** Следит за раздачами на торрент-сайтах, в которых заменяют `.torrent`, и добавляет
+каждую новую версию в ваш торрент-клиент.
 
 [![CI](https://github.com/d0j/tow/actions/workflows/ci.yml/badge.svg)](https://github.com/d0j/tow/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/d0j/tow)](https://github.com/d0j/tow/releases/latest)

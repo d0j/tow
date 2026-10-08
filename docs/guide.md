@@ -23,10 +23,10 @@ How TOW thinks, what each screen and colour means, and what to do about each mes
 
 | Term | Meaning |
 |---|---|
-| **Topic** | A page on a tracker that holds one torrent, for example a series. TOW remembers its link, a name, a folder and a torrent client. |
-| **Keep watching** | *Yes*: TOW checks the topic on a schedule and adds every new version. *No, once*: TOW adds it one time and then only follows the download progress. |
-| **Version** | One `.torrent` of a topic. Trackers replace the `.torrent` when episodes are added; each replacement is a new version with a new hash. |
-| **Site** | A tracker TOW knows how to read: how to recognise its links, where the `.torrent` is, how to sign in. Known sites come preconfigured. |
+| **Topic** | A page on a torrent site that holds one torrent, for example a series. TOW remembers its link, a name, a folder and a torrent client. |
+| **Follow the topic** | *Yes*: TOW checks the topic on a schedule and adds every new version. *No, once*: TOW adds it one time and then only follows the download progress. |
+| **Version** | One `.torrent` of a topic. Sites replace the `.torrent` when episodes are added; each replacement is a new version with a new hash. |
+| **Site** | A torrent site TOW knows how to read: how to recognise its links, where the `.torrent` is, how to sign in. Known sites come preconfigured. |
 | **Mirror** | Another address of the same site. TOW tries them in order and remembers the one that worked. |
 | **Torrent client** | qBittorrent, Transmission or Deluge with its Web UI turned on. TOW only talks to it; the client downloads. |
 | **Selection** | Which files of the torrent to download: all, checked files, episodes by number, or file patterns. |
@@ -39,7 +39,7 @@ client to add, start, stop or move a torrent. It only ever changes torrents it a
 | Screen | What is there |
 |---|---|
 | **Home** | Your topics: status dot, site icon, name, folder, latest event, progress. **+** adds a topic. Click a row to edit it. Filters and search hide rows; when nothing matches, **Show all topics** clears them. Until the first topic is added, Home shows three first steps: the torrent client, a messenger (optional), a topic link. |
-| **Sites** | Trackers and their mirrors, sign-in state, pause and check per site (the icons in its row). **+** adds a site: paste a link to any topic of it first, the rest fills in; patterns and paths are under **Advanced**. |
+| **Sites** | Sites and their mirrors, sign-in state, pause and check per site (the icons in its row). **+** adds a site: paste a link to any topic of it first, the rest fills in; patterns and paths are under **Advanced**. |
 | **Settings** | Language, theme (as the system, light or dark), torrent clients, notifications, checks, network access and password, version and updates, the TOW service, backups, the log; below them **Diagnostics**, the **Guide** and, on a device signed in over the network, **Sign out on this device**. |
 | **History** | Downloads, errors, changes and notifications, with filters and search. |
 | **Diagnostics** | At the end of Settings: the connection to the torrent client and to every site. The in-app **Guide** is next to it. |
@@ -52,7 +52,7 @@ tooltip says “No check has run yet”.
 
 1. **Home → +**, paste the link to the *topic page* (not a magnet link).
 2. Keep the suggested name, or type your own. Pick the folder where the client should save the files.
-3. Choose **what to download** and whether to **keep watching**.
+3. Choose **what to download** and whether to **follow the topic**.
 4. **Add.** TOW checks the topic at once (the button says “Checking…”, up to a minute): the message
    “… — added to the torrent client” means the client confirmed it. If the add is refused, the form opens again
    with everything you typed and the reason above it.
@@ -71,7 +71,7 @@ If the site is not known yet, add it first on **Sites** — pasting any topic li
 **Get contents** reads the file list from the site, or choose a local `.torrent`. A local file only previews
 the contents: the first check still gets the torrent from the site and refuses a different one, and the
 file is not kept as the topic's saved contents. A download-limited site asks for confirmation first.
-**From magnet (contacts peers)** asks your torrent client for the file list without downloading anything; it
+**From magnet (asks other users)** asks your torrent client for the file list without downloading anything; it
 needs qBittorrent 5.2+ or Deluge. Other clients need a `.torrent`.
 
 Search hides rows, not selections. Folder checkboxes and **Select all files** include files hidden by
@@ -121,7 +121,7 @@ none is connected.
 
 | Check | When | What it does |
 |---|---|---|
-| Global timer | Every hour by default (Settings → Checks, 15 min – 24 h) | Active topics without a personal timer: checks the tracker and adds a new version of the torrent to the selected client. |
+| Global timer | Every hour by default (Settings → Checks, 15 min – 24 h) | Active topics without a personal timer: checks the site and adds a new version of the torrent to the selected client. |
 | Personal timer | Set minutes when adding or editing a topic, 1 min – 7 days | Overrides the global timer for that topic. A clock and countdown appear in its Home row. |
 | Progress | Every 30 minutes | Only asks the client about downloads; no requests to sites. |
 | Check all | ↻ in the header (asks to confirm) | Checks active topics now in the background, including those with personal timers; does not reset their countdowns. |

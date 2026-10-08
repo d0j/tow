@@ -1301,9 +1301,9 @@ def test_prefer_unknown_mirror_changes_nothing(client):
             {"ok": True, "degraded": ["a", "b"]},
             "http://127.0.0.1/sites",
             "/sites",
-            "проверка состояния: всё в порядке; зеркала не отвечают: 2",
+            "проверка связи: всё в порядке; зеркала не отвечают: 2",
         ),
-        ({"ok": True}, "http://127.0.0.1/settings?open=x", "/settings", "проверка состояния: всё в порядке"),
+        ({"ok": True}, "http://127.0.0.1/settings?open=x", "/settings", "проверка связи: всё в порядке"),
         (
             {
                 "ok": False,
@@ -1317,9 +1317,9 @@ def test_prefer_unknown_mirror_changes_nothing(client):
             },
             "http://127.0.0.1/topics/t1/edit",
             "/doctor",
-            "проверка состояния: торрент-клиент не отвечает; ни одно зеркало не отвечает: rutor",
+            "проверка связи: торрент-клиент не отвечает; ни одно зеркало не отвечает: rutor",
         ),
-        ({"ok": False, "qbit": "ok"}, None, "/", "проверка состояния: есть проблемы"),
+        ({"ok": False, "qbit": "ok"}, None, "/", "проверка связи: есть проблемы"),
     ],
 )
 def test_doctor_run_summarises_and_returns_to_known_page(monkeypatch, client, report, referer, path, flash):

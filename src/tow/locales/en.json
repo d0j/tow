@@ -10,7 +10,7 @@
   "timer": {
     "field": "Personal check interval, minutes",
     "global_placeholder": "Global interval",
-    "hint": "Empty uses the global interval in Settings. A number replaces it with this topic's own timer. Manual checks do not shift the timer. Site limits and pause still apply.",
+    "hint": "Empty uses the global interval (Settings → Checks). A number replaces it with this topic's own timer. Manual checks do not shift the timer. Site limits and pause still apply.",
     "invalid_minutes": "Enter a whole number of minutes from 1 to {maximum}, or leave empty for the global interval.",
     "title": "Personal timer: every {minutes} min",
     "every": "{minutes} min",
@@ -121,7 +121,7 @@
       "restore_failed": "the restore stopped ({reason}); the data was put back as it was before",
       "rollback_failed": "the restore stopped, and putting the data back failed too; TOW tries again before its next write. The files as they were before the restore are in {path}",
       "read_back_failed": "{name} could not be read back after writing",
-      "unverified": "the new copy {name} did not pass the read-back check ({reason}); older copies were kept",
+      "unverified": "the new copy {name} did not pass the check after writing ({reason}); older copies were kept",
       "recovery_blocked": "an interrupted restore of a nightly backup could not be checked or undone ({reason}); until it is, TOW changes no data and tries again before every write. Close any program that holds files of the data folder and try again. Keep {marker} and the data/before-restore-… folder: they hold the previous data"
     },
     "restore_point": {
@@ -171,10 +171,10 @@
     "rollback_policy": "Web updates support published stable versions from 1.22.21. Data is kept; an incompatible data schema refuses the change. Older releases require the terminal and may not understand current data.",
     "target_label": "Release version",
     "apply_version": "Install version",
-    "job_unreadable": "The update record cannot be verified. No new update was started; check the local update log.",
+    "job_unreadable": "The update record cannot be verified. No new update was started; read the Update log below.",
     "not_runtime": "Web installation is available only in a runtime install, not a development checkout.",
     "detached_unavailable": "With this way of running TOW, the update cannot be started safely from this page: the service would stop it together with TOW. Nothing was changed; update from the terminal (see How to update).",
-    "interrupted": "The updater was interrupted. Check the local update log and recover with the terminal command before another update.",
+    "interrupted": "The updater was interrupted. Read the Update log below, then update from the terminal (How to update) before another update.",
     "unsupported_version": "Choose a stable release from 1.22.21 or newer; older releases do not support safe web updating.",
     "already_installed": "This version is already installed.",
     "not_published": "Could not verify a published stable release with this version. Nothing was changed.",
@@ -185,7 +185,7 @@
     "broker_failed": "The update could not be started safely. TOW was not stopped and the restore point was kept. Update from the terminal (see How to update).",
     "inherited_job": "The update could not be started safely. TOW was not stopped and the restore point was kept. Update from the terminal (see How to update).",
     "parent_wait_failed": "The update could not be started safely. TOW was not stopped and the restore point was kept. Update from the terminal (see How to update).",
-    "update_failed": "The update did not complete. Check the result and the local update log.",
+    "update_failed": "The update did not complete. Check the result in the Update log below.",
     "worker_unverified": "The old update job's process could not be verified. Changes are blocked to protect the data; check the local log and complete recovery on the computer running TOW.",
     "notes": "Release notes",
     "log": "Update log",
@@ -249,7 +249,7 @@
     "cdp_refused": "the browser refused the request",
     "closed_before_confirm": "the browser window was closed before the sign-in was confirmed",
     "not_responding": "the browser window stopped responding",
-    "not_confirmed": "sign-in not confirmed: sign in in the window that opened and pass Turnstile"
+    "not_confirmed": "sign-in not confirmed: sign in in the window that opened and pass the site's “I am not a robot” check"
   },
   "check": {
     "low_disk": "not enough disk space: {needed} GB needed, {free} GB free ({path})",
@@ -298,7 +298,7 @@
     "no_torrent": "the topic has no torrent in the client to adopt — check it first",
     "unsupported": "this torrent client cannot take TOW's mark",
     "missing": "the torrent is not in the torrent client",
-    "unconfirmed": "the torrent client did not keep TOW's mark (read-back)",
+    "unconfirmed": "the torrent client did not keep TOW's mark (checked after saving)",
     "topic_changed": "the topic's link or torrent client was changed meanwhile: the torrent now has the label tow but is not recorded as this topic's — remove the label in the client if it is not this topic's"
   },
   "cli": {
@@ -487,7 +487,7 @@
     "fields": {
       "host": "Address",
       "port": "Port",
-      "username": "Sign-in name",
+      "username": "User name",
       "password": "Password"
     },
     "factory": {
@@ -505,21 +505,21 @@
     },
     "managed": {
       "error_state": "the torrent went into an error state ({state})",
-      "not_visible": "the client accepted the torrent but does not show it (read-back)",
-      "no_owner_mark": "the client did not keep the tow label (read-back)",
+      "not_visible": "the client accepted the torrent but does not show it (checked after saving)",
+      "no_owner_mark": "the client did not keep the tow label (checked after saving)",
       "stop_unconfirmed": "the client did not confirm the stop",
       "start_unconfirmed": "the client did not confirm the start",
       "no_files": "the client does not show the torrent's files",
       "file_unmatched": "could not match a torrent file: {path}",
       "bad_selection": "the file selection has wrong numbers",
-      "wrong_selection": "the client kept a different file selection (read-back)",
-      "pending_not_cleared": "the tow-pending label was not removed (read-back)",
+      "wrong_selection": "the client kept a different file selection (checked after saving)",
+      "pending_not_cleared": "the tow-pending label was not removed (checked after saving)",
       "hash_changed_add": "the torrent hash changed before adding",
       "no_folder": "no folder given",
       "already_there": "the torrent is already in the client",
       "added_unmarked": "the torrent was added (paused), but the client did not keep the label tow on it — give it the label tow in the client, or remove it there",
-      "adopt_unconfirmed": "the label tow was not kept (read-back)",
-      "wrong_folder": "the client saved the torrent to a different folder (read-back)",
+      "adopt_unconfirmed": "the label tow was not kept (checked after saving)",
+      "wrong_folder": "the client saved the torrent to a different folder (checked after saving)",
       "hash_changed_selection": "the torrent hash changed before the file selection change",
       "not_owned": "the torrent was not added through TOW — TOW does not change it",
       "missing": "the torrent is not in the client",
@@ -531,7 +531,7 @@
     },
     "qbittorrent": {
       "step_open": "In qBittorrent: Tools → Options → Web UI.",
-      "step_enable": "Turn on “Web User Interface (Remote control)”, set a login and password; the port is usually 8080.",
+      "step_enable": "Turn on “Web User Interface (Remote control)”, set a user name and password; the port is usually 8080.",
       "step_address": "If qBittorrent runs on this computer, the address is 127.0.0.1.",
       "step_save": "Fill in the fields below, press “Save”, then “Check”.",
       "note": "TOW marks its torrents with the tag tow and never touches others.",
@@ -557,12 +557,12 @@
     },
     "transmission": {
       "step_open": "In Transmission: Edit → Preferences → Remote.",
-      "step_enable": "Turn on “Allow remote access”; the port is usually 9091. Login and password are optional.",
+      "step_enable": "Turn on “Allow remote access”; the port is usually 9091. User name and password are optional.",
       "step_whitelist": "If Transmission runs on another computer, add this computer's address to the allowed list.",
       "step_save": "Fill in the fields below, press “Save”, then “Check”.",
       "note": "Transmission 3.0 or newer is needed: TOW marks its torrents with the label tow. Magnet links are not supported with Transmission — it starts downloading before TOW can choose the files.",
       "no_connection": "no connection — is Transmission running, are the address and port right?",
-      "bad_login": "wrong login or password",
+      "bad_login": "wrong user name or password",
       "forbidden": "access denied — add this computer's address to Transmission's rpc-whitelist",
       "host_not_allowed": "host name not allowed — add it to rpc-host-whitelist or use the IP address",
       "no_rpc": "no Transmission RPC at this address — check the port and path",
@@ -639,8 +639,8 @@
       "network": "network error"
     },
     "autostart": "Autostart",
-    "autostart_on": "starts with the computer",
-    "autostart_off": "does not start automatically",
+    "autostart_on": "Starts automatically",
+    "autostart_off": "Does not start automatically",
     "autostart_foreign": "The autostart of this account ({where}) belongs to another TOW folder, not to this one. To start this TOW with the computer, turn autostart off in that TOW first, then on here.",
     "autostart_unread": "the system did not answer the question; the state above may be incomplete"
   },
@@ -735,7 +735,7 @@
       "title": "3. How to add a site",
       "step1": "Sites →",
       "step2": "The easiest way is to paste a link to any topic on that site — the fields fill in by themselves.",
-      "step3": "If the file cannot be downloaded without signing in, enter the site's login and password. They are stored encrypted.",
+      "step3": "If the file cannot be downloaded without signing in, enter the site's user name and password. They are stored encrypted.",
       "step4": "The address you click in the site's row becomes the main one; the globe icon opens it.",
       "note": "If a site address does not answer three times in a row, TOW skips it for an hour and tries the others; the “Check” button in the site's row ends this pause. When a site says “download limit for today”, TOW leaves it alone until tomorrow."
     },
@@ -821,8 +821,8 @@
     "auth": {
       "title": "Sign-in needed",
       "start": "Sign in",
-      "enter": "Enter the login and password.",
-      "username": "Sign-in name",
+      "enter": "Enter the user name and password.",
+      "username": "User name",
       "password": "Password",
       "password_note": "The password never goes into the address, the TOW state or the log.",
       "save_retry": "Save and retry"
@@ -843,7 +843,7 @@
       "added": "As added",
       "name": "By name",
       "event": "By latest event",
-      "status": "Problems first"
+      "status": "Errors first"
     },
     "head": {
       "torrent": "Topic",
@@ -935,7 +935,7 @@
       "scheduled": "Next automatic check",
       "paused": "Timer paused",
       "done": "One-time topic done",
-      "stopped": "Scheduler stopped or status unavailable",
+      "stopped": "The TOW service is not running, or its state is unavailable",
       "waiting": "Waiting for the updated schedule",
       "queued": "Waiting for a check; another job or a site limit may delay it",
       "running": "Personal-timer check in progress"
@@ -953,7 +953,7 @@
       "confirm": "Install TOW {version}? TOW first saves and verifies a restore point, then restarts. If the new version fails its health check, the updater tries to restore the previous version and data.",
       "previous": "Back to {version}",
       "supported": "Before installation: a verified restore point and an update snapshot. Nothing installs without confirmation.",
-      "unsupported": "Web installation is not available in this installation. Use the terminal instructions below.",
+      "unsupported": "Web installation is not available in this installation. Update from the terminal: see How to update below.",
       "reconnecting": "TOW is restarting. Waiting for the update result…",
       "confirming": "The response was lost. Checking whether this installation started; it will not be sent again automatically. Reload the page to check the current state before retrying.",
       "status_unavailable": "Could not read the installation status. Retrying; installation controls are temporarily disabled.",
@@ -970,9 +970,9 @@
       "ok_current": "TOW {version} installed and verified.",
       "reload": "Reload page",
       "rolled_back": "The update failed; the previous version and data were restored and verified.",
-      "failed": "The update or its rollback did not complete. Check the local update log; do not repeat installation blindly.",
-      "refused": "The updater refused the change before installation. Check the local update log.",
-      "interrupted": "The updater was interrupted. Use the recovery instructions in the terminal.",
+      "failed": "The update or its rollback did not complete. Read the Update log below; do not repeat the installation blindly.",
+      "refused": "The updater refused the change before installation. The reason is in the Update log below.",
+      "interrupted": "The updater was interrupted. Update from the terminal: see How to update below.",
       "superseded": "A previous update installed {version}; the installed version has changed since then.",
       "recovered": "A later terminal update recovered TOW and checked its startup. Web updates are available again.",
       "invalid_version": "Enter a stable release version, for example 1.22.21.",
@@ -1004,9 +1004,9 @@
       "failed": "could not fill it in automatically",
       "not_understood": "could not read this link",
       "exists": "already added: {name}",
-      "can_save_login": "you can save the login",
+      "can_save_login": "you can save the sign-in",
       "filled": "filled in: {name}",
-      "need_login": "a login is needed",
+      "need_login": "a sign-in is needed",
       "kept_typed": "Fields you had filled in yourself were kept."
     },
     "settings": {
@@ -1333,15 +1333,15 @@
     "ntfy": {
       "title": "ntfy (phone notifications)",
       "step_app": "Install the ntfy app on your phone (Google Play, App Store or F-Droid).",
-      "step_topic": "Take the topic name below (already made up, long and hard to guess) or choose your own.",
-      "step_subscribe": "In the app, press “+” and subscribe to this topic.",
+      "step_topic": "Take the ntfy topic name below (already made up, long and hard to guess) or choose your own.",
+      "step_subscribe": "In the app, press “+” and subscribe to this ntfy topic.",
       "step_save": "Press “Save”, then “Check” — a notification will arrive on your phone.",
-      "note": "Anyone who knows the topic name can read its messages: do not make the name short and do not publish it.",
-      "topic_label": "Topic name",
+      "note": "Anyone who knows the ntfy topic name can read its messages: do not make the name short and do not publish it.",
+      "topic_label": "ntfy topic name",
       "topic_error": "8–64 characters: Latin letters, digits, “-” and “_”",
       "server_label": "Server",
       "server_error": "the server address starts with https://",
-      "login_required": "ntfy: the server requires a login — use ntfy.sh or open the topic",
+      "login_required": "ntfy: the server requires signing in — use ntfy.sh or open access to the ntfy topic",
       "error": "ntfy: error {code}"
     }
   },
@@ -1458,7 +1458,7 @@
     "load": "Get contents",
     "upload": "Or choose a .torrent file",
     "limited_load": "Get .torrent (uses the site's download limit)",
-    "magnet_load": "From magnet (contacts peers)",
+    "magnet_load": "From magnet (asks other users)",
     "magnet_hint": "Asks your torrent client for the file list without downloading anything. Needs qBittorrent 5.2+ or Deluge.",
     "magnet_unsupported": "This client cannot provide a safe magnet preview. Choose a .torrent file or update the client (qBittorrent requires 5.2+ for a new magnet). Nothing was added.",
     "magnet_failed": "The torrent client could not get the file list from the magnet link. Choose a .torrent file or try again. Nothing was added to the client.",
@@ -1671,7 +1671,7 @@
       "default_pill": "Default",
       "now": "Now: {path}",
       "free": "{free} free",
-      "use_default": "Use default",
+      "use_default": "Use the default folder",
       "manual_title": "Backups made by hand",
       "saved_count": {
         "one": "{n} saved",
@@ -1742,8 +1742,8 @@
       "like_kinozal": "like kinozal:",
       "forum_examples": "forum (nnm, rutracker):",
       "forum": "forum: <code>{first}</code> or <code>{second}</code>",
-      "p6": "The easy way: paste a link to any topic of the site in the first field — the other fields fill in by themselves. Add a login if the site gives the file only after signing in.",
-      "p1": "This is a <b>tracker site</b>, not a single topic. From a link TOW recognises the site and downloads the <code>.torrent</code>.",
+      "p6": "The easy way: paste a link to any topic of the site in the first field — the other fields fill in by themselves. Add a user name and password if the site gives the file only after signing in.",
+      "p1": "This is a <b>torrent site</b>, not a single topic. From a link TOW recognises the site and downloads the <code>.torrent</code>.",
       "p2": "<b>{field}</b> — Latin letters without spaces, as in the list and in the TOW address: <code>rutor</code>, <code>kinozal</code>. Not the name of a series.",
       "p3": "<b>{field}</b> — the site address without a path, one per line: <code>https://rutor.info</code>. If there are several mirrors, list them all.",
       "p4": "<b>{field}</b> — open any topic → copy the address from the browser's address bar. Replace the number with <code>{number}</code>. Write dots in the domain as <code>{dot}</code>",
@@ -1759,7 +1759,7 @@
     "href_regex": "Pattern of the .torrent link on the page (regex)",
     "from_url": "Link to a topic on the site",
     "from_url_placeholder": "paste a topic link to fill in the form",
-    "login": "Sign-in name",
+    "login": "User name",
     "password": "Password",
     "add": "Add",
     "cancel": "Cancel",
@@ -2105,9 +2105,9 @@
       "auth_start_failed": "could not start the sign-in",
       "login_not_needed": "this site does not need a sign-in",
       "needs_auth": "this site needs a browser sign-in",
-      "enter_login": "enter the login and password",
+      "enter_login": "enter the user name and password",
       "site_gone": "the site is already deleted",
-      "login_not_saved": "login not saved: saved passwords and tokens cannot be opened — see Settings",
+      "login_not_saved": "sign-in not saved: saved passwords and tokens cannot be opened — see Settings",
       "login_blocked": "sign-in not confirmed: the check is blocked",
       "password_not_restored": "; the previous password was not restored: the data has already changed",
       "restore_failed": "sign-in to {site} not confirmed; could not restore the previous password",
@@ -2130,7 +2130,7 @@
       "replace_failed": "the previous torrent was not stopped: {error}",
       "adopt_failed": "the torrent was not adopted into TOW: {error}",
       "not_owned": "torrent client: the torrent has no tow tag — TOW does not touch it",
-      "move_back_unconfirmed": "torrent client: moving the folder back was not confirmed by read-back",
+      "move_back_unconfirmed": "torrent client: the check after the move did not confirm that the folder is back",
       "added_check_busy": "topic saved; another check is running right now, so this one was not checked yet — press “Check” in a minute or wait for the next scheduled check",
       "login_check_busy": "sign-in saved but not confirmed yet: another check is running right now — press “Check” on the topic in a minute"
     },
@@ -2177,7 +2177,7 @@
       "default_client": "main client chosen: TOW adds new topics to it",
       "access_local_only": "access and password can be changed only on the computer running TOW",
       "set_password_first": "set a password first",
-      "access_saved": "access saved; restart TOW",
+      "access_saved": "access saved; restart TOW (Settings → TOW service → Restart)",
       "autostart_unconfirmed": "autostart not confirmed",
       "autostart_on": "autostart on",
       "autostart_off": "autostart off",
@@ -2201,7 +2201,7 @@
       "minutes": "{count} min",
       "bad_port": "Port: a number from 1 to 65535 — nothing was saved",
       "bad_client_host": "Address: a computer name or IP address, optionally with http:// and a path, for example 192.168.1.10 or localhost — nothing was saved",
-      "password_again": "address or login changed — enter the client password again",
+      "password_again": "address or user name changed — enter the client password again",
       "unknown_messenger": "unknown messenger",
       "notifier_not_saved": "{title}: not saved — {errors}",
       "notifier_saved": "{title}: saved — press “Check”",
@@ -2216,13 +2216,13 @@
       "clamp_kept": "; outside the allowed range, so kept: {items}",
       "not_saved": "not saved",
       "notifier_private_host": "the server must be an internet address: TOW does not send to this computer or the home network (for your own server at home: allow_private_notifier_hosts: true in config.yaml)",
-      "ping_login": "the client did not accept the login or password",
+      "ping_login": "the client did not accept the user name or password",
       "ping_unreachable": "the client does not answer at this address and port, or its web interface is off",
       "point_created": "restore point created",
       "file_other_key_next": "Copy keys/master.key of the TOW that made the file into the keys folder of this TOW and try again, or move the data with a passphrase instead: tow export on that computer, tow import here."
     },
     "sites": {
-      "login_saved": "login saved",
+      "login_saved": "sign-in saved",
       "added": "site added",
       "no_site": "no such site",
       "paused": "paused",
@@ -2239,9 +2239,9 @@
       "exists": "A site named “{name}” already exists — open its row below to change it"
     },
     "doctor": {
-      "ok": "status check: all is well",
+      "ok": "connection check: all is well",
       "degraded": "; mirrors not answering: {count}",
-      "prefix": "status check: ",
+      "prefix": "connection check: ",
       "client_down": "the torrent client does not answer",
       "dead": "not a single mirror answers: {sites}",
       "problems": "there are problems"
@@ -2257,7 +2257,7 @@
   },
   "site": {
     "nnmclub": {
-      "browser_login": "Sign in to NNMClub and pass Turnstile in the window that opened"
+      "browser_login": "Sign in to NNMClub and pass the site's “I am not a robot” check in the window that opened"
     }
   },
   "store": {
