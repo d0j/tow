@@ -224,3 +224,29 @@ def test_a_topic_page_with_an_undefined_charset_still_gives_the_guess(monkeypatc
         lambda c, url, max_bytes: httpx.Response(200, content=page, headers={"content-type": "text/html"}),
     )
     assert guess.guess_site("https://forum.example/viewtopic.php?t=1")["download_path"] == "/dl.php?t={id}"
+
+
+def test_a_page_link_without_an_address_is_skipped_not_a_crash(monkeypatch):
+    # urljoin raised ValueError("Invalid IPv6 URL") on this link: a 500 on /sites/guess.
+    from fastapi.testclient import TestClient
+
+    from tow import guess
+    from tow.web import app
+
+    url = "https://forum.example.org/viewtopic.php?t=1"
+    broken = '<a href="http://[x/dl.php?t=1">t</a>'
+    assert guess.download_path_from_page({"page_download": True}, url, broken) == {"page_download": True}
+    page = f'<table class="attach"><tr><td>{broken}<a href="dl.php?t=1">t</a></td></tr></table>'
+    monkeypatch.setattr(guess, "_topic_page", lambda _url: page)
+    assert guess.guess_site(url)["download_path"] == "/dl.php?t={id}"
+
+    def refused(*_args):
+        raise ValueError("Invalid IPv6 URL")
+
+    monkeypatch.setattr(guess, "download_path_from_page", refused)
+    with pytest.raises(guess.GuessError) as caught:
+        guess.guess_site(url)
+    assert caught.value.key == "guess.invalid_url"
+    answer = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post("/sites/guess", data={"url": url})
+    assert answer.status_code == 200
+    assert answer.json()["ok"] is False

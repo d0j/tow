@@ -125,3 +125,14 @@ def test_half_a_character_on_a_page_never_reaches_the_state():
     assert title_from_html("<title>Show \ud800 S01</title>") == "Show � S01"
     save_state({"topics": [{"id": "a", "tracker_title": title}], "mirrors": {}})
     assert load_state()["topics"][0]["tracker_title"] == "Show �"
+
+
+@pytest.mark.parametrize("url", ["ftp://]/download.php?id=1&=1&t=t=2", "http://[x/show_name_s01"])
+def test_a_link_the_parser_refuses_has_no_title_and_is_no_download(url):
+    # urlparse raised ValueError("Invalid IPv6 URL") from every one of these.
+    from tow.title import title_is_placeholder
+
+    assert title_from_url_slug(url) == ""
+    assert looks_like_download_url(url) is False
+    assert title_is_placeholder("Show", url) is False
+    assert title_is_placeholder("", url) is True
