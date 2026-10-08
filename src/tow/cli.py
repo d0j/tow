@@ -763,7 +763,10 @@ def _cmd_update(args: argparse.Namespace) -> int:
         print(t("cli.update.archive_file", file=name, ref=args.ref))
     elif platform.is_windows():
         print(t("cli.update.or_windows"))
-        print(f'  pwsh -File "{repo_root() / "scripts" / "deploy.ps1"}" -Ref {args.ref}')
+        # Windows PowerShell 5.1 is on every Windows (pwsh may not be); Bypass for this one run,
+        # so an execution policy that refuses scripts does not stop it.
+        deploy = repo_root() / "scripts" / "deploy.ps1"
+        print(f'  powershell -NoProfile -ExecutionPolicy Bypass -File "{deploy}" -Ref {args.ref}')
     return 0
 
 

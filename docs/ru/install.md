@@ -243,5 +243,12 @@ cp config.example.yaml ../config.yaml
 
 Запуск при входе (LaunchAgent): `./scripts/tow autostart on`.
 
-Обновить клон: `.\scripts\deploy.ps1 -Ref v1.25.0` в Windows; в Linux и macOS `./scripts/tow update --ref v1.25.0`
-покажет команду. Подробности (англ.): [PORTABLE.md](../PORTABLE.md).
+Обновить клон: `.\scripts\deploy.ps1 -Ref v1.25.0` в Windows (Windows PowerShell или PowerShell 7, в папке `app`);
+в Linux и macOS `./scripts/tow update --ref v1.25.0` покажет команду. Если PowerShell отвечает, что выполнение
+сценариев отключено в этой системе, запустите так (сценарии разрешаются только для этой одной команды):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -Ref v1.25.0
+```
+
+Подробности (англ.): [PORTABLE.md](../PORTABLE.md).
