@@ -188,3 +188,56 @@ def test_the_owner_of_a_folder_is_unknown_when_its_permissions_are(monkeypatch, 
     _fake(monkeypatch, Icacls(_closed("BA", USER)))
     assert windows.folder_owner(folder) == "S-1-5-32-544"
     assert Path(folder).is_dir()  # nothing on disk was touched
+
+
+# --- the SDDL parser and the account names, without Windows (mutation survivors) -------------
+
+
+@pytest.fixture
+def no_win32(monkeypatch):
+    """Any Win32 call fails the way a missing DLL would: these helpers must not need one."""
+
+    def no_dll(name):
+        raise OSError(f"no {name} here")
+
+    windows._alias_sid.cache_clear()
+    monkeypatch.setattr(windows, "_dll", no_dll)
+    yield
+    windows._alias_sid.cache_clear()
+
+
+def test_the_ace_parser_reads_each_ace_and_refuses_malformed_text():
+    aces = windows._aces("(A;OICI;FA;;;SY)(D;;FA;;;S-1-5-21-1-2-3-1001)")
+    assert aces == [["A", "OICI", "FA", "", "", "SY"], ["D", "", "FA", "", "", "S-1-5-21-1-2-3-1001"]]
+    assert windows._aces("") == []
+    assert windows._aces("(A;;FA;;;SY;(@User.x == 1))") == [["A", "", "FA", "", "", "SY", "(@User.x == 1)"]]
+    assert windows._aces("(A;;FA;;;SY))") is None  # one parenthesis closed twice
+    assert windows._aces(")(A;;FA;;;SY)") is None
+    assert windows._aces("(A;;FA;;;SY") is None  # never closed
+    assert windows._aces("(A;;FA;;SY)") is None  # five fields: no account
+
+
+def test_others_in_the_permissions_are_found_by_account_however_written(no_win32):
+    assert windows.sddl_others(_closed(USER, USER), USER) is False
+    assert windows.sddl_others(_closed(USER, USER), USER.lower()) is False
+    assert windows.sddl_others(_closed(USER, OTHER), USER) is True
+    assert windows.sddl_others(OPEN, USER) is True  # Users and Authenticated Users
+    assert windows.sddl_others(f"O:{USER}D:P(D;;FA;;;WD)(A;;FA;;;SY)", USER) is False  # a deny lets nobody in
+    assert windows.sddl_others(f"O:{USER}D:NO_ACCESS_CONTROL", USER) is True
+    # A resource-attribute ACE carries a seventh field: the account is still the sixth.
+    assert windows.sddl_others(f"O:{USER}D:P(A;;FA;;;SY;(x))(A;;FA;;;{USER})", USER) is False
+    assert windows.sddl_others(f"O:{USER}D:P(A;;FA;;;SY))", USER) is None  # malformed: unknown
+    assert windows.sddl_others(f"O:{USER}D:P(A;;FA;;SY)", USER) is None
+    assert windows.sddl_others("not sddl", USER) is None
+    assert windows.sddl_owner(_closed("BA", USER)) == "S-1-5-32-544"
+    assert windows.sddl_owner(_closed(USER.lower(), USER)) == USER
+    assert windows.sddl_owner("not sddl") is None
+
+
+def test_an_account_written_as_a_sid_is_passed_through_without_windows(no_win32):
+    assert windows.account_of(USER) == USER
+    assert windows.account_of(USER.lower()) == USER
+    assert windows.account_of("S-1-5-18") == "S-1-5-18"
+    assert windows.account_of("PC\\owner") is None  # a name needs Windows: unknown here
+    assert windows.sid_text("SY") == "S-1-5-18"
+    assert windows.sid_text("ZZ") == "ZZ"  # an alias Windows cannot resolve stays itself

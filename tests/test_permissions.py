@@ -331,3 +331,70 @@ def test_posix_hand_over_of_an_own_folder_makes_it_0700(tmp_path):
     me = backend.current_account()
     assert me is not None
     assert backend.hand_over(folder, me) is (me != "0")
+
+
+# --- what `tow permissions` reports must be what happened (mutation survivors) ---------------
+
+CLOSED = f"O:{OWNER}D:PAI(A;OICI;FA;;;{OWNER})(A;OICI;FA;;;S-1-5-18)(A;OICI;FA;;;S-1-5-32-544)"
+
+
+def test_a_hand_over_the_system_refuses_is_reported_as_a_failure(install, monkeypatch):
+    root, acl, session = install
+    session.update(elevated=True)
+    monkeypatch.setattr(WindowsBackend, "hand_over", lambda self, path, account: False)
+
+    result = permissions.fix()
+
+    assert result["ok"] is False
+    assert result["error"] == t("permissions.failed", path=str(root))
+    assert "changed" not in result
+    assert acl.owner(root) == "BA"  # nothing was handed over
+
+
+def test_an_open_data_folder_inside_the_install_is_not_ok(install):
+    root, acl, _session = install
+    acl.sddl[str(root)] = acl.sddl[str(root / "keys")] = CLOSED
+    acl.sddl[str(root / "data")] = CLOSED + "(A;OICI;0x1200a9;;;BU)"  # Users can read data/
+
+    result = permissions.status()
+
+    rows = {row["folder"]: row for row in result["folders"]}
+    assert (rows["data"]["open"], rows["data"]["outside"]) == (True, False)
+    assert (rows["root"]["open"], rows["root"]["outside"]) == (False, False)
+    assert result["ok"] is False
+    assert result["needs_admin"] is False  # this account's own folder: a start can close it
+
+
+def test_only_the_install_root_is_judged_as_the_root(install, monkeypatch):
+    root, _acl, _session = install
+    seen: dict[str, bool] = {}
+    shared_for = WindowsBackend.shared_for
+
+    def spy(self, path, account, *, root=False):
+        seen[Path(path).name] = root
+        return shared_for(self, path, account, root=root)
+
+    monkeypatch.setattr(WindowsBackend, "shared_for", spy)
+    permissions.status()
+    assert seen == {root.name: True, "keys": False, "data": False}
+
+
+def test_a_folder_that_is_not_a_directory_is_not_reported(install):
+    root, _acl, _session = install
+    (root / "data").rmdir()
+    (root / "data").write_bytes(b"")  # a file where data/ belongs
+
+    assert [row["folder"] for row in permissions.status()["folders"]] == ["root", "keys"]
+
+
+def test_without_an_administrator_terminal_fix_closes_this_accounts_own_folders(install):
+    root, acl, _session = install
+    for folder in (root, root / "keys", root / "data"):
+        acl.sddl[str(folder)] = acl.sddl[str(folder)].replace("O:BA", f"O:{OWNER}")  # mine, but open
+
+    result = permissions.fix()
+
+    assert (result["ok"], result["changed"]) == (True, True)
+    for folder in (root, root / "keys", root / "data"):
+        assert "BU" not in acl.sddl[str(folder)]
+        assert "AU" not in acl.sddl[str(folder)]
