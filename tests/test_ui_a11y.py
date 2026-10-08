@@ -163,6 +163,31 @@ def test_the_progress_link_is_outside_the_rows_summary(client):
     assert "top: anchor(top); bottom: anchor(bottom)" in CSS
 
 
+@pytest.mark.parametrize(
+    ("lang", "labels"),
+    [("en", ["Site:", "Folder:", "Event:", "Progress:"]), ("ru", ["Сайт:", "Папка:", "Событие:", "Прогресс:"])],
+)
+def test_each_row_cell_says_its_column_to_a_screen_reader(client, lang, labels):
+    """A11: on a desktop the columns' names were only in the head row (and on a phone only in
+    CSS ::before): a screen reader heard "Kinozal, D:/TV/…" without "Site" or "Folder"."""
+    from bs4 import BeautifulSoup
+
+    from tow.config import load_config, save_config
+
+    cfg = load_config()
+    cfg["language"] = lang
+    save_config(cfg)
+    _seed()
+    row = BeautifulSoup(client.get("/").text, "html.parser").select_one("#topics > .row-wrap")
+    said = [cell.select_one(":scope > .sr-only").get_text() for cell in row.select("summary > [data-label]")]
+    assert said == [f"{label} " for label in labels]
+    for cell in row.select("summary > [data-label]"):
+        assert cell.select_one(":scope > .sr-only").get_text().strip() == cell["data-label"]
+    # The phone draws the label in CSS: an empty alternative text keeps it from being said twice.
+    assert 'content: attr(data-label) / "";' in CSS
+    assert "position: relative" in _desktop_rules()[".topic-event"]  # the hidden text stays in its cell
+
+
 def test_links_inside_running_text_are_underlined(client):
     """A7: "More" in the Backups note was told from its sentence by colour only (axe
     link-in-text-block)."""

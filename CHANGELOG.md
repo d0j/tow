@@ -29,6 +29,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - On a phone a long topic name wraps onto the next line like the folder and the error, instead of ending in "…".
 - A Home row's progress ("3/10") is a link of its own that the keyboard and a screen reader reach; it was inside
   the row's toggle. It looks and sits as before.
+- A screen reader hears each Home cell with its column ("Site: Kinozal, Folder: …"), on a desktop too, and finds
+  the version at the end of the page as its footer.
 
 ## [1.27.1] — 2026-10-08
 
