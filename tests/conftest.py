@@ -430,15 +430,30 @@ def _guard_signals(monkeypatch, deny) -> None:
         monkeypatch.setattr(os, name, guarded_signal)
 
 
+def _real_system_test(request) -> bool:
+    """A test of a real torrent client or of the OS autostart (tests/integration), marked
+    `@pytest.mark.real_system("TOW_REAL_...")`: skipped unless that variable is exactly 1, which
+    only .github/workflows/real.yml sets on a runner; then it runs without the guard. Never on a
+    development machine by accident: it would register autostart or talk to a live client."""
+    marker = request.node.get_closest_marker("real_system")
+    if marker is None:
+        return False
+    variable = str(marker.args[0]) if marker.args else ""
+    if not variable.startswith("TOW_REAL_") or os.environ.get(variable) != "1":
+        pytest.skip(f"a test of real systems: runs only with {variable or 'TOW_REAL_*'}=1 (.github/workflows/real.yml)")
+    return True
+
+
 @pytest.fixture(autouse=True)
 def _no_real_system_effects(request, monkeypatch):  # noqa: C901 - one guard, every check in one place
     """Refuse every real side effect on this machine; tests patch what they need.
 
     Violations are recorded and fail the test at teardown, so code under test that
     swallows the error with `except Exception` cannot hide them. A test that really
-    needs the system (none today) is marked `@pytest.mark.allow_system`.
+    needs the system is marked `@pytest.mark.allow_system`; a test of real clients or
+    autostart `@pytest.mark.real_system("TOW_REAL_...")` (skipped without that variable).
     """
-    if request.node.get_closest_marker("allow_system"):
+    if request.node.get_closest_marker("allow_system") or _real_system_test(request):
         yield
         return
 

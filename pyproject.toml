@@ -99,6 +99,7 @@ testpaths = ["tests"]
 markers = [
     "allow_system: the test may touch the real machine (processes, network)",
     "allow_git: the test may run git (only git) on a throwaway repository in the temp folder",
+    "real_system(variable): a real torrent client or the OS autostart; skipped unless variable=1 (CI real.yml)",
 ]
 pythonpath = ["src"]
 # A test that hangs fails after 5 minutes with every thread's stack, instead of holding the gate
