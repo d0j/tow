@@ -59,8 +59,6 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   still names it, or, on a page without a magnet, when the site has a daily download limit; and the wait is logged
   once instead of "add started", "add failed" and "check failed" at every check. A newer upload named by the magnet,
   a check you start and the stop of the previous torrent still download the current `.torrent`.
-### Fixed
-
 - A site name that answers with an IPv6 form of 0.0.0.0 (`64:ff9b::`, `::ffff:0:0:0`) is refused like other
   non-public addresses: before, TOW took it for a public internet address.
 
