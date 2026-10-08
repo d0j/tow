@@ -153,8 +153,18 @@ def login_help() -> dict[str, str]:
 
 def site_title(name: object) -> str:
     """How pages name a site: its settings' title ("NNM-Club"), as on Sites; else its key."""
-    trackers = {str(key): value for key, value in as_dict(_context.config().get("trackers")).items()}
-    return str(as_dict(trackers.get(str(name))).get("title") or name)
+    title = _site_titles().get(str(name))
+    return str(name) if title is None else title
+
+
+def _site_titles() -> dict[str, str]:
+    """Every site's title by its key, built once per request: Home names a site in every row."""
+
+    def build() -> dict[str, str]:
+        sites = {str(key): value for key, value in as_dict(_context.config().get("trackers")).items()}
+        return {key: str(as_dict(value).get("title") or key) for key, value in sites.items()}
+
+    return _context.memo("site_titles", build)
 
 
 def network_session(request: Request) -> bool:
