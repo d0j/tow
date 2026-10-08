@@ -323,9 +323,13 @@ def run_supervisor(deps: Deps | None = None) -> int:
             supervisor.request_stop({"by": "signal"})
             supervisor.stop_deadline = min(supervisor.stop_deadline, supervisor.deps.monotonic() + SIGNAL_STOP_WAIT_SEC)
 
-        # SIGHUP: the terminal of `tow run` was closed (Linux, macOS) - a clean stop like SIGTERM,
-        # not the default of ending at once with the web server and a job left behind.
-        stop_signals = [signal.SIGTERM, *([signal.SIGHUP] if hasattr(signal, "SIGHUP") else [])]
+        # SIGHUP: the terminal of `tow run` was closed (Linux, macOS); SIGBREAK: Ctrl+Break in its
+        # console (Windows) - a clean stop like SIGTERM, not the default of ending at once with
+        # the web server and a job left behind. Each only where the system has it.
+        stop_signals = [
+            signal.SIGTERM,
+            *(getattr(signal, name) for name in ("SIGHUP", "SIGBREAK") if hasattr(signal, name)),
+        ]
         previous = {number: signal.getsignal(number) for number in stop_signals}
         for number in stop_signals:
             with contextlib.suppress(ValueError, OSError):  # not the main thread

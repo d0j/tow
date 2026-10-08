@@ -259,7 +259,8 @@ blocks for long.
   operation on `data/service-restart.json`: stopping → starting → ready/failed; a new server that
   exits three times before it answers is "failed"); `tow stop` and the updater stop TOW. A stop
   lets a running job finish (up to 10 minutes, then it is stopped), then stops the web server and
-  exits 0. SIGTERM (systemd, launchd), SIGHUP (its terminal closed) and Ctrl+C stop it the same
+  exits 0. SIGTERM (systemd, launchd), SIGHUP (its terminal closed), Ctrl+C and, on Windows,
+  Ctrl+Break (SIGBREAK) stop it the same
   way with a 20-second job limit (all in all about 50 s: `SIGNAL_STOP_BUDGET_SEC`, which systemd's `TimeoutStopSec` and launchd's
   `ExitTimeOut` exceed).
 - **Status and logs.** `data/run/status.json` is rewritten only when something changes (server
