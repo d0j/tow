@@ -732,8 +732,10 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
   details.row-edit:not(.sites) > summary { grid-template-columns: auto minmax(0, 1fr); column-gap: .55rem; }
   details.row-edit:not(.sites) > summary > :not(.dot):not([data-hl]):not(.topic-name) { grid-column: 1 / -1; }
   details.row-edit:not(.sites) > summary > [data-label] { font-size: 13px; }
+  /* The label is drawn here and said by the cell's own hidden text (every width): "/ ''" keeps a
+     screen reader from hearing it twice. */
   details.row-edit:not(.sites) [data-label]::before {
-    content: attr(data-label); color: var(--mut); margin-right: .3em; flex: 0 0 auto;
+    content: attr(data-label) / ""; color: var(--mut); margin-right: .3em; flex: 0 0 auto;
     font: 400 12px/1.5 "Segoe UI", system-ui, sans-serif;
   }
   .settings-section { padding: .85rem; }
