@@ -498,7 +498,7 @@ def test_each_os_gets_its_backend(install):
 
 
 def test_the_default_runner_never_raises(monkeypatch):
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=0, stdout="ok", stderr=""))
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=0, stdout=b"ok", stderr=b""))
     assert default_runner(["x"]) == CommandResult(0, "ok", "")
 
     def broken(*_a, **_k):
@@ -506,6 +506,43 @@ def test_the_default_runner_never_raises(monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", broken)
     assert default_runner(["x"]).returncode == 127
+
+
+def test_the_default_runner_reads_utf8_and_the_consoles_code_page(monkeypatch):
+    # Audit 08.10.2026: text=True read schtasks' and Windows PowerShell's OEM output (cp866 on a
+    # Russian Windows) as the ANSI code page: "Отказано в доступе" came back garbled.
+    from tow import platform
+
+    seen = {}
+
+    def run(argv, **kwargs):
+        seen.update(kwargs)
+        return SimpleNamespace(
+            returncode=1, stdout="Задача TOW".encode(), stderr="ОШИБКА: Отказано в доступе.".encode("cp866")
+        )
+
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(platform, "console_codec", lambda: "cp866")  # a Russian Windows console
+    result = default_runner(["schtasks", "/Create"])
+    assert result == CommandResult(1, "Задача TOW", "ОШИБКА: Отказано в доступе.")
+    assert "text" not in seen  # bytes, decoded by TOW
+    monkeypatch.setattr(platform, "console_codec", lambda: "utf-8")  # Linux, macOS: never raises
+    assert default_runner(["x"]).stderr.startswith("�")
+
+
+def test_the_console_code_page_is_the_oem_one_on_windows_only():
+    import codecs
+
+    from tow import platform
+
+    try:
+        codecs.lookup("oem")
+    except LookupError:
+        assert platform.console_codec() == "utf-8"
+    else:
+        assert platform.console_codec() == "oem"
+    assert platform.decode_output(b"ok") == "ok"
+    assert platform.decode_output("путь".encode()) == "путь"
 
 
 # --- the CLI ----------------------------------------------------------------------------------

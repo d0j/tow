@@ -51,19 +51,19 @@ Runner = Callable[[Sequence[str]], CommandResult]
 
 
 def default_runner(argv: Sequence[str]) -> CommandResult:
+    """Run an OS command (schtasks, PowerShell, systemctl, launchctl) and read its output.
+
+    Read as bytes and decoded by ``platform.decode_output``: systemctl and launchctl write UTF-8,
+    schtasks and Windows PowerShell the console's OEM code page - which ``text=True`` read as
+    the ANSI one, so a Russian error ("Отказано в доступе") came back garbled.
+    """
+    from tow.platform import decode_output
+
     try:
-        done = subprocess.run(
-            list(argv),
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=60,
-            check=False,
-            creationflags=_NO_WINDOW,
-        )
+        done = subprocess.run(list(argv), capture_output=True, timeout=60, check=False, creationflags=_NO_WINDOW)
     except (OSError, subprocess.SubprocessError) as exc:
         return CommandResult(127, "", str(exc))
-    return CommandResult(done.returncode, done.stdout or "", done.stderr or "")
+    return CommandResult(done.returncode, decode_output(done.stdout or b""), decode_output(done.stderr or b""))
 
 
 @dataclass(frozen=True)
