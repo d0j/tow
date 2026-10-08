@@ -11,9 +11,18 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [1.28.0] — 2026-10-08
 
+### Added
+
+- The add and edit forms show the free space of the chosen folder and, once the chosen files are known, whether
+  they fit.
+
 ### Changed
 
 - Home remembers the chosen order on this device: it stays after a reload, the Home icon or a new tab.
+- A new version whose files do not fit on the target drive is added stopped instead of refused (its `.torrent`
+  was downloaded again at every check): TOW says once what is missing and starts it by itself when there is room.
+- Pages are faster with many topics and sites: with 2000 topics and 200 sites Home, Settings, History, a history
+  search and the header's status poll take a fraction of the time they took.
 
 ### Fixed
 
@@ -69,6 +78,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   site icon green instead of grey.
 - Diagnostics and a site's mirror check count a mirror that answers with a missing page (HTTP 404 at the site's
   root, as many trackers do) as answering, with its status, instead of "not a single mirror answers".
+
 ### Security
 
 - A device on the home network can no longer fill the TOW folder through the sign-in page: every form is
@@ -87,12 +97,6 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   addresses of the home network.
 - A tracker's answer to the sign-in is read like a topic page, at most 4 MiB: a site (or a page between TOW and
   it) can no longer make TOW read an answer of any size into memory.
-- Pages are faster with many topics and sites: with 2000 topics and 200 sites Home, Settings, History, a history
-  search and the header's status poll take a fraction of the time they took.
-- A new version whose files do not fit on the target drive is added stopped instead of refused (its `.torrent`
-  was downloaded again at every check): TOW says once what is missing and starts it by itself when there is room.
-- The add and edit forms show the free space of the chosen folder and, once the chosen files are known, whether
-  they fit.
 
 ## [1.27.1] — 2026-10-08
 
