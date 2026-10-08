@@ -342,3 +342,41 @@ def test_load_config_hands_out_copies():
     first = load_config()
     first["trackers"]["evil"] = {"url_regex": "x"}  # changed without saving
     assert "evil" not in load_config()["trackers"]
+
+
+def test_the_checked_config_is_kept_for_the_same_file_and_equals_a_fresh_check(monkeypatch):
+    """load_config checks every site once per file version: the kept result is what a fresh check
+    gives, each caller gets its own copy (also of nested site settings), a wrong value is refused
+    on every load, and any write - by TOW or by an editor - is seen at the next load."""
+    import tow.config
+    from tow.config import ConfigError, validated
+
+    raw = yaml.safe_load(config_path().read_text(encoding="utf-8"))
+    checks = []
+    original = tow.config.validated
+
+    def counting(data):
+        checks.append(1)
+        return original(data)
+
+    monkeypatch.setattr(tow.config, "validated", counting)
+    first = load_config()
+    assert first == validated(raw)
+    first["trackers"][next(iter(first["trackers"]))]["title"] = "changed in memory"
+    first["client"]["kind"] = "changed in memory"
+    second = load_config()
+    assert second == validated(raw)
+    assert len(checks) == 1
+
+    set_interval_sec(900)
+    assert load_config()["interval_sec"] == 900
+    assert len(checks) == 2
+
+    _write("port: http\n")
+    for _ in range(2):
+        with pytest.raises(ConfigError):
+            load_config()
+    assert len(checks) == 4
+
+    _write("interval_sec: 600\n")
+    assert load_config()["interval_sec"] == 600
