@@ -1822,6 +1822,7 @@
     "tracker": {
       "ok": "The site answers",
       "warn": "The site is down for now",
+      "sign_in": "The site asks to sign in",
       "bad": "A problem on the site",
       "mut": "The site is not checked yet"
     }

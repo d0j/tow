@@ -45,6 +45,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   settled, at five points, instead of fifteen points on every frame.
 - A site that sends the .torrent's file name in Cyrillic (raw UTF-8 in its headers) no longer fails every download,
   and TOW failing on a site's answer no longer pauses the site's mirrors.
+- When a site answers the .torrent with a sign-in page and its page has no magnet link either, the row keeps the
+  site's reason (sign in) instead of "the page has no valid magnet link", and the site icon is amber for a sign-in,
+  as the Guide says.
 ### Security
 
 - A device on the home network can no longer fill the TOW folder through the sign-in page: every form is

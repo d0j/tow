@@ -94,12 +94,14 @@ def test_old_client_event_does_not_override_current_check_state():
     assert unobserved.torrent_tone == "mut"
 
 
-def test_nnmclub_auth_failure_is_actionable_red():
+def test_nnmclub_auth_failure_is_actionable_red_and_the_site_amber():
+    # AGENTS.md: the dot is red for a sign-in, the site icon amber (the site wants a login).
     status = project_home_status(
         {"last_ok": False, "last_error": "nnmclub: no download link on page", "hash": None},
         {"items": {}},
     )
 
     assert status.torrent_tone == "bad"
-    assert status.tracker_tone == "bad"
+    assert status.tracker_tone == "warn"
+    assert status.tracker_label == "Сайт просит войти"
     assert status.torrent_label == "Ошибка — причина в строке, откройте её"
