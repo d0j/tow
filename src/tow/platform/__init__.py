@@ -10,6 +10,7 @@ Every probe fails soft: an unknown fact is ``None`` / ``[]`` / ``False``, never 
 
 from __future__ import annotations
 
+import codecs
 import os
 import stat
 import sys
@@ -174,6 +175,25 @@ def user_name() -> str:
     return os.environ.get("USER") or os.environ.get("USERNAME") or ""
 
 
+def console_codec() -> str:
+    """The code page console programs write into a pipe: on Windows the OEM one (``schtasks`` and
+    Windows PowerShell write it, not the ANSI code page Python reads by default), else UTF-8."""
+    try:
+        codecs.lookup("oem")  # the codec exists on Windows only
+    except LookupError:
+        return "utf-8"
+    return "oem"
+
+
+def decode_output(data: bytes) -> str:
+    """A program's output as text: UTF-8 when it is (Linux, macOS, a PowerShell told so), else
+    in the console's code page (``console_codec``); never raises."""
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data.decode(console_codec(), errors="replace")
+
+
 def is_link_like(info: os.stat_result) -> bool:
     """``info`` (from ``lstat``) is a symbolic link, or on Windows any reparse point (a junction,
     a mount point): an entry that may lead somewhere else, never followed or trusted as data."""
@@ -284,7 +304,9 @@ __all__ = [
     "Backend",
     "backend_for",
     "child_path",
+    "console_codec",
     "current",
+    "decode_output",
     "is_link_like",
     "is_plain_dir",
     "is_plain_file",

@@ -26,6 +26,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Windows: Ctrl+Break in the console of `tow run` stops TOW cleanly, as Ctrl+C does, instead of ending it at once.
 - `data/logs/serve-stderr.log` no longer grows for ever: at 5 MiB it becomes `serve-stderr.log.1` when the web
   server starts again (one older file is kept).
+- Windows: an error of Task Scheduler or PowerShell when autostart is turned on or off is shown readable in a
+  non-English Windows, instead of garbled letters.
 
 ## [1.27.0] — 2026-10-08
 
