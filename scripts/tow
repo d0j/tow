@@ -36,9 +36,14 @@ fi
 if [ -z "${TOW_ROOT:-}" ]; then
     TOW_ROOT=$TOW_APP
     parent=$(dirname -- "$TOW_APP")
-    if [ "$(basename -- "$TOW_APP")" = app ] && { [ -f "$parent/config.yaml" ] || [ -d "$parent/data" ]; }; then
-        TOW_ROOT=$parent
-    fi
+    # The code folder's name in any case, as tow.paths and tow-env.cmd read it ("App" too).
+    case $(basename -- "$TOW_APP") in
+        [Aa][Pp][Pp])
+            if [ -f "$parent/config.yaml" ] || [ -d "$parent/data" ]; then
+                TOW_ROOT=$parent
+            fi
+            ;;
+    esac
 fi
 export TOW_ROOT
 export PYTHONIOENCODING=utf-8

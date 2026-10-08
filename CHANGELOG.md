@@ -20,6 +20,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - An autostart left by a TOW folder that was moved or deleted is now named in Diagnostics, Settings → TOW service,
   `tow status` and `tow doctor`, with the way to take it over (turn autostart on here); before, nothing said that
   the computer kept starting a program that no longer exists.
+- Linux and macOS: `scripts/tow` finds an install whose code folder is named `App` (any case), as TOW itself
+  does; before, it took such an install for a development checkout, and setup put Python and uv's cache outside
+  the folder.
 
 ## [1.27.0] — 2026-10-08
 
