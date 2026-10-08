@@ -2400,7 +2400,7 @@ def test_attention_banner_lists_what_needs_the_owner(monkeypatch):
 
     page = TestClient(app).get("/").text
 
-    assert "Нужно внимание" in page
+    assert "Требует внимания" in page
     assert "Плановые проверки не выполнялись с" in page
     assert "Торрент-клиент недоступен" in page
     assert "Нужен вход на сайт nnmclub (раздач: 2)" in page
@@ -2411,7 +2411,7 @@ def test_no_banner_when_all_is_well():
 
     save_state({"topics": [], "mirrors": {}, "health": {"auto_at_ts": int(_time.time()), "qbit_ok": True}})
 
-    assert "Нужно внимание" not in TestClient(app).get("/").text
+    assert "Требует внимания" not in TestClient(app).get("/").text
 
 
 def test_a_successful_check_records_when_it_last_worked(monkeypatch):

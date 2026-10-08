@@ -2,8 +2,8 @@
 
 # TOW
 
-**Torrent topic watcher.** Follows tracker topics that replace their `.torrent` in place and adds every new
-version to your torrent client.
+**Torrent topic watcher.** Follows topics on torrent sites that replace their `.torrent` in place and adds
+every new version to your torrent client.
 
 [![CI](https://github.com/d0j/tow/actions/workflows/ci.yml/badge.svg)](https://github.com/d0j/tow/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/d0j/tow)](https://github.com/d0j/tow/releases/latest)

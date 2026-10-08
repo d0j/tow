@@ -21,6 +21,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   safety copy.
 - An undo that could not be applied says so ("could not undo the change") instead of calling it a rollback, which
   names only going back to an older release.
+- Clearer wording: the sign-in field is **User name**; the ntfy field is **ntfy topic name**; the guide and README
+  call trackers sites; update errors point to **How to update** and the **Update log**; jargon such as
+  "read-back", "Turnstile" and "contacts peers" is gone; Diagnostics names autostart as Settings does; the Home
+  sort is **Errors first**, like its filter.
 
 ### Removed
 
