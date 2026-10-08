@@ -133,22 +133,27 @@ class DelugeClient(ManagedClient):
         if attached and refresh and not (self.read_only or self._metadata_preview):
             # Deluge Web learns the daemon's methods when it attaches (later only from a plugin
             # event it may miss): "unknown method" while attached is that stale list, and a new
-            # login does not refresh it - attaching again does.
-            self._raw("web.disconnect")
-            attached = False
+            # login does not refresh it - attaching again does, to the same daemon. One that
+            # cannot be told stays attached: another daemon has other torrents.
+            current = [host for host, status in self._host_statuses() if status == "Connected"]
+            if len(current) == 1:
+                self._raw("web.disconnect")
+                self._raw("web.connect", current[0])
         if not attached:
             if self.read_only or self._metadata_preview:
                 raise self._fail("client.deluge.not_attached_preview")
-            hosts = self._raw("web.get_hosts") or []
-            online = [
-                host[0]
-                for host in hosts
-                if (self._raw("web.get_host_status", host[0]) or [None, ""])[1] in ("Online", "Connected")
-            ]
+            online = [host for host, status in self._host_statuses() if status in ("Online", "Connected")]
             if not online:
                 raise self._fail("client.deluge.no_daemon")
             self._raw("web.connect", online[0])
         self._ready = True
+
+    def _host_statuses(self) -> list[tuple[Any, str]]:
+        """Every daemon Deluge Web knows, with its status ("Online", "Connected" ...)."""
+        return [
+            (host[0], str((self._raw("web.get_host_status", host[0]) or [None, ""])[1]))
+            for host in self._raw("web.get_hosts") or []
+        ]
 
     def _ensure_labels(self) -> None:
         """Turn on the bundled Label plugin and create TOW's labels - only when TOW adds or
