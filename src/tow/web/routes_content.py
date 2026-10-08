@@ -77,6 +77,12 @@ async def content_prepare(
     return await _answer(prepare)
 
 
+@router.get("/content/space")
+async def content_space(path: str = "") -> JSONResponse:
+    """The free space of the folder the add or edit form names (a hint; the add decides)."""
+    return await _answer(lambda: services.folder_free(path))
+
+
 @router.post("/content/resolve")
 async def content_resolve(
     token: str = Form(),

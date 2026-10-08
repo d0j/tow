@@ -82,7 +82,50 @@
       const summary = !manual() && ruleNotice || t(manual() ? "content.js.count" : "content.js.rule", { count: chosen.length, size });
       if (status.textContent !== summary) status.textContent = summary;
       indices.value = manual() ? JSON.stringify([...selected]) : "";
+      showSpace();
     };
+    // The free space of the chosen folder, under the folder field (a hint: the add itself
+    // decides, counting files already there, and waits for room instead of failing). Compared
+    // with the chosen files once their sizes are known; a folder this computer does not see
+    // shows nothing.
+    const folder = field("save_path"), spaceHint = form.querySelector("[data-space-hint]");
+    let free = null, margin = 0n, spaceTimer = null, spaceAsked = 0;
+    const showSpace = () => {
+      if (!spaceHint) return;
+      if (free === null) {
+        spaceHint.hidden = true;
+        spaceHint.classList.remove("warn");
+        return;
+      }
+      const chosen = snapshot ? snapshot.files.filter((row) => selected.has(row.id)) : [];
+      const need = chosen.length ? chosen.reduce((sum, row) => sum + rowSize(row), 0n) : null;
+      const short = need !== null && need + margin > free;
+      const text = need === null
+        ? t("content.js.space_free", { free: humanSize(free) })
+        : t(short ? "content.js.space_short" : "content.js.space_fits", { size: humanSize(need), free: humanSize(free) });
+      if (spaceHint.textContent !== text) spaceHint.textContent = text;
+      spaceHint.classList.toggle("warn", short);
+      spaceHint.hidden = false;
+    };
+    const askSpace = async () => {
+      const asked = ++spaceAsked, path = folder?.value.trim() || "";
+      let reply = null;
+      if (path) {
+        try {
+          const response = await fetch(`/content/space?path=${encodeURIComponent(path)}`, { headers: { Accept: "application/json" } });
+          reply = response.ok ? await response.json() : null;
+        } catch {
+          reply = null; // no answer: no hint, the add still decides
+        }
+      }
+      if (asked !== spaceAsked) return;
+      free = Number.isSafeInteger(reply?.free) ? BigInt(reply.free) : null;
+      margin = Number.isSafeInteger(reply?.margin) ? BigInt(reply.margin) : 0n;
+      showSpace();
+    };
+    folder?.addEventListener("input", () => { window.clearTimeout(spaceTimer); spaceTimer = window.setTimeout(askSpace, 400); });
+    folder?.addEventListener("change", () => { window.clearTimeout(spaceTimer); askSpace(); });
+    askSpace();
     const checkbox = (name, checked, mixed, update, key) => {
       const input = document.createElement("input");
       input.type = "checkbox";
@@ -211,6 +254,7 @@
       if (fresh) { fresh.hidden = true; fresh.disabled = false; }
       if (cachedHint) cachedHint.hidden = true;
       status.textContent = discarded ? t("content.js.stale") : "";
+      showSpace();
     };
     const load = async (allowLimited = false, restore = false, fromMagnet = false, fromTracker = false) => {
       if (allowLimited && !window.confirm(t("content.limited_confirm"))) return;

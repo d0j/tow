@@ -65,6 +65,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   search and the header's status poll take a fraction of the time they took.
 - A new version whose files do not fit on the target drive is added stopped instead of refused (its `.torrent`
   was downloaded again at every check): TOW says once what is missing and starts it by itself when there is room.
+- The add and edit forms show the free space of the chosen folder and, once the chosen files are known, whether
+  they fit.
 
 ## [1.27.1] — 2026-10-08
 

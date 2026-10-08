@@ -1506,7 +1506,10 @@
       "stale": "The link or client changed. Get the contents again.",
       "folder": "Select all files in {name}",
       "session": "Your sign-in has expired. Reload the page to sign in again.",
-      "too_large": "The .torrent file is larger than TOW accepts."
+      "too_large": "The .torrent file is larger than TOW accepts.",
+      "space_free": "Free on this disk: {free}",
+      "space_fits": "Chosen {size}, free {free}: it fits",
+      "space_short": "Not enough room: chosen {size}, free {free}. TOW adds the topic stopped and starts it by itself when there is room."
     }
   },
   "settings": {

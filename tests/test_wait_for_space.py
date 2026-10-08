@@ -379,3 +379,39 @@ def test_the_shortfall_says_what_to_free():
     assert short.missing == 40 * GIB + space.FREE_SPACE_MARGIN
     assert short.error().params == {"missing": 40.5, "needed": 50.0, "free": 10.0, "path": "D:\\"}
     assert space.Shortfall(needed=1, free=space.FREE_SPACE_MARGIN, path="D:\\").error().params["missing"] == 0.1
+
+
+# --- the add and edit forms' free-space hint ------------------------------------------------------
+
+
+def test_the_forms_hint_measures_the_folder_as_an_add_does(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from tow.web import app
+
+    shown = space.folder_free(str(tmp_path / "not yet created"))
+    assert isinstance(shown["free"], int)
+    assert shown["free"] > 0
+    assert shown["margin"] == space.FREE_SPACE_MARGIN
+    with monkeypatch.context() as remote:
+        remote.setattr("tow.folders.seen_from_here", lambda _path: False)  # a remote client's /downloads
+        assert space.folder_free("/downloads/tv") == {"free": None, "margin": space.FREE_SPACE_MARGIN}
+    assert space.folder_free("") == {"free": None, "margin": space.FREE_SPACE_MARGIN}
+    answer = TestClient(app).get("/content/space", params={"path": str(tmp_path)})
+    assert answer.status_code == 200
+    assert isinstance(answer.json()["free"], int)
+
+
+def test_both_forms_show_the_hint_under_the_folder_and_warn_when_it_will_not_fit():
+    from pathlib import Path
+
+    src = Path(space.__file__).resolve().parents[1]
+    for name in ("index.html", "_topic_edit.html"):
+        template = (src / "templates" / name).read_text(encoding="utf-8")
+        folder = template[template.index('name="save_path"') :]
+        assert "data-space-hint" in folder[:700]  # right under the folder field
+    script = (src / "static" / "content.js").read_text(encoding="utf-8")
+    assert "/content/space?path=" in script
+    assert "need + margin > free" in script  # the add's own rule: the chosen bytes and the margin
+    assert '"content.js.space_short"' in script
+    assert ".space-hint.warn { color: var(--warn); }" in (src / "static" / "app.css").read_text(encoding="utf-8")

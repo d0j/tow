@@ -26,6 +26,7 @@ from tow.access import set_session_cookie, sign_out, sign_out_everywhere
 from tow.adopt import adopt_topic
 from tow.browser_auth import browser_auth
 from tow.check import await_relocation, client_owned_by_tow, record_check_failure, run_check
+from tow.check.space import folder_free
 from tow.clients.factory import from_secrets as client_from_secrets
 from tow.config import load_config, save_config
 from tow.content import metadata as content_metadata
@@ -106,6 +107,7 @@ __all__ = [
     "doctor_reason",
     "doctor_report",
     "export_portable_bundle",
+    "folder_free",
     "folder_write_problem",
     "free_bytes",
     "guess_topic_title",
