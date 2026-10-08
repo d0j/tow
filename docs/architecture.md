@@ -14,11 +14,13 @@ flowchart TD
     RUN -->|child, /healthz every 10 s, restart with backoff| SERVE["tow serve<br/>uvicorn + FastAPI (tow.web)"]
     RUN -->|child, every interval_sec| CHECK["tow check --apply --notify"]
     RUN -->|child, every 30 min| PROG["tow check --progress-only"]
+    RUN -->|child, every 5 min while a torrent waits for disk space| SPACE["tow check --space-only"]
     RUN -->|child, daily at backup_time| NIGHT["night copy (tow.snapshots)"]
     RUN -->|in-process, every 10 min| WD["watchdog duties<br/>lateness, alerts, heartbeat, outbox"]
     SERVE --> DATA[("data/ · config.yaml · keys/")]
     CHECK --> DATA
     PROG --> DATA
+    SPACE --> DATA
     NIGHT --> DATA
     CHECK --> TRK["tracker sites"]
     CHECK --> CL["torrent client Web UI"]
@@ -39,6 +41,13 @@ flowchart TD
 - The schedule is the supervisor's own: checks every `interval_sec` after its last scheduled start
   (`data/run/schedule.json`), the night copy once per local day (a copy older than the latest slot is due; DST
   neither skips nor repeats a night). The watchdog duty only reports.
+- A new revision whose selected files do not fit on the target drive (new bytes plus a 512 MiB margin, measured
+  only on a drive this computer sees) is added stopped with its selection read back, and the topic keeps
+  `waiting_space` (error `check.waiting_space`, class `disk`). While it waits no check downloads its `.torrent`
+  again: every check, and the `space` pass the supervisor runs every 5 minutes only while a topic waits
+  (`tow check --space-only`, client only), looks again and starts it once it fits, the start read back
+  (`tow.check.space`). An earlier revision still running on the same files holds the start back, as it holds
+  an add.
 - Personal tracker timers override the global cadence for their topic (`check_interval_min`,
   empty/null inherits; 1–10080 minutes). Changing the interval starts a new policy revision
   from save time; unrelated edits, manual checks and progress passes do not shift it.
@@ -85,7 +94,7 @@ flowchart TD
 | `tow.cli` | Every command (`run`, `serve`, `check`, `autostart`, `update`, `keys`, `export`…). `setup` lives in the launchers (`scripts/tow.cmd`, `scripts/tow`). |
 | `tow.supervisor` | `tow run`: the loop (`core`), timing with a fake-clock-testable schedule (`schedule`), its files (`layout`). |
 | `tow.web` | FastAPI app built by `create_app()`: one `APIRouter` per `routes_*.py`, the request middleware, templates. Everything outside the package is called through `tow.web.services`. |
-| `tow.check`, `check_steps`, `check_transaction` | A check run: fetch, decide, hand to the client, record — with a journal for the commit. The package exports `run_check` and the checks the web pages share; inside it `run` is the run, its commit and health record, `topic` one topic's check, `apply` what that check does in the client, `client_ops` hash identity, ownership, read-back and relocation, `reconcile` progress and the history commit, `notices` the messages, `rows` a topic's result row. |
+| `tow.check`, `check_steps`, `check_transaction` | A check run: fetch, decide, hand to the client, record — with a journal for the commit. The package exports `run_check` and the checks the web pages share; inside it `run` is the run, its commit and health record, `topic` one topic's check, `apply` what that check does in the client, `client_ops` hash identity, ownership, read-back and relocation, `reconcile` progress and the history commit, `space` the wait for disk space, `notices` the messages, `rows` a topic's result row. |
 | `tow.trackers` | `generic.GenericHttpTracker` reads any configured site; `presets/<site>.py` adds what TOW knows about a particular site. `tow.mirrors` picks mirrors, cooldowns, redirects. |
 | `tow.clients` | Torrent adapters behind `TorrentClientAdapter`; qBittorrent, Transmission and Deluge all use the read-back contract of `managed.ManagedClient`; qBittorrent overrides its add, a full selection and the rollback's priority levels. |
 | `tow.adopt` | Adopt into TOW: on the owner's request only, the `tow` mark on a torrent already in the client (added by hand or by another program), read back and logged; nothing else about the torrent changes. |

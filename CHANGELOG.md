@@ -63,6 +63,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   it) can no longer make TOW read an answer of any size into memory.
 - Pages are faster with many topics and sites: with 2000 topics and 200 sites Home, Settings, History, a history
   search and the header's status poll take a fraction of the time they took.
+- A new version whose files do not fit on the target drive is added stopped instead of refused (its `.torrent`
+  was downloaded again at every check): TOW says once what is missing and starts it by itself when there is room.
 
 ## [1.27.1] — 2026-10-08
 

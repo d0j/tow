@@ -90,6 +90,15 @@ How an add works, for every client: the torrent is added **stopped** and tagged 
 are selected; the selection is **read back** from the client; only then the torrent starts and `tow-pending` is
 removed. If any step is not confirmed, TOW stops what it added and reports the failure.
 
+When the chosen files do not fit on the target drive (only what is not in the folder yet counts, plus a 0.5 GB
+reserve), TOW still adds the torrent stopped, with its files selected and read back, but does not start it. The row
+says *waiting for disk space* (red: free some space) and you get one message. TOW does not download the `.torrent`
+again while it waits; every check, and a short pass every 5 minutes that asks only the client, looks again and
+starts the torrent by itself once there is room (you get a message then too). If you start it yourself, choose
+other files for it in the client, or remove it, TOW stops waiting. Only a drive this computer sees is measured: a
+client on another computer, a folder this computer cannot see or free space that cannot be read never holds a
+torrent back.
+
 When a new version arrives while the previous one is still seeding the same file, TOW does not touch the old
 torrent. It asks you: **Stop the previous one and add** stops the old torrent (its files stay) and adds the new one.
 
@@ -124,6 +133,7 @@ none is connected.
 | Global timer | Every hour by default (Settings → Checks, 15 min – 24 h) | Active topics without a personal timer: checks the site and adds a new version of the torrent to the selected client. |
 | Personal timer | Set minutes when adding or editing a topic, 1 min – 7 days | Overrides the global timer for that topic. A clock and countdown appear in its Home row. |
 | Progress | Every 30 minutes | Only asks the client about downloads; no requests to sites. |
+| Disk space | Every 5 minutes, only while a torrent waits for disk space | Only asks the client: starts a waiting torrent once its files fit; no requests to sites. |
 | Check all | ↻ in the header (asks to confirm) | Checks active topics now in the background, including those with personal timers; does not reset their countdowns. |
 | One topic | ↻ in the row | That topic only; ignores the one-hour mirror pause. |
 
@@ -278,7 +288,8 @@ The left column is the text TOW shows (on Home, in a row, in a message or on a p
 | the previous version of the torrent is still active on the same file: … | A new version overlaps a torrent that is still seeding. | **Stop the previous one and add** in the row, or stop it in the client. |
 | waiting for episodes (…) | The episodes you chose are not in the torrent yet. | Nothing; they are added when they appear. |
 | the selection matches no file of the torrent · episode *N* is in several seasons — write it as S01E05 | The selection cannot be applied safely. | Edit the topic's selection. |
-| not enough disk space: … GB needed, … GB free | The target drive is too full (measured only for a torrent client on this computer). | Free space or choose another folder. |
+| waiting for disk space: … GB short (needs … GB, … GB free in …); TOW starts it by itself when there is room | The new version's files do not fit on the target drive (measured only for a torrent client on this computer). It is in the client, stopped, with its files selected. | Free the space it names (or choose fewer files for the topic): TOW starts the torrent within minutes. |
+| not enough disk space: … GB needed, … GB free | Shown by TOW 1.27.1 and earlier, which did not add such a torrent. | Free space or choose another folder. |
 | no site is set up for this link | The link belongs to an unknown site. | **Sites → +**, paste the link. |
 | the torrent was removed from the client | The torrent is gone from the client. | Check again to add it back, or **Remove from TOW**. |
 | the torrent in the client was not added by TOW — … | The torrent has no `tow` mark, and TOW does not change torrents it did not add. | If it is the topic's torrent, open the topic and choose **Adopt into TOW** (or `tow adopt ID`): TOW marks it and changes nothing else. Or change it in the client, or remove it there and let TOW add it. |
