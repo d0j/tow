@@ -188,6 +188,7 @@ def _first_check(new: dict[str, Any], tracker: GenericHttpTracker) -> RedirectRe
                 row,
                 topic_id=new["id"],
                 tracker_name=tracker.name if tracker.spec.get("login_path") else "",
+                new_topic=True,
             )
             if refused is not None:  # always, for a row that is not ok
                 return refused

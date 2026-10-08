@@ -995,6 +995,27 @@ def test_topic_check_flash_describes_the_result(monkeypatch, client, row, flash)
     assert _flash(response) == flash
 
 
+@pytest.mark.parametrize(
+    ("row", "flash"),
+    [
+        (
+            {"ok": False, "error": "клиент не ответил", "error_class": "qbit"},
+            "торрент-клиент не подтвердил: клиент не ответил",
+        ),
+        ({"ok": False, "error": "сайт не ответил", "error_class": "tracker"}, "проверка не прошла: сайт не ответил"),
+    ],
+)
+def test_a_failed_check_of_a_topic_tow_had_is_not_called_an_add(monkeypatch, client, row, flash):
+    # A row's check (or "Stop the previous one and add") said "added to TOW, ..." for a topic
+    # TOW had for weeks; only the first check of a topic just added says that.
+    _seed(_topic())
+    monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: {"results": [{"id": "t1", **row}]})
+
+    response = client.post("/topics/t1/check", follow_redirects=False)
+
+    assert _flash(response) == flash
+
+
 def _wait_job(client, response) -> dict:
     """The job's end as the page sees it; its message also waits on the server for Home."""
     body = wait_for_check_job(client, _query(response)["check_job"])

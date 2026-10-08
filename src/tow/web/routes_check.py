@@ -51,7 +51,7 @@ def topics_replace_revision(tid: str) -> Response:
         services.log_event("client_stop_failed", topic=tid, error=str(exc), how="manual")
         return flash_redirect("/", "web.topics.replace_failed", "err", error=exc)
     services.log_event("client_stopped", topic=tid, hashes=stopped, reason="replace_revision", how="manual")
-    return topics_check(tid)
+    return _check_topic(tid)
 
 
 @router.post("/topics/{tid}/adopt")
@@ -67,11 +67,17 @@ def topics_adopt(tid: str) -> Response:
         return flash_redirect("/", "web.check.blocked", "err")
     except Exception as exc:  # noqa: BLE001 - any client failure is logged (tow.adopt) and shown, never a 500
         return flash_redirect("/", "web.topics.adopt_failed", "err", error=exc)
-    return topics_check(tid)
+    return _check_topic(tid, adopted=True)
 
 
 @router.post("/topics/{tid}/check")
 def topics_check(tid: str) -> Response:
+    return _check_topic(tid)
+
+
+def _check_topic(tid: str, *, adopted: bool = False) -> Response:
+    """Check one topic now and say what it found; ``adopted``: the owner has just adopted its
+    torrent into TOW, which a check that changes nothing else confirms."""
     try:
         out = services.run_check(apply=True, notify=True, ids=[tid], ignore_cool=True, how="manual", wait=False)
     except CheckBusyError:
@@ -96,6 +102,8 @@ def topics_check(tid: str) -> Response:
         return flash_redirect("/", "web.check.selection_updated")
     if row and row.get("changed"):
         return flash_redirect("/", "web.check.changed")
+    if row and row.get("ok") and adopted:
+        return flash_redirect("/", "web.check.adopted")
     if row and row.get("ok") and row.get("skipped"):
         return flash_redirect("/", "web.check.no_changes_reason", "ok", reason=row["skipped"])
     if row and row.get("ok"):

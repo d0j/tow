@@ -294,6 +294,10 @@ def test_the_button_adopts_then_checks_the_topic(monkeypatch):
     response = TestClient(app, headers=ORIGIN).post("/topics/t1/adopt", follow_redirects=False)
     assert response.status_code == 303
     assert (adopted, checks) == ([("t1", "manual")], [["t1"]])
+    # The adoption is what happened, not "no changes".
+    assert shown(response.headers["location"]).endswith(
+        " взято под управление TOW: торрент получил метку tow, больше ничего не изменено"
+    )
 
 
 def test_a_refused_adoption_is_shown(monkeypatch):
