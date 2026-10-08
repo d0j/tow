@@ -15,6 +15,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   `Update TOW.cmd` for good: an update writes the new version's files into the TOW folder, before it replaces the
   code and again after. With a 1.22 `Update TOW.cmd`, running the update again after a cut-off update failed with
   "can't open file …\app\scripts\update.py"; the guide says how to recover such an install by hand.
+- `Start TOW.cmd` and `Stop TOW.cmd` say that an update was cut off and to run `Update TOW.cmd` again, or that TOW's
+  code is incomplete, instead of "The system cannot find the path specified" followed by "TOW did not start: the
+  reason is above" with no reason above.
 
 ## [1.28.1] — 2026-10-08
 

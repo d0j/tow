@@ -21,6 +21,20 @@ rem TOW: double-click to start it. Its page opens in your browser (http://127.0.
 rem The first start prepares TOW inside this folder, without the internet. Everything stays in
 rem this folder. Stop: "Stop TOW.cmd". Help: README.txt
 title TOW
+setlocal
+for %%I in ("%~dp0.") do set "TOW_DIR=%%~fI"
+rem An update cut off while it replaced the code leaves its record, and app\ (app\scripts too) may
+rem hold half of either version: the rule of app\scripts\tow-start.cmd, checked here before anything
+rem in app\ runs (not when the record says the switch is finished, nor while an update holds
+rem .update.lock). PowerShell reads both.
+set "TOW_CUT="
+if exist "%~dp0.update-switch.json" set "TOW_CUT=1"
+if defined TOW_CUT "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$d = $env:TOW_DIR; try { $j = Get-Content -LiteralPath (Join-Path $d '.update-switch.json') -Raw | ConvertFrom-Json; if ($j.phase -eq 'accepted' -or $j.restored -eq $true) { exit 0 } } catch {}; try { $f = [IO.File]::Open((Join-Path $d '.update.lock'), 'Open', 'ReadWrite', 'ReadWrite') } catch { exit 3 }; try { $f.Lock(0, 1) } catch { $f.Close(); exit 0 }; $f.Unlock(0, 1); $f.Close(); exit 3" >nul 2>&1 && set "TOW_CUT="
+if defined TOW_CUT echo TOW was not started: an update was cut off while it replaced the code in "%TOW_DIR%". Run "Update TOW.cmd" there again: it puts the previous version back first.
+if not defined TOW_CUT if not exist "%~dp0app\scripts\tow-start.cmd" set "TOW_CUT=2"
+if "%TOW_CUT%"=="2" echo TOW was not started: its code is incomplete, "%~dp0app\scripts\tow-start.cmd" is missing. To put it back, run "Update TOW.cmd" there in a terminal with the version you had: "Update TOW.cmd" vX.Y.Z
+if defined TOW_CUT pause
+if defined TOW_CUT exit /b 3
 call "%~dp0app\scripts\tow-start.cmd" %*
 set "TOW_CODE=%ERRORLEVEL%"
 if not "%TOW_CODE%"=="0" echo.
@@ -32,8 +46,15 @@ exit /b %TOW_CODE%
 STOP_CMD = r"""@echo off
 rem TOW: double-click to stop it (a check that is running finishes first).
 title TOW
-call "%~dp0app\scripts\tow.cmd" stop
-set "TOW_CODE=%ERRORLEVEL%"
+setlocal
+for %%I in ("%~dp0.") do set "TOW_DIR=%%~fI"
+set "TOW_CODE=0"
+rem Without app\scripts (an update cut off while it replaced the code) there is nothing to call.
+if not exist "%~dp0app\scripts\tow.cmd" set "TOW_CODE=3"
+if "%TOW_CODE%"=="3" if exist "%~dp0.update-switch.json" echo TOW cannot run: an update was cut off while it replaced the code in "%TOW_DIR%". Run "Update TOW.cmd" there again: it puts the previous version back first.
+if "%TOW_CODE%"=="3" if not exist "%~dp0.update-switch.json" echo TOW cannot run: its code is incomplete, "%~dp0app\scripts\tow.cmd" is missing. To put it back, run "Update TOW.cmd" there in a terminal with the version you had: "Update TOW.cmd" vX.Y.Z
+if "%TOW_CODE%"=="0" call "%~dp0app\scripts\tow.cmd" stop
+if "%TOW_CODE%"=="0" set "TOW_CODE=%ERRORLEVEL%"
 if not "%TOW_CODE%"=="0" pause
 timeout /t 3 /nobreak >nul 2>&1
 exit /b %TOW_CODE%
