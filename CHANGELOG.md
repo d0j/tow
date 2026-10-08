@@ -32,6 +32,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Layout: check boxes in line with their labels, the backup Save button and pills at their own width, a site's
   mirrors clear of its icons on a phone, long help patterns wrap, Diagnostics cards spaced, the version badge
   steps aside for pills and comes last in the Tab order.
+- A second client still loading its torrents after a start is no longer believed empty (and added to again) when
+  a check in between did not ask it.
 
 ## [1.26.0] — 2026-10-08
 

@@ -238,8 +238,8 @@ def _commit_run_state(result: _RunResult, history_rebuilt: bool = False) -> None
             health["qbit_ok"] = previous_health["qbit_ok"]
         if "clients_ok" in previous_health:
             health["clients_ok"] = previous_health["clients_ok"]
-    if pool.empty:
-        health["clients_empty"] = dict(pool.empty)
+    if empty := pool.empty_counts():
+        health["clients_empty"] = empty
     disk = load_state()
     edited = {
         str(topic.get("id")): changed

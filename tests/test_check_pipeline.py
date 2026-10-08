@@ -262,6 +262,36 @@ def test_a_client_that_stays_empty_is_believed_after_two_checks(monkeypatch, sto
     assert "clients_empty" not in load_state()["health"]
 
 
+@pytest.mark.parametrize("between", ["one_topic", "no_topic"])
+def test_a_run_that_does_not_ask_a_client_keeps_its_empty_count(monkeypatch, stores, between):
+    """A check in between that did not ask the second client (the owner checked a topic of the
+    main one, or there was nothing to check) dropped its count: the still-loading client was
+    then believed empty after one refusal instead of two and its torrent was added again."""
+    main = StartingClient("main")
+    main.loading = False
+    main.put(OLD, "/media/tv", tags=["tow"])
+    other = StartingClient("b")
+    other.put(OLD, "/media/tv", tags=["tow"])  # still loading: lists nothing yet
+    save_state(
+        {
+            "topics": [
+                _topic(hash=OLD, last_ok=True),
+                {**_topic(hash=OLD, last_ok=True, client_id="b"), "id": "t2", "url": "https://tracker.example/2"},
+            ]
+        }
+    )
+    _wire(monkeypatch, {"main": main, "b": other}, Tracker())
+    check.run_check(apply=True, notify=False, how="test")
+    assert load_state()["health"]["clients_empty"] == {"b": 1}
+    check.run_check(apply=True, notify=False, how="test", ids=["t1"] if between == "one_topic" else [])
+    assert load_state()["health"]["clients_empty"] == {"b": 1}
+    check.run_check(apply=True, notify=False, how="test")
+    t2 = next(topic for topic in load_state()["topics"] if topic["id"] == "t2")
+    assert other.adds == []
+    assert t2["last_error_params"]["reason"]["$msg"]["code"] == "check.client_empty"
+    assert load_state()["health"]["clients_empty"] == {"b": 2}
+
+
 def test_an_empty_client_without_earlier_torrents_is_used(monkeypatch, stores):
     client = StartingClient()
     client.loading = False
