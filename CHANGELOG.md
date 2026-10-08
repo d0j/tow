@@ -3,6 +3,13 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [Unreleased]
+
+### Fixed
+
+- Changing the network password or **Sign out everywhere** when TOW cannot write `data/sessions.json` says so
+  (the password is saved; this device signs in again) instead of a server error.
+
 ## [1.27.1] — 2026-10-08
 
 ### Fixed

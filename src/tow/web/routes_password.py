@@ -8,6 +8,7 @@ the network can lock the owner out. The rules themselves live in ``tow.access``.
 
 from __future__ import annotations
 
+import contextlib
 import copy
 from typing import Any
 
@@ -96,7 +97,8 @@ def setup_save(
         services.commit_stores(config=cfg, secrets=secrets)  # never a password without its network setting
     except TransactionError:
         return _setup_page(request, t("web.password.store_unavailable"), status_code=503)
-    services.sign_out_everywhere()
+    with contextlib.suppress(OSError):  # the first password: no device was signed in with an earlier one
+        services.sign_out_everywhere()
     services.log_event("setup_password", allow_lan=lan, hint=bool(record.get("hint")), how="manual")
     return flash_redirect("/", "setup.saved_lan" if lan else "setup.saved")
 
@@ -185,7 +187,13 @@ def settings_password(
     # A new password signs every device out (its key changes), and so does a later undo of it:
     # the old sessions stay out even if the old password comes back. This device stays in.
     response = _back("web.password.saved")
-    services.sign_out_everywhere(request, response, session_key=lan_password_session_key(new_record))
+    try:
+        services.sign_out_everywhere(request, response, session_key=lan_password_session_key(new_record))
+    except AuthConfigurationError, OSError:
+        # data/sessions.json could not be written (or read for this device's new session): the
+        # password is saved and the old sessions no longer match it, so only this device has to
+        # sign in again - said, instead of a server error after the change was made.
+        return _back("web.password.saved_sign_in_again", "warn")
     return response
 
 
@@ -198,6 +206,9 @@ def settings_sign_out_everywhere(request: Request) -> Response:
     except AuthConfigurationError:
         session_key = None
     response = _back("web.password.signed_out")
-    services.sign_out_everywhere(request, response, session_key=session_key)
+    try:
+        services.sign_out_everywhere(request, response, session_key=session_key)
+    except AuthConfigurationError, OSError:
+        return _back("web.password.sign_out_failed", "err")  # nobody was signed out: said so
     services.log_event("sessions_signed_out", where="local" if access.is_local(request) else "network", how="manual")
     return response
