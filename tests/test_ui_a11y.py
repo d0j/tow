@@ -125,6 +125,17 @@ def test_links_inside_running_text_are_underlined(client):
     assert note is not None, "the Backups note keeps its link inside the sentence"
 
 
+def test_a_long_topic_name_wraps_on_a_phone():
+    """A14: a phone cut long topic names with "…" though it wraps the folder and the error."""
+    phone = CSS[CSS.index("  /* A phone has the width for one value per line") :]
+    phone = phone[: phone.index("\n}\n")]
+    rules = _rules(phone)
+    name = rules[".topic-name > .clip"]
+    assert "white-space: normal" in name
+    assert "overflow-wrap: anywhere" in name
+    assert "white-space: nowrap" in _desktop_rules()[".clip"]  # a desktop row keeps one line
+
+
 def test_the_version_is_the_pages_footer(client):
     """A12: the version badge sat outside every landmark (axe region)."""
     from bs4 import BeautifulSoup

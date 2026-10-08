@@ -1018,6 +1018,7 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
   /* A phone has the width for one value per line: the whole folder and the whole error wrap
      instead of being cut off at the right edge. */
   .topic-path .clip-start { white-space: normal; direction: ltr; text-overflow: clip; overflow-wrap: anywhere; }
+  .topic-name > .clip { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
   .topic-event.clip, .topic-event .row-error { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
   /* The version sits at the end of the page instead of floating over text (the floating
      badge only steps aside for controls; a phone has no free corner for it). */
