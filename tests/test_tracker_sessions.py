@@ -299,6 +299,45 @@ def test_closing_tags_are_matched_like_nested_elements():
     assert link_text(page) == "<DIV class='attach'><div>d</div></DIV>"
 
 
+def test_one_page_is_scanned_for_its_tags_once_per_check(monkeypatch):
+    # A check asks guest_page, site_text, the download id and signed_in of one page: each scanned
+    # every tag again, 4-5 passes of 1-2.5 s on a 4 MiB page of tags.
+    from tow.trackers import generic
+
+    scans = []
+    real = generic._tags
+    monkeypatch.setattr(generic, "_tags", lambda page: scans.append(len(page)) or real(page))
+    generic._blocks.cache_clear()
+    page = (
+        "<a href='login.php?logout=1'>out</a><div class=post>see <a href='dl.php?t=9'>x</a></div>"
+        + "<b><i>" * 50_000
+        + "<table class=attach><tr><td><a href='dl.php?t=5'>t</a></td></tr></table>"
+    )
+    assert generic.guest_page(page) is False
+    assert generic.signed_in(page) is True
+    assert "dl.php?t=9" not in generic.site_text(page)
+    assert generic.link_text(page) == "<table class=attach><tr><td><a href='dl.php?t=5'>t</a></td></tr></table>"
+    assert scans == [len(page)]
+
+
+def test_a_title_is_read_from_the_head_of_a_long_page(monkeypatch):
+    # BeautifulSoup took 9-12 s on a 4 MiB page of tags; it is given the part a title lives in.
+    import bs4
+
+    from tow.title import title_from_html
+
+    fed = []
+    real = bs4.BeautifulSoup
+    monkeypatch.setattr(bs4, "BeautifulSoup", lambda markup, *args: fed.append(len(markup)) or real(markup, *args))
+    tags = "<b><i>" * (4 * 2**20 // 6)
+    assert title_from_html(f"<title>Site</title><h1>Show A</h1>{tags}") == "Show A"
+    assert title_from_html(f"<title>Show B</title>{tags}<h1>Late</h1>") == "Show B"
+    near_the_end = "x" * (256 * 1024 - 20) + "<h1>Show C <i>" + " " * 1000 + "S01</i></h1>" + tags
+    assert title_from_html(near_the_end) == "Show C S01"  # an <h1> begun in the head is read whole
+    assert title_from_html("<h1>Short page</h1>") == "Short page"
+    assert max(fed) <= 256 * 1024 + 2000
+
+
 def test_page_repeating_one_download_link_downloads_it(site):
     site.pages["/viewtopic.php?t=5"] = (
         "<html><a href='download.php?id=222'>a</a><a href='download.php?id=222'>b</a></html>"
