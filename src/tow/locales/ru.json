@@ -1282,6 +1282,7 @@
     "frozen": "{tracker}: сайт на паузе",
     "all_failed": "{tracker}: ни одно зеркало не ответило: {error}",
     "transport": "нет связи ({error})",
+    "local": "{tracker}: TOW не смог прочитать ответ сайта ({error})",
     "too_large": "слишком большой ответ"
   },
   "notifier": {

@@ -43,6 +43,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   and typing in the search no longer stalls at every key: the list follows after a short pause.
 - Scrolling a long Home is smoother: the version badge looks at what lies under it once a scroll or a change has
   settled, at five points, instead of fifteen points on every frame.
+- A site that sends the .torrent's file name in Cyrillic (raw UTF-8 in its headers) no longer fails every download,
+  and TOW failing on a site's answer no longer pauses the site's mirrors.
 ### Security
 
 - A device on the home network can no longer fill the TOW folder through the sign-in page: every form is

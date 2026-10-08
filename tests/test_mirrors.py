@@ -400,3 +400,55 @@ def test_healthy_fetches_from_the_active_mirror_do_not_rewrite_state(monkeypatch
 
     assert len(writes) == 1  # the first success makes it the active mirror; the rest change nothing
     assert load_state()["mirrors"]["rutor"]["active"] == "http://rutor.info"
+
+
+def test_tow_failing_on_an_answer_does_not_cool_the_mirror(monkeypatch, tmp_path):
+    # A mirror answered and TOW failed on the answer (a header it could not rebuild): the
+    # mirror is not to blame - three such checks paused every mirror and the whole site.
+    monkeypatch.setenv("TOW_HOME", str(tmp_path))
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(thttp, "client", lambda **kwargs: Client())
+
+    def broken(*_args, **_kwargs):
+        raise UnicodeEncodeError("ascii", "Кириллица", 0, 1, "ordinal not in range(128)")
+
+    monkeypatch.setattr(thttp, "get_limited", broken)
+    for _ in range(3):
+        with raises_code("mirrors.local", MirrorFetchError) as error:
+            pick_and_get("rutor", ["http://rutor.info", "http://rutor.is"], "/topic/1", fail_threshold=3)
+    assert error.value.error_class == "error"
+    assert error.value.params["error"] == "UnicodeEncodeError"
+    bucket = load_state().get("mirrors", {}).get("rutor", {})
+    assert not bucket.get("cool")
+    assert not any(bucket.get("fail", {}).values())
+
+
+def test_a_lost_connection_still_counts_towards_the_cooldown(monkeypatch, tmp_path):
+    import httpx
+
+    monkeypatch.setenv("TOW_HOME", str(tmp_path))
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(thttp, "client", lambda **kwargs: Client())
+
+    def down(*_args, **_kwargs):
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(thttp, "get_limited", down)
+    for _ in range(3):
+        with raises_code("mirrors.all_failed", MirrorFetchError):
+            pick_and_get("rutor", ["http://rutor.info"], "/topic/1", fail_threshold=3)
+    assert load_state()["mirrors"]["rutor"]["cool"].get("http://rutor.info")

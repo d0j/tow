@@ -1276,6 +1276,7 @@
     "frozen": "{tracker}: the site is paused",
     "all_failed": "{tracker}: no mirror answered: {error}",
     "transport": "no connection ({error})",
+    "local": "{tracker}: TOW could not read the site's answer ({error})",
     "too_large": "the answer is too large"
   },
   "notifier": {
