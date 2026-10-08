@@ -16,6 +16,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   device** moved to the end of Settings.
 - Messages about a copy made with **Create a backup** call it a restore point everywhere; a damaged data file
   points to Settings → Backups.
+- The copies made before an update have one name each: the restore point TOW saves first and the update
+  snapshot the updater takes (no more "data archive" or "safety copy"); the copy kept before a restore is the
+  safety copy.
 
 ### Removed
 

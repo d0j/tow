@@ -222,9 +222,9 @@ Settings → **Version and updates**; the version in the corner of every page op
   out. Nothing is installed without you, and nothing about your topics or settings is sent.
 - When TOW is already the latest release, the check says so, and an update (`Update TOW.cmd`, `update-tow`)
   says “… is the latest release: nothing to update” and changes nothing.
-- **Update** installs it after you confirm. TOW first saves and checks a `.towx` archive of your data, then stops,
-  takes a snapshot of `data/` and `config.yaml`, switches the code, starts again and checks that the new version
-  answers and reads your data. The page reconnects and shows the result; **Reload page** opens the new interface.
+- **Update** installs it after you confirm. TOW first saves and checks a restore point (a `.towx` archive of your
+  data), then stops, takes an update snapshot of `data/` and `config.yaml`, switches the code, starts again and
+  checks that the new version answers and reads your data. The page reconnects and shows the result; **Reload page** opens the new interface.
 - **What is kept:** settings, topics, history, saved passwords and tokens, `keys/master.key`, autostart and network
   access. Downloaded files are never touched.
 - **When the new version fails** to install, start or read the data, the update puts the previous version and data
