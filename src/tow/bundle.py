@@ -86,6 +86,23 @@ _SECRET_FIELD_NAMES = frozenset(
 _SECRET_FIELD_SUFFIXES = ("_password", "_passwd", "_token", "_cookies", "_api_key")
 _DRIVE_PATH = re.compile(r"^[A-Za-z]:[\\/]")
 
+# The one field of that shape TOW itself writes that is not a credential: a messenger delivery's
+# claim in state.json (``notify_lease.<recipient>.token``, "<pid>:<thread>:<12 hex>"), as TOW
+# 1.28 and older named it (now ``owner``). Exempt only there and only in that exact form: a
+# lease left by an older version blocked every restore point, and so the web update, while a
+# messenger could not be reached.
+_LEGACY_LEASE_OWNER = re.compile(r"[0-9]{1,10}:[0-9]{1,20}:[0-9a-f]{12}")
+
+
+def _legacy_lease_owner(path: list[str | int], key: str, item: Any) -> bool:
+    return (
+        len(path) == 2
+        and path[0] == "notify_lease"
+        and key == "token"
+        and isinstance(item, str)
+        and _LEGACY_LEASE_OWNER.fullmatch(item) is not None
+    )
+
 
 class ExportImportError(RuntimeError):
     """Raised when a portable TOW export/import cannot be handled safely.
@@ -149,9 +166,10 @@ def _atomic_write(path: Path, content: bytes) -> None:
         raise ExportImportError(f"cannot write imported {path.name}") from exc
 
 
-def _secret_key_path(value: Any, path: str = "") -> str | None:
-    """Path of the first credential-named field in ``value``, or None."""
-    segments = _secret_segments(value, set())
+def _secret_key_path(value: Any, path: str = "", *, state: bool = False) -> str | None:
+    """Path of the first credential-named field in ``value``, or None (``state``: state.json,
+    where an old messenger lease's claim is not one)."""
+    segments = _secret_segments(value, set(), state=state)
     if segments is None:
         return None
     for segment in segments:
@@ -162,7 +180,7 @@ def _secret_key_path(value: Any, path: str = "") -> str | None:
     return path
 
 
-def _secret_segments(value: Any, seen: set[int]) -> list[str | int] | None:
+def _secret_segments(value: Any, seen: set[int], *, state: bool = False) -> list[str | int] | None:
     # Shared containers need one scan. Build a path only for the actual match,
     # not one long prefix per innocent child of a large-keyed mapping.
     if not isinstance(value, (dict, list)):
@@ -183,7 +201,11 @@ def _secret_segments(value: Any, seen: set[int]) -> list[str | int] | None:
         if mapping:
             lowered = str(key).lower()
             is_secret_name = lowered in _SECRET_FIELD_NAMES or lowered.endswith(_SECRET_FIELD_SUFFIXES)
-            if is_secret_name and item not in (None, "", False, True):
+            if (
+                is_secret_name
+                and item not in (None, "", False, True)
+                and not (state and _legacy_lease_owner(path, str(key), item))
+            ):
                 return [*path, segment]
         if isinstance(item, (dict, list)) and id(item) not in seen:
             seen.add(id(item))
@@ -200,7 +222,7 @@ def _refuse_plaintext_secrets(config_data: Any, state_data: Any, history_data: A
         ("state.json", state_data),
         ("download_history.json", history_data),
     ):
-        found = _secret_key_path(data)
+        found = _secret_key_path(data, state=label == "state.json")
         if found:
             raise ExportImportError(f"plaintext secret-shaped field outside encrypted payload: {label}:{found}")
 
