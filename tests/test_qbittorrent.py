@@ -971,3 +971,119 @@ def test_the_listing_is_read_again_after_a_minute(monkeypatch):
     now[0] += qbittorrent.LISTING_SEC + 1
     client.observe_torrent("A" * 40)
     assert [call for call in api.calls if call == ("info", None)] == [("info", None)] * 2
+
+
+# --- what qBittorrent must confirm before TOW goes on (mutation survivors) -------------------
+
+
+def _row(h: str, *, v1: str = "", v2: str = "", state: str = "stoppedDL", tags: str = "tow") -> SimpleNamespace:
+    return SimpleNamespace(
+        hash=h,
+        infohash_v1=v1,
+        infohash_v2=v2,
+        progress=0,
+        added_on=1,
+        completion_on=0,
+        save_path=r"M:\TV",
+        content_path=r"M:\TV\Show",
+        tags=tags,
+        state=state,
+    )
+
+
+def test_two_torrents_sharing_one_identity_are_ambiguous_not_guessed(monkeypatch):
+    wanted = parse_torrent_metadata(TORRENT).hash_v1
+
+    class TwoRows(_SelectionAPI):
+        def torrents_info(self, *, torrent_hashes=None, limit=None):
+            # a v1 torrent, and another whose v2 id starts with the same 40 characters
+            return [_row(wanted, v1=wanted), _row("B" * 40, v2=wanted.lower() + "0" * 24)]
+
+        def torrents_add(self, **kwargs):
+            self.calls.append("add")
+            return "Ok."
+
+        def torrents_export(self, *, torrent_hash):
+            return TORRENT
+
+    api = TwoRows()
+    monkeypatch.setattr(qbittorrent, "Client", lambda **kwargs: api)
+    client = qbittorrent.QBittorrentClient("http://qbit", 8080, "user", "password")
+    with raises_code("client.qbittorrent.hash_ambiguous"):
+        client.materialize_magnet(f"magnet:?xt=urn:btih:{wanted}", r"M:\TV", wanted)
+    assert api.calls == []
+
+
+def test_a_stale_magnet_still_listed_after_its_delete_is_not_added_again(monkeypatch):
+    metadata = parse_torrent_metadata(TORRENT)
+
+    class DeleteIgnored(_SelectionAPI):
+        def __init__(self):
+            super().__init__()
+            self.present = True
+
+        def torrents_files(self, *, torrent_hash):
+            return []  # a magnet without metadata yet
+
+        def torrents_delete(self, *, delete_files, torrent_hashes):
+            self.calls.append("delete-pending")  # accepted, but the torrent stays listed
+
+        def torrents_add(self, **kwargs):
+            self.calls.append("add-magnet-metadata")
+            return "Ok."
+
+    api = DeleteIgnored()
+    monkeypatch.setattr(qbittorrent, "Client", lambda **kwargs: api)
+    monkeypatch.setattr(qbittorrent.time, "sleep", lambda _seconds: None)
+    client = qbittorrent.QBittorrentClient("http://qbit", 8080, "user", "password")
+    with raises_code("client.qbittorrent.stale_magnet_not_removed"):
+        client.materialize_magnet(f"magnet:?xt=urn:btih:{metadata.hash_v1}", r"M:\TV", metadata.hash_v1)
+    assert api.calls == ["delete-pending"]
+
+
+@pytest.mark.parametrize("state", ["missingFiles", "error"])
+def test_an_add_the_client_lists_in_an_error_state_fails(monkeypatch, state):
+    api = _SelectionAPI()
+    api.state = state
+    monkeypatch.setattr(qbittorrent, "Client", lambda **kwargs: api)
+    client = qbittorrent.QBittorrentClient("http://qbit", 8080, "user", "password")
+    with raises_code("client.managed.error_state"):
+        client.add_torrent_selected(TORRENT, r"M:\TV", parse_torrent_metadata(TORRENT).infohash, [0, 1])
+    assert api.calls == ["add-stopped"]  # neither selected nor started
+
+
+def test_more_listed_files_than_the_torrent_has_fail_the_all_files_selection(monkeypatch):
+    class ExtraFile(_SelectionAPI):
+        def __init__(self):
+            super().__init__()
+            self.priorities[11] = 0
+
+        def torrents_files(self, *, torrent_hash):
+            extra = SimpleNamespace(index=11, name="Show/extra.mkv", size=5, progress=0, priority=self.priorities[11])
+            return [*super().torrents_files(torrent_hash=torrent_hash), extra]
+
+    api = ExtraFile()
+    monkeypatch.setattr(qbittorrent, "Client", lambda **kwargs: api)
+    monkeypatch.setattr(qbittorrent.time, "sleep", lambda _seconds: None)
+    client = qbittorrent.QBittorrentClient("http://qbit", 8080, "user", "password")
+    with raises_code("client.managed.wrong_selection"):
+        client.add_torrent_selected(TORRENT, r"M:\TV", parse_torrent_metadata(TORRENT).infohash, [0, 1])
+    assert not [call for call in api.calls if call[0] == "priority"]
+    assert "start" not in api.calls
+
+
+def test_a_mark_removed_while_all_files_are_selected_fails_the_selection_change(monkeypatch):
+    api = _SelectionAPI()
+    api.present, api.tags = True, "tow"  # TOW's own, stopped, nothing selected yet
+    write = api.torrents_file_priority
+
+    def written_then_unmarked(**kwargs):
+        write(**kwargs)
+        api.tags = "manual"  # the owner took it over while TOW set the files
+
+    monkeypatch.setattr(api, "torrents_file_priority", written_then_unmarked)
+    monkeypatch.setattr(qbittorrent, "Client", lambda **kwargs: api)
+    client = qbittorrent.QBittorrentClient("http://qbit", 8080, "user", "password")
+    with raises_code("client.managed.not_owned"):
+        client.configure_torrent_selection(TORRENT, parse_torrent_metadata(TORRENT).infohash, [0, 1])
+    assert "start" not in api.calls
