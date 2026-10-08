@@ -45,7 +45,7 @@ every new version to your torrent client.
 | **Sites** | rutor, Kinozal, NNM-Club, RuTracker, Tapochek, UnionPeer, fast-torrent; others by hand |
 | **Torrent clients** | qBittorrent (Web UI), Transmission 3.0+, Deluge 2.x |
 | **Notifications** | Telegram, Discord, WhatsApp (CallMeBot), ntfy |
-| **Systems** | Windows 10/11, Linux, macOS (Apple silicon) — all three in CI |
+| **Systems** | Windows 10/11 (x64), Linux, macOS (Apple silicon) — all three in CI |
 
 ## Install
 
@@ -112,8 +112,12 @@ TOW listens on `127.0.0.1:8787`. On the computer itself it asks no password.
 
 | From | How |
 |---|---|
-| Phone or laptop at home, or over a VPN (WireGuard, Tailscale) | `tow access on` — asks for a password if none is set — then `tow restart`; open `http://<computer>:8787` |
+| Phone or laptop at home, or over a VPN (WireGuard, Tailscale) | `tow access on` — asks for a password if none is set — then `tow restart`; open `http://<IP address>:8787` |
 | Anywhere over SSH | `ssh -L 8787:127.0.0.1:8787 user@server`, then open <http://127.0.0.1:8787> |
+
+Use the computer's IP address on the home network or the VPN (`http://192.168.1.10:8787`, `http://100.64.1.1:8787`).
+Its plain name (`http://pc:8787`) and `pc.local` work too; any other name (`pc.lan`, a Tailscale MagicDNS name) gets
+“untrusted host”. On the computer itself only `localhost`, `127.0.0.1` and `[::1]` work.
 
 Requests from public internet addresses are refused, so a router port forward does not work. Do not put TOW behind a
 reverse proxy on the same machine: the proxy's requests look local and get no password prompt. `tow access off`
@@ -124,9 +128,9 @@ closes network access.
 | | Windows zip or `install.ps1` | `install.sh` | git clone |
 |---|---|---|---|
 | Update from the page (1.22.20 or newer) | Settings → Version and updates → **Check for updates**, **Update** | the same; with autostart through systemd or launchd, use the line below | the same |
-| Update to the latest release | double-click `Update TOW.cmd` | `~/TOW/update-tow` · macOS: `Update TOW.command` | `.\scripts\deploy.ps1 -Ref <tag>` · `tow update --ref <tag>` prints the command |
+| Update to the latest release | double-click `Update TOW.cmd` | Linux: `~/TOW/update-tow` · macOS: double-click `Update TOW.command` | `.\scripts\deploy.ps1 -Ref <tag>` · `tow update --ref <tag>` prints the command |
 | Go back from the page | Settings → Version and updates → **Install another version or roll back** (1.22.21 or newer) | the same | the same |
-| Go back | `Update TOW.cmd v1.23.0` (v1.23.0 or newer once v1.23 ran: older ones cannot read its data) | `update-tow v1.23.0` (the same) | the same with the older tag (v1.18.0 or newer; v1.23.0 or newer once v1.23 ran) |
+| Go back | `Update TOW.cmd v1.23.0` (v1.23.0 or newer once v1.23 ran: older ones cannot read its data) | Linux: `~/TOW/update-tow v1.23.0` · macOS: `~/TOW/"Update TOW.command" v1.23.0` (the same) | the same with the older tag (v1.18.0 or newer; v1.23.0 or newer once v1.23 ran) |
 | After moving the folder | `Start TOW.cmd` prepares it again; then `tow autostart on` if you use it | the start file does it too; then `tow autostart on` | `tow stop`, `tow setup`, `tow autostart on` |
 | Restore a nightly backup | `tow restore-snapshot --path <copy> --apply` | the same | the same |
 | Remove | [docs/install.md](docs/install.md#remove-tow) | the same | the same |
