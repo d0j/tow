@@ -58,6 +58,7 @@ ROUTES = frozenset(
         ("GET", "/topics/{tid}/edit"),
         ("POST", "/topics/add"),
         ("POST", "/content/resolve"),
+        ("GET", "/content/space"),
         ("POST", "/content/snapshot"),
         ("POST", "/content/prepare"),
         ("GET", "/topics/{tid}/tracker-browser-auth"),

@@ -117,6 +117,25 @@ def measure(dest: str, wanted: Iterable[tuple[tuple[Path, ...], int, int]]) -> S
     return Shortfall(needed=needed, free=free, path=str(probe))
 
 
+def folder_free(dest: str) -> dict[str, Any]:
+    """The free space the add and edit forms show for a folder, measured as an add measures it:
+    ``free`` in bytes (None when this computer does not see the folder or cannot read it) and
+    the ``margin`` an add keeps. A hint only: the add itself decides (``measure``)."""
+    from tow.folders import seen_from_here
+
+    value = str(dest or "").strip()
+    free: int | None = None
+    if value and len(value) <= 4096 and seen_from_here(value):
+        probe = Path(value)
+        while not probe.exists() and probe.parent != probe:
+            probe = probe.parent
+        try:
+            free = shutil.disk_usage(probe).free
+        except OSError, ValueError:
+            free = None
+    return {"free": free, "margin": FREE_SPACE_MARGIN}
+
+
 def _wanted_rows(info: dict[str, Any]) -> Iterator[dict[str, Any]]:
     """The client's files of the torrent it downloads (priority above 0)."""
     for row in info.get("files") or []:
