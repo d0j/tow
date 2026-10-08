@@ -3,6 +3,13 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [Unreleased]
+
+### Fixed
+
+- `tow.cmd` and `scripts/tow` in a copy of the TOW folder no longer run the original folder's code while the
+  original is still there: they say to run setup first, as the start files do.
+
 ## [1.27.0] — 2026-10-08
 
 ### Added
