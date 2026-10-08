@@ -38,6 +38,9 @@ def service_view() -> dict[str, Any]:
         and not detail.get("stale")
         and detail.get("state", "present") == "present"
     )
+    # Its program is gone (that folder was moved or deleted): the OS keeps trying in vain, and
+    # turning autostart on here takes it over.
+    service["autostart_stale"] = services.stale_autostart(detail)
     supervisor = service.get("supervisor")
     server = supervisor.get("server") if isinstance(supervisor, dict) else None
     up_since = server.get("up_since") if isinstance(server, dict) else None

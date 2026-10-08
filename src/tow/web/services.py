@@ -30,7 +30,7 @@ from tow.clients.factory import from_secrets as client_from_secrets
 from tow.config import load_config, save_config
 from tow.content import metadata as content_metadata
 from tow.content import read as read_content
-from tow.doctor import doctor_report
+from tow.doctor import doctor_report, stale_autostart
 from tow.doctor import reason_text as doctor_reason
 from tow.lifecycle import request_restart, service_status, set_autostart
 from tow.locations import check_writable as folder_write_problem
@@ -149,6 +149,7 @@ __all__ = [
     "sign_out_everywhere",
     "snapshot_delete_view",
     "snapshot_path",
+    "stale_autostart",
     "start_web_update",
     "store_transaction",
     "test_notifier",

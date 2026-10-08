@@ -38,6 +38,9 @@
   {% if autostart.foreign %}
   <p><span class="pill warn">{{ t('doctor.autostart_off') }}</span></p>
   <p>{{ t('doctor.autostart_foreign', where=autostart.where or 'TOW') }}</p>
+  {% elif autostart.stale %}
+  <p><span class="pill warn">{{ t('doctor.autostart_off') }}</span></p>
+  <p>{{ t('doctor.autostart_stale', where=autostart.where or 'TOW') }}</p>
   {% else %}
   <p><span class="pill {{ 'ok' if autostart.on else 'mut' }}">{{ t('doctor.autostart_on') if autostart.on else t('doctor.autostart_off') }}</span>{% if autostart.where %} <code>{{ autostart.where }}</code>{% endif %}</p>
   {% endif %}

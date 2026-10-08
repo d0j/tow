@@ -102,6 +102,13 @@ def _autostart() -> dict[str, Any]:
     return status
 
 
+def stale_autostart(status: object) -> bool:
+    """This account's autostart runs a program that no longer exists: the TOW folder it starts
+    was moved or deleted, and the OS keeps trying in vain. Turning autostart on here takes it
+    over (``tow.autostart``); until then it is said in Diagnostics, Settings and ``tow status``."""
+    return isinstance(status, dict) and status.get("ours") is False and status.get("stale") is True
+
+
 def _connected_messengers(secrets: dict[str, Any]) -> list[Any]:
     from tow.notifiers import connected
 
@@ -272,6 +279,8 @@ def doctor_text(report: dict[str, Any] | None = None) -> str:
         lines.append(t("doctor_report.open_root", lang, value=r["open_root"]))
     if r.get("open_folders"):
         lines.append(t("doctor_report.open_folders", lang, value=", ".join(map(str, r["open_folders"]))))
+    if stale_autostart(r.get("autostart")):
+        lines.append(t("doctor_report.autostart_stale", lang, where=r["autostart"].get("where") or "TOW"))
     for p in r.get("probes") or []:
         mark = t("doctor_report.probe_ok", lang) if p.get("ok") else reason_text(str(p.get("error") or ""), lang)
         lines.append(t("doctor_report.probe", lang, tracker=p.get("tracker"), host=p.get("host"), result=mark))

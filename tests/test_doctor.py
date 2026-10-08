@@ -313,6 +313,53 @@ def test_another_folders_autostart_is_never_shown_as_this_ones(monkeypatch, stat
     assert (t("doctor.autostart_foreign", "ru", where=status["where"]) in page) is foreign
 
 
+@pytest.mark.parametrize(
+    ("status", "stale"),
+    [
+        ({"on": False, "ours": False, "stale": True, "state": "present", "where": "TOW"}, True),  # Windows
+        ({"on": False, "ours": False, "stale": True, "where": "tow.service"}, True),  # systemd, launchd
+        ({"on": False, "ours": False, "stale": False, "state": "present", "where": "TOW"}, False),  # another folder
+        ({"on": True, "ours": True, "stale": False, "state": "present", "where": "TOW"}, False),
+        ({"on": False, "ours": True, "state": "absent", "where": "TOW"}, False),
+    ],
+)
+def test_an_autostart_of_a_moved_folder_is_said_everywhere(monkeypatch, capsys, status, stale):
+    """Audit 08.10.2026: an autostart whose program is gone (the folder was moved) was only kept
+    from being called another folder's; Diagnostics, Settings and `tow status` said nothing while
+    the OS kept starting a program that no longer exists."""
+    import json
+
+    from fastapi.testclient import TestClient
+
+    from tow import cli, doctor, lifecycle
+    from tow.i18n import t
+    from tow.web import app
+
+    class Backend:
+        supports_without_login = True
+
+        def status(self):
+            return dict(status)
+
+    monkeypatch.setattr("tow.autostart.backend", lambda: Backend())
+    monkeypatch.setattr(doctor, "owner_language", lambda: "ru")
+    lifecycle._forget_cached()
+    where = status["where"]
+    client = TestClient(app)
+    for page in ("/doctor", "/settings"):
+        text = client.get(page, headers={"Accept-Language": "ru"}).text
+        assert (t("doctor.autostart_stale", "ru", where=where) in text) is stale, page
+    lifecycle._forget_cached()
+    report_text = doctor.doctor_text({"ok": True, "autostart": doctor._autostart()})
+    assert (t("doctor_report.autostart_stale", "ru", where=where) in report_text) is stale
+    assert cli.main(["status"]) == 0
+    out = capsys.readouterr().out
+    said = [t("doctor_report.autostart_stale", lang, where=where) in out for lang in ("ru", "en")]
+    assert any(said) is stale
+    assert cli.main(["status", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["autostart_stale"] is stale
+
+
 def test_tow_doctor_says_its_findings_in_the_owners_words(monkeypatch):
     """Round-3 audit: `tow doctor` in Russian printed "cloudflare", "redirect outside configured
     mirror" and the client library's English as they came."""
