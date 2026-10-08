@@ -272,7 +272,7 @@ def _category(code: str, n: Any) -> str:
     """The plural category of ``n``: a fraction (1.5 GB) or a non-number is ``other`` (CLDR)."""
     try:
         number = float(n)
-    except TypeError, ValueError:
+    except TypeError, ValueError, OverflowError:  # OverflowError: an integer of 309+ digits
         return "other"
     if not math.isfinite(number) or not number.is_integer():
         return "other"
