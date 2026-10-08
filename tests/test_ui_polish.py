@@ -456,15 +456,86 @@ def test_home_with_topics_has_no_checklist(client):
     assert 'class="list-head"' in page
 
 
-def test_the_header_links_the_guide_and_diagnostics(client):
+def _header(page: str) -> str:
+    return page[page.index('<header class="app">') : page.index("</header>")]
+
+
+def test_diagnostics_and_the_guide_are_reached_from_settings_not_the_header(client):
+    # 08.10.2026, the owner: the header keeps the sections; Diagnostics and the Guide sit in Settings.
+    header = _header(client.get("/").text)
+    assert 'href="/doctor"' not in header
+    assert 'href="/settings/help"' not in header
+    settings = client.get("/settings").text
+    links = settings[settings.index('id="acc-log"') :]
+    assert links.index('href="/doctor"') < links.index('href="/settings/help"')
+    assert "Диагностика" in links
+    assert "Инструкция" in links
+    for page in ("/doctor", "/settings/help"):
+        text = client.get(page).text
+        assert re.search(r'<a href="/settings" class="ico on"', _header(text))  # Settings stays lit
+        assert '<a href="/settings">← настройки</a>' in text  # and the way back is on the page
+    assert 'aria-current="page"' not in _header(client.get("/doctor").text)
+
+
+@pytest.mark.parametrize("choice", ["light", "dark", "auto"])
+def test_settings_theme_is_saved_and_every_page_is_drawn_in_it(client, choice):
+    # 08.10.2026, the owner: a theme switch in Settings - as the system, light, dark.
+    from tow.config import load_config
+
+    page = client.get("/settings").text
+    form = page[page.index('id="acc-theme"') : page.index('id="acc-clients"')]
+    assert re.findall(r'name="theme" value="(\w+)"', form) == ["auto", "light", "dark"]
+    assert all(f'href="#i-{picture}"' in form for picture in ("monitor", "sun", "moon"))
+    saved = client.post("/settings/theme", data={"theme": choice}, follow_redirects=False)
+    assert saved.status_code == 303
+    assert load_config()["theme"] == choice
+    for url in ("/", "/settings", "/doctor"):
+        html = client.get(url).text
+        head = html[: html.index("<body")]
+        if choice == "auto":
+            assert "data-theme" not in head
+            assert '<meta name="color-scheme" content="dark light">' in head
+        else:
+            assert f'<html lang="ru" data-theme="{choice}">' in head
+            assert f'<meta name="color-scheme" content="{choice}">' in head
+            assert head.count('name="theme-color"') == 1
+    page = client.get("/settings").text
+    form = page[page.index('id="acc-theme"') : page.index('id="acc-clients"')]
+    assert re.search(rf'value="{choice}" checked', form)
+
+
+def test_an_unknown_theme_is_not_saved_and_config_yaml_refuses_it(client):
+    from tow.config import ConfigError, load_config, validated
+
+    client.post("/settings/theme", data={"theme": "neon"}, follow_redirects=False)
+    assert load_config()["theme"] == "auto"
+    with pytest.raises(ConfigError):
+        validated({"theme": "neon"})
+
+
+def test_the_light_palette_follows_the_choice_before_the_system():
+    # One palette (light-dark()); "dark" wins over a light system, "light" over a dark one.
+    assert ':root[data-theme="light"] { color-scheme: light;' in CSS
+    assert ':root:not([data-theme="dark"]) { color-scheme: light;' in CSS
+    root = CSS[CSS.index(":root {") : CSS.index("}", CSS.index(":root {"))]
+    assert "color-scheme: dark;" in root
+    colours = re.findall(r"(--[\w-]+): (light-dark\([^;]*\));", root)
+    assert len(colours) > 30
+
+
+def test_every_header_icon_is_one_drawing_from_the_shared_set(client):
+    # One set, one stroke: the header draws only <use> of templates/_icons.html, and Settings is a gear.
+    for page in ("/", "/sites", "/settings", "/history"):
+        header = _header(client.get(page).text)
+        assert "<path" not in header
+        assert "<circle" not in header
+        assert header.count('<svg class="i') == header.count("<svg")
+    assert re.search(
+        r'<a href="/settings" class="ico[^"]*"[^>]*><svg class="i"[^>]*><use href="#i-settings"/>',
+        _header(client.get("/").text),
+    )
     page = client.get("/").text
-    header = page[page.index('<header class="app">') : page.index("</header>")]
-    assert re.search(r'<a href="/doctor" class="ico hdr-doctor"[^>]*title="Диагностика"', header)
-    assert re.search(r'<a href="/settings/help" class="ico hdr-help"[^>]*title="Инструкция"', header)
-    help_page = client.get("/settings/help").text
-    head = help_page[help_page.index('<header class="app">') : help_page.index("</header>")]
-    assert re.search(r'<a href="/settings/help" class="ico hdr-help on" aria-current="page"', head)
-    assert not re.search(r'<a href="/settings" class="ico on"', head)
+    assert page.count('<svg class="sprite"') == 1  # the sprite once per page
 
 
 # --- Settings: titles above cards, pills that say the truth -----------------------------------------
@@ -886,8 +957,7 @@ def _contrast(a: str, b: str) -> float:
 
 
 def test_the_light_themes_amber_dot_has_3_to_1_contrast():
-    light = CSS[CSS.index("@media (prefers-color-scheme: light)") :]
-    amber = re.search(r"--dot-warn:\s*(#[0-9a-fA-F]{6})", light)
+    amber = re.search(r"--dot-warn:\s*light-dark\((#[0-9a-fA-F]{6}),", CSS)  # light-dark(light, dark)
     assert amber is not None
     assert _contrast(amber.group(1), "#ffffff") >= 3
 

@@ -53,7 +53,7 @@ PURE: dict[str, set[str]] = {
     "tow.clients.managed": {"ClientError"},
     "tow.clients.spec": {"get"},
     "tow.clock": {"format_ui_timestamp", "iso_now", "machine_now"},
-    "tow.config": {"INTERVAL_MAX_MINUTES", "INTERVAL_MIN_MINUTES", "as_bool", "flash_ttl", "interval_sec_of"},
+    "tow.config": {"INTERVAL_MAX_MINUTES", "INTERVAL_MIN_MINUTES", "THEMES", "as_bool", "flash_ttl", "interval_sec_of"},
     "tow.content": {"describe"},
     "tow.diagnostic_json": {"epoch"},
     "tow.episodes": {"parse_season_hint"},

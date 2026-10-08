@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{ lang() }}">
+<html lang="{{ lang() }}"{% if theme() %} data-theme="{{ theme() }}"{% endif %}>
 <head>
 {% with title = t('setup.page_title') %}{% include "_head.html" %}{% endwith %}
 </head>

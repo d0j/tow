@@ -75,7 +75,7 @@ def test_settings_ui_is_sectioned_and_explains_actions():
     assert 'class="settings-section settings-accordion acc" id="acc-service"' in page
     assert 'class="settings-section settings-accordion acc settings-log" id="acc-log"' in page
     accordion_tags = re.findall(r'<details class="settings-section settings-accordion[^>]+>', page)
-    assert len(accordion_tags) == 9  # updates are separate from service controls
+    assert len(accordion_tags) == 10  # updates are separate from service controls; the theme has its own
     assert all(" open" not in tag for tag in accordion_tags)
     assert "Проверяются сохранённые настройки." in page
     assert "После «Сохранить» появится кнопка «Проверить» — она отправит пробное сообщение." in page

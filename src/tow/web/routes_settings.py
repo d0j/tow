@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from tow import access, i18n, store_transaction, undo
 from tow.auth import MAX_HINT_LENGTH, password_hint
 from tow.clock import format_ui_timestamp
-from tow.config import INTERVAL_MAX_MINUTES, INTERVAL_MIN_MINUTES, as_bool, flash_ttl, interval_sec_of
+from tow.config import INTERVAL_MAX_MINUTES, INTERVAL_MIN_MINUTES, THEMES, as_bool, flash_ttl, interval_sec_of
 from tow.log import error_class
 from tow.notifiers import cards as notifier_cards
 from tow.restore_points import RestorePointError
@@ -112,6 +112,7 @@ def settings_page(request: Request) -> Response:
             "restore_points_error": restore_points_error,
             "backups": backup_view(cfg, request),
             "language_setting": _language_setting(cfg),
+            "theme_setting": cfg.get("theme") if cfg.get("theme") in THEMES else "auto",
             "log_rows": [format_event(e, title_index=title_index) for e in services.read_events(limit=200)],
         },
     )
@@ -175,6 +176,17 @@ def settings_language(auto: str = Form(""), language: str = Form("")) -> Respons
         i18n.use(value)
     services.log_event("settings_language", language=value, how="manual")
     return flash_redirect("/settings?open=language", "settings.language.saved", "ok")
+
+
+@router.post("/settings/theme")
+@services.locked_state_mutation
+def settings_theme(theme: str = Form("")) -> Response:
+    """Settings → Theme: the pages' colours for every device - as the system, light or dark."""
+    cfg = services.load_config()
+    cfg["theme"] = theme if theme in THEMES else "auto"
+    services.save_config(cfg)
+    services.log_event("settings_theme", theme=cfg["theme"], how="manual")
+    return flash_redirect("/settings?open=theme", "settings.theme.saved", "ok")
 
 
 def _topics_using(topics: list[dict[str, Any]], client_id: str, default_id: str) -> int:

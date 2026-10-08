@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block body %}
 <h1 id="page-title" class="sr-only">{{ t('sites.title') }}</h1>
 {#- A refused add comes back with the form open: the draft is the server's own record of it
@@ -146,20 +147,20 @@
     </details>
     <span class="row-ops">
           <a class="row-ico {{ 'ok' if any_ok else ('warn' if mine else 'mut') }}" href="{{ href }}" target="_blank" rel="noopener" title="{{ t('sites.open_named', name=spec.title or name) }}" aria-label="{{ t('sites.open_named', name=spec.title or name) }}">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="8.2"/><path d="M3.5 12h17M12 3.8c2.4 2.6 2.4 13.8 0 16.4M12 3.8c-2.4 2.6-2.4 13.8 0 16.4"/></svg>
+            {{ icon('globe', 'sm') }}
           </a>
           <form method="post" action="/sites/{{ name|urlencode }}/freeze">
             <button class="row-ico{% if frozen.get(name) %} on{% endif %}" type="submit" title="{% if frozen.get(name) %}{{ t('sites.unpause') }}{% else %}{{ t('sites.pause') }}{% endif %}" aria-label="{{ t('sites.unpause_named' if frozen.get(name) else 'sites.pause_named', name=spec.title or name) }}">
               {% if frozen.get(name) %}
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"></path></svg>
+              {{ icon('play', 'sm') }}
               {% else %}
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="7" y="5" width="3.2" height="14" rx=".4"/><rect x="13.8" y="5" width="3.2" height="14" rx=".4"/></svg>
+              {{ icon('pause', 'sm') }}
               {% endif %}
             </button>
           </form>
           <form method="post" action="/sites/{{ name|urlencode }}/probe">
             <button class="row-ico" type="submit" title="{{ t('sites.probe') }}" aria-label="{{ t('sites.probe_named', name=spec.title or name) }}">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2-5.1"/><path d="M19.5 5v5h-5"/></svg>
+              {{ icon('refresh', 'sm') }}
             </button>
           </form>
         </span>

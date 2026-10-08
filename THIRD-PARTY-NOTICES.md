@@ -2,12 +2,13 @@
 
 TOW is licensed under the [MIT License](LICENSE). It includes the following third-party material.
 
-## Icons in `src/tow/templates/base.html`
+## Icons in `src/tow/templates/_icons.html`
 
-| Icon | Source | License |
-|---|---|---|
-| bell (notifications) | [Feather Icons](https://github.com/feathericons/feather) | MIT |
-| undo-2 (the Undo button) | [Lucide](https://github.com/lucide-icons/lucide) | ISC |
+Every icon of the pages comes from [Lucide](https://github.com/lucide-icons/lucide) (ISC; parts of Lucide come
+from [Feather Icons](https://github.com/feathericons/feather), MIT): house, globe, search, scroll-text, plus,
+refresh-cw, bell, undo-2, settings, clock, pause, play, chevron-down, chevron-right, check, x, monitor, sun, moon,
+calendar-arrow-down, arrow-down-a-z, clock-arrow-down, triangle-alert. Only their shapes are kept; size, colour and
+line width come from `app.css`.
 
 ### Feather Icons — MIT License
 

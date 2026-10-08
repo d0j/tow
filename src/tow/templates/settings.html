@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block body %}
 {% set hh = header_health() %}
 <div class="settings-page settings-page-compact">
@@ -30,6 +31,29 @@
           </div>
           <p class="action-hint">{% if language_setting.auto %}{{ t('settings.language.messages_note_auto') }}{% else %}{{ t('settings.language.messages_note') }}{% endif %}</p>
           <div class="settings-actions"><button type="submit">{{ t('common.save') }}</button></div>
+        </form>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-theme" data-q="{{ t('settings.theme.q') }}">
+      <summary>
+        <span class="settings-summary-title">{{ t('settings.theme.title') }}</span>
+        {% set themes = [('auto', 'monitor', t('settings.theme.auto')), ('light', 'sun', t('settings.theme.light')), ('dark', 'moon', t('settings.theme.dark'))] %}
+        <span class="pill mut">{% for value, _picture, label in themes if value == theme_setting %}{{ label }}{% endfor %}</span>
+      </summary>
+      <div class="settings-panel">
+        <form method="post" action="/settings/theme" class="compact-form" data-return-target="acc-theme" data-theme-form>
+          <fieldset class="theme-choice" aria-describedby="theme-hint">
+            <legend class="sr-only">{{ t('settings.theme.title') }}</legend>
+            {% for value, picture, label in themes %}
+            <label class="theme-option">
+              <input type="radio" name="theme" value="{{ value }}"{% if theme_setting == value %} checked{% endif %}>
+              {{ icon(picture, 'sm') }}<span>{{ label }}</span>
+            </label>
+            {% endfor %}
+          </fieldset>
+          <p id="theme-hint" class="action-hint">{{ t('settings.theme.hint') }}</p>
+          <noscript><div class="settings-actions"><button type="submit">{{ t('common.save') }}</button></div></noscript>
         </form>
       </div>
     </details>
@@ -422,7 +446,6 @@
           <ul class="watchdog-lines">{% for line in service.watchdog_problem.lines %}<li>{{ line }}</li>{% endfor %}</ul>
           {% endif %}
         </div>
-        <p class="action-hint"><a href="/doctor">{{ t('settings.service.doctor_link') }}</a> {{ t('settings.service.doctor_note') }}</p>
         {% if service.running_since %}
         <p class="restart-result">{{ t('settings.service.running_since') }} <b>{{ service.running_since }}</b>.</p>
         {% endif %}
@@ -599,9 +622,24 @@
       </div>
     </details>
 
-    <a class="settings-help-link" href="/settings/help" data-q="{{ t('settings.page.help_q') }}">
-      <span>{{ t('settings.page.help_link') }}</span><span aria-hidden="true">→</span>
+    {#- What the header no longer carries: Diagnostics, the Guide and signing out of this device. -#}
+    <a class="settings-link" href="/doctor" data-q="{{ t('settings.page.doctor_q') }}">
+      <span class="settings-summary-title">{{ t('settings.page.doctor_link') }}</span>
+      <span class="settings-link-note">{{ t('settings.page.doctor_note') }}</span>
+      {{ icon('next', 'sm') }}
     </a>
+    <a class="settings-link" href="/settings/help" data-q="{{ t('settings.page.help_q') }}">
+      <span class="settings-summary-title">{{ t('settings.page.help_link') }}</span>
+      <span class="settings-link-note">{{ t('settings.page.help_note') }}</span>
+      {{ icon('next', 'sm') }}
+    </a>
+    {% if network_session(request) %}
+    <form method="post" action="/logout" class="settings-link" data-q="{{ t('settings.page.sign_out_q') }}">
+      <span class="settings-summary-title">{{ t('settings.page.sign_out') }}</span>
+      <span class="settings-link-note">{{ t('settings.page.sign_out_note') }}</span>
+      <button type="submit" class="ghost">{{ t('settings.page.sign_out_button') }}</button>
+    </form>
+    {% endif %}
   </div>
 </div>
 {% endblock %}
