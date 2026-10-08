@@ -907,9 +907,41 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .row-wrap { position: relative; }
 .row-wrap > .row-ops { position: absolute; top: .38rem; right: .7rem; }
 summary:focus-visible, select:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+/* A2: the progress link ("3/10") lives outside <summary> too (a link inside the summary's button
+   is not reachable as a link, axe nested-interactive). It is laid over the summary with the
+   summary's own columns, so it sits where the progress cell is; the cell keeps the same words
+   unseen. Where anchor positioning is known the layer follows the summary of its own row (also
+   while the row is open); elsewhere it covers the closed row, and an open row shows the words. */
+.row-progress {
+  position: absolute; inset: 0 0 1px 0; pointer-events: none;
+  display: grid; grid-template-columns: 1.3rem minmax(0,1.6fr) 5.5rem minmax(0,1fr) minmax(9rem,1.3fr) 5rem 6.4rem;
+  gap: .35rem .7rem; align-items: center; padding: .32rem .7rem;
+}
+.row-progress > a { grid-column: 6; justify-self: start; min-width: 0; pointer-events: auto; }
+.row-wrap:has(> .row-progress) .topic-progress { visibility: hidden; }
+.row-wrap:has(> details[open]) > .row-progress { display: none; }
+.row-wrap:has(> details[open]) .topic-progress { visibility: visible; }
+@supports (anchor-scope: --row-summary) {
+  .row-wrap { anchor-scope: --row-summary; }
+  .row-wrap > details.row-edit > summary { anchor-name: --row-summary; }
+  .row-progress { position-anchor: --row-summary; top: anchor(top); bottom: anchor(bottom); left: anchor(left); right: anchor(right); }
+  .row-wrap:has(> details[open]) > .row-progress { display: grid; }
+  .row-wrap:has(> details[open]) .topic-progress { visibility: hidden; }
+}
+.progress-ghost { font-weight: 700; white-space: nowrap; color: var(--acc); }
+.progress-ghost.complete { color: var(--ok); }
 @media (max-width: 720px) {
   .row-ops-slot { display: none; }
   .row-wrap > .row-ops { top: .45rem; }
+  /* A phone shows the progress as the summary's last line: the link with its label, there. */
+  .row-progress { display: flex; align-items: flex-end; gap: 0; font-size: 13px; }
+  .row-progress::before {
+    content: attr(data-label) / ""; color: var(--mut); margin-right: .3em; flex: 0 0 auto;
+    font: 400 12px/1.5 "Segoe UI", system-ui, sans-serif;
+  }
+  @supports (anchor-scope: --row-summary) {
+    .row-wrap:has(> details[open]) > .row-progress { display: flex; }
+  }
 }
 
 /* M2: the row icons' one sprite takes no room. */

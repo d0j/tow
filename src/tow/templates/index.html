@@ -183,15 +183,22 @@
       <span class="clip addition topic-event" data-label="{{ t('home.row.event') }}" title="{{ topic.last_event_at or t('home.topic.no_events') }}">
         {%- if topic.error_line %}<span class="row-error {{ 'bad' if torrent_tone == 'bad' else 'warn' }}" title="{{ topic.last_error_human or topic.last_error }}">{{ topic.error_line }}<span class="sr-only"> {{ t('home.row.full_error') }}</span></span>{% elif topic.last_event_label %}<b>{{ topic.last_event_label }}</b> <small class="mut event-at">{{ topic.last_event_at }}</small>{% else %}<span class="mut">—</span>{% endif -%}
       </span>
+      {#- The progress link lives outside <summary> (no link inside its button, A2) and is laid
+          over this cell; the cell keeps the same words, unseen while the link covers it. -#}
+      {%- if ds.expected %}{% set progress_text = ('✓ ' if ds.is_complete else '') ~ ds.completed ~ '/' ~ ds.expected %}{% set progress_title = t('home.topic.episodes_history') %}
+      {%- elif ds.completed %}{% set progress_text = t('home.topic.files_count', n=ds.completed) %}{% set progress_title = t('home.topic.files_history') %}
+      {%- else %}{% set progress_text = '' %}{% endif %}
       <span class="progress-cell topic-progress" data-label="{{ t('home.row.progress') }}">
-        {%- if ds.expected %}<a class="download-details progress-link{% if ds.is_complete %} complete{% endif %}" href="/topics/{{ topic.id|urlencode }}/downloads.json" data-topic-id="{{ topic.id }}" title="{{ t('home.topic.episodes_history') }}">{% if ds.is_complete %}✓ {% endif %}{{ ds.completed }}/{{ ds.expected }}</a>
-        {%- elif ds.completed %}<a class="download-details progress-link" href="/topics/{{ topic.id|urlencode }}/downloads.json" data-topic-id="{{ topic.id }}" title="{{ t('home.topic.files_history') }}">{{ t('home.topic.files_count', n=ds.completed) }}</a>
+        {%- if progress_text %}<span class="progress-ghost{% if ds.is_complete %} complete{% endif %}" aria-hidden="true">{{ progress_text }}</span>
         {%- else %}<span class="mut">—</span>{% endif -%}
       </span>
       <span class="row-ops-slot" aria-hidden="true"></span>
     </summary>
     <div class="edit-panel" data-edit-src="/topics/{{ topic.id|urlencode }}/edit-panel"><p class="sub"><a href="/topics/{{ topic.id|urlencode }}/edit">{{ t('home.edit.open') }}</a></p></div>
   </details>
+  {%- if progress_text %}
+  <span class="row-progress" data-label="{{ t('home.row.progress') }}"><a class="download-details progress-link{% if ds.is_complete %} complete{% endif %}" href="/topics/{{ topic.id|urlencode }}/downloads.json" data-topic-id="{{ topic.id }}" title="{{ progress_title }}">{{ progress_text }}</a></span>
+  {%- endif %}
   <span class="row-ops">
     <a class="row-ico {{ tracker_tone }}" href="{{ topic.url }}" target="_blank" rel="noopener" title="{{ tracker_label }}" aria-label="{{ t('home.topic.site_aria_named', name=topic.series, label=tracker_label) }}">{{ icon('globe', 'sm') }}</a>
     <form method="post" action="/topics/{{ topic.id|urlencode }}/pause"><button class="row-ico{% if topic.paused %} on{% endif %}" type="submit" title="{{ pause_label }}" aria-label="{{ t('home.topic.resume_named' if topic.paused else 'home.topic.pause_named', name=topic.series) }}">{{ icon('play' if topic.paused else 'pause', 'sm') }}</button></form>

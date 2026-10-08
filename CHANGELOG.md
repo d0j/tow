@@ -27,6 +27,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   the focus and has a name.
 - Links inside sentences (notes, hints, the Guide) are underlined, not told from the text by colour alone.
 - On a phone a long topic name wraps onto the next line like the folder and the error, instead of ending in "…".
+- A Home row's progress ("3/10") is a link of its own that the keyboard and a screen reader reach; it was inside
+  the row's toggle. It looks and sits as before.
 
 ## [1.27.1] — 2026-10-08
 
