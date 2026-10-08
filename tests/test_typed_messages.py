@@ -209,3 +209,23 @@ def test_a_plural_of_a_number_too_large_for_a_float_is_the_other_form():
     assert i18n._category("ru", 21) == "one"
     stored = {"code": "notifier.common.dropped", "params": {"n": 10**400}}
     assert str(10**400) in errors.render(stored, "ru")
+
+
+def test_messages_stored_inside_messages_are_rendered_to_a_bounded_depth():
+    # A thousand stored levels (a damaged file) raised RecursionError from errors.render.
+    code = "config_error.language_unread"
+    words = i18n.t(code, "en", error="").strip()
+
+    def nested(levels: int) -> dict:
+        record: dict = {"code": "config_error.mapping", "params": {}}
+        for _ in range(levels):
+            record = {"code": code, "params": {"error": {"$msg": record}}}
+        return record
+
+    assert errors.render(nested(2), "en") == i18n.t(
+        code, "en", error=i18n.t(code, "en", error=i18n.t("config_error.mapping", "en"))
+    )
+    deep = errors.render(nested(2000), "en")
+    assert deep.count(words) == errors._MAX_NESTED_MESSAGES + 1
+    assert deep.endswith(f": {code}")  # past the bound a stored message is shown as its code
+    assert errors.render(nested(errors._MAX_NESTED_MESSAGES), "en").endswith(i18n.t("config_error.mapping", "en"))
