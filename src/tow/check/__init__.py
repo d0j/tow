@@ -8,6 +8,8 @@ reconcile with the clients and commit the result.
 - ``client_ops``: what is asked of a client (hash identity, TOW's ownership mark, read-back
   confirmation, relocation, other topics' claims) and the clients one run talks to;
 - ``reconcile``: progress and presence in the clients, and the download history's commit;
+- ``space``: a revision that does not fit on the target drive waits in its client, stopped,
+  and is started once there is room;
 - ``notices``: the messages a run sends; ``rows``: a topic's result row.
 """
 

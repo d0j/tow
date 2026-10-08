@@ -212,6 +212,16 @@ def client_unreachable(run: Any, client_id: str) -> TowError:
     return TowError("check.client_unreachable", reason=reason)
 
 
+def live_previous_overlap(client: TorrentClientAdapter, revision_hashes: list[str], files: Any) -> str:
+    """A file of ``files`` that an earlier revision still running in the client also downloads
+    ("" when none does): the new revision must not start beside it (G1)."""
+    for revision_hash in dict.fromkeys(revision_hashes):
+        overlap = _active_revision_overlap(client, revision_hash, tuple(files))
+        if overlap:
+            return overlap
+    return ""
+
+
 def assert_client_can_add(
     state: dict[str, Any],
     topic: Topic,
@@ -229,11 +239,9 @@ def assert_client_can_add(
     if conflicting_topic:
         raise TowError("check.hash_claimed", topic=conflicting_topic)
     if replaces_revision:
-        revision_hashes = [old, *[str(value) for value in topic.get("previous_hashes") or []]]
-        for revision_hash in dict.fromkeys(revision_hashes):
-            overlap = _active_revision_overlap(topic_client, revision_hash, files)
-            if overlap:
-                raise TowError(PREVIOUS_REVISION_ACTIVE, file=overlap)
+        overlap = live_previous_overlap(topic_client, [old, *map(str, topic.get("previous_hashes") or [])], files)
+        if overlap:
+            raise TowError(PREVIOUS_REVISION_ACTIVE, file=overlap)
     capabilities = topic_client.capabilities or {}
     if not all(
         capabilities.get(name) is True for name in ("stopped_add", "file_selection", "priority_readback", "start_stop")

@@ -62,6 +62,9 @@ class Topic(TypedDict, total=False):
     selected_files_truncated: bool
     selected_episode_keys: list[str]
     file_aliases: dict[str, Any]  # original path/size identities whose portable spelling differs, bound to hash
+    # the revision added stopped because its files do not fit yet (tow.check.space): hash,
+    # client, needed, free, path, since, selection, kind
+    waiting_space: dict[str, Any]
     # the latest result (the Home status colour, AGENTS.md)
     last_ok: bool
     last_ok_at: str

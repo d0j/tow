@@ -135,6 +135,7 @@ _CHECK_CLEARABLE_FIELDS = (
     "last_error_params",
     "content_token",
     "content_hash",
+    "waiting_space",
 )
 
 

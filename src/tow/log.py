@@ -406,6 +406,7 @@ HISTORY_GROUPS = {
     "downloads": frozenset(
         {
             "client_added",
+            "client_started",
             "client_updated",
             "new_file",
             "revision_updated",
