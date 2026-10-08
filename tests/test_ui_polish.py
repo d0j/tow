@@ -990,3 +990,14 @@ def test_phone_rows_keep_the_dot_in_line_and_one_label_size():
     phone = CSS[CSS.index("/* Labels come from the language catalog (data-label)") :]
     assert "grid-template-columns: auto minmax(0, 1fr)" in phone
     assert "font: 400 12px/1.5" in phone
+
+
+def test_homes_sort_order_is_remembered_on_this_device():
+    # 08.10.2026, the owner: the chosen order stays after a reload, so it is not chosen every time.
+    # Checked in Chromium: the Home icon, a reload and a new tab keep it; an order in the address wins.
+    assert 'const SORT_KEY = "tow.home.sort";' in JS
+    assert 'params.get("s") ?? storedSort() ?? ""' in JS
+    remember = JS[JS.index("const remember = () => {") :]
+    remember = remember[: remember.index("\n  };\n")]
+    assert "localStorage.setItem(SORT_KEY, sortSelect.value)" in remember
+    assert remember.count("try {") == 1  # no storage (a private window) never breaks the page
