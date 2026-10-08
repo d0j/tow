@@ -484,6 +484,29 @@ class Processes:
         return {"creationflags": 0x08000200 if new_group and hidden else 0, "close_fds": True}
 
 
+def test_the_web_servers_stderr_log_is_capped_at_its_start(monkeypatch, tmp_path):
+    # Audit 08.10.2026: serve-stderr.log was appended to at every start, for ever.
+    from tow import supervisor
+    from tow.supervisor import _spawn
+
+    monkeypatch.setattr(_os, "spawn", lambda argv, **kwargs: SimpleNamespace(pid=77))
+    monkeypatch.setattr(supervisor, "APPENDED_LOG_BYTES", 100)
+    log = tmp_path / "logs" / "serve-stderr.log"
+    log.parent.mkdir()
+    log.write_bytes(b"x" * 99)
+    _spawn(["py", "-m", "tow", "serve"], log, True)
+    assert log.read_bytes() == b"x" * 99  # under the limit: appended to
+    log.write_bytes(b"old" * 40)
+    (log.parent / "serve-stderr.log.1").write_bytes(b"older")
+    _spawn(["py", "-m", "tow", "serve"], log, True)
+    assert (log.parent / "serve-stderr.log.1").read_bytes() == b"old" * 40  # one older file is kept
+    assert log.read_bytes() == b""  # the new start writes into a new file
+    job = tmp_path / "logs" / "check-last.log"
+    job.write_bytes(b"y" * 500)
+    _spawn(["py", "-m", "tow", "check"], job, False)  # a job's log is replaced anyway
+    assert not (tmp_path / "logs" / "check-last.log.1").exists()
+
+
 def test_spawned_children_write_to_their_log_and_are_stopped_whole(monkeypatch, tmp_path):
     from tow import platform
     from tow.supervisor import _spawn, _stop

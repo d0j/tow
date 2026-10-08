@@ -207,7 +207,8 @@ blocks for long.
   the launcher's variables: the runtime layout (`<app>/..` holding `config.yaml` / `data/`, or
   `TOW_ROOT`) is resolved first and handed to every child (`TOW_HOME`, `TOW_CONFIG`, `TOW_ROOT`).
 - **Web server.** `tow serve --log-file data/logs/serve.log --parent-pid <tow run>` runs as a child
-  (stderr into `data/logs/serve-stderr.log`). `/healthz` is asked every 10 s with httpx
+  (stderr into `data/logs/serve-stderr.log`; a start that finds it at 5 MiB moves it to
+  `serve-stderr.log.1`, replacing the older one). `/healthz` is asked every 10 s with httpx
   `trust_env=False` and a 3 s timeout. A fresh server gets 90 s to answer; a server that answered
   before is "hung" after six failed probes in a row (one minute). An exit or a hang leads to a
   restart after a pause that doubles from 1 s to 5 minutes and drops back to 1 s after ten quiet
