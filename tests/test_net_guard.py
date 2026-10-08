@@ -138,19 +138,37 @@ def test_missing_private_and_mixed_answers_fail_closed(monkeypatch, addresses):
         "64:ff9b::127.0.0.1",
         "64:ff9b::c0a8:114",
         "64:ff9b::100.64.0.1",
+        "::ffff:0:c0a8:101",  # IPv4-translated 192.168.1.1 (audit 08.10.2026)
+        "::ffff:0:127.0.0.1",
+        "::ffff:0:a00:2",
     ],
 )
 def test_ipv6_forms_of_a_private_ipv4_address_fail_closed(monkeypatch, address):
-    # IPv4-compatible and NAT64 addresses count as "global" for ipaddress; their IPv4 part is not.
+    # IPv4-compatible, IPv4-translated and NAT64 addresses count as "global" for ipaddress; their
+    # IPv4 part is not.
     assert is_public(address) is False
     monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers(address))
     with pytest.raises(httpcore.ConnectError):
         public_addresses("tracker.example", 443)
 
 
-@pytest.mark.parametrize("address", ["93.184.216.34", "64:ff9b::93.184.216.34", "2606:4700::1111"])
+@pytest.mark.parametrize(
+    "address", ["93.184.216.34", "64:ff9b::93.184.216.34", "::ffff:0:93.184.216.34", "2606:4700::1111"]
+)
 def test_public_addresses_stay_public_in_every_form(address):
     assert is_public(address) is True
+
+
+@pytest.mark.parametrize(
+    "address", ["224.0.0.1", "224.0.1.1", "239.255.255.250", "ff02::1", "ff0e::1", "::ffff:224.0.1.1"]
+)
+def test_multicast_groups_are_not_public_addresses(monkeypatch, address):
+    # Audit 08.10.2026: ipaddress counts most multicast groups as global; a site name answering
+    # with one would have sent requests (and a tracker announce) to the local network.
+    assert is_public(address) is False
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers(address))
+    with pytest.raises(httpcore.ConnectError):
+        public_addresses("tracker.example", 443)
 
 
 def test_a_site_address_in_an_ipv6_form_of_the_home_network_is_internal():

@@ -56,6 +56,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   a password. Other devices may still use the computer's name.
 - Windows: TOW runs PowerShell, Task Scheduler (`schtasks`) and `taskkill` from the Windows folder
   (`%SystemRoot%\System32`), never a program of the same name that a search of PATH would find first.
+- Site, tracker and messenger addresses that resolve to a multicast group (224.0.0.0/4, ff00::/8) or to an
+  IPv4-translated IPv6 form of a home-network address (`::ffff:0:192.168.1.1`) are now refused like other
+  addresses of the home network.
 
 ## [1.27.1] — 2026-10-08
 
