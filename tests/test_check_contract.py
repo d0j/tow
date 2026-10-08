@@ -1866,8 +1866,48 @@ def test_torrent_removed_from_client_makes_the_topic_red(monkeypatch):
 
     topic = load_state()["topics"][0]
     assert topic["last_ok"] is False
-    assert topic["last_error"] == "торрент удалён из клиента"
+    assert topic["last_error"].startswith("торрент удалён из клиента")
     assert topic["last_error_class"] == "qbit"
+    assert client.add_calls == 0  # a scheduled check only reports it: the owner may have removed it
+
+
+def test_a_row_check_adds_a_removed_torrent_back(monkeypatch):
+    # The Guide: "the torrent was removed from the client - check again to add it back"; the
+    # check only said it was removed, every time.
+    client = FakeClient()
+    _wire_fake_check(monkeypatch, client)
+    events = []
+    monkeypatch.setattr(check_run, "log_event", lambda kind, **fields: events.append((kind, fields)))
+    _seed_watched_topic(selection_verified=True, selection_hash="HASH-NEW")
+
+    row = check.run_check(apply=True, notify=False, ids=["t1"], how="manual")["results"][0]
+
+    assert row["ok"] is True
+    assert row["added"] is True
+    assert client.add_calls == 1
+    assert client.present is True
+    topic = load_state()["topics"][0]
+    assert topic["hash"] == "HASH-NEW"
+    assert topic["last_ok"] is True
+    assert not topic.get("last_error")
+    assert [fields["hash"] for kind, fields in events if kind == "client_added"] == ["HASH-NEW"]
+
+
+def test_check_all_by_hand_does_not_add_a_removed_torrent_back(monkeypatch):
+    client = FakeClient()
+    _wire_fake_check(monkeypatch, client)
+
+    def removed(topic, adapter, history, now):
+        history.setdefault("topics", {})[str(topic["id"])] = {"items": {}, "client_present": False}
+        return {"events": [], "summary": {}}
+
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", removed)
+    _seed_watched_topic()
+
+    check.run_check(apply=True, notify=False, how="manual")
+
+    assert client.add_calls == 0
+    assert load_state()["topics"][0]["last_error_code"] == "check.removed_from_client"
 
 
 def test_blocked_check_keeps_the_last_known_client_and_bot_status():

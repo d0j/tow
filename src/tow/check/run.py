@@ -379,6 +379,9 @@ def _run_check(
         history_retention=download_history.retention(cfg),
         remote_clients=remote_clients(cfg, secrets),
         secrets_stamp=secrets_stamp,
+        # A row's check (the owner chose these topics) puts a removed torrent back; Check all
+        # and the scheduled checks only report it.
+        readd_removed=how == "manual" and ids is not None,
     )
     results: list[CheckRow] = []
     for topic in topics_of(state):
