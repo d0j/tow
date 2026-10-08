@@ -20,10 +20,13 @@ MAX_PATH_CHARS = 4096
 
 _WINDOWS_DEVICE = re.compile(r"^(?:con|prn|aux|nul|clock\$|com[1-9]|lpt[1-9])(?:\..*)?$", re.IGNORECASE)
 _WINDOWS_FORBIDDEN = str.maketrans(dict.fromkeys('<>:"|?*', "_"))
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
 
 
 def parse_magnet_hashes(value: str) -> tuple[frozenset[str], frozenset[str]] | None:
     """Return unique BTIH and BEP 52 SHA-256 hashes from a magnet URI."""
+    if _LONE_SURROGATE.search(value):  # no link can carry one: it cannot even be percent-encoded
+        return None
     try:
         parsed = urlsplit(value)
     except ValueError:

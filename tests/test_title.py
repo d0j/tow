@@ -114,3 +114,14 @@ def test_auto_title_keeps_every_name_and_drops_only_the_site(raw, expected):
     from tow.title import _drop_site_bits
 
     assert _drop_site_bits(raw) == expected
+
+
+def test_half_a_character_on_a_page_never_reaches_the_state():
+    # A lone surrogate in tracker_title made save_state refuse the run's whole state.
+    from tow.store import load_state, save_state
+
+    title = title_from_html("<html><head><title>Show \udfff :: RuTracker.org</title></head><h1>Show \udfff</h1></html>")
+    assert title == "Show �"
+    assert title_from_html("<title>Show \ud800 S01</title>") == "Show � S01"
+    save_state({"topics": [{"id": "a", "tracker_title": title}], "mirrors": {}})
+    assert load_state()["topics"][0]["tracker_title"] == "Show �"

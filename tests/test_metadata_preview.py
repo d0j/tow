@@ -287,6 +287,23 @@ def test_invalid_tracker_identity_does_not_reach_native_client(monkeypatch):
     assert calls == []
 
 
+def test_a_magnet_with_half_a_character_is_refused_before_the_client(monkeypatch):
+    # "&xt=\udfff" was ignored as an unknown xt and then broke quote() with a UnicodeEncodeError.
+    from tow.torrent import parse_magnet_hashes, preview_magnet
+
+    broken = f"magnet:?xt=urn:btih:{META.hash_v1}&xt=\udfff"
+    assert parse_magnet_hashes(broken) is None
+    assert preview_magnet(broken, lambda _tracker: True) is None
+    named = f"magnet:?xt=urn:btih:{META.hash_v1}&dn=Сериал А"  # other non-ASCII text stays fine
+    assert preview_magnet(named, lambda _tracker: True) == f"magnet:?xt=urn:btih:{META.hash_v1}"
+    calls, _, tracker = service_fixture(monkeypatch)
+    tracker.fetch_magnet = lambda *_args, **_kwargs: (broken, META.hash_v1)
+    with pytest.raises(TowError) as error:
+        services.prepare_magnet_content(URL, "main")
+    assert error.value.code == "content.magnet_failed"
+    assert calls == []
+
+
 def test_web_native_preparation_is_only_an_explicit_post(monkeypatch):
     calls = []
     monkeypatch.setattr(
