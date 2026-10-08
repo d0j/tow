@@ -23,6 +23,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   and a page title with half a character lost the check results of every topic.
 - A magnet link on a topic page with half a character in it is refused before the torrent client ("could not get the
   file list") instead of a server error when the files are listed.
+- A topic page with a link that has no valid address (`http://[x/...`) no longer makes filling in a new site from
+  its topic link fail with a server error; a topic link the parser refuses gives no title instead of an error.
 
 ## [1.28.0] — 2026-10-08
 

@@ -52,9 +52,16 @@ def _drop_site_bits(s: str) -> str:
     return _clean(s)
 
 
+def _path(url: str) -> str:
+    """The link's path; "" for a link the parser refuses ("http://[x/...": no address)."""
+    try:
+        return urlparse((url or "").strip()).path or ""
+    except ValueError:
+        return ""
+
+
 def title_from_url_slug(url: str) -> str:
-    p = urlparse((url or "").strip())
-    parts = [unquote(x) for x in p.path.split("/") if x]
+    parts = [unquote(x) for x in _path(url).split("/") if x]
     if not parts:
         return ""
     last = parts[-1]
@@ -101,13 +108,12 @@ def title_is_placeholder(title: str | None, url: str) -> bool:
     slug = title_from_url_slug(u)
     if slug and _norm(t) == _norm(slug):
         return True
-    path = unquote(urlparse(u).path or "")
+    path = unquote(_path(u))
     return bool(_norm(t) and _norm(t) in _norm(path) and not re.search(r"[а-яё]", t.lower()))
 
 
 def looks_like_download_url(url: str) -> bool:
-    p = urlparse((url or "").strip())
-    path = p.path or ""
+    path = _path(url)
     if path.lower().endswith(".torrent"):
         return True
     return bool(_DOWNLOAD_PATH.search(path))

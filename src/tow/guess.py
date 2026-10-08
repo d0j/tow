@@ -180,7 +180,10 @@ def download_path_from_page(guessed: dict[str, Any], url: str, page: str) -> dic
     except re.error:
         return guessed
     for found in _HREF.finditer(link_text(page)):
-        target = urlparse(urljoin(url, html.unescape(found.group(1)).strip()))
+        try:
+            target = urlparse(urljoin(url, html.unescape(found.group(1)).strip()))
+        except ValueError:  # "http://[x/dl.php?t=1": no address at all, not the site's link
+            continue
         if origin_key(target.geturl()) != origin_key(url):
             continue  # another host's link: TOW downloads from the site's own mirrors
         relative = target.path + (f"?{target.query}" if target.query else "")
@@ -217,9 +220,14 @@ def guess_site(url: str) -> dict[str, Any]:
     guessed = guess_from_url(url)
     # A known site's own rules know its links; only a guessed forum's are read from its page.
     if guessed.get("page_download") and presets.get(str(guessed.get("name") or "")) is None:
-        page = _topic_page(canon_watch_url(url))
-        if page:
-            guessed = download_path_from_page(guessed, url, page)
+        try:
+            page = _topic_page(canon_watch_url(url))
+            if page:
+                guessed = download_path_from_page(guessed, url, page)
+        except GuessError:
+            raise
+        except ValueError as exc:  # a link the parser refuses: said in words, never a server error
+            raise GuessError("guess.invalid_url") from exc
     return guessed
 
 
