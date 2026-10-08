@@ -25,6 +25,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   a screen reader reads a timer's meaning from its text instead of a label rewritten every second.
 - The log in the header and in Settings and the episodes list can be scrolled with the keyboard: each box takes
   the focus and has a name.
+- Links inside sentences (notes, hints, the Guide) are underlined, not told from the text by colour alone.
 
 ## [1.27.1] — 2026-10-08
 
