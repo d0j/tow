@@ -7,6 +7,7 @@ import html
 import ipaddress
 import logging
 import re
+from itertools import islice
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
 
@@ -166,6 +167,9 @@ def _number_guess(parts: UrlParts) -> dict[str, Any]:
 
 _HREF = re.compile(r"""href\s*=\s*["']([^"'<>]+)["']""", re.IGNORECASE)
 _DEFAULT_DOWNLOAD_HREF = r"(?:download|dl)\.php\?(?:id|t)=(\d+)"
+# How many links of a topic page are looked at: a forum page has a few hundred; a page of
+# nothing but links (2 MiB of them took 2.5 s) gives no download link anyway.
+_MAX_PAGE_LINKS = 5000
 
 
 def download_path_from_page(guessed: dict[str, Any], url: str, page: str) -> dict[str, Any]:
@@ -179,7 +183,7 @@ def download_path_from_page(guessed: dict[str, Any], url: str, page: str) -> dic
         pattern = re.compile(str(guessed.get("download_href_regex") or _DEFAULT_DOWNLOAD_HREF), re.IGNORECASE)
     except re.error:
         return guessed
-    for found in _HREF.finditer(link_text(page)):
+    for found in islice(_HREF.finditer(link_text(page)), _MAX_PAGE_LINKS):
         try:
             target = urlparse(urljoin(url, html.unescape(found.group(1)).strip()))
         except ValueError:  # "http://[x/dl.php?t=1": no address at all, not the site's link
