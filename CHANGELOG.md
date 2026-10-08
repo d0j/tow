@@ -42,7 +42,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Edit offers the same choices, in the same words, as Add; the event's time sits under the event.
 - The header search closes with Escape or a click elsewhere; the Log and Downloads windows are as tall as their
   lines and close with the same icon; an empty History says where routine events are.
-- Settings → TOW service says when this account's autostart belongs to another TOW folder, as Diagnostics does.
+- Settings → TOW service says when this account's autostart belongs to another TOW folder, as Diagnostics does;
+  Diagnostics says "Not set" and "Not connected" instead of a bare "No".
 - Layout: check boxes in line with their labels, the backup Save button and pills at their own width, a site's
   mirrors clear of its icons on a phone, long help patterns wrap, Diagnostics cards spaced, the version badge
   steps aside for pills and comes last in the Tab order.
