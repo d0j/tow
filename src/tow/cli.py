@@ -133,6 +133,8 @@ def _build_parser() -> argparse.ArgumentParser:
     c.add_argument("--manual", action="store_true", help=argparse.SUPPRESS)
     # G2: the progress pass of `tow run` - completions from the torrent client only, no tracker requests.
     c.add_argument("--progress-only", action="store_true", help=argparse.SUPPRESS)
+    # The space pass of `tow run`: topics waiting in the client for disk space, client only.
+    c.add_argument("--space-only", action="store_true", help=argparse.SUPPRESS)
     scope = c.add_mutually_exclusive_group()
     scope.add_argument("--global-only", action="store_true", help=argparse.SUPPRESS)
     scope.add_argument("--timer-only", action="store_true", help=argparse.SUPPRESS)
@@ -511,7 +513,8 @@ def _cmd_check(args: argparse.Namespace) -> int:
 
     check_state_version()  # a newer TOW's state.json: refused before anything is recorded
     apply = bool(args.apply) and not args.dry_run
-    how = "manual" if args.manual else "progress" if args.progress_only else "timer" if args.timer_only else "auto"
+    background = args.progress_only or args.space_only
+    how = "manual" if args.manual else "progress" if background else "timer" if args.timer_only else "auto"
     try:
         out = run_check(
             apply=apply,
@@ -519,6 +522,7 @@ def _cmd_check(args: argparse.Namespace) -> int:
             how=how,
             progress_only=args.progress_only,
             scheduled_scope="global" if args.global_only else "timer" if args.timer_only else "",
+            space_only=args.space_only,
         )
     except SecretStoreError as exc:
         if apply:

@@ -1945,11 +1945,20 @@ def test_watched_range_in_the_future_waits_instead_of_failing(monkeypatch, track
         assert topic["last_error_code"] == "selection.not_out_yet"
 
 
-def test_an_add_that_cannot_fit_is_refused_before_the_client(monkeypatch, tmp_path):
-    # G6: a torrent larger than the free space was handed to qBittorrent anyway.
+def test_an_add_that_cannot_fit_is_added_stopped_and_waits(monkeypatch, tmp_path):
+    # G6: a torrent larger than the free space was handed to qBittorrent anyway; later it was
+    # refused, and its .torrent fetched again on every check. Now it waits in the client, stopped.
     import shutil
 
     client = FakeClient()
+    starts: list[bool] = []
+    real_add = client.add_torrent_selected
+
+    def add(content, save_path, infohash, selected_indices, *, start=True):
+        starts.append(start)
+        return real_add(content, save_path, infohash, selected_indices)
+
+    client.add_torrent_selected = add
     _wire_fake_check(monkeypatch, client)
     big = TorrentFile(0, "Show.mkv", 50 * 1024**3)
     monkeypatch.setattr(
@@ -1958,15 +1967,20 @@ def test_an_add_that_cannot_fit_is_refused_before_the_client(monkeypatch, tmp_pa
         lambda _blob: SimpleNamespace(infohash="HASH-NEW", client_hash="HASH-NEW", name="Show", files=(big,)),
     )
     monkeypatch.setattr(shutil, "disk_usage", lambda _p: SimpleNamespace(total=0, used=0, free=10 * 1024**3))
-    _seed_watched_topic(hash="", save_path=str(tmp_path))
+    monkeypatch.setattr("tow.folders.seen_from_here", lambda _p: True)  # M: is this computer's drive
+    _seed_watched_topic(hash="")
 
     row = check.run_check(apply=True, notify=False, how="test")["results"][0]
 
-    assert client.add_calls == 0
+    assert client.add_calls == 1
+    assert starts == [False]
     assert row["ok"] is False
-    assert row["error"].startswith("мало места на диске: нужно 50,0 ГБ, свободно 10,0 ГБ")
+    assert row["error"].startswith("ждёт места на диске: не хватает 40,5 ГБ (нужно 50,0 ГБ, свободно 10,0 ГБ")
     assert row["error_record"]["params"]["needed"] == 50.0
-    assert load_state()["topics"][0]["last_error_class"] == "disk"
+    topic = load_state()["topics"][0]
+    assert topic["last_error_class"] == "disk"
+    assert topic["hash"] == "HASH-NEW"
+    assert topic["waiting_space"]["hash"] == "HASH-NEW"
 
 
 def test_a_daily_limit_is_kept_until_the_next_local_day(monkeypatch):

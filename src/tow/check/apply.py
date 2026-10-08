@@ -1,19 +1,24 @@
 """Bring the client in line with a topic's revision: add it with its file selection, change
 the selection of TOW's torrent already there, or verify it untouched - each confirmed by
-read-back before it counts. A new add must fit on the target drive."""
+read-back before it counts. A new add whose files do not fit on the target drive is added
+stopped and waits for room (``tow.check.space``)."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from tow.check import space
 from tow.check.client_ops import (
+    PREVIOUS_REVISION_ACTIVE,
     assert_client_can_add,
     client_unreachable,
-    confirm_client_add,
     info_confirms,
     info_is_pending_tow_add,
     info_owned_by_tow,
+    live_previous_overlap,
 )
+from tow.check.space import FREE_SPACE_MARGIN, Shortfall
 from tow.check_steps import client_identities, is_owned_add_recovery, store_revision
 from tow.clients.spec import TorrentClientAdapter
 from tow.errors import TowError
@@ -25,66 +30,44 @@ from tow.records import Topic, topics_of
 if TYPE_CHECKING:
     from tow.check.topic import CheckRun, Fetched, TopicCheck
 
-
-# Keep this much free beyond the torrent itself (temporary files, other downloads).
-FREE_SPACE_MARGIN = 512 * 1024 * 1024
+__all__ = ["FREE_SPACE_MARGIN", "apply_revision", "free_space_problem"]
 
 
-def _bytes_already_there(dest: str, file: Any, name: str, is_multi: bool) -> int:
-    """How much of ``file`` already lies in ``dest`` (the client keeps it and adds only the rest).
-
-    A multi-file torrent lands in ``dest/<name>/`` (or straight in ``dest/`` when the client
-    creates no subfolder); a single file is ``dest/<name>``.
-    """
-    from pathlib import Path
-
+def _where_it_may_lie(dest: str, file: Any, name: str, is_multi: bool) -> tuple[Path, ...]:
+    """Where ``file`` lies when it is already in ``dest`` (the client keeps it and adds only the
+    rest): a multi-file torrent lands in ``dest/<name>/`` (or straight in ``dest/`` when the
+    client creates no subfolder); a single file is ``dest/<name>``."""
     relative = Path(*str(file.path).replace("\\", "/").split("/"))
-    candidates = [Path(dest) / name / relative, Path(dest) / relative] if is_multi and name else [Path(dest) / relative]
-    for candidate in candidates:
-        try:
-            if candidate.is_file():
-                return min(int(candidate.stat().st_size), int(getattr(file, "size", 0) or 0))
-        except OSError, ValueError:
-            continue
-    return 0
+    return (Path(dest) / name / relative, Path(dest) / relative) if is_multi and name else (Path(dest) / relative,)
 
 
 def free_space_problem(
     dest: str, files: tuple[Any, ...], selected_indices: Any, *, name: str = "", is_multi: bool = False
-) -> TowError | None:
-    """G6: refuse an add that cannot fit on the target drive. Unknown free space (the
-    folder is on another machine or not reachable from here) does not block.
+) -> Shortfall | None:
+    """G6: the selected files do not fit on the target drive (None: they do, or it cannot be
+    known - the folder is on another machine or not reachable from here).
 
     Only NEW bytes count (M5): files of the selection already in the folder (a new revision
-    of a season whose earlier episodes are there) are not downloaded again. The sizes are kept
-    as numbers: the reader's language writes their decimal sign.
+    of a season whose earlier episodes are there) are not downloaded again.
     """
-    import shutil
-    from pathlib import Path
-
     wanted = set(selected_indices or ())
     selected = [f for f in files if f.index in wanted and not getattr(f, "is_pad", False)]
-    needed = sum(int(getattr(f, "size", 0) or 0) for f in selected)
-    if needed <= 0:
-        return None
-    from tow.folders import seen_from_here
+    return space.measure(
+        dest, ((_where_it_may_lie(dest, f, name, is_multi), int(getattr(f, "size", 0) or 0), 0) for f in selected)
+    )
 
-    probe = Path(dest)
-    if not seen_from_here(dest):
-        return None  # /downloads of a remote client, or a drive this PC does not have
-    needed -= sum(_bytes_already_there(dest, f, name, is_multi) for f in selected)
-    if needed <= 0:
+
+def _shortfall(run: CheckRun, client_id: str, dest: str, metadata: Any, plan: Any) -> Shortfall | None:
+    """Whether the plan's files do not fit; a client on another computer is never judged here."""
+    if client_id in run.remote_clients:
         return None
-    while not probe.exists() and probe.parent != probe:
-        probe = probe.parent
-    try:
-        free = shutil.disk_usage(probe).free
-    except OSError:
-        return None
-    if needed + FREE_SPACE_MARGIN <= free:
-        return None
-    gib = 1024**3
-    return TowError("check.low_disk", needed=round(needed / gib, 1), free=round(free / gib, 1), path=str(probe))
+    return free_space_problem(
+        dest,
+        metadata.files,
+        plan.selected_indices,
+        name=str(getattr(metadata, "name", "") or ""),
+        is_multi=bool(getattr(metadata, "is_multi", False)),
+    )
 
 
 def _accept_existing_torrent(
@@ -158,21 +141,16 @@ def _add_new_revision(
     operation_id: str,
     client_id: str,
 ) -> str:
-    """Add the revision with its file selection, confirm it by read-back, log and notify.
+    """Add the revision with its file selection, confirm it by read-back, log and notify. Files
+    that do not fit yet: added stopped, and the topic waits for room (the owner hears that).
 
     Returns the hash the client actually registered (a hybrid may come back as its v1 hash).
     """
-    if client_id not in run.remote_clients and (
-        problem := free_space_problem(
-            dest,
-            metadata.files,
-            plan.selected_indices,
-            name=str(getattr(metadata, "name", "") or ""),
-            is_multi=bool(getattr(metadata, "is_multi", False)),
-        )
-    ):
-        raise problem
-    added_info = topic_client.add_torrent_selected(blob, dest, h, plan.selected_indices)
+    shortfall = _shortfall(run, client_id, dest, metadata, plan)
+    if shortfall is None:
+        added_info = topic_client.add_torrent_selected(blob, dest, h, plan.selected_indices)
+    else:
+        added_info = topic_client.add_torrent_selected(blob, dest, h, plan.selected_indices, start=False)
     resolved_hash = str((added_info or {}).get("hash") or "").upper()
     if resolved_hash:
         if resolved_hash not in client_identities(metadata):
@@ -181,10 +159,12 @@ def _add_new_revision(
             h = resolved_hash
             row["hash"] = h
             row["client_hash_legacy_v1"] = bool(h == str(getattr(metadata, "hash_v1", None) or "").upper())
-    if not confirm_client_add(topic_client, h, dest, require_tow_ownership=True):
+    added = topic_client.inspect_torrent(h)  # the read-back: one read for the mark, folder and files
+    if not info_confirms(added, h, dest, require_tow_ownership=True):
         raise TowError("check.add_unconfirmed")
     row["added"] = True
     row["status"] = "succeeded"
+    kind = "updated" if old and h != old else "added"
     run.record(
         "client_added",
         operation_id=operation_id,
@@ -203,16 +183,15 @@ def _add_new_revision(
         tracking_mode=policy["tracking_mode"],
         selected_files_preview=list(plan.selected_files[:20]),
         selection_truncated=len(plan.selected_files) > 20,
+        started=shortfall is None,
         status="succeeded",
         how=run.how,
     )
-    if run.notify:
-        run.queue_notification(
-            topic,
-            kind="updated" if old and h != old else "added",
-            operation_id=operation_id,
-            tracker=str(row.get("tracker") or ""),
-        )
+    if shortfall is not None:
+        # Not started: "added" is told when TOW starts it; now the owner hears the wait.
+        space.wait_for_space(topic, run, row, h=h, client_id=client_id, info=added, shortfall=shortfall, kind=kind)
+    elif run.notify:
+        run.queue_notification(topic, kind=kind, operation_id=operation_id, tracker=str(row.get("tracker") or ""))
     return h
 
 
@@ -236,6 +215,7 @@ def _update_client_selection(
     topic_client: TorrentClientAdapter,
     *,
     blob: bytes,
+    metadata: Any,
     h: str,
     old: str,
     dest: str,
@@ -247,7 +227,8 @@ def _update_client_selection(
     pending_recovery: bool,
 ) -> None:
     """Apply a new file selection to a TOW-owned torrent already in the client, or finish
-    an add an earlier run left pending (``resume``); confirm by read-back, log, notify."""
+    an add an earlier run left pending (``resume``); confirm by read-back, log, notify. A
+    torrent waiting for disk space starts when the new selection fits, else it keeps waiting."""
     info = topic_client.inspect_torrent(h)  # one read for the mark and the folder
     if not info_owned_by_tow(info, h):
         raise TowError("check.not_owned_priorities")
@@ -255,8 +236,18 @@ def _update_client_selection(
         raise TowError("check.save_path_unconfirmed")
     owned_add_recovery = h != old and (is_owned_add_recovery(topic) or _unrecorded_own_add(run.state, topic, h))
     completed_pending_add = resume or owned_add_recovery
-    topic_client.configure_torrent_selection(blob, h, plan.selected_indices, ensure_started=completed_pending_add)
-    if not confirm_client_add(topic_client, h, dest, require_tow_ownership=True):
+    waiting = space.waiting_for(topic, h)
+    shortfall = _shortfall(run, client_id, dest, metadata, plan) if waiting is not None else None
+    if waiting is not None and shortfall is None:
+        revisions = [str(value) for value in topic.get("previous_hashes") or []]
+        if overlap := live_previous_overlap(topic_client, revisions, metadata.files):
+            raise TowError(PREVIOUS_REVISION_ACTIVE, file=overlap)
+    starts_waiting = waiting is not None and shortfall is None
+    topic_client.configure_torrent_selection(
+        blob, h, plan.selected_indices, ensure_started=completed_pending_add or starts_waiting
+    )
+    after = topic_client.inspect_torrent(h)
+    if not info_confirms(after, h, dest, require_tow_ownership=True):
         raise TowError("check.selection_unconfirmed")
     row["added"] = completed_pending_add
     row["selection_updated"] = not completed_pending_add
@@ -290,6 +281,12 @@ def _update_client_selection(
             operation_id=operation_id,
             tracker=str(row.get("tracker") or ""),
         )
+    if waiting is not None:
+        kind = str(waiting.get("kind") or "added")
+        if shortfall is not None:
+            space.wait_for_space(topic, run, row, h=h, client_id=client_id, info=after, shortfall=shortfall, kind=kind)
+        else:
+            space.started(topic, run, row, h=h, client_id=client_id, kind=kind)
 
 
 def apply_revision(
@@ -365,6 +362,8 @@ def apply_revision(
         once=policy["tracking_mode"] == "once",
         files=metadata.files,
     )
+    if not row.get("waiting_space"):
+        space.forget(topic)  # a revision handed over and running: nothing waits any more
     if migrates:
         row["hash_identity_from"] = old  # reconcile relabels the history (B7)
 
@@ -429,6 +428,7 @@ def _hand_to_client(
             row,
             client,
             blob=fetched.blob,
+            metadata=metadata,
             h=h,
             old=old,
             dest=dest,

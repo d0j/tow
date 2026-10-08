@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from tow import check_transaction, download_history
-from tow.check import rows
+from tow.check import rows, space
 from tow.check.client_ops import ClientPool, remote_clients
 from tow.check.notices import RunNotifications, flush_notifications
 from tow.check.reconcile import reconcile_and_commit, reconcile_preview
@@ -124,8 +124,12 @@ def run_check(
     progress_only: bool = False,
     wait: bool = True,
     scheduled_scope: str = "",
+    space_only: bool = False,
 ) -> dict[str, Any]:
     """Run one check; applying checks never overlap (scheduled, progress, web, CLI).
+
+    ``space_only``: the supervisor's space pass - only the topics whose revision waits in the
+    client for disk space, asked of the client alone (``tow.check.space``), no site traffic.
 
     ``wait=False`` (web requests): raise ``CheckBusyError`` at once when another applying
     check runs, instead of holding the request - and every page behind it - for minutes.
@@ -135,7 +139,7 @@ def run_check(
     edits in the web UI, the watchdog and the night copy are not held up by network time;
     edits made meanwhile are kept (``merge_check_results``).
     """
-    if scheduled_scope not in {"", "global", "timer"} or (progress_only and scheduled_scope):
+    if scheduled_scope not in {"", "global", "timer"} or ((progress_only or space_only) and scheduled_scope):
         raise ValueError("invalid scheduled check scope")
     if not apply:
         return _run_check(
@@ -146,6 +150,7 @@ def run_check(
             how=how,
             progress_only=progress_only,
             scheduled_scope=scheduled_scope,
+            space_only=space_only,
         )
     with check_run_lock(wait=wait):
         return _run_check(
@@ -156,6 +161,7 @@ def run_check(
             how=how,
             progress_only=progress_only,
             scheduled_scope=scheduled_scope,
+            space_only=space_only,
         )
 
 
@@ -256,9 +262,14 @@ def _commit_run_state(result: _RunResult, history_rebuilt: bool = False) -> None
     save_state(disk)
 
 
-def _wanted_ids(state: dict[str, Any], ids: list[str] | None, scheduled_scope: str) -> set[str] | None:
+def _wanted_ids(
+    state: dict[str, Any], ids: list[str] | None, scheduled_scope: str, *, space_only: bool = False
+) -> set[str] | None:
     """The topics this run checks (None: all of them)."""
     want = {str(x) for x in ids} if ids is not None else None
+    if space_only:
+        waiting = {str(topic.get("id")) for topic in space.waiting_topics(state)}
+        want = waiting if want is None else want & waiting
     if scheduled_scope:
         from tow.supervisor import layout
         from tow.topic_timers import batch_ids, interval_of
@@ -297,6 +308,7 @@ def _run_check(
     how: str = "auto",
     progress_only: bool = False,
     scheduled_scope: str = "",
+    space_only: bool = False,
 ) -> dict[str, Any]:
     cfg = load_config()
     secrets, secrets_stamp = read_secrets()
@@ -313,7 +325,7 @@ def _run_check(
         if apply:
             log_event(kind, **fields)
 
-    want = _wanted_ids(state, ids, scheduled_scope)
+    want = _wanted_ids(state, ids, scheduled_scope, space_only=space_only)
     default_id = client_factory.default_client_id(cfg)
     pool = ClientPool(
         cfg=cfg,
@@ -373,7 +385,12 @@ def _run_check(
         if want is not None and str(topic.get("id")) not in want:
             continue
         # G2: a progress-only pass asks qBittorrent alone - no tracker traffic at all.
-        results.append(_progress_only_row(topic) if progress_only else check_topic(topic, run))
+        if space_only:
+            row = _progress_only_row(topic)
+            space.space_pass_row(topic, run, row)
+            results.append(row)
+        else:
+            results.append(_progress_only_row(topic) if progress_only else check_topic(topic, run))
     secrets = run.secrets  # the per-topic step may have re-read tracker cookies
     pool.queue_recovered()
     if not apply:

@@ -74,7 +74,7 @@ def _calls() -> dict[str, set[str | None]]:
 def test_the_scan_sees_the_raise_sites():
     codes = _calls()
     assert len(codes) > 100
-    for code in ("selection.too_long", "tracker.no_download_link", "client.managed.not_visible", "check.low_disk"):
+    for code in ("selection.too_long", "tracker.no_download_link", "client.managed.not_visible", "check.waiting_space"):
         assert code in codes
     assert "client.qbittorrent.webapi_too_old" in codes  # a plugin's own error
 

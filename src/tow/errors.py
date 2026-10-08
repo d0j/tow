@@ -67,6 +67,8 @@ CLASSES: dict[str, str] = {
     "check.save_path_unconfirmed": "qbit",
     "check.selection_unconfirmed": "qbit",
     "check.low_disk": "disk",
+    "check.waiting_space": "disk",
+    "check.start_unconfirmed": "qbit",
     "check.daily_limit": "quota",
     "check.frozen": "frozen",
     "check.no_tracker": "no_tracker",

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any, NamedTuple
 
 from tow import download_history
+from tow.check import space
 from tow.check.apply import apply_revision
 from tow.check.client_ops import confirm_client_add, magnet_matches_saved_hash
 from tow.check.rows import set_error, stamp_result
@@ -344,13 +345,25 @@ def check_topic(topic: Topic, run: CheckRun) -> CheckRow:
     row["client_kind"] = topic_client.client_kind if topic_client is not None else None
     work = TopicCheck(topic, run, tr, url, row, old, client_id, topic_client, started=started)
     try:
-        _check_revision(work)
+        if not _waits_for_space(work):
+            _check_revision(work)
     except TorrentPathConflictError:
         _topic_failed(work, TowError("content.path_conflict"))
     except Exception as error:  # noqa: BLE001 - any failure of one topic is its result, never the run's end
         _topic_failed(work, error)
     stamp_result(topic, row)
     return row
+
+
+def _waits_for_space(work: TopicCheck) -> bool:
+    """The topic's revision waits in the client for disk space (``tow.check.space``): only the
+    client is asked - the site's .torrent is not downloaded again, nothing is added again.
+    False: the check goes on as always (it was started now, or the waiting ended; a new file
+    selection of the owner is applied by the check, which starts it when it fits)."""
+    topic = work.topic
+    if not topic.get("waiting_space") or topic.get("selection_dirty"):
+        return False
+    return space.recheck(topic, work.run, work.row, work.client, work.client_id) == space.WAITING
 
 
 def _check_revision(work: TopicCheck) -> None:

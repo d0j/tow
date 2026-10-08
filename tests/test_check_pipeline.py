@@ -73,9 +73,10 @@ class Client:
             "files": [{"index": 0, "name": "Show/e01.mkv", "size": 1, "priority": 1}],
         }
 
-    def add_torrent_selected(self, content, save_path, h, selected):
+    def add_torrent_selected(self, content, save_path, h, selected, *, start=True):
         self.adds.append((h, save_path))
         self.put(h, save_path, tags=["tow"])
+        self.started = start
         return {"hash": h}
 
     def configure_torrent_selection(self, content, h, selected, *, ensure_started=False):
@@ -146,19 +147,21 @@ def test_torrent_with_the_tow_mark_already_there_is_accepted(monkeypatch, stores
 @pytest.mark.parametrize(("host", "remote"), [("192.168.1.5", True), ("127.0.0.1", False), ("", False)])
 def test_free_space_is_judged_only_for_a_client_on_this_computer(monkeypatch, stores, host, remote):
     """A remote client's /downloads whose top folder also exists here was measured on this
-    computer's disk (and could refuse the add with "not enough space")."""
-    from tow.errors import TowError
+    computer's disk (and could hold the add back with "not enough space")."""
+    from tow.check.space import Shortfall
     from tow.store import save_secrets
 
     save_secrets({"qbittorrent": {"host": host}})
     save_state({"topics": [_topic(hash=OLD)]})
     client = Client()
     _wire(monkeypatch, {"main": client}, Tracker())
-    full = TowError("check.low_disk", needed=1.0, free=0.1, path="/media")
+    full = Shortfall(needed=1024**3, free=10, path="/media")
     monkeypatch.setattr(check_apply, "free_space_problem", lambda *a, **k: full)
     row = check.run_check(apply=True, notify=False, how="test")["results"][0]
     assert row["ok"] is remote
-    assert client.adds == ([(NEW, "/media/tv")] if remote else [])
+    assert client.adds == [(NEW, "/media/tv")]
+    assert client.started is remote  # on this computer: added stopped, waiting for room
+    assert ("waiting_space" in load_state()["topics"][0]) is not remote
 
 
 @pytest.mark.parametrize(

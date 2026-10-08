@@ -1,0 +1,381 @@
+"""A revision whose selected files do not fit on the target drive (G6): added stopped with its
+file selection and confirmed, then started by TOW itself once there is room - without a new
+.torrent download while it waits. Fake site, fake client, synthetic sizes."""
+
+from __future__ import annotations
+
+import shutil
+from types import SimpleNamespace
+from typing import Any, ClassVar
+
+import pytest
+
+from tow import check
+from tow.check import notices as check_notices
+from tow.check import reconcile as check_reconcile
+from tow.check import run as check_run
+from tow.check import space
+from tow.check import topic as topic_step
+from tow.clients import factory as client_factory
+from tow.store import load_state, save_download_history, save_secrets, save_state
+from tow.torrent import TorrentFile
+
+OLD, NEW = "A" * 40, "B" * 40
+GIB = 1024**3
+FILES = (TorrentFile(0, "Show/e01.mkv", 30 * GIB), TorrentFile(1, "Show/e02.mkv", 20 * GIB))
+
+
+class Tracker:
+    name = "fake"
+
+    def __init__(self) -> None:
+        self.fetches = 0
+
+    def fetch_torrent(self, url, secrets, ua, *, ignore_cool=False, persist=True):
+        self.fetches += 1
+        return b"torrent"
+
+    def fetch_title(self, url, secrets, ua, *, ignore_cool=False, persist=True):
+        return "Show"
+
+
+class Client:
+    """Keeps torrents per hash with their state, files, priorities and TOW's mark."""
+
+    client_id = "main"
+    client_kind = "fake"
+    capabilities: ClassVar[dict[str, bool]] = {
+        "inspect": True,
+        "add": True,
+        "stopped_add": True,
+        "file_selection": True,
+        "priority_readback": True,
+        "start_stop": True,
+    }
+
+    def __init__(self) -> None:
+        self.files = FILES
+        self.torrents: dict[str, dict[str, Any]] = {}
+        self.adds: list[tuple[str, bool]] = []
+        self.starts: list[str] = []
+
+    def ping(self) -> str:
+        return "ok"
+
+    def has_hash(self, h):
+        return h in self.torrents
+
+    def inspect_torrent(self, h):
+        torrent = self.torrents.get(h)
+        return None if torrent is None else {**torrent, "files": [dict(row) for row in torrent["files"]]}
+
+    def _wanted(self, h: str, selected) -> None:
+        for row in self.torrents[h]["files"]:
+            row["priority"] = 1 if row["index"] in set(selected) else 0
+
+    def add_torrent_selected(self, content, save_path, h, selected, *, start=True):
+        self.adds.append((h, start))
+        files = [{"index": f.index, "name": f.path, "size": f.size, "progress": 0.0, "priority": 1} for f in self.files]
+        self.torrents[h] = {"hash": h, "save_path": save_path, "state": "stoppedDL", "tags": ["tow"], "files": files}
+        self._wanted(h, selected)
+        if start:
+            self.torrents[h]["state"] = "downloading"
+        return {"hash": h}
+
+    def configure_torrent_selection(self, content, h, selected, *, ensure_started=False):
+        was_stopped = self.torrents[h]["state"].startswith("stopped")
+        self._wanted(h, selected)
+        if ensure_started or not was_stopped:
+            self.torrents[h]["state"] = "downloading"
+        return self.inspect_torrent(h)
+
+    def start_owned_torrent(self, h):
+        assert "tow" in self.torrents[h]["tags"]
+        self.starts.append(h)
+        self.torrents[h]["state"] = "downloading"
+        return self.inspect_torrent(h)
+
+    def stop_owned_torrent(self, h):
+        self.torrents[h]["state"] = "stoppedDL"
+        return self.inspect_torrent(h)
+
+
+@pytest.fixture
+def world(monkeypatch, tmp_path):
+    """A topic on this computer's drive, its fake site and client; free space set by the test."""
+    tracker, client = Tracker(), Client()
+    cfg = {"trackers": {}, "client": {"id": "main", "kind": "fake"}}
+    monkeypatch.setattr(check_run, "load_config", lambda: cfg)
+    monkeypatch.setattr(check_run, "load_trackers", lambda cfg: {"fake": tracker})
+    monkeypatch.setattr(topic_step, "match_tracker", lambda trackers, url: tracker)
+    monkeypatch.setattr(
+        topic_step,
+        "parse_torrent_metadata",
+        lambda blob: SimpleNamespace(infohash=NEW, client_hash=NEW, name="Show", is_multi=True, files=client.files),
+    )
+    monkeypatch.setattr(client_factory, "default_client_id", lambda cfg: "main")
+    monkeypatch.setattr(client_factory, "from_secrets", lambda cfg, secrets, client_id=None: client)
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", lambda *a, **k: {"events": [], "summary": {}})
+    sent: list[str] = []
+    monkeypatch.setattr(
+        check_notices, "_audited_send", lambda _secrets, *, text, **_kw: sent.append(text.split("\n")[0]) or True
+    )
+    disk = {"free": 10 * GIB}
+    monkeypatch.setattr(shutil, "disk_usage", lambda _p: SimpleNamespace(total=0, used=0, free=disk["free"]))
+    save_download_history({"schema_version": 1, "topics": {}})
+    folder = tmp_path / "tv"
+    folder.mkdir()
+    save_state(
+        {"topics": [{"id": "t1", "title": "Show", "url": "https://tracker.example/1", "save_path": str(folder)}]}
+    )
+    return SimpleNamespace(tracker=tracker, client=client, sent=sent, disk=disk, folder=folder)
+
+
+def _check(**kwargs: Any) -> dict[str, Any]:
+    return check.run_check(apply=True, notify=True, how="test", **kwargs)["results"][0]
+
+
+def _space_pass() -> list[dict[str, Any]]:
+    return check.run_check(apply=True, notify=True, how="progress", space_only=True)["results"]
+
+
+def _topic() -> dict[str, Any]:
+    return load_state()["topics"][0]
+
+
+def test_files_that_do_not_fit_are_added_stopped_and_wait(world):
+    row = _check()
+    topic = _topic()
+    assert world.client.adds == [(NEW, False)]  # added once, not started
+    torrent = world.client.torrents[NEW]
+    assert torrent["state"] == "stoppedDL"
+    assert torrent["tags"] == ["tow"]
+    assert [f["priority"] for f in torrent["files"]] == [1, 1]  # its file selection, confirmed
+    assert topic["hash"] == NEW
+    assert topic["selection_verified"] is True
+    waiting = topic["waiting_space"]
+    assert (waiting["hash"], waiting["needed"], waiting["free"], waiting["kind"]) == (NEW, 50 * GIB, 10 * GIB, "added")
+    assert row["ok"] is False
+    assert topic["last_error_code"] == "check.waiting_space"
+    assert topic["last_error_class"] == "disk"  # red: the owner can free space
+    assert topic["last_error"].startswith("ждёт места на диске: не хватает 40,5 ГБ (нужно 50,0 ГБ, свободно 10,0 ГБ")
+    assert topic["last_error"].endswith("TOW запустит раздачу сам, когда место появится")
+    assert len(world.sent) == 1
+    assert world.sent[0].startswith("Сбой — Show: ждёт места на диске: не хватает 40,5 ГБ")
+
+
+def test_a_waiting_topic_is_not_downloaded_again_and_tells_the_owner_once(world):
+    _check()
+    fetched = world.tracker.fetches
+    for _ in range(2):
+        row = _check()
+        assert row["status"] == "waiting_space"
+    assert world.tracker.fetches == fetched  # no new .torrent from the site
+    assert world.client.adds == [(NEW, False)]  # nothing added again
+    assert len(world.sent) == 1  # the waiting error was said once
+    assert _topic()["last_error_code"] == "check.waiting_space"
+
+
+def test_the_space_pass_starts_it_when_there_is_room(world):
+    _check()
+    assert [row["status"] for row in _space_pass()] == ["skipped"]  # still short: nothing changes
+    assert world.client.starts == []
+    world.disk["free"] = 60 * GIB  # the owner freed space
+    fetched = world.tracker.fetches
+    rows = _space_pass()
+    topic = _topic()
+    assert world.client.starts == [NEW]
+    assert world.client.torrents[NEW]["state"] == "downloading"
+    assert rows[0]["ok"] is True
+    assert rows[0]["started"] is True
+    assert "waiting_space" not in topic
+    assert not topic.get("last_error")
+    assert topic["last_ok"] is True
+    assert world.tracker.fetches == fetched  # the space pass never asks the site
+    assert world.sent[-1].startswith("Show — добавлено в торрент-клиент")
+    assert world.sent[-1].endswith("(сбой устранён)")
+    assert len(world.sent) == 2
+    _space_pass()  # nothing waits any more
+    assert world.client.starts == [NEW]
+
+
+def test_a_regular_check_starts_it_too_and_then_checks_the_site(world):
+    _check()
+    world.disk["free"] = 60 * GIB
+    row = _check()
+    assert world.client.starts == [NEW]
+    assert row["ok"] is True
+    assert "waiting_space" not in _topic()
+    assert world.tracker.fetches == 2  # started, then checked as always
+
+
+def test_the_space_pass_refreshes_the_numbers_without_counting_as_a_check(world):
+    _check()
+    before = _topic()["last_check"]
+    world.disk["free"] = 30 * GIB
+    _space_pass()
+    topic = _topic()
+    assert topic["waiting_space"]["free"] == 30 * GIB
+    assert "не хватает 20,5 ГБ" in topic["last_error"]
+    assert topic["last_check"] == before
+    assert len(world.sent) == 1
+
+
+def test_files_already_in_the_folder_count_as_there(world):
+    world.client.files = (TorrentFile(0, "Show/e01.mkv", 300), TorrentFile(1, "Show/e02.mkv", 200))
+    world.disk["free"] = space.FREE_SPACE_MARGIN + 250  # the second episode alone fits
+    _check()
+    assert _topic()["waiting_space"]["needed"] == 500
+    (world.folder / "Show").mkdir()
+    (world.folder / "Show" / "e01.mkv").write_bytes(b"x" * 300)  # the first one was already there
+    _space_pass()
+    assert world.client.starts == [NEW]
+
+
+def test_the_owner_starting_it_himself_ends_the_wait(world):
+    _check()
+    world.client.torrents[NEW]["state"] = "downloading"
+    _space_pass()
+    topic = _topic()
+    assert "waiting_space" not in topic
+    assert not topic.get("last_error")
+    assert world.client.starts == []
+
+
+def test_the_owner_choosing_other_files_in_the_client_ends_the_wait(world):
+    _check()
+    world.client.torrents[NEW]["files"][0]["priority"] = 0
+    _space_pass()
+    assert "waiting_space" not in _topic()
+    assert world.client.starts == []  # his choice: TOW does not start it
+
+
+def test_a_torrent_removed_or_unmarked_meanwhile_ends_the_wait(world):
+    _check()
+    world.client.torrents[NEW]["tags"] = []
+    _space_pass()
+    topic = _topic()
+    assert "waiting_space" not in topic
+    assert topic["last_error_code"] == "check.not_owned_existing"
+    save_state({"topics": [{**topic, "waiting_space": {"hash": NEW, "selection": "x"}}]})
+    del world.client.torrents[NEW]
+    _space_pass()
+    topic = _topic()
+    assert "waiting_space" not in topic
+    assert topic["last_error_code"] == "check.removed_from_client"
+
+
+def test_a_smaller_selection_that_fits_starts_it(world):
+    _check()
+    topic = _topic()
+    topic["selection"] = {"mode": "files", "value": "*e02.mkv"}  # 20 GiB: still does not fit in 10
+    topic["selection_dirty"] = True
+    save_state({"topics": [topic]})
+    world.disk["free"] = 60 * GIB
+    _space_pass()  # the new selection is not in the client yet: left to the check
+    assert world.client.starts == []
+    world.disk["free"] = 10 * GIB
+    _check()
+    topic = _topic()
+    assert [f["priority"] for f in world.client.torrents[NEW]["files"]] == [0, 1]
+    assert world.client.torrents[NEW]["state"] == "stoppedDL"
+    assert topic["waiting_space"]["needed"] == 20 * GIB
+    assert len(world.sent) == 1  # the same wait, not news
+    world.disk["free"] = 21 * GIB
+    _space_pass()
+    assert world.client.starts == [NEW]
+    assert "waiting_space" not in _topic()
+
+
+def test_a_selection_change_that_fits_starts_it_in_the_same_check(world):
+    _check()
+    topic = _topic()
+    topic["selection"] = {"mode": "files", "value": "*e02.mkv"}
+    topic["selection_dirty"] = True
+    save_state({"topics": [topic]})
+    world.disk["free"] = 21 * GIB
+    row = _check()
+    assert world.client.torrents[NEW]["state"] == "downloading"
+    assert row["ok"] is True
+    assert "waiting_space" not in _topic()
+
+
+def test_a_new_revision_keeps_the_running_previous_one_untouched_while_it_waits(world):
+    topic = _topic()
+    topic["hash"] = OLD
+    save_state({"topics": [topic]})
+    world.client.torrents[OLD] = {
+        "hash": OLD,
+        "save_path": str(world.folder),
+        "state": "stoppedUP",  # stopped by the owner, so the new one may be added
+        "tags": ["tow"],
+        "files": [{"index": 0, "name": "Show/e01.mkv", "size": 1, "progress": 1.0, "priority": 1}],
+    }
+    _check()
+    topic = _topic()
+    assert topic["waiting_space"]["kind"] == "updated"
+    assert topic["previous_hashes"] == [OLD]
+    world.client.torrents[OLD]["state"] = "uploading"  # the owner started the previous one again
+    world.disk["free"] = 60 * GIB
+    _space_pass()
+    topic = _topic()
+    assert world.client.starts == []  # not beside a previous revision on the same files
+    assert topic["last_error_code"] == "check.previous_revision_active"
+    assert topic["waiting_space"]["hash"] == NEW
+    world.client.torrents[OLD]["state"] = "stoppedUP"
+    _space_pass()
+    assert world.client.starts == [NEW]
+    assert world.client.torrents[OLD]["state"] == "stoppedUP"  # the old one is never touched
+
+
+def test_a_folder_not_seen_from_here_never_waits(world, monkeypatch):
+    monkeypatch.setattr("tow.folders.seen_from_here", lambda _path: False)
+    row = _check()
+    assert world.client.adds == [(NEW, True)]
+    assert row["ok"] is True
+    assert "waiting_space" not in _topic()
+
+
+def test_unknown_free_space_never_waits(world, monkeypatch):
+    monkeypatch.setattr(shutil, "disk_usage", lambda _p: (_ for _ in ()).throw(OSError("unreachable")))
+    _check()
+    assert world.client.adds == [(NEW, True)]
+
+
+def test_a_remote_client_is_not_judged_by_this_computers_disk(world):
+    save_secrets({"qbittorrent": {"host": "192.168.1.5"}})
+    _check()
+    assert world.client.adds == [(NEW, True)]
+    assert "waiting_space" not in _topic()
+
+
+def test_a_dry_run_neither_adds_nor_starts(world):
+    preview = check.run_check(apply=False, notify=True, how="test")["results"][0]
+    assert world.client.adds == []
+    assert preview["status"] == "preview"
+    _check()
+    world.disk["free"] = 60 * GIB
+    state_before = load_state()
+    rows = check.run_check(apply=False, notify=True, how="progress", space_only=True)["results"]
+    assert rows[0].get("would_start") is True
+    check.run_check(apply=False, notify=True, how="test")
+    assert world.client.starts == []
+    assert load_state() == state_before
+    assert len(world.sent) == 1
+
+
+def test_a_paused_waiting_topic_is_left_alone(world):
+    _check()
+    topic = _topic()
+    topic["paused"] = True
+    save_state({"topics": [topic]})
+    world.disk["free"] = 60 * GIB
+    assert _space_pass() == []
+    assert world.client.starts == []
+
+
+def test_the_shortfall_says_what_to_free():
+    short = space.Shortfall(needed=50 * GIB, free=10 * GIB, path="D:\\")
+    assert short.missing == 40 * GIB + space.FREE_SPACE_MARGIN
+    assert short.error().params == {"missing": 40.5, "needed": 50.0, "free": 10.0, "path": "D:\\"}
+    assert space.Shortfall(needed=1, free=space.FREE_SPACE_MARGIN, path="D:\\").error().params["missing"] == 0.1
