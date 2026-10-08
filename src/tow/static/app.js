@@ -758,13 +758,45 @@ if (settingsPage) {
     });
   });
 
-  // Settings → Theme: the page takes the chosen colours at once, then the choice is saved.
+  // Settings → Theme: the page takes the chosen colours at once, then the choice is saved in the
+  // background (A6). Arrow keys move between the options and every move is a change: a save that
+  // reloaded the page took the focus away at each step (WCAG 3.2.2). The focus stays on the
+  // option, the section's pill names the choice, and the hidden status says it was saved; the
+  // last of quick moves is the one saved.
   settingsPage.querySelectorAll("[data-theme-form]").forEach((form) => {
+    const pill = form.closest("details")?.querySelector(":scope > summary .pill");
+    const status = form.querySelector("[data-theme-status]");
+    let sequence = 0;
+    let timer = 0;
+    let pending = null;
+    const save = async (mine, label) => {
+      pending = null;
+      try {
+        // keepalive: a choice made just before leaving the page is still saved.
+        const response = await fetch(formActionUrl(form), {
+          method: "POST", body: new FormData(form), credentials: "same-origin", keepalive: true,
+          headers: { Accept: "text/html", "X-TOW-Fetch": "1" },
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (mine === sequence && status) status.textContent = t("js.settings.theme_saved", { theme: label });
+      } catch (error) {
+        if (mine === sequence && status) status.textContent = t("js.submit.failed", { error: error.message || t("js.submit.unknown_error") });
+      }
+    };
     form.addEventListener("change", (event) => {
       const value = event.target.value;
       if (value === "light" || value === "dark") document.documentElement.dataset.theme = value;
       else delete document.documentElement.dataset.theme;
-      if (form.dataset.submitting !== "1") form.requestSubmit();
+      const label = event.target.closest("label")?.textContent.trim() || value;
+      if (pill) pill.textContent = label;
+      const mine = ++sequence;
+      window.clearTimeout(timer);
+      pending = () => save(mine, label);
+      timer = window.setTimeout(pending, 250);
+    });
+    window.addEventListener("pagehide", () => {
+      window.clearTimeout(timer);
+      pending?.();
     });
   });
 

@@ -37,6 +37,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   to the same row and button (a removed row's neighbour, else the message) instead of the start of the page.
 - A screen reader announces the message an action leaves (an error as an alert), and the message and its Undo
   no longer vanish while the pointer or the focus is on them: they go once both have left.
+- Settings → Theme saves a choice in the background: moving between the options with the arrow keys no longer
+  reloads the page at every step and keeps the focus on the option; the section's pill names the choice.
 
 ## [1.27.1] — 2026-10-08
 

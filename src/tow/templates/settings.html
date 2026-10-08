@@ -53,6 +53,8 @@
             {% endfor %}
           </fieldset>
           <p id="theme-hint" class="action-hint">{{ t('settings.theme.hint') }}</p>
+          {#- app.js saves a choice in the background and says so here (A6); without scripts, Save. -#}
+          <span class="sr-only" data-theme-status role="status"></span>
           <noscript><div class="settings-actions"><button type="submit">{{ t('common.save') }}</button></div></noscript>
         </form>
       </div>

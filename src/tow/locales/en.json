@@ -1022,7 +1022,8 @@
       "applying": "Applying…",
       "copied": "Command copied.",
       "copy_failed": "Could not copy — select the command by hand.",
-      "save_address_first": "Enter the address and press Save first"
+      "save_address_first": "Enter the address and press Save first",
+      "theme_saved": "Theme saved: {theme}"
     },
     "downloads": {
       "open_failed": "could not open the history",

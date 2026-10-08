@@ -236,6 +236,29 @@ def test_an_actions_message_is_announced_and_stays_while_in_use(client):
     assert '"focusout"' in unused
 
 
+def test_a_theme_choice_is_saved_in_the_background_without_a_reload(client):
+    """A6: arrow keys move between the theme options and every move submitted the form: the page
+    reloaded at each step and the focus was lost (WCAG 3.2.2). The choice is applied at once and
+    saved with fetch; the pill names it and a hidden status says it was saved."""
+    from tow.config import load_config
+
+    page = client.get("/settings").text
+    theme = page[page.index('id="acc-theme"') : page.index('id="acc-clients"')]
+    assert '<span class="sr-only" data-theme-status role="status"></span>' in theme
+    assert '<noscript><div class="settings-actions"><button type="submit">' in theme  # without scripts: Save
+    block = JS[JS.index("// Settings → Theme:") : JS.index('window.addEventListener("beforeunload"')]
+    assert "requestSubmit" not in block
+    assert '"X-TOW-Fetch": "1"' in block
+    assert "keepalive: true" in block
+    assert 'status.textContent = t("js.settings.theme_saved"' in block
+    assert "pill.textContent = label;" in block
+    # What the background save gets: JSON, not a page to open; the choice is saved.
+    saved = client.post("/settings/theme", data={"theme": "dark"}, headers={"X-TOW-Fetch": "1"})
+    assert saved.status_code == 200
+    assert saved.json()["redirect"].startswith("/settings?open=theme")
+    assert load_config()["theme"] == "dark"
+
+
 def test_links_inside_running_text_are_underlined(client):
     """A7: "More" in the Backups note was told from its sentence by colour only (axe
     link-in-text-block)."""
