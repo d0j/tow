@@ -355,10 +355,18 @@ class ManagedClient:
         return not self._stopped(added)
 
     def _finish_add(
-        self, infohash: str, added: dict[str, Any], destination: str, metadata: TorrentMetadata, selected: set[int]
+        self,
+        infohash: str,
+        added: dict[str, Any],
+        destination: str,
+        metadata: TorrentMetadata,
+        selected: set[int],
+        *,
+        start: bool = True,
     ) -> dict[str, Any]:
         """The add is visible with both marks: its folder, a confirmed stop, the file selection,
-        the start, the release. A failure before the release stops the torrent again."""
+        the start (unless ``start`` is False: the files do not fit yet), the release. A failure
+        before the release stops the torrent again."""
         release_requested = False
         try:
             if not paths_equal(str(added.get("save_path") or ""), destination):
@@ -368,9 +376,10 @@ class ManagedClient:
                 self._stop(infohash)
             self._wait_stopped(infohash)
             self._apply_selection(infohash, metadata.files, selected, metadata.name)
-            self._require_owned(infohash)
-            self._start(infohash)
-            self._wait_started(infohash)
+            if start:
+                self._require_owned(infohash)
+                self._start(infohash)
+                self._wait_started(infohash)
             release_requested = True
             return self._clear_pending(infohash)
         except Exception:
@@ -384,6 +393,8 @@ class ManagedClient:
         save_path: str | None,
         infohash: str,
         selected_indices: list[int] | tuple[int, ...],
+        *,
+        start: bool = True,
     ) -> dict[str, Any]:
         metadata, destination, selected = self._check_add(content, save_path, infohash, selected_indices)
         aliases = list(
@@ -409,7 +420,7 @@ class ManagedClient:
         except Exception:
             self._stop_after_failure(infohash)
             raise
-        return self._finish_add(infohash, added, destination, metadata, selected)
+        return self._finish_add(infohash, added, destination, metadata, selected, start=start)
 
     def configure_torrent_selection(
         self,
@@ -496,6 +507,20 @@ class ManagedClient:
             return info
         self._stop(infohash)
         return self._wait_stopped(infohash)
+
+    def start_owned_torrent(self, infohash: str) -> dict[str, Any]:
+        """Start TOW's own stopped torrent (one added stopped while its files did not fit); the
+        start is read back. A torrent already running is left as it is."""
+        info = self.inspect_torrent(infohash)
+        if info is None:
+            raise self._fail("client.managed.missing")
+        if OWNER not in self._tags(info):
+            raise self._fail("client.managed.not_owned")
+        if not self._stopped(info):
+            return info
+        self._require_owned(infohash)
+        self._start(infohash)
+        return self._wait_started(infohash)
 
     def set_location(self, infohash: str, save_path: str) -> str:
         destination = (save_path or "").strip()

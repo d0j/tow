@@ -61,6 +61,8 @@ class TorrentClientAdapter(Protocol):
         save_path: str | None,
         infohash: str,
         selected_indices: list[int] | tuple[int, ...],
+        *,
+        start: bool = True,
     ) -> dict[str, Any]: ...
 
     def configure_torrent_selection(
@@ -82,6 +84,8 @@ class TorrentClientAdapter(Protocol):
     def preview_magnet(self, magnet_url: str) -> bytes: ...
 
     def stop_owned_torrent(self, infohash: str) -> dict[str, Any]: ...
+
+    def start_owned_torrent(self, infohash: str) -> dict[str, Any]: ...
 
     def set_location(self, infohash: str, save_path: str) -> str: ...
 

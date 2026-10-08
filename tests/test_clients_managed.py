@@ -427,6 +427,32 @@ def test_add_happens_stopped_before_the_selection(client, tmp_path, monkeypatch)
     assert seen == [(False, [True, True, True])]
 
 
+def test_an_add_without_start_stays_stopped_selected_and_released(client, tmp_path):
+    """Files that do not fit yet: added, selected, read back and released, but not started;
+    TOW starts it later (start_owned_torrent), its start read back."""
+    adapter, server = client
+    info = adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01], start=False)
+    assert info["tags"] == ["tow"]
+    assert _wanted(info) == [index == E01 for index in range(3)]
+    assert info["state"].startswith(("stopped", "paused"))
+    assert not server.torrents[K].running
+    started = adapter.start_owned_torrent(H)
+    assert server.torrents[K].running
+    assert not started["state"].startswith(("stopped", "paused"))
+    assert adapter.start_owned_torrent(H)["state"] == started["state"]  # running: left as it is
+
+
+def test_start_owned_torrent_refuses_a_foreign_or_missing_torrent(client, tmp_path):
+    adapter, server = client
+    with pytest.raises(ClientError, match="нет в клиенте"):
+        adapter.start_owned_torrent(H)
+    adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01], start=False)
+    adapter._remove_label(H, adapter._owner_tags(H) or [], "tow")  # the owner took TOW's mark away
+    with pytest.raises(ClientError):
+        adapter.start_owned_torrent(H)
+    assert not server.torrents[K].running
+
+
 def test_duplicate_and_bad_selection_are_refused(client, tmp_path):
     adapter, server = client
     with pytest.raises(ClientError, match="неверные номера"):
