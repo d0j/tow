@@ -48,6 +48,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - When a site answers the .torrent with a sign-in page and its page has no magnet link either, the row keeps the
   site's reason (sign in) instead of "the page has no valid magnet link", and the site icon is amber for a sign-in,
   as the Guide says.
+- A check of a topic's row adds its torrent back when it was removed from the client, as the Guide says (stopped,
+  with its files chosen, confirmed, then started); scheduled checks and Check all only report it.
 ### Security
 
 - A device on the home network can no longer fill the TOW folder through the sign-in page: every form is

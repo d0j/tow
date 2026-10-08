@@ -201,6 +201,9 @@ class CheckRun:
     remote_clients: frozenset[str] = frozenset()
     # The secrets.enc that ``secrets`` was decrypted from (see _reread_secrets).
     secrets_stamp: FileStamp | None = None
+    # The owner checks these topics by hand (a row's check): a current revision gone from its
+    # client is added again. A scheduled check only reports it - the owner may have removed it.
+    readd_removed: bool = False
 
 
 def read_secrets() -> tuple[dict[str, Any], FileStamp | None]:
@@ -408,7 +411,8 @@ def _check_revision(work: TopicCheck) -> None:
         migrates=hash_alias_migration,
         updates_selection=needs_selection_update,
     )
-    if run.apply and (h != old or needs_selection_update):
+    readd = _readds_removed(work, h=h, needs_selection_update=needs_selection_update)
+    if run.apply and (h != old or needs_selection_update or readd):
         if _withdrawn_meanwhile(topic, row, old, work.started):
             return
         apply_revision(
@@ -439,6 +443,17 @@ def _check_revision(work: TopicCheck) -> None:
         # Refresh legacy/corrupt caches without any client mutation. A preview
         # changes only its in-memory copy; the applying commit remains journaled.
         store_file_aliases(topic, h, metadata.files, mode=plan.mode)
+
+
+def _readds_removed(work: TopicCheck, *, h: str, needs_selection_update: bool) -> bool:
+    """A check by hand finds the topic's current revision gone from its client: it is added
+    again the normal way (stopped, its files chosen, read back, then started - or left waiting
+    for disk space). Only the client is asked; a scheduled check leaves it reported."""
+    if not (work.run.apply and work.run.readd_removed and work.old and h == work.old):
+        return False
+    if needs_selection_update or work.client is None:
+        return False  # the selection update adds it anyway; a client that did not answer is reported
+    return work.client.inspect_torrent(h) is None
 
 
 def _fetch_revision(work: TopicCheck, policy: dict[str, Any]) -> Fetched | None:

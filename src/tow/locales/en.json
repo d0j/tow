@@ -267,7 +267,7 @@
     "no_connection": "no connection",
     "client_unreachable": "client unreachable: {reason}",
     "client_empty": "the torrent client lists no torrents at all, although it had TOW's at the last check — it is probably still starting; TOW checks again next time",
-    "removed_from_client": "the torrent was removed from the client",
+    "removed_from_client": "the torrent was removed from the client; press the row's check icon to add it back",
     "paused_meanwhile": "paused during the check — nothing was handed to the torrent client",
     "deleted_meanwhile": "deleted during the check — nothing was handed to the torrent client",
     "edited_meanwhile": "its folder, torrent client or file selection changed during the check — nothing was handed to the torrent client; the next check uses the new settings",
