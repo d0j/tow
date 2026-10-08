@@ -4,6 +4,7 @@ import argparse
 import contextvars
 import json
 import os
+import re
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -803,9 +804,15 @@ def _cmd_update(args: argparse.Namespace) -> int:
 
     script = repo_root() / "scripts" / "update.py"
     python = getattr(sys, "_base_executable", None) or sys.executable  # the venv's base interpreter
+    archive = not (repo_root() / ".git").exists()  # the Windows bundle, install.ps1, install.sh
+    found = re.match(r"^v?(\d+)\.(\d+)\.(\d+)", args.ref)
+    if archive and found and tuple(int(part) for part in found.groups()) < (1, 22, 0):
+        # update.py refuses it: no command that would only be refused.
+        print(t("cli.update.archive_too_old", ref=args.ref))
+        return EXIT_USAGE
     print(t("cli.update.how"))
     print(f'  "{python}" "{script}" --ref {args.ref}')
-    if not (repo_root() / ".git").exists():  # the Windows bundle, install.ps1, install.sh
+    if archive:
         print(t("cli.update.archive"))
         # Their own update file in the TOW folder; deploy.ps1 needs a git checkout.
         name = {"windows": "Update TOW.cmd", "macos": "Update TOW.command"}.get(platform.this_os(), "update-tow")

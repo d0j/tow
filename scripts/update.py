@@ -1022,6 +1022,10 @@ class ArchiveCode:
             if not self._fetch(
                 f"{self.sys.github}/{self.sys.repo}/releases/download/{tag}/{SUMS_ASSET}", path, required=False
             ):
+                # No SHA256SUMS: a tag that does not exist at all is named as such.
+                url = f"{self.sys.github}/{self.sys.repo}/archive/refs/tags/{tag}.tar.gz"
+                if not self._fetch(url, self.downloads / SOURCE_ASSET, required=False):
+                    raise UpdateError(self.work.text("no_release", ref=tag, url=url))
                 raise UpdateError(self.work.text("not_verified"))
         try:
             expected = parse_sums(path.read_text(encoding="utf-8")).get(SOURCE_ASSET)
@@ -1067,8 +1071,14 @@ class ArchiveCode:
                 raise UpdateError(self.work.text("latest_older", ref=ref, version=self.work.version()))
             if latest is not None and latest == installed:
                 return None
-        if version_tuple(ref) is None:
+        requested = version_tuple(ref)
+        if requested is None:
             raise UpdateError(self.work.text("archive_ref", ref=ref))
+        # Before any download: a release this install cannot go to is refused as such, not as a
+        # release "without a checksum" (v1.21.0 has no SHA256SUMS).
+        if requested < MINIMUM_ARCHIVE_TARGET:
+            version = ".".join(str(part) for part in requested)
+            raise UpdateError(self.work.text("archive_too_old", ref=ref, version=version))
         self.downloads.mkdir(parents=True, exist_ok=True)
         archive = self._download(ref)
         try:

@@ -242,7 +242,7 @@ def test_a_release_without_sums_changes_nothing(install, github):
 @pytest.mark.parametrize(
     ("ref", "release", "message"),
     [
-        ("v1.23.0", None, "the release has no checksum for the source archive"),
+        ("v1.23.0", None, "v1.23.0 is not a release of TOW"),
         ("v1.21.0", "1.21.0", "goes no further back than v1.22.0"),
         ("v1.23.0", "1.24.0", "the archive of v1.23.0 holds TOW 1.24.0"),
         ("main", None, "updates to a release tag (for example v1.22.0) or latest, not to main"),
@@ -1069,3 +1069,23 @@ def test_start_files_are_left_alone_where_they_are_not_the_bundles(install, gith
     assert (install["root"] / "Update TOW.cmd").read_bytes() == b"@echo off\r\necho my own\r\n"
     assert "Update TOW.cmd was left as it is: it is not a file TOW wrote" in lines
     assert (install["root"] / "Start TOW.cmd").is_file()
+
+
+@pytest.mark.parametrize(
+    ("ref", "message"),
+    [
+        ("v1.21.0", "v1.21.0 is TOW 1.21.0: an install without git goes no further back than v1.22.0"),
+        ("v9.9.9", "v9.9.9 is not a release of TOW (nothing at"),
+    ],
+)
+def test_a_release_too_old_or_missing_is_named_as_such(install, github, ref, message):
+    # Before: both said "the release has no checksum for the source archive".
+    machine = Machine(install["app"], github)
+    code, lines = run(machine, ref)
+    assert code == 2
+    assert message in lines[-1], lines
+    assert "checksum" not in lines[-1]
+    assert machine.calls == []
+    assert leftovers(install) == []
+    if ref == "v1.21.0":
+        assert github.asked == []  # refused before any download
