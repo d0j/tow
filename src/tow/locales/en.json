@@ -304,6 +304,7 @@
   "cli": {
     "command_failed": "the command could not be completed; check the settings and try again",
     "folder_failed": "TOW cannot use {path}: {error}. Check that the folder exists and that your account may write to it (TOW keeps its data there).",
+    "foreign_code": "TOW did not run: its environment runs the code in {code}, not the one in {root} (the folder was copied, and its environment still belongs to the original folder). Run setup first: {setup}",
     "folder_shared": "Warning: other accounts on this computer can open {path}. TOW could not limit it to your account: run tow permissions fix (in a terminal opened with “Run as administrator” when another account owns the folder).",
     "root_shared": "Warning: other accounts on this computer can change the TOW folder {path} and the program in it. TOW could not limit it to your account: run tow permissions fix (in a terminal opened with “Run as administrator” when another account owns the folder).",
     "password": {

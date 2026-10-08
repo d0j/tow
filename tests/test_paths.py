@@ -86,6 +86,56 @@ def test_an_installed_package_takes_the_root_from_the_explicit_locations(bare, m
     assert paths.root() == tmp_path / "install"
 
 
+def test_a_copy_running_the_originals_code_is_told_apart(monkeypatch, tmp_path):
+    # Audit 08.10.2026: a copied .venv imports the original's app/src while the original folder
+    # is still there; its launcher names the copy as TOW_ROOT.
+    original = _checkout(tmp_path / "TOW" / "app")
+    copy = _checkout(tmp_path / "Copy of TOW" / "app")
+    (tmp_path / "Copy of TOW" / "data").mkdir()
+    monkeypatch.setattr(paths, "repo_root", lambda: original)
+    monkeypatch.setenv("TOW_ROOT", str(copy.parent))
+    assert paths.foreign_code() == copy.parent
+
+    monkeypatch.setattr(paths, "repo_root", lambda: copy)  # after setup: its own code
+    assert paths.foreign_code() is None
+    monkeypatch.setenv("TOW_ROOT", str(copy))  # an older launcher's TOW_ROOT (the code folder)
+    assert paths.foreign_code() is None
+
+
+def test_a_checkout_or_a_root_without_code_has_nothing_to_compare(bare, monkeypatch, tmp_path):
+    code = _checkout(tmp_path / "tow")
+    monkeypatch.setattr(paths, "repo_root", lambda: code)
+    assert paths.foreign_code() is None  # development: the checkout is the root
+    monkeypatch.setenv("TOW_ROOT", str(tmp_path / "scratch"))  # tests, a wheel: no app/ there
+    assert paths.foreign_code() is None
+
+
+def test_the_cli_refuses_another_folders_code_before_touching_the_folder(monkeypatch, tmp_path, capsys):
+    import json
+
+    from tow import cli
+
+    original = _checkout(tmp_path / "TOW" / "app")
+    copy = tmp_path / "Copy of TOW"
+    (copy / "app").mkdir(parents=True)
+    monkeypatch.setattr(paths, "repo_root", lambda: original)
+    monkeypatch.setenv("TOW_ROOT", str(copy))
+    monkeypatch.delenv("TOW_HOME", raising=False)
+    monkeypatch.delenv("TOW_CONFIG", raising=False)
+
+    assert cli.main(["status"]) == cli.EXIT_CANNOT_RUN
+    said = capsys.readouterr().err
+    assert str(original) in said
+    assert str(copy) in said
+    assert "setup" in said
+    assert not (copy / "data").exists()  # nothing created in the copy
+
+    assert cli.main(["status", "--json"]) == cli.EXIT_CANNOT_RUN
+    answer = json.loads(capsys.readouterr().out)
+    assert answer["ok"] is False
+    assert str(copy) in answer["error"]
+
+
 def test_folders_outside_data_are_not_created_by_asking(monkeypatch, tmp_path):
     monkeypatch.setenv("TOW_ROOT", str(tmp_path / "install"))
     for folder in (paths.keys_dir(), paths.backup_root(), paths.runtime_dir()):

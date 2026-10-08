@@ -85,6 +85,33 @@ def root() -> Path:
     raise RuntimeError("TOW_ROOT must be configured for a portable runtime")
 
 
+def _same_folder(first: Path, second: Path) -> bool:
+    try:
+        return os.path.samefile(first, second)
+    except OSError:  # one of them is missing: compare the names
+        return os.path.normcase(os.path.realpath(first)) == os.path.normcase(os.path.realpath(second))
+
+
+def foreign_code() -> Path | None:
+    """The install root when this process runs another folder's code for it, else None.
+
+    A copy of an install keeps ``app/.venv`` with absolute paths: while the original folder is
+    still there, the copy's environment imports the original's ``app/src``. Started with the
+    copy as its root it would read and write the copy's data with the original's code - and
+    take the original's web server for its own. An install's code is ``<root>/app``; a
+    development checkout is its own root, and a root without ``app/`` (tests, a wheel) has no
+    code of its own to compare with.
+    """
+    code = repo_root()
+    try:
+        install = root()
+    except RuntimeError:
+        return None
+    if _same_folder(code, install) or _same_folder(code.parent, install):
+        return None
+    return install if (install / "app").is_dir() else None
+
+
 def data_dir(*, create: bool = True) -> Path:
     p = _env_path(_RUNTIME_HOME_ENV, _LEGACY_RUNTIME_HOME_ENV) or root() / "data"
     if create:

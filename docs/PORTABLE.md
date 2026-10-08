@@ -48,6 +48,11 @@ Root discovery (`tow.paths.root()`, built):
 4. An installed wheel without a layout: the parent of `TOW_CONFIG`, else of `TOW_HOME`; else
    `RuntimeError("TOW_ROOT must be configured …")` — nothing is created in site-packages.
 
+An install runs only its own code: every `tow` command first asks `tow.paths.foreign_code()`
+and refuses (exit code 3, `cli.foreign_code`, before anything is written in the folder)
+when the root has an `app/` that is not the code running - a copy whose `.venv` still imports
+the original's `app/src`, started with the copy as its root (also by its autostart).
+
 `TOW_HOME`/`TOW_CONFIG` stay explicit overrides (tests, scripts). Since 1.21 the launchers no
 longer read an `app\tow-local.cmd` (installs before 1.18 set them there; discovery finds the same
 folders, and a leftover file is simply ignored — delete it).

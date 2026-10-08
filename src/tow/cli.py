@@ -960,6 +960,19 @@ def _use_language(argv: list[str] | None) -> None:
         i18n.use(i18n.DEFAULT)
 
 
+def _foreign_code_refusal() -> str:
+    """Why this environment must not run TOW for its folder (``tow.paths.foreign_code``), or ""."""
+    from tow import platform
+    from tow.i18n import t
+    from tow.paths import foreign_code, repo_root
+
+    install = foreign_code()
+    if install is None:
+        return ""
+    launcher = install / "app" / "scripts" / ("tow.cmd" if platform.is_windows() else "tow")
+    return t("cli.foreign_code", code=repo_root(), root=install, setup=f'"{launcher}" setup')
+
+
 def main(argv: list[str] | None = None) -> int:
     _utf8_console()
     # The command's language lives in its own context and ends with it: a caller in the same
@@ -973,6 +986,13 @@ def _main(argv: list[str] | None) -> int:
     command = _COMMANDS.get(args.cmd)
     if command is None:
         return EXIT_USAGE
+    refusal = _foreign_code_refusal()
+    if refusal:  # before anything is written in the folder (only config.yaml's language was read)
+        if getattr(args, "json", False):
+            print(json.dumps({"ok": False, "error": refusal}, ensure_ascii=False))
+        else:
+            print(refusal, file=sys.stderr)
+        return EXIT_CANNOT_RUN
     if args.cmd in _LAYOUT_COMMANDS:
         from tow.supervisor import layout
 
