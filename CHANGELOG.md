@@ -25,6 +25,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   (v1.23.0 for today's data) instead of "the version that wrote it".
 - An update keeps the oldest update snapshot in `backup/` besides the newest five: a few cut-off and repeated updates
   no longer delete the only copy of the data from before the first update.
+- After the TOW folder was moved, `tow setup` (and the first start in the new place) makes uv's link
+  `runtime\python\cpython-3.14-…` again inside the folder: it still pointed at the old folder.
 
 ## [1.28.1] — 2026-10-08
 

@@ -29,6 +29,10 @@ rem A copied install (docs/PORTABLE.md 3) holds uv's minor-version link runtime\
 rem as a plain folder: uv cannot make the link again (os error 145). Only that entry, only a plain
 rem folder (attribute l marks a link), only inside this install; the full version cpython-X.Y.Z-* stays.
 for /d %%D in ("%TOW_ROOT%\runtime\python\cpython-*") do echo %%~aD%%~nxD| findstr /r /i "^d[^l]*cpython-[0-9]*\.[0-9]*-" >nul && rmdir /s /q "%%~fD"
+rem A moved install keeps that link as a junction to the old folder (an absolute path), and an
+rem environment built through it is not this folder's. When the environment is built again, the
+rem link itself goes (rmdir without /s: never what it points to); uv makes it again here.
+if defined TOW_REBUILD for /d %%D in ("%TOW_ROOT%\runtime\python\cpython-*") do echo %%~aD%%~nxD| findstr /r /i "^d.*l.*cpython-[0-9]*\.[0-9]*-" >nul && rmdir "%%~fD"
 rem The Python of .python-version, into runtime\python; no copies on PATH, no registry entries.
 "%TOW_UV%" python install --no-bin --no-registry || exit /b 3
 "%TOW_UV%" sync --frozen --no-dev || exit /b 3
