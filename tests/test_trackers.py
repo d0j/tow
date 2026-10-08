@@ -25,9 +25,9 @@ def test_login_does_not_follow_credential_redirect(monkeypatch):
         def __exit__(self, *args):
             return False
 
-        def post(self, url, data):
-            seen.update({"url": url, "data": data})
-            return type("Response", (), {"status_code": 302})()
+        def request(self, method, url, data):
+            seen.update({"method": method, "url": url, "data": data})
+            return httpx.Response(302)
 
     def fake_client(**kwargs):
         seen["follow_redirects"] = kwargs["follow_redirects"]
@@ -42,6 +42,7 @@ def test_login_does_not_follow_credential_redirect(monkeypatch):
     tr._login({"trackers": {"demo": {"username": "u", "password": "p"}}}, "ua", persist=False)
 
     assert seen["follow_redirects"] is False
+    assert seen["method"] == "POST"
     assert seen["url"] == "https://demo/login"
 
 
@@ -55,9 +56,9 @@ def test_login_keeps_all_response_cookies_when_cookie_names_are_unspecified(monk
         def __exit__(self, *args):
             return False
 
-        def post(self, _url, data):
+        def request(self, _method, _url, data):
             assert data == {"username": "u", "password": "p"}
-            return type("Response", (), {"status_code": 302})()
+            return httpx.Response(302)
 
     monkeypatch.setattr(thttp, "client", lambda **_kwargs: Client())
     tr = GenericHttpTracker(
@@ -252,10 +253,10 @@ def test_login_collects_sessions_for_each_configured_origin(monkeypatch):
         def __exit__(self, *args):
             return False
 
-        def post(self, url, data):
+        def request(self, _method, url, data):
             posts.append(url)
             self.cookies = {"sid": url.split("/")[2]}
-            return type("Response", (), {"status_code": 200})()
+            return httpx.Response(200)
 
     monkeypatch.setattr(thttp, "client", lambda **_kwargs: Client())
     tracker = GenericHttpTracker(
@@ -291,8 +292,8 @@ def test_deleted_site_cannot_persist_late_login_session(monkeypatch, tmp_path):
         def __exit__(self, *args):
             return False
 
-        def post(self, _url, data):
-            return type("Response", (), {"status_code": 200})()
+        def request(self, _method, _url, data):
+            return httpx.Response(200)
 
     monkeypatch.setattr(thttp, "client", lambda **_kwargs: Client())
     tracker = GenericHttpTracker(
@@ -551,10 +552,6 @@ def test_tracker_regex_and_url_are_bounded():
 
 
 def _login_client(monkeypatch, *, status=302, body="", cookies=None, seen=None):
-    class Response:
-        status_code = status
-        text = body
-
     class Client:
         def __init__(self):
             self.cookies = dict(cookies or {"bb_session": "s"})
@@ -565,10 +562,10 @@ def _login_client(monkeypatch, *, status=302, body="", cookies=None, seen=None):
         def __exit__(self, *args):
             return False
 
-        def post(self, _url, data):
+        def request(self, _method, _url, data):
             if seen is not None:
                 seen.update(data)
-            return Response()
+            return httpx.Response(status, text=body)
 
     monkeypatch.setattr(thttp, "client", lambda **_kwargs: Client())
 
@@ -644,3 +641,47 @@ def test_a_topic_page_read_for_the_download_link_also_gives_the_title(monkeypatc
     title = tracker.fetch_title("https://nnm.example/forum/viewtopic.php?t=5", {}, None, persist=False)
     assert "Show S01" in title
     assert len(calls) == 2  # the page and the file; the title came from the same page
+
+
+def _streaming_login_client(monkeypatch, response):
+    """thttp.client as a real httpx client (the streaming branch of request_limited)."""
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        thttp,
+        "client",
+        lambda **kwargs: real_client(
+            transport=httpx.MockTransport(lambda _request: response()),
+            follow_redirects=kwargs["follow_redirects"],
+        ),
+    )
+
+
+def test_the_login_answer_is_read_like_a_topic_page_never_whole(monkeypatch):
+    # Audit 08.10.2026: the login POST read the answer whole, without the limit topic pages have.
+    sent = []
+
+    def endless():
+        for _ in range(thttp.MAX_HTML_RESPONSE_BYTES // (1 << 20) + 8):
+            sent.append(1)
+            yield b"x" * (1 << 20)
+
+    _streaming_login_client(
+        monkeypatch, lambda: httpx.Response(200, headers={"Set-Cookie": "bb_session=s; Path=/"}, content=endless())
+    )
+    cookies = GenericHttpTracker("demo", _TORRENTPIER)._login(
+        {"trackers": {"demo": {"username": "u", "password": "p"}}}, "ua", persist=False
+    )
+
+    assert cookies == {}  # that host's login failed: the next one would be tried
+    assert len(sent) <= thttp.MAX_HTML_RESPONSE_BYTES // (1 << 20) + 1
+
+
+def test_a_login_answer_within_the_limit_still_yields_its_cookies(monkeypatch):
+    _streaming_login_client(
+        monkeypatch,
+        lambda: httpx.Response(302, headers={"Set-Cookie": "bb_session=s; Path=/", "Location": "/"}, content=b"moved"),
+    )
+    cookies = GenericHttpTracker("demo", _TORRENTPIER)._login(
+        {"trackers": {"demo": {"username": "u", "password": "p"}}}, "ua", persist=False
+    )
+    assert cookies == {"https://demo:443": {"bb_session": "s"}}

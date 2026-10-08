@@ -59,6 +59,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Site, tracker and messenger addresses that resolve to a multicast group (224.0.0.0/4, ff00::/8) or to an
   IPv4-translated IPv6 form of a home-network address (`::ffff:0:192.168.1.1`) are now refused like other
   addresses of the home network.
+- A tracker's answer to the sign-in is read like a topic page, at most 4 MiB: a site (or a page between TOW and
+  it) can no longer make TOW read an answer of any size into memory.
 
 ## [1.27.1] — 2026-10-08
 

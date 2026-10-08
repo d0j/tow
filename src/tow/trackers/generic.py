@@ -371,7 +371,10 @@ class GenericHttpTracker:
                     follow_redirects=False,
                     public_only=not as_bool(load_config().get("allow_private_tracker_hosts")),
                 ) as c:
-                    response = c.post(host.rstrip("/") + path, data=form)
+                    # Read like a topic page: at most MAX_HTML_RESPONSE_BYTES, never a body of any size.
+                    response = thttp.request_limited(
+                        c, "POST", host.rstrip("/") + path, max_bytes=thttp.MAX_HTML_RESPONSE_BYTES, data=form
+                    )
                     if response.status_code >= 400 or login_form_came_back(response, pw_field):
                         # A login page shown again means the credentials were refused; its
                         # cookies are guest cookies and must not replace working ones.
