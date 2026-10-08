@@ -47,6 +47,9 @@ Linux checks and installer smoke tests run on both Ubuntu 24.04 and 26.04. The l
 - The guard in `tests/conftest.py` refuses real network, processes, signals and writes outside the test's temp
   folder. Each test gets a throwaway master key and its own `TOW_ROOT`. `@pytest.mark.allow_git` lets only `git`
   through, on a throwaway repository.
+- `tests/integration/` tests real torrent clients and the OS autostart. They are marked
+  `@pytest.mark.real_system("TOW_REAL_...")` and skipped unless that variable is 1, which only
+  `.github/workflows/real.yml` sets on a CI runner: never run them on your machine.
 - Use fake clients, fake HTTP and injected platform backends (`tow.platform.use`); never a live client, site or
   messenger.
 - **Test data is synthetic**: made-up titles (`Show A`, `Сериал А`), topic ids (`1234567`), private-range or

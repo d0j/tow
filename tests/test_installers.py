@@ -391,7 +391,12 @@ def _runs(job):
     return "\n".join(step.get("run", "") for step in job["steps"])
 
 
-@pytest.mark.parametrize("name", ["ci", "release", "installers"])
+def test_every_workflow_is_checked_here():
+    found = sorted(path.stem for path in (ROOT / ".github" / "workflows").glob("*.yml"))
+    assert found == ["ci", "installers", "real", "release"]
+
+
+@pytest.mark.parametrize("name", ["ci", "release", "installers", "real"])
 def test_every_workflow_pins_its_actions_and_only_reads_by_default(name):
     text, flow = _workflow(name)
     # Every action pinned to a commit (the repository requires it); checkout and setup-uv to the
@@ -433,6 +438,44 @@ def test_installers_run_the_release_smokes_before_a_tag():
     assert selection["if"] == "github.event_name != 'pull_request'"
     assert selection["steps"][-1]["env"] == {"TOW_SELECTION_WORK": "all"}
     assert "tests/test_selection_work_bounds.py" in selection["steps"][-1]["run"]
+
+
+def test_real_systems_run_on_their_code_weekly_and_by_hand_never_unbounded():
+    """real.yml: the only place the tests/integration tests run (their variables are set nowhere
+    else), on pull requests that touch what they test, weekly and by hand; every job bounded."""
+    text, flow = _workflow("real")
+    assert flow["name"] == "real systems"
+    triggers = flow[True]  # YAML 1.1 reads the key `on` as True
+    assert triggers["schedule"]
+    assert "workflow_dispatch" in triggers
+    assert set(triggers["pull_request"]["paths"]) == {
+        "src/tow/clients/**",
+        "src/tow/autostart/**",
+        "src/tow/check/**",
+        "src/tow/supervisor/**",
+        "tests/integration/**",
+        ".github/workflows/real.yml",
+    }
+    jobs = flow["jobs"]
+    assert set(jobs) == {"clients", "autostart"}
+    assert all(job["timeout-minutes"] <= 40 for job in jobs.values())
+    assert all(
+        step.get("timeout-minutes") for job in jobs.values() for step in job["steps"] if "pytest" in step.get("run", "")
+    )
+    assert jobs["clients"]["runs-on"] == "ubuntu-24.04"
+    assert jobs["clients"]["env"]["TOW_REAL_CLIENTS"] == "1"
+    assert "tests/integration/test_real_clients.py" in _runs(jobs["clients"])
+    assert set(jobs["autostart"]["strategy"]["matrix"]["os"]) == {"windows-latest", "macos-latest", "ubuntu-24.04"}
+    assert jobs["autostart"]["env"]["TOW_REAL_AUTOSTART"] == "1"
+    assert jobs["autostart"]["env"]["TOW_REAL_AUTOSTART_PORT"] != "8787"
+    assert "tests/integration/test_real_autostart.py" in _runs(jobs["autostart"])
+    # Autostart is registered only for a runtime install made as the owner makes one.
+    assert "install/install.sh --dir" in _runs(jobs["autostart"])
+    assert "install/install.ps1 -Dir" in _runs(jobs["autostart"])
+    # The variables that let these tests through the guard are set by this workflow only.
+    for other in ("ci", "installers", "release"):
+        assert "TOW_REAL_" not in _workflow(other)[0], other
+    assert "8787" not in text
 
 
 def test_ci_keeps_the_required_check_names_and_audits_once():

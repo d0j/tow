@@ -112,6 +112,8 @@ tracker degradation from a client or TOW failure before changing state.
   evidence you have: source checkout, installed wheel, browser, or a real client.
 - The test guard (`tests/conftest.py`) refuses processes, network, signals and writes outside the temp folder;
   `@pytest.mark.allow_git` lets only `git` through (the updater's tests on a throwaway clone).
+  `tests/integration/` (real clients, real autostart) carries `@pytest.mark.real_system("TOW_REAL_...")`:
+  skipped unless that variable is 1, which only `.github/workflows/real.yml` sets on a runner.
 - Web: one `APIRouter` per `tow/web/routes_*.py`, included by `tow.web.app.create_app()`; everything outside the web
   package is called through `tow.web.services`, which is where tests patch it (`docs/EXTENDING.md`, "Page or
   action"). `tow.web` itself exports only `app` and `create_app`.
