@@ -54,6 +54,46 @@ def test_inner():
     result.stdout.fnmatch_lines(["*test guard violations*process*schtasks*"])
 
 
+_REAL_SYSTEM_TESTS = """
+import subprocess, sys
+import pytest
+
+@pytest.mark.real_system("TOW_REAL_PROBE")
+def test_real():
+    subprocess.run([sys.executable, "-c", "pass"], check=True)
+
+@pytest.mark.real_system("TOW_REAL_OTHER")
+def test_real_of_another_variable():
+    subprocess.run([sys.executable, "-c", "pass"], check=True)
+
+@pytest.mark.real_system("NOT_TOW_REAL")
+def test_real_of_a_variable_outside_the_family():
+    subprocess.run([sys.executable, "-c", "pass"], check=True)
+
+def test_unmarked():
+    try:
+        subprocess.run([sys.executable, "-c", "pass"])
+    except Exception:
+        pass
+"""
+
+
+def test_a_real_system_test_runs_only_with_its_variable_and_then_unguarded(pytester, monkeypatch):
+    """tests/integration: skipped on a development machine; with its TOW_REAL_* variable at 1 (the
+    real.yml runners) it runs without the guard, and every other test stays guarded."""
+    for name in ("TOW_REAL_PROBE", "TOW_REAL_OTHER"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("NOT_TOW_REAL", "1")
+    monkeypatch.setenv("TOW_REAL_OTHER", "yes")  # only exactly 1 counts
+
+    _inner(pytester, _REAL_SYSTEM_TESTS).assert_outcomes(passed=1, skipped=3, errors=1)
+
+    monkeypatch.setenv("TOW_REAL_PROBE", "1")
+    result = _inner(pytester, _REAL_SYSTEM_TESTS)
+    result.assert_outcomes(passed=2, skipped=2, errors=1)
+    result.stdout.fnmatch_lines(["*test guard violations*process*"])
+
+
 def test_read_only_task_query_is_stubbed(pytester):
     result = _inner(
         pytester,
