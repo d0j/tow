@@ -159,8 +159,12 @@ def test_the_progress_link_is_outside_the_rows_summary(client):
     assert "pointer-events: none" in layer
     assert "pointer-events: auto" in rules[".row-progress > a"]
     assert "visibility: hidden" in rules[".row-wrap:has(> .row-progress) .topic-progress"]
-    assert "@supports (anchor-scope: --row-summary)" in CSS
-    assert "top: anchor(top); bottom: anchor(bottom)" in CSS
+    # An open row shows the words; a click on them opens the episodes, not the row's toggle.
+    assert "display: none" in rules[".row-wrap:has(> details[open]) > .row-progress"]
+    assert "visibility: visible" in rules[".row-wrap:has(> details[open]) .topic-progress"]
+    assert 'const words = event.target.closest?.(".progress-ghost");' in JS
+    # Anchor positioning cost a layout on every scroll frame of a 2000-row Home: not used.
+    assert "anchor-name" not in CSS
 
 
 @pytest.mark.parametrize(
