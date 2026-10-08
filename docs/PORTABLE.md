@@ -167,7 +167,10 @@ The owner's guide is [install.md](install.md); the README links the stable relea
   the base Python both inside `<TOW>`); otherwise they run `tow setup` - on Windows first with
   `UV_OFFLINE=1` (the bundle's cache), then online, after removing the "Mark of the Web" from
   the folder's files (`Unblock-File`; Windows would ask about each start file again). Then
-  `tow start` (§6). The first start waits for a key so the master-key note is read.
+  `tow start` (§6). The first start waits for a key so the master-key note is read. The update
+  files hold their own logic (`app/` may be half-switched): they run `update.py` with the Python
+  `app/.venv/pyvenv.cfg` names (by its folder name in `runtime/python`, so a moved folder finds
+  it), else with the newest `cpython-3.X.Y` there by number, never a link or a pre-release.
 - **Installers** refuse a folder that holds an install (they name the update file) or anything
   else; a failed install leaves the folder as it found it (absent or empty). `--port` /
   `-Port` (or `TOW_INSTALL_PORT`) sets `port:`. `--uninstall` / `-Uninstall` asks (`--yes`),

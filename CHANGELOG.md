@@ -33,6 +33,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   stopping TOW".
 - Windows, git install: `scripts\deploy.ps1` runs in Windows PowerShell 5.1 too (it demanded PowerShell 7) and in
   a folder with `[ ]` in its name; the guides and `tow update` say how to run it when PowerShell refuses scripts.
+- `Update TOW.cmd`, `update-tow` and `Update TOW.command` of new installs run the update with the Python TOW's
+  environment was made from, else the newest one by version number (3.14.10 after 3.14.8), never uv's link folder.
 
 ## [1.27.0] — 2026-10-08
 

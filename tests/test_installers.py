@@ -4,6 +4,7 @@ the release workflow (.github/workflows/release.yml)."""
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import os
 import re
@@ -101,6 +102,48 @@ def test_install_sh_makes_start_files_that_call_the_apps_scripts():
     assert '\'exec "$(dirname "$0")/app/scripts/tow-start" "$@"\'' in text
     assert '\'exec "$(dirname "$0")/app/scripts/tow" stop\'' in text
     assert 'chmod 755 "$start_file" "$stop_file" "$update_file"' in text
+
+
+@pytest.mark.allow_system  # sh on a temp layout: the update file install.sh writes, python3 a stub
+def test_the_update_file_takes_the_environments_python_else_the_newest_real_one(tmp_path):
+    # It took the first cpython-3* folder: uv's cpython-3.14 link, or 3.14.10 before 3.14.8.
+    shell = shutil.which("dash") or shutil.which("sh")
+    if shell is None:
+        pytest.skip("no sh on this machine")
+    text = SH.read_text(encoding="utf-8")
+    start = text.index("<<'EOF'\n") + len("<<'EOF'\n")
+    root = tmp_path / "my TOW"
+    python = root / "runtime" / "python"
+    for name in (
+        "cpython-3.14.8-linux-x86_64-gnu",
+        "cpython-3.14.10-linux-x86_64-gnu",
+        "cpython-3.9.20-linux-x86_64-gnu",
+        "cpython-3.15.0a1-linux-x86_64-gnu",
+        "cpython-3.14.11+freethreaded-linux-x86_64-gnu",
+    ):
+        (python / name / "bin").mkdir(parents=True)
+        stub = python / name / "bin" / "python3"
+        stub.write_text(f'#!/bin/sh\necho "{name} $*"\n', encoding="utf-8", newline="\n")
+        stub.chmod(0o755)
+    with contextlib.suppress(OSError):  # Windows without the right to make links: the rest still holds
+        (python / "cpython-3.14.99-linux-x86_64-gnu").symlink_to(python / "cpython-3.14.8-linux-x86_64-gnu")
+    (root / "update-tow").write_text(text[start : text.index("\nEOF\n", start) + 1], encoding="utf-8", newline="\n")
+
+    def picked() -> str:
+        done = subprocess.run(
+            [shell, _posix(root / "update-tow"), "v9.9.9"], capture_output=True, text=True, check=False, timeout=60
+        )
+        assert done.stdout.endswith(" --ref v9.9.9\n"), done.stdout + done.stderr
+        return done.stdout.split()[0]
+
+    assert picked() == "cpython-3.14.10-linux-x86_64-gnu"
+    cfg = root / "app" / ".venv" / "pyvenv.cfg"
+    cfg.parent.mkdir(parents=True)
+    # Made in another place (moved since): found by its folder name in this runtime/python.
+    cfg.write_text("home = /old place/runtime/python/cpython-3.14.8-linux-x86_64-gnu/bin\n", encoding="utf-8")
+    assert picked() == "cpython-3.14.8-linux-x86_64-gnu"
+    cfg.write_text("home = /old/cpython-3.13.1-linux-x86_64-gnu/bin\n", encoding="utf-8")
+    assert picked() == "cpython-3.14.10-linux-x86_64-gnu"
 
 
 def _posix(path: Path) -> str:

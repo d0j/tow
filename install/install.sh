@@ -368,12 +368,41 @@ main() {
         'exec "$(dirname "$0")/app/scripts/tow-start" "$@"' >"$start_file"
     printf '%s\n' '#!/bin/sh' '# TOW: stop it (a check that is running finishes first).' \
         'exec "$(dirname "$0")/app/scripts/tow" stop' >"$stop_file"
-    printf '%s\n' '#!/bin/sh' '# TOW: update it to the latest release (or: update-tow v1.23.0); it goes back by itself on failure.' \
-        'root=$(dirname "$0")' \
-        'for python in "$root"/runtime/python/cpython-3*/bin/python3; do [ -x "$python" ] && break; done' \
-        'update="$root/app/scripts/update.py"' \
-        'if [ -f "$root/.update-switch.json" ] || [ ! -f "$update" ]; then update="$root/runtime/update.py"; fi' \
-        'exec "$python" "$update" --ref "${1:-latest}"' >"$update_file"
+    # The Python of the update: the one the environment was made from (app/.venv/pyvenv.cfg "home",
+    # by its folder name in runtime/python, so a moved folder still finds it), else the newest
+    # cpython-3.X.Y there by number (3.14.10 after 3.14.8), never a link and never a pre-release.
+    cat >"$update_file" <<'EOF'
+#!/bin/sh
+# TOW: update it to the latest release (or: update-tow v1.23.0); it goes back by itself on failure.
+root=$(dirname "$0")
+python=
+home=$(sed -n 's/^home *= *//p' "$root/app/.venv/pyvenv.cfg" 2>/dev/null | head -n 1)
+home=${home%/}
+home=${home%/bin}
+if [ -n "$home" ] && [ -x "$root/runtime/python/${home##*/}/bin/python3" ]; then
+    python=$root/runtime/python/${home##*/}/bin/python3
+fi
+best=-1
+[ -n "$python" ] || for folder in "$root"/runtime/python/cpython-3.*; do
+    version=${folder##*/cpython-3.}
+    version=${version%%-*}
+    case $version in [0-9]*.[0-9]*) ;; *) continue ;; esac
+    minor=${version%%.*}
+    patch=${version#*.}
+    case $minor$patch in *[!0-9]*) continue ;; esac
+    if [ ! -L "$folder" ] && [ -x "$folder/bin/python3" ] && [ $((minor * 1000 + patch)) -gt "$best" ]; then
+        best=$((minor * 1000 + patch))
+        python=$folder/bin/python3
+    fi
+done
+if [ -z "$python" ]; then
+    echo "TOW's Python is not in $root/runtime/python: start TOW once first." >&2
+    exit 3
+fi
+update="$root/app/scripts/update.py"
+if [ -f "$root/.update-switch.json" ] || [ ! -f "$update" ]; then update="$root/runtime/update.py"; fi
+exec "$python" "$update" --ref "${1:-latest}"
+EOF
     chmod 755 "$start_file" "$stop_file" "$update_file"
     printf '%s\n' 'TOW portable install v1' >"$marker"
     chmod 600 "$marker"
