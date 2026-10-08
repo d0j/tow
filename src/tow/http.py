@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import codecs
 import re
 import time
 from typing import Any
@@ -32,6 +33,25 @@ _META_CHARSET = re.compile(rb"""<meta[^>]+charset\s*=\s*["']?([\w.:-]+)""", re.I
 # A charset a server names by default rather than for the page (its own setting, not the site's).
 _WEAK_CHARSETS = frozenset({"iso-8859-1", "iso8859-1", "latin1", "latin-1", "l1", "us-ascii", "ascii", "windows-1252"})
 _BOMS = ((b"\xef\xbb\xbf", "utf-8-sig"), (b"\xff\xfe", "utf-16"), (b"\xfe\xff", "utf-16"))
+# Codecs that turn bytes into text but are no page encoding: the escapes and UTF-7 give any
+# code point (lone surrogates too, which no store can save), the name codecs, the
+# never-defined one and charmap (latin-1 by another name). Bytes-to-bytes and text-to-text
+# codecs (base64, hex, rot_13...) are refused by their own mark.
+_NOT_PAGE_CODECS = frozenset(
+    {"unicode-escape", "raw-unicode-escape", "utf-7", "idna", "punycode", "undefined", "charmap"}
+)
+_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def _page_codec(name: str) -> str | None:
+    """The codec a page may be decoded with, or None for a name that is no text encoding."""
+    try:
+        info = codecs.lookup(name)
+    except LookupError:
+        return None
+    if not getattr(info, "_is_text_encoding", True) or info.name in _NOT_PAGE_CODECS:
+        return None
+    return info.name
 
 
 def html_text(response: Any) -> str:
@@ -58,13 +78,16 @@ def html_text(response: Any) -> str:
     if header in _WEAK_CHARSETS and not meta:
         # A server's default alone does not name the page, and latin-1 never fails to decode.
         header = ""
-    for encoding in [*first, "utf-8", header, meta]:
-        if not encoding:
+    for name in [*first, "utf-8", header, meta]:
+        codec = _page_codec(name) if name else None
+        if codec is None:
             continue
         try:
-            return body.decode(encoding)
-        except LookupError, UnicodeDecodeError:
+            text = body.decode(codec)
+        except UnicodeError:  # "undefined" and its kind raise a plain UnicodeError
             continue
+        if not _SURROGATE.search(text):
+            return text
     return body.decode("cp1251", errors="replace")
 
 

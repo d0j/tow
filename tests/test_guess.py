@@ -210,3 +210,17 @@ def test_a_known_sites_guess_does_not_read_its_page(monkeypatch):
 
     monkeypatch.setattr(guess, "_topic_page", refuse)
     assert guess.guess_site("https://nnmclub.to/forum/viewtopic.php?t=555")["name"] == "nnmclub"
+
+
+def test_a_topic_page_with_an_undefined_charset_still_gives_the_guess(monkeypatch):
+    # <meta charset=undefined> raised a plain UnicodeError from html_text: a 500 on /sites/guess.
+    import httpx
+
+    from tow import guess
+
+    page = b'<meta charset=undefined><table class="attach"><tr><td><a href="dl.php?t=1">\xcf</a></td></tr></table>'
+    monkeypatch.setattr(
+        "tow.http.get_limited",
+        lambda c, url, max_bytes: httpx.Response(200, content=page, headers={"content-type": "text/html"}),
+    )
+    assert guess.guess_site("https://forum.example/viewtopic.php?t=1")["download_path"] == "/dl.php?t={id}"
