@@ -111,12 +111,16 @@ ROOT_FILES = {"Start TOW.cmd": START_CMD, "Stop TOW.cmd": STOP_CMD, "Update TOW.
 
 # cmd.exe reads a running batch file again after each command, from the byte where it stopped. An
 # "Update TOW.cmd" replaced while it waits for update.py goes on in the new file at the offset just
-# after the line that ran update.py. ``refresh`` puts this line exactly there: a run of the old
-# file ends with its update's exit code (and the pause every version of the file has there); a run
-# of the new file, whose head set TOW_FILE_RUN to this line's offset, passes over it. Not merely
-# "defined": an old file that is itself a written-again one set it too, went on into the body and
-# ran the update a second time.
+# after the line that ran update.py (``resume_offset``). ``update_file`` makes the new file's own
+# update.py line end at that byte (``rem`` lines before it), so the old run goes on with the new
+# file's last three lines - the exit code, the pause, the end - as every version of the file has
+# them. Where that does not fit (the new file is longer up to that line), this line is put at that
+# byte instead: it ends the old run the same way, and a run of the new file, whose first lines set
+# TOW_FILE_RUN to this line's offset, passes over it. Not merely "defined": a run of an older file
+# written this way set it too, passed the line, and ran the update a second time.
 RESUME = 'if not "%TOW_FILE_RUN%"=="{mark}" pause & exit /b %ERRORLEVEL%\n'
+# ``rem`` lines that fill the space before that byte are at most this long (cmd reads 8191 at most).
+_PADDING_LINE = 1000
 # The line of every "Update TOW.cmd" since 1.22.0 that runs update.py.
 _RUNS_UPDATE = b'--ref "%TOW_REF%"'
 
@@ -142,20 +146,35 @@ def resume_offset(current: bytes) -> int | None:
     return found
 
 
+def _padding(size: int) -> bytes | None:
+    """``size`` bytes of ``rem`` lines; None when no such lines are that long (below 0, 1 to 4)."""
+    if size < 0 or 0 < size < len(b"rem\r\n"):
+        return None
+    lines = []
+    while size:
+        take = min(size, _PADDING_LINE)
+        if 0 < size - take < len(b"rem\r\n"):
+            take = size - len(b"rem\r\n")
+        lines.append(b"rem" + b" " * (take - len(b"rem\r\n")) + b"\r\n")
+        size -= take
+    return b"".join(lines)
+
+
 def update_file(resume_at: int | None) -> bytes | None:
     """ "Update TOW.cmd" that a run of the file it replaces, stopped at ``resume_at``, ends safely
-    in; None when it cannot (the line does not fit there)."""
+    in; None when it cannot (``RESUME`` does not fit there either)."""
     if resume_at is None:
         return None
+    body = crlf(UPDATE_BODY).encode("ascii")
+    ends = resume_offset(body) or 0  # the end of the body's own update.py line
+    head = crlf(UPDATE_HEAD.replace("{mark}", "0")).encode("ascii")
+    padding = _padding(resume_at - len(head) - ends)
+    if padding is not None:
+        return head + padding + body
     mark = str(resume_at)
     head = crlf(UPDATE_HEAD.replace("{mark}", mark)).encode("ascii")
-    body = crlf(UPDATE_BODY).encode("ascii")
-    gap = resume_at - len(head)
-    if gap == 0:
-        padding = b""
-    elif gap >= len(b"rem\r\n"):
-        padding = b"rem" + b" " * (gap - len(b"rem\r\n")) + b"\r\n"
-    else:
+    padding = _padding(resume_at - len(head))
+    if padding is None:
         return None
     return head + padding + crlf(RESUME.replace("{mark}", mark)).encode("ascii") + body
 
