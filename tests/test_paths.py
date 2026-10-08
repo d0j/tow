@@ -136,8 +136,8 @@ def test_a_copys_environment_running_this_code_is_not_redirected(monkeypatch, tm
 
     original = _checkout(tmp_path / "TOW" / "app")
     (tmp_path / "TOW" / "data").mkdir()
-    copy = tmp_path / "Copy of TOW"
-    (copy / "app" / ".venv").mkdir(parents=True)
+    copy = _checkout(tmp_path / "Copy of TOW" / "app").parent
+    (copy / "app" / ".venv").mkdir()
     monkeypatch.setattr(paths, "repo_root", lambda: original)
     monkeypatch.setattr(sys, "prefix", str(copy / "app" / ".venv"))
     monkeypatch.setenv("TOW_ROOT", str(copy))
@@ -152,6 +152,8 @@ def test_a_checkout_or_a_root_without_code_has_nothing_to_compare(bare, monkeypa
     assert paths.foreign_code() is None  # development: the checkout is the root
     monkeypatch.setenv("TOW_ROOT", str(tmp_path / "scratch"))  # tests, a wheel: no app/ there
     assert paths.foreign_code() is None
+    (tmp_path / "scratch" / "app").mkdir(parents=True)  # an app/ without TOW's code in it
+    assert paths.foreign_code() is None
 
 
 def test_the_cli_refuses_another_folders_code_before_touching_the_folder(monkeypatch, tmp_path, capsys):
@@ -160,8 +162,7 @@ def test_the_cli_refuses_another_folders_code_before_touching_the_folder(monkeyp
     from tow import cli
 
     original = _checkout(tmp_path / "TOW" / "app")
-    copy = tmp_path / "Copy of TOW"
-    (copy / "app").mkdir(parents=True)
+    copy = _checkout(tmp_path / "Copy of TOW" / "app").parent
     monkeypatch.setattr(paths, "repo_root", lambda: original)
     monkeypatch.setenv("TOW_ROOT", str(copy))
     monkeypatch.delenv("TOW_HOME", raising=False)

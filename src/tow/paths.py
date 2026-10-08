@@ -137,8 +137,8 @@ def foreign_code() -> Path | None:
     still there, the copy's environment imports the original's ``app/src``. Started with the
     copy as its root it would read and write the copy's data with the original's code - and
     take the original's web server for its own. An install's code is ``<root>/app``; a
-    development checkout is its own root, and a root without ``app/`` (tests, a wheel) has no
-    code of its own to compare with.
+    development checkout is its own root, and a root without TOW's code in ``app/`` (tests, a
+    wheel) has no code of its own to compare with.
     """
     code = repo_root()
     try:
@@ -147,7 +147,7 @@ def foreign_code() -> Path | None:
         return None
     if _same_folder(code, install) or _same_folder(code.parent, install):
         return None
-    return install if (install / "app").is_dir() else None
+    return install if _is_checkout(install / "app") else None
 
 
 def data_dir(*, create: bool = True) -> Path:
