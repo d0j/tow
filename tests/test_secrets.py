@@ -1,5 +1,6 @@
 import base64
 import json
+from pathlib import Path
 
 import pytest
 
@@ -205,3 +206,67 @@ def test_load_state_drops_legacy_secret_undo_before_next_write():
     assert "undo" not in state
     save_state(state)
     assert "fixture-secret" not in path.read_text(encoding="utf-8")
+
+
+# --- a write is kept only once it reads back (mutation survivors) ----------------------------
+
+
+def _legacy_file(data: dict) -> Path:
+    legacy = encrypted_secrets_path().with_name("secrets.json")
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    legacy.write_text(json.dumps(data), encoding="utf-8")
+    return legacy
+
+
+def _reads_back_other(monkeypatch) -> None:
+    from tow import store
+
+    monkeypatch.setattr(store, "_encrypted_payload", lambda _path, _format: {"telegram": {"token": "something else"}})
+
+
+def test_a_secrets_save_that_reads_back_different_fails_and_keeps_the_old_file(monkeypatch):
+    monkeypatch.setenv("TOW_MASTER_KEY", _key())
+    legacy = _legacy_file({"telegram": {"token": "legacy-token"}})
+    _reads_back_other(monkeypatch)
+
+    with pytest.raises(SecretStoreError) as error:
+        save_secrets({"telegram": {"token": "new-token"}})
+    assert str(error.value) == i18n.translate("store.readback_mismatch", i18n.current())
+    assert legacy.exists()
+
+
+def test_a_migration_that_reads_back_different_fails_and_keeps_the_plaintext(monkeypatch):
+    monkeypatch.setenv("TOW_MASTER_KEY", _key())
+    legacy = _legacy_file({"telegram": {"token": "legacy-token"}})
+    _reads_back_other(monkeypatch)
+
+    with pytest.raises(SecretStoreError) as error:
+        migrate_legacy_secrets()
+    assert str(error.value) == i18n.translate("store.readback_mismatch", i18n.current())
+    assert legacy.exists()
+
+
+def test_undecodable_secrets_bytes_are_a_damaged_store_not_a_crash(monkeypatch):
+    from tow.store import decrypt_secret_undo_bytes, decrypt_secrets_bytes
+
+    monkeypatch.setenv("TOW_MASTER_KEY", _key())
+    for read in (decrypt_secrets_bytes, decrypt_secret_undo_bytes):
+        with pytest.raises(SecretStoreError) as error:
+            read(b"\xff\xfe{not utf-8")
+        assert str(error.value) == i18n.translate("store.secrets_damaged", i18n.current())
+
+
+def test_a_half_written_key_file_is_removed(tmp_path, monkeypatch):
+    import os
+
+    from tow import store
+
+    def full_disk(_fd):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(os, "fsync", full_disk)
+    path = tmp_path / "keys" / "master.key"
+    with pytest.raises(SecretStoreError) as error:
+        store._write_new_key_file(path, b"k" * 44)
+    assert str(error.value) == i18n.translate("cli.keys.error.write_failed", i18n.current())
+    assert not path.exists()  # never a half key that looks like another one next time
