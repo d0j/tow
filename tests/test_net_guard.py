@@ -237,3 +237,13 @@ def test_a_zoned_public_address_is_judged_without_its_zone():
 def test_nat64_forms_are_judged_by_every_bit_of_their_ipv4_part(address):
     # 64:ff9b::1 is 0.0.0.1 behind a NAT64 gateway: the last bit decides it is not 64:ff9b::0.
     assert is_public(address) is False
+
+
+@pytest.mark.parametrize("address", ["64:ff9b::", "64:ff9b::0.0.0.0", "::ffff:0:0:0", "::ffff:0:0.0.0.0"])
+def test_an_ipv6_form_of_0_0_0_0_is_not_public(monkeypatch, address):
+    # Audit 09.10.2026: an all-zero IPv4 part was left as the IPv6 address, which ipaddress
+    # calls global; behind a NAT64 gateway or a translator it is 0.0.0.0 ("this host").
+    assert is_public(address) is False
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers(address))
+    with pytest.raises(httpcore.ConnectError):
+        public_addresses("tracker.example", 443)

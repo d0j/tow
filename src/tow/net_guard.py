@@ -30,8 +30,9 @@ def is_public(value: str) -> bool:
     if isinstance(address, ipaddress.IPv6Address):
         if address.ipv4_mapped is not None:
             address = address.ipv4_mapped
-        elif any(address in network for network in _EMBEDDED_IPV4) and int(address) & 0xFFFFFFFF:
-            address = ipaddress.IPv4Address(int(address) & 0xFFFFFFFF)
+        elif any(address in network for network in _EMBEDDED_IPV4):
+            # Its last 32 bits, also when they are all zero: 64:ff9b:: is 0.0.0.0, not global.
+            address = ipaddress.IPv4Address(address.packed[12:])
     return address.is_global and not address.is_multicast
 
 
