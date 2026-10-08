@@ -1274,6 +1274,42 @@ def test_overlap_guard_checks_all_previous_revision_hashes(monkeypatch):
     assert client.add_calls == 0
 
 
+def _claim(other_selection, other_files, wanted_files, wanted_mode, *, other_path=r"M:\TV"):
+    topic = {"id": "t1", "client_id": "main"}
+    other = {"id": "t2", "client_id": "main", "hash": "AB" * 20, "save_path": other_path, "selection": other_selection}
+    if other_files is not None:
+        other["selected_files"] = other_files
+    state = {"topics": [topic, other]}
+    return client_ops._conflicting_topic_claim(state, topic, "ab" * 20, r"M:\TV", wanted_files, wanted_mode)
+
+
+def test_a_hash_another_topic_holds_with_a_partial_selection_is_shared_only_on_the_same_files():
+    files = {"mode": "files", "value": "*e01*"}
+    assert _claim(files, ["Show/e01.mkv"], ("Show/e02.mkv",), "files") == "t2"  # different files: refused
+    assert _claim(files, ["Show/e01.mkv"], ("Show\\E01.mkv",), "files") == ""  # the same files: allowed
+    assert _claim(files, ["Show/e01.mkv"], ("Show/e01.mkv", "Show/e02.mkv"), "files") == "t2"
+    assert _claim({"mode": "all"}, None, ("Show/e01.mkv", "Show/e02.mkv"), "all") == ""  # all and all: allowed
+    assert _claim({"mode": "all"}, None, ("Show/e01.mkv",), "files") == "t2"  # all and part: refused
+    assert _claim({"mode": "all"}, None, ("Show/e01.mkv",), "all", other_path=r"N:\TV") == "t2"  # another folder
+
+
+def test_a_deselected_file_of_the_previous_revision_does_not_overlap():
+    old = "CD" * 20
+    files = [
+        {"index": 0, "name": "Show/e01.mkv", "size": 1, "priority": 0},  # not downloaded by the old one
+        {"index": 1, "name": "Show/e02.mkv", "size": 1, "priority": 1},
+    ]
+
+    class Old:
+        def inspect_torrent(self, h):
+            return {"hash": old, "state": "uploading", "files": files} if h == old else None
+
+    e01, e02 = SimpleNamespace(path="Show/e01.mkv"), SimpleNamespace(path="Show/e02.mkv")
+    assert client_ops._active_revision_overlap(Old(), old, (e01,)) == ""
+    assert client_ops._active_revision_overlap(Old(), old, (e01, e02)) == "Show/e02.mkv"
+    assert client_ops.live_previous_overlap(Old(), [old], [e01]) == ""
+
+
 def test_qbit_down_notification_is_sent_only_after_state_commit(monkeypatch):
     # A paused topic: the run has something to check, so it asks the client (without the site).
     save_state({"topics": [{"id": "t1", "title": "Show", "url": "http://rutor.info/torrent/1", "paused": True}]})

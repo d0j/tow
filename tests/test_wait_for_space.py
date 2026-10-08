@@ -415,3 +415,135 @@ def test_both_forms_show_the_hint_under_the_folder_and_warn_when_it_will_not_fit
     assert "need + margin > free" in script  # the add's own rule: the chosen bytes and the margin
     assert '"content.js.space_short"' in script
     assert ".space-hint.warn { color: var(--warn); }" in (src / "static" / "app.css").read_text(encoding="utf-8")
+
+
+# --- a start or a reselect is only told once the client confirms it (mutation survivors) ------
+
+
+def _recording_selection(client: Client) -> list[bool]:
+    calls: list[bool] = []
+    configure = client.configure_torrent_selection
+
+    def recorded(content, h, selected, *, ensure_started=False):
+        calls.append(ensure_started)
+        return configure(content, h, selected, ensure_started=ensure_started)
+
+    client.configure_torrent_selection = recorded  # type: ignore[method-assign]
+    return calls
+
+
+def test_space_start_not_read_back_keeps_waiting(world):
+    from tow.log import read_events
+
+    _check()
+    world.disk["free"] = 60 * GIB
+    world.client.torrents[NEW]["progress"] = 0.5
+    world.client.start_owned_torrent = lambda h: world.client.inspect_torrent(h)  # accepted, never carried out
+    rows = _space_pass()
+    topic = _topic()
+    assert rows[0]["ok"] is False
+    assert topic["last_error_code"] == "check.start_unconfirmed"
+    assert topic["waiting_space"]["hash"] == NEW  # still waiting: the next pass tries again
+    assert world.client.torrents[NEW]["state"] == "stoppedDL"
+    assert "client_started" not in {event["kind"] for event in read_events(limit=500)}
+    world.client.torrents[NEW]["progress"] = 1.0  # a complete torrent may stay stopped after its start
+    assert _space_pass()[0]["ok"] is True
+    assert "waiting_space" not in _topic()
+
+
+def test_a_reselect_that_fits_does_not_start_beside_a_live_previous_revision(world):
+    topic = _topic()
+    topic["hash"] = OLD
+    save_state({"topics": [topic]})
+    world.client.torrents[OLD] = {
+        "hash": OLD,
+        "save_path": str(world.folder),
+        "state": "stoppedUP",
+        "tags": ["tow"],
+        "files": [{"index": 0, "name": "Show/e01.mkv", "size": 1, "progress": 1.0, "priority": 1}],
+    }
+    _check()
+    assert _topic()["waiting_space"]["kind"] == "updated"
+    world.client.torrents[OLD]["state"] = "uploading"  # the owner started the previous one again
+    topic = _topic()
+    topic["selection"] = {"mode": "files", "value": "*e02.mkv"}
+    topic["selection_dirty"] = True
+    save_state({"topics": [topic]})
+    world.disk["free"] = 21 * GIB  # the new selection fits now
+    calls = _recording_selection(world.client)
+    row = _check()
+    topic = _topic()
+    assert row["ok"] is False
+    assert topic["last_error_code"] == "check.previous_revision_active"
+    assert True not in calls  # never started beside the running previous revision
+    assert world.client.torrents[NEW]["state"] == "stoppedDL"
+    assert world.client.torrents[OLD]["state"] == "uploading"  # and the old one is not touched
+    assert topic["waiting_space"]["hash"] == NEW
+
+
+def test_a_rollback_to_the_previous_revision_is_not_an_unfinished_own_add(world, monkeypatch):
+    world.disk["free"] = 600 * GIB
+    _check()  # NEW added and running
+    world.client.torrents[OLD] = {
+        "hash": OLD,
+        "save_path": str(world.folder),
+        "state": "stoppedUP",
+        "tags": ["tow"],
+        "files": [{"index": f.index, "name": f.path, "size": f.size, "progress": 1.0, "priority": 1} for f in FILES],
+    }
+    topic = _topic()
+    topic["previous_hashes"] = [OLD]
+    save_state({"topics": [topic]})
+    world.client.torrents[NEW]["state"] = "stoppedDL"  # the new one is not running, so a switch is allowed
+    monkeypatch.setattr(
+        topic_step,
+        "parse_torrent_metadata",
+        lambda blob: SimpleNamespace(infohash=OLD, client_hash=OLD, name="Show", is_multi=True, files=FILES),
+    )
+    calls = _recording_selection(world.client)
+    row = _check()
+    assert calls == [False]  # the owner's stopped older revision is not started by TOW
+    assert row.get("added") is False
+    assert world.client.torrents[OLD]["state"] == "stoppedUP"
+    assert _topic()["hash"] == OLD
+
+
+def test_a_hash_another_topic_records_is_not_an_unfinished_own_add(world):
+    world.disk["free"] = 600 * GIB
+    world.client.add_torrent_selected(b"torrent", str(world.folder), NEW, [0, 1], start=False)
+    state = load_state()
+    other = {"id": "t2", "title": "Show", "url": "https://tracker.example/2", "save_path": str(world.folder)}
+    save_state({"topics": [*state["topics"], {**other, "hash": NEW}]})
+    calls = _recording_selection(world.client)
+    row = check.run_check(apply=True, notify=True, how="test", ids=["t1"])["results"][0]
+    assert calls == [False]  # the other topic's stopped torrent is not started as if TOW's own add
+    assert row.get("added") is False
+    assert world.client.torrents[NEW]["state"] == "stoppedDL"
+
+
+def test_a_reselect_of_a_stopped_revision_that_does_not_wait_is_not_blocked_by_the_previous_one(world):
+    topic = _topic()
+    topic["hash"] = OLD
+    save_state({"topics": [topic]})
+    world.client.torrents[OLD] = {
+        "hash": OLD,
+        "save_path": str(world.folder),
+        "state": "stoppedUP",
+        "tags": ["tow"],
+        "files": [{"index": 0, "name": "Show/e01.mkv", "size": 1, "progress": 1.0, "priority": 1}],
+    }
+    world.disk["free"] = 600 * GIB
+    _check()  # NEW added and started: nothing waits
+    world.client.torrents[NEW]["state"] = "stoppedDL"  # the owner stopped the new one...
+    world.client.torrents[OLD]["state"] = "uploading"  # ...and runs the previous one again
+    topic = _topic()
+    assert "waiting_space" not in topic
+    topic["selection"] = {"mode": "files", "value": "*e02.mkv"}
+    topic["selection_dirty"] = True
+    save_state({"topics": [topic]})
+    calls = _recording_selection(world.client)
+    row = _check()
+    assert row["ok"] is True  # only the selection changes; nothing starts beside the old one
+    assert calls == [False]
+    assert [f["priority"] for f in world.client.torrents[NEW]["files"]] == [0, 1]
+    assert world.client.torrents[NEW]["state"] == "stoppedDL"
