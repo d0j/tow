@@ -266,7 +266,7 @@ def _raise_for_status(r: Any) -> None:
     if r.status_code < 400:
         return
     preview = r.text[:800] if r.headers.get("content-type", "").startswith("text") else ""
-    if thttp.is_cloudflare(r.status_code, preview or r.content[:800].decode("latin-1", "replace")):
+    if thttp.is_cloudflare(r.status_code, preview or r.content[:800].decode("latin-1", "replace"), r.headers):
         raise MirrorFetchError("mirrors.cloudflare", failure="cloudflare")
     if r.status_code == 401 or (
         r.status_code == 403

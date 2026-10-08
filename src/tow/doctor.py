@@ -150,7 +150,7 @@ def doctor_report(*, probe: bool = True, names: list[str] | None = None) -> dict
                         text = r.text[:800]
                     except LookupError, ValueError:  # an unknown or wrong charset: read as bytes
                         text = r.content[:800].decode("latin-1", "replace")
-                    if is_cloudflare(r.status_code, text):
+                    if is_cloudflare(r.status_code, text, r.headers):
                         row["error"] = "cloudflare"
                         out["ok"] = False
                     elif r.status_code >= 400:

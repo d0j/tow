@@ -236,6 +236,29 @@ def test_one_dead_mirror_among_working_ones_is_degraded_not_failed(monkeypatch):
     assert report["degraded"] == ["a http://a1"]
 
 
+def test_a_mirror_behind_cloudflares_check_is_reported_as_cloudflare(monkeypatch):
+    """Cloudflare's own header was not looked at: a check page of another title was "http 403"."""
+
+    class _ChallengeHttp(_Http):
+        def get(self, url):
+            response = _Response()
+            response.status_code = 403
+            response.headers = {"cf-mitigated": "challenge"}
+            response.text = "<html><title>Один момент…</title></html>"
+            return response
+
+    monkeypatch.setattr("tow.doctor.load_state", dict)
+    monkeypatch.setattr("tow.doctor.save_state", lambda state: None)
+    monkeypatch.setattr("tow.doctor.load_config", lambda: {"trackers": {"a": {"fetch_hosts": ["http://a"]}}})
+    monkeypatch.setattr("tow.doctor.load_secrets", dict)
+    monkeypatch.setattr("tow.doctor.http_client", lambda **kwargs: _ChallengeHttp())
+    monkeypatch.setattr("tow.doctor._autostart", lambda: {"on": False})
+
+    report = doctor_report(probe=True, names=["a"])
+
+    assert [probe.get("error") for probe in report["probes"]] == ["cloudflare"]
+
+
 def test_removed_tracker_disappears_from_a_partial_report(monkeypatch):
     state = {"doctor": {"qbit": "5.2", "probes": [{"tracker": "gone", "host": "http://gone", "ok": False}]}}
     _doctor_with(monkeypatch, state=state, trackers={"b": {"fetch_hosts": ["http://b"]}}, responses={"http://b": 200})
