@@ -25,6 +25,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   file list") instead of a server error when the files are listed.
 - A topic page with a link that has no valid address (`http://[x/...`) no longer makes filling in a new site from
   its topic link fail with a server error; a topic link the parser refuses gives no title instead of an error.
+- A torrent whose file names declare long episode ranges (`S01E0001-E1000` in each of 20,000 names) is read in about
+  a second instead of minutes and gigabytes of memory: a file name's range counts in full up to 100 episodes, and a
+  torrent whose names declare more than 50,000 episodes in all counts each file as its first episode.
 
 ## [1.28.0] — 2026-10-08
 

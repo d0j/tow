@@ -189,15 +189,13 @@ def _episode_range(token: str) -> tuple[EpisodeLabel, ...] | None:
     raise SelectionError("selection.bad_episode", rule=token)
 
 
-def _resolve_episode_keys(value: str, files: Iterable[TorrentFile], preferred_season: int | None = None) -> set[str]:
+def _resolve_episode_keys(
+    value: str, rows: tuple[TorrentFile, ...], coverages: tuple[tuple[EpisodeLabel, ...], ...]
+) -> set[str]:
+    """The episode keys ``value`` asks for among ``rows`` (``coverages``: their episodes, as
+    resolve_selection worked them out once for the whole torrent)."""
     rules = _split_rules(value)
     available: dict[str, EpisodeLabel] = {}
-    rows = tuple(files)
-    coverages = normalize_episode_seasons(
-        resolve_episode_coverages(file.path for file in rows),
-        preferred_season,
-        names=(file.path for file in rows),
-    )
     seasons = {label.season for coverage in coverages for label in coverage if label.season is not None}
     for row, coverage in zip(rows, coverages, strict=True):
         if not is_video_file(row.path):
@@ -423,7 +421,7 @@ def resolve_selection(
             if is_video_file(row.path):
                 episode_keys.update(label.key for label in labels(row))
     elif mode == "episodes":
-        episode_keys = _resolve_episode_keys(expression, selectable, preferred_season)
+        episode_keys = _resolve_episode_keys(expression, selectable, tuple(map(labels, selectable)))
         selected = [row for row in selectable if episode_keys.intersection(label.key for label in labels(row))]
     elif mode == "exact":
         wanted = normalize_exact_files(policy.get("files"))

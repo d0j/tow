@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import functools
 import re
+import threading
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
+from itertools import repeat
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -178,6 +180,20 @@ def parse_season_hint(title: str) -> int | None:
     return None
 
 
+# The longest range one file name may declare: S01E01-E100 (an absolute-number alias such as
+# S03E02-E074 stays inside it). A longer one counts as a list of its ends or its first episode,
+# as one over 1000 always did: no file holds a hundred episodes, and 20,000 names of 1000 each
+# took minutes and gigabytes to expand.
+_MAX_RANGE_SPAN = 99
+# What one name may declare in all (two seasons of such ranges); more is not an episode file.
+_MAX_FILE_LABELS = 2 * (_MAX_RANGE_SPAN + 1)
+
+
+def _run(first: int, last: int, season: int | None = None) -> tuple[EpisodeLabel, ...]:
+    """Episodes ``first`` to ``last`` of one season."""
+    return tuple(map(EpisodeLabel, range(first, last + 1), repeat(season)))
+
+
 def parse_episode_label(name: str) -> EpisodeLabel | None:
     labels = parse_episode_coverage(name)
     return labels[0] if labels else None
@@ -262,9 +278,9 @@ def _season_episode_range(text: str, path: PurePosixPath) -> tuple[EpisodeLabel,
             return ()
         end_text = match.group(3) or match.group(4)
         last = int(end_text or first)
-        if last < first or last - first > 1000:
+        if last < first or last - first > _MAX_RANGE_SPAN:
             return (EpisodeLabel(episode=first, season=season),)
-        return tuple(EpisodeLabel(episode=episode, season=season) for episode in range(first, last + 1))
+        return _run(first, last, season)
     return None
 
 
@@ -314,8 +330,8 @@ def _episode_word(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, ...] | 
         first, second = int(match.group(1)), int(match.group(3) or match.group(1))
         if first == 0 or second == 0:
             return ()
-        if match.group(2) == "-" and first <= second and second - first <= 1000:
-            return tuple(EpisodeLabel(episode=value) for value in range(first, second + 1))
+        if match.group(2) == "-" and first <= second and second - first <= _MAX_RANGE_SPAN:
+            return _run(first, second)
         if match.group(2) and first != second:
             return (EpisodeLabel(episode=first), EpisodeLabel(episode=second))
         return (EpisodeLabel(episode=first),)
@@ -340,8 +356,8 @@ def _range_then_plural_word(text: str, path: PurePosixPath) -> tuple[EpisodeLabe
     )
     if match:
         first, last = int(match.group(1)), int(match.group(2))
-        if 0 < first <= last and last - first <= 1000 and not 1900 <= first <= 2099:
-            return tuple(EpisodeLabel(episode=value) for value in range(first, last + 1))
+        if 0 < first <= last and last - first <= _MAX_RANGE_SPAN and not 1900 <= first <= 2099:
+            return _run(first, last)
     return None
 
 
@@ -370,8 +386,8 @@ def _anime_dash_range(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, ...
     )
     if match:
         first, last = int(match.group(1)), int(match.group(2))
-        if 0 < first <= last and last - first <= 1000 and not 1900 <= first <= 2099:
-            return tuple(EpisodeLabel(episode=value) for value in range(first, last + 1))
+        if 0 < first <= last and last - first <= _MAX_RANGE_SPAN and not 1900 <= first <= 2099:
+            return _run(first, last)
     return None
 
 
@@ -479,7 +495,7 @@ def _mixed_season_labels(core: str, path: PurePosixPath) -> tuple[EpisodeLabel, 
     # including lists with '&' and ranges with different zero padding.
     core = head.group() + core[head.end() :].replace(head.group(), "e")
     span = re.fullmatch(r"s\d+e(\d+)[-–—~]\s*e?(\d+)", core)
-    if span and (int(span.group(2)) < int(span.group(1)) or int(span.group(2)) - int(span.group(1)) > 1000):
+    if span and (int(span.group(2)) < int(span.group(1)) or int(span.group(2)) - int(span.group(1)) > _MAX_RANGE_SPAN):
         return ()
     for parse in (_compact_sequence, _repeated_episodes, _season_episode_range):
         coverage = parse(core, path)
@@ -512,6 +528,8 @@ def _mixed_seasons(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, ...] |
         if not coverage:
             return ()
         labels.update((label, None) for label in coverage)
+        if len(labels) > _MAX_FILE_LABELS:  # dozens of seasons of long ranges: no real file
+            return ()
     return tuple(labels)
 
 
@@ -581,13 +599,22 @@ def _normalize_explicit_markers(text: str) -> str:
 def parse_episode_coverage(name: str) -> tuple[EpisodeLabel, ...]:
     """Parse episode coverage from a filename, including compact ranges."""
     text = str(name or "").replace("\\", "/")
-    return _known_coverage(text) if len(text) <= _KNOWN_NAME_CHARS else _coverage_of(text)
+    if len(text) > _KNOWN_NAME_CHARS:
+        return _coverage_of(text)
+    known = _known_coverage(text)
+    if known is not None:
+        return known
+    parsed, _LONG.parsed = getattr(_LONG, "parsed", None), None
+    # Just parsed by _kept_coverage (a miss) and not kept: taken from there, not parsed twice.
+    return parsed[1] if parsed is not None and parsed[0] == text else _coverage_of(text)
 
 
 # Home works out every topic's progress from its episode labels on every render (2000 topics:
 # ~15 000 labels, 0.2 s). A name always parses the same and the result is immutable, so the
-# answers for ordinary names are kept; an unusually long (untrusted) name is not.
+# answers for ordinary names are kept; an unusually long (untrusted) name is not, and neither
+# is a long range (16 384 kept ranges of 1000 labels each held more than a gigabyte).
 _KNOWN_NAME_CHARS = 512
+_KEPT_LABELS = 32
 
 
 def _coverage_of(name: str) -> tuple[EpisodeLabel, ...]:
@@ -600,16 +627,48 @@ def _coverage_of(name: str) -> tuple[EpisodeLabel, ...]:
     return ()
 
 
-_known_coverage = functools.lru_cache(maxsize=16384)(_coverage_of)
+# The long answer _kept_coverage just gave up keeping, for its caller in this thread.
+_LONG = threading.local()
+
+
+def _kept_coverage(name: str) -> tuple[EpisodeLabel, ...] | None:
+    """The answer worth keeping for ``name``; None for a long range (parsed again when asked)."""
+    coverage = _coverage_of(name)
+    if len(coverage) <= _KEPT_LABELS:
+        return coverage
+    _LONG.parsed = (name, coverage)
+    return None
+
+
+_known_coverage = functools.lru_cache(maxsize=16384)(_kept_coverage)
 
 
 def _single_season(coverage: tuple[EpisodeLabel, ...]) -> bool:
     return bool(coverage) and all(label.season == coverage[0].season for label in coverage)
 
 
+# How many episodes one torrent's names may declare together: 20,000 files of double episodes
+# stay far below. Past it the names describe no real series and every file counts as its first
+# episode (as a lone long range does): 20,000 names of a hundred episodes each are two million
+# labels to compare.
+_MAX_TORRENT_LABELS = 50_000
+
+
+def _bounded_coverages(names: Iterable[str]) -> tuple[tuple[EpisodeLabel, ...], ...]:
+    coverages: list[tuple[EpisodeLabel, ...]] = []
+    total = 0
+    for name in names:
+        coverage = _coverage_with_folder_season(name)
+        total += len(coverage)
+        coverages.append(coverage[:1] if total > _MAX_TORRENT_LABELS else coverage)
+    if total > _MAX_TORRENT_LABELS:
+        return tuple(coverage[:1] for coverage in coverages)
+    return tuple(coverages)
+
+
 def resolve_episode_coverages(names: Iterable[str]) -> tuple[tuple[EpisodeLabel, ...], ...]:
     """Parse a file set and collapse overlapping pseudo-ranges from dual numbering."""
-    coverages = tuple(_coverage_with_folder_season(name) for name in names)
+    coverages = _bounded_coverages(names)
     nonempty = [coverage for coverage in coverages if coverage]
     if len(nonempty) == 1 and len(nonempty[0]) > 30 and _single_season(nonempty[0]):
         # With no neighbouring filenames the syntax is irreducibly ambiguous.
