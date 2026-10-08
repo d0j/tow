@@ -8,10 +8,12 @@ from tow.log import error_class, owner_language
 
 # Transport trouble that passes by itself: amber for the status dot and the site icon.
 TRACKER_WARNING_CLASSES = frozenset({"tracker", "frozen", "cloudflare"})
-# The site icon is also amber for the day's download limit.
-SITE_WARNING_CLASSES = TRACKER_WARNING_CLASSES | {"quota"}
-# Problems on the site's side that need the owner (log in again, topic removed...): red site icon.
-SITE_ERROR_CLASSES = frozenset({"gone", "no_tracker", "not_torrent", "tracker_auth", "auth"})
+# The site icon is also amber for a sign-in the site asks for and the day's download limit
+# (AGENTS.md, the status-colour contract; the status dot stays red for them).
+_SIGN_IN_CLASSES = frozenset({"tracker_auth", "auth"})
+SITE_WARNING_CLASSES = TRACKER_WARNING_CLASSES | {"quota"} | _SIGN_IN_CLASSES
+# Problems on the site's side about the topic (removed, not a torrent page, no site): red site icon.
+SITE_ERROR_CLASSES = frozenset({"gone", "no_tracker", "not_torrent"})
 
 # Catalog keys of the labels (tow/locales): translated when a status is projected (the page's
 # language, or the owner's outside a request).
@@ -92,11 +94,13 @@ def project_home_status(topic: dict[str, Any], history_record: dict[str, Any] | 
     tracker_tone = _tracker_tone(topic)
     tracker_action = "tracker_check" if error or topic.get("last_ok") else None
     lang = owner_language()
+    # Amber for a sign-in is not "down": the site answers and asks for a login.
+    tracker_key = "status.tracker.sign_in" if error and error_cls in _SIGN_IN_CLASSES else _TRACKER_LABELS[tracker_tone]
     return HomeStatus(
         torrent_tone=torrent_tone,
         tracker_tone=tracker_tone,
         torrent_label=t(_TORRENT_LABELS[torrent_tone], lang),
-        tracker_label=t(_TRACKER_LABELS[tracker_tone], lang),
+        tracker_label=t(tracker_key, lang),
         torrent_action=action,
         tracker_action=tracker_action,
     )

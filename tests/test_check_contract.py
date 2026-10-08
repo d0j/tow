@@ -293,6 +293,53 @@ def test_tracker_auth_falls_back_to_magnet_metadata_and_normal_add_flow(monkeypa
     assert load_state()["topics"][0]["hash"] == "HASH-NEW"
 
 
+@pytest.mark.parametrize("saved_hash", [None, "A" * 40])
+def test_a_failed_magnet_fallback_keeps_the_sites_own_refusal(monkeypatch, saved_hash):
+    # The site answered the .torrent with a sign-in page and its page has no magnet either:
+    # the row said "the page has no valid magnet link" (red, the site icon green) instead of
+    # the sign-in the site asks for.
+    from tow.errors import TowError
+
+    save_state(
+        {
+            "topics": [
+                {
+                    "id": "login-topic",
+                    "title": "Show",
+                    "url": "https://tracker/1",
+                    "save_path": r"M:\TV",
+                    "hash": saved_hash,
+                }
+            ]
+        }
+    )
+    save_download_history({"schema_version": 1, "topics": {}})
+    client = FakeClient()
+    client.present = saved_hash is not None
+    client.capabilities = {**FakeClient.capabilities, "magnet_metadata": True}
+    tracker = _wire_fake_check(monkeypatch, client)
+    monkeypatch.setattr(
+        tracker,
+        "fetch_torrent",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(TowError("mirrors.not_torrent_login", cls="tracker_auth")),
+    )
+    monkeypatch.setattr(
+        tracker,
+        "fetch_magnet",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(TowError("tracker.no_magnet")),
+        raising=False,
+    )
+
+    row = check.run_check(apply=True, notify=False, ids=["login-topic"], how="manual")["results"][0]
+
+    assert row["ok"] is False
+    assert row["error_record"]["code"] == "mirrors.not_torrent_login"
+    assert row["error_class"] == "tracker_auth"
+    assert client.add_calls == 0
+    topic = load_state()["topics"][0]
+    assert topic["last_error_code"] == "mirrors.not_torrent_login"
+
+
 @pytest.mark.parametrize("apply", [False, True])
 def test_existing_hash_uses_matching_page_magnet_when_torrent_link_disappears(monkeypatch, apply):
     saved_hash = "A" * 40

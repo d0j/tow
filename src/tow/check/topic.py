@@ -494,13 +494,19 @@ def _fetch_by_magnet(work: TopicCheck, policy: dict[str, Any], torrent_error: Ex
     dest = str(topic.get("save_path") or "").strip()
     if not dest:
         raise TowError("check.no_save_path") from torrent_error
-    magnet_url, magnet_hash = fetch_magnet(
-        work.url,
-        run.secrets,
-        run.ua,
-        ignore_cool=run.ignore_cool,
-        persist=run.apply,
-    )
+    try:
+        magnet_url, magnet_hash = fetch_magnet(
+            work.url,
+            run.secrets,
+            run.ua,
+            ignore_cool=run.ignore_cool,
+            persist=run.apply,
+        )
+    except Exception as magnet_error:  # the fallback failed too: the site's own answer stands
+        # "No valid magnet link" hid why the .torrent was refused (a sign-in page, not a
+        # torrent): the row keeps that reason; the magnet attempt is its cause and in the log.
+        _LOG.warning("magnet fallback failed for %s: %s", tr.name, type(magnet_error).__name__)
+        raise torrent_error from magnet_error
     _observe_cached_magnet(work.url, magnet_url, topic)
     run.record(
         "tracker_magnet_found",
