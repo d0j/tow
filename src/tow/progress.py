@@ -107,6 +107,21 @@ def _completion_key(item: HistoryItem) -> tuple[float, int, int, str]:
     )
 
 
+# Events of one pass share its time: which one Home shows as the latest. A file that is new
+# in this revision (the new episode) outranks the files the revision only carried over.
+_EVENT_RANK = {"episode_completed": 3, "file_completed": 2, "new_file": 1, "revision_updated": 0}
+
+
+def _event_order(event: dict[str, Any]) -> tuple[int, int, int]:
+    """An event's place among events of the same moment: its kind, then its episode."""
+    label = parse_episode_label(str(event.get("label") or ""))
+    return (
+        _EVENT_RANK.get(str(event.get("kind")), 0),
+        label.season if label and label.season is not None else -1,
+        label.episode if label else -1,
+    )
+
+
 def _set_latest_event(record: HistoryRecord, event: dict[str, Any]) -> None:
     current = record.get("last_event")
     if not isinstance(current, dict) or not current.get("at"):
@@ -115,9 +130,8 @@ def _set_latest_event(record: HistoryRecord, event: dict[str, Any]) -> None:
     try:
         event_time = parse_timestamp(str(event["at"]))
         current_time = parse_timestamp(str(current["at"]))
-        rank = {"episode_completed": 3, "file_completed": 2, "revision_updated": 1, "new_file": 0}
         is_newer = event_time > current_time or (
-            event_time == current_time and rank.get(str(event.get("kind")), 0) > rank.get(str(current.get("kind")), 0)
+            event_time == current_time and _event_order(event) > _event_order(current)
         )
     except TypeError, ValueError, OverflowError, OSError:
         is_newer = True

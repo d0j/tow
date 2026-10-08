@@ -1983,3 +1983,26 @@ def test_a_file_confirmed_today_is_not_looked_at_again(tmp_path: Path, monkeypat
     item["confirmed_ts"] -= 25 * 3600  # a day later the disk is looked at again
     reconcile_topic(topic, client, history, "2026-09-13T22:30:00+03:00")
     assert len(looks) == 2
+
+
+def test_the_new_episode_is_the_latest_event_of_a_new_revision():
+    # A new revision carries E01-E02 over (revision_updated) and brings E03 (new_file), all
+    # at the pass's time: Home showed E01 as the latest event.
+    from tow.progress import _set_latest_event
+
+    at = "2026-10-08T20:16:47+03:00"
+    record: dict = {}
+    for kind, label in (
+        ("revision_updated", "S01E01"),
+        ("revision_updated", "S01E02"),
+        ("new_file", "S01E03"),
+        ("new_file", "S01E04"),
+        ("revision_updated", "S01E02"),
+    ):
+        _set_latest_event(record, {"kind": kind, "label": label, "at": at})
+    assert (record["last_event"]["kind"], record["last_event"]["label"]) == ("new_file", "S01E04")
+
+    _set_latest_event(record, {"kind": "episode_completed", "label": "S01E01", "at": at})
+    assert record["last_event"]["kind"] == "episode_completed"  # a completion still outranks
+    _set_latest_event(record, {"kind": "revision_updated", "label": "S01E09", "at": "2026-10-08T20:20:00+03:00"})
+    assert record["last_event"]["label"] == "S01E09"  # a later time always wins
