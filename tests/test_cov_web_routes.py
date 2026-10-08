@@ -806,7 +806,7 @@ def test_settings_undo_rolls_back_when_config_write_fails(monkeypatch, client):
 
     response = client.post("/undo", follow_redirects=False)
 
-    assert _flash(response) == "не удалось применить откат"
+    assert _flash(response) == "не удалось отменить изменение"
     cfg = load_config()
     assert cfg["interval_sec"] == 3600
     assert cfg["flash_ttl_sec"] == 60
@@ -874,7 +874,7 @@ def test_settings_access_undo_keeps_everything_when_config_write_fails(monkeypat
 
     response = client.post("/undo", follow_redirects=False)
 
-    assert _flash(response) == "откат доступа не применён"
+    assert _flash(response) == "изменение доступа не отменено"
     assert _query(response)["open"] == "access"
     assert load_secrets() == secrets_before
     assert load_config()["allow_lan"] is True

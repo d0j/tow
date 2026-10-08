@@ -238,7 +238,7 @@ def test_an_undo_that_cannot_be_written_changes_nothing_and_stays(client, monkey
 
     monkeypatch.setattr("tow.config.save_config", disk_full)
 
-    assert _undo(client) == "откат не применён"
+    assert _undo(client) == "отменить изменение не удалось"
     assert _store_bytes() == before
     assert _events("undo_fail")[-1]["status"] == "restored"
 
