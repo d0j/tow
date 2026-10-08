@@ -47,6 +47,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   mirror's own failures count towards its cooldown (a refused or dropped connection, no answer, a server error, a
   Cloudflare check on its front page too), and such a topic shows its own yellow error. Before, two topics behind a
   check and a slow one in a row paused all topics of the site for an hour.
+- Scheduled checks keep their interval: the next one was due an interval after the previous one actually started,
+  so each started a fraction of a second later than planned (+0.25 s per check, without end). Now it counts from
+  the planned start; a check that started more than an interval late (after a long stall) counts from then, without
+  a burst of catch-up checks.
 
 ## [1.28.1] — 2026-10-08
 

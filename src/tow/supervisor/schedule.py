@@ -164,13 +164,27 @@ class Schedule:
             due_at["space"] = self._every_due_at("space", SPACE_EVERY_SEC, SPACE_EVERY_SEC, now)
         return [(name, now - at) for name, at in due_at.items() if at <= now]
 
-    def started(self, name: str, now: float) -> None:
+    def _period(self, name: str) -> float:
+        """How often a job of fixed cadence is due (0: a daily slot or a timer, no cadence)."""
+        return {
+            "check": float(self.interval_sec),
+            "progress": PROGRESS_EVERY_SEC,
+            "space": SPACE_EVERY_SEC,
+            "watchdog": WATCHDOG_EVERY_SEC,
+        }.get(name, 0.0)
+
+    def started(self, name: str, now: float, late: float = 0.0) -> None:
+        """The job started at ``now``, ``late`` seconds after it was due. A job of fixed cadence
+        counts from when it was due, not from the tick that started it: the next check is
+        ``interval_sec`` after the previous one was planned (counting from the actual start
+        moved every check a quarter second later). A start later than a whole period (a long
+        stall, a long job before it, a machine asleep) counts from now: no burst of catch-ups."""
         self._corrected.pop(f"{name}:own", None)
         if name == "check":
             self._corrected.pop("check:persisted", None)
         elif name == "backup":
             self._corrected.pop("backup:attempt", None)
-        self.last[name] = now
+        self.last[name] = now - late if 0.0 < late < self._period(name) else now
 
     def next_due(self, now: float, **facts: float) -> dict[str, float]:
         """When each job is due next (for status.json and Settings)."""

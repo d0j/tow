@@ -525,6 +525,40 @@ def test_a_week_of_hourly_checks_after_a_manual_one(tmp_path, monkeypatch):
     assert len([child for child in world.jobs() if "--progress-only" in child.argv]) > 300
 
 
+def test_checks_start_on_their_plan_not_a_tick_later_each_time(tmp_path, monkeypatch):
+    # Soak: the next check was due 60 s after the previous ACTUAL start, so every check started
+    # a tick (~0.25 s) later than the one before and the schedule drifted without end.
+    from tow.paths import config_path
+
+    with config_path().open("a", encoding="utf-8") as handle:
+        handle.write("interval_sec: 60\n")
+    clock = Clock()
+    world = StateWorld(clock, {}, monkeypatch)
+    sup = Supervisor(world.deps(), python="py", home=tmp_path / "logs")
+    for _ in range(int(25 * 60 / 0.7)):  # ticks that never fall on a due time
+        sup.tick()
+        clock.advance(0.7)
+    starts = [child.at - 1000.0 for child in world.checks()]
+    assert len(starts) == 23
+    offsets = [start - (120 + 60 * k) for k, start in enumerate(starts)]
+    assert all(0 <= offset < 0.7 for offset in offsets), offsets
+
+
+def test_a_check_late_by_more_than_its_interval_does_not_catch_up_in_a_burst():
+    schedule = Schedule(started_at=T0, interval_sec=60)
+    schedule.started("check", T0, 0.0)
+    due = schedule.check_due_at(T0 + 60.3, 0)
+    assert due == T0 + 60
+    schedule.started("check", T0 + 60.3, T0 + 60.3 - due)
+    assert schedule.check_due_at(T0 + 61, 0) == T0 + 120  # from the plan, not from the tick
+    # a stall of five minutes (a long job, a frozen loop): one check now, the next a minute later
+    late = T0 + 425 - schedule.check_due_at(T0 + 425, 0)
+    schedule.started("check", T0 + 425, late)
+    assert schedule.check_due_at(T0 + 426, 0) == T0 + 485
+    due_now = schedule.due(T0 + 426, last_scheduled_check=0, last_backup_ok=T0, last_backup_attempt=T0)
+    assert "check" not in dict(due_now)
+
+
 def test_the_cadence_survives_a_restart_and_ignores_manual_checks(tmp_path, monkeypatch):
     _hourly()
     clock = Clock()
