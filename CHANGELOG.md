@@ -35,6 +35,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A second client still loading its torrents after a start is no longer believed empty (and added to again) when
   a check in between did not ask it.
 - A broken topic page of a few megabytes (tags or posts never closed) no longer holds a check for minutes.
+- Deluge with several daemons: when its Web UI has to be attached again, TOW attaches it to the same daemon, not
+  to the first one online.
 
 ## [1.26.0] — 2026-10-08
 

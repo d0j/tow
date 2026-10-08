@@ -161,6 +161,10 @@ class FakeDeluge:
         # (which it may miss: then a plugin's methods stay unknown until it attaches again).
         self.misses_plugin_event = False
         self.known_plugins: list[str] = []
+        # The daemons Deluge Web knows, and the one it is attached to.
+        self.hosts = ["host-1"]
+        self.attached_to: str | None = None
+        self.reports_connected = True
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
@@ -190,18 +194,22 @@ class FakeDeluge:
         return self.connected
 
     def m_web_get_hosts(self):
-        return [["host-1", "127.0.0.1", 58846, "localclient"]]
+        return [[host, "127.0.0.1", 58846 + i, "localclient"] for i, host in enumerate(self.hosts)]
 
     def m_web_get_host_status(self, host_id):
+        if self.connected and host_id == self.attached_to and self.reports_connected:
+            return [host_id, "Connected", "2.2.0"]
         return [host_id, "Online" if self.host_online else "Offline", "2.2.0"]
 
     def m_web_connect(self, host_id):
         self.connected = True
+        self.attached_to = host_id
         self.known_plugins = list(self.plugins)
         return []
 
     def m_web_disconnect(self):
         self.connected = False
+        self.attached_to = None
         return "disconnected"
 
     def m_daemon_get_version(self):
@@ -525,7 +533,7 @@ def test_pending_add_is_finished_by_a_selection_update(client, tmp_path):
     adapter, server = client
     labels = ["tow-pending"] if isinstance(server, FakeDeluge) else ["tow", "tow-pending"]
     if isinstance(server, FakeDeluge):
-        server.connected = True
+        server.connected, server.attached_to = True, "host-1"
         server.plugins.append("Label")
         server.labels.update({"tow", "tow-pending"})
         server.logged_in = True
@@ -719,6 +727,36 @@ def test_deluge_reattaches_when_its_web_ui_does_not_know_a_method(tmp_path):
     assert server.labels == {"tow", "tow-pending"}
     assert server.calls.count("web.disconnect") == 1
     assert server.calls.count("web.connect") == 2
+
+
+def test_deluge_reattaches_to_the_daemon_it_was_attached_to(tmp_path):
+    """With several daemons the new attach took the first one online: TOW then added to
+    (and read) another daemon's torrents than the one the owner had attached."""
+    server = FakeDeluge()
+    server.misses_plugin_event = True
+    server.hosts = ["host-1", "host-2"]
+    server.connected, server.attached_to = True, "host-2"  # attached by the owner
+    adapter = _deluge(server)
+    adapter.ping()
+    adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert server.labels == {"tow", "tow-pending"}
+    assert server.calls.count("web.disconnect") == 1
+    assert server.attached_to == "host-2"
+
+
+def test_deluge_stays_attached_when_it_cannot_tell_to_which_daemon(tmp_path):
+    """No daemon says "Connected": attaching again could pick another one, so it is not detached."""
+    server = FakeDeluge()
+    server.misses_plugin_event = True
+    server.hosts = ["host-1", "host-2"]
+    server.connected, server.attached_to = True, "host-2"
+    server.reports_connected = False
+    adapter = _deluge(server)
+    adapter.ping()
+    with pytest.raises(ClientError):
+        adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert "web.disconnect" not in server.calls
+    assert server.attached_to == "host-2"
 
 
 def test_deluge_in_a_preview_does_not_attach_the_web_ui_to_a_daemon():
