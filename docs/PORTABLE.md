@@ -781,6 +781,21 @@ Built so far (this workstream):
   and once with the copy it leaves in `runtime/update.py`. Weekly and by hand it also measures
   all 45 large file-selection scenarios of `tests/selection_work_probe.py`
   (`TOW_SELECTION_WORK=all`); the gate measures the costliest of each kind.
+- Real systems (`.github/workflows/real.yml`): on pull requests that touch the clients, autostart,
+  the check or the supervisor, weekly and by hand. An Ubuntu runner installs qBittorrent,
+  Transmission and Deluge from apt, starts each on its own port with a login of that run, and
+  `tests/integration/test_real_clients.py` drives TOW's own adapters (built by the client factory
+  from settings) on torrents whose data is already there: added stopped with a file selection,
+  the selection and the "tow" mark read back, started, complete after a recheck, stopped, moved,
+  an unmarked torrent adopted, each removed without its files; then `tow check --apply` against a
+  local site, once more after the site publishes a new version. On Windows, macOS and Ubuntu
+  `tests/integration/test_real_autostart.py` takes a runtime install of the commit (the bundle
+  with `install.ps1`, `install.sh`), turns autostart on, finds the task, agent or unit with the
+  OS's own tools, lets the OS start TOW (`schtasks /Run`, `launchctl kickstart`,
+  `systemctl --user start`; lingering on for the runner's user), waits for `/healthz`, turns it
+  off and confirms the entry is gone and TOW stopped; "without signing in" too. These tests carry
+  `@pytest.mark.real_system("TOW_REAL_...")`: skipped unless that variable is 1, which only this
+  workflow sets; then the test guard lets them through.
 - Releases (`.github/workflows/release.yml`, 1.22): a `v*` tag (or a dispatch with a tag) must be
   an annotated `TOW X.Y.Z` on `origin/main` whose content passed `ci` - on its commit or on any
   commit with the same tree, such as the head of the merged pull request (the gate is not run

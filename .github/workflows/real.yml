@@ -1,0 +1,290 @@
+name: real systems
+
+# What the gate replaces with fakes, for real: qBittorrent, Transmission and Deluge, each started
+# on the runner with a login of this run and driven through TOW's own adapters and a real
+# `tow check --apply` against a local site (tests/integration/test_real_clients.py); and the
+# autostart of each OS - Task Scheduler, launchd, systemd --user - turned on for a throwaway
+# install made the way the owner makes one, started by the OS and turned off again
+# (tests/integration/test_real_autostart.py). Those tests are skipped without TOW_REAL_CLIENTS /
+# TOW_REAL_AUTOSTART, which only this workflow sets: never on a development machine. It runs on
+# pull requests that touch that code, once a week (new runner images, new client versions) and
+# by hand. Not a required check: the path filter would leave it pending on other pull requests.
+
+on:
+  pull_request:
+    paths:
+      - "src/tow/clients/**"
+      - "src/tow/autostart/**"
+      - "src/tow/check/**"
+      - "src/tow/supervisor/**"
+      - "tests/integration/**"
+      - ".github/workflows/real.yml"
+  schedule:
+    - cron: "41 4 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clients:
+    name: torrent clients
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TOW_REAL_CLIENTS: "1"
+      TOW_REAL_QBITTORRENT: 127.0.0.1:18080
+      TOW_REAL_TRANSMISSION: 127.0.0.1:19091
+      TOW_REAL_DELUGE: 127.0.0.1:18112
+      TOW_REAL_CLIENT_USER: tow
+    steps:
+      # Pinned to full commit SHAs (the tag in the comment); Dependabot proposes updates.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      - name: Install Python from .python-version
+        run: uv python install --no-bin --no-registry
+      - name: Sync locked environment
+        run: uv sync --frozen
+      - name: Install qBittorrent, Transmission and Deluge (their system services stay off)
+        timeout-minutes: 10
+        run: |
+          printf '#!/bin/sh\nexit 101\n' | sudo tee /usr/sbin/policy-rc.d >/dev/null
+          sudo chmod 755 /usr/sbin/policy-rc.d
+          sudo apt-get update -q
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
+            qbittorrent-nox transmission-daemon deluged deluge-web
+          sudo systemctl stop transmission-daemon deluged deluge-web 2>/dev/null || true
+          dpkg-query -W qbittorrent-nox transmission-daemon deluged deluge-web
+      - name: A login for this run, and the clients' folders
+        run: |
+          secret=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+          echo "::add-mask::$secret"
+          echo "TOW_REAL_CLIENT_SECRET=$secret" >> "$GITHUB_ENV"
+          echo "CLIENTS=$RUNNER_TEMP/clients" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/clients/logs" "$RUNNER_TEMP/clients/downloads" \
+            "$RUNNER_TEMP/clients/qbittorrent/qBittorrent/config" "$RUNNER_TEMP/clients/transmission" \
+            "$RUNNER_TEMP/clients/deluge"
+      - name: Start the clients on their own ports with that login
+        run: |
+          # qBittorrent: the Web UI login in its config file, PBKDF2-SHA512 as qBittorrent keeps it.
+          key=$(python3 - <<'PY'
+          import base64, hashlib, os
+          salt = os.urandom(16)
+          derived = hashlib.pbkdf2_hmac("sha512", os.environ["TOW_REAL_CLIENT_SECRET"].encode(), salt, 100000, 64)
+          print(base64.b64encode(salt).decode() + ":" + base64.b64encode(derived).decode())
+          PY
+          )
+          cat > "$CLIENTS/qbittorrent/qBittorrent/config/qBittorrent.conf" <<EOF
+          [LegalNotice]
+          Accepted=true
+
+          [BitTorrent]
+          Session\DHTEnabled=false
+          Session\LSDEnabled=false
+          Session\PeXEnabled=false
+          Session\DefaultSavePath=$CLIENTS/downloads
+
+          [Preferences]
+          WebUI\Address=127.0.0.1
+          WebUI\Port=18080
+          WebUI\Username=$TOW_REAL_CLIENT_USER
+          WebUI\Password_PBKDF2="@ByteArray($key)"
+          EOF
+          printf 'y\n' | nohup qbittorrent-nox --profile="$CLIENTS/qbittorrent" --webui-port=18080 \
+            >"$CLIENTS/logs/qbittorrent.log" 2>&1 &
+          echo $! >"$CLIENTS/qbittorrent.pid"
+
+          nohup transmission-daemon --foreground --config-dir "$CLIENTS/transmission" --port 19091 \
+            --auth --username "$TOW_REAL_CLIENT_USER" --password "$TOW_REAL_CLIENT_SECRET" --allowed 127.0.0.1 \
+            --download-dir "$CLIENTS/downloads" --no-portmap --no-dht --logfile "$CLIENTS/logs/transmission.log" \
+            >"$CLIENTS/logs/transmission-console.log" 2>&1 &
+          echo $! >"$CLIENTS/transmission.pid"
+
+          # Deluge Web keeps sha1(salt + password); its default host is the daemon of the same
+          # config folder on 58846 (deluged's own "localclient" login from that folder's auth file).
+          python3 - <<'PY'
+          import hashlib, json, os, secrets
+          salt = secrets.token_hex(20)
+          digest = hashlib.sha1((salt + os.environ["TOW_REAL_CLIENT_SECRET"]).encode()).hexdigest()
+          settings = {"pwd_salt": salt, "pwd_sha1": digest, "port": 18112, "interface": "127.0.0.1", "first_login": False}
+          with open(os.path.join(os.environ["CLIENTS"], "deluge", "web.conf"), "w", encoding="utf-8") as handle:
+              handle.write(json.dumps({"file": 2, "format": 1}, indent=4) + json.dumps(settings, indent=4))
+          PY
+          nohup deluged --do-not-daemonize --config "$CLIENTS/deluge" --port 58846 --loglevel info \
+            --logfile "$CLIENTS/logs/deluged.log" >"$CLIENTS/logs/deluged-console.log" 2>&1 &
+          echo $! >"$CLIENTS/deluged.pid"
+          for attempt in $(seq 1 30); do [ -s "$CLIENTS/deluge/auth" ] && break; sleep 1; done
+          [ -s "$CLIENTS/deluge/auth" ] || { echo "::error::deluged wrote no auth file in 30 s"; exit 1; }
+          nohup deluge-web --do-not-daemonize --config "$CLIENTS/deluge" --port 18112 --interface 127.0.0.1 \
+            --loglevel info --logfile "$CLIENTS/logs/deluge-web.log" >"$CLIENTS/logs/deluge-web-console.log" 2>&1 &
+          echo $! >"$CLIENTS/deluge-web.pid"
+      - name: Wait until each client answers with that login
+        timeout-minutes: 5
+        run: |
+          wait_for() {
+            name=$1
+            shift
+            for attempt in $(seq 1 60); do
+              if "$@"; then echo "$name answers"; return 0; fi
+              sleep 2
+            done
+            echo "::error::$name does not answer within 120 s"
+            return 1
+          }
+          qbt_up() { [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:18080/api/v2/app/version)" != 000 ]; }
+          qbt_login() {
+            curl -fsS --max-time 5 --data-urlencode "username=$TOW_REAL_CLIENT_USER" \
+              --data-urlencode "password=$TOW_REAL_CLIENT_SECRET" http://127.0.0.1:18080/api/v2/auth/login | grep -qx 'Ok.'
+          }
+          transmission_up() {
+            [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 -u "$TOW_REAL_CLIENT_USER:$TOW_REAL_CLIENT_SECRET" \
+              http://127.0.0.1:19091/transmission/rpc)" = 409 ]
+          }
+          deluged_up() { (echo >/dev/tcp/127.0.0.1/58846) 2>/dev/null; }
+          deluge_web_login() {
+            curl -fsS --max-time 5 -H 'Content-Type: application/json' \
+              --data "{\"method\": \"auth.login\", \"params\": [\"$TOW_REAL_CLIENT_SECRET\"], \"id\": 1}" \
+              http://127.0.0.1:18112/json | grep -q '"result": *true'
+          }
+          wait_for qBittorrent qbt_up
+          if ! qbt_login; then
+            # A qBittorrent that ignored the configured login prints a temporary one (4.6.1+):
+            # sign in with it and set this run's login through the Web API.
+            temporary=$(sed -n 's/.*temporary password is provided for this session: *//p' "$CLIENTS/logs/qbittorrent.log" | tail -n 1 | tr -d '\r ')
+            [ -n "$temporary" ] || { echo "::error::qBittorrent refused the configured login and printed no temporary one"; exit 1; }
+            echo "::add-mask::$temporary"
+            echo "qBittorrent ignored the configured login: setting it through the Web API"
+            curl -fsS -c "$CLIENTS/qbt.cookies" --data-urlencode "username=admin" --data-urlencode "password=$temporary" \
+              http://127.0.0.1:18080/api/v2/auth/login
+            python3 -c 'import json, os; print(json.dumps({"web_ui_username": os.environ["TOW_REAL_CLIENT_USER"], "web_ui_password": os.environ["TOW_REAL_CLIENT_SECRET"]}))' >"$CLIENTS/qbt-login.json"
+            curl -fsS -b "$CLIENTS/qbt.cookies" --data-urlencode "json@$CLIENTS/qbt-login.json" \
+              http://127.0.0.1:18080/api/v2/app/setPreferences
+            rm -f "$CLIENTS/qbt-login.json" "$CLIENTS/qbt.cookies"
+            wait_for "qBittorrent with this run's login" qbt_login
+          fi
+          wait_for Transmission transmission_up
+          wait_for deluged deluged_up
+          wait_for "Deluge Web" deluge_web_login
+      - name: TOW's adapters and `tow check --apply` against the real clients
+        timeout-minutes: 20
+        run: uv run --frozen pytest -q -ra -p no:cacheprovider tests/integration/test_real_clients.py
+      - name: The clients' logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: client-logs
+          path: |
+            ${{ env.CLIENTS }}/logs
+            ${{ env.CLIENTS }}/qbittorrent/qBittorrent/data/logs
+          if-no-files-found: warn
+      - name: Stop the clients
+        if: always()
+        run: |
+          for name in qbittorrent transmission deluge-web deluged; do
+            [ ! -f "$CLIENTS/$name.pid" ] || kill "$(cat "$CLIENTS/$name.pid")" 2>/dev/null || true
+          done
+
+  autostart:
+    name: autostart (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    env:
+      TOW_REAL_AUTOSTART: "1"
+      TOW_REAL_AUTOSTART_PORT: "18877"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      - name: Install Python from .python-version
+        run: uv python install --no-bin --no-registry
+      - name: Sync locked environment
+        run: uv sync --frozen
+      - name: Source archive of this commit
+        shell: bash
+        run: git archive --format=tar.gz --prefix=tow/ -o "$RUNNER_TEMP/tow-source.tar.gz" HEAD
+      # A runtime install, made as the owner makes one: autostart refuses a development checkout.
+      - name: Install it with install.sh (Linux, macOS)
+        if: runner.os != 'Windows'
+        timeout-minutes: 10
+        run: |
+          dir="$RUNNER_TEMP/tow autostart"
+          printf '%s  tow-source.tar.gz\n' "$(shasum -a 256 "$RUNNER_TEMP/tow-source.tar.gz" | cut -d ' ' -f 1)" >"$RUNNER_TEMP/SHA256SUMS"
+          # The installer runs as on a new computer: no uv variables of this job.
+          for name in $(env | sed -n 's/^\(UV_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$name"; done
+          TOW_INSTALL_SOURCE="$RUNNER_TEMP/tow-source.tar.gz" TOW_INSTALL_SUMS="$RUNNER_TEMP/SHA256SUMS" \
+            sh install/install.sh --dir "$dir" --port "$TOW_REAL_AUTOSTART_PORT" </dev/null
+          echo "TOW_REAL_AUTOSTART_ROOT=$dir" >>"$GITHUB_ENV"
+      - name: Build the bundle and install it with install.ps1 (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          uv run --no-project python scripts/build-bundle.py --out dist --source "$env:RUNNER_TEMP/tow-source.tar.gz"
+          if ($LASTEXITCODE) { throw "build-bundle.py exited with $LASTEXITCODE" }
+          $zip = (Resolve-Path dist/TOW-windows-x64.zip).Path
+          $sums = Join-Path $env:RUNNER_TEMP 'SHA256SUMS'
+          "$((Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant())  TOW-windows-x64.zip" | Set-Content -Encoding ascii $sums
+          $dir = Join-Path $env:RUNNER_TEMP 'TOW autostart'
+          $port = [int]$env:TOW_REAL_AUTOSTART_PORT
+          # The installer runs as on a new computer: no uv or TOW variables of this job.
+          Get-ChildItem env: | Where-Object { $_.Name -like 'UV_*' -or $_.Name -like 'TOW_*' } | ForEach-Object { Remove-Item "env:$($_.Name)" }
+          $env:TOW_INSTALL_SOURCE = $zip; $env:TOW_INSTALL_SUMS = $sums; $env:TOW_NO_BROWSER = '1'
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File install/install.ps1 -Dir $dir -Port $port
+          if ($LASTEXITCODE) { throw "install.ps1 exited with $LASTEXITCODE" }
+          "TOW_REAL_AUTOSTART_ROOT=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: The user's systemd manager without a sign-in (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          user=$(id -un)
+          uid=$(id -u)
+          sudo loginctl enable-linger "$user"
+          for attempt in $(seq 1 30); do [ -S "/run/user/$uid/bus" ] && break; sleep 1; done
+          echo "XDG_RUNTIME_DIR=/run/user/$uid" >>"$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus" >>"$GITHUB_ENV"
+          if XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
+            systemctl --user show-environment >/dev/null; then
+            echo "the user manager of $user answers"
+          else
+            reason="systemctl --user does not answer on this runner (no user manager after loginctl enable-linger)"
+            echo "::warning::$reason"
+            echo "TOW_REAL_AUTOSTART_SKIP=$reason" >>"$GITHUB_ENV"
+          fi
+      - name: tow autostart on, the OS starts TOW, tow autostart off
+        timeout-minutes: 20
+        shell: bash
+        run: uv run --frozen pytest -q -ra -p no:cacheprovider tests/integration/test_real_autostart.py
+      - name: The install's logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: autostart-logs-${{ matrix.os }}
+          path: ${{ env.TOW_REAL_AUTOSTART_ROOT }}/data/logs
+          if-no-files-found: warn
+      - name: Leave nothing registered or running
+        if: always() && env.TOW_REAL_AUTOSTART_ROOT != '' && runner.os != 'Windows'
+        run: |
+          "$TOW_REAL_AUTOSTART_ROOT/app/scripts/tow" autostart off || true
+          "$TOW_REAL_AUTOSTART_ROOT/app/scripts/tow" stop || true
+      - name: Leave nothing registered or running (Windows)
+        if: always() && env.TOW_REAL_AUTOSTART_ROOT != '' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $launcher = Join-Path $env:TOW_REAL_AUTOSTART_ROOT 'app\scripts\tow.cmd'
+          & $launcher autostart off
+          & $launcher stop
+          exit 0
