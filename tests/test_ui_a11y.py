@@ -23,9 +23,16 @@ def _rules(css: str) -> dict[str, str]:
 
 
 def _desktop_rules() -> dict[str, str]:
-    """The rules outside any @media block."""
-    flat = re.sub(r"@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}", "", re.sub(r"/\*.*?\*/", "", CSS, flags=re.DOTALL))
-    return _rules(flat)
+    """The rules outside any @media block (an @media block may hold an @supports block)."""
+    css = re.sub(r"/\*.*?\*/", "", CSS, flags=re.DOTALL)
+    while (start := css.find("@media")) != -1:
+        depth, end = 0, css.index("{", start)
+        for end in range(end, len(css)):  # noqa: B020 - `end` is where the block closes
+            depth += {"{": 1, "}": -1}.get(css[end], 0)
+            if depth == 0:
+                break
+        css = css[:start] + css[end + 1 :]
+    return _rules(css)
 
 
 @pytest.fixture
@@ -109,6 +116,51 @@ def test_header_states_are_said_in_words_not_only_by_colour(client, health, prob
     assert "clock.title = " not in JS.replace("if (clock.title !== words) clock.title = words;", "")
     # The hidden text of a scrolled-away name stays inside the strip (it made the page wider).
     assert "position: relative" in _desktop_rules()[".hdr-sites .trk"]
+
+
+def test_the_progress_link_is_outside_the_rows_summary(client):
+    """A2: "3/10" was a link inside <summary> (axe nested-interactive): a summary is a button and
+    its content is not reachable as a link. It now lives beside the row's buttons and is laid over
+    the summary's progress column; the cell keeps the same words for the layout, unseen."""
+    from bs4 import BeautifulSoup
+
+    from tow.store import save_download_history
+
+    _seed()
+    save_download_history(
+        {
+            "schema_version": 1,
+            "topics": {
+                "t1": {
+                    "expected": {"kind": "episodes", "total": 10, "confidence": "high"},
+                    "summary": {"completed": 3, "expected": 10, "is_complete": False},
+                    "items": {},
+                }
+            },
+        }
+    )
+    page = BeautifulSoup(client.get("/").text, "html.parser")
+    rows = page.select("#topics > .row-wrap")
+    assert all(not row.select("summary a, summary button, summary [tabindex]") for row in rows)
+    first = rows[0]
+    link = first.select_one(":scope > .row-progress > a.download-details.progress-link")
+    assert link is not None
+    assert re.fullmatch(r"\d+/10", link.get_text())
+    assert link["href"] == "/topics/t1/downloads.json"
+    ghost = first.select_one("summary .topic-progress .progress-ghost")
+    assert ghost["aria-hidden"] == "true"
+    assert ghost.get_text() == link.get_text()
+    assert rows[1].select_one(".row-progress") is None  # nothing downloaded: the cell says "—"
+    assert rows[1].select_one(".topic-progress .mut").get_text() == "—"
+    rules = _desktop_rules()
+    summary_columns = re.search(r"grid-template-columns: ([^;]+);", rules[".list-head, details.row-edit > summary"])
+    layer = re.search(r"\n\.row-progress \{([^}]*)\}", CSS).group(1)  # the first rule: not @supports
+    assert summary_columns.group(1) in layer  # the same columns as the summary
+    assert "pointer-events: none" in layer
+    assert "pointer-events: auto" in rules[".row-progress > a"]
+    assert "visibility: hidden" in rules[".row-wrap:has(> .row-progress) .topic-progress"]
+    assert "@supports (anchor-scope: --row-summary)" in CSS
+    assert "top: anchor(top); bottom: anchor(bottom)" in CSS
 
 
 def test_links_inside_running_text_are_underlined(client):
