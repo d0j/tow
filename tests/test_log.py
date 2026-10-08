@@ -399,6 +399,60 @@ def test_history_search_by_a_topics_current_name_parses_only_its_events(monkeypa
     assert len(parsed) == len(by_text)
 
 
+@pytest.mark.parametrize("block", [97, 4096, 256 * 1024])
+def test_history_search_skips_whole_blocks_without_changing_what_it_finds(monkeypatch, block):
+    """A search reads only the lines of blocks that can hold the text: the results are those of
+    the line-by-line search, also for text that only appears once folded (ß -> ss, the Kelvin
+    sign -> k, the ligature ﬁ -> fi), escaped text, other letters' cases and broken bytes."""
+    from tow import log as logmod
+
+    monkeypatch.setattr(logmod, "_BLOCK_BYTES", block)
+    path = logmod.log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    titles = [
+        "Plain Show",
+        "STRASSE",
+        "Straße",
+        "Größe ẞ",
+        "Kelvin",
+        "ﬁle",
+        "Сериал Сезон",
+        "İstanbul",
+        "mixed CaSe",
+    ]
+    lines = [_history_line(n, title=titles[n % len(titles)], pad="y" * (n % 13)) for n in range(400)]
+    lines.insert(37, json.dumps({"kind": "file_completed", "event_id": "esc", "title": "Straße"}) + "\n")
+    raw = "".join(lines).encode("utf-8")
+    raw = raw.replace(b'"pad": "yyy"', b'"pad": "\xff\xfeyy"', 3)  # bytes that are not UTF-8
+    path.write_bytes(raw)
+    needles = ["zzz", "ss", "strasse", "STRASSE", "k", "kelvin", "fi", "FILE", "i", "сезон", "case", "y\xff", "a b"]
+    found = {needle: logmod.history_events(text=needle, limit=1000) for needle in needles}
+    monkeypatch.setattr(logmod, "_block_without", lambda needle, refs: None)  # line by line, as before
+
+    for needle in needles:
+        assert found[needle] == logmod.history_events(text=needle, limit=1000), needle
+    assert found["zzz"] == []
+    assert len(found["ss"]) > len(found["strasse"]) > 0
+    assert {event["title"] for event in found["kelvin"]} == {"Kelvin"}
+    assert {event["title"] for event in found["fi"]} >= {"ﬁle"}
+    assert any(event["event_id"] == "esc" for event in found["strasse"])
+
+
+def test_the_characters_that_fold_to_ascii_letters_are_all_known():
+    from tow import log as logmod
+
+    folds = logmod._ascii_folds()
+    expected: dict[str, set[bytes]] = {}
+    for code in range(0x80, 0x110000):
+        char = chr(code)
+        for folded in char.casefold():
+            if folded.isascii():
+                expected.setdefault(folded, set()).add(char.encode("utf-8"))
+    assert folds == {key: frozenset(value) for key, value in expected.items()}
+    assert "ß".encode() in folds["s"]
+    assert "K".encode() in folds["k"]
+
+
 def test_log_keeps_five_files_of_five_mib():
     from tow import log as logmod
 
