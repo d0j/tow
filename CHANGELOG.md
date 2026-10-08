@@ -9,6 +9,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - `tow.cmd` and `scripts/tow` in a copy of the TOW folder no longer run the original folder's code while the
   original is still there: they say to run setup first, as the start files do.
+- TOW itself also refuses to run another folder's code for its folder (a copy's autostart, a command started
+  without a launcher): it names both folders and says to run setup, before it writes anything there.
 
 ## [1.27.0] — 2026-10-08
 
