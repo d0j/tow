@@ -404,3 +404,74 @@ def test_cli_without_an_answer_changes_nothing(monkeypatch):
     monkeypatch.setattr("builtins.input", no_terminal)
     assert cli.main(["adopt", "--all-unmarked"]) == 0
     assert client.torrents[NEW]["tags"] == []
+
+
+# --- refusals and the Deluge label, through the action itself (mutation survivors) ---------------
+
+
+def test_deluge_adoption_that_replaces_the_owners_label_is_read_back_and_recorded(monkeypatch):
+    server = FakeDeluge()
+    deluge = _deluge(server)
+    deluge.ping()
+    torrent = _by_hand(server, ["movies"], running=True)
+    save_state({"topics": [_unmarked_topic(H)]})
+    _wire(monkeypatch, {"main": deluge}, Tracker())
+    with pytest.raises(TowError) as raised:
+        adopt.adopt_topic("t1", how="manual")  # not without the owner's word
+    assert raised.value.code == "client.deluge.adopt_has_label"
+    assert torrent.labels == ["movies"]
+
+    result = adopt.adopt_topic("t1", how="manual", replace_label=True)
+
+    assert result == {"id": "t1", "hash": H, "client_id": "main", "already": False}
+    assert torrent.labels == ["tow"]
+    assert load_state()["topics"][0]["hash"] == H
+
+
+class Forgets(Client):
+    """Says it marked the torrent, but the mark is not there when TOW reads it back."""
+
+    def adopt_torrent(self, h):
+        return [*self.torrents[h]["tags"], "tow"]
+
+
+@pytest.mark.parametrize(
+    ("client", "code"), [(Forgets(), "adopt.unconfirmed"), (Client(), "adopt.unsupported")], ids=["forgets", "plain"]
+)
+def test_an_adoption_the_client_cannot_do_or_does_not_keep_is_refused(monkeypatch, client, code):
+    save_state({"topics": [_unmarked_topic()]})
+    client.put(NEW, "/media/tv", tags=["mine"])
+    _wire(monkeypatch, {"main": client}, Tracker())
+    with pytest.raises(adopt.AdoptError) as raised:
+        adopt.adopt_topic("t1", how="manual")
+    assert raised.value.code == code
+    assert client.torrents[NEW]["tags"] == ["mine"]
+    assert load_state()["topics"][0].get("hash") is None  # nothing recorded
+    assert [e["kind"] for e in _events()] == ["client_adopt_failed"]
+
+
+def test_an_unknown_topic_is_not_adopted(monkeypatch):
+    save_state({"topics": [_unmarked_topic()]})
+    client = Adoptable()
+    client.put(NEW, "/media/tv", tags=[])
+    _wire(monkeypatch, {"main": client}, Tracker())
+    with pytest.raises(adopt.AdoptError) as raised:
+        adopt.adopt_topic("t9", how="manual")
+    assert raised.value.code == "adopt.not_found"
+    assert client.torrents[NEW]["tags"] == []
+
+
+@pytest.mark.parametrize("found", ["xyz", 123, None, "A" * 39])
+def test_a_found_hash_that_is_not_a_hash_is_ignored(found):
+    topic = _unmarked_topic()
+    assert adopt.unmarked_hash(topic, {"client": {"id": "main"}}) == NEW
+    topic["last_error_params"] = {**topic["last_error_params"], "hash": found}
+    assert adopt.unmarked_hash(topic, {"client": {"id": "main"}}) == ""
+
+
+def test_a_torrent_that_is_gone_from_the_client_is_not_listed_as_unmarked(monkeypatch):
+    client = _two_unmarked(monkeypatch)
+    del client.torrents[OTHER]  # removed in the client since the check
+    client.torrents[NEW]["tags"] = ["mine"]
+    found = adopt.unmarked_topics()["found"]
+    assert [row["id"] for row in found] == ["t1"]
