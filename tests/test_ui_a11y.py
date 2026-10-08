@@ -64,3 +64,48 @@ def test_many_sites_never_push_the_header_controls_off_the_screen(client):
     page = client.get("/").text
     assert re.search(r'<div class="hdr-sites" role="group" aria-label="[^"]+" tabindex="0">', page)
     assert re.search(r'<div class="hdr-svc" role="group" aria-label="[^"]+">', page)
+
+
+@pytest.mark.parametrize(
+    ("health", "probe_ok", "site", "client_words", "clock_words"),
+    [
+        ({}, None, "base.header.not_checked", "base.header.not_checked", "timer.global_title"),
+        (
+            {"qbit_ok": True, "check_ok": True},
+            True,
+            "base.header.site_ok",
+            "web.header.connected",
+            "timer.global_title",
+        ),
+        (
+            {"qbit_ok": False, "check_ok": False},
+            False,
+            "base.header.site_warn",
+            "web.header.disconnected",
+            "js.clock.last_attempt_failed",
+        ),
+    ],
+)
+def test_header_states_are_said_in_words_not_only_by_colour(client, health, probe_ok, site, client_words, clock_words):
+    """A3: the site names, the client chip and a failed check were told apart by colour only."""
+    from tow.i18n import t
+
+    site, client_words, clock_words = t(site, "ru"), t(client_words, "ru"), t(clock_words, "ru")
+    assert site in ("ещё не проверялся", "отвечает", "сбои связи")
+    extra = {"health": {**health, "at_ts": 1}} if health else {}
+    if probe_ok is not None:
+        extra["doctor"] = {"probes": [{"tracker": "rutor", "host": "http://rutor.info", "ok": probe_ok}]}
+    _seed(**extra)
+    page = client.get("/").text
+    sites = page[page.index('class="hdr-sites"') : page.index('class="hdr-right"')]
+    assert f'title="Rutor: {site}">Rutor<span class="sr-only">: {site}</span></span>' in sites
+    services = page[page.index('class="hdr-svc"') : page.index('id="next-check"')]
+    assert re.search(rf'qBittorrent<span class="sr-only">: {client_words}</span></span>', services)
+    clock = page[page.index('id="next-check"') : page.index("data-clock-value")]
+    assert f'title="{clock_words}"><span class="sr-only" data-clock-words>{clock_words} </span>' in clock
+    # app.js keeps the hidden words equal to the tooltip, and writes them only when they change.
+    assert "if (clock.title !== words) clock.title = words;" in JS
+    assert "clockLabel.textContent = `${words} `" in JS
+    assert "clock.title = " not in JS.replace("if (clock.title !== words) clock.title = words;", "")
+    # The hidden text of a scrolled-away name stays inside the strip (it made the page wider).
+    assert "position: relative" in _desktop_rules()[".hdr-sites .trk"]

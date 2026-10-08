@@ -102,7 +102,9 @@ def _seed_rutor(*, probes=None, health=None, topics=None, active=None):
 def test_header_site_chip_is_amber_when_its_mirrors_do_not_answer(client):
     _seed_rutor(probes=[{"tracker": "rutor", "host": "http://rutor.info", "ok": False, "error": "timed out"}])
     page = client.get("/").text
-    assert '<span class="trk warn" title="Rutor">Rutor</span>' in page
+    assert (
+        '<span class="trk warn" title="Rutor: сбои связи">Rutor<span class="sr-only">: сбои связи</span></span>' in page
+    )
     assert 'class="trk bad"' not in page.split('class="hdr-svc"')[0]
 
 
@@ -889,7 +891,7 @@ def test_tab_titles_name_the_page(client, path, title):
 
 def test_the_client_has_one_name(client):
     page = client.get("/").text
-    assert ">qBittorrent</span>" in page[page.index('class="hdr-svc"') :]
+    assert '>qBittorrent<span class="sr-only">: ' in page[page.index('class="hdr-svc"') :]
     assert "(qbittorrent)" not in page
     assert ">qBit<" not in page
 

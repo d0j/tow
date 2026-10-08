@@ -222,7 +222,10 @@
     "new_site": "Новый сайт",
     "header": {
       "sites": "Сайты",
-      "services": "Сервисы"
+      "services": "Сервисы",
+      "site_ok": "отвечает",
+      "site_warn": "сбои связи",
+      "not_checked": "ещё не проверялся"
     },
     "undo": {
       "title": "Вернуть: {what}",
