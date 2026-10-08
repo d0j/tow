@@ -48,8 +48,11 @@ otherwise.
 - Wrong passwords from the network are slowed per device and, after 30 failures in ten minutes from any devices,
   for all of them: someone on your home network who keeps guessing can lock your other devices out of the sign-in
   page for up to 15 minutes at a time. This computer needs no password and is not affected.
-- A reverse proxy on the same machine makes every request look local, so TOW asks no password. Do not run TOW behind
-  one unless the proxy authenticates every request.
+- TOW ignores `X-Forwarded-For` and similar headers: it judges a request by the address of the connection, so
+  behind a reverse proxy every request comes from the proxy's address. A proxy on the same machine makes every
+  request look local: TOW asks no password and cannot tell an internet client from you. A proxy on another device
+  makes every request need the password, and all of them count as one device when wrong passwords are slowed
+  down. Do not run TOW behind a proxy unless the proxy authenticates every request.
 - TOW is meant for one computer, a home network or a VPN. It is not hardened for direct exposure to the internet.
 - Traffic between a device and TOW over the network is plain HTTP: anyone who can watch the home network (a shared
   Wi-Fi, a compromised router) can read the password at sign-in and the session cookie, and that cookie works for

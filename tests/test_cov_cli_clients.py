@@ -880,6 +880,38 @@ def test_serve_uses_config_bind_and_port(uvicorn_runs):
     assert kwargs["log_config"] is None
 
 
+def test_serve_trusts_no_forwarded_headers(monkeypatch):
+    # Audit 08.10.2026: uvicorn's defaults trusted X-Forwarded-For/-Proto from 127.0.0.1, or from
+    # anyone with FORWARDED_ALLOW_IPS=*: a header could make a device on the network look local.
+    import uvicorn
+    from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
+    real_config = uvicorn.Config
+    built = []
+
+    class Server:
+        def __init__(self, config):
+            built.append(config)
+
+        def run(self):
+            pass
+
+    monkeypatch.setenv("FORWARDED_ALLOW_IPS", "*")
+    monkeypatch.setattr(uvicorn, "Config", lambda app, **kwargs: real_config(app, **kwargs))
+    monkeypatch.setattr(uvicorn, "Server", Server)
+
+    assert cli.main(["serve"]) == 0
+
+    config = built[0]
+    assert config.proxy_headers is False
+    assert config.forwarded_allow_ips == ""
+    config.load()
+    app = config.loaded_app
+    while app is not None and not isinstance(app, ProxyHeadersMiddleware):
+        app = getattr(app, "app", None)
+    assert app is None
+
+
 def test_serve_refuses_lan_bind_without_permission(uvicorn_runs, capsys):
     assert cli.main(["serve", "--host", "0.0.0.0"]) == 3
     assert t("cli.serve_blocked", error="") in capsys.readouterr().out
