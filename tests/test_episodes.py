@@ -449,3 +449,36 @@ def test_episode_prefix_and_repeated_e_quality_suffixes_do_not_expand_ranges():
     )
     for name, key in cases:
         assert [label.key for label in parse_episode_coverage(name)] == [key], name
+
+
+def test_a_name_parsed_again_gives_the_same_coverage_and_progress():
+    """Home recomputes every topic's progress on every render: the parse of a name is kept, and a
+    kept answer equals a fresh parse (also for a backslash path and a very long name)."""
+    from tow import episodes
+
+    names = [
+        "Season 1/Show.S01E03-E05.mkv",
+        "Season 1\\Show.S01E03-E05.mkv",
+        "04x01-03.mkv",
+        "Show - S01E05 - 720p.mkv",
+        "S01E05.5.mkv",
+        "cover.jpg",
+        "",
+        "Show " + "x" * 600 + " S01E02.mkv",
+    ]
+    fresh = [episodes._coverage_of(str(name).replace("\\", "/")) for name in names]
+    episodes._known_coverage.cache_clear()
+    assert [parse_episode_coverage(name) for name in names] == fresh
+    hits = episodes._known_coverage.cache_info().hits
+    assert [parse_episode_coverage(name) for name in names] == fresh
+    assert episodes._known_coverage.cache_info().hits == hits + len(names) - 1  # the long one is not kept
+    assert parse_episode_coverage(None) == ()  # type: ignore[arg-type]
+
+    items = {
+        f"k{n}": {"label": f"Show.S01E{n:02d}.mkv", "status": "completed" if n % 3 else "seen"} for n in range(1, 13)
+    }
+    expected = {"kind": "episodes", "total": 12}
+    episodes._known_coverage.cache_clear()
+    first = summarize_completion(items, expected)
+    assert summarize_completion(items, expected) == first
+    assert first["completed"] == 8

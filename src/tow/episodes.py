@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
@@ -579,13 +580,27 @@ def _normalize_explicit_markers(text: str) -> str:
 
 def parse_episode_coverage(name: str) -> tuple[EpisodeLabel, ...]:
     """Parse episode coverage from a filename, including compact ranges."""
-    path = PurePosixPath(str(name or "").replace("\\", "/"))
+    text = str(name or "").replace("\\", "/")
+    return _known_coverage(text) if len(text) <= _KNOWN_NAME_CHARS else _coverage_of(text)
+
+
+# Home works out every topic's progress from its episode labels on every render (2000 topics:
+# ~15 000 labels, 0.2 s). A name always parses the same and the result is immutable, so the
+# answers for ordinary names are kept; an unusually long (untrusted) name is not.
+_KNOWN_NAME_CHARS = 512
+
+
+def _coverage_of(name: str) -> tuple[EpisodeLabel, ...]:
+    path = PurePosixPath(name)
     text = _normalize_explicit_markers(path.name)
     for parse in _COVERAGE_PARSERS:
         coverage = parse(text, path)
         if coverage is not None:
             return coverage
     return ()
+
+
+_known_coverage = functools.lru_cache(maxsize=16384)(_coverage_of)
 
 
 def _single_season(coverage: tuple[EpisodeLabel, ...]) -> bool:
