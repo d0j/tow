@@ -1,90 +1,54 @@
+/* L3: one palette, light-dark(light, dark): dark by default, light when Settings → Theme says so
+   (data-theme on <html>) or, on "As the system", when the system asks for it. Text 4.5:1 or more,
+   field borders and icons 3:1 or more in both. --dot-warn light: 3.6:1 on white (#e5a50a was 2.16:1). */
 :root {
+  color-scheme: dark;
   --btn-h: 1.625rem;
   --btn-h-sm: 1.625rem;
   --field-h: 2.5rem;
-  --bg: #0b0d12;
-  --panel: #141822;
-  --panel2: #1a1f2b;
-  --fg: #f2f4f8;
-  --mut: #9aa3b5;
-  --acc: #7eb0ff;
-  --acc2: #3d6db5;
-  --line: #2a3142;
-  --field-line: #6b7690;
-  --ok: #3dcf8e;
-  --warn: #f0b429;
-  --bad: #ff7a7a;
+  --bg: light-dark(#f4f6fa, #0b0d12);
+  --panel: light-dark(#ffffff, #141822);
+  --panel2: light-dark(#eef1f6, #1a1f2b);
+  --fg: light-dark(#161a22, #f2f4f8);
+  --mut: light-dark(#555e70, #9aa3b5);
+  --acc: light-dark(#1f5fbf, #7eb0ff);
+  --acc2: light-dark(#2f62b0, #3d6db5);
+  --line: light-dark(#d5dbe5, #2a3142);
+  --field-line: light-dark(#7b8496, #6b7690);
+  --ok: light-dark(#137a4b, #3dcf8e);
+  --warn: light-dark(#8a5a00, #f0b429);
+  --bad: light-dark(#c0262d, #ff7a7a);
   --radius: 12px;
   --shadow: 0 8px 32px rgba(0,0,0,.35);
-  --glow: #1a2744;
-  --header-bg: rgba(11,13,18,.92);
-  --glass: rgba(20,24,34,.78);
-  --nav-fg: #d5dce8;
-  --nav-fg-hi: #fff;
-  --trk-mut: #8b93a3;
-  --line-soft: #252c3b;
-  --flash-bg: #17324d;
-  --flash-line: #2d5f8a;
-  --flash-err-bg: #3a1c1f;
-  --flash-err-line: #8a3a3f;
-  --pill-ok-bg: #163526;
-  --pill-bad-bg: #3a1717;
-  --pill-warn-bg: #3b2c12;
-  --danger: #7a2424;
-  --notice-fg: #c8d1df;
-  --notice-bg: #101722;
-  --notice-line: #2e3a4e;
-  --notice-err-bg: #281717;
-  --notice-err-line: #593030;
-  --new-row: rgba(126,176,255,.07);
-  --open-row: rgba(126,176,255,.045);
-  --dot-warn: #f0b429;
+  --glow: light-dark(#dfe8fb, #1a2744);
+  --header-bg: light-dark(rgba(255,255,255,.92), rgba(11,13,18,.92));
+  --glass: light-dark(rgba(255,255,255,.8), rgba(20,24,34,.78));
+  --nav-fg: light-dark(#3a4252, #d5dce8);
+  --nav-fg-hi: light-dark(#0b0d12, #fff);
+  --trk-mut: light-dark(#5f6878, #8b93a3);
+  --line-soft: light-dark(#dde2ea, #252c3b);
+  --flash-bg: light-dark(#e3eefb, #17324d);
+  --flash-line: light-dark(#9cbde6, #2d5f8a);
+  --flash-err-bg: light-dark(#fdecec, #3a1c1f);
+  --flash-err-line: light-dark(#e3a5a5, #8a3a3f);
+  --pill-ok-bg: light-dark(#dcf3e7, #163526);
+  --pill-bad-bg: light-dark(#fbe2e2, #3a1717);
+  --pill-warn-bg: light-dark(#fbefd6, #3b2c12);
+  --danger: light-dark(#b3261e, #7a2424);
+  --notice-fg: light-dark(#2b3444, #c8d1df);
+  --notice-bg: light-dark(#eef2f8, #101722);
+  --notice-line: light-dark(#c9d3e2, #2e3a4e);
+  --notice-err-bg: light-dark(#fdecec, #281717);
+  --notice-err-line: light-dark(#e3a5a5, #593030);
+  --new-row: light-dark(rgba(31,95,191,.07), rgba(126,176,255,.07));
+  --open-row: light-dark(rgba(31,95,191,.05), rgba(126,176,255,.045));
+  --dot-warn: light-dark(#b07d00, #f0b429);
 }
-/* L3: a light theme when the system asks for one; dark stays the default. Text 4.5:1 or more,
-   field borders and icons 3:1 or more (as in the dark theme). */
+:root[data-theme="light"] { color-scheme: light; --shadow: 0 4px 16px rgba(20,30,50,.08); }
 @media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f4f6fa;
-    --panel: #ffffff;
-    --panel2: #eef1f6;
-    --fg: #161a22;
-    --mut: #555e70;
-    --acc: #1f5fbf;
-    --acc2: #2f62b0;
-    --line: #d5dbe5;
-    --field-line: #7b8496;
-    --ok: #137a4b;
-    --warn: #8a5a00;
-    --bad: #c0262d;
-    --shadow: 0 4px 16px rgba(20,30,50,.08);
-    --glow: #dfe8fb;
-    --header-bg: rgba(255,255,255,.92);
-    --glass: rgba(255,255,255,.8);
-    --nav-fg: #3a4252;
-    --nav-fg-hi: #0b0d12;
-    --trk-mut: #5f6878;
-    --line-soft: #dde2ea;
-    --flash-bg: #e3eefb;
-    --flash-line: #9cbde6;
-    --flash-err-bg: #fdecec;
-    --flash-err-line: #e3a5a5;
-    --pill-ok-bg: #dcf3e7;
-    --pill-bad-bg: #fbe2e2;
-    --pill-warn-bg: #fbefd6;
-    --danger: #b3261e;
-    --notice-fg: #2b3444;
-    --notice-bg: #eef2f8;
-    --notice-line: #c9d3e2;
-    --notice-err-bg: #fdecec;
-    --notice-err-line: #e3a5a5;
-    --new-row: rgba(31,95,191,.07);
-    --open-row: rgba(31,95,191,.05);
-    --dot-warn: #b07d00; /* 3.6:1 on white (#e5a50a was 2.16:1) */
-  }
-  html:root { color-scheme: light; }
+  :root:not([data-theme="dark"]) { color-scheme: light; --shadow: 0 4px 16px rgba(20,30,50,.08); }
 }
 * { box-sizing: border-box; }
-html { color-scheme: dark; }
 body {
   margin: 0;
   min-height: 100vh;
@@ -200,8 +164,9 @@ main.auth-shell {
   padding: .45rem .7rem .45rem 1rem; border-radius: var(--radius); margin-bottom: 1rem;
 }
 .flash-x {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
   background: transparent; border: 0; color: var(--mut); cursor: pointer;
-  font-size: 1.15rem; line-height: 1; padding: .15rem .4rem; border-radius: 6px;
+  width: 1.625rem; height: 1.625rem; padding: 0; border-radius: 6px;
 }
 .flash-x:hover { color: var(--fg); background: var(--panel2); }
 /* The undo of the action the message is about sits in the message, with the time it has left. */
@@ -492,7 +457,6 @@ button.spinning:disabled { opacity: 1; cursor: wait; }
 .trk.busy, .hdr-clock.busy { opacity: .55; }
 .row-ico.busy { opacity: .7; }
 form.ico-form { margin: 0; display: inline-flex; }
-header.app .ico.quiet { color: var(--mut); }
 i.dot { font-style: normal; }
 .face-item { display: flex; align-items: center; gap: .35rem; }
 .face-item .k { margin: 0; }
@@ -659,15 +623,37 @@ details.help[open] > summary { color: var(--acc); border-color: var(--acc2); }
 .settings-log > summary small { color: var(--mut); font-size: 12px; }
 .settings-log-body { padding: 0 1rem 1rem; border-top: 1px solid var(--line); }
 .settings-log-body .section-note { margin-bottom: .55rem; }
-.settings-help-link {
-  display: flex; align-items: center; justify-content: space-between; gap: .75rem;
-  padding: .85rem 1rem; color: var(--fg); background: var(--glass);
-  border: 1px solid var(--line); border-radius: var(--radius); text-decoration: none;
+/* Settings → Theme: one segmented choice, an icon and a word per option; the chosen one is raised. */
+.theme-choice {
+  display: inline-flex; flex-wrap: wrap; gap: 2px; margin: 0 0 .5rem; padding: 2px; min-width: 0;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 9px;
 }
-.settings-help-link:hover { background: var(--panel); text-decoration: none; }
-.settings-help-link[hidden] { display: none; }
-.settings-help-link > span:first-child { display: grid; gap: .1rem; }
-.settings-help-link small { color: var(--mut); font-size: 12px; }
+.theme-option {
+  position: relative; display: inline-flex; align-items: center; gap: .4rem;
+  min-height: var(--btn-h); padding: 0 .75rem; border-radius: 7px;
+  color: var(--mut); font-size: 12.5px; cursor: pointer; user-select: none;
+}
+.theme-option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.theme-option:hover { color: var(--fg); }
+.theme-option:has(input:checked) { color: var(--fg); background: var(--panel); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+.theme-option:has(input:focus-visible) { outline: 2px solid var(--acc); outline-offset: 1px; }
+/* The rows below the sections (Diagnostics, Guide, Sign out): a section's look - title where the
+   section titles start, a muted note, a chevron or the row's button at the end. */
+.settings-link {
+  display: grid; grid-template-columns: max-content minmax(0, 1fr) auto; align-items: center;
+  gap: .2rem .7rem; margin: 0; padding: .38rem .62rem .38rem 1.85rem; line-height: 1.25;
+  color: var(--fg); background: var(--panel); border: 1px solid var(--line-soft); border-radius: 7px;
+  text-decoration: none;
+}
+a.settings-link:hover { background: var(--panel2); text-decoration: none; }
+.settings-link[hidden] { display: none; }
+.settings-link-note { min-width: 0; color: var(--mut); font-size: 12.5px; }
+.settings-link > svg.i { color: var(--mut); }
+@media (max-width: 720px) {
+  .settings-link { grid-template-columns: minmax(0, 1fr) auto; padding-left: 1.75rem; }
+  .settings-link-note { grid-column: 1; grid-row: 2; }
+  .settings-link > :last-child { grid-column: 2; grid-row: 1 / span 2; }
+}
 .settings-page.settings-page-compact { width: 100%; max-width: none; }
 .settings-page-compact .settings-title { margin-bottom: .7rem; }
 .settings-page-compact .settings-title h1 { margin: 0; font-size: 1.45rem; }
@@ -848,9 +834,6 @@ details.help[open] > summary { color: var(--acc); border-color: var(--acc2); }
 }
 .portable-import-form .settings-actions { margin-top: 0; }
 .copy-status { min-height: 1.1rem; margin: .32rem 0 0; color: var(--ok); font-size: 12px; }
-.settings-page-compact .settings-help-link {
-  padding: .45rem .65rem; border-radius: 7px; box-shadow: none; font-size: 13px;
-}
 @media (max-width: 720px) {
   .settings-page-compact .settings-section { padding: 0; }
   .settings-page-compact .settings-accordion > summary,
@@ -901,6 +884,14 @@ summary:focus-visible, select:focus-visible { outline: 2px solid var(--acc); out
 
 /* M2: the row icons' one sprite takes no room. */
 svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+/* One icon set (templates/_icons.html): the same stroke everywhere, three sizes - the header
+   (20 px), rows, menus and buttons (16 px), and small marks inside text (12 px). */
+svg.i {
+  display: block; flex: 0 0 auto; width: 1.25rem; height: 1.25rem;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+svg.i.sm { width: 1rem; height: 1rem; }
+svg.i.xs { width: .75rem; height: .75rem; stroke-width: 2.4; }
 
 /* E1: list tools on the home page */
 .home-page { padding-top: .45rem; }
@@ -976,8 +967,6 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
   .hdr-clock { line-height: 1; }
   .hdr-right { gap: .25rem; }
   .hdr-svc { gap: .2rem; }
-  /* No room for every header icon on a phone: the Guide and Diagnostics stay links in Settings. */
-  header.app .hdr-doctor, header.app .hdr-help { display: none; }
   /* "Undo" shows as an arrow (its text stays for screen readers and in the tooltip). */
   .undo-ico { display: block; }
   .undo-btn .undo-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }

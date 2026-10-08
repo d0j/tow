@@ -5,6 +5,16 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Added
+
+- Settings → Theme: as the system, light or dark, for every device; the page changes at once.
+
+### Changed
+
+- One icon set on every page (the same line width and sizes); Settings is a gear.
+- The header keeps the sections and the page's own actions: Diagnostics, the Guide and **Sign out on this
+  device** moved to the end of Settings.
+
 ### Removed
 
 - The Monitorrent import (`tow import-monitorrent`). Topics already imported stay as they are; a torrent in the

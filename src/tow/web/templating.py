@@ -164,6 +164,16 @@ def network_session(request: Request) -> bool:
     return not access.is_local(request) and bool(request.cookies.get(SESSION_COOKIE))
 
 
+def theme() -> str:
+    """The theme Settings chose for every page, "light" or "dark" (``data-theme`` on <html>);
+    "" follows the system - also when config.yaml cannot be read (the setup and error pages)."""
+    try:
+        value = _context.config().get("theme")
+    except OSError, ValueError:
+        return ""
+    return value if value in ("light", "dark") else ""
+
+
 def _languages() -> list[dict[str, str]]:
     return [{"code": code, "name": name, "native": native} for code, name, native in i18n.available()]
 
@@ -204,6 +214,7 @@ def configure(templates: Jinja2Templates = TEMPLATES) -> None:
     env["t"] = i18n.translate
     env["tm"] = tm
     env["lang"] = i18n.current
+    env["theme"] = theme
     env["languages"] = _languages
     env["js_texts"] = js_texts
     env["content_texts"] = content_texts

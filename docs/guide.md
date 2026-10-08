@@ -40,10 +40,10 @@ client to add, start, stop or move a torrent. It only ever changes torrents it a
 |---|---|
 | **Home** | Your topics: status dot, site icon, name, folder, latest event, progress. **+** adds a topic. Click a row to edit it. Filters and search hide rows; when nothing matches, **Show all topics** clears them. Until the first topic is added, Home shows three first steps: the torrent client, a messenger (optional), a topic link. |
 | **Sites** | Trackers and their mirrors, sign-in state, pause and check per site (the icons in its row). **+** adds a site: paste a link to any topic of it first, the rest fills in; patterns and paths are under **Advanced**. |
-| **Settings** | Language, torrent clients, notifications, checks, network access and password, version and updates, the TOW service, backups, the log. |
+| **Settings** | Language, theme (as the system, light or dark), torrent clients, notifications, checks, network access and password, version and updates, the TOW service, backups, the log; below them **Diagnostics**, the **Guide** and, on a device signed in over the network, **Sign out on this device**. |
 | **History** | Downloads, errors, changes and notifications, with filters and search. |
-| **Diagnostics** | The pulse icon in the header: the connection to the torrent client and to every site. The **?** icon opens the in-app **Guide**. |
-| **Log** | The list icon in the header: the latest events, live. |
+| **Diagnostics** | At the end of Settings: the connection to the torrent client and to every site. The in-app **Guide** is next to it. |
+| **Log** | The scroll icon in the header: the latest events, live. |
 
 The clock in the header counts down to the next scheduled check; before the first check it shows “—”, and its
 tooltip says “No check has run yet”.
@@ -254,8 +254,8 @@ Settings → **Version and updates**; the version in the corner of every page op
   network can lock you out.
 - **Forgot the password?** On the computer running TOW set a new one without the old one: Settings → Network access
   → Password, or `tow password`. Other devices then sign in again.
-- The sign-out button in the header (shown only on a device signed in over the network) ends this device's
-  session.
+- **Sign out on this device** at the end of Settings (shown only on a device signed in over the network) ends
+  this device's session.
 - **Sign out everywhere** (Settings → Network access) ends every network session; the password stays.
 - The reminder you set is visible to anyone who opens the sign-in page — never write the password into it. TOW
   refuses a reminder that shares four letters or digits in a row with the password; to change only the reminder,

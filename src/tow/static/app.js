@@ -618,6 +618,16 @@ if (settingsPage) {
     });
   });
 
+  // Settings → Theme: the page takes the chosen colours at once, then the choice is saved.
+  settingsPage.querySelectorAll("[data-theme-form]").forEach((form) => {
+    form.addEventListener("change", (event) => {
+      const value = event.target.value;
+      if (value === "light" || value === "dark") document.documentElement.dataset.theme = value;
+      else delete document.documentElement.dataset.theme;
+      if (form.dataset.submitting !== "1") form.requestSubmit();
+    });
+  });
+
   window.addEventListener("beforeunload", (event) => {
     const hasUnsaved = settingsForms.some((form) => form.dataset.dirty === "1" && form.dataset.submitting !== "1");
     if (!hasUnsaved) return;
@@ -764,8 +774,9 @@ const initChoiceMenu = (select, name) => {
     const label = `${toggle.dataset.menuLabel}: ${current.querySelector("span").textContent}`;
     toggle.title = label;
     toggle.setAttribute("aria-label", label);
-    const icon = current.querySelector("use");
-    if (icon) toggle.querySelector("use").setAttribute("href", icon.getAttribute("href"));
+    // The option's own icon (a sort order has one, a site has none) - not its selected mark.
+    const icon = current.querySelector(":scope > svg use");
+    if (icon) toggle.querySelector(":scope > svg use").setAttribute("href", icon.getAttribute("href"));
     const text = toggle.querySelector("span");
     if (text) text.textContent = current.querySelector("span").textContent;
     toggle.classList.toggle("on", Boolean(select.value));

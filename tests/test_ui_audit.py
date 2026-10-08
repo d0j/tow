@@ -543,12 +543,17 @@ def _contrast(a: str, b: str) -> float:
     return (high + 0.05) / (low + 0.05)
 
 
-def _tokens(block: str) -> dict[str, str]:
-    return dict(re.findall(r"--([\w-]+):\s*(#[0-9a-fA-F]{6})", block))
+def _palette(which: str) -> dict[str, str]:
+    """The six-digit colours of :root in one theme: light-dark(light, dark), or one for both."""
+    root = CSS.split(":root {", 1)[1].split("}", 1)[0]
+    out = dict(re.findall(r"--([\w-]+):\s*(#[0-9a-fA-F]{6});", root))
+    pairs = re.findall(r"--([\w-]+):\s*light-dark\((#[0-9a-fA-F]{6}),\s*(#[0-9a-fA-F]{6})\)", root)
+    out.update({name: light if which == "light" else dark for name, light, dark in pairs})
+    return out
 
 
 def test_field_borders_and_muted_text_have_enough_contrast():
-    dark = _tokens(CSS.split(":root {", 1)[1].split("}", 1)[0])
+    dark = _palette("dark")
     assert _contrast(dark["field-line"], dark["panel2"]) >= 3
     assert _contrast(dark["field-line"], dark["panel"]) >= 3
     assert _contrast(dark["mut"], dark["panel"]) >= 4.5
@@ -570,16 +575,16 @@ def _light_block() -> str:
 
 
 def test_every_colour_token_has_a_light_value():
-    dark = CSS.split(":root {", 1)[1].split("}", 1)[0]
-    colour_tokens = set(re.findall(r"--([\w-]+):\s*(?:#|rgba?\()", dark))
-    light = set(re.findall(r"--([\w-]+):", _light_block()))
-    assert colour_tokens - {"shadow"} <= light
-    assert "html:root { color-scheme: light; }" in _light_block()
-    assert "html { color-scheme: dark; }" in CSS  # dark without a preference
+    root = CSS.split(":root {", 1)[1].split("}", 1)[0]
+    colour_tokens = set(re.findall(r"--([\w-]+):\s*(?:#|rgba?\(|light-dark\()", root))
+    paired = set(re.findall(r"--([\w-]+):\s*light-dark\(", root))
+    assert colour_tokens == paired  # every colour has its light and its dark value
+    assert "color-scheme: dark;" in root  # dark without a preference or a choice
+    assert ':root:not([data-theme="dark"]) { color-scheme: light;' in _light_block()
 
 
 def test_light_theme_contrast():
-    light = _tokens(_light_block())
+    light = _palette("light")
     for text in ("fg", "mut", "acc", "ok", "warn", "bad"):
         assert _contrast(light[text], light["panel"]) >= 4.5, text
         assert _contrast(light[text], light["panel2"]) >= 4.5, text

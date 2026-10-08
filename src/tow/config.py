@@ -60,6 +60,8 @@ INTERVAL_MIN_MINUTES = 15
 INTERVAL_MAX_MINUTES = 1440
 FLASH_TTL_MIN_SEC = 15
 FLASH_TTL_MAX_SEC = 3600
+# Settings → Theme (``theme:``): the pages' colours; "auto" (or no key) follows the system.
+THEMES = ("auto", "light", "dark")
 
 # What load_config fills in when config.yaml does not say it; save_config leaves these
 # out again unless the file had them, so a save never adds lines the owner did not write.
@@ -342,11 +344,7 @@ def _validate(data: dict[str, Any]) -> None:
         raise ConfigError("config_error.heartbeat_url")
     if data.get("daily_digest_hour") is not None:
         _int_field(data, "daily_digest_hour", 0, 23)
-    language = data.get("language")
-    if language is not None and not (
-        isinstance(language, str) and re.fullmatch(r"auto|[a-z]{2,3}(-[a-z0-9]{1,8})*", language, re.IGNORECASE)
-    ):
-        raise ConfigError("config_error.language")
+    _validate_look(data)
     quiet = data.get("quiet_hours")
     span = re.fullmatch(r"\s*(\d{1,2})\s*-\s*(\d{1,2})\s*", str(quiet))
     if quiet is not None and not span:
@@ -354,6 +352,17 @@ def _validate(data: dict[str, Any]) -> None:
     if span and not (int(span[1]) <= 23 and int(span[2]) <= 24 and int(span[1]) % 24 != int(span[2]) % 24):
         # "0-24" or "8-8" would be read as no quiet hours at all.
         raise ConfigError("config_error.quiet_hours_span", value=str(quiet).strip())
+
+
+def _validate_look(data: dict[str, Any]) -> None:
+    """How the pages look: ``language`` (auto or a language code) and ``theme`` (THEMES)."""
+    language = data.get("language")
+    if language is not None and not (
+        isinstance(language, str) and re.fullmatch(r"auto|[a-z]{2,3}(-[a-z0-9]{1,8})*", language, re.IGNORECASE)
+    ):
+        raise ConfigError("config_error.language")
+    if data.get("theme") is not None and data["theme"] not in THEMES:
+        raise ConfigError("config_error.theme")
 
 
 def _header(path: Path) -> str:

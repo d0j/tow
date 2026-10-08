@@ -49,7 +49,8 @@
     "site_true_false": "config.yaml: trackers.{site}.{key} must be true or false",
     "site_number": "config.yaml: trackers.{site}.{key} must be a whole number",
     "site_text_list": "config.yaml: trackers.{site}.{key} must be a list of texts",
-    "site_login_form": "config.yaml: trackers.{site}.login_form may have only user_field and pw_field (texts) and extra (names and values as text)"
+    "site_login_form": "config.yaml: trackers.{site}.login_form may have only user_field and pw_field (texts) and extra (names and values as text)",
+    "theme": "config.yaml: theme must be auto, light or dark"
   },
   "auth": {
     "password_too_short": {
@@ -201,8 +202,7 @@
       "home": "Home",
       "sites": "Sites",
       "settings": "Settings",
-      "help": "Guide",
-      "doctor": "Diagnostics"
+      "help": "Guide"
     },
     "search": {
       "open": "Search",
@@ -230,8 +230,7 @@
       "confirm": "Check all topics and add what is found to the torrent client?"
     },
     "flash": {},
-    "close": "Close",
-    "sign_out": "Sign out on this device"
+    "close": "Close"
   },
   "browser_auth": {
     "starting": "opening the sign-in window…",
@@ -720,8 +719,8 @@
       "title": "1. Sections",
       "home": "<b>Home</b> — the topics TOW watches: link, name, folder in the torrent client.",
       "sites": "<b>Sites</b> — where the topics come from (rutor, kinozal…). A site can have several mirror addresses: if one does not answer, TOW takes the next.",
-      "settings": "<b>Settings</b> — torrent clients, notifications, how often to check, access from other devices, the service and backups.",
-      "log": "<b>Log</b> (the list icon in the header) — recent events. Passwords never get there. The log does not grow forever: {n} files of {size} each are kept."
+      "settings": "<b>Settings</b> — the theme, torrent clients, notifications, how often to check, access from other devices, the service and backups; at the end, Diagnostics, this guide and signing out.",
+      "log": "<b>Log</b> (the scroll icon in the header) — recent events. Passwords never get there. The log does not grow forever: {n} files of {size} each are kept."
     },
     "s2": {
       "title": "2. How to add a topic",
@@ -758,7 +757,7 @@
     "s7": {
       "title": "7. Access from a phone or laptop",
       "text": "On this computer TOW opens without a password. From other devices — only with a password (Settings → Network access); a device stays signed in for 90 days. Access and the password can only be changed on this computer.",
-      "sign_out": "On a phone or laptop, the exit icon in the header signs that device out; Settings → Network access → “Sign out everywhere” signs out every device."
+      "sign_out": "On a phone or laptop, “Sign out on this device” at the end of Settings signs that device out; Settings → Network access → “Sign out everywhere” signs out every device."
     },
     "s8": {
       "title": "8. Where the data is",
@@ -1206,7 +1205,8 @@
       "undo_fail": "undo not applied",
       "settings_save_fail": "settings not saved",
       "master_key_created": "master key created — back it up",
-      "sessions_reset": "sign-ins reset: data/sessions.json was damaged, every device signs in again"
+      "sessions_reset": "sign-ins reset: data/sessions.json was damaged, every device signs in again",
+      "settings_theme": "theme"
     },
     "cls": {
       "quota": "daily limit",
@@ -1516,7 +1516,15 @@
       "title": "Settings",
       "help_link": "Guide",
       "help_q": "guide how it works help",
-      "secret_store": "Saved passwords and tokens cannot be opened: the master key is missing or does not match. Put keys/master.key back from your copy, or run <code>tow keys status</code> to see why. More in the <a href=\"{help}\">guide</a>."
+      "secret_store": "Saved passwords and tokens cannot be opened: the master key is missing or does not match. Put keys/master.key back from your copy, or run <code>tow keys status</code> to see why. More in the <a href=\"{help}\">guide</a>.",
+      "help_note": "How TOW works: statuses, messages, backups and updates",
+      "doctor_link": "Diagnostics",
+      "doctor_note": "Connection to the torrent client, the sites and the running service",
+      "doctor_q": "diagnostics doctor connection check sites client service",
+      "sign_out": "Sign out on this device",
+      "sign_out_note": "Only this phone or computer; other devices stay signed in",
+      "sign_out_button": "Sign out",
+      "sign_out_q": "sign out log out exit device session"
     },
     "common": {
       "save": "Save",
@@ -1631,8 +1639,6 @@
       "restart_note": "The page will be unavailable for a few seconds.",
       "watchdog": "The watchdog checks the schedule and reports downtime and its cause to connected messengers. When the web server fails, the TOW service restarts it; the watchdog itself does not restart TOW.",
       "watchdog_last": "Last watchdog message,",
-      "doctor_link": "Diagnostics",
-      "doctor_note": "— connection to the torrent client, the sites and the running service.",
       "last_restart": "Last requested restart:",
       "running_since": "Web page running since:",
       "no_restarts": "TOW has not been restarted from here yet.",
@@ -1701,6 +1707,15 @@
       "q": "log journal events failure diagnostics",
       "title": "Log",
       "empty": "Nothing here yet."
+    },
+    "theme": {
+      "title": "Theme",
+      "auto": "As the system",
+      "light": "Light",
+      "dark": "Dark",
+      "hint": "The colours of TOW's pages on every device. “As the system” follows the light or dark mode of the computer or phone that opens them.",
+      "saved": "theme saved",
+      "q": "theme appearance colours dark light night mode"
     }
   },
   "setup": {
