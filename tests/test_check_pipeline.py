@@ -473,3 +473,34 @@ def test_a_check_without_messages_keeps_the_recovery_for_the_next_one(monkeypatc
     check.run_check(apply=True, notify=True, how="auto")
     assert [kind for _tid, kind in notified] == ["recovered"]
     assert "error_notified" not in load_state()["topics"][0]
+
+
+# --- a site whose mirrors rest is one line of the log per check, not one per topic ---------------
+
+
+def test_topics_of_a_paused_site_are_one_log_line_per_check(monkeypatch, stores):
+    """Soak: 150 ``check_fail mirrors.all_paused`` lines per site per check were 46% of tow.jsonl."""
+    from tow.errors import TowError
+    from tow.log import format_event, read_events
+    from tow.mirrors import MirrorFetchError
+
+    class PausedSite(Tracker):
+        def fetch_torrent(self, url, secrets, ua, *, ignore_cool=False, persist=True):
+            if url.endswith("/9"):
+                raise TowError("tracker.not_torrent", prefix="fake")  # a topic's own error stays its line
+            raise MirrorFetchError("mirrors.all_paused", failure="paused", tracker="fake")
+
+    topics = [_topic(id=f"t{i}", url=f"https://tracker.example/{i}", hash=OLD) for i in range(1, 10)]
+    save_state({"topics": topics})
+    _wire(monkeypatch, {"main": Client()}, PausedSite())
+    for _ in range(2):
+        check.run_check(apply=True, notify=False, how="auto")
+    events = list(reversed(read_events(limit=200)))
+    skipped = [e for e in events if e.get("kind") == "check_site_skipped"]
+    failed = [e for e in events if e.get("kind") == "check_fail"]
+    assert [(e["tracker"], e["topics"], e["error_code"]) for e in skipped] == [("fake", 8, "mirrors.all_paused")] * 2
+    assert [e["topic"] for e in failed] == ["t9", "t9"]
+    saved = {t["id"]: t for t in load_state()["topics"]}
+    assert all(saved[f"t{i}"]["last_error_code"] == "mirrors.all_paused" for i in range(1, 9))  # the rows keep it
+    assert all(saved[f"t{i}"]["last_error_class"] == "tracker" for i in range(1, 9))
+    assert "8" in format_event(skipped[0])["detail"]

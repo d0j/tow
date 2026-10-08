@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 
 from tow import download_history
@@ -36,6 +36,12 @@ from tow.trackers import GenericHttpTracker, match_tracker, presets
 
 _LOG = logging.getLogger("tow.check")
 
+# Errors that say the site, not the topic, is not asked in this run: its mirrors rest, it is
+# frozen, its daily download limit is reached. Each topic's row keeps the error; the log gets
+# one ``check_site_skipped`` line per site and run instead of one ``check_fail`` per topic (a
+# soak of 200 topics logged 150 of them per site per check: 46% of tow.jsonl).
+SITE_SKIP_CODES = frozenset({"mirrors.all_paused", "check.frozen", "check.daily_limit"})
+
 
 def _fail_log(
     topic: Topic,
@@ -45,8 +51,14 @@ def _fail_log(
     *,
     how: str = "auto",
     persist: bool = True,
+    site_skips: dict[tuple[str, str], dict[str, Any]] | None = None,
 ) -> None:
     if not persist:
+        return
+    code = getattr(error, "code", None)
+    if site_skips is not None and tr is not None and code in SITE_SKIP_CODES:
+        skipped = site_skips.setdefault((tr.name, str(code)), {"error": error, "topics": 0})
+        skipped["topics"] += 1
         return
     log_event(
         "check_fail",
@@ -91,6 +103,7 @@ def _skip_row(
     state: dict[str, Any],
     how: str,
     apply: bool,
+    site_skips: dict[tuple[str, str], dict[str, Any]] | None = None,
 ) -> bool:
     """Fill ``row`` and return True when the topic is not fetched in this run."""
     url = str(topic.get("url") or "")
@@ -132,7 +145,7 @@ def _skip_row(
     else:
         return False
     set_error(row, error)
-    _fail_log(topic, url, error, tr, how=how, persist=apply)
+    _fail_log(topic, url, error, tr, how=how, persist=apply, site_skips=site_skips)
     stamp_result(topic, row)
     return True
 
@@ -205,6 +218,20 @@ class CheckRun:
     # The owner checks these topics by hand (a row's check): a current revision gone from its
     # client is added again. A scheduled check only reports it - the owner may have removed it.
     readd_removed: bool = False
+    # (site, error code) -> {"error", "topics"}: topics not asked because of their site (SITE_SKIP_CODES).
+    site_skips: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)
+
+
+def log_site_skips(run: CheckRun) -> None:
+    """One line per site for the topics this run did not ask because of their site."""
+    for (tracker, _code), skipped in sorted(run.site_skips.items()):
+        run.record(
+            "check_site_skipped",
+            tracker=tracker,
+            topics=skipped["topics"],
+            **error_fields(skipped["error"]),
+            how=run.how,
+        )
 
 
 def read_secrets() -> tuple[dict[str, Any], FileStamp | None]:
@@ -339,7 +366,17 @@ def check_topic(topic: Topic, run: CheckRun) -> CheckRow:
         "ok": False,
     }
     old = str(topic.get("hash") or "").upper()
-    if _skip_row(topic, row, tr, old=old, quota=run.quota, state=run.state, how=run.how, apply=run.apply):
+    if _skip_row(
+        topic,
+        row,
+        tr,
+        old=old,
+        quota=run.quota,
+        state=run.state,
+        how=run.how,
+        apply=run.apply,
+        site_skips=run.site_skips,
+    ):
         return row
     assert tr is not None  # _skip_row handled "no tracker"
     started = _client_marks(topic)
@@ -631,7 +668,7 @@ def _topic_failed(work: TopicCheck, error: Exception) -> None:
         )
     if is_daily_limit(error):
         run.quota.add(tr.name)
-    _fail_log(topic, work.url, error, tr, how=run.how, persist=run.apply)
+    _fail_log(topic, work.url, error, tr, how=run.how, persist=run.apply, site_skips=run.site_skips)
     if run.notify:
         run.queue_notification(
             topic,

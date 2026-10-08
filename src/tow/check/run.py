@@ -12,7 +12,7 @@ from tow.check import rows, space
 from tow.check.client_ops import ClientPool, remote_clients
 from tow.check.notices import RunNotifications, flush_notifications
 from tow.check.reconcile import reconcile_and_commit, reconcile_preview
-from tow.check.topic import CheckRun, check_topic, read_secrets
+from tow.check.topic import CheckRun, check_topic, log_site_skips, read_secrets
 from tow.check_steps import changed_owner_fields, merge_check_results, owner_fields
 from tow.clients import factory as client_factory
 from tow.clock import iso_now, machine_now
@@ -400,6 +400,7 @@ def _run_check(
         else:
             results.append(_progress_only_row(topic) if progress_only else check_topic(topic, run))
     secrets = run.secrets  # the per-topic step may have re-read tracker cookies
+    log_site_skips(run)
     pool.queue_recovered()
     if not apply:
         reconcile_preview(state, results, run, pending_reconcile_records, want)

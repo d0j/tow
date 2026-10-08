@@ -421,6 +421,7 @@ HISTORY_GROUPS = {
     "errors": frozenset(
         {
             "check_fail",
+            "check_site_skipped",
             "content_cache_failed",
             "client_add_failed",
             "reconcile_failed",
@@ -711,6 +712,8 @@ def format_event(rec: Mapping[str, Any], *, title_index: Mapping[str, str] | Non
         if cls and human.casefold().startswith(CLS_RU.label(cls, lang, cls).casefold()):
             bits.remove(CLS_RU.label(cls, lang, cls))  # "torrent client · torrent client: refused" says it twice
         bits.append(human[:220])
+    if kind == "check_site_skipped" and isinstance(rec.get("topics"), int):
+        bits.append(t("log.site_skipped", lang, n=rec["topics"]))
     elif kind == "check" and rec.get("n") is not None:
         bits.append(t("log.check_result", lang, ok=rec.get("ok"), n=rec.get("n")))
         if rec.get("apply") is False:
