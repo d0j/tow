@@ -193,6 +193,17 @@ def test_the_owner_can_be_named(install, capsys):
     assert t("permissions.fixed") in out
 
 
+def test_a_named_owner_without_an_administrator_terminal_changes_nothing_and_says_why(install, capsys):
+    # Round-5 QA: `--owner` in an ordinary terminal was ignored without a word.
+    _root, acl, session = install
+    session.update(user=OWNER, elevated=False)
+
+    assert cli.main(["permissions", "fix", "--owner", "PC\\owner"]) == 3
+
+    assert acl.calls == []
+    assert t("permissions.owner_needs_admin", command=permissions.fix_command(admin=True)) in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("name", ["BUILTIN\\Administrators", "PC\\nobody"])
 def test_a_named_owner_must_be_a_person(install, capsys, name):
     _root, acl, session = install

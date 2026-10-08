@@ -9,6 +9,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - Changing the network password or **Sign out everywhere** when TOW cannot write `data/sessions.json` says so
   (the password is saved; this device signs in again) instead of a server error.
+- `tow permissions fix --owner` in an ordinary terminal says that only an administrator can name the owner and
+  changes nothing; before, the option was ignored without a word.
 
 ## [1.27.1] — 2026-10-08
 

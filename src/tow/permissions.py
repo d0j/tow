@@ -167,6 +167,14 @@ def fix(owner: str | None = None) -> dict[str, Any]:
     if install.parent == install or not _plain_dir(install):
         return {"ok": False, "error": t("permissions.refused_root", path=str(install))}
     if not backend.elevated():
+        if owner:
+            # Round-5 QA: --owner was ignored here without a word; only an administrator (sudo)
+            # can give the folders to another account. Nothing is changed.
+            return {
+                **status(),
+                "ok": False,
+                "error": t("permissions.owner_needs_admin", command=fix_command(admin=True)),
+            }
         was_open = not status()["ok"]
         protect_install_folders(quiet=True)  # what every start does: this account's folders
         after = status()
