@@ -155,3 +155,80 @@ def test_a_broken_secret_store_gives_the_same_answer_for_the_whole_request(monke
 
     _in_a_request(request)
     assert calls == [1]
+
+
+def _sites(*names_and_patterns):
+    return {"trackers": {name: {"url_regex": pattern} for name, pattern in names_and_patterns}}
+
+
+def test_the_site_of_a_link_is_the_one_match_tracker_finds_and_is_kept_for_the_same_sites(monkeypatch):
+    """Home and the header name every topic's site: the answer of match_tracker (the first site in
+    config order whose pattern takes the link), remembered across requests while the sites stay
+    the same, and asked again as soon as a site or a pattern changes."""
+    from tow.trackers import generic, load_trackers, match_tracker
+    from tow.web import _context
+
+    cfg = {
+        "value": _sites(
+            ("wide", r"^https?://(?:www\.)?example\.org/.*?[?&]t=(\d+)"),
+            ("narrow", r"^https?://example\.org/topic\?t=(\d+)"),
+        )
+    }
+    monkeypatch.setattr("tow.web.services.load_config", lambda: cfg["value"])
+    runs = []
+    original = generic.GenericHttpTracker.parse_id
+
+    def parse_id(self, url):
+        runs.append(self.name)
+        return original(self, url)
+
+    monkeypatch.setattr(generic.GenericHttpTracker, "parse_id", parse_id)
+    links = [
+        "https://example.org/topic?t=1",
+        "https://www.example.org/x?a=1&t=2",
+        "https://other.example/topic?t=3",
+        "  https://example.org/topic?t=4  ",
+    ]
+
+    def names():
+        return [_context.site_name(link) for link in links]
+
+    def expected():
+        found = [match_tracker(load_trackers(cfg["value"]), link) for link in links]
+        return [tracker.name if tracker else None for tracker in found]
+
+    assert _in_a_request(names) == expected() == ["wide", "wide", None, "wide"]
+    runs.clear()
+    assert _in_a_request(names) == ["wide", "wide", None, "wide"]
+    assert runs == []  # the same sites: nothing is matched again
+    assert _in_a_request(lambda: _context.tracker_of(links[0]).name) == "wide"
+
+    # Another order of the same sites: the first one that takes the link wins again.
+    cfg["value"] = _sites(
+        ("narrow", r"^https?://example\.org/topic\?t=(\d+)"),
+        ("wide", r"^https?://(?:www\.)?example\.org/.*?[?&]t=(\d+)"),
+    )
+    assert _in_a_request(names) == expected() == ["narrow", "wide", None, "narrow"]
+    # A new pattern for a site, and a new site: shown at once.
+    cfg["value"] = _sites(
+        ("narrow", r"^https?://example\.org/topic\?t=(\d+)"),
+        ("wide", r"^https?://www\.example\.org/.*?[?&]t=(\d+)"),
+        ("other", r"^https?://other\.example/topic\?t=(\d+)"),
+    )
+    assert _in_a_request(names) == expected() == ["narrow", "wide", "other", "narrow"]
+    # A link nobody asked about yet is matched when it is first asked.
+    runs.clear()
+    assert _in_a_request(lambda: _context.site_name("https://other.example/topic?t=9")) == "other"
+    assert runs == ["narrow", "wide", "other"]
+
+
+def test_home_and_the_header_name_the_same_sites_after_the_lookup_is_kept(monkeypatch, stores):
+    """The header's site icons and Home's site column come from the kept lookup and do not change
+    between the first and the second request."""
+    from tow.web.templating import header_health
+
+    client = TestClient(app)
+    first = client.get("/", headers={"Accept": "text/html"}).text
+    second = client.get("/", headers={"Accept": "text/html"}).text
+    assert first.count('class="topic-tracker"') == second.count('class="topic-tracker"') == 20
+    assert _in_a_request(header_health)["sites"] == {"rutor": "mut"}

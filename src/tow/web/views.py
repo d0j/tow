@@ -406,13 +406,13 @@ def _with_site_title(params: Any, tracker: Any, title: str) -> Any:
 
 def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
     cfg = _context.config()
-    trs = load_trackers(cfg)
+    _context.trackers()  # a site whose link pattern is broken fails the page, as it always did
     history = services.load_download_history()
     timers = services.topic_timer_status(dict(state))
     rows = []
     for topic in state.get("topics") or []:
         url = topic.get("url") or ""
-        tr = match_tracker(trs, url)
+        tr = _context.tracker_of(url)
         title = topic.get("tracker_title") or topic.get("title") or ""
         summary = topic_progress_summary(topic, history)
         record = (history.get("topics") or {}).get(str(topic.get("id") or "")) or {}
