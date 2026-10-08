@@ -20,7 +20,6 @@ from tow.auth import SESSION_COOKIE, password_hint
 from tow.clients.factory import client_name
 from tow.config import interval_sec_of, port_of
 from tow.jsonish import as_dict
-from tow.trackers import load_trackers, match_tracker
 from tow.web import _context, services
 from tow.web.text import t, tm
 from tow.web.views import flash_ttl_sec, stored_ui_time
@@ -66,11 +65,11 @@ def header_health() -> dict[str, Any]:
     elif not h and doc.get("qbit"):
         qbit_ok = True
     site_tones: dict[str, str] = {}
-    trs = load_trackers(cfg)
+    _context.trackers()  # a site whose link pattern is broken fails the header, as it always did
     for topic in state.get("topics") or []:
-        tr = match_tracker(trs, topic.get("url") or "")
-        if tr and tr.name not in site_tones:
-            site_tones[tr.name] = "mut"
+        name = _context.site_name(topic.get("url") or "")
+        if name is not None and name not in site_tones:
+            site_tones[name] = "mut"
     for p in doc.get("probes") or []:
         name = str(p.get("tracker") or "")
         if name not in site_tones:
