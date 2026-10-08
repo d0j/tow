@@ -2256,7 +2256,9 @@
       "saved": "password saved; other devices sign in again",
       "hint_saved": "reminder saved",
       "store_unavailable": "the password was not changed: saved passwords and tokens cannot be opened — see Settings",
-      "signed_out": "every other device has been signed out; they need the password to come back"
+      "signed_out": "every other device has been signed out; they need the password to come back",
+      "saved_sign_in_again": "Password saved. Sign in again on this device: TOW could not write its sign-in file data/sessions.json.",
+      "sign_out_failed": "No device was signed out: TOW could not write its sign-in file data/sessions.json. Check that TOW's data can be changed, then try again."
     }
   },
   "site": {

@@ -233,6 +233,52 @@ def test_the_settings_button_signs_out_every_other_device(password):
     assert load_secrets()["lan_auth"] == password  # the password is the same
 
 
+def _sessions_file_not_writable(monkeypatch):
+    def denied(*_args, **_kwargs):
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(auth, "_save_sessions", denied)
+
+
+def test_sign_out_everywhere_says_when_the_sessions_file_cannot_be_written(password, monkeypatch):
+    # Round-5 QA: the button answered with a server error (500) and nobody was signed out.
+    from helpers import flash_kind
+
+    phone, laptop = _device(password), _device(password)
+    _sessions_file_not_writable(monkeypatch)
+
+    response = phone.post("/settings/sessions/sign-out", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert t("web.password.sign_out_failed", "ru") in shown(response.headers["location"])
+    assert flash_kind(response.headers["location"]) == "err"
+    assert laptop.get("/settings", headers=HTML, follow_redirects=False).status_code == 200  # nothing changed
+
+
+def test_a_new_password_is_saved_even_when_the_sessions_file_cannot_be_written(password, monkeypatch):
+    # Round-5 QA: the password was changed, then the page answered 500.
+    from helpers import flash_kind
+
+    phone = _device(password)
+    _sessions_file_not_writable(monkeypatch)
+
+    response = phone.post(
+        "/settings/password",
+        data={
+            "current_password": "old-horse-battery",
+            "lan_password": "new-horse-battery-2",
+            "lan_password2": "new-horse-battery-2",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert t("web.password.saved_sign_in_again", "ru") in shown(response.headers["location"])
+    assert flash_kind(response.headers["location"]) == "warn"
+    assert load_secrets()["lan_auth"] != password  # the new password is in force
+    assert phone.get("/settings", headers=HTML, follow_redirects=False).headers["location"] == "/login?again=1"
+
+
 def test_a_form_posted_with_an_ended_session_goes_to_the_sign_in_page(password):
     """Round-3 audit: a form posted after the session ended got a bare English
     "authentication required" (401). A form goes to the sign-in page, which says why; app.js
