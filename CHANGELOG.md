@@ -19,6 +19,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The copies made before an update have one name each: the restore point TOW saves first and the update
   snapshot the updater takes (no more "data archive" or "safety copy"); the copy kept before a restore is the
   safety copy.
+- An undo that could not be applied says so ("could not undo the change") instead of calling it a rollback, which
+  names only going back to an older release.
 
 ### Removed
 
