@@ -3,6 +3,12 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [Unreleased]
+
+### Fixed
+
+- `deploy.ps1` written to a file or passed to another program no longer garbles Russian text and the ellipsis.
+
 ## [1.26.0] — 2026-10-08
 
 ### Added

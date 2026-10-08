@@ -162,6 +162,15 @@ def test_deploy_wraps_update_and_keeps_credentials_out_of_snapshots():
     assert {"browser-auth", "keys"} <= update.SKIP_DIRS
 
 
+def test_deploy_reads_the_updates_utf8_and_gives_the_console_its_code_page_back():
+    # 08.10.2026: deploy.ps1 written to a file from a fresh console said "TOWтАж" and garbled Russian.
+    deploy = (ROOT / "scripts" / "deploy.ps1").read_text(encoding="utf-8")
+    run = deploy.index("update.py') --ref")
+    assert deploy.index("[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)") < run
+    assert run < deploy.index("finally") < deploy.index("[Console]::OutputEncoding = $encoding")
+    assert "exit $code" in deploy
+
+
 def test_setup_takes_no_options_and_never_runs_under_a_running_tow():
     # 02.10.2026: `tow.cmd setup --help` rebuilt the live install's environment under a running TOW.
     root = Path(__file__).resolve().parents[1] / "scripts"

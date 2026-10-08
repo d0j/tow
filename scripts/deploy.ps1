@@ -48,5 +48,14 @@ function Find-BasePython {
 }
 
 $python = Find-BasePython
-& $python (Join-Path $PSScriptRoot 'update.py') --ref $Ref --health-timeout $HealthTimeoutSec --wait-minutes $CheckWaitMinutes --keep $KeepSnapshots
-exit $LASTEXITCODE
+# update.py writes UTF-8. When this script's output goes to a file or another program, PowerShell
+# would read it in the console's old code page and garble every non-English letter and the ellipsis.
+$encoding = [Console]::OutputEncoding
+try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch { }
+try {
+    & $python (Join-Path $PSScriptRoot 'update.py') --ref $Ref --health-timeout $HealthTimeoutSec --wait-minutes $CheckWaitMinutes --keep $KeepSnapshots
+    $code = $LASTEXITCODE
+} finally {
+    try { [Console]::OutputEncoding = $encoding } catch { }
+}
+exit $code
