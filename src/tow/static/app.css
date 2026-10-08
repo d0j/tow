@@ -65,10 +65,12 @@ a:hover { text-decoration: underline; }
   position: absolute; left: -999px;
 }
 .skip:focus { left: 8px; top: 8px; z-index: 20; background: var(--panel); padding: .4rem .7rem; }
+/* The sections (left) and the controls (right) keep their width; the site strip in the middle
+   takes what is left and scrolls (53 sites made the page 2096 px wide and pushed Settings off it). */
 header.app {
   position: sticky; top: 0; z-index: 10;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
   align-items: center;
   column-gap: .5rem;
   padding: .22rem .7rem;
@@ -101,7 +103,11 @@ header.app .ico.on, header.app .ico:hover, header.app .ico:focus-visible {
 .hdr-controls > * { flex: 0 0 auto; }
 .hdr-sites {
   justify-self: center; display: flex; align-items: center; flex-wrap: nowrap; gap: .7rem;
+  min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: thin;
+  padding-right: 2.5rem; mask-image: linear-gradient(to right, black calc(100% - 2.5rem), transparent);
 }
+.hdr-sites .trk { flex: 0 0 auto; white-space: nowrap; }
+.hdr-sites:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
 .trk {
   font-size: 12px; font-weight: 650; letter-spacing: .02em; line-height: 1;
 }
@@ -704,12 +710,10 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
     grid-area: sites; min-width: 0; max-width: 100%; justify-self: stretch; overflow-x: auto; justify-content: flex-start;
     padding-right: 2.5rem; mask-image: linear-gradient(to right, black calc(100% - 2.5rem), transparent);
   }
-  .hdr-sites:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
   .hdr-right { display: contents; }
   .hdr-controls { grid-area: right; justify-self: end; }
   .hdr-svc { grid-area: services; max-width: 55vw; padding-left: .5rem; margin-right: 0; border-left: 1px solid var(--line); }
   .hdr-clock { grid-area: clock; justify-self: end; }
-  .hdr-sites .trk { flex: 0 0 auto; }
   .list-head { display: none; }
   .list-head, details.row-edit > summary,
   .list-head.sites, details.row-edit.sites > summary {
