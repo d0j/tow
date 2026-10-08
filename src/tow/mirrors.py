@@ -342,6 +342,62 @@ def _failure_code(error: Exception) -> str:
     return "local"
 
 
+# A host that took the request and then did not answer it in time: the page may be the slow one.
+_SLOW_ANSWER_ERRORS: tuple[type[BaseException], ...] = (
+    httpx.ReadTimeout,
+    httpx.WriteTimeout,
+    httpcore.ReadTimeout,
+    httpcore.WriteTimeout,
+    thttp.ResponseTooSlowError,
+)
+
+
+def _may_be_page_only(error: Exception) -> bool:
+    """A failure that may belong to the one page asked for, not to its host: a Cloudflare check
+    on that page, or a page the host was too slow to give. A refused or reset connection, a
+    name or TLS failure, a connect timeout and a 5xx always say the host."""
+    if isinstance(error, MirrorFetchError):
+        return error.failure == "cloudflare"
+    return isinstance(error, _SLOW_ANSWER_ERRORS)
+
+
+def _host_answers(host: str, *, cookies: dict[str, str] | None, ua: str | None, public_only: bool) -> bool:
+    """The host's front page answers - any status but a 5xx or 429, no Cloudflare check: a
+    failure of another page is then that page's own and does not pause the host. A front page
+    that fails too (a site-wide check, a host that hangs) says the host."""
+    try:
+        with thttp.client(ua=ua, cookies=cookies or None, follow_redirects=False, public_only=public_only) as c:
+            r = thttp.get_limited(c, host + "/", max_bytes=thttp.MAX_HTML_RESPONSE_BYTES)
+    except thttp.ResponseTooLargeError:
+        return True  # it answered, at length
+    except Exception:  # noqa: BLE001 - a front page that does not come is the host's failure
+        return False
+    if r.status_code >= 500 or r.status_code == 429:
+        return False
+    head = bytes(r.content[:8192]).decode("latin-1")
+    return not thttp.is_cloudflare(r.status_code, head, r.headers)
+
+
+def _counts_against_host(
+    error: Exception,
+    host: str,
+    path: str,
+    *,
+    cookies: dict[str, str] | None,
+    ua: str | None,
+    public_only: bool,
+    persist: bool,
+) -> bool:
+    """Whether a failure counts towards the host's cooldown. A failure that may be one page's
+    own counts only when the host's front page fails too; a preview (``persist=False``) keeps
+    no count, so it does not ask the front page either."""
+    if _failure_code(error) in _NOT_HOST_HEALTH_CODES:
+        return False
+    if not _may_be_page_only(error) or path.split("?", 1)[0] in {"", "/"}:
+        return True
+    return persist and not _host_answers(host, cookies=cookies, ua=ua, public_only=public_only)
+
+
 def pick_and_get(
     tracker: str,
     hosts: list[str],
@@ -381,8 +437,8 @@ def pick_and_get(
         if not ignore_cool and until > _now():
             continue
         url = host + (path if path.startswith("/") else "/" + path)
+        host_cookies = _cookies_for_host(cookies, host, hosts)
         try:
-            host_cookies = _cookies_for_host(cookies, host, hosts)
             with thttp.client(
                 ua=ua, cookies=host_cookies or None, follow_redirects=False, public_only=public_only
             ) as c:
@@ -404,9 +460,12 @@ def pick_and_get(
             if code == "quota":
                 break
             # Only host-health failures count towards the mirror cooldown; a missing or
-            # oversized topic, or TOW failing on a good answer, must not pause the whole
+            # oversized topic, a check page or a slow answer on one topic's page (its host's
+            # front page answers), or TOW failing on a good answer, must not pause the whole
             # tracker for every other topic.
-            if code not in _NOT_HOST_HEALTH_CODES:
+            if _counts_against_host(
+                e, host, path, cookies=host_cookies, ua=ua, public_only=public_only, persist=persist
+            ):
                 n = int(b["fail"].get(host) or 0) + 1
                 b["fail"][host] = n
                 if n >= fail_threshold:

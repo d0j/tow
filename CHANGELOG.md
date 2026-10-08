@@ -36,6 +36,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Pausing, editing or deleting a topic, pausing a site, choosing its mirror or saving a setting while another program
   (an antivirus, a backup tool) keeps TOW's data file open says that the file could not be written and to try again,
   on the same page; TOW also waits a little longer (about 4 s) for the file. Before, it was a server error.
+- A Cloudflare check or a slow answer on a few topic pages no longer pauses every mirror of the site: only a
+  mirror's own failures count towards its cooldown (a refused or dropped connection, no answer, a server error, a
+  Cloudflare check on its front page too), and such a topic shows its own yellow error. Before, two topics behind a
+  check and a slow one in a row paused all topics of the site for an hour.
 
 ## [1.28.1] — 2026-10-08
 

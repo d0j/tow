@@ -155,7 +155,10 @@ manual checks and progress checks do not reset it.
   main mirror. Click a mirror on **Sites** to make it the main one.
 - **Cooldown.** A mirror that fails three times in a row rests for an hour (rutor: 30 minutes); the others keep
   working. A site's `fail_threshold` and `cooldown_sec` in `config.yaml` change the count and the pause. The site's
-  check icon in its row (“Check the site's mirrors”) ends the pause.
+  check icon in its row (“Check the site's mirrors”) ends the pause. Only the mirror's own failures count: it refuses
+  or drops the connection, does not answer, answers with a server error, or shows a Cloudflare check on its front
+  page too. A Cloudflare check or a slow answer on one topic's page alone is that topic's error (yellow) and does not
+  pause the mirror for the other topics.
 - **Daily limit.** When a site says the download limit for today is reached, scheduled checks leave that site alone
   until tomorrow and do not try other mirrors (they share the limit). A check you start (the row's ↻, **Check all**)
   still tries it.
