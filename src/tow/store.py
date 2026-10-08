@@ -311,7 +311,7 @@ def _writer_lock(path: Path) -> Iterator[None]:
         yield
 
 
-def _replace_with_retry(source: Path, target: Path, *, attempts: int = 8) -> None:
+def replace_with_retry(source: Path, target: Path, *, attempts: int = 8) -> None:
     """os.replace, retrying briefly while a reader has the target open (Windows sharing violation)."""
     for attempt in range(attempts):
         try:
@@ -359,7 +359,7 @@ def _atomic_write_bytes(path: Path, content: bytes, *, overwrite: bool) -> None:
                 handle.flush()
                 os.fsync(handle.fileno())
             if overwrite:
-                _replace_with_retry(temporary_name, path)
+                replace_with_retry(temporary_name, path)
             else:
                 current_platform().publish_exclusive(temporary_name, path)
             _write_generation += 1  # after the replace, under the writer lock (one writer at a time)

@@ -128,6 +128,67 @@ def test_the_web_server_is_started_and_watched(tmp_path):
     assert status["server"]["pid"] == server.pid
 
 
+def test_a_status_write_a_reader_blocked_is_written_at_the_next_tick(tmp_path, monkeypatch):
+    # Audit 08.10.2026: on Windows a reader holding status.json made the replace fail; the
+    # supervisor had already marked it written and left it stale until something else changed.
+    world, sup = make(tmp_path)
+    run_for(sup, world.clock, 7)
+    real = layout.write_json
+    failures = []
+
+    def held(path, value, *, durable=True):
+        if path == layout.status_path() and not failures:
+            failures.append(value)
+            raise PermissionError(13, "held by a reader")
+        return real(path, value, durable=durable)
+
+    monkeypatch.setattr(layout, "write_json", held)
+    world.servers()[0].code = 1  # something changes: the server exited
+    sup.tick()
+    assert len(failures) == 1
+    assert failures[0]["server"]["state"] == "waiting"
+    assert json.loads(layout.status_path().read_text(encoding="utf-8"))["server"]["state"] == "up"  # stale
+    sup.tick()  # nothing else changed, yet the change is written now
+    assert json.loads(layout.status_path().read_text(encoding="utf-8"))["server"]["state"] != "up"
+
+
+def test_a_status_replace_waits_for_a_reader_and_leaves_no_temporary_file(tmp_path, monkeypatch):
+    import tow.store
+
+    folder = tmp_path / "run"
+    folder.mkdir()
+    path = folder / "status.json"
+    path.write_text("{}", encoding="utf-8")
+    real = os.replace
+    calls = []
+
+    def busy_twice(source, target):
+        calls.append(target)
+        if len(calls) <= 2:
+            raise PermissionError(13, "held by a reader")
+        return real(source, target)
+
+    monkeypatch.setattr(tow.store.os, "replace", busy_twice)
+    monkeypatch.setattr(tow.store.time, "sleep", lambda _seconds: None)
+    layout.write_json(path, {"state": "up"}, durable=False)
+    assert json.loads(path.read_text(encoding="utf-8")) == {"state": "up"}
+    assert len(calls) == 3
+    assert sorted(item.name for item in folder.iterdir()) == ["status.json"]
+
+    calls.clear()
+
+    def always_held(source, target):
+        calls.append(target)
+        raise PermissionError(13, "held by a reader")
+
+    monkeypatch.setattr(tow.store.os, "replace", always_held)
+    with pytest.raises(PermissionError):
+        layout.write_json(path, {"state": "down"}, durable=False)
+    assert len(calls) == layout.STATUS_REPLACE_ATTEMPTS
+    assert sorted(item.name for item in folder.iterdir()) == ["status.json"]  # the temp file removed
+    assert json.loads(path.read_text(encoding="utf-8")) == {"state": "up"}
+
+
 def test_spawn_failure_does_not_expose_exception_text_in_status_or_log(tmp_path, caplog):
     world, sup = make(tmp_path)
 

@@ -25,9 +25,12 @@ from tow import paths
 from tow.diagnostic_json import encode_object, epoch, read_object
 from tow.paths import repo_root
 from tow.platform import locks
-from tow.store import atomic_write_text, init_lock_file
+from tow.store import atomic_write_text, init_lock_file, replace_with_retry
 
 CONTROL_ACTIONS = ("restart", "stop")
+# A non-durable write (status.json, every change) waits at most about 0.3 s for a reader: the
+# supervisor's loop ticks every second, and the next tick tries again.
+STATUS_REPLACE_ATTEMPTS = 5
 
 
 def install_root() -> Path:
@@ -119,15 +122,24 @@ def read_json(path: Path) -> dict[str, Any]:
 
 
 def write_json(path: Path, value: dict[str, Any], *, durable: bool = True) -> None:
-    """Replace the file whole; ``durable=False`` skips the flush to disk (status, rewritten often)."""
+    """Replace the file whole; ``durable=False`` skips the flush to disk (status, rewritten often).
+
+    Either way a reader holding the file (Settings, ``tow status``; on Windows that refuses the
+    replace) is waited for briefly, and a failed write leaves no temporary file behind.
+    """
     text = encode_object(value)
     path.parent.mkdir(parents=True, exist_ok=True)
     if durable:
         atomic_write_text(path, text)
         return
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    temporary.write_text(text, encoding="utf-8")
-    os.replace(temporary, path)
+    try:
+        temporary.write_text(text, encoding="utf-8")
+        replace_with_retry(temporary, path, attempts=STATUS_REPLACE_ATTEMPTS)
+    except BaseException:
+        with suppress(OSError):
+            temporary.unlink(missing_ok=True)
+        raise
 
 
 def request(action: str, *, by: str = "cli", operation_id: str | None = None) -> dict[str, Any]:

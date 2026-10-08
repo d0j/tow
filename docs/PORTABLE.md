@@ -264,7 +264,8 @@ blocks for long.
   `ExitTimeOut` exceed).
 - **Status and logs.** `data/run/status.json` is rewritten only when something changes (server
   state and pid, restarts, the running job, the next due times, the last wake) — never on a
-  timer, so the disk can sleep. `data/logs/run.log` is rotated at 5 MiB × 3; the terminal gets the
+  timer, so the disk can sleep. A reader holding it (Windows refuses the replace then) is waited
+  for briefly; a write that still fails leaves no temporary file and is made at the next tick. `data/logs/run.log` is rotated at 5 MiB × 3; the terminal gets the
   same lines only when stderr is one (not the journal or `launchd.log`).
 
 Without autostart: `tow run` in a terminal (`<app>\scripts\tow.cmd run` / `<app>/scripts/tow run`).
