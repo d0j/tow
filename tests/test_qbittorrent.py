@@ -891,3 +891,83 @@ def test_factory_passes_category_and_tags_from_the_client_config(monkeypatch):
     adapter = factory.from_secrets(cfg, secrets)
 
     assert (adapter.add_category, adapter.add_tags) == ("tv", ["serials", "kids"])
+
+
+class _ListingAPI:
+    """qbittorrent-api's shape where it matters here: ``app.web_api_version`` asks
+    ``app_web_api_version()``, and so does every start and stop."""
+
+    def __init__(self):
+        self.calls: list[object] = []
+        self.rows = {
+            h: SimpleNamespace(hash=h.lower(), state="stoppedUP", progress=1.0, tags="tow")
+            for h in ("A" * 40, "B" * 40)
+        }
+        api = self
+
+        class App:
+            version = "5.1.2"
+
+            @property
+            def web_api_version(self):
+                return api.app_web_api_version()
+
+        self.app = App()
+
+    def app_web_api_version(self):
+        self.calls.append("webapiVersion")
+        return "2.11.4"
+
+    def torrents_info(self, torrent_hashes=None, **_kwargs):
+        self.calls.append(("info", torrent_hashes))
+        if torrent_hashes is None:
+            return list(self.rows.values())
+        row = self.rows.get(torrent_hashes.upper())
+        return [row] if row else []
+
+    def torrents_files(self, *, torrent_hash):
+        self.calls.append(("files", torrent_hash))
+        return [SimpleNamespace(index=0, name="Show/e01.mkv", size=1, progress=1.0, priority=1)]
+
+    def torrents_stop(self, *, torrent_hashes):
+        self.app_web_api_version()  # qbittorrent-api: "stop" or "pause" by the version
+        self.calls.append(("stop", torrent_hashes))
+        self.rows[torrent_hashes.upper()].state = "stoppedDL"
+
+
+def test_observations_of_a_run_read_one_listing_and_read_backs_stay_fresh(monkeypatch):
+    # Soak: about 311 torrents/info and 30 webapiVersion requests per check of 200 topics.
+    api = _ListingAPI()
+    monkeypatch.setattr(qbittorrent, "Client", lambda **_kwargs: api)
+    client = qbittorrent.QBittorrentClient("http://qbit", 8080, "user", "password")
+    client.ping()
+    assert client.observe_torrent("A" * 40)["hash"] == "a" * 40
+    assert client.observe_torrent("B" * 40)["files"][0]["name"] == "Show/e01.mkv"
+    listings = [call for call in api.calls if call == ("info", None)]
+    assert len(listings) == 1  # one listing for both, no request per torrent
+    assert ("info", "a" * 40) not in api.calls
+
+    assert client.inspect_torrent("A" * 40) is not None  # a read-back always asks the client
+    assert ("info", "a" * 40) in api.calls
+
+    assert client.observe_torrent("C" * 40) is None  # not listed: asked on its own before "gone"
+    assert ("info", "c" * 40) in api.calls
+
+    client._stop("A" * 40)  # a change TOW makes drops the listing
+    assert client.observe_torrent("A" * 40)["state"] == "stoppedDL"
+    assert [call for call in api.calls if call == ("info", None)] == [("info", None)] * 2
+
+    client._stop("B" * 40)
+    assert api.calls.count("webapiVersion") == 1  # asked by the ping, then kept
+
+
+def test_the_listing_is_read_again_after_a_minute(monkeypatch):
+    api = _ListingAPI()
+    monkeypatch.setattr(qbittorrent, "Client", lambda **_kwargs: api)
+    now = [100.0]
+    monkeypatch.setattr(qbittorrent.time, "monotonic", lambda: now[0])
+    client = qbittorrent.QBittorrentClient("http://qbit", 8080, "user", "password")
+    client.observe_torrent("A" * 40)
+    now[0] += qbittorrent.LISTING_SEC + 1
+    client.observe_torrent("A" * 40)
+    assert [call for call in api.calls if call == ("info", None)] == [("info", None)] * 2

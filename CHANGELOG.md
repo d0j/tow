@@ -11,6 +11,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   are one line per site and check in History and the event log ("site not asked · topics not checked: 150"), not one
   "check failed" line per topic; each topic keeps its error on Home. With 150 topics on a resting site these lines
   were half of `tow.jsonl`, and its rotation kept hours of history instead of days.
+- A check asks qBittorrent much less: the torrents of all topics come from one list per check instead of one
+  request per topic, and its Web API version is asked once instead of before every add, start and stop. A
+  confirmation after an add or a change is still read from the client itself.
 
 ### Fixed
 

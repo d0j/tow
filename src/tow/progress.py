@@ -1163,7 +1163,9 @@ def reconcile_topic(
         record["last_scan_at"] = now
         return {"summary": _summary_record(record, expected), "events": events}
 
-    info = client_adapter.inspect_torrent(str(topic.get("hash") or ""))
+    # An observation, not a read-back: a client that can answers it from one listing per run.
+    observe = getattr(client_adapter, "observe_torrent", None) or client_adapter.inspect_torrent
+    info = observe(str(topic.get("hash") or ""))
     record["last_scan_at"] = now
     if not _track_client_presence(record, info, client_adapter, now, events):
         return {"summary": _summary_record(record, expected), "events": events}
