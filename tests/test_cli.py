@@ -5,9 +5,9 @@ from tow.cli import main
 from tow.i18n import t
 
 
-def test_import_monitorrent_requires_explicit_db():
+def test_the_removed_monitorrent_import_is_an_unknown_command():
     with pytest.raises(SystemExit) as exc:
-        main(["import-monitorrent", "--json"])
+        main(["import-monitorrent", "--db", "monitorrent.db"])
     assert exc.value.code == 1  # a usage error (2 means "done in part" in TOW)
 
 

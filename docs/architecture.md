@@ -88,7 +88,7 @@ flowchart TD
 | `tow.check`, `check_steps`, `check_transaction` | A check run: fetch, decide, hand to the client, record — with a journal for the commit. The package exports `run_check` and the checks the web pages share; inside it `run` is the run, its commit and health record, `topic` one topic's check, `apply` what that check does in the client, `client_ops` hash identity, ownership, read-back and relocation, `reconcile` progress and the history commit, `notices` the messages, `rows` a topic's result row. |
 | `tow.trackers` | `generic.GenericHttpTracker` reads any configured site; `presets/<site>.py` adds what TOW knows about a particular site. `tow.mirrors` picks mirrors, cooldowns, redirects. |
 | `tow.clients` | Torrent adapters behind `TorrentClientAdapter`; qBittorrent, Transmission and Deluge all use the read-back contract of `managed.ManagedClient`; qBittorrent overrides its add, a full selection and the rollback's priority levels. |
-| `tow.adopt` | Adopt into TOW: on the owner's request only, the `tow` mark on a torrent already in the client (added by hand or by Monitorrent), read back and logged; nothing else about the torrent changes. |
+| `tow.adopt` | Adopt into TOW: on the owner's request only, the `tow` mark on a torrent already in the client (added by hand or by another program), read back and logged; nothing else about the torrent changes. |
 | `tow.notifiers` | One module per messenger behind the `Notifier` protocol; `outbox` is the per-recipient delivery queue; `tow.delivery` groups, delays and digests. |
 | `tow.selection`, `tow.episodes`, `tow.torrent` | Which files to download; episode parsing; bencode and info-hash. |
 | `tow.content` | Encrypted, bounded metadata preparation snapshots; literal file identities for graphical selection, without transfer-task mutations or media retrieval. Explicit native magnet preview is separate from the mutating add fallback and from dry-run. A local `.torrent` only previews: it never becomes a new topic's first revision or its saved metadata. |
@@ -247,7 +247,7 @@ client failure.
 | Journal | Protects | On a crash |
 |---|---|---|
 | Check transaction (`data/.tow-check-transaction/`) | `state.json` + `download_history.json` of one check | rolled back or completed |
-| Store transaction (`tow.store_transaction`, `tow.site_journal`) | `config.yaml` + `state.json` + secrets + undo snapshot (site edits, settings, undo, Monitorrent import) | all four back as before |
+| Store transaction (`tow.store_transaction`, `tow.site_journal`) | `config.yaml` + `state.json` + secrets + undo snapshot (site edits, settings, undo) | all four back as before |
 | Import checkpoint (`tow.bundle`) | `.towx` imports | rolled back |
 | Night restore marker (`.tow-night-restore.json`) | restoring a night copy | previous data put back |
 

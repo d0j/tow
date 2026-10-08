@@ -5,6 +5,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Removed
+
+- The Monitorrent import (`tow import-monitorrent`). Topics already imported stay as they are; a torrent in the
+  client without the `tow` mark is still taken over with **Adopt into TOW** or `tow adopt`.
+
 ### Fixed
 
 - `deploy.ps1` written to a file or passed to another program no longer garbles Russian text and the ellipsis.

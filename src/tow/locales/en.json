@@ -51,18 +51,6 @@
     "site_text_list": "config.yaml: trackers.{site}.{key} must be a list of texts",
     "site_login_form": "config.yaml: trackers.{site}.login_form may have only user_field and pw_field (texts) and extra (names and values as text)"
   },
-  "monitorrent": {
-    "missing": "The Monitorrent database file was not found.",
-    "invalid_database": "Could not read the Monitorrent database: the file is corrupt, busy or contains unsupported data. Nothing was imported.",
-    "backup_failed": "Could not create a verified backup before the Monitorrent import. Nothing was imported.",
-    "prepare_failed": "Could not prepare a safe Monitorrent import write. Check access to the data and try again.",
-    "write_failed": "Could not write the Monitorrent import. Changes were rolled back and the previous data restored.",
-    "rollback_failed": "The Monitorrent import stopped and the previous data could not be restored. Do not make further changes: the recovery journal was kept; check access to the data.",
-    "qbittorrent_skipped": "qBittorrent connection settings were skipped because a different torrent-client type is selected.",
-    "transmission_skipped": "Transmission connection settings were not imported because a different torrent-client type is selected.",
-    "bad_port": "The torrent-client connection settings were not imported: Monitorrent keeps a port that is not a number. Enter the connection in Settings.",
-    "shared_credentials": "The torrent-client connection settings were skipped because the selected client shares its credentials block with a different client type. Connection settings are kept unchanged."
-  },
   "auth": {
     "password_too_short": {
       "one": "the password must have at least {n} character",
@@ -380,16 +368,11 @@
       "permissions_long": "Shows whether other accounts of this computer can get into the TOW folder, the key folder and the data folder, and who owns them. “fix” closes them; a folder another account owns (one created from an administrator terminal) is given to its owner when run in a terminal opened with “Run as administrator” (Linux, macOS: with sudo): the account named with --owner, else the one that already owns the TOW folder, else the one TOW's autostart runs as, else the one that opened the terminal. Nothing outside the TOW folder changes.",
       "permissions_action": "status (default) or fix",
       "permissions_owner": "with fix: the account to give the folders to (COMPUTER\\name or name), when TOW cannot tell whose install it is",
-      "import_monitorrent": "take the topics over from a Monitorrent database (a preview unless --apply)",
-      "monitorrent_db": "the Monitorrent database file (monitorrent.db)",
-      "monitorrent_client": "client ID for new topics (default: the currently configured main client)",
-      "monitorrent_apply": "take the topics over (without it: a preview only)",
       "adopt": "adopt topics whose torrent is in the client without the label tow: TOW marks it (nothing else changes) and manages it from then on",
       "adopt_ids": "topic ids",
       "adopt_all": "every topic whose torrent is in its client without the label tow (listed first)",
       "adopt_yes": "do not ask for confirmation",
       "adopt_replace_label": "Deluge keeps one label per torrent: replace the owner's own label with tow (without it such a torrent is not adopted)",
-      "monitorrent_adopt": "with --apply: also adopt the imported topics whose torrent is already in the client (by the hash Monitorrent kept)",
       "check": "check the topics now (a preview that changes nothing unless --apply)",
       "check_apply": "hand what is found to the torrent client and save the result",
       "check_dry_run": "a preview only, even with --apply",

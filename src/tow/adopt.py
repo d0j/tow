@@ -1,5 +1,5 @@
 """Adopt into TOW: the owner's explicit action for a topic whose torrent is already in its
-torrent client without TOW's mark - added by hand, or by Monitorrent before the move to TOW.
+torrent client without TOW's mark - added by hand or by another program.
 
 TOW changes only torrents marked as its own (AGENTS.md), and a check shows such a topic red
 ("check.not_owned_existing"). Adopting puts TOW's mark on that torrent - the qBittorrent tag,
@@ -7,8 +7,7 @@ the Transmission or Deluge label "tow" - and nothing else: its files, folder, fi
 state stay as they are. The mark is read back, the topic records the torrent as its revision
 and the History has it; from the next check on TOW manages the torrent like one it added.
 
-Never done by a check on its own: only the row's button, ``tow adopt`` or the Monitorrent
-import's explicit ``--adopt``.
+Never done by a check on its own: only the row's button or ``tow adopt``.
 """
 
 from __future__ import annotations

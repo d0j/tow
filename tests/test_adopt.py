@@ -1,5 +1,5 @@
 """Adopt into TOW: a topic whose torrent is already in its client without TOW's mark (added
-by hand, or by Monitorrent before the move). Only on the owner's request; only the mark
+by hand or by another program). Only on the owner's request; only the mark
 changes; it is read back, recorded and logged; the next check manages the torrent."""
 
 from __future__ import annotations

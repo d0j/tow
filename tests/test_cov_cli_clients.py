@@ -723,20 +723,6 @@ def test_secrets_migrate_encrypts_legacy_secrets_without_printing_them(monkeypat
     assert load_secrets()["telegram"]["token"] == "tok-secret-123"
 
 
-def test_import_monitorrent_prints_readable_result(monkeypatch, capsys, tmp_path):
-    seen = []
-    monkeypatch.setattr(
-        "tow.import_monitorrent.import_monitorrent",
-        lambda db, **kwargs: seen.append((db, kwargs.get("apply", False))) or {"ok": True, "imported": 2},
-    )
-
-    assert cli.main(["import-monitorrent", "--db", str(tmp_path / "mt.db")]) == 0
-    out = capsys.readouterr().out
-    assert seen == [(tmp_path / "mt.db", False)]  # never applies unless asked
-    assert "imported: 2" in out
-    assert "{" not in out
-
-
 def _passphrases(monkeypatch, *answers: str) -> None:
     replies = iter(answers)
     monkeypatch.setattr("getpass.getpass", lambda _prompt: next(replies))
