@@ -213,6 +213,7 @@ def test_the_ace_parser_reads_each_ace_and_refuses_malformed_text():
     assert windows._aces("(A;;FA;;;SY;(@User.x == 1))") == [["A", "", "FA", "", "", "SY", "(@User.x == 1)"]]
     assert windows._aces("(A;;FA;;;SY))") is None  # one parenthesis closed twice
     assert windows._aces(")(A;;FA;;;SY)") is None
+    assert windows._aces("(A;;FA;;;SY))(") is None  # closed twice, then opened: still malformed
     assert windows._aces("(A;;FA;;;SY") is None  # never closed
     assert windows._aces("(A;;FA;;SY)") is None  # five fields: no account
 
