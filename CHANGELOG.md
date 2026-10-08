@@ -41,6 +41,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   not as "Ñåðèàë".
 - A mirror answering with an error status and Cloudflare's `cf-mitigated: challenge` header is reported as a
   Cloudflare check, in a check and in Diagnostics, not as an HTTP error.
+- Undoing a password change from another device no longer fails with a server error when TOW cannot read
+  `data/sessions.json`; the undo is done and that device signs in again.
 
 ## [1.26.0] — 2026-10-08
 
