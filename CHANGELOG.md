@@ -31,6 +31,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A check of a topic page of several megabytes of markup takes about a second instead of up to 15 s: its title is
   read from the head of the page, and the page is scanned for its posts and download block once instead of four or
   five times.
+- A damaged export or restore point (a broken zip inside the encrypted file) is refused as a damaged archive:
+  before, some kinds of damage stopped the import or the cleanup of old restore points with an unexpected error.
 
 ## [1.28.0] — 2026-10-08
 

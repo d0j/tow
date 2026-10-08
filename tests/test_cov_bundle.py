@@ -577,6 +577,38 @@ def test_a_member_is_never_unpacked_beyond_its_declared_size(tmp_path):
     _rejects(tmp_path, bundle, "cannot read export bundle archive")
 
 
+def _damaged_archive(damage: str) -> bytes:
+    """A one-member archive damaged the way the fuzzing found: each made zipfile raise
+    something other than BadZipFile."""
+    marker = b"bind: 127.0.0.1\nport: 8787\n" * 50
+    method = zipfile.ZIP_LZMA if damage == "lzma" else zipfile.ZIP_DEFLATED
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=method) as archive:
+        archive.writestr("config.yaml", marker)
+    payload = bytearray(buffer.getvalue())
+    central = payload.find(b"PK\x01\x02")
+    end = payload.find(b"PK\x05\x06")
+    if damage == "negative seek":  # ValueError: the directory says the archive starts earlier
+        offset = int.from_bytes(payload[end + 16 : end + 20], "little")
+        payload[end + 16 : end + 20] = (offset + 1000).to_bytes(4, "little")
+    elif damage == "version":  # NotImplementedError: "zip file version 11.0"
+        payload[central + 6 : central + 8] = (110).to_bytes(2, "little")
+    elif damage == "deflate":  # zlib.error: a deflate block of the reserved type 3
+        payload[30 + len("config.yaml") + int.from_bytes(payload[28:30], "little")] = 0x07
+    else:  # LZMAError: the stream after the LZMA properties is broken
+        start = 30 + len("config.yaml") + int.from_bytes(payload[28:30], "little")
+        payload[start + 8 : central - 4] = b"\xff" * (central - 4 - start - 8)
+    return bytes(payload)
+
+
+@pytest.mark.parametrize("damage", ["negative seek", "version", "deflate", "lzma"])
+def test_a_damaged_archive_is_refused_as_a_bundle_error(tmp_path, damage):
+    bundle = _write_outer(tmp_path / "in" / "tow.towx", _seal(_damaged_archive(damage)))
+    with pytest.raises(tow_bundle.ExportImportError, match="export bundle archive"):
+        tow_bundle.verify_bundle(bundle, PASS)  # what restore-point cleanup runs on each copy
+    _rejects(tmp_path, bundle, "export bundle archive")
+
+
 def test_members_whose_total_size_exceeds_the_bundle_limit_are_rejected(tmp_path, monkeypatch):
     # Highly compressible members: the sealed file stays small, the unpacked total does not.
     monkeypatch.setattr(tow_bundle, "MAX_BUNDLE_BYTES", 6000)
