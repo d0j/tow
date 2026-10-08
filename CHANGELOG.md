@@ -3,6 +3,15 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [Unreleased]
+
+### Fixed
+
+- Restore points, exports and the web update are no longer refused ("plaintext secret-shaped field outside
+  encrypted payload: state.json:notify_lease…token") while a messenger delivery is in progress, for example while
+  a messenger server cannot be reached: the delivery's claim is named `owner` now, and one an older TOW left is
+  recognised in its exact form. A real credential in state, config or history is still refused.
+
 ## [1.28.1] — 2026-10-08
 
 ### Fixed

@@ -14,7 +14,8 @@
 Only one dispatcher delivers to a recipient at a time, so the watchdog and a running check -
 other processes or other threads of the same one - never send the same message twice: a
 per-recipient lock inside the process, and across processes ``notify_lease``, a claim with its
-own token (process, thread and a random part). Every progress write checks the token: a
+own ``owner`` (process, thread and a random part; TOW 1.28 and older called it ``token``, which
+restore points took for a credential). Every progress write checks the owner: a
 dispatcher whose lease was taken over stops instead of writing over the new owner. Items are
 removed by id. Delivery is at least once: a TOW stopped after a messenger's answer but before
 the queue's write sends that part again (no messenger here offers a way to deduplicate it).
@@ -57,10 +58,15 @@ def _new_token() -> str:
     return f"{os.getpid()}:{threading.get_ident()}:{uuid.uuid4().hex[:12]}"
 
 
+def _lease_owner(lease: dict[str, Any]) -> Any:
+    """The claim that holds ``lease``: ``owner``, or ``token`` as TOW 1.28 and older wrote it."""
+    return lease.get("owner", lease.get("token"))
+
+
 def _lease_held_by_other(lease: dict[str, Any], token: str, now: float) -> bool:
     if not lease or float(lease.get("until") or 0) <= now:
         return False
-    held = lease.get("token")
+    held = _lease_owner(lease)
     if held is None:  # written by TOW 1.20 or older: only the process was recorded
         return bool(lease.get("pid") != os.getpid())
     return bool(held != token)
@@ -204,7 +210,8 @@ def set_status(state: dict[str, Any], key: str, reason: str | Msg | None) -> Non
 
 
 def _lease(token: str, until: float) -> dict[str, Any]:
-    return {"pid": os.getpid(), "token": token, "until": until}
+    # Not "token": a restore point refuses a field of that name outside the encrypted secrets.
+    return {"pid": os.getpid(), "owner": token, "until": until}
 
 
 def _claim(key: str, settings: dict[str, Any], token: str) -> tuple[str, dict[str, Any] | None]:
@@ -262,7 +269,7 @@ def _progress(
     with persistence_lock():
         state = load_state()
         lease = (state.get("notify_lease") or {}).get(key) or {}
-        if lease.get("token") != token:
+        if _lease_owner(lease) != token:
             return False
         box = _box(state, key)
         inflight = box.get("inflight") or {}

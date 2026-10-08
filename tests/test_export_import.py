@@ -143,6 +143,48 @@ def test_real_secret_fields_are_still_refused(leak):
     assert _secret_key_path(leak) is not None
 
 
+def test_a_restore_point_is_made_while_a_messenger_delivery_holds_its_lease(tmp_path, monkeypatch):
+    """A messenger that cannot be reached keeps its delivery's lease in state.json: its claim was
+    called ``token`` and every restore point, the web update's first, was refused meanwhile."""
+    from tow import restore_points
+    from tow.notifiers import outbox
+
+    _seed_source(monkeypatch, tmp_path / "source")
+    save_state({**load_state(), "notify_outbox": {"ntfy": {"items": [{"id": "a", "text": "synthetic"}]}}})
+    assert outbox._claim("ntfy", {"topic": "synthetic"}, outbox._new_token())[0] == "send"
+    lease = load_state()["notify_lease"]["ntfy"]
+    assert "token" not in lease
+    assert outbox._lease_owner(lease)
+
+    live = restore_points.create_restore_point()
+    assert import_bundle(restore_points.point_path(live["id"]), restore_points._passphrase(), apply=False)
+
+    # The lease an older TOW left behind (a delivery cut off by the update) passes too.
+    state = load_state()
+    state["notify_lease"]["ntfy"] = {"pid": 4242, "token": "4242:17:0123456789ab", "until": 9_999_999_999}
+    save_state(state)
+    legacy = restore_points.create_restore_point()
+    assert import_bundle(restore_points.point_path(legacy["id"]), restore_points._passphrase(), apply=False)
+    assert outbox._lease_held_by_other(state["notify_lease"]["ntfy"], outbox._new_token(), 0.0) is True
+
+
+@pytest.mark.parametrize(
+    ("label", "data"),
+    [
+        ("state.json", {"notify_lease": {"ntfy": {"token": "synthetic-ntfy-access-token"}}}),
+        ("state.json", {"notify_lease": {"ntfy": {"nested": {"token": "4242:17:0123456789ab"}}}}),
+        ("state.json", {"telegram": {"token": "4242:17:0123456789ab"}}),
+        ("config.yaml", {"notify_lease": {"ntfy": {"token": "4242:17:0123456789ab"}}}),
+    ],
+)
+def test_a_secret_shaped_field_outside_a_lease_claim_is_still_refused(label, data):
+    from tow.bundle import _refuse_plaintext_secrets
+
+    files = {"config.yaml": {}, "state.json": {}, "download_history.json": {}, label: data}
+    with pytest.raises(ExportImportError, match="plaintext secret-shaped field"):
+        _refuse_plaintext_secrets(files["config.yaml"], files["state.json"], files["download_history.json"])
+
+
 @pytest.mark.parametrize(
     "bucket",
     [
