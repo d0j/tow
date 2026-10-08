@@ -39,6 +39,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   no longer vanish while the pointer or the focus is on them: they go once both have left.
 - Settings → Theme saves a choice in the background: moving between the options with the arrow keys no longer
   reloads the page at every step and keeps the focus on the option; the section's pill names the choice.
+- Home with thousands of topics opens faster (it no longer re-orders the rows into the order they already have)
+  and typing in the search no longer stalls at every key: the list follows after a short pause.
 
 ## [1.27.1] — 2026-10-08
 
