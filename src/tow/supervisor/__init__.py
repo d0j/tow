@@ -23,6 +23,8 @@ from tow.supervisor.core import LOG, Deps, Supervisor
 
 RUN_LOG_BYTES = 5 * 1024 * 1024
 RUN_LOG_BACKUPS = 3
+# The web server's stderr (serve-stderr.log), appended at every start: one older file is kept.
+APPENDED_LOG_BYTES = 5 * 1024 * 1024
 # A stop by the OS (systemd, launchd, Ctrl+C) gives a running job this long, not ten minutes.
 SIGNAL_STOP_WAIT_SEC = 20.0
 # After that signal: the job, then the web server, are each stopped (10 s) and reaped (5 s).
@@ -62,10 +64,20 @@ def _interactive(stream: Any) -> bool:
         return False
 
 
+def _cap_log(path: Path, limit: int) -> None:
+    """An appended log that reached ``limit`` becomes ``<name>.1`` (the older one goes), so it
+    never grows for ever; a missing file or one held open stays as it is."""
+    with contextlib.suppress(OSError):
+        if path.stat().st_size >= limit:
+            os.replace(path, path.with_name(path.name + ".1"))
+
+
 def _spawn(argv: list[str], output: Path, append: bool) -> Any:
     from tow.supervisor import _os
 
     output.parent.mkdir(parents=True, exist_ok=True)
+    if append:  # serve-stderr.log: every start of the web server writes on
+        _cap_log(output, APPENDED_LOG_BYTES)
     with output.open("ab" if append else "wb") as handle:
         return _os.spawn(argv, cwd=layout.install_root(), env=layout.child_env(), stdout=handle, stderr=handle)
 

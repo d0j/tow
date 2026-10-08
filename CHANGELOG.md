@@ -24,6 +24,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   does; before, it took such an install for a development checkout, and setup put Python and uv's cache outside
   the folder.
 - Windows: Ctrl+Break in the console of `tow run` stops TOW cleanly, as Ctrl+C does, instead of ending it at once.
+- `data/logs/serve-stderr.log` no longer grows for ever: at 5 MiB it becomes `serve-stderr.log.1` when the web
+  server starts again (one older file is kept).
 
 ## [1.27.0] — 2026-10-08
 
