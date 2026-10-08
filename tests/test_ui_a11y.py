@@ -109,3 +109,29 @@ def test_header_states_are_said_in_words_not_only_by_colour(client, health, prob
     assert "clock.title = " not in JS.replace("if (clock.title !== words) clock.title = words;", "")
     # The hidden text of a scrolled-away name stays inside the strip (it made the page wider).
     assert "position: relative" in _desktop_rules()[".hdr-sites .trk"]
+
+
+def test_personal_timers_have_hidden_words_and_are_drawn_only_when_seen_and_changed(client):
+    """A10/P3: each timer had an aria-label on a span without a role, and app.js rewrote the text,
+    tooltip and label of all 500 timers every second (~20 ms/s on a 2000-topic Home)."""
+    _seed(
+        [
+            {
+                "id": "t1",
+                "title": "Show",
+                "url": "http://rutor.info/torrent/1/x",
+                "save_path": "Z:\\a",
+                "check_interval_min": 30,
+            }
+        ]
+    )
+    page = client.get("/").text
+    timer = re.search(r'<span class="topic-timer"[^>]*>.*?</span>', page, re.DOTALL)
+    assert timer is not None
+    assert "aria-label" not in timer.group(0)
+    assert '<span class="sr-only" data-timer-words>' in timer.group(0)
+    assert 'setAttribute("aria-label", `${node.title}' not in JS
+    assert "new IntersectionObserver(" in JS
+    assert "for (const node of onScreen || topicTimerNodes)" in JS
+    assert "if (last.text !== text) {" in JS
+    assert "if (last.title !== title) {" in JS
