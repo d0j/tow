@@ -419,7 +419,7 @@ def test_home_uses_canonical_episode_progress_and_separates_event_time():
     assert "Сериал Г" in home
     assert "22/24" in home
     assert "43/24" not in home
-    assert 'S04E22</b><small class="mut"> · 13.09.2026 19:05:25 IDT UTC+03:00</small>' in home
+    assert 'S04E22</b> <small class="mut event-at">13.09.2026 19:05:25 IDT UTC+03:00</small>' in home
     assert "[04x01-22 из 24]" in home
     details = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/topics/mr-16/downloads.json")
     assert details.status_code == 200
@@ -2472,7 +2472,7 @@ def test_edit_panel_links_to_tracker_search_and_the_next_season():
     page = TestClient(app).get("/").text + TestClient(app).get("/topics/t1/edit-panel").text  # M2
 
     assert 'href="http://rutor.is/search/0/0/100/0/%D0%A1%D0%B5%D1%80%D0%B8%D0%B0%D0%BB%20%D0%90"' in page
-    assert ">Найти на rutor</a>" in page
+    assert ">Найти на Rutor</a>" in page  # the site as the pages name it, not its key
     assert 'href="http://rutor.is/search/0/0/100/0/%D0%A1%D0%B5%D1%80%D0%B8%D0%B0%D0%BB%20%D0%90%203"' in page
     assert ">Следующий сезон</a>" in page
 

@@ -64,10 +64,6 @@
     </div>
   </div>
 </header>
-  <div class="app-version" data-page-version="{{ h.ver }}">
-    <a href="/settings?open=updates#acc-updates" title="{{ t('releases.current', version=h.ver) }}">TOW {{ h.ver }}</a>
-    <a href="/settings?open=updates#acc-updates" class="release-badge" data-release-badge hidden></a>
-  </div>
 <main id="main"{% if request.url.path == '/' %} class="home-page"{% endif %} aria-labelledby="page-title">
   {% if request.url.path == '/' %}<a class="release-notice" href="/settings?open=updates#acc-updates" data-release-notice aria-live="polite" hidden></a>{% endif %}
   {#- A message an action left (typed flash): its kind comes from the route - ok fades, warn stays, err is an alert that stays. -#}
@@ -76,6 +72,10 @@
   <button type="button" class="flash-x" aria-label="{{ t('base.close') }}">{{ icon('close', 'sm') }}</button></div>{% endif %}
   {% block body %}{% endblock %}
 </main>
+  <div class="app-version" data-page-version="{{ h.ver }}">
+    <a href="/settings?open=updates#acc-updates" title="{{ t('releases.current', version=h.ver) }}">TOW {{ h.ver }}</a>
+    <a href="/settings?open=updates#acc-updates" class="release-badge" data-release-badge hidden></a>
+  </div>
 <dialog id="log-pop" class="log-pop" aria-labelledby="log-title">
   <div class="log-pop-head">
     <span id="log-title">{{ t('base.log.title') }}</span>

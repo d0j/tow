@@ -181,7 +181,7 @@
       <span class="topic-tracker" data-label="{{ t('home.row.site') }}">{{ site_title(topic.tracker) if topic.tracker else '' }}</span>
       <span class="mono topic-path" data-label="{{ t('home.row.folder') }}"><span class="clip-start" title="{{ topic.save_path or '' }}"><bdi>{{ topic.save_path or "—" }}</bdi></span></span>
       <span class="clip addition topic-event" data-label="{{ t('home.row.event') }}" title="{{ topic.last_event_at or t('home.topic.no_events') }}">
-        {%- if topic.error_line %}<span class="row-error {{ 'bad' if torrent_tone == 'bad' else 'warn' }}" title="{{ topic.last_error_human or topic.last_error }}">{{ topic.error_line }}<span class="sr-only"> {{ t('home.row.full_error') }}</span></span>{% elif topic.last_event_label %}<b>{{ topic.last_event_label }}</b><small class="mut"> · {{ topic.last_event_at }}</small>{% else %}<span class="mut">—</span>{% endif -%}
+        {%- if topic.error_line %}<span class="row-error {{ 'bad' if torrent_tone == 'bad' else 'warn' }}" title="{{ topic.last_error_human or topic.last_error }}">{{ topic.error_line }}<span class="sr-only"> {{ t('home.row.full_error') }}</span></span>{% elif topic.last_event_label %}<b>{{ topic.last_event_label }}</b> <small class="mut event-at">{{ topic.last_event_at }}</small>{% else %}<span class="mut">—</span>{% endif -%}
       </span>
       <span class="progress-cell topic-progress" data-label="{{ t('home.row.progress') }}">
         {%- if ds.expected %}<a class="download-details progress-link{% if ds.is_complete %} complete{% endif %}" href="/topics/{{ topic.id|urlencode }}/downloads.json" data-topic-id="{{ topic.id }}" title="{{ t('home.topic.episodes_history') }}">{% if ds.is_complete %}✓ {% endif %}{{ ds.completed }}/{{ ds.expected }}</a>
@@ -229,7 +229,7 @@
 </div>
 
 <dialog class="log-pop" id="download-pop" aria-labelledby="download-title">
-  <div class="log-pop-head"><span id="download-title">{{ t('home.downloads.title') }}</span><button class="ghost sm" type="button" id="download-close">{{ t('home.downloads.close') }}</button></div>
+  <div class="log-pop-head"><span id="download-title">{{ t('home.downloads.title') }}</span><button type="button" class="flash-x" id="download-close" aria-label="{{ t('base.close') }}">{{ icon('close', 'sm') }}</button></div>
   <div class="log-box" id="download-body"><div class="mut">{{ t('home.downloads.loading') }}</div></div>
 </dialog>
 {% endblock %}

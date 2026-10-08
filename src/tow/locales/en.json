@@ -212,7 +212,7 @@
     "log": {
       "open": "Log",
       "title": "Log (updates every 2 s)",
-      "history": "Full history"
+      "history": "History of downloads and changes"
     },
     "new_topic": "New topic",
     "new_site": "New site",
@@ -787,7 +787,7 @@
     "search_placeholder": "topic, site, file…",
     "empty": "Nothing found.",
     "note": "Shows up to 300 latest events from the log (5 files of 5 MB).",
-    "no_events": "No events yet. Checks, downloads and changes appear here."
+    "no_events": "No downloads, errors, changes or notifications yet. Routine events — site checks, starts — are in the Log."
   },
   "home": {
     "title": "Topics",
@@ -896,9 +896,6 @@
     "edit": {
       "name": "Name",
       "url": "Link",
-      "mode_all": "All files",
-      "watch": "Yes",
-      "once": "No, once",
       "selection": "Episodes / patterns",
       "open": "Open the edit form",
       "page_title": "Edit topic",
@@ -906,7 +903,6 @@
     },
     "downloads": {
       "title": "File history",
-      "close": "Close",
       "loading": "Loading…"
     },
     "row": {

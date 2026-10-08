@@ -331,8 +331,8 @@ def test_a_phones_site_list_gets_the_free_room_and_fades_before_the_client():
     assert "minmax(0, 1fr) minmax(0, max-content) auto" in mobile["header.app"]
     sites = mobile[".hdr-sites"]
     assert "overflow-x: auto" in sites
-    assert "mask-image: linear-gradient(to right, black calc(100% - 1rem), transparent)" in sites
-    assert "padding-right: 1rem" in sites  # the last name can be scrolled clear of the fade
+    assert "mask-image: linear-gradient(to right, black calc(100% - 2.5rem), transparent)" in sites
+    assert "padding-right: 2.5rem" in sites  # as wide as the fade: the last name can be scrolled clear of the fade
     assert "border-left: 1px solid var(--line)" in mobile[".hdr-svc"]
 
 
@@ -922,7 +922,7 @@ def test_sign_in_page_without_network_access_links_home_instead_of_a_dead_form(c
 
 
 def test_history_tells_an_empty_log_from_a_search_without_results(client):
-    assert "Событий пока нет" in client.get("/history").text
+    assert "Загрузок, ошибок, изменений и уведомлений пока нет" in client.get("/history").text
     assert "Ничего не найдено." in client.get("/history?q=zzz").text
 
 
