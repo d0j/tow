@@ -161,6 +161,35 @@ def test_a_sign_in_after_a_damaged_sessions_file_holds(password):
     assert [event["kind"] for event in read_events(limit=20)].count("sessions_reset") == 1
 
 
+def test_a_brief_sharing_clash_never_signs_every_device_out(password, monkeypatch):
+    # Round-5 QA: two reads held by a writer (Windows) and a third that worked rewrote a good
+    # file with a new epoch - every device on the network had to sign in again.
+    from pathlib import Path
+
+    from tow.log import read_events
+
+    sign_out_everywhere()
+    other = issue_session(lan_password_session_key(password))
+    before = (data_dir() / "sessions.json").read_bytes()
+    clear_sessions()  # a fresh process: nothing cached
+    real, held = Path.read_bytes, {"left": 2}
+
+    def clash(self):
+        if self.name == "sessions.json" and held["left"]:
+            held["left"] -= 1
+            raise PermissionError(32, "The process cannot access the file")
+        return real(self)
+
+    monkeypatch.setattr(Path, "read_bytes", clash)
+    device = TestClient(app, client=LAN, headers=ORIGIN)
+
+    assert device.post("/login", data={"password": "old-horse-battery"}, follow_redirects=False).status_code == 303
+
+    assert (data_dir() / "sessions.json").read_bytes() == before  # not reset
+    assert session_is_valid(other, lan_password_session_key(password))  # the other device stays in
+    assert "sessions_reset" not in [event["kind"] for event in read_events(limit=20)]
+
+
 def test_a_sessions_file_that_cannot_be_read_refuses_the_sign_in_with_a_reason(password, monkeypatch):
     from pathlib import Path
 

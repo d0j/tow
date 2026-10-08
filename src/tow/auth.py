@@ -282,9 +282,18 @@ def _signing_epoch() -> int:
         if epoch >= 0:  # another sign-in repaired it meanwhile
             return epoch
         try:
-            _sessions_path().read_bytes()
+            raw = _sessions_path().read_bytes()
         except OSError as exc:
             raise AuthConfigurationError("auth.sessions_unreadable") from exc
+        # Readable now: the earlier reads may only have met a writer's moment (Windows). A good
+        # file is never reset - that signed every device out after a brief sharing clash.
+        try:
+            good = int(json.loads(raw.decode("utf-8")).get("epoch") or 0)
+        except UnicodeError, ValueError, TypeError, AttributeError:
+            good = -1
+        if good >= 0:
+            clear_sessions()  # the next read takes the file as it is
+            return good
         epoch = max(1, int(time.time()))
         _save_sessions(epoch, {})
     from tow.log import log_event
