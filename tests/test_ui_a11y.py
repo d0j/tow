@@ -125,6 +125,22 @@ def test_links_inside_running_text_are_underlined(client):
     assert note is not None, "the Backups note keeps its link inside the sentence"
 
 
+def test_the_version_is_the_pages_footer(client):
+    """A12: the version badge sat outside every landmark (axe region)."""
+    from bs4 import BeautifulSoup
+
+    _seed()
+    for path in ("/", "/sites", "/settings"):
+        page = BeautifulSoup(client.get(path).text, "html.parser")
+        footer = page.select_one("body > footer.app-version")
+        assert footer is not None, path
+        assert footer["data-page-version"]
+        assert footer.select_one("[data-release-badge]") is not None
+    # The phone rule and updates.js still find it as before.
+    assert "body > .app-version { position: absolute; }" in CSS
+    assert 'document.querySelector(".app-version")' in (SRC / "static" / "updates.js").read_text(encoding="utf-8")
+
+
 def test_scrolling_log_boxes_are_named_regions_the_keyboard_reaches(client):
     """A4: the log of the header, of Settings and the episodes box scroll but took no focus."""
     _seed()
