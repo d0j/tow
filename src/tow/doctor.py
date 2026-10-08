@@ -8,6 +8,7 @@ import httpx
 
 from tow import http as thttp
 from tow.clients import factory as client_factory
+from tow.clock import iso_now
 from tow.config import as_bool, load_config
 from tow.http import client as http_client
 from tow.http import is_cloudflare
@@ -150,7 +151,8 @@ def doctor_report(*, probe: bool = True, names: list[str] | None = None) -> dict
             if want is not None and name not in want:
                 continue
             for host in spec.get("fetch_hosts") or []:
-                row = {"tracker": name, "host": host, "ok": False}
+                # "at": the header and Sites weigh a probe against the latest check by time.
+                row = {"tracker": name, "host": host, "ok": False, "at": iso_now()}
                 try:
                     r = _probe_root(c, host)
                     try:

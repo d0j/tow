@@ -374,6 +374,7 @@ def _check_revision(work: TopicCheck) -> None:
     topic, run, row, old = work.topic, work.run, work.row, work.old
     policy = policy_from_topic(topic)
     fetched = _fetch_revision(work, policy)
+    row["site_answered"] = True  # whatever the client says next, the site gave the revision
     if fetched is None:
         return  # the tracker's magnet confirmed the revision the topic already has
     metadata = parse_torrent_metadata(fetched.blob)

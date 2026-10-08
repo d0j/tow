@@ -14,7 +14,7 @@ from tow.web import _context, services
 from tow.web.site_actions import add_site, delete_site, edit_site, save_site
 from tow.web.site_form import NewSite, SiteEdit
 from tow.web.site_store import with_login
-from tow.web.templating import TEMPLATES
+from tow.web.templating import TEMPLATES, site_tones
 from tow.web.text import t
 from tow.web.views import add_draft, flash_redirect, request_flash
 
@@ -61,6 +61,8 @@ def sites(request: Request) -> Response:
             "probes": probes,
             "active": active,
             "open_hosts": open_hosts,
+            # A site's colour follows its latest check as well as its mirrors' probes.
+            "site_tones": site_tones()[0],
             "logins": {
                 k: {
                     "user": (v or {}).get("username") or "",

@@ -57,6 +57,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   carried over.
 - A failed check of a topic TOW already had (the row's check, "Stop the previous one and add") no longer says
   "Added to TOW, …", and a successful "Adopt into TOW" says the torrent was adopted instead of "No changes".
+- Header and Sites follow what TOW last saw: a site's name takes the latest check's answer, not only Diagnostics
+  (it stayed "not checked yet" after any number of checks); the client chip and the Settings pill turn red right
+  after Check finds a wrong password; and a new topic whose site gave the torrent but whose client failed shows the
+  site icon green instead of grey.
 ### Security
 
 - A device on the home network can no longer fill the TOW folder through the sign-in page: every form is

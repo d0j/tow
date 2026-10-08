@@ -86,10 +86,10 @@
     <div class="row-wrap{% if frozen.get(name) %} is-paused{% endif %}" id="site-row-{{ name }}" data-q="{{ (name ~ ' ' ~ (spec.title or '') ~ ' ' ~ ((spec.fetch_hosts or []) | join(' '))) | lower }}">
     <details class="row-edit sites{% if frozen.get(name) %} is-paused{% endif %}">
       <summary>
-        {% set any_ok = mine | selectattr('ok') | list %}
+        {% set tone = site_tones.get(name, 'mut') %}
         {% if frozen.get(name) %}<span class="trk mut" title="{{ t('sites.paused') }}">{{ spec.title or name }}</span><span class="sr-only">{{ t('sites.paused') }}</span>
-        {% elif not mine %}<span class="trk mut">{{ spec.title or name }}</span><span class="sr-only">{{ t('sites.not_checked') }}</span>
-        {% elif any_ok %}<span class="trk ok">{{ spec.title or name }}</span><span class="sr-only">{{ t('sites.home_ok') }}</span>
+        {% elif tone == 'mut' %}<span class="trk mut">{{ spec.title or name }}</span><span class="sr-only">{{ t('sites.not_checked') }}</span>
+        {% elif tone == 'ok' %}<span class="trk ok">{{ spec.title or name }}</span><span class="sr-only">{{ t('sites.responds') }}</span>
         {% else %}<span class="trk warn">{{ spec.title or name }}</span><span class="sr-only">{{ t('sites.no_connection') }}</span>{% endif %}
         {# M6: the mirrors are text here (no buttons inside <summary>); the choice is in the panel. #}
         <span class="mirror-list">
@@ -146,7 +146,7 @@
       </div>
     </details>
     <span class="row-ops">
-          <a class="row-ico {{ 'ok' if any_ok else ('warn' if mine else 'mut') }}" href="{{ href }}" target="_blank" rel="noopener" title="{{ t('sites.open_named', name=spec.title or name) }}" aria-label="{{ t('sites.open_named', name=spec.title or name) }}">
+          <a class="row-ico {{ tone }}" href="{{ href }}" target="_blank" rel="noopener" title="{{ t('sites.open_named', name=spec.title or name) }}" aria-label="{{ t('sites.open_named', name=spec.title or name) }}">
             {{ icon('globe', 'sm') }}
           </a>
           <form method="post" action="/sites/{{ name|urlencode }}/freeze">

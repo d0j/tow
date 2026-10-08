@@ -158,6 +158,46 @@ def test_a_client_that_answers_check_shows_as_answering_at_once(legacy_qbit, mon
     assert header_health()["qbit_tone"] == "ok"
 
 
+def test_a_client_that_refuses_check_shows_as_not_answering_at_once(legacy_qbit, monkeypatch):
+    """QA r5: after "Check" said the password was wrong, the header chip and the Settings pill
+    stayed green until the next check. The failure is a mark the next check drops, never the
+    check's own qbit_ok (whose change sends the "client not available" message)."""
+    from tow.check import run as check_run
+    from tow.web.templating import header_health
+
+    class Broken:
+        def ping(self):
+            from tow.clients.managed import ClientError
+
+            raise ClientError("qBittorrent: неверный логин или пароль")
+
+    save_state({"topics": [], "health": {"qbit_ok": True, "clients_ok": {"default": True}, "check_ok": True}})
+    monkeypatch.setattr("tow.web.services.client_answers", lambda _client_id: True)
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a: Broken())
+    _client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
+    health = load_state()["health"]
+    assert (health["qbit_ok"], health["clients_ok"]) == (True, {"default": True})  # the check's own
+    assert set(health["ping_failed"]) == {"default"}
+    assert header_health()["qbit_tone"] == "bad"
+    assert 'class="pill bad"' in _client().get("/settings").text
+
+    class Alive:
+        def ping(self):
+            return "5.0.1"
+
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a: Alive())
+    _client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
+    assert "ping_failed" not in load_state()["health"]
+    assert header_health()["qbit_tone"] == "ok"
+
+    # A check after the failed "Check" decides again (its new health has no mark); one that
+    # asked no client keeps it.
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a: Broken())
+    _client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
+    check_run.run_check(apply=True, notify=False, how="manual")
+    assert "ping_failed" in load_state()["health"]
+
+
 def test_check_of_a_client_nobody_listens_for_fails_after_one_quick_try(legacy_qbit, monkeypatch):
     """QA 1.24.1: "Check" took ~24 s when nothing listened (the library's retries, each one a
     Windows connect with its own retries). One connection attempt of 3 s now answers it."""

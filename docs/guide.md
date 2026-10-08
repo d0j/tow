@@ -121,10 +121,12 @@ not whether the download is complete.
 daily limit), red for site-side problems (topic removed, page is not a torrent page, no site configured). A torrent
 client or folder error does not colour it.
 
-The red delete button and the pause icon are controls, not health colours. In the header, a site's name is yellow
-when its mirrors did not answer; the client name is green when the client answers, red when it does not, grey
-before it was asked; the bell is green when messages get through, red when a messenger refused one, grey when
-none is connected.
+The red delete button and the pause icon are controls, not health colours. In the header (and on **Sites**) a
+site's name follows the latest check or **Diagnostics** that asked the site: green when it answered, yellow when
+it did not (mirrors down or paused, Cloudflare, sign-in, daily limit), grey before it was asked; the client name
+is green when the client answers, red when it does not (also right after **Check** in Settings), grey before it
+was asked; the bell is green when messages get through, red when a messenger refused one, grey when none is
+connected.
 
 ## Checks
 

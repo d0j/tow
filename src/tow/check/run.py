@@ -244,6 +244,8 @@ def _commit_run_state(result: _RunResult, history_rebuilt: bool = False) -> None
             health["qbit_ok"] = previous_health["qbit_ok"]
         if "clients_ok" in previous_health:
             health["clients_ok"] = previous_health["clients_ok"]
+        if "ping_failed" in previous_health:  # Settings' "Check" saw the client later
+            health["ping_failed"] = previous_health["ping_failed"]
     if empty := pool.empty_counts():
         health["clients_empty"] = empty
     disk = load_state()

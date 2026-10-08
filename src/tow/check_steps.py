@@ -111,6 +111,7 @@ _CHECK_OWNED_FIELDS = (
     "last_error_class",
     "last_check",
     "last_ok_at",
+    "site_ok_at",
     "last_changed",
     "previous_hashes",
     "selected_file_count",

@@ -440,13 +440,18 @@ def settings_client_ping(client_id: str = Form("")) -> Response:
         msg = t("web.settings.ping_failed", error=reason) if reason else t("web.settings.ping_silent")
         kind = "err"
         services.log_event("qbit_unreachable", client_id=client_id or None, error=reason, cls="qbit", how="manual")
+        _client_answered(client_id, answered=False)
     return flash_redirect("/settings?open=clients", msg, kind)
 
 
-def _client_answered(client_id: str) -> None:
-    """The header and Home show the client as answering at once, not at the next check: a
-    client set up (or repaired) and checked here stayed red or grey until then. Only an answer
-    is recorded - a failure is left to the check, whose message about it would be lost."""
+def _client_answered(client_id: str, *, answered: bool = True) -> None:
+    """The header and Settings show what "Check" found at once, not at the next check: a
+    client set up (or repaired) and checked here stayed red or grey until then, and one that
+    refused the password here stayed green. An answer is recorded as a check records it; a
+    failure only as a mark (``ping_failed``) the next check drops - recorded as the check's
+    own "not answering", it would swallow that check's message about the client."""
+    import time
+
     from tow.clients.factory import default_client_id
 
     with services.persistence_lock():
@@ -455,10 +460,19 @@ def _client_answered(client_id: str) -> None:
         health: dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
         default = default_client_id(services.load_config())
         wanted = client_id or default
-        if wanted == default:
-            health["qbit_ok"] = True
-        clients = health.get("clients_ok")
-        health["clients_ok"] = {**(clients if isinstance(clients, dict) else {}), wanted: True}
+        marks = health.get("ping_failed")
+        failed = {k: v for k, v in (marks.items() if isinstance(marks, dict) else ()) if k != wanted}
+        if answered:
+            if wanted == default:
+                health["qbit_ok"] = True
+            clients = health.get("clients_ok")
+            health["clients_ok"] = {**(clients if isinstance(clients, dict) else {}), wanted: True}
+        else:
+            failed[wanted] = int(time.time())
+        if failed:
+            health["ping_failed"] = failed
+        else:
+            health.pop("ping_failed", None)
         state["health"] = health
         services.save_state(state)
 
