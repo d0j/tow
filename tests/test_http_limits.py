@@ -57,6 +57,14 @@ def test_html_text_meta_beats_a_servers_latin1_default():
     assert TITLE in thttp.html_text(_response(page, "text/html; charset=ISO-8859-1"))
 
 
+@pytest.mark.parametrize("charset", ["ISO-8859-1", "latin1", "windows-1252"])
+def test_html_text_a_servers_latin1_default_alone_is_not_believed(charset):
+    """Without a <meta charset> the server's default named the page: latin-1 never fails, so a
+    windows-1251 page came out as "Ñåðèàë"."""
+    page = f"<html><head><title>{TITLE}</title></head></html>".encode("cp1251")
+    assert TITLE in thttp.html_text(_response(page, f"text/html; charset={charset}"))
+
+
 def test_html_text_valid_utf8_beats_a_wrong_cp1251_header():
     page = f"<html><title>{TITLE}</title></html>".encode()
     assert TITLE in thttp.html_text(_response(page, "text/html; charset=windows-1251"))

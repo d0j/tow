@@ -40,7 +40,8 @@ def html_text(response: Any) -> str:
 
     Order: a byte-order mark; the <meta charset> when the header names none or only a
     server's latin-1 default; a body that is valid UTF-8 (a windows-1251 page almost never
-    is); the header's charset, the meta's; windows-1251.
+    is); the header's charset (not a latin-1 default without a meta), the meta's;
+    windows-1251.
     """
     content = getattr(response, "content", None)
     if not isinstance(content, (bytes, bytearray)):
@@ -54,6 +55,9 @@ def html_text(response: Any) -> str:
     found_meta = _META_CHARSET.search(body[:8192])
     meta = found_meta.group(1).decode("ascii", "ignore") if found_meta else ""
     first = [meta] if meta and (not header or header in _WEAK_CHARSETS) else []
+    if header in _WEAK_CHARSETS and not meta:
+        # A server's default alone does not name the page, and latin-1 never fails to decode.
+        header = ""
     for encoding in [*first, "utf-8", header, meta]:
         if not encoding:
             continue

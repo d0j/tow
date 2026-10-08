@@ -37,6 +37,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A broken topic page of a few megabytes (tags or posts never closed) no longer holds a check for minutes.
 - Deluge with several daemons: when its Web UI has to be attached again, TOW attaches it to the same daemon, not
   to the first one online.
+- A windows-1251 page whose server names only its latin-1 default (and the page no charset) is read as Russian,
+  not as "Ñåðèàë".
 
 ## [1.26.0] — 2026-10-08
 
