@@ -190,6 +190,7 @@ that the folder is your former TOW install.
 | "TOW is already installed" | Use the update file instead, or remove TOW first. |
 | "… is not empty: choose another folder" | The folder holds other files. Install into a new or empty folder (`-Dir` / `--dir`). |
 | "… has data without a TOW install marker" | The folder holds data of an older TOW installer, or another program's `data` and `config.yaml`. If it is your former TOW folder, run the installer again with `-AdoptData` / `--adopt-data`; otherwise choose another folder. |
+| "… longer than 110 characters and Windows long paths are off" | The path of the TOW folder is too long for Windows without long paths: preparing TOW there fails. Move the folder to a short path such as `C:\TOW` (installer: `-Dir C:\TOW`), or turn on long paths (`LongPathsEnabled`). |
 
 ## Manual install with git
 

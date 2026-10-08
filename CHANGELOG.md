@@ -35,6 +35,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   a folder with `[ ]` in its name; the guides and `tow update` say how to run it when PowerShell refuses scripts.
 - `Update TOW.cmd`, `update-tow` and `Update TOW.command` of new installs run the update with the Python TOW's
   environment was made from, else the newest one by version number (3.14.10 after 3.14.8), never uv's link folder.
+- Windows: a TOW folder whose path is longer than 110 characters, with long paths off, is refused by `install.ps1`
+  before it writes anything, and `Start TOW.cmd` says so before it prepares TOW, instead of an unexplained failure.
 
 ## [1.27.0] — 2026-10-08
 

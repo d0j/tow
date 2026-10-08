@@ -301,6 +301,18 @@ def test_install_ps1_closes_the_install_folder_before_anything_is_written_in_it(
     assert text.index("Close-Folder $folder $new") < text.index("& (Join-Path $Dir 'Start TOW.cmd')")
 
 
+def test_install_ps1_refuses_a_long_folder_before_writing_anything():
+    # A folder over the limit of docs/PORTABLE.md 3 failed in the first start, after the install
+    # was in place.
+    text = PS1.read_text(encoding="utf-8")
+    first_write = text.index("New-Item -ItemType Directory -Force -Path $Dir")
+    long = text.index("if ($Dir.Length -gt 110 -and $longPaths -ne 1)")
+    assert "-Name LongPathsEnabled" in text
+    assert "longer than about\n  110 characters" in (ROOT / "docs" / "PORTABLE.md").read_text(encoding="utf-8")
+    assert long < first_write
+    assert long < text.index("Invoke-WebRequest")
+
+
 @pytest.mark.allow_system
 @pytest.mark.parametrize("shell", ["pwsh", "powershell"])
 def test_install_ps1_parses(shell):

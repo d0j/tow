@@ -123,6 +123,12 @@ function Install-Tow {
     if ($env:PROCESSOR_ARCHITECTURE -eq 'x86' -and -not $env:PROCESSOR_ARCHITEW6432) {
         throw 'TOW: TOW needs 64-bit Windows'
     }
+    # docs/PORTABLE.md 3: without Windows long paths, a folder path over 110 characters lets files
+    # deep in app\.venv and runtime\ pass 260 characters, and the first start fails inside uv or Python.
+    $longPaths = (Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled -ErrorAction SilentlyContinue).LongPathsEnabled
+    if ($Dir.Length -gt 110 -and $longPaths -ne 1) {
+        throw "TOW: the folder path $Dir is longer than 110 characters and Windows long paths are off, so TOW could not be prepared there. Choose a shorter folder with -Dir (for example C:\TOW), or turn long paths on (LongPathsEnabled)."
+    }
 
     # Folders for this account, SYSTEM and Administrators only: in a drive root (D:\TOW) the
     # install would inherit "Authenticated Users: modify", and every account of the PC could

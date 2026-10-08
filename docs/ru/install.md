@@ -193,6 +193,7 @@ TOW/
 | «TOW is already installed» | Обновите TOW файлом обновления или сначала удалите его. |
 | «… is not empty: choose another folder» | В папке есть другие файлы. Установите TOW в новую или пустую папку (`-Dir` / `--dir`). |
 | «… has data without a TOW install marker» | В папке данные старого установщика TOW или чужие `data` и `config.yaml`. Если это ваша прежняя папка TOW, запустите установщик снова с `-AdoptData` / `--adopt-data`; иначе выберите другую папку. |
+| «… longer than 110 characters and Windows long paths are off» | Путь к папке TOW длиннее 110 символов, а длинные пути в Windows выключены: подготовка TOW там не удастся. Перенесите папку в короткий путь, например `C:\TOW` (установщик: `-Dir C:\TOW`), или включите длинные пути (`LongPathsEnabled`). |
 
 ## Ручная установка через git
 
