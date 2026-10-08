@@ -28,6 +28,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A torrent whose file names declare long episode ranges (`S01E0001-E1000` in each of 20,000 names) is read in about
   a second instead of minutes and gigabytes of memory: a file name's range counts in full up to 100 episodes, and a
   torrent whose names declare more than 50,000 episodes in all counts each file as its first episode.
+- A check of a topic page of several megabytes of markup takes about a second instead of up to 15 s: its title is
+  read from the head of the page, and the page is scanned for its posts and download block once instead of four or
+  five times.
 
 ## [1.28.0] — 2026-10-08
 

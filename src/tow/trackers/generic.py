@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import bisect
+import functools
 import html
 import logging
 import re
@@ -91,34 +92,53 @@ def _closing_tags(tags: list[re.Match[str]]) -> dict[int, int]:
     return closes
 
 
-def _elements(page: str, classes: frozenset[str], ids: frozenset[str]) -> list[tuple[int, int]]:
-    """Where the outermost elements with one of ``classes`` (or ``ids``) are: (start, end)."""
-    wanted = {f"class:{name}" for name in classes} | {f"id:{name}" for name in ids}
-    tags = _tags(page[:MAX_DOWNLOAD_PAGE_CHARS])
+_USER_TEXT = frozenset(f"class:{name}" for name in _USER_TEXT_CLASSES)
+_OWN_BLOCK = frozenset({f"class:{name}" for name in _OWN_BLOCK_CLASSES} | {f"id:{name}" for name in _OWN_BLOCK_IDS})
+
+
+def _tag_names(attributes: str) -> set[str]:
+    """A tag's classes and id, as "class:<word>" and "id:<value>"."""
+    names: set[str] = set()
+    for attr in _ATTR.finditer(attributes):
+        value = (attr.group(2) or attr.group(3) or attr.group(4) or "").casefold()
+        if attr.group(1).casefold() == "class":
+            names.update(f"class:{word}" for word in value.split())
+        else:
+            names.add(f"id:{value.strip()}")
+    return names
+
+
+@functools.lru_cache(maxsize=4)
+def _blocks(head: str) -> tuple[tuple[tuple[int, int], ...], tuple[tuple[int, int], ...]]:
+    """Where a page's outermost posts and comments are, and its outermost own download blocks:
+    (start, end) of each, from one scan of its tags. One check asks site_text, link_text,
+    signed_in and guest_page of the same page, and each scanned all of its tags again (seconds
+    on 4 MiB of them): the answers for the last few pages are kept."""
+    tags = _tags(head)
     closes: dict[int, int] | None = None
-    found: list[tuple[int, int]] = []
-    taken_until = 0
+    found: tuple[list[tuple[int, int]], list[tuple[int, int]]] = ([], [])
+    taken_until = [0, 0]
     for i, tag in enumerate(tags):
-        if tag.group(1) or tag.start() < taken_until:
+        closing, _name, attributes = tag.groups()
+        if closing or "=" not in attributes:  # a closing tag, or one without a class or an id
             continue
-        names: set[str] = set()
-        for attr in _ATTR.finditer(tag.group(3)):
-            value = (attr.group(2) or attr.group(3) or attr.group(4) or "").casefold()
-            if attr.group(1).casefold() == "class":
-                names.update(f"class:{word}" for word in value.split())
-            else:
-                names.add(f"id:{value.strip()}")
-        if not names & wanted:
-            continue
-        if closes is None:
-            closes = _closing_tags(tags)
-        end = tags[closes[i]].end() if i in closes else tag.end()
-        found.append((tag.start(), end))
-        taken_until = end
-    return found
+        names: set[str] | None = None
+        for kind, wanted in enumerate((_USER_TEXT, _OWN_BLOCK)):
+            if tag.start() < taken_until[kind]:
+                continue
+            if names is None:
+                names = _tag_names(attributes)
+            if not names & wanted:
+                continue
+            if closes is None:
+                closes = _closing_tags(tags)
+            end = tags[closes[i]].end() if i in closes else tag.end()
+            found[kind].append((tag.start(), end))
+            taken_until[kind] = end
+    return tuple(found[0]), tuple(found[1])
 
 
-def _without(page: str, spans: list[tuple[int, int]]) -> str:
+def _without(page: str, spans: tuple[tuple[int, int], ...]) -> str:
     out, at = [], 0
     for start, end in spans:
         out.append(page[at:start])
@@ -130,14 +150,14 @@ def _without(page: str, spans: list[tuple[int, int]]) -> str:
 def site_text(page: str) -> str:
     """The page without what its users wrote (posts, comments): the site's own words."""
     head = page[:MAX_DOWNLOAD_PAGE_CHARS]
-    return _without(head, _elements(head, _USER_TEXT_CLASSES, frozenset()))
+    return _without(head, _blocks(head)[0])
 
 
 def link_text(page: str) -> str:
     """Where the topic's own .torrent or magnet link is: its download block, or - on a page
     without one - the site's own part of the page. A link in a post may be another topic's."""
     head = page[:MAX_DOWNLOAD_PAGE_CHARS]
-    blocks = _elements(head, _OWN_BLOCK_CLASSES, _OWN_BLOCK_IDS)
+    blocks = _blocks(head)[1]
     if blocks:
         return "\n".join(head[start:end] for start, end in blocks)
     return site_text(head)

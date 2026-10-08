@@ -75,10 +75,30 @@ def title_from_url_slug(url: str) -> str:
     return _drop_site_bits(slug)
 
 
+# Where a topic page names itself: <title> and og:title in its head, the <h1> above the posts.
+# BeautifulSoup reads only that part (a whole 4 MiB page of tags took it 9-12 s); a first <h1>
+# that starts inside it is read to its end, up to a bounded distance.
+_TITLE_HEAD_CHARS = 256 * 1024
+_H1_TAIL_CHARS = 64 * 1024
+_H1_START = re.compile(r"<h1[\s/>]", re.IGNORECASE)
+_H1_END = re.compile(r"</h1\s*>", re.IGNORECASE)
+
+
+def _title_part(html: str) -> str:
+    if len(html) <= _TITLE_HEAD_CHARS:
+        return html
+    cut = _TITLE_HEAD_CHARS
+    start = _H1_START.search(html, 0, _TITLE_HEAD_CHARS)
+    end = _H1_END.search(html, start.end(), _TITLE_HEAD_CHARS + _H1_TAIL_CHARS) if start else None
+    if end is not None:
+        cut = max(cut, end.end())
+    return html[:cut]
+
+
 def title_from_html(html: str) -> str:
     from bs4 import BeautifulSoup
 
-    soup = BeautifulSoup(html or "", "html.parser")
+    soup = BeautifulSoup(_title_part(html or ""), "html.parser")
     h1 = soup.find("h1")
     if h1:
         got = _drop_site_bits(h1.get_text(" ", strip=True))
