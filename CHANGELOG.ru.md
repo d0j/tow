@@ -8,6 +8,9 @@
 ### Исправлено
 
 - macOS: выключение автозапуска больше не сообщает об ошибке, пока launchd ещё выгружает агент.
+- `tow backup`, `restore-snapshot`, `import-rollback`, `password`, `update`, `secrets`, `keys`, `run`, `stop` и
+  `restart` объясняют себя по `--help`, как и обещает `tow --help`; по-русски справка больше не вставляет
+  английские слова («usage:», «options», «show this help message and exit»).
 
 ## [1.28.0] — 2026-10-08
 

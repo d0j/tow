@@ -8,6 +8,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 ### Fixed
 
 - macOS: turning autostart off no longer reports a failure while launchd is still unloading the agent.
+- `tow backup`, `restore-snapshot`, `import-rollback`, `password`, `update`, `secrets`, `keys`, `run`, `stop` and
+  `restart` explain themselves with `--help`, as `tow --help` promises; in Russian the help no longer mixes in
+  English words ("usage:", "options", "show this help message and exit").
 
 ## [1.28.0] — 2026-10-08
 
