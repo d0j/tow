@@ -417,7 +417,7 @@
       "backup": "make a nightly backup now (into backup_dir)",
       "backup_long": "Makes a nightly backup now, as “Back up now” in Settings → Backups does: a signed copy of the settings, topics, history and encrypted passwords and tokens in backup_dir (default backup/night). The master key is never in it. Older copies are removed by the retention setting only after the new copy is checked.",
       "restore_snapshot": "restore the data from a nightly backup",
-      "restore_snapshot_long": "Restores the data from a nightly backup (its folder in backup_dir), also while TOW runs. Without --apply it only checks the copy (that needs this install's master key) and shows what would change. With --apply it first keeps the current data in data/before-restore-<time> and puts it back by itself if anything fails. Network access stays as it is, and History keeps what happened after the copy.",
+      "restore_snapshot_long": "Restores the data from a nightly backup (its folder in backup_dir), also while TOW runs. Without --apply it only checks the copy (that needs this install's master key) and shows what would change. With --apply it first keeps the current data in data/before-restore-* and puts it back by itself if anything fails. Network access stays as it is, and History keeps what happened after the copy.",
       "restore_path": "the nightly backup's folder",
       "restore_apply": "restore (without it: check and preview only)",
       "watchdog": "is TOW up and are the checks running? (a diagnostic; it changes nothing)",
@@ -761,7 +761,7 @@
       "step2": "The easiest way is to paste a link to any topic on that site — the fields fill in by themselves.",
       "step3": "If the file cannot be downloaded without signing in, enter the site's user name and password. They are stored encrypted.",
       "step4": "The address you click in the site's row becomes the main one; the globe icon opens it.",
-      "note": "If a site address does not answer three times in a row, TOW skips it for an hour and tries the others; the “Check” button in the site's row ends this pause. When a site says “download limit for today”, TOW leaves it alone until tomorrow."
+      "note": "If a site address does not answer three times in a row, TOW skips it for an hour (rutor: 30 minutes) and tries the others; the check icon in the site's row (“Check the site's mirrors”) ends this pause. When a site says “download limit for today”, scheduled checks leave it alone until tomorrow; a check you start still tries it."
     },
     "s4": {
       "title": "4. Notifications",
@@ -788,7 +788,8 @@
       "config": "— settings and the list of sites (without passwords).",
       "secrets": "— encrypted passwords and tokens. The encryption key is kept apart from the data.",
       "state": "— topics and their state.",
-      "log": "— the log.",
+      "log": "— the event log behind History and the Log window.",
+      "logs": "— run.log and the logs of the web server and of each scheduled job.",
       "note": "An empty password field in a form means “keep as is”; saved passwords are never shown."
     },
     "s9": {
