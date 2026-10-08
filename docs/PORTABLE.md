@@ -314,8 +314,10 @@ gone, so Diagnostics, Settings → TOW service, `tow status` and `tow doctor` sa
   `ProcessType` Adaptive, `TOW_AUTOSTART=launchd`, log in `data/logs/launchd.log`),
   `launchctl enable` + `bootstrap gui/<uid>`. Off unloads it (`launchctl bootout gui/<uid>/io.tow`)
   and removes the plist: a loaded agent would otherwise keep TOW alive until the next sign-in, so
-  a TOW launchd started stops with it (the owner is told; `tow run` starts it by hand). Without
-  signing in would need a system LaunchDaemon (administrator): not offered.
+  a TOW launchd started stops with it (the owner is told; `tow run` starts it by hand). The bootout
+  returns while launchd still lets that TOW stop: the off is read back once `launchctl print` no
+  longer finds the agent, waiting up to ExitTimeOut + 5 s (after that it is reported as not yet
+  unloaded). Without signing in would need a system LaunchDaemon (administrator): not offered.
   - `bootstrap gui/<uid>` needs the owner's GUI session: over SSH without one it fails ("Domain
     does not support specified action"); sign in at the Mac once, then turn autostart on (or run
     `tow run` from the SSH session).

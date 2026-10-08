@@ -13,6 +13,7 @@ signing in would need a system LaunchDaemon (administrator): not offered.
 from __future__ import annotations
 
 import plistlib
+import time
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,11 @@ EXIT_TIMEOUT_SEC = 60
 class LaunchAgent:
     name = "macos"
     supports_without_login = False
+    # `launchctl bootout` returns while launchd still tears the service down (it lets `tow run`
+    # stop for up to ExitTimeOut, then kills it): `launchctl print` keeps finding it until then.
+    # The off is read back after that, bounded by the same time (tests set both to zero).
+    UNLOAD_WAIT_SEC: float = EXIT_TIMEOUT_SEC + 5
+    UNLOAD_POLL_SEC: float = 0.5
 
     def __init__(self, install: Install, runner: Runner):
         self.install = install
@@ -74,6 +80,16 @@ class LaunchAgent:
 
     def loaded(self) -> bool:
         return self.run(["launchctl", "print", self.target]).ok
+
+    def _wait_unloaded(self) -> bool:
+        """After a bootout: True once launchd no longer has the agent (bounded wait)."""
+        deadline = time.monotonic() + self.UNLOAD_WAIT_SEC
+        while self.loaded():
+            if time.monotonic() >= deadline:
+                return False
+            if self.UNLOAD_POLL_SEC:
+                time.sleep(self.UNLOAD_POLL_SEC)
+        return True
 
     def status(self) -> dict[str, Any]:
         current = self._read()
@@ -125,19 +141,24 @@ class LaunchAgent:
         if not before.get("ours") and not before.get("stale"):
             return refusal("autostart.other_install", where=before.get("where") or AGENT_LABEL)
         result: dict[str, Any] = {"changed": True}
+        unloaded = bool(before.get("loaded")) or not self.loaded()  # a bootout below reads it back
         if before.get("loaded"):
+            from tow.i18n import t
+
             # Unloaded, not only removed: a loaded agent would keep TOW alive (and launchd would
             # start it again) until the next sign-in. A TOW launchd started stops with it.
             stopped = self.run(["launchctl", "bootout", self.target])
             if not stopped.ok:
                 result["error"] = stopped.text[:300]
-            else:
-                from tow.i18n import t
-
+                unloaded = not self.loaded()
+            elif self._wait_unloaded():
                 result["hint"] = t("autostart.launchd_stopped")
+            else:
+                unloaded = False
+                result["error"] = t("autostart.launchd_still_loaded", seconds=round(self.UNLOAD_WAIT_SEC))
         self.plist_path.unlink(missing_ok=True)
         after = self.status()
-        return {**result, "ok": "where" not in after and not self.loaded(), "status": after}
+        return {**result, "ok": "where" not in after and unloaded, "status": after}
 
     def start(self) -> bool:
         if self._read() is None:
