@@ -61,6 +61,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   (it stayed "not checked yet" after any number of checks); the client chip and the Settings pill turn red right
   after Check finds a wrong password; and a new topic whose site gave the torrent but whose client failed shows the
   site icon green instead of grey.
+- Diagnostics and a site's mirror check count a mirror that answers with a missing page (HTTP 404 at the site's
+  root, as many trackers do) as answering, with its status, instead of "not a single mirror answers".
 ### Security
 
 - A device on the home network can no longer fill the TOW folder through the sign-in page: every form is
