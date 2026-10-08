@@ -475,7 +475,8 @@ before the update does the same).
    of the supervised-service layout (older versions have no `tow run`) — and a target that cannot
    read `data/state.json`: its `STATE_SCHEMA_VERSION` (none: v1.18–v1.20, format 1) is lower than
    the file's `schema_version` (v1.22 reads format 1, v1.23 writes 2), or the file cannot be
-   verified. Both before TOW stops.
+   verified. Both before TOW stops. The refusal names the first version that reads the data's
+   format (`STATE_FORMAT_SINCE` in `update.py`, kept in step with `tow.store` by a test).
 2. Stop TOW: the stop request, and wait (it lets a running job finish); only if it does not stop
    within `--wait-minutes` is it stopped forcibly — the supervisor's process tree, and its web
    server and job from `status.json` (on Linux and macOS they have their own sessions), each only

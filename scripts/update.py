@@ -117,6 +117,9 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 # cut would once N entries of an archive switch have moved, so the smoke test can check the
 # start files' refusal and the recovery on a real install. Without it nothing happens.
 TEST_CUT_SWITCH = "TOW_TEST_CUT_SWITCH_AFTER"
+# The first version that reads each state.json format (``STATE_SCHEMA_VERSION`` of tow.store;
+# tests/test_update_archive.py keeps the last one in step with it): what a refusal to go back names.
+STATE_FORMAT_SINCE = {1: "v1.18.0", 2: "v1.23.0"}
 # The Windows bundle's start files in <TOW> (scripts/root_files.py writes them).
 ROOT_FILE_NAMES = ("Start TOW.cmd", "Stop TOW.cmd", "Update TOW.cmd")
 TEST_CUT_EXIT = 97
@@ -172,6 +175,10 @@ TEXTS = {
     "data_newer": (
         "{ref} cannot read this install's data (state.json format {found}; it reads up to {known}): go back no"
         " further than the version that wrote it; nothing was updated"
+    ),
+    "data_newer_since": (
+        "{ref} cannot read this install's data (state.json format {found}; it reads up to {known}): go back no"
+        " further than {since}, the first version that reads it; nothing was updated"
     ),
     "data_unverified": (
         "this install's data/state.json cannot be read ({error}), so it is not known whether {ref} can read it;"
@@ -1658,6 +1665,9 @@ class Update:
         except (OSError, ValueError, TypeError, RecursionError) as exc:
             raise UpdateError(self.text("data_unverified", ref=self.ref, error=exc)) from exc
         if found > known:
+            since = STATE_FORMAT_SINCE.get(found)
+            if since:
+                raise UpdateError(self.text("data_newer_since", ref=self.ref, found=found, known=known, since=since))
             raise UpdateError(self.text("data_newer", ref=self.ref, found=found, known=known))
 
     def run(self) -> int:

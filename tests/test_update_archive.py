@@ -280,9 +280,18 @@ def test_going_back_to_a_version_that_cannot_read_the_data_is_refused_before_tow
     assert code == 2
     assert machine.calls == []  # TOW was never stopped
     assert "v1.22.5 cannot read this install's data (state.json format 2; it reads up to 1)" in lines[-1]
+    # Before: "go back no further than the version that wrote it", which named no version.
+    assert "go back no further than v1.23.0, the first version that reads it" in lines[-1]
     assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
     assert leftovers(install) == []
     assert not (install["root"] / "update-state.json").exists()
+
+
+def test_every_state_format_names_the_first_version_that_reads_it():
+    from tow.store import STATE_SCHEMA_VERSION
+
+    assert sorted(updater.STATE_FORMAT_SINCE) == list(range(1, STATE_SCHEMA_VERSION + 1))
+    assert updater.STATE_FORMAT_SINCE[2] == "v1.23.0"
 
 
 def _target(install, store: bytes | None, version: str = "1.30.0") -> Any:

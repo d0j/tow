@@ -1899,6 +1899,7 @@
     "archive_ref": "an install without git updates to a release tag (for example v1.22.0) or latest, not to {ref}",
     "switch_failed": "the code could not be switched ({error}): close programs and windows that use files in {app}",
     "data_newer": "{ref} cannot read this install's data (state.json format {found}; it reads up to {known}): go back no further than the version that wrote it; nothing was updated",
+    "data_newer_since": "{ref} cannot read this install's data (state.json format {found}; it reads up to {known}): go back no further than {since}, the first version that reads it; nothing was updated",
     "data_unverified": "this install's data/state.json cannot be read ({error}), so it is not known whether {ref} can read it; nothing was updated",
     "up_to_date": "TOW {version} is the latest release: nothing to update",
     "latest_older": "the latest release, {ref}, is older than the installed TOW {version}; nothing was updated (to go back to it, name it: --ref {ref})",
