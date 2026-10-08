@@ -556,7 +556,18 @@ def _cmd_serve(args: argparse.Namespace) -> int:
         return 3
     port = args.port or port_of(cfg)
     log_config = _serve_log_config(args.log_file) if getattr(args, "log_file", None) else None
-    server = uvicorn.Server(uvicorn.Config("tow.web:app", host=host, port=port, reload=False, log_config=log_config))
+    # No X-Forwarded-For/-Proto from anyone: TOW tells this computer from the network by the
+    # connection's own address, which a header (or FORWARDED_ALLOW_IPS=*) must never replace.
+    config = uvicorn.Config(
+        "tow.web:app",
+        host=host,
+        port=port,
+        reload=False,
+        log_config=log_config,
+        proxy_headers=False,
+        forwarded_allow_ips="",
+    )
+    server = uvicorn.Server(config)
     parent = getattr(args, "parent_pid", None)
     if parent:
         from tow.supervisor.parent import end_with_parent

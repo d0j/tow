@@ -48,6 +48,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A device on the home network can no longer fill the TOW folder through the sign-in page: every form is
   limited to 512 KiB and must say its size, and sign-in takes only a plain form (before, a large file sent to it
   was stored in `data/tmp` until the end of the request).
+- The web server no longer takes the client's address or scheme from `X-Forwarded-For` / `X-Forwarded-Proto`
+  headers, even with `FORWARDED_ALLOW_IPS` set: a program on this computer could make a request look like it
+  came from another address, and with `FORWARDED_ALLOW_IPS=*` a device on the network could look local.
 
 ## [1.27.1] — 2026-10-08
 
