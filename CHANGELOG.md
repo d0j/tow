@@ -17,6 +17,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   master key in the old place: the launchers and TOW use the folder TOW is in, and `run.log` says to remove it.
 - On Windows the TOW service status in Settings no longer stays out of date after Settings or `tow status` read
   it at the moment TOW rewrote it, and no temporary file is left next to it.
+- An autostart left by a TOW folder that was moved or deleted is now named in Diagnostics, Settings → TOW service,
+  `tow status` and `tow doctor`, with the way to take it over (turn autostart on here); before, nothing said that
+  the computer kept starting a program that no longer exists.
 
 ## [1.27.0] — 2026-10-08
 

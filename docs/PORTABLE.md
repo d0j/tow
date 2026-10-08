@@ -278,7 +278,9 @@ before it counts. A development checkout (code not in `<TOW>/app`) is refused, s
 one-per-user names never point at it. A registration that belongs to another TOW folder is never
 replaced or removed — unless the program it runs no longer exists (the task's action, the unit's
 `ExecStart`, the agent's `ProgramArguments[0]`): that install was moved or deleted, and its
-registration is taken over (or turned off).
+registration is taken over (or turned off). Until then the OS keeps starting a program that is
+gone, so Diagnostics, Settings → TOW service, `tow status` and `tow doctor` say so
+(`doctor.stale_autostart`) and that turning autostart on here takes it over.
 
 - **Windows:** one Task Scheduler task `TOW`, created from XML: action
   `<app>\.venv\Scripts\pythonw.exe -m tow run` (no console window), working directory `<TOW>`;

@@ -794,10 +794,15 @@ def _status_view() -> dict[str, Any]:
         client_title = client_name(client_configuration(cfg))
     except RuntimeError, ValueError:
         client_title = ""
+    stale: str | None = None  # the autostart's name when it starts a folder that is gone
     try:
         from tow.autostart import backend
+        from tow.doctor import stale_autostart
 
-        autostart: bool | None = bool(backend().status().get("on"))
+        found = backend().status()
+        autostart: bool | None = bool(found.get("on"))
+        if stale_autostart(found):
+            stale = str(found.get("where") or "TOW")
     except Exception:  # noqa: BLE001 - autostart is read from the system; its failure is "unknown"
         autostart = None
     running = layout.running()
@@ -820,6 +825,8 @@ def _status_view() -> dict[str, Any]:
         "next_check": format_ui_timestamp(datetime.fromtimestamp(next_at, UTC).isoformat()) if next_at else None,
         "network": as_bool(cfg.get("allow_lan")),
         "autostart": autostart,
+        "autostart_stale": stale is not None,
+        "autostart_where": stale,
         "update_interrupted": running is None and layout.interrupted_update(),
     }
 
@@ -853,6 +860,8 @@ def _cmd_status(args: argparse.Namespace) -> int:
         t("cli.status.autostart", value=yes_no[view["autostart"]]),
     ]
     print(" · ".join(parts))
+    if view["autostart_stale"]:  # the OS keeps starting a TOW folder that was moved or deleted
+        print(t("doctor_report.autostart_stale", where=view["autostart_where"]))
     return EXIT_OK
 
 
