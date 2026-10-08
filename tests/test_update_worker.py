@@ -4,6 +4,7 @@ import io
 import json
 import multiprocessing
 import os
+import queue
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -143,8 +144,10 @@ def _prepare_lease(path: Path, job_id: str) -> Path:
 def _leased_child(path: str, job_id: str, ready, finish, abrupt: bool) -> None:
     with update_worker.worker_lease(Path(path), {"id": job_id, "lease_version": 1}) as acquired:
         ready.put(acquired)
-        if not finish.wait(10):
-            raise RuntimeError("test lease holder was not released")
+        try:
+            finish.get(timeout=120)
+        except queue.Empty:
+            raise RuntimeError("test lease holder was not released") from None
         if abrupt:
             os._exit(17)
 
@@ -155,24 +158,27 @@ def test_os_releases_the_worker_lease_after_normal_or_abrupt_process_exit(tmp_pa
     job_id = "d" * 32
     lease = _prepare_lease(path, job_id)
     context = multiprocessing.get_context("spawn")
-    ready, finish = context.Queue(), context.Event()
+    # Queues, not a multiprocessing Event: Event.set() waits for every waiter to wake, and
+    # a child killed while waiting never does - the test then hung for good. A put never waits.
+    ready, finish = context.Queue(), context.Queue()
     process = context.Process(target=_leased_child, args=(str(path), job_id, ready, finish, abrupt))
     try:
         with reaped(process):
             process.start()
-            assert ready.get(timeout=10) is True
+            assert ready.get(timeout=120) is True  # generous: spawning is slow under a parallel suite
             with lease.open("r+b") as handle:
                 assert not locks.lock(handle, wait=False)
-            finish.set()
-            process.join(10)
+            finish.put(True)
+            process.join(120)
             assert process.exitcode == (17 if abrupt else 0)
             with lease.open("r+b") as handle:
                 assert locks.lock(handle, wait=False)
                 locks.unlock(handle)
     finally:
-        finish.set()
-        ready.close()
-        ready.join_thread()
+        finish.put(True)
+        for channel in (ready, finish):
+            channel.close()
+            channel.join_thread()
 
 
 @pytest.mark.parametrize("damage", ["missing", "empty", "module", "syntax", "version"])
