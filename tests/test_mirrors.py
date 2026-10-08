@@ -507,7 +507,7 @@ def test_a_few_broken_topic_pages_do_not_pause_the_site(monkeypatch, tmp_path):
     bucket = load_state()["mirrors"]["site"]
     assert not bucket["cool"]
     assert not any(bucket["fail"].values())
-    assert "http://site.example/" in asked  # the front page was asked whose problem it is
+    assert asked.count("http://site.example/") >= 1  # the front page was asked whose problem it is
 
 
 def test_a_check_page_on_the_front_page_too_still_pauses_the_host(monkeypatch, tmp_path):
