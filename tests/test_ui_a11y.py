@@ -111,6 +111,20 @@ def test_header_states_are_said_in_words_not_only_by_colour(client, health, prob
     assert "position: relative" in _desktop_rules()[".hdr-sites .trk"]
 
 
+def test_links_inside_running_text_are_underlined(client):
+    """A7: "More" in the Backups note was told from its sentence by colour only (axe
+    link-in-text-block)."""
+    css = re.sub(r"/\*.*?\*/", "", CSS, flags=re.DOTALL)
+    rule = re.search(r":where\(([^)]*)\) a:not\(\.btn\) \{([^}]*)\}", css)
+    assert rule is not None
+    containers = {name.strip() for name in rule.group(1).split(",")}
+    assert {".section-note", ".action-hint", ".field-hint", ".sub", ".help-page p", ".list-empty"} <= containers
+    assert "text-decoration: underline" in rule.group(2)
+    page = client.get("/settings?open=transfer").text
+    note = re.search(r'<p class="section-note">(?:(?!</p>).)*help#export-import', page, re.DOTALL)
+    assert note is not None, "the Backups note keeps its link inside the sentence"
+
+
 def test_scrolling_log_boxes_are_named_regions_the_keyboard_reaches(client):
     """A4: the log of the header, of Settings and the episodes box scroll but took no focus."""
     _seed()

@@ -61,6 +61,12 @@ body {
 }
 a { color: var(--acc); text-decoration: none; }
 a:hover { text-decoration: underline; }
+/* A link inside running text is told from the words around it by more than its colour
+   (WCAG 1.4.1): underlined. Links that stand alone (icons, menus, rows) keep no line. */
+:where(.section-note, .action-hint, .field-hint, .sub, .lead, .notice, .support-note, .help-pop, .help-page p,
+  .help-page li, .check-field p, .list-empty, .form-error, .empty-state p) a:not(.btn) {
+  text-decoration: underline; text-underline-offset: .15em;
+}
 .skip {
   position: absolute; left: -999px;
 }
