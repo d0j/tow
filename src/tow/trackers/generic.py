@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import bisect
 import html
 import logging
 import re
@@ -48,8 +49,12 @@ _SIGN_IN_TITLES = frozenset(
 )
 
 
-# A way to sign out: a link to the site's logout (login.php?logout=1, /logout.php ...).
-_LOGOUT_LINK = re.compile(r"""href\s*=\s*["']?[^"'\s>]*log_?out""", re.IGNORECASE)
+# A way to sign out: a link to the site's logout (login.php?logout=1, /logout.php ...): "log_?out"
+# between an "href=" and the link's end. One regex for it read the rest of the link again from
+# every "href=" inside it (minutes on a page of them); the three are found once instead.
+_HREF = re.compile(r"""href\s*=\s*["']?""", re.IGNORECASE)
+_LOGOUT = re.compile(r"log_?out", re.IGNORECASE)
+_LINK_END = re.compile(r"""["'\s>]""")
 _TAG = re.compile(r"<(/?)([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>")
 _ATTR = re.compile(r"""(?:^|\s)(class|id)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
 # The topic's own download block: TorrentPier's attachment table, the phpBB torrent table, a
@@ -138,15 +143,29 @@ def link_text(page: str) -> str:
     return site_text(head)
 
 
+def _has_logout_link(text: str) -> bool:
+    logouts = [found.start() for found in _LOGOUT.finditer(text)]
+    if not logouts:
+        return False
+    ends = [found.start() for found in _LINK_END.finditer(text)]
+    for link in _HREF.finditer(text):
+        start = link.end()
+        logout = bisect.bisect_left(logouts, start)
+        end = bisect.bisect_left(ends, start)
+        if logout < len(logouts) and logouts[logout] < (ends[end] if end < len(ends) else len(text)):
+            return True
+    return False
+
+
 def signed_in(page: str) -> bool:
     """The page is shown to a signed-in member: the site offers to sign out."""
-    return bool(_LOGOUT_LINK.search(site_text(page)))
+    return _has_logout_link(site_text(page))
 
 
 def guest_page(page: str) -> bool:
     """A page as a guest sees it: it asks to sign in and has no way to sign out."""
     own = site_text(page)
-    return not _LOGOUT_LINK.search(own) and bool(_GUEST_MARKS.search(own))
+    return not _has_logout_link(own) and bool(_GUEST_MARKS.search(own))
 
 
 def sign_in_page(page: str, title: str) -> bool:

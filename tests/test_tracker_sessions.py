@@ -257,12 +257,17 @@ def test_a_logout_word_in_a_post_is_not_a_way_to_sign_out():
     quoted = "<html><a href='login.php'>Вход</a><div class=post><a href='/login.php?logout=1'>x</a></div></html>"
     assert guest_page(quoted)
     assert not signed_in(quoted)
+    for link in ("HREF = '/LogOut.php'", "href=/x?log_out=1", "href=href= logout", "href=x href='/logout"):
+        assert signed_in(f"<html><a {link}>x</a></html>")
+    for link in ("href='/x' logout", "href= 'x' title='logout'", 'href="/x">logout', "logout href=/x"):
+        assert not signed_in(f"<html><a {link}>x</a></html>")
 
 
 _BROKEN_PAGES = {
     "tags_never_end": "<a" * 1_000_000,  # each one was scanned to the end of the page
     "posts_never_closed": "<a href='login.php?logout=1'>x</a>" + "<p class='post'>reply" * 100_000,
     "nested_deep": "<div class='post'>" * 150_000 + "</div>" * 150_000,
+    "one_long_link": "<a " + "href=" * 400_000 + " logout",  # every "href=" read the rest of the link
 }
 
 
