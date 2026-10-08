@@ -51,6 +51,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The web server no longer takes the client's address or scheme from `X-Forwarded-For` / `X-Forwarded-Proto`
   headers, even with `FORWARDED_ALLOW_IPS` set: a program on this computer could make a request look like it
   came from another address, and with `FORWARDED_ALLOW_IPS=*` a device on the network could look local.
+- On this computer TOW now answers only `localhost` and loopback addresses (127.0.0.1, [::1]): a device on the
+  network could answer LLMNR or mDNS for the computer's name and let a site's page reach TOW through it without
+  a password. Other devices may still use the computer's name.
 
 ## [1.27.1] — 2026-10-08
 

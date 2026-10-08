@@ -103,15 +103,25 @@ def _trusted_request_host(request: Request, cfg: dict[str, Any]) -> bool:
         return False
     if host == "localhost":
         return True
+    # From this computer only localhost and a loopback address: the computer's own name (and
+    # name.local) can be answered by any device on the network through LLMNR or mDNS, which
+    # lets a site's page rebind to 127.0.0.1 and use TOW without a password.
+    from_this_computer = access.is_local(request)
     try:
         address = ipaddress.ip_address(host)
     except ValueError:
+        if from_this_computer:
+            return False
         configured = str(cfg.get("bind") or "").lower()
         machine = socket.gethostname().lower()
         names = {configured, machine, f"{machine}.local"} - {"", "0.0.0.0", "::"}
         return host in names
     # A public address in Host means the request came from the internet (a forwarded router
     # port): TOW is for this PC, the home network and a VPN such as Tailscale (100.64.0.0/10).
+    if from_this_computer:
+        if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+            address = address.ipv4_mapped
+        return address.is_loopback
     return not address.is_global
 
 

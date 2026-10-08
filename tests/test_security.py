@@ -38,8 +38,25 @@ def lan_config(monkeypatch):
         ("evil.example:8787", False),  # DNS rebinding
     ],
 )
-def test_only_local_network_host_names_are_accepted(host, allowed):
-    response = TestClient(app).get("/healthz", headers={"Host": host})
+def test_only_local_network_host_names_are_accepted(lan_config, host, allowed):
+    response = TestClient(app, client=LAN).get("/healthz", headers={"Host": host})
+    assert (response.status_code == 200) is allowed, response.status_code
+
+
+@pytest.mark.parametrize(
+    ("host", "allowed"),
+    [
+        ("127.0.0.1:8787", True),
+        ("127.0.0.2:8787", True),
+        ("localhost:8787", True),
+        ("[::1]:8787", True),
+        ("[::ffff:127.0.0.1]:8787", True),
+        ("192.168.1.2:8787", False),
+        ("evil.example:8787", False),
+    ],
+)
+def test_this_computer_asks_by_localhost_or_a_loopback_address_only(host, allowed):
+    response = TestClient(app, client=("127.0.0.1", 50000)).get("/healthz", headers={"Host": host})
     assert (response.status_code == 200) is allowed, response.status_code
 
 
@@ -124,10 +141,24 @@ def test_a_signed_in_device_and_this_pc_set_the_owners_language(lan_auto_languag
     assert _remembered() == "en"
 
 
-def test_this_computers_own_name_is_accepted():
+def test_this_computers_own_name_is_accepted_from_the_network(lan_config):
     name = socket.gethostname().lower()
-    assert TestClient(app).get("/healthz", headers={"Host": f"{name}:8787"}).status_code == 200
-    assert TestClient(app).get("/healthz", headers={"Host": f"{name}.local:8787"}).status_code == 200
+    lan = TestClient(app, client=LAN)
+    assert lan.get("/healthz", headers={"Host": f"{name}:8787"}).status_code == 200
+    assert lan.get("/healthz", headers={"Host": f"{name}.local:8787"}).status_code == 200
+
+
+def test_this_computers_own_name_is_refused_from_this_computer(monkeypatch):
+    # Audit 08.10.2026: any device on the network can answer LLMNR or mDNS for the computer's
+    # name; a page that rebinds it to 127.0.0.1 used TOW from this computer without a password.
+    name = socket.gethostname().lower()
+    monkeypatch.setattr("tow.web.services.load_config", lambda: {"bind": name})
+    local = TestClient(app, client=("127.0.0.1", 50000))
+    for host in (f"{name}:8787", f"{name}.local:8787"):
+        response = local.get("/healthz", headers={"Host": host})
+        assert response.status_code == 403
+        assert response.text == "untrusted host"
+    assert TestClient(app, client=("::1", 50000)).get("/healthz", headers={"Host": name}).status_code == 403
 
 
 def test_access_settings_change_only_on_this_computer(lan_config, monkeypatch):
