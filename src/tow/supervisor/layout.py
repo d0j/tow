@@ -184,14 +184,22 @@ class InstanceLock:
 def install_id() -> str:
     """This install as its web server names itself on ``/healthz`` (asked from this computer).
 
-    A hash of the code folder: the same for every process of this install, another one for a
-    copy of the folder - so ``tow start``, ``tow setup`` and the supervisor never take another
-    TOW answering on the same port for their own.
+    A hash of the code folder and the install root: the same for every process of this install,
+    another one for a copy of the folder - so ``tow start``, ``tow setup`` and the supervisor
+    never take another TOW answering on the same port for their own. The root counts too: a
+    copy whose environment still runs the original's code (its ``.venv`` holds absolute paths)
+    has the original's code folder, and its copied status.json names the original's web
+    server - which it would otherwise stop as a server its own supervisor left behind.
     """
     import hashlib
 
     folder = os.path.normcase(str(repo_root()))
-    return hashlib.sha256(folder.encode("utf-8", "surrogatepass")).hexdigest()[:16]
+    try:
+        install = os.path.normcase(os.path.realpath(install_root()))
+    except RuntimeError:  # a wheel without a layout: the code folder alone
+        install = ""
+    named = f"{folder}\0{install}" if install else folder
+    return hashlib.sha256(named.encode("utf-8", "surrogatepass")).hexdigest()[:16]
 
 
 def own_server_command(command: str, logs: Path | None = None) -> bool:

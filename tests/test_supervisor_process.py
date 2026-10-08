@@ -668,6 +668,32 @@ def test_the_install_id_names_the_folder_without_showing_it(monkeypatch, tmp_pat
     assert layout.install_id() != first  # a copy of the folder is another install
 
 
+def test_a_copy_that_still_runs_the_originals_code_is_another_install(monkeypatch, tmp_path):
+    # Audit 08.10.2026: a copied .venv imports the original's code, so the code folder alone
+    # named the copy as the original; its copied status.json names the original's server pid,
+    # and the copy's supervisor took over (stopped) the original's live web server.
+    code = tmp_path / "TOW" / "app"
+    monkeypatch.setattr(layout, "repo_root", lambda: code)
+    monkeypatch.setattr(layout, "install_root", lambda: tmp_path / "TOW")
+    original = layout.install_id()
+    monkeypatch.setattr(layout, "install_root", lambda: tmp_path / "Copy of TOW")
+    assert layout.install_id() != original
+    monkeypatch.setattr(layout, "install_root", lambda: tmp_path / "TOW" / "." / "")  # spelled differently
+    assert layout.install_id() == original
+
+
+def test_the_supervisor_asks_its_own_server_with_this_roots_id(monkeypatch, tmp_path):
+    from tow.supervisor import default_deps
+
+    asked = []
+    monkeypatch.setattr("tow.watchdog.healthy", lambda port, install=None: asked.append(install) or False)
+    original = layout.install_id()
+    monkeypatch.setattr(layout, "install_root", lambda: tmp_path / "Copy of TOW")
+    assert default_deps().own_server(8790) is False
+    assert asked == [layout.install_id()]
+    assert asked[0] != original
+
+
 # --- a web server ends with its supervisor (tow serve --parent-pid) ----------------------------
 
 
