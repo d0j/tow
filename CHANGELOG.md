@@ -41,6 +41,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   reloads the page at every step and keeps the focus on the option; the section's pill names the choice.
 - Home with thousands of topics opens faster (it no longer re-orders the rows into the order they already have)
   and typing in the search no longer stalls at every key: the list follows after a short pause.
+- Scrolling a long Home is smoother: the version badge looks at what lies under it once a scroll or a change has
+  settled, at five points, instead of fifteen points on every frame.
 
 ## [1.27.1] — 2026-10-08
 
