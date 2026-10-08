@@ -11,6 +11,7 @@ Every probe fails soft: an unknown fact is ``None`` / ``[]`` / ``False``, never 
 from __future__ import annotations
 
 import codecs
+import ntpath
 import os
 import stat
 import sys
@@ -173,6 +174,20 @@ def user_id() -> int:
 def user_name() -> str:
     """This account's login name as the session says it (``USER``, Windows ``USERNAME``); "" unknown."""
     return os.environ.get("USER") or os.environ.get("USERNAME") or ""
+
+
+def windows_program(*parts: str) -> str:
+    """A program of Windows itself, under ``%SystemRoot%\\System32`` (``windows_program("schtasks.exe")``),
+    never one a PATH search finds: the venv's Scripts folder comes first there. Without a usable
+    ``SystemRoot`` (missing, or not a full path) the default Windows folder."""
+    roots = (os.environ.get(name, "").strip() for name in ("SystemRoot", "SYSTEMROOT", "windir"))
+    root = next((value for value in roots if ntpath.isabs(value) and ntpath.splitdrive(value)[0]), r"C:\Windows")
+    return ntpath.join(root, "System32", *parts)
+
+
+def powershell_program() -> str:
+    """Windows PowerShell 5.1, which every Windows has, by its full path."""
+    return windows_program("WindowsPowerShell", "v1.0", "powershell.exe")
 
 
 def console_codec() -> str:

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from tow.autostart import TASK_NAME, CommandResult, Install, Runner, refusal
+from tow.platform import powershell_program, windows_program
 
 ARGUMENTS = "-m tow run"
 
@@ -154,7 +155,7 @@ class WindowsTask:
             "[Console]::Error.WriteLine($_.Exception.Message); exit 1 }; "
             "'xml:' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($xml))"
         )
-        result = self.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script])
+        result = self.run([powershell_program(), "-NoProfile", "-NonInteractive", "-Command", script])
         answer = result.stdout.strip()
         if result.ok and answer == "absent":
             return {"name": name, "state": "absent", "error": ""}
@@ -214,7 +215,7 @@ class WindowsTask:
         path = folder / f"task-{name.lower()}-{uuid.uuid4().hex[:8]}.xml"
         try:
             path.write_text(xml, encoding="utf-16")
-            return self.run(["schtasks", "/Create", "/F", "/TN", name, "/XML", str(path)])
+            return self.run([windows_program("schtasks.exe"), "/Create", "/F", "/TN", name, "/XML", str(path)])
         finally:
             path.unlink(missing_ok=True)
 
@@ -240,7 +241,7 @@ class WindowsTask:
             return {"ok": True, "changed": False, "status": before}
         if before.get("state") == "present" and not before.get("ours") and not before.get("stale"):
             return refusal("autostart.other_install", where=before.get("command") or TASK_NAME)
-        deleted = self.run(["schtasks", "/Delete", "/TN", TASK_NAME, "/F"])
+        deleted = self.run([windows_program("schtasks.exe"), "/Delete", "/TN", TASK_NAME, "/F"])
         after = self.status()
         result: dict[str, Any] = {"ok": after.get("state") == "absent", "changed": deleted.ok, "status": after}
         if not deleted.ok:
@@ -248,4 +249,4 @@ class WindowsTask:
         return result
 
     def start(self) -> bool:
-        return self.run(["schtasks", "/Run", "/TN", TASK_NAME]).ok
+        return self.run([windows_program("schtasks.exe"), "/Run", "/TN", TASK_NAME]).ok

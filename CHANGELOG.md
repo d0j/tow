@@ -54,6 +54,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - On this computer TOW now answers only `localhost` and loopback addresses (127.0.0.1, [::1]): a device on the
   network could answer LLMNR or mDNS for the computer's name and let a site's page reach TOW through it without
   a password. Other devices may still use the computer's name.
+- Windows: TOW runs PowerShell, Task Scheduler (`schtasks`) and `taskkill` from the Windows folder
+  (`%SystemRoot%\System32`), never a program of the same name that a search of PATH would find first.
 
 ## [1.27.1] — 2026-10-08
 
