@@ -436,7 +436,7 @@ def test_restore_point_failure_flash_names_the_reason(monkeypatch, tmp_path):
 
     assert response.status_code == 303
     message = shown(response.headers["location"])
-    assert "копия не создана" in message
+    assert "точка восстановления не создана" in message
     assert "state.json:telegram_token" in message
 
 
