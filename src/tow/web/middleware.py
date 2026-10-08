@@ -28,6 +28,14 @@ from tow.torrent import MAX_TORRENT_BYTES
 from tow.web import _context, services, site_store
 
 _PORTABLE_UPLOAD_REQUEST_LIMIT = MAX_BUNDLE_BYTES + 2 * 1024 * 1024
+_UPLOAD_LIMITS = {
+    "/settings/portable/import": _PORTABLE_UPLOAD_REQUEST_LIMIT,
+    "/content/prepare": MAX_TORRENT_BYTES + 1024 * 1024,
+}
+# Every other write is a form of a few fields. The largest, a topic with the file selection of
+# a 20,000-file torrent, stays under 250 KB even at the fields' own limits. Below Starlette's
+# 1 MiB spool size a file part someone adds stays in memory: nothing is written to data/tmp.
+FORM_REQUEST_LIMIT = 512 * 1024
 _PUBLIC_PATHS = {"/favicon.ico", "/healthz", "/login"}
 _SITE_HTTP_LOCK = asyncio.Lock()
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
@@ -124,27 +132,45 @@ def _redirect_for_fetch(request: Request, response: Response) -> Response:
     return converted
 
 
+def _body_refusal(request: Request) -> Response | None:
+    """A write's body, judged by its headers before anything reads it: an upload needs its size
+    and stays under its own limit; any other write is a form of at most FORM_REQUEST_LIMIT, sent
+    with its size (or without a body), and signing in takes only a plain form. Starlette parses
+    a form before the route runs, so without this anyone who reaches the sign-in page could
+    make TOW store a file part of any size in data/tmp."""
+    path = request.url.path
+    upload = request.method == "POST" and path in _UPLOAD_LIMITS
+    declared = request.headers.get("content-length")
+    if "transfer-encoding" in request.headers:  # a chunked body says its size only at its end
+        return Response("content length required", status_code=411)
+    if declared is None and not upload:
+        content_length = 0  # HTTP/1.1: no length and no transfer coding is a request without a body
+    else:
+        try:
+            content_length = int(declared or "")
+        except ValueError:
+            return Response("content length required", status_code=411)
+        if content_length < 0 or (upload and content_length == 0):
+            return Response("content length required", status_code=411)
+    if content_length > (_UPLOAD_LIMITS[path] if upload else FORM_REQUEST_LIMIT):
+        return Response("upload too large" if upload else "request too large", status_code=413)
+    if path == "/login" and request.method == "POST":
+        media_type = (request.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
+        if media_type != "application/x-www-form-urlencoded":
+            return Response("unsupported media type", status_code=415)
+    return None
+
+
 def _refusal(request: Request, cfg: dict[str, Any]) -> Response | None:
     """Who may not ask at all: a foreign host, the network while it is closed, an oversized or
-    unsized upload, a write from another site. Checks of the request alone, no I/O."""
+    unsized body, a write from another site. Checks of the request alone, no I/O."""
     if not _trusted_request_host(request, cfg):
         return Response("untrusted host", status_code=403)
     if not access.network_open(cfg) and not access.is_local(request):
         return Response("LAN access is disabled", status_code=403)
-    upload_limits = {
-        "/settings/portable/import": _PORTABLE_UPLOAD_REQUEST_LIMIT,
-        "/content/prepare": MAX_TORRENT_BYTES + 1024 * 1024,
-    }
-    if request.method == "POST" and request.url.path in upload_limits:
-        try:
-            content_length = int(request.headers.get("content-length") or "")
-        except ValueError:
-            return Response("content length required", status_code=411)
-        if content_length <= 0:
-            return Response("content length required", status_code=411)
-        if content_length > upload_limits[request.url.path]:
-            return Response("upload too large", status_code=413)
     if request.method in _WRITE_METHODS:
+        if (refused := _body_refusal(request)) is not None:
+            return refused
         origin = request.headers.get("origin")
         req_host = request.headers.get("host") or (request.url.hostname or "")
         if not origin_matches_request(origin, req_host, request.url.scheme):

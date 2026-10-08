@@ -284,3 +284,145 @@ def test_names_resolving_to_internal_addresses_count_as_internal(monkeypatch):
     assert site_form.internal_host("rutor.info") is False
     assert site_form.internal_host("router.home.arpa") is True
     assert site_form.internal_host("100.64.1.1") is True
+
+
+# Audit 08.10.2026: the public /login parsed any multipart body before the route ran, and
+# Starlette stored its file parts in data/tmp: a device on the network filled 400 MB unsigned in.
+def _multipart(fields: dict[str, str], *, junk: int = 0) -> tuple[bytes, str]:
+    boundary = "tow-test-boundary"
+    body = b"".join(
+        f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode()
+        for name, value in fields.items()
+    )
+    if junk:
+        body += (
+            (
+                f'--{boundary}\r\nContent-Disposition: form-data; name="junk"; filename="a.bin"\r\n'
+                "Content-Type: application/octet-stream\r\n\r\n"
+            ).encode()
+            + b"\0" * junk
+            + b"\r\n"
+        )
+    return body + f"--{boundary}--\r\n".encode(), f"multipart/form-data; boundary={boundary}"
+
+
+@pytest.fixture
+def spool(tmp_path, monkeypatch):
+    """Where Starlette would store a file part (tempfile's folder, data/tmp in TOW)."""
+    import tempfile
+
+    folder = tmp_path / "spool"
+    folder.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(folder))
+    monkeypatch.setattr("tow.web.services.network_credential", lambda *_a: pytest.fail("the body reached the route"))
+    return folder
+
+
+def _lan_login(body, content_type: str, **headers):
+    client = TestClient(app, client=LAN, base_url="http://192.168.1.2:8787")
+    request = client.build_request(
+        "POST",
+        "/login",
+        content=body,
+        headers={"Origin": "http://192.168.1.2:8787", "Content-Type": content_type, **headers},
+    )
+    return client.send(request)
+
+
+def test_an_oversized_sign_in_body_is_refused_before_it_is_read(lan_config, spool):
+    from tow.web.middleware import FORM_REQUEST_LIMIT
+
+    body, content_type = _multipart({"password": "x"}, junk=2 * 1024 * 1024)
+    assert len(body) > FORM_REQUEST_LIMIT
+
+    response = _lan_login(body, content_type)
+
+    assert response.status_code == 413
+    assert response.headers["cache-control"] == "no-store"
+    assert list(spool.iterdir()) == []
+
+
+def test_a_chunked_body_without_a_size_is_refused(lan_config, spool):
+    chunks = (b"password=x" for _ in range(3))  # a generator: httpx sends it chunked
+
+    response = _lan_login(chunks, "application/x-www-form-urlencoded")
+
+    assert response.status_code == 411
+    assert list(spool.iterdir()) == []
+
+
+def test_signing_in_takes_only_a_plain_form(lan_config, spool):
+    body, content_type = _multipart({"token": "t" * 32})
+
+    assert _lan_login(body, content_type).status_code == 415
+    assert _lan_login(b'{"token": "x"}', "application/json").status_code == 415
+
+
+def test_a_plain_sign_in_form_still_signs_in(lan_config):
+    client = TestClient(app, client=LAN, base_url="http://192.168.1.2:8787")
+    response = client.post(
+        "/login", data={"token": "t" * 32}, headers={"Origin": "http://192.168.1.2:8787"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert "tow_session" in response.headers["set-cookie"]
+
+
+def test_every_other_write_is_capped_too(lan_config, spool):
+    from tow.auth import issue_session
+    from tow.web.middleware import FORM_REQUEST_LIMIT
+
+    signed_in = TestClient(app, client=LAN, cookies={"tow_session": issue_session("t" * 32)})
+    body, content_type = _multipart({"theme": "dark"}, junk=FORM_REQUEST_LIMIT)
+    response = signed_in.post(
+        "/settings/theme",
+        content=body,
+        headers={"Origin": "http://127.0.0.1", "Content-Type": content_type},
+        follow_redirects=False,
+    )
+    assert response.status_code == 413
+    assert list(spool.iterdir()) == []
+
+
+def test_forms_as_app_js_posts_them_still_pass():
+    from tow.config import load_config
+
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    body, content_type = _multipart({"theme": "dark"})  # fetch() with FormData: multipart
+    response = client.post(
+        "/settings/theme",
+        content=body,
+        headers={"Content-Type": content_type, "X-TOW-Fetch": "1"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 200, response.text
+    assert load_config()["theme"] == "dark"
+
+    bodiless = client.build_request("POST", "/settings/theme")
+    bodiless.headers.pop("content-length", None)  # no length and no transfer coding: no body
+    assert client.send(bodiless, follow_redirects=False).status_code == 303
+    assert load_config()["theme"] == "auto"
+
+
+def test_the_largest_topic_form_fits_the_cap():
+    import json
+    from urllib.parse import urlencode
+
+    from tow.selection import MAX_RULE_TEXT
+    from tow.torrent import MAX_FILES
+    from tow.web.middleware import FORM_REQUEST_LIMIT
+
+    fields = {
+        "url": "https://tracker.example/forum/viewtopic.php?t=" + "1" * 12,
+        "title": "Сериал " * 40,
+        "save_path": "D:\\Сериалы\\" + "Папка\\" * 40,
+        "client_id": "qbit",
+        "selection_mode": "episodes",
+        "selection_value": "я" * MAX_RULE_TEXT,
+        "tracking_mode": "watch",
+        "check_interval_min": "60",
+        "content_token": "a" * 64,
+        "selection_indices": json.dumps(list(range(MAX_FILES)), separators=(",", ":")),
+    }
+    multipart, _ = _multipart(fields)
+    plain = urlencode(fields).encode()
+    assert max(len(multipart), len(plain)) * 1.5 < FORM_REQUEST_LIMIT, (len(multipart), len(plain))

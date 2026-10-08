@@ -43,6 +43,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   and typing in the search no longer stalls at every key: the list follows after a short pause.
 - Scrolling a long Home is smoother: the version badge looks at what lies under it once a scroll or a change has
   settled, at five points, instead of fifteen points on every frame.
+### Security
+
+- A device on the home network can no longer fill the TOW folder through the sign-in page: every form is
+  limited to 512 KiB and must say its size, and sign-in takes only a plain form (before, a large file sent to it
+  was stored in `data/tmp` until the end of the request).
 
 ## [1.27.1] — 2026-10-08
 
