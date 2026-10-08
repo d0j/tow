@@ -344,12 +344,15 @@ def _next_season_query(title: str, series: str, summary: Mapping[str, Any]) -> s
     return f"{series} {season + 1}" if season else ""
 
 
-def _error_line(error: str, cls: str) -> str:
+def _error_line(error: str, cls: str, site: str = "") -> str:
     """One short line for the row (D4): the error's class in words, then its advice
-    (the part after " — ") or its start; the full text stays in the edit panel."""
+    (the part after " — ") or its start; the full text stays in the edit panel. The row has
+    its own Site column, so a leading "<site>: " is left out."""
     from tow.log import CLS_RU
 
     text = " ".join(str(error or "").split())
+    if site and text.casefold().startswith(f"{site}: ".casefold()):
+        text = text[len(site) + 2 :]
     if not text:
         return ""
     lang = owner_language()
@@ -364,7 +367,10 @@ def _error_line(error: str, cls: str) -> str:
     if len(detail) > 90:
         detail = detail[:89].rstrip() + "…"
     label = CLS_RU.label(cls, lang, i18n.t("web.error_line.error", lang))
-    line = detail if detail.lower().startswith(label.lower()) else f"{label}: {detail}"
+    # A paused mirror's own words already say what happened ("all mirrors are paused"): no
+    # "Mirror paused:" in front of them.
+    same = detail.lower().startswith(label.lower()) or cls == "frozen"
+    line = detail if same else f"{label}: {detail}"
     return line[:1].upper() + line[1:]
 
 
@@ -384,8 +390,23 @@ _ERROR_WORDS = (
 )
 
 
+def _site_title(cfg: Mapping[str, Any], name: str) -> str:
+    """A site as the pages name it ("NNM-Club"), not its settings key ("nnmclub")."""
+    site = (cfg.get("trackers") or {}).get(name)
+    return str((site.get("title") if isinstance(site, Mapping) else "") or name)
+
+
+def _with_site_title(params: Any, tracker: Any, title: str) -> Any:
+    """Stored error values with the site's key replaced by its title (the row and the edit panel
+    said "nnmclub: all mirrors are paused")."""
+    if not isinstance(params, Mapping) or tracker is None or params.get("tracker") != tracker.name:
+        return params
+    return {**params, "tracker": title}
+
+
 def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
-    trs = load_trackers(_context.config())
+    cfg = _context.config()
+    trs = load_trackers(cfg)
     history = services.load_download_history()
     timers = services.topic_timer_status(dict(state))
     rows = []
@@ -400,8 +421,11 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
         series = title.split(" / ")[0]
         next_season = _next_season_query(title, series, summary)
         # The error in the reader's language (from its code); an old record shows its stored text.
+        site = _site_title(cfg, tr.name) if tr else ""
         last_error = render_stored(
-            topic.get("last_error_code"), topic.get("last_error_params"), str(topic.get("last_error") or "")
+            topic.get("last_error_code"),
+            _with_site_title(topic.get("last_error_params"), tr, site),
+            str(topic.get("last_error") or ""),
         )
         rows.append(
             {
@@ -429,7 +453,7 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
                     )
                 ),
                 "last_error_human": humanize(last_error),
-                "error_line": _error_line(humanize(last_error), cls),
+                "error_line": _error_line(humanize(last_error), cls, site),
                 "search_href": _search_href(tr, state, series),
                 "next_season_href": _search_href(tr, state, next_season) if next_season else "",
                 "torrent_tone": status.torrent_tone,

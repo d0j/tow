@@ -29,6 +29,15 @@ def service_view() -> dict[str, Any]:
         if problem
         else None
     )
+    # The same finding as Diagnostics: this account's autostart starts another TOW folder, so
+    # the unchecked box here is not "nothing is set up".
+    detail = service.get("autostart_detail")
+    service["autostart_foreign"] = (
+        isinstance(detail, dict)
+        and detail.get("ours") is False
+        and not detail.get("stale")
+        and detail.get("state", "present") == "present"
+    )
     supervisor = service.get("supervisor")
     server = supervisor.get("server") if isinstance(supervisor, dict) else None
     up_since = server.get("up_since") if isinstance(server, dict) else None

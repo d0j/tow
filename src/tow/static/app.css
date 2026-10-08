@@ -183,6 +183,8 @@ main.auth-shell {
   padding: 1rem 1.1rem;
   box-shadow: var(--shadow);
 }
+/* Cards stacked on a page (Diagnostics) keep the gap the stat tiles above them have. */
+main > .card + .card, main > .card + form { margin-top: 1rem; }
 .credential-prompt[open] {
   width: min(34rem, calc(100% - 2rem));
   margin: 1rem auto;
@@ -346,7 +348,8 @@ a.set-link:hover { background: var(--panel2); text-decoration: none; }
 .log-line details.raw-error[open] { display: block; }
 details.raw-error > code { display: block; margin-top: .2rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 dialog.log-pop {
-  width: min(92vw, 90rem); height: min(88vh, 58rem); max-height: 88vh; padding: 0;
+  /* As tall as its lines, up to most of the screen (it opened full height for two lines). */
+  width: min(92vw, 90rem); height: auto; max-height: min(88vh, 58rem); padding: 0;
   border: 1px solid var(--line); border-radius: 10px;
   background: var(--bg); color: inherit;
 }
@@ -494,6 +497,7 @@ details.help[open] > summary { color: var(--acc); border-color: var(--acc2); }
 .help-pop code {
   background: var(--panel); color: var(--acc);
   padding: .05rem .28rem; border-radius: 4px; font-size: 12px;
+  overflow-wrap: anywhere; /* a long pattern wraps on a phone instead of running off the edge */
 }
 
 /* Settings: calm, explicit sections instead of an admin-table accordion. */
@@ -577,7 +581,10 @@ details.help[open] > summary { color: var(--acc); border-color: var(--acc2); }
   width: 1.1rem; height: 1.1rem; margin: .15rem 0 0;
   accent-color: var(--acc);
 }
-.check-field label { line-height: 1.45; cursor: pointer; color: var(--fg); font-size: 12.5px; }
+/* margin: 0 - the global label margin put the text ~7 px below its box outside .settings-form. */
+.check-field label { margin: 0; line-height: 1.45; cursor: pointer; color: var(--fg); font-size: 12.5px; }
+/* A check field that is itself the <label> (Backups) reads like the others, not like a field label. */
+label.check-field { margin: 0; color: var(--fg); font-size: 12.5px; cursor: pointer; }
 .check-field p { grid-column: 2; margin: 0; color: var(--mut); font-size: 12px; }
 .check-field p.locked-hint { color: var(--warn); }
 .check-field input:disabled + label { color: var(--mut); cursor: not-allowed; }
@@ -695,8 +702,9 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
   header.app nav { grid-area: nav; }
   .hdr-sites {
     grid-area: sites; min-width: 0; max-width: 100%; justify-self: stretch; overflow-x: auto; justify-content: flex-start;
-    padding-right: 1rem; mask-image: linear-gradient(to right, black calc(100% - 1rem), transparent);
+    padding-right: 2.5rem; mask-image: linear-gradient(to right, black calc(100% - 2.5rem), transparent);
   }
+  .hdr-sites:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
   .hdr-right { display: contents; }
   .hdr-controls { grid-area: right; justify-self: end; }
   .hdr-svc { grid-area: services; max-width: 55vw; padding-left: .5rem; margin-right: 0; border-left: 1px solid var(--line); }
@@ -811,12 +819,18 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .backup-inventory > .restore-point-list { padding: .35rem; max-height: 20rem; overflow-y: auto; overscroll-behavior: contain; }
 .backup-retention-form { display: grid; grid-template-columns: minmax(0, 12rem) auto; align-items: end; justify-content: start; gap: .35rem .5rem; }
 .backup-retention-form input { width: 100%; }
+/* The hint spans both columns; the button keeps its own width instead of growing to the hint's. */
+.backup-retention-form > button { justify-self: start; }
 .backup-retention-form > .field-hint { grid-column: 1 / -1; margin: 0; }
 .settings-page-compact .settings-empty { margin: .55rem 0 0; padding: .55rem .65rem; }
 .settings-page-compact .technical-details .command-list { margin-top: .5rem; }
 /* L6: backups are three cards: night copies, copies made by hand, a TOW file. */
 .backup-card { display: grid; gap: .6rem; }
 .backup-card .integration-head { padding-bottom: .5rem; }
+@media (max-width: 720px) {
+  /* A phone has no room beside the card's text: its status pill goes under the title. */
+  .backup-card .integration-head { flex-direction: column; align-items: flex-start; gap: .3rem; }
+}
 .backup-card h2 { margin: 0; font-size: .9rem; }
 .backup-card form { margin: 0; }
 .backup-card .restore-point-list { margin-top: 0; }
@@ -866,7 +880,11 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 /* Transport trouble (site unreachable, mirror paused) is amber, as the row's dot. */
 .form-error.warn { color: var(--warn); }
 
-.row-error { font-size: .9em; }
+/* The event's time goes under the event (it wrapped anyway, starting the line with "·"). */
+.event-at { display: block; }
+/* A long error ends in "…" inside its cell (a phone wraps it instead, below); the full text is
+   the tooltip and the edit panel. */
+.row-error { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9em; }
 /* The screen-reader note at the end of a long, clipped error line stays inside the cell. */
 .topic-event { position: relative; }
 .row-error.bad { color: var(--bad); }
@@ -981,6 +999,10 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
   details.row-edit > summary > .topic-name,
   details.row-edit > summary > [data-hl],
   details.row-edit.sites > summary > :first-child { padding-right: 7rem; }
+  /* The mirrors start right under the name, still beside the icons; the sign-in pill keeps its
+     own width instead of stretching like a field. */
+  details.row-edit.sites > summary > .mirror-list { padding-right: 7rem; }
+  details.row-edit.sites > summary > .pill { justify-self: start; }
   /* A phone has the width for one value per line: the whole folder and the whole error wrap
      instead of being cut off at the right edge. */
   .topic-path .clip-start { white-space: normal; direction: ltr; text-overflow: clip; overflow-wrap: anywhere; }

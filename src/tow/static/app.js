@@ -963,6 +963,25 @@ if (q) {
     const box = q.closest("details");
     if (box) box.open = true;
   }
+  // The search closes like the menus: Escape clears it first, then closes it; a click elsewhere
+  // closes an empty one (a search that still filters the list stays in sight).
+  const searchBox = q.closest("details");
+  if (searchBox) {
+    q.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      if (q.value) {
+        q.value = "";
+        q.dispatchEvent(new Event("input", { bubbles: true }));
+      } else {
+        searchBox.open = false;
+        searchBox.querySelector("summary")?.focus();
+      }
+    });
+    document.addEventListener("click", (event) => {
+      if (searchBox.open && !q.value && !searchBox.contains(event.target)) searchBox.open = false;
+    });
+  }
   sortRows();
   announce();
 }

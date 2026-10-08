@@ -421,6 +421,7 @@
           </div>
           <noscript><button type="submit">{{ t('settings.service.apply') }}</button></noscript>
         </form>
+        {% if service.autostart_foreign %}<p class="form-error warn" role="status">{{ t('doctor.autostart_foreign', where=(service.autostart_detail or {}).get('where') or 'TOW') }}</p>{% endif %}
         {% if service.supports_without_login and service.autostart %}
         <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
           <input type="hidden" name="enabled" value="1">

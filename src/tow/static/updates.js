@@ -9,7 +9,8 @@
   // What lies under the version badge: the browser's own hit test at a few points inside it
   // (corners, edges, middle) - not every control of the page measured on each scroll frame (a
   // Home of 2000 rows has 12 000). Hidden controls and closed accordions are not hit at all.
-  const CONTROLS = "button,input,select,textarea,a,summary,td,.flash";
+  // Status pills count too: the badge covered "No saved backups" and the edge of a card.
+  const CONTROLS = "button,input,select,textarea,a,summary,td,.flash,.pill";
   const positionOverlay = () => {
     if (!overlay || framePending) return;
     framePending = true;
