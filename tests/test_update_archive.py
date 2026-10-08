@@ -1030,7 +1030,7 @@ def test_an_update_writes_the_start_files_of_the_new_version(install, github):
     # The 1.22 file that ran this update goes on at the end of its update.py line: there it finds
     # the line that ends it with the update's exit code.
     resume = module.resume_offset(UPDATE_CMD_1_22_0)
-    assert update_cmd[resume:].startswith(module.crlf(module.RESUME).encode("ascii"))
+    assert update_cmd[resume:].startswith(module.crlf(module.RESUME.replace("{mark}", str(resume))).encode("ascii"))
     assert update_cmd == module.update_file(resume)
     assert (root / "runtime" / "update.py").read_bytes() == new_updater
     assert "the start files were written again from TOW 1.23.0: Start TOW.cmd, Stop TOW.cmd, Update TOW.cmd" in lines

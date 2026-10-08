@@ -60,10 +60,11 @@ timeout /t 3 /nobreak >nul 2>&1
 exit /b %TOW_CODE%
 """
 
-# The first lines of "Update TOW.cmd", before ``RESUME`` (``refresh``): they mark a run of this file.
+# The first lines of "Update TOW.cmd", before ``RESUME`` (``refresh``): they mark a run of this very
+# file with the offset of its ``RESUME`` line (0: the zip's file, which has none).
 UPDATE_HEAD = r"""@echo off
 setlocal
-set "TOW_FILE_RUN=1"
+set "TOW_FILE_RUN={mark}"
 """
 
 UPDATE_BODY = r"""rem TOW: double-click to update it to the latest release
@@ -104,7 +105,7 @@ pause
 exit /b %TOW_CODE%
 """
 
-UPDATE_CMD = UPDATE_HEAD + UPDATE_BODY
+UPDATE_CMD = UPDATE_HEAD.replace("{mark}", "0") + UPDATE_BODY
 
 ROOT_FILES = {"Start TOW.cmd": START_CMD, "Stop TOW.cmd": STOP_CMD, "Update TOW.cmd": UPDATE_CMD}
 
@@ -112,8 +113,10 @@ ROOT_FILES = {"Start TOW.cmd": START_CMD, "Stop TOW.cmd": STOP_CMD, "Update TOW.
 # "Update TOW.cmd" replaced while it waits for update.py goes on in the new file at the offset just
 # after the line that ran update.py. ``refresh`` puts this line exactly there: a run of the old
 # file ends with its update's exit code (and the pause every version of the file has there); a run
-# of the new file, which set TOW_FILE_RUN, passes over it.
-RESUME = "if not defined TOW_FILE_RUN pause & exit /b %ERRORLEVEL%\n"
+# of the new file, whose head set TOW_FILE_RUN to this line's offset, passes over it. Not merely
+# "defined": an old file that is itself a written-again one set it too, went on into the body and
+# ran the update a second time.
+RESUME = 'if not "%TOW_FILE_RUN%"=="{mark}" pause & exit /b %ERRORLEVEL%\n'
 # The line of every "Update TOW.cmd" since 1.22.0 that runs update.py.
 _RUNS_UPDATE = b'--ref "%TOW_REF%"'
 
@@ -142,9 +145,11 @@ def resume_offset(current: bytes) -> int | None:
 def update_file(resume_at: int | None) -> bytes | None:
     """ "Update TOW.cmd" that a run of the file it replaces, stopped at ``resume_at``, ends safely
     in; None when it cannot (the line does not fit there)."""
-    head, body = crlf(UPDATE_HEAD).encode("ascii"), crlf(UPDATE_BODY).encode("ascii")
     if resume_at is None:
         return None
+    mark = str(resume_at)
+    head = crlf(UPDATE_HEAD.replace("{mark}", mark)).encode("ascii")
+    body = crlf(UPDATE_BODY).encode("ascii")
     gap = resume_at - len(head)
     if gap == 0:
         padding = b""
@@ -152,7 +157,7 @@ def update_file(resume_at: int | None) -> bytes | None:
         padding = b"rem" + b" " * (gap - len(b"rem\r\n")) + b"\r\n"
     else:
         return None
-    return head + padding + crlf(RESUME).encode("ascii") + body
+    return head + padding + crlf(RESUME.replace("{mark}", mark)).encode("ascii") + body
 
 
 def _write(path: Path, data: bytes) -> None:
