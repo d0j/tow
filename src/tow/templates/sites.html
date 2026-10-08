@@ -83,7 +83,7 @@
   {% endif %}
   {% for name, spec in trackers.items() %}
     {% set mine = probes | selectattr('tracker', 'equalto', name) | list %}
-    <div class="row-wrap{% if frozen.get(name) %} is-paused{% endif %}" data-q="{{ (name ~ ' ' ~ (spec.title or '') ~ ' ' ~ ((spec.fetch_hosts or []) | join(' '))) | lower }}">
+    <div class="row-wrap{% if frozen.get(name) %} is-paused{% endif %}" id="site-row-{{ name }}" data-q="{{ (name ~ ' ' ~ (spec.title or '') ~ ' ' ~ ((spec.fetch_hosts or []) | join(' '))) | lower }}">
     <details class="row-edit sites{% if frozen.get(name) %} is-paused{% endif %}">
       <summary>
         {% set any_ok = mine | selectattr('ok') | list %}

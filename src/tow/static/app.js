@@ -26,6 +26,58 @@ const isLocalPostForm = (form, submitter = null) => {
   }
 };
 
+// A5: an action posted from a row or from the header reloads the page, and the focus went back
+// to the page's start. Just before the next page opens, the row and the action are kept for this
+// tab; the next page puts the focus on the same button of the same row, else the row's summary
+// (an edit was saved), else the row that took a deleted row's place, else the same header
+// button, else the message. Without storage the page opens as before.
+const FOCUS_KEY = "tow.focus.return";
+const rowOf = (element) => element?.closest?.(".row-wrap[id]") || null;
+const siblingRow = (row, step) => {
+  let next = row;
+  do next = step > 0 ? next.nextElementSibling : next.previousElementSibling;
+  while (next && !(next.matches(".row-wrap[id]") && !next.hidden));
+  return next?.id || "";
+};
+const rememberFocus = (form, nextUrl) => {
+  const row = rowOf(form);
+  if (!row && !form.closest?.("header.app, #flash")) return;
+  try {
+    sessionStorage.setItem(FOCUS_KEY, JSON.stringify({
+      path: nextUrl.pathname, action: form.getAttribute("action") || "", at: Date.now(),
+      row: row?.id || "", next: row ? siblingRow(row, 1) : "", previous: row ? siblingRow(row, -1) : "",
+    }));
+  } catch {
+    // no storage: the next page opens with the focus at its start, as before
+  }
+};
+const restoreFocus = () => {
+  let saved = null;
+  try {
+    saved = JSON.parse(sessionStorage.getItem(FOCUS_KEY) || "null");
+    sessionStorage.removeItem(FOCUS_KEY);
+  } catch {
+    return;
+  }
+  if (!saved || saved.path !== location.pathname || !(Date.now() - saved.at < 120000)) return;
+  // A refused add puts the focus in its field; a page that already moved the focus keeps it.
+  if (document.getElementById("add-error") || (document.activeElement && document.activeElement !== document.body)) return;
+  const buttonOf = (root) => [...(root?.querySelectorAll("form[action]") || [])]
+    .find((form) => form.getAttribute("action") === saved.action)?.querySelector("button");
+  const row = saved.row ? document.getElementById(saved.row) : null;
+  let target = null;
+  if (row) target = buttonOf(row.querySelector(":scope > .row-ops")) || row.querySelector(":scope > details > summary");
+  else if (saved.row) target = [saved.next, saved.previous].map((id) => document.getElementById(id)).find(Boolean)?.querySelector(":scope > details > summary");
+  else target = buttonOf(document.querySelector("header.app"));
+  if (!target || target.closest("[hidden]")) {
+    target = document.getElementById("flash");
+    if (target && !target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+  }
+  if (!target) return;
+  target.scrollIntoView({ block: "center" });
+  target.focus({ preventScroll: true });
+};
+
 const submitPostForm = async (form, submitter, preparedBody = null) => {
   if (form.dataset.submitting === "1") return;
   form.dataset.submitting = "1";
@@ -54,6 +106,7 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
     }
     if (!nextUrl) throw new Error(t("js.submit.no_next_page"));
     if (form.dataset.returnTarget) nextUrl.hash = form.dataset.returnTarget;
+    rememberFocus(form, nextUrl);
     window.location.assign(nextUrl);
   } catch (error) {
     delete form.dataset.submitting;
@@ -158,7 +211,10 @@ if (checkJob) {
       const data = await response.json();
       if (data.status === "done" || data.status === "failed") {
         // The server keeps the result and gives an address with its token: no text in the URL.
-        window.location.assign(data.redirect || "/");
+        const next = new URL(data.redirect || "/", location.href);
+        const checkForm = document.querySelector?.('header.app form[action="/check"]');
+        if (checkForm?.contains(document.activeElement)) rememberFocus(checkForm, next);
+        window.location.assign(next);
         return;
       }
       if (data.status !== "running") {
@@ -1300,3 +1356,6 @@ if (accLog && accBody) {
     }
   });
 }
+
+// Last: the rows are in their order (sort, filter) before the focus comes back to one (A5).
+restoreFocus();

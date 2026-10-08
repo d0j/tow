@@ -33,6 +33,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   the version at the end of the page as its footer.
 - Esc folds an open Home or Sites row from inside its edit panel and puts the focus back on the row; what was
   typed stays.
+- After pausing, checking, saving or removing a topic or a site, or an action in the header, the focus comes back
+  to the same row and button (a removed row's neighbour, else the message) instead of the start of the page.
 
 ## [1.27.1] — 2026-10-08
 
