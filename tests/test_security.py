@@ -457,3 +457,28 @@ def test_the_largest_topic_form_fits_the_cap():
     multipart, _ = _multipart(fields)
     plain = urlencode(fields).encode()
     assert max(len(multipart), len(plain)) * 1.5 < FORM_REQUEST_LIMIT, (len(multipart), len(plain))
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "user@127.0.0.1:8787",  # a user part
+        "user:pass@localhost:8787",
+        "127.0.0.1:8787/admin",  # a path
+        "127.0.0.1:8787?x=1",
+        "127.0.0.1:8787#top",
+        "127.0.0.1:0",  # no port 0
+        "localhost:0",
+        "127.0.0.1:65536",
+        "",
+    ],
+)
+def test_a_host_header_that_is_more_than_a_host_and_port_is_refused(host):
+    response = TestClient(app, client=("127.0.0.1", 50000)).get("/healthz", headers={"Host": host})
+    assert response.status_code == 403, response.status_code
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1:1", "localhost:65535", "127.0.0.1"])
+def test_any_real_port_is_a_host_and_port(host):
+    response = TestClient(app, client=("127.0.0.1", 50000)).get("/healthz", headers={"Host": host})
+    assert response.status_code == 200, response.status_code
