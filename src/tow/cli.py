@@ -73,6 +73,8 @@ def _human(data: Any) -> str:
                 or (t("web.check.changed") if row.get("changed") else "")
             )
             lines.append(f"{mark} {str(row.get('title') or row.get('id'))[:70]}" + (f" — {state}" if state else ""))
+            if row.get("note"):
+                lines.append(f"    {row['note']}")
         failed = sum(1 for row in data["results"] if not row.get("ok"))
         lines.append(t("cli.check.total", n=len(data["results"]), failed=failed))
         return "\n".join(lines)

@@ -346,7 +346,7 @@ def test_folder_moved_during_the_check_is_left_to_the_next_check(monkeypatch, st
     row = check.run_check(apply=True, notify=False, how="test")["results"][0]
     assert client.adds == []
     assert row["status"] == "skipped"
-    assert row["skipped"].startswith("во время проверки изменились папка")
+    assert row["skipped"].startswith("во время проверки изменились ссылка, папка")
     saved = load_state()["topics"][0]
     assert (saved["hash"], saved["save_path"]) == (OLD, "/media/new")
     # The next check adds the new revision where the topic now says.

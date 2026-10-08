@@ -175,26 +175,44 @@ def changed_owner_fields(started: tuple[Any, ...] | None, topic: Topic) -> froze
     return frozenset(key for key, before, after in zip(OWNER_FIELDS, started, now, strict=True) if before != after)
 
 
+def identity_changed(changed: Collection[str], topic: Topic, source: Topic) -> bool:
+    """The owner gave the topic another link or another client while the check ran: the check
+    worked on a torrent (or in a client) that is no longer the topic's."""
+    if "url" in changed:
+        return True
+    # The check sets the client it used on its copy; an edit that only wrote the same client
+    # down (a topic saved without one) is not a change of client.
+    return "client_id" in changed and str(topic.get("client_id") or "") != str(source.get("client_id") or "")
+
+
 def merge_check_results(
     disk: dict[str, Any],
     state: dict[str, Any],
     *,
     edited: Mapping[str, Collection[str]] | Collection[str] = frozenset(),
-) -> None:
+) -> frozenset[str]:
     """Copy the check-owned fields of every checked topic onto the freshly loaded state.
 
     ``edited``: topic id -> owner fields changed while the check ran (a plain collection of
     ids means "any of them").
+
+    A topic whose link or client changed meanwhile keeps nothing of this check (its hash,
+    selection, previous hashes and status were about the old torrent or client); the next
+    check does it again with what the owner saved. Returns the ids of those topics.
     """
     changes: Mapping[str, Collection[str]] = (
         edited if isinstance(edited, Mapping) else {str(tid): OWNER_FIELDS for tid in edited}
     )
     checked = {str(topic.get("id")): topic for topic in state.get("topics") or []}
+    dropped: set[str] = set()
     for topic in disk.get("topics") or []:
         source = checked.get(str(topic.get("id")))
         if not source:
             continue
         changed = changes.get(str(topic.get("id"))) or ()
+        if identity_changed(changed, topic, source):
+            dropped.add(str(topic.get("id")))
+            continue
         owner_edited = bool(changed)
         for key in _CHECK_OWNED_FIELDS:
             if owner_edited and key in _OWNER_WINS:
@@ -212,6 +230,7 @@ def merge_check_results(
             # The check applied the selection it started with; the owner's newer one has not
             # reached the client yet - the next check must apply it (M1).
             topic["selection_dirty"] = True
+    return frozenset(dropped)
 
 
 def store_revision(

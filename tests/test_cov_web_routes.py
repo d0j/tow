@@ -984,6 +984,7 @@ def test_topic_check_blocked_by_secret_store(monkeypatch, client):
         ({"ok": True, "changed": True}, "новая версия"),
         ({"ok": True, "skipped": "уже в клиенте"}, "без изменений: уже в клиенте"),
         ({"ok": True}, "без изменений"),
+        ({"ok": True, "added": True, "note": "ссылка изменилась"}, "без изменений: ссылка изменилась"),
     ],
 )
 def test_topic_check_flash_describes_the_result(monkeypatch, client, row, flash):

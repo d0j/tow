@@ -680,6 +680,11 @@ def test_human_output_of_a_scalar_is_the_text_itself():
     assert cli._human(3) == "3"
 
 
+def test_human_output_of_a_check_shows_a_row_note():
+    out = cli._human({"qbit": "ok", "results": [{"ok": True, "title": "Show", "note": "ссылка изменилась"}]})
+    assert out.splitlines()[1:3] == ["ok  Show", "    ссылка изменилась"]
+
+
 def test_secrets_status_generate_key_and_refusal_to_overwrite(capsys, tmp_path):
     assert cli.main(["secrets", "status", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["storage"] == "uninitialized"
