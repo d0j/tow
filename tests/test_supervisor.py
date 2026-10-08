@@ -15,7 +15,7 @@ import pytest
 from tow.config import load_config
 from tow.supervisor import layout
 from tow.supervisor.core import BACKOFF_MAX_SEC, Deps, Supervisor
-from tow.supervisor.schedule import Schedule, WakeDetector, local_slot
+from tow.supervisor.schedule import SPACE_EVERY_SEC, Schedule, WakeDetector, local_slot
 
 T0 = datetime(2026, 10, 1, 12, 0, tzinfo=UTC).timestamp()
 
@@ -957,3 +957,48 @@ def test_the_supervisor_reads_backup_time_and_interval_from_the_config(tmp_path)
     _world, sup = make(tmp_path)
     assert sup.schedule.backup_at == (5, 10)
     assert sup.schedule.interval_sec == 7200
+
+
+# --- the space pass ---------------------------------------------------------------------------
+
+
+def test_the_space_pass_runs_only_while_a_topic_waits_for_disk_space():
+    schedule = Schedule(started_at=T0)
+    facts = {"last_scheduled_check": T0, "last_backup_ok": T0, "last_backup_attempt": T0}
+    later = T0 + SPACE_EVERY_SEC
+    assert "space" not in dict(schedule.due(later, **facts))
+    assert "space" not in schedule.next_due(later, **facts)
+    schedule.space_waiting = True
+    assert "space" in dict(schedule.due(later, **facts))
+    schedule.started("space", later)
+    assert "space" not in dict(schedule.due(later + SPACE_EVERY_SEC - 1, **facts))
+    assert "space" in dict(schedule.due(later + SPACE_EVERY_SEC, **facts))
+
+
+def test_the_supervisor_starts_the_space_pass_from_its_facts(tmp_path):
+    world, sup = make(tmp_path, facts={"last_scheduled_check": T0, "last_backup_ok": T0, "space_waiting": True})
+    for _ in range(3 * SPACE_EVERY_SEC // 60):  # jobs run one at a time: check, progress, then space
+        for child in world.jobs():
+            child.code = 0
+        sup.tick()
+        world.clock.advance(60)
+    assert any("--space-only" in child.argv for child in world.jobs())
+    world.facts["space_waiting"] = False
+    sup._facts_at = -1e18
+    before = len(world.jobs())
+    for _ in range(3 * SPACE_EVERY_SEC // 60):
+        for child in world.jobs():
+            child.code = 0
+        sup.tick()
+        world.clock.advance(60)
+    assert not any("--space-only" in child.argv for child in world.jobs()[before:])
+
+
+def test_the_facts_say_whether_a_topic_waits_for_disk_space():
+    from tow.store import save_state
+    from tow.supervisor import _facts
+
+    save_state({"topics": [{"id": "t1", "waiting_space": {"hash": "B" * 40}}, {"id": "t2"}]})
+    assert _facts()["space_waiting"] is True
+    save_state({"topics": [{"id": "t1", "waiting_space": {"hash": "B" * 40}, "paused": True}]})
+    assert _facts()["space_waiting"] is False

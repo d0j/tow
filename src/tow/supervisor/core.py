@@ -7,7 +7,8 @@ The loop ticks every second and never blocks for long:
   port stays held, is stopped and started again after a pause that doubles from 1 s up to
   5 minutes and drops back to 1 s after ten quiet minutes. Restarts are counted; the owner is
   told after the first one and once more when they keep coming (the watchdog's messages);
-- scheduled checks, progress passes and night copies are child processes too, one at a time
+- scheduled checks, progress passes, space passes (only while a topic waits for disk space)
+  and night copies are child processes too, one at a time
   (a check additionally holds ``check_run_lock`` against checks started from the web page);
 - the watchdog's duties (lateness, night copies, change alerts, heartbeat, queued messages)
   run in-process every 10 minutes, without its restart part;
@@ -55,11 +56,12 @@ STOP_JOB_WAIT_SEC = 10 * 60
 STOP_RETRY_SEC = 10.0
 FACTS_EVERY_SEC = 60.0
 
-JOB_TIMEOUT_SEC = {"check": 3600.0, "timer": 3600.0, "progress": 600.0, "backup": 1800.0}
+JOB_TIMEOUT_SEC = {"check": 3600.0, "timer": 3600.0, "progress": 600.0, "space": 600.0, "backup": 1800.0}
 JOB_ARGS = {
     "check": ["check", "--apply", "--notify", "--global-only", "--json"],
     "timer": ["check", "--apply", "--notify", "--timer-only", "--json"],
     "progress": ["check", "--apply", "--notify", "--progress-only", "--json"],
+    "space": ["check", "--apply", "--notify", "--space-only", "--json"],
     "backup": ["backup", "--json"],
 }
 
@@ -85,7 +87,7 @@ class Deps:
     watchdog_pass: Callable[[float | None], Any]
     send: Callable[[str], bool]
     load_config: Callable[[], dict[str, Any]]
-    facts: Callable[[], dict[str, Any]]  # last_scheduled_check, last_backup_ok, topic_timers
+    facts: Callable[[], dict[str, Any]]  # last_scheduled_check, last_backup_ok, topic_timers, space_waiting
     crash_line: Callable[[float], str] = field(default=lambda _since: "")
     now: Callable[[], float] = time.time
     monotonic: Callable[[], float] = time.monotonic
@@ -186,6 +188,7 @@ class Supervisor:
             try:
                 self._facts = self.deps.facts()
                 self.schedule.topic_timers = dict(self._facts.get("topic_timers") or {})
+                self.schedule.space_waiting = bool(self._facts.get("space_waiting"))
             except Exception as exc:  # noqa: BLE001 - the supervisor loop never dies on a state read (logged)
                 LOG.warning("state not read: %s", type(exc).__name__)
 
