@@ -259,6 +259,42 @@ def test_a_logout_word_in_a_post_is_not_a_way_to_sign_out():
     assert not signed_in(quoted)
 
 
+_BROKEN_PAGES = {
+    "tags_never_end": "<a" * 1_000_000,  # each one was scanned to the end of the page
+    "posts_never_closed": "<a href='login.php?logout=1'>x</a>" + "<p class='post'>reply" * 100_000,
+    "nested_deep": "<div class='post'>" * 150_000 + "</div>" * 150_000,
+}
+
+
+@pytest.mark.parametrize("shape", sorted(_BROKEN_PAGES))
+def test_a_broken_page_of_megabytes_is_read_quickly(shape):
+    """A broken page near the size limit took minutes: every unended tag and every unclosed
+    post was looked through again from its own place."""
+    import time
+
+    from tow.trackers.generic import guest_page, link_text, signed_in, site_text
+
+    page = _BROKEN_PAGES[shape]
+    started = time.perf_counter()
+    site_text(page)
+    link_text(page)
+    signed_in(page)
+    guest_page(page)
+    assert time.perf_counter() - started < 3.0
+
+
+def test_closing_tags_are_matched_like_nested_elements():
+    from tow.trackers.generic import link_text, site_text
+
+    page = (
+        "<div id=top><div class=post>a <div>b</div> <a href='x.torrent'>c</a></div>"
+        "<DIV class='attach'><div>d</div></DIV> e <p class=post>f<br><p class=comment>g</p></div>"
+    )
+    # The first p.post is never closed (its </p> closes the comment): it is its tag alone.
+    assert site_text(page) == "<div id=top> <DIV class='attach'><div>d</div></DIV> e  f<br> </div>"
+    assert link_text(page) == "<DIV class='attach'><div>d</div></DIV>"
+
+
 def test_page_repeating_one_download_link_downloads_it(site):
     site.pages["/viewtopic.php?t=5"] = (
         "<html><a href='download.php?id=222'>a</a><a href='download.php?id=222'>b</a></html>"

@@ -63,10 +63,34 @@ _USER_TEXT_CLASSES = frozenset({"post_body", "postbody", "post-body", "post", "c
 _MAX_ELEMENT_TAGS = 5000
 
 
+def _tags(page: str) -> list[re.Match[str]]:
+    """The page's tags. Searched only up to the last ``>``: past it no tag can end, and a
+    broken ``<x`` there was scanned to the end of the page for every one (seconds on a page
+    full of them)."""
+    return list(_TAG.finditer(page, 0, page.rfind(">") + 1))
+
+
+def _closing_tags(tags: list[re.Match[str]]) -> dict[int, int]:
+    """Which tag closes which: opening tag's index -> its closing tag's index. One pass with a
+    stack per tag name; a tag never closed (or closed too far away) has no entry."""
+    open_by_name: dict[str, list[int]] = {}
+    closes: dict[int, int] = {}
+    for i, tag in enumerate(tags):
+        stack = open_by_name.setdefault(tag.group(2).casefold(), [])
+        if not tag.group(1):
+            stack.append(i)
+        elif stack:
+            start = stack.pop()
+            if i - start < _MAX_ELEMENT_TAGS:
+                closes[start] = i
+    return closes
+
+
 def _elements(page: str, classes: frozenset[str], ids: frozenset[str]) -> list[tuple[int, int]]:
     """Where the outermost elements with one of ``classes`` (or ``ids``) are: (start, end)."""
     wanted = {f"class:{name}" for name in classes} | {f"id:{name}" for name in ids}
-    tags = list(_TAG.finditer(page[:MAX_DOWNLOAD_PAGE_CHARS]))
+    tags = _tags(page[:MAX_DOWNLOAD_PAGE_CHARS])
+    closes: dict[int, int] | None = None
     found: list[tuple[int, int]] = []
     taken_until = 0
     for i, tag in enumerate(tags):
@@ -81,14 +105,9 @@ def _elements(page: str, classes: frozenset[str], ids: frozenset[str]) -> list[t
                 names.add(f"id:{value.strip()}")
         if not names & wanted:
             continue
-        name, depth, end = tag.group(2).casefold(), 0, tag.end()
-        for other in tags[i : i + _MAX_ELEMENT_TAGS]:
-            if other.group(2).casefold() != name:
-                continue
-            depth += -1 if other.group(1) else 1
-            if depth == 0:
-                end = other.end()
-                break
+        if closes is None:
+            closes = _closing_tags(tags)
+        end = tags[closes[i]].end() if i in closes else tag.end()
         found.append((tag.start(), end))
         taken_until = end
     return found

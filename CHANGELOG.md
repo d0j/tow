@@ -34,6 +34,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   steps aside for pills and comes last in the Tab order.
 - A second client still loading its torrents after a start is no longer believed empty (and added to again) when
   a check in between did not ask it.
+- A broken topic page of a few megabytes (tags or posts never closed) no longer holds a check for minutes.
 
 ## [1.26.0] — 2026-10-08
 
