@@ -32,6 +32,7 @@ from tow.store import (
     save_secrets,
     save_state,
     secret_undo_path,
+    state_path,
 )
 from tow.web import app, services
 
@@ -1220,6 +1221,51 @@ def test_actions_on_unknown_site_are_refused(monkeypatch, client, path, data):
     assert _flash(response) == "нет такого сайта"
     assert load_config() == config_before
     assert not encrypted_secrets_path().exists()
+
+
+@pytest.mark.parametrize(
+    ("path", "data", "back"),
+    [
+        ("/topics/t1/pause", {}, "/"),
+        ("/topics/t1/delete", {}, "/"),
+        ("/sites/rutor/freeze", {}, "/sites"),
+        ("/sites/rutor/prefer", {"host": "http://rutor.is/"}, "/sites"),
+        ("/settings/backup/automatic", {"enabled": "1"}, "/settings?open=backup"),
+    ],
+)
+def test_a_data_file_held_open_is_a_message_to_try_again(monkeypatch, client, path, data, back):
+    """Another program kept state.json (or config.yaml) open longer than the replace retries:
+    pause, delete, a site's pause... answered with a server error (PermissionError)."""
+    from tow import store
+
+    _seed(_topic())
+    before = (state_path().read_bytes(), load_config())
+
+    def held(_source, _target):
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(store.os, "replace", held)
+    monkeypatch.setattr(store.time, "sleep", lambda _seconds: None)
+    joint = "&" if "?" in back else "?"
+    referer = f"http://127.0.0.1{back}{joint}flash=old"  # the host the test client asks
+    response = client.post(path, data=data, headers={"Referer": referer}, follow_redirects=False)
+
+    assert _flash(response).startswith("TOW не смог сейчас записать свой файл данных")
+    assert response.headers["location"].startswith(f"{back}{joint}flash=")
+    assert (state_path().read_bytes(), load_config()) == before
+
+
+def test_a_data_file_error_goes_home_without_a_page_of_this_site(monkeypatch, client):
+    from tow import store
+
+    _seed(_topic())
+    monkeypatch.setattr(store.os, "replace", lambda _s, _t: (_ for _ in ()).throw(PermissionError(13, "denied")))
+    monkeypatch.setattr(store.time, "sleep", lambda _seconds: None)
+    response = client.post(
+        "/topics/t1/pause", headers={"Referer": "http://elsewhere.example/sites"}, follow_redirects=False
+    )
+    assert _path(response) == "/"
+    assert _flash(response).startswith("TOW не смог сейчас записать свой файл данных")
 
 
 def test_freeze_toggles_site_pause(client):
