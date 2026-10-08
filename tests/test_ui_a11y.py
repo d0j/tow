@@ -359,5 +359,7 @@ def test_personal_timers_have_hidden_words_and_are_drawn_only_when_seen_and_chan
     assert 'setAttribute("aria-label", `${node.title}' not in JS
     assert "new IntersectionObserver(" in JS
     assert "for (const node of onScreen || topicTimerNodes)" in JS
+    # A timer that scrolls into view waits for the scroll to pause: a draw per frame cost a layout.
+    assert "arrived = window.setTimeout(tickTimers, 150);" in JS
     assert "if (last.text !== text) {" in JS
     assert "if (last.title !== title) {" in JS
