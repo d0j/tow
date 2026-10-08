@@ -13,6 +13,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   English words ("usage:", "options", "show this help message and exit").
 - The Guide in Settings says that rutor's mirrors rest 30 minutes, that the check icon in a site's row ends the
   pause, that a check you start still tries a site at its daily limit, and where both logs are.
+- A session cookie with a non-ASCII digit (such as "²") is treated as no session: before, every page before sign-in
+  and signing out answered with a server error.
 
 ## [1.28.0] — 2026-10-08
 
