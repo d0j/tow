@@ -364,3 +364,14 @@ def test_undoing_a_password_change_does_not_bring_old_sessions_back(password):
 
     assert load_secrets()["lan_auth"]["digest"] == password["digest"]  # the old password is back ...
     assert not session_is_valid(old_device, lan_password_session_key(password))  # ... its sessions are not
+
+
+def test_a_cookie_with_a_non_ascii_digit_is_refused_not_a_crash(password):
+    # The Cookie header is read as latin-1: byte 0xB2 arrives as "²", which str.isdigit() takes.
+    raw = b"tow_session=AAAAAAAAAAAAAAAA.\xb2.AAAAAAAAAAAAAAAA"
+    assert not session_is_valid(raw.decode("latin-1").split("=", 1)[1], TOKEN)
+    assert not session_is_valid(f"{'A' * 16}.{'9' * 13}.{'A' * 16}", TOKEN)
+    device = TestClient(app, client=LAN, headers={**ORIGIN, "Cookie": raw})
+
+    assert device.get("/settings", headers=HTML, follow_redirects=False).headers["location"].startswith("/login")
+    assert device.post("/logout", headers=HTML, follow_redirects=False).status_code == 303

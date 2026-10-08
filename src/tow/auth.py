@@ -318,7 +318,8 @@ def _parts(cookie: str | None) -> tuple[str, int, str] | None:
     if len(pieces) != 3:
         return None
     session_id, expires, signature = pieces
-    if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", session_id) or not expires.isdigit():
+    # ASCII digits only: str.isdigit() also takes "²", which int() refuses (the header is latin-1).
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", session_id) or not re.fullmatch(r"[0-9]{1,12}", expires):
         return None
     if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", signature):
         return None
