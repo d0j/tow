@@ -91,3 +91,10 @@ def test_successful_static_files_keep_cache_policy_including_revalidation(query)
     assert unchanged.status_code == 304
     assert_security_headers(unchanged)
     assert unchanged.headers["cache-control"] == expected
+
+
+@pytest.mark.parametrize("path", ["/settings?v=1", "/healthz?v=1", "/login?v=abc"])
+def test_a_page_asked_with_a_version_query_is_never_immutable(path):
+    response = TestClient(app).get(path)
+    assert response.status_code == 200
+    assert "immutable" not in response.headers.get("cache-control", "")
