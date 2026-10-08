@@ -109,21 +109,31 @@ def test_update_takes_the_environments_python_else_the_newest_real_one(tmp_path)
 def test_an_update_file_written_again_while_it_runs_ends_cleanly(tmp_path):
     # cmd.exe reads a running batch file again after each command, from the byte it stopped at:
     # the new file holds, right there, the line that ends the old run with the update's exit code.
+    # Three runs in a row: the v1.22.0 file, the file written then, and the zip's own file. Each
+    # runs update.py once (a real recovery once ran it twice: the written file's own mark let the
+    # old run go on into the body of the next one).
     import subprocess
 
     from test_update_archive import UPDATE_CMD_1_22_0
 
     root = tmp_path / "my TOW (1) & co"
-    (root / "runtime" / "python").mkdir(parents=True)
+    python = root / "runtime" / "python"
+    python.mkdir(parents=True)
     base = Path(sys.base_prefix)
-    link = root / "runtime" / "python" / "cpython-3.14.0-windows-x86_64-none"
-    subprocess.run(["cmd.exe", "/d", "/c", "mklink", "/J", str(link), str(base)], check=True, capture_output=True)
+    # the v1.22.0 file takes any runtime\python\cpython-3*; later ones the folder pyvenv.cfg names
+    links = [python / "cpython-3.14.0-windows-x86_64-none", python / base.name]
+    for link in dict.fromkeys(links):
+        subprocess.run(["cmd.exe", "/d", "/c", "mklink", "/J", str(link), str(base)], check=True, capture_output=True)
     try:
+        (root / "app" / ".venv").mkdir(parents=True)
+        (root / "app" / ".venv" / "pyvenv.cfg").write_text(f"home = {base}\n", encoding="utf-8")
         scripts = root / "app" / "scripts"
         scripts.mkdir(parents=True)
+        runs = tmp_path / "runs.txt"
         (scripts / "update.py").write_text(
             "import importlib.util, sys\n"
             "from pathlib import Path\n"
+            f"with open({str(runs)!r}, 'a') as handle: handle.write('run\\n')\n"
             f"spec = importlib.util.spec_from_file_location('rf',{str(ROOT / 'scripts' / 'root_files.py')!r})\n"
             "module = importlib.util.module_from_spec(spec)\n"
             "spec.loader.exec_module(module)\n"
@@ -132,24 +142,39 @@ def test_an_update_file_written_again_while_it_runs_ends_cleanly(tmp_path):
             encoding="utf-8",
         )
         script = root / "Update TOW.cmd"
-        script.write_bytes(UPDATE_CMD_1_22_0)
+        module = bundle._ROOT
+        # the zip of an earlier version (other wording): the same form as the one built now
+        zip_file = module.rendered()["Update TOW.cmd"].replace(b"rem It stops TOW", b"rem It halts TOW")
+        written = module.update_file(module.resume_offset(UPDATE_CMD_1_22_0))
+        for count, (before, after) in enumerate(
+            [
+                (UPDATE_CMD_1_22_0, written),
+                (written, module.update_file(module.resume_offset(written))),
+                (zip_file, module.update_file(module.resume_offset(zip_file))),
+            ],
+            start=1,
+        ):
+            script.write_bytes(before)
 
-        done = subprocess.run(
-            f'cmd.exe /d /s /c ""{script}" v1.29.0"',
-            capture_output=True,
-            stdin=subprocess.DEVNULL,
-            timeout=120,
-            check=False,
-        )
+            done = subprocess.run(
+                f'cmd.exe /d /s /c ""{script}" v1.29.0"',
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+                timeout=120,
+                check=False,
+            )
 
-        output = done.stdout + done.stderr
-        assert b"'Update TOW.cmd'], [])" in output.replace(b'"', b"'"), output  # it was written again
-        assert done.returncode == 7, output  # the update's exit code, through the new file's line
-        assert b"not recognized" not in output, output
-        assert b"Press any key" in output  # the pause of the old file, from the new one
-        assert script.read_bytes() == bundle._ROOT.update_file(bundle._ROOT.resume_offset(UPDATE_CMD_1_22_0))
+            output = done.stdout + done.stderr
+            assert b"'Update TOW.cmd'], [])" in output.replace(b'"', b"'"), output  # it was written again
+            assert done.returncode == 7, output  # the update's exit code, through the new file's line
+            assert b"not recognized" not in output, output
+            assert b"Press any key" in output  # the pause of the old file, from the new one
+            assert script.read_bytes() == after
+            assert runs.read_text(encoding="utf-8").count("run") == count, output  # once per run
     finally:
-        os.rmdir(link)  # the junction only, never the Python it points to
+        for link in dict.fromkeys(links):
+            if link.exists():
+                os.rmdir(link)  # the junction only, never the Python it points to
 
 
 @pytest.mark.allow_system  # cmd.exe (and its PowerShell check) on a temp layout

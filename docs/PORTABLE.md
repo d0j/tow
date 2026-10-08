@@ -557,8 +557,9 @@ same steps, with the code from the release instead of git.
   made to them by hand are not kept. `cmd.exe` reads a running batch file again after each
   command from the byte where it stopped, so the new `Update TOW.cmd` (the one running this
   update) holds, exactly at the end of the old file's `update.py` line, a line that ends the
-  old run with the update's exit code (`pause & exit /b`; a run of the new file passes over it,
-  `TOW_FILE_RUN`). An `Update TOW.cmd` without that line (`--ref "%TOW_REF%"`) is not one TOW
+  old run with the update's exit code (`pause & exit /b`). A run of the new file passes over it:
+  its first lines set `TOW_FILE_RUN` to that line's offset, which no other file's run has (an old
+  run of a file written the same way set its own). An `Update TOW.cmd` without that line (`--ref "%TOW_REF%"`) is not one TOW
   wrote and is left as it is. A version without `scripts/root_files.py` (going back before it)
   leaves the files as they are; they still start it.
 - `--source FILE` (and `--sums FILE`) take a local archive instead of a download.
