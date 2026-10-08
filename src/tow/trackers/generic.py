@@ -626,7 +626,9 @@ class GenericHttpTracker:
             ignore_cool=ignore_cool,
             persist=persist,
         )
-        result = self._page_magnet(thttp.html_text(response))
+        page_html = thttp.html_text(response)
+        self._pages[tid] = (time.monotonic(), page_html)  # the title comes from the same page
+        result = self._page_magnet(page_html)
         if result is None:
             raise TrackerError("tracker.no_magnet", prefix=self.name)
         return result
