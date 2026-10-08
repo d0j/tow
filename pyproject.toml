@@ -65,6 +65,7 @@ dev = [
     "httpx2>=2.12.0",
     "mypy>=1.18",
     "pytest>=9.1.1",
+    "pytest-timeout>=2.4",
     "pytest-xdist>=3.8",
     "ruff>=0.16.6",
     "types-regex>=2026.6.28",
@@ -101,6 +102,10 @@ markers = [
     "allow_git: the test may run git (only git) on a throwaway repository in the temp folder",
 ]
 pythonpath = ["src"]
+# A test that hangs fails after 5 minutes with every thread's stack, instead of holding the gate
+# for hours (the slowest test takes about 100 s). "thread" works on every system.
+timeout = 300
+timeout_method = "thread"
 filterwarnings = [
     "error::DeprecationWarning",
 ]
