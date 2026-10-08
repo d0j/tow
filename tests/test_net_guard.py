@@ -222,3 +222,18 @@ def test_tracker_and_notifier_clients_use_the_pinned_transport_by_default(monkey
     with tracker_client(public_only=True) as tracker, notifier_client() as notifier:
         assert isinstance(tracker._transport, PublicOnlyTransport)
         assert isinstance(notifier._transport, PublicOnlyTransport)
+
+
+@pytest.mark.parametrize("address", ["fe80::1%eth0", "fe80::1%12", "::1%lo"])
+def test_a_zoned_link_local_or_loopback_address_is_not_public(address):
+    assert is_public(address) is False
+
+
+def test_a_zoned_public_address_is_judged_without_its_zone():
+    assert is_public("2606:4700::1111%eth0") is True
+
+
+@pytest.mark.parametrize("address", ["64:ff9b::c0a8:0101", "64:ff9b::1", "::ffff:0:0.0.0.1", "64:ff9b::7f00:1"])
+def test_nat64_forms_are_judged_by_every_bit_of_their_ipv4_part(address):
+    # 64:ff9b::1 is 0.0.0.1 behind a NAT64 gateway: the last bit decides it is not 64:ff9b::0.
+    assert is_public(address) is False
