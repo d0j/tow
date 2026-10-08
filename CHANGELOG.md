@@ -26,6 +26,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The log in the header and in Settings and the episodes list can be scrolled with the keyboard: each box takes
   the focus and has a name.
 - Links inside sentences (notes, hints, the Guide) are underlined, not told from the text by colour alone.
+- On a phone a long topic name wraps onto the next line like the folder and the error, instead of ending in "…".
 
 ## [1.27.1] — 2026-10-08
 
