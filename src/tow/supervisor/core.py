@@ -490,12 +490,12 @@ class Supervisor:
             if job.child.poll() is not None or mono - job.started_mono > timeout:
                 self._finish_job(wall, mono, stopped=job.child.poll() is None)
             return
-        for name, _late in self.schedule.due(wall, **self._facts_now()):
+        for name, late in self.schedule.due(wall, **self._facts_now()):
             if name in JOB_ARGS:
-                self._start_job(name, wall, mono)
+                self._start_job(name, wall, mono, late)
                 return
 
-    def _start_job(self, name: str, wall: float, mono: float) -> None:
+    def _start_job(self, name: str, wall: float, mono: float, late: float = 0.0) -> None:
         if name == "timer" and not self._reserve_timers(wall):
             return
         if name == "backup":
@@ -507,10 +507,11 @@ class Supervisor:
                 LOG.warning("backup settings not read: %s", type(exc).__name__)
             if not self.schedule.backup_enabled:
                 return
-        self.schedule.started(name, wall)
+        self.schedule.started(name, wall, late)
         persisted_key = {"check": "check_started_at", "backup": "backup_attempt_at"}.get(name)
         if persisted_key:
-            self._persisted[persisted_key] = wall
+            # The check's cadence survives a restart: when it was due, as the schedule counts it.
+            self._persisted[persisted_key] = self.schedule.last[name]
             with contextlib.suppress(OSError):
                 layout.write_json(self._schedule_file, self._persisted)
         argv = [self.python, "-m", "tow", *JOB_ARGS[name]]
@@ -581,9 +582,10 @@ class Supervisor:
         thread = self._watchdog_thread
         if thread is not None and getattr(thread, "is_alive", lambda: False)():
             return
-        if not any(name == "watchdog" for name, _ in self.schedule.due(wall, **self._facts_now())):
+        late = next((late for name, late in self.schedule.due(wall, **self._facts_now()) if name == "watchdog"), None)
+        if late is None:
             return
-        self.schedule.started("watchdog", wall)
+        self.schedule.started("watchdog", wall, late)
         wake = self.wake.woke_at
         self._watchdog_thread = self._background(lambda: self.deps.watchdog_pass(wake), "tow-supervisor-watchdog")
 
