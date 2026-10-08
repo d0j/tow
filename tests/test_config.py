@@ -380,3 +380,40 @@ def test_the_checked_config_is_kept_for_the_same_file_and_equals_a_fresh_check(m
 
     _write("interval_sec: 600\n")
     assert load_config()["interval_sec"] == 600
+
+
+@pytest.mark.parametrize("value", ['"²"', '"' + "9" * 5000 + '"', '"١٢"'], ids=["superscript", "5000-digits", "arabic"])
+def test_a_number_that_is_not_plain_ascii_digits_is_named_not_a_crash(value):
+    # "²" passes str.isdigit() but not int(); 5000 digits exceed int()'s 4300-digit limit.
+    from tow.bundle import ExportImportError, _validate_config_schema
+    from tow.config import ConfigError, validated
+
+    _write(f"interval_sec: {value}\n")
+    with pytest.raises(ConfigError) as caught:
+        load_config()
+    assert caught.value.code == "config_error.whole_number"
+    assert caught.value.params["key"] == "interval_sec"
+    with pytest.raises(ExportImportError, match="interval_sec must be a whole number"):
+        _validate_config_schema(yaml.safe_load(f"interval_sec: {value}\n"))
+    assert validated({"interval_sec": " 1800 "})["interval_sec"] == 1800  # a quoted number still loads
+
+
+def test_a_config_saved_in_another_encoding_says_to_save_it_as_utf8():
+    from fastapi.testclient import TestClient
+
+    from tow.config import ConfigError
+    from tow.i18n import t
+    from tow.web import app
+
+    config_path().write_bytes("# Привет\nport: 8787\n".encode("cp1251"))  # Notepad's ANSI
+    with pytest.raises(ConfigError) as caught:
+        load_config()
+    assert caught.value.code == "config_error.encoding"
+    assert "UTF-8" in t("config_error.encoding", "en")
+    assert "UTF-8" in t("config_error.encoding", "ru")
+    with pytest.raises(ConfigError, match="UTF-8"):
+        set_interval_sec(600)
+
+    page = TestClient(app).get("/", headers={"Accept": "text/html"})
+    assert page.status_code != 500
+    assert "UTF-8" in page.text
