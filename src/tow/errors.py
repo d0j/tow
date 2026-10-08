@@ -104,6 +104,9 @@ def class_of(code: str) -> str | None:
 
 _MSG = "$msg"  # a stored value that is itself a message: {"$msg": {"code": ..., "params": ...}}
 _PREFIX = "_prefix"
+# How deep stored messages inside messages are rendered (as deep as a bundle's JSON may nest);
+# a deeper one is shown as its code. A thousand levels in a damaged file hit RecursionError.
+_MAX_NESTED_MESSAGES = 32
 
 
 def _stored(value: Any) -> Any:
@@ -119,20 +122,20 @@ def _stored(value: Any) -> Any:
     return str(value)
 
 
-def _shown(value: Any, lang: str) -> str:
-    """A value as the text shows it in ``lang``."""
+def _shown(value: Any, lang: str, depth: int = 0) -> str:
+    """A value as the text shows it in ``lang`` (``depth``: stored messages around it)."""
     if isinstance(value, (TowError, Msg)):
         return value.text(lang)
     if isinstance(value, Mapping) and isinstance(value.get(_MSG), Mapping):
-        return render(value[_MSG], lang)
+        return _render(value[_MSG], lang, "", depth + 1)
     if isinstance(value, float) and not isinstance(value, bool):
         return i18n.format_decimal(value, 1, lang)
     return "" if value is None else str(value)
 
 
-def _text(code: str, params: Mapping[str, Any], lang: str | None) -> str:
+def _text(code: str, params: Mapping[str, Any], lang: str | None, depth: int = 0) -> str:
     language = lang or i18n.current()
-    values = {name: _shown(value, language) for name, value in params.items() if name != _PREFIX}
+    values = {name: _shown(value, language, depth) for name, value in params.items() if name != _PREFIX}
     text = i18n.translate(code, language, **values)
     prefix = params.get(_PREFIX)
     return f"{prefix}: {text}" if prefix else text
@@ -221,13 +224,19 @@ def record_of(error: BaseException | None) -> dict[str, Any] | None:
 def render(record: Mapping[str, Any] | None, lang: str | None = None, fallback: str = "") -> str:
     """A stored ``{"code", "params"}`` in ``lang``; ``fallback`` (the text stored with it) when
     the record is missing or its code is unknown to this TOW (an older or newer one wrote it)."""
+    return _render(record, lang, fallback, 0)
+
+
+def _render(record: Mapping[str, Any] | None, lang: str | None, fallback: str, depth: int) -> str:
     if not isinstance(record, Mapping):
         return fallback
     code = record.get("code")
     if not isinstance(code, str) or not i18n.has(code):
         return fallback
+    if depth > _MAX_NESTED_MESSAGES:
+        return code
     params = record.get("params")
-    return _text(code, params if isinstance(params, Mapping) else {}, lang)
+    return _text(code, params if isinstance(params, Mapping) else {}, lang, depth)
 
 
 def render_stored(code: Any, params: Any, fallback: str, lang: str | None = None) -> str:
