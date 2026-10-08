@@ -15,6 +15,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   taking it for a server its own TOW left behind.
 - A `TOW_ROOT` variable left from a move (the old folder) no longer makes TOW start with empty data and a new
   master key in the old place: the launchers and TOW use the folder TOW is in, and `run.log` says to remove it.
+- On Windows the TOW service status in Settings no longer stays out of date after Settings or `tow status` read
+  it at the moment TOW rewrote it, and no temporary file is left next to it.
 
 ## [1.27.0] — 2026-10-08
 

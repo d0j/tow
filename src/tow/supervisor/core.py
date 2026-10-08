@@ -640,9 +640,12 @@ class Supervisor:
         stable = {key: value for key, value in current.items() if key != "at"}
         if stable == self._status_written:
             return
-        self._status_written = stable
-        with contextlib.suppress(OSError):
+        try:
             layout.write_json(self._status_file, current, durable=False)
+        except OSError as exc:  # a reader held it (Windows) or the disk refused: the next tick tries again
+            LOG.debug("status.json not written: %s", type(exc).__name__)
+            return
+        self._status_written = stable  # only once it is on disk
 
     def loop(self) -> None:
         while not self.finished:
