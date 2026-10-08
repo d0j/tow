@@ -331,6 +331,11 @@ def _cf(status: int = 403, **headers: str) -> httpx.Response:
         lambda: _cf(403),
         lambda: _cf(503),
         lambda: httpx.Response(200, text="<html>x</html>", headers={"cf-mitigated": "challenge"}),
+        # An error status with Cloudflare's header and a check page of another title.
+        lambda: httpx.Response(
+            403, text="<html><title>Один момент…</title></html>", headers={"cf-mitigated": "challenge"}
+        ),
+        lambda: httpx.Response(503, content=b"\x00", headers={"cf-mitigated": "Challenge"}),
     ],
 )
 def test_cloudflare_check_is_cloudflare_without_a_login(site, answer):

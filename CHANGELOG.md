@@ -39,6 +39,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   to the first one online.
 - A windows-1251 page whose server names only its latin-1 default (and the page no charset) is read as Russian,
   not as "Ñåðèàë".
+- A mirror answering with an error status and Cloudflare's `cf-mitigated: challenge` header is reported as a
+  Cloudflare check, in a check and in Diagnostics, not as an HTTP error.
 
 ## [1.26.0] — 2026-10-08
 
