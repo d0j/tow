@@ -47,7 +47,7 @@ jobs:
         if: matrix.py311
         run: |
           uv python install 3.11 --no-bin --no-registry
-          "$(uv python find --no-project 3.11)" -m py_compile scripts/update.py src/tow/update_worker.py src/tow/platform/locks.py
+          "$(uv python find --no-project 3.11)" -m py_compile scripts/update.py scripts/root_files.py src/tow/update_worker.py src/tow/platform/locks.py
       - name: Sync locked environment
         run: uv sync --frozen
       - name: Quality gate${{ matrix.audit && ' (with dependency audit)' || '' }}

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import os
 import re
 import sys
 import tarfile
@@ -101,6 +102,54 @@ def test_update_takes_the_environments_python_else_the_newest_real_one(tmp_path)
     assert picked() == "cpython-3.14.8-windows-x86_64-none"
     cfg.write_text("home = D:\\old\\cpython-3.13.1-windows-x86_64-none\n", encoding="utf-8")
     assert picked() == "cpython-3.14.10-windows-x86_64-none"
+
+
+@pytest.mark.allow_system  # cmd.exe runs a v1.22.0 "Update TOW.cmd" whose update.py writes the new one
+@pytest.mark.skipif(sys.platform != "win32", reason="cmd.exe")
+def test_an_update_file_written_again_while_it_runs_ends_cleanly(tmp_path):
+    # cmd.exe reads a running batch file again after each command, from the byte it stopped at:
+    # the new file holds, right there, the line that ends the old run with the update's exit code.
+    import subprocess
+
+    from test_update_archive import UPDATE_CMD_1_22_0
+
+    root = tmp_path / "my TOW (1) & co"
+    (root / "runtime" / "python").mkdir(parents=True)
+    base = Path(sys.base_prefix)
+    link = root / "runtime" / "python" / "cpython-3.14.0-windows-x86_64-none"
+    subprocess.run(["cmd.exe", "/d", "/c", "mklink", "/J", str(link), str(base)], check=True, capture_output=True)
+    try:
+        scripts = root / "app" / "scripts"
+        scripts.mkdir(parents=True)
+        (scripts / "update.py").write_text(
+            "import importlib.util, sys\n"
+            "from pathlib import Path\n"
+            f"spec = importlib.util.spec_from_file_location('rf',{str(ROOT / 'scripts' / 'root_files.py')!r})\n"
+            "module = importlib.util.module_from_spec(spec)\n"
+            "spec.loader.exec_module(module)\n"
+            f"print(module.refresh(Path({str(root)!r})))\n"
+            "sys.exit(7)\n",
+            encoding="utf-8",
+        )
+        script = root / "Update TOW.cmd"
+        script.write_bytes(UPDATE_CMD_1_22_0)
+
+        done = subprocess.run(
+            f'cmd.exe /d /s /c ""{script}" v1.29.0"',
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            timeout=120,
+            check=False,
+        )
+
+        output = done.stdout + done.stderr
+        assert b"'Update TOW.cmd'], [])" in output.replace(b'"', b"'"), output  # it was written again
+        assert done.returncode == 7, output  # the update's exit code, through the new file's line
+        assert b"not recognized" not in output, output
+        assert b"Press any key" in output  # the pause of the old file, from the new one
+        assert script.read_bytes() == bundle._ROOT.update_file(bundle._ROOT.resume_offset(UPDATE_CMD_1_22_0))
+    finally:
+        os.rmdir(link)  # the junction only, never the Python it points to
 
 
 def test_the_readme_says_how_to_start_stop_and_keep_the_key_in_both_languages():

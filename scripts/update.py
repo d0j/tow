@@ -45,7 +45,11 @@ Steps (each one checked; nothing is reported as done without its read-back):
    one and check it - and the report says which step failed. The previous one is started only
    when its code and the data are both back, never on a mix;
 8. on success prune old update snapshots (the newest 5; night copies, key copies and anything
-   else in backup/ are never touched).
+   else in backup/ are never touched);
+9. an install without git: the Windows bundle's start files ("Start TOW.cmd", "Stop TOW.cmd",
+   "Update TOW.cmd", scripts/root_files.py) are written again from the code before the switch
+   and from the new code after it, and ``runtime/update.py`` from the new code: an install
+   that began with an older zip no longer keeps that zip's files.
 
 ``<TOW>/update-state.json`` records the run (the watchdog holds back for 30 minutes while it says
 ``in_progress``).
@@ -113,6 +117,8 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 # cut would once N entries of an archive switch have moved, so the smoke test can check the
 # start files' refusal and the recovery on a real install. Without it nothing happens.
 TEST_CUT_SWITCH = "TOW_TEST_CUT_SWITCH_AFTER"
+# The Windows bundle's start files in <TOW> (scripts/root_files.py writes them).
+ROOT_FILE_NAMES = ("Start TOW.cmd", "Stop TOW.cmd", "Update TOW.cmd")
 TEST_CUT_EXIT = 97
 
 # English texts; the install's language file (src/tow/locales, section "update") wins when it
@@ -178,6 +184,9 @@ TEXTS = {
     ),
     "recovering": "an earlier update was cut off while it replaced the code: putting back TOW {version} first",
     "recovery_failed": "the cut-off update could not be undone: {error}; run the update again to retry",
+    "root_files": "the start files were written again from TOW {version}: {names}",
+    "root_files_kept": "{name} was left as it is: it is not a file TOW wrote",
+    "root_files_failed": "the start files could not be written again ({error})",
     "newer_data": (
         "the data changed after the update was cut off ({path}): putting back the update snapshot ({snapshot}) would"
         " lose that, so nothing was changed. To go back to TOW {version} and that snapshot anyway, run: {command}"
@@ -1165,6 +1174,18 @@ def _project_version(pyproject: Path) -> str:
     return ""
 
 
+def _load_module(path: Path) -> Any:
+    """A standard-library module of the code by its path (scripts/ is not on sys.path)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("tow_update_" + path.stem, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _try_lock(handle) -> bool:
     handle.seek(0, os.SEEK_END)
     if handle.tell() == 0:
@@ -1243,6 +1264,9 @@ class Update:
         self.held = False  # a rollback could not put code and data back: TOW must stay stopped
         self.snapshot: Path | None = None
         self.manifest: dict[str, str] = {}
+        # Where a cmd.exe that runs "Update TOW.cmd" goes on in it once this run ends: taken from the
+        # file as it was before this run wrote it again (scripts/root_files.py).
+        self.resume_at: int | None = None
 
     # --- helpers -----------------------------------------------------------------------------
 
@@ -1542,6 +1566,51 @@ class Update:
         for _stamp, folder in sorted(found, reverse=True)[self.keep :]:
             shutil.rmtree(folder, ignore_errors=True)
 
+    # --- the start files of an install without git ------------------------------------------
+
+    def refresh_root_files(self, app: Path) -> None:
+        """The Windows bundle's start files of ``app``'s version into <TOW> (its
+        scripts/root_files.py; a version without it is left out). Said, and recorded in
+        update-state.json; a failure here never fails the update."""
+        if not isinstance(self.code, ArchiveCode) or not self.sys.windows:
+            return
+        if not any((self.root / name).exists() for name in ROOT_FILE_NAMES):
+            return  # not the bundle: install.sh writes its own start files
+        source = app / "scripts" / "root_files.py"
+        if not source.is_file():
+            return
+        version = _project_version(app / "pyproject.toml") or "?"
+        try:
+            module = _load_module(source)
+            if self.resume_at is None:
+                with contextlib.suppress(OSError):
+                    self.resume_at = module.resume_offset((self.root / "Update TOW.cmd").read_bytes())
+            written, kept = module.refresh(self.root, resume_at=self.resume_at)
+        except Exception as exc:  # noqa: BLE001 - the update itself is not changed by its start files
+            self.say("root_files_failed", error=str(exc) or type(exc).__name__)
+            return
+        for name in kept:
+            self.say("root_files_kept", name=name)
+        if written:
+            self.say("root_files", version=version, names=", ".join(written))
+            self.write_state(root_files=sorted({*self.state.get("root_files", []), *written}))
+
+    def refresh_runtime_copy(self) -> None:
+        """``runtime/update.py`` (what the start files run while app/scripts may be missing) from
+        the new code, so it is not the previous version's until the next update."""
+        stable = self.root / "runtime" / "update.py"
+        new = self.app / "scripts" / "update.py"
+        if not isinstance(self.code, ArchiveCode) or not stable.is_file() or not new.is_file():
+            return
+        try:
+            if new.read_bytes() == stable.read_bytes():
+                return
+            temporary = stable.with_name(".update.py.tmp")
+            shutil.copy2(new, temporary)
+            os.replace(temporary, stable)
+        except OSError as exc:
+            self.say("root_files_failed", error=exc)
+
     # --- the run -----------------------------------------------------------------------------
 
     def refuse_too_old(self, target: str) -> None:
@@ -1617,6 +1686,8 @@ class Update:
                 self.stop()
                 self.progress("backup")
                 self.take_snapshot(target)
+                # Before anything moves: a switch cut off now is undone with these files.
+                self.refresh_root_files(self.app)
             except BaseException:
                 code.discard()  # the code was not switched: an unpacked archive goes
                 raise
@@ -1659,6 +1730,8 @@ class Update:
         if result != "ok":
             return 1
         self.prune()
+        self.refresh_root_files(self.app)
+        self.refresh_runtime_copy()
         self.say("ok", version=self.version(), port=self.port)
         return 0
 

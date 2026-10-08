@@ -1903,6 +1903,9 @@
     "latest_older": "the latest release, {ref}, is older than the installed TOW {version}; nothing was updated (to go back to it, name it: --ref {ref})",
     "recovering": "an earlier update was cut off while it replaced the code: putting back TOW {version} first",
     "recovery_failed": "the cut-off update could not be undone: {error}; run the update again to retry",
+    "root_files": "the start files were written again from TOW {version}: {names}",
+    "root_files_kept": "{name} was left as it is: it is not a file TOW wrote",
+    "root_files_failed": "the start files could not be written again ({error})",
     "newer_data": "the data changed after the update was cut off ({path}): putting back the update snapshot ({snapshot}) would lose that, so nothing was changed. To go back to TOW {version} and that snapshot anyway, run: {command}"
   },
   "watchdog": {

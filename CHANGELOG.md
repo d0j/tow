@@ -11,6 +11,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   encrypted payload: state.json:notify_lease…token") while a messenger delivery is in progress, for example while
   a messenger server cannot be reached: the delivery's claim is named `owner` now, and one an older TOW left is
   recognised in its exact form. A real credential in state, config or history is still refused.
+- A Windows zip install that began with an older zip no longer keeps that zip's `Start TOW.cmd`, `Stop TOW.cmd` and
+  `Update TOW.cmd` for good: an update writes the new version's files into the TOW folder, before it replaces the
+  code and again after. With a 1.22 `Update TOW.cmd`, running the update again after a cut-off update failed with
+  "can't open file …\app\scripts\update.py"; the guide says how to recover such an install by hand.
 
 ## [1.28.1] — 2026-10-08
 
