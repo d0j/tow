@@ -21,6 +21,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   names scroll sideways between the sections and the controls, and the keyboard reaches them.
 - A screen reader hears the state of each site and of the torrent client in the header, and a failed check
   of the countdown, in words: before, only their colour told it.
+- Home with hundreds of personal timers redraws each second only the timers on screen, and only what changed;
+  a screen reader reads a timer's meaning from its text instead of a label rewritten every second.
 
 ## [1.27.1] — 2026-10-08
 

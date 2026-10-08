@@ -356,22 +356,55 @@ if (topicTimerNodes.length) {
     scheduled: "js.timer.scheduled", paused: "js.timer.paused", done: "js.timer.done",
     stopped: "js.timer.stopped", waiting: "js.timer.waiting", queued: "js.timer.queued", running: "js.timer.running",
   };
-  const tickTimers = () => {
-    const now = serverNow + performance.now() - sampledAt;
-    for (const node of topicTimerNodes) {
-      if (!node.isConnected) continue;
-      const state = node.dataset.timerState;
-      const at = Number(node.dataset.timerAt) * 1000;
-      const seconds = Math.max(0, Math.ceil((at - now) / 1000));
-      const p = (n) => String(n).padStart(2, "0");
-      const text = state === "scheduled" ? `${p(Math.floor(seconds / 3600))}:${p(Math.floor(seconds % 3600 / 60))}:${p(seconds % 60)}` : ["queued", "running"].includes(state) ? "00:00:00" : "—";
-      const value = node.querySelector("[data-timer-value]");
-      if (value.textContent !== text) value.textContent = text;
-      const phase = state === "scheduled" && !seconds ? "queued" : state;
-      node.title = `${t("js.timer.title", { minutes: node.dataset.timerMinutes })} · ${t(phaseKeys[phase] || phaseKeys.waiting)}`;
-      node.setAttribute("aria-label", `${node.title} · ${text}`);
+  // Each second only the timers on screen are drawn, and only what changed is written (500
+  // timers rewrote their text, tooltip and label every second: ~20 ms/s on a 2000-topic Home).
+  // A timer coming into view is drawn at once. The value is visible text; its meaning is the
+  // tooltip and the hidden words before it (no aria-label on a span without a role).
+  const p = (n) => String(n).padStart(2, "0");
+  const drawn = new Map();
+  const onScreen = typeof IntersectionObserver === "undefined" ? null : new Set();
+  const drawTimer = (node, now) => {
+    const state = node.dataset.timerState;
+    const at = Number(node.dataset.timerAt) * 1000;
+    const seconds = Math.max(0, Math.ceil((at - now) / 1000));
+    const text = state === "scheduled" ? `${p(Math.floor(seconds / 3600))}:${p(Math.floor(seconds % 3600 / 60))}:${p(seconds % 60)}` : ["queued", "running"].includes(state) ? "00:00:00" : "—";
+    const phase = state === "scheduled" && !seconds ? "queued" : state;
+    const title = `${t("js.timer.title", { minutes: node.dataset.timerMinutes })} · ${t(phaseKeys[phase] || phaseKeys.waiting)}`;
+    let last = drawn.get(node);
+    if (!last) {
+      last = { value: node.querySelector("[data-timer-value]"), words: node.querySelector("[data-timer-words]"), text: null, title: null };
+      drawn.set(node, last);
+    }
+    if (last.text !== text) {
+      last.text = text;
+      last.value.textContent = text;
+    }
+    if (last.title !== title) {
+      last.title = title;
+      node.title = title;
+      if (last.words) last.words.textContent = `${title} `;
     }
   };
+  const tickTimers = () => {
+    const now = serverNow + performance.now() - sampledAt;
+    for (const node of onScreen || topicTimerNodes) {
+      if (node.isConnected) drawTimer(node, now);
+    }
+  };
+  if (onScreen) {
+    const watcher = new IntersectionObserver((entries) => {
+      const now = serverNow + performance.now() - sampledAt;
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          onScreen.add(entry.target);
+          drawTimer(entry.target, now);
+        } else {
+          onScreen.delete(entry.target);
+        }
+      });
+    });
+    topicTimerNodes.forEach((node) => watcher.observe(node));
+  }
   healthPoll.add({
     due: () => timersDue,
     shown: () => timersDue !== null,

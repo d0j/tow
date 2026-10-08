@@ -88,6 +88,7 @@ def test_countdown_and_personal_timers_share_one_health_poll():
 
     assert verdict["firstMinute"] == [0, 10, 30, 60]
     assert verdict["timerUpdated"] is True
+    assert verdict["timerWords"] is True
     assert verdict["clock"] == "00:00:00"
     assert verdict["whileHidden"] == 0
     assert verdict["onShow"] == 1

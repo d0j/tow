@@ -14,10 +14,12 @@ const clock = {
   textContent: "", title: "", classList: { add() {}, toggle() {}, remove() {} },
 };
 const value = { textContent: "" };
+const words = { textContent: "" };
 const timerNode = {
   dataset: { topicTimer: "t1", timerNow: String(now / 1000), timerAt: String(now / 1000 + 600), timerState: "stopped", timerMinutes: "10" },
   isConnected: true, title: "", attributes: {},
-  querySelector: () => value, setAttribute(key, text) { this.attributes[key] = text; }, remove() { this.isConnected = false; },
+  querySelector: (selector) => (selector === "[data-timer-words]" ? words : value),
+  setAttribute(key, text) { this.attributes[key] = text; }, remove() { this.isConnected = false; },
 };
 const document = {
   hidden: false,
@@ -76,4 +78,6 @@ const whileHidden = polls().length - beforeHidden;
 document.hidden = false;
 (listeners.visibilitychange || []).forEach((fn) => fn());
 await new Promise((r) => setImmediate(r));
-console.log(JSON.stringify({ firstMinute, timerUpdated, clock: clock.textContent, whileHidden, onShow: polls().length - beforeHidden }));
+// The timer's meaning is its tooltip and hidden words, never an aria-label rewritten each second.
+const timerWords = words.textContent === `${timerNode.title} ` && !("aria-label" in timerNode.attributes);
+console.log(JSON.stringify({ firstMinute, timerUpdated, timerWords, clock: clock.textContent, whileHidden, onShow: polls().length - beforeHidden }));
