@@ -18,6 +18,21 @@ while [ -L "$self" ]; do  # started through a link (e.g. ~/bin/tow): find the re
 done
 TOW_APP=$(CDPATH='' cd -- "$(dirname -- "$self")/.." && pwd -P)
 
+# A TOW_ROOT set before (a variable of the whole account, left from a move or another install) is
+# kept only when it names the folder above this code folder; the code folder itself (older
+# launchers set that) is found again below. Another folder would get a new data/ and master key,
+# and TOW would start there with no data.
+if [ -n "${TOW_ROOT:-}" ]; then
+    given=$(CDPATH='' cd -- "$TOW_ROOT" 2>/dev/null && pwd -P) || given=
+    if [ "$given" = "$(dirname -- "$TOW_APP")" ]; then
+        TOW_ROOT=$given
+    else
+        if [ "$given" != "$TOW_APP" ]; then
+            echo "TOW: TOW_ROOT=$TOW_ROOT is not the folder of this TOW, so it is ignored. Remove the variable if it is left from a move or another install." >&2
+        fi
+        TOW_ROOT=
+    fi
+fi
 if [ -z "${TOW_ROOT:-}" ]; then
     TOW_ROOT=$TOW_APP
     parent=$(dirname -- "$TOW_APP")

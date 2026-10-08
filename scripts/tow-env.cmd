@@ -9,6 +9,16 @@ for %%I in ("%~dp0..") do set "TOW_APP=%%~fI"
 rem The install is the parent of an app folder that has config.yaml or data\ next to it.
 for %%I in ("%TOW_APP%") do set "TOW_APP_NAME=%%~nxI"
 for %%I in ("%TOW_APP%\..") do set "TOW_PARENT=%%~fI"
+rem A TOW_ROOT set before (a variable of the whole account, left from a move or another install) is
+rem kept only when it names the folder above this code folder; the code folder itself (older
+rem launchers set that) is found again below. Another folder would get a new data\ and master key,
+rem and TOW would start there with no data.
+set "TOW_GIVEN="
+if defined TOW_ROOT for %%I in ("%TOW_ROOT%\.") do set "TOW_GIVEN=%%~fI"
+if defined TOW_GIVEN if /i not "%TOW_GIVEN%"=="%TOW_APP%" if /i not "%TOW_GIVEN%"=="%TOW_PARENT%" echo TOW: TOW_ROOT="%TOW_ROOT%" is not the folder of this TOW, so it is ignored. Remove the variable if it is left from a move or another install. 1>&2
+if defined TOW_GIVEN if /i not "%TOW_GIVEN%"=="%TOW_PARENT%" set "TOW_ROOT="
+if defined TOW_GIVEN if /i "%TOW_GIVEN%"=="%TOW_PARENT%" set "TOW_ROOT=%TOW_PARENT%"
+set "TOW_GIVEN="
 if not defined TOW_ROOT if /i "%TOW_APP_NAME%"=="app" if exist "%TOW_PARENT%\config.yaml" set "TOW_ROOT=%TOW_PARENT%"
 if not defined TOW_ROOT if /i "%TOW_APP_NAME%"=="app" if exist "%TOW_PARENT%\data\" set "TOW_ROOT=%TOW_PARENT%"
 if not defined TOW_ROOT set "TOW_ROOT=%TOW_APP%"

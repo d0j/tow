@@ -103,6 +103,36 @@ def test_variables_that_lead_a_portable_install_elsewhere_are_named(monkeypatch,
     assert layout.outside_overrides(env) == []
 
 
+def test_a_tow_root_left_from_a_move_is_kept_for_children_and_named(monkeypatch, tmp_path):
+    # Not followed (tow.paths.root_env_ignored): the children resolve the same install from the
+    # same variable, and run.log says to remove it.
+    from tow import paths
+
+    root = tmp_path / "TOW"
+    (root / "data").mkdir(parents=True)
+    monkeypatch.setattr(paths, "repo_root", lambda: root / "app")
+    monkeypatch.setattr(layout, "repo_root", lambda: root / "app")
+    monkeypatch.setattr(sys, "prefix", str(root / "app" / ".venv"))
+    stale = str(tmp_path / "old" / "TOW")
+    env = layout.child_env({"TOW_ROOT": stale})
+    assert env["TOW_ROOT"] == stale
+    assert env["TOW_HOME"] == str(root / "data")
+    assert layout.outside_overrides(env) == ["TOW_ROOT"]
+    assert layout.child_env({"TOW_ROOT": str(root)})["TOW_ROOT"] == str(root)
+    assert layout.outside_overrides({"TOW_ROOT": str(root)}) == []
+
+
+def test_run_names_a_tow_root_it_ignores(run_env, monkeypatch):
+    monkeypatch.setattr(layout, "outside_overrides", lambda: ["TOW_ROOT"])
+    world = _world_that_stops_after(2)
+    deps = world.deps()
+    deps.sleep = world.sleep  # type: ignore[attr-defined]
+    assert run_supervisor(deps) == 0
+    log = (layout.logs_dir() / "run.log").read_text(encoding="utf-8")
+    assert "TOW_ROOT=" in log
+    assert "is ignored" in log
+
+
 def test_run_logs_a_variable_leading_out_of_the_install(run_env, monkeypatch):
     monkeypatch.setattr(layout, "outside_overrides", lambda: ["TOW_CONFIG"])
     world = _world_that_stops_after(2)

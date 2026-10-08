@@ -102,6 +102,50 @@ def test_a_copy_running_the_originals_code_is_told_apart(monkeypatch, tmp_path):
     assert paths.foreign_code() is None
 
 
+def test_a_tow_root_left_from_a_move_is_not_followed(monkeypatch, tmp_path):
+    # Audit 08.10.2026: TOW_ROOT=C:\TOW left for the whole account after moving to D:\TOW made
+    # TOW create data/ and a new master key in the old place and start with no data.
+    import sys
+
+    app = _checkout(tmp_path / "moved" / "TOW" / "app")
+    (tmp_path / "moved" / "TOW" / "config.yaml").write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(paths, "repo_root", lambda: app)
+    monkeypatch.setattr(sys, "prefix", str(app / ".venv"))  # this install's own environment
+    monkeypatch.delenv("TOW_HOME", raising=False)
+    _checkout(tmp_path / "old-copy" / "TOW" / "app")  # the old folder may still be there too
+    for old in (tmp_path / "old" / "TOW", tmp_path / "old-copy" / "TOW"):
+        monkeypatch.setenv("TOW_ROOT", str(old))
+        assert paths.root() == tmp_path / "moved" / "TOW"
+        assert paths.data_dir() == tmp_path / "moved" / "TOW" / "data"
+        assert paths.root_env_ignored() is True
+        assert paths.foreign_code() is None
+    assert not (tmp_path / "old" / "TOW").exists()  # nothing created in the old place
+
+    # This install named by TOW_ROOT, also as an older launcher's code folder: followed.
+    for own in (tmp_path / "moved" / "TOW", app):
+        monkeypatch.setenv("TOW_ROOT", str(own))
+        assert paths.root() == tmp_path / "moved" / "TOW"
+        assert paths.root_env_ignored() is False
+    assert paths.root_env_ignored("") is False
+
+
+def test_a_copys_environment_running_this_code_is_not_redirected(monkeypatch, tmp_path):
+    # The other way round: the environment is the copy's (its .venv still imports this code).
+    # TOW_ROOT, the copy, is followed - and the copy is refused for running another folder's code.
+    import sys
+
+    original = _checkout(tmp_path / "TOW" / "app")
+    (tmp_path / "TOW" / "data").mkdir()
+    copy = tmp_path / "Copy of TOW"
+    (copy / "app" / ".venv").mkdir(parents=True)
+    monkeypatch.setattr(paths, "repo_root", lambda: original)
+    monkeypatch.setattr(sys, "prefix", str(copy / "app" / ".venv"))
+    monkeypatch.setenv("TOW_ROOT", str(copy))
+    assert paths.root() == copy
+    assert paths.root_env_ignored() is False
+    assert paths.foreign_code() == copy
+
+
 def test_a_checkout_or_a_root_without_code_has_nothing_to_compare(bare, monkeypatch, tmp_path):
     code = _checkout(tmp_path / "tow")
     monkeypatch.setattr(paths, "repo_root", lambda: code)

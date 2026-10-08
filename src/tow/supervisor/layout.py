@@ -76,12 +76,15 @@ def child_env(base: dict[str, str] | None = None) -> dict[str, str]:
         env.setdefault("TOW_HOME", str(root / "data"))
         if (root / "config.yaml").is_file():
             env.setdefault("TOW_CONFIG", str(root / "config.yaml"))
-    env["TOW_ROOT"] = str(root)
+    # A TOW_ROOT this install does not follow (left from a move) stays as it was: the children
+    # ignore it the same way, and run.log names it at every start (outside_overrides).
+    if not paths.root_env_ignored(env.get("TOW_ROOT", "")):
+        env["TOW_ROOT"] = str(root)
     env["PYTHONIOENCODING"] = "utf-8"  # output files keep Cyrillic readable
     return env
 
 
-OVERRIDES = ("TOW_HOME", "TOW_CONFIG", "TOW_MASTER_KEY_FILE")
+OVERRIDES = ("TOW_ROOT", "TOW_HOME", "TOW_CONFIG", "TOW_MASTER_KEY_FILE")
 
 
 def outside_overrides(env: dict[str, str] | None = None) -> list[str]:
@@ -91,6 +94,7 @@ def outside_overrides(env: dict[str, str] | None = None) -> list[str]:
     start TOW in the owner's environment), so a variable set for the whole account - left from
     another install, say - makes this one use another data folder, config or key. Said in
     run.log at every start; a development checkout is not a portable install and is skipped.
+    A ``TOW_ROOT`` of another folder is not followed (``paths.root_env_ignored``) but named too.
     """
     values = os.environ if env is None else env
     root = install_root()

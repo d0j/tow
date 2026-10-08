@@ -42,7 +42,12 @@ Development checkout: the repo root plays `<TOW>` (data/, keys/, config.yaml git
 
 Root discovery (`tow.paths.root()`, built):
 1. `TOW_ROOT` (the launchers set it). An older launcher that set it to the code folder is
-   recognised: when it equals the code folder of a runtime layout, the parent is used.
+   recognised: when it equals the code folder of a runtime layout, the parent is used. One that
+   names another folder than the runtime install whose `app/` runs and whose environment is in
+   use (a variable for the whole account left from a move: `C:\TOW` after moving to `D:\TOW`) is
+   not followed - otherwise TOW would create `data/` and a new master key in the old place and
+   start empty: the launchers ignore it with a note on stderr, TOW takes the code's install
+   (`paths.root_env_ignored`), and `tow run` names it in `run.log` (`layout.outside_overrides`).
 2. The code folder is named `app` and its parent has `config.yaml` or `data/` → that parent.
 3. The code folder is a checkout (`pyproject.toml` + `src/tow`) → the checkout (development).
 4. An installed wheel without a layout: the parent of `TOW_CONFIG`, else of `TOW_HOME`; else
@@ -685,7 +690,8 @@ launchers' environment and Python 3.11 syntax.
 ## 6. Launchers (built)
 
 - `scripts/tow-env.cmd` (shared by the Windows launchers `tow.cmd` and `tow-setup.cmd`): `TOW_APP`
-  (the code), `TOW_ROOT` (discovery as in §1), `TOW_EXE`, `TOW_HOME`, `TOW_CONFIG`, the uv
+  (the code), `TOW_ROOT` (discovery as in §1; one set before is kept only when it names the
+  folder above `TOW_APP`, `scripts/tow` the same), `TOW_EXE`, `TOW_HOME`, `TOW_CONFIG`, the uv
   variables of §1 for a runtime install, `TOW_UV` (`runtime\bin\uv.exe` when present). A legacy
   `data\master.key` and `data\lan-auth.token` are no longer set here (since 1.21 `tow.store` and
   `tow.auth` find them, so `scripts/tow`, autostart and the task behave the same).

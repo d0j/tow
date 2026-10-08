@@ -303,6 +303,14 @@ def run_supervisor(deps: Deps | None = None) -> int:
         )
         LOG.info("TOW %s started (pid %s)", __version__, os.getpid())
         for name in layout.outside_overrides():
+            if name == "TOW_ROOT":  # not followed (tow.paths.root_env_ignored): only named
+                LOG.warning(
+                    "TOW_ROOT=%s (set in the environment TOW was started with) is not this install (%s) "
+                    "and is ignored: remove it if it is left from a move or another TOW",
+                    os.environ.get(name, ""),
+                    layout.install_root(),
+                )
+                continue
             LOG.warning(
                 "%s=%s (set in the environment TOW was started with) leads out of this install (%s): "
                 "remove it if it was meant for another TOW",
