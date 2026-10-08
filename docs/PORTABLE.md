@@ -556,10 +556,12 @@ same steps, with the code from the release instead of git.
   (`update-state.json`: `root_files`); a failure is said and does not fail the update. Changes
   made to them by hand are not kept. `cmd.exe` reads a running batch file again after each
   command from the byte where it stopped, so the new `Update TOW.cmd` (the one running this
-  update) holds, exactly at the end of the old file's `update.py` line, a line that ends the
-  old run with the update's exit code (`pause & exit /b`). A run of the new file passes over it:
-  its first lines set `TOW_FILE_RUN` to that line's offset, which no other file's run has (an old
-  run of a file written the same way set its own). An `Update TOW.cmd` without that line (`--ref "%TOW_REF%"`) is not one TOW
+  update) is laid out on the old one: `rem` lines (at most 1000 bytes each) make its own
+  `update.py` line end at the same byte, and the old run goes on with the new file's last lines
+  (exit code, pause, end). Where the new file is too long for that (the short 1.22 file), a line
+  at that byte ends the old run the same way (`pause & exit /b`); a run of the new file passes
+  over it, as its first lines set `TOW_FILE_RUN` to that line's offset, which no other file's run
+  has. A file that already has this version's form is not written again, and the size stays. An `Update TOW.cmd` without that line (`--ref "%TOW_REF%"`) is not one TOW
   wrote and is left as it is. A version without `scripts/root_files.py` (going back before it)
   leaves the files as they are; they still start it.
 - `--source FILE` (and `--sums FILE`) take a local archive instead of a download.

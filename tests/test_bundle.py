@@ -171,10 +171,34 @@ def test_an_update_file_written_again_while_it_runs_ends_cleanly(tmp_path):
             assert b"Press any key" in output  # the pause of the old file, from the new one
             assert script.read_bytes() == after
             assert runs.read_text(encoding="utf-8").count("run") == count, output  # once per run
+            if count > 1:
+                assert len(after) == len(before)  # aligned on the old file: it does not grow
     finally:
         for link in dict.fromkeys(links):
             if link.exists():
                 os.rmdir(link)  # the junction only, never the Python it points to
+
+
+def test_start_files_written_again_settle_and_stay_small(tmp_path):
+    # A real update wrote "Update TOW.cmd" again at every run, with a longer padding line each time.
+    from test_update_archive import UPDATE_CMD_1_22_0
+
+    module = bundle._ROOT
+    (tmp_path / "Update TOW.cmd").write_bytes(UPDATE_CMD_1_22_0)
+    assert module.refresh(tmp_path) == (["Start TOW.cmd", "Stop TOW.cmd", "Update TOW.cmd"], [])
+    first = (tmp_path / "Update TOW.cmd").read_bytes()
+    assert module.refresh(tmp_path) == (["Update TOW.cmd"], [])  # the guard line goes, the size stays
+    second = (tmp_path / "Update TOW.cmd").read_bytes()
+    assert len(second) == len(first)
+    for _ in range(3):
+        assert module.refresh(tmp_path) == ([], [])  # the same version writes nothing
+    assert (tmp_path / "Update TOW.cmd").read_bytes() == second
+    assert max(len(line) for line in second.splitlines()) <= 1000
+    padded = module.update_file(50_000)
+    assert padded is not None
+    assert max(len(line) for line in padded.splitlines(keepends=True)) <= 1000
+    assert module.resume_offset(padded) == 50_000
+    assert module.update_file(3) is None  # nothing fits before that byte
 
 
 @pytest.mark.allow_system  # cmd.exe (and its PowerShell check) on a temp layout
