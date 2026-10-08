@@ -9,10 +9,12 @@ TOW is portable: everything it writes lives inside the root (docs/PORTABLE.md)::
     <root>/backup/        night copies, pre-update snapshots
     <root>/runtime/       the Python uv installed for TOW, uv's cache
 
-The root is ``TOW_ROOT`` when set; else the parent of the code folder when it is an ``app``
-folder next to ``config.yaml`` or ``data/`` (a runtime install); else the code checkout itself
-(development: its ``config.yaml``, ``data/`` and ``keys/`` are gitignored). ``TOW_HOME`` and
-``TOW_CONFIG`` stay explicit overrides of the data folder and the config file.
+The root is ``TOW_ROOT`` when set (unless it names another folder than the runtime install this
+code and its environment live in: a variable left from a move); else the parent of the code
+folder when it is an ``app`` folder next to ``config.yaml`` or ``data/`` (a runtime install);
+else the code checkout itself (development: its ``config.yaml``, ``data/`` and ``keys/`` are
+gitignored). ``TOW_HOME`` and ``TOW_CONFIG`` stay explicit overrides of the data folder and the
+config file.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from __future__ import annotations
 import contextlib
 import os
 import shutil
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -64,6 +67,39 @@ def _is_checkout(code: Path) -> bool:
     return (code / "pyproject.toml").is_file() and (code / "src" / "tow").is_dir()
 
 
+def _inside(path: Path, folder: Path) -> bool:
+    inner, outer = (os.path.normcase(os.path.realpath(item)) for item in (path, folder))
+    return inner == outer or inner.startswith(outer.rstrip(os.sep) + os.sep)
+
+
+def _stale_root(given: Path, code: Path) -> Path | None:
+    """This code's own install when ``TOW_ROOT`` (``given``) names another folder, else None.
+
+    A variable set for the whole account and left from a move (``C:\\TOW`` after moving to
+    ``D:\\TOW``): followed, TOW would create data/ and a new master key in the old place and
+    start with no data. It is not followed when this code is ``<install>/app`` of a runtime
+    layout and the running environment is that install's too - the launchers ignore it the
+    same way. A copy's environment running this code is another matter (``foreign_code``).
+    """
+    own = _runtime_parent(code)
+    if own is None or _same_folder(given, own) or not _inside(Path(sys.prefix), own):
+        return None
+    return own
+
+
+def root_env_ignored(value: str | None = None) -> bool:
+    """``TOW_ROOT`` (``value``, else the environment's) names another folder than this install,
+    and ``root()`` does not follow it. ``tow run`` names it in run.log (``layout.outside_overrides``)."""
+    text = os.environ.get(_ROOT_ENV, "") if value is None else value
+    if not text.strip():
+        return False
+    code = repo_root()
+    given = _absolute(text.strip())
+    if os.path.normcase(str(given)) in (os.path.normcase(str(code)), os.path.normcase(str(code.parent))):
+        return False
+    return _stale_root(given, code) is not None
+
+
 def root() -> Path:
     """The install root (see the module docstring)."""
     code = repo_root()
@@ -72,6 +108,8 @@ def root() -> Path:
         # Older launchers set TOW_ROOT to the code folder; the install is its parent then.
         if os.path.normcase(str(given)) == os.path.normcase(str(code)):
             return _runtime_parent(code) or given
+        if os.path.normcase(str(given)) != os.path.normcase(str(code.parent)):
+            return _stale_root(given, code) or given
         return given
     runtime = _runtime_parent(code)
     if runtime is not None:

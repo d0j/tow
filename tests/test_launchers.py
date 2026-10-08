@@ -200,6 +200,55 @@ def test_a_copied_install_says_to_run_setup_instead_of_running_the_originals_cod
     assert "ran" not in done.stdout
 
 
+@pytest.mark.allow_system  # the launcher's environment in a temp install
+@pytest.mark.parametrize(
+    ("given", "ignored"),
+    [(None, False), ("old", True), ("root/", False), ("app", False), ("missing", True)],
+)
+def test_a_tow_root_of_another_folder_is_ignored_by_the_launchers(tmp_path, given, ignored):
+    # Audit 08.10.2026: TOW_ROOT=C:\TOW left for the whole account after a move to D:\TOW was
+    # kept by the launchers: data\ and a new master key in the old place, TOW started empty.
+    import os
+    import shutil
+    import subprocess
+
+    root = tmp_path / "TOW"
+    shutil.copytree(ROOT / "scripts", root / "app" / "scripts")
+    (root / "data").mkdir()
+    (tmp_path / "old" / "app").mkdir(parents=True)  # the old folder may still be there
+    env = {key: value for key, value in os.environ.items() if not key.startswith(("TOW_", "UV_"))}
+    if given is not None:
+        env["TOW_ROOT"] = {
+            "old": str(tmp_path / "old"),
+            "root/": str(root) + os.sep,
+            "app": str(root / "app"),
+            "missing": str(tmp_path / "gone"),
+        }[given]
+    if os.name == "nt":
+        probe = tmp_path / "probe.cmd"
+        probe.write_text(
+            f'@echo off\r\ncall "{root / "app" / "scripts" / "tow-env.cmd"}"\r\necho root=%TOW_ROOT%\r\n'
+            "echo home=%TOW_HOME%\r\n",
+            encoding="utf-8",
+        )
+        argv = ["cmd.exe", "/d", "/c", str(probe)]
+    else:
+        bin_dir = root / "app" / ".venv" / "bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "python").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")  # "this folder's own"
+        (bin_dir / "tow").write_text('#!/bin/sh\necho "root=$TOW_ROOT"\n', encoding="utf-8")
+        for item in bin_dir.iterdir():
+            item.chmod(0o755)
+        argv = ["/bin/sh", str(root / "app" / "scripts" / "tow"), "status"]
+    done = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=60, check=False)
+    assert done.returncode == 0, done.stdout + done.stderr
+    lines = done.stdout.splitlines()
+    assert f"root={root.resolve()}" in lines or f"root={root}" in lines, done.stdout
+    if os.name == "nt":
+        assert f"home={root}\\data" in lines
+    assert ("is ignored" in done.stderr) is ignored
+
+
 def test_setup_installs_python_and_the_environment_inside_the_install():
     for name in ("tow-setup.cmd", "tow"):
         text = (ROOT / "scripts" / name).read_text(encoding="utf-8")

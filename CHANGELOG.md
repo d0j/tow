@@ -13,6 +13,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   without a launcher): it names both folders and says to run setup, before it writes anything there.
 - A copy of the TOW folder started at its old port no longer stops the original folder's running web server,
   taking it for a server its own TOW left behind.
+- A `TOW_ROOT` variable left from a move (the old folder) no longer makes TOW start with empty data and a new
+  master key in the old place: the launchers and TOW use the folder TOW is in, and `run.log` says to remove it.
 
 ## [1.27.0] — 2026-10-08
 
