@@ -5,6 +5,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Changed
+
+- Home remembers the chosen order on this device: it stays after a reload, the Home icon or a new tab.
+
 ### Fixed
 
 - Changing the network password or **Sign out everywhere** when TOW cannot write `data/sessions.json` says so

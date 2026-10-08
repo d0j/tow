@@ -845,8 +845,18 @@ if (q) {
   let filter = params.get("f") || "";
   let tracker = params.get("t") || "";
   q.value = params.get("q") || "";
+  // The chosen order stays on this device: a page opened without one in its address (the Home
+  // icon, a new tab, a restart) gets the last order chosen here. Storage may be off: then as before.
+  const SORT_KEY = "tow.home.sort";
+  const storedSort = () => {
+    try {
+      return localStorage.getItem(SORT_KEY);
+    } catch {
+      return null;
+    }
+  };
   if (sortSelect) {
-    const mode = params.get("s") || "";
+    const mode = params.get("s") ?? storedSort() ?? "";
     sortSelect.value = [...sortSelect.options].some((option) => option.value === mode) ? mode : "";
     initChoiceMenu(sortSelect, "sort");
   }
@@ -894,6 +904,13 @@ if (q) {
     set("t", tracker);
     set("s", sortSelect?.value || "");
     history.replaceState({}, "", u.pathname + u.search + u.hash);
+    if (sortSelect) {
+      try {
+        localStorage.setItem(SORT_KEY, sortSelect.value);
+      } catch {
+        // no storage (a private window, blocked site data): the address still keeps the order
+      }
+    }
   };
 
   const announce = () => {
