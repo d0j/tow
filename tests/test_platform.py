@@ -302,7 +302,7 @@ def test_windows_port_owner_reads_powershell_json(monkeypatch, output, expected)
     found = WindowsBackend().port_owner(8787)
     assert found == (json.loads(output) if expected == "dict" else None)
     args = scripts[0]
-    assert args[:4] == ["powershell", "-NoProfile", "-NonInteractive", "-Command"]
+    assert args[:4] == [platform.powershell_program(), "-NoProfile", "-NonInteractive", "-Command"]
     assert "-LocalPort 8787 " in args[4]
 
 
@@ -322,6 +322,29 @@ def test_windows_powershell_probes_write_utf8(monkeypatch):
 # --- Windows: processes -------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize(
+    ("system_root", "expected"),
+    [
+        (r"D:\Win", r"D:\Win\System32\schtasks.exe"),
+        (None, r"C:\Windows\System32\schtasks.exe"),
+        ("", r"C:\Windows\System32\schtasks.exe"),
+        ("Windows", r"C:\Windows\System32\schtasks.exe"),  # not a full path: the default
+        (r"\Windows", r"C:\Windows\System32\schtasks.exe"),  # no drive: the default
+    ],
+)
+def test_windows_programs_are_run_from_system32_never_from_path(monkeypatch, system_root, expected):
+    # Audit 08.10.2026: "powershell" and "schtasks" were found by a PATH search, where the venv's
+    # Scripts folder (and on Windows the current folder) comes before System32.
+    for name in ("SystemRoot", "SYSTEMROOT", "windir"):
+        monkeypatch.delenv(name, raising=False)
+    if system_root is not None:
+        monkeypatch.setenv("SystemRoot", system_root)
+    assert platform.windows_program("schtasks.exe") == expected
+    folder = expected.removesuffix("schtasks.exe")
+    assert platform.powershell_program() == folder + r"WindowsPowerShell\v1.0\powershell.exe"
+    assert windows._icacls() == folder + "icacls.exe"
+
+
 def test_windows_terminate_stops_the_whole_tree(monkeypatch):
     calls: list[list[str]] = []
     monkeypatch.setattr(
@@ -329,7 +352,7 @@ def test_windows_terminate_stops_the_whole_tree(monkeypatch):
     )
     monkeypatch.setattr(windows, "process_alive", lambda _pid: False)
     assert WindowsBackend().terminate(60, timeout=1) is True
-    assert calls == [["taskkill", "/PID", "60", "/T", "/F"]]
+    assert calls == [[platform.windows_program("taskkill.exe"), "/PID", "60", "/T", "/F"]]
 
     monkeypatch.setattr(windows.subprocess, "run", lambda args, **_k: SimpleNamespace(returncode=128))
     assert WindowsBackend().terminate(60) is False
@@ -1053,7 +1076,7 @@ def test_windows_process_command_is_a_bounded_read_only_probe(monkeypatch, reply
     calls = []
     monkeypatch.setattr(windows, "_run", lambda args, **kwargs: calls.append((args, kwargs)) or reply)
     assert windows.WindowsBackend().process_command(123) == expected
-    assert calls[0][0][:4] == ["powershell", "-NoProfile", "-NonInteractive", "-Command"]
+    assert calls[0][0][:4] == [platform.powershell_program(), "-NoProfile", "-NonInteractive", "-Command"]
     assert "ProcessId=123" in calls[0][0][4]
     assert calls[0][1]["timeout"] == 5
     for invalid in (0, -1, "invalid", None):

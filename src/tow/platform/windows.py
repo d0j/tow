@@ -30,7 +30,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from tow.platform import _common
+from tow.platform import _common, powershell_program, windows_program
 
 FILETIME_UNIX_EPOCH = 116444736000000000
 _EVENT_NS = "{http://schemas.microsoft.com/win/2004/08/events/event}"
@@ -52,7 +52,7 @@ def _powershell(script: str, timeout: float = 20) -> str:
     """A PowerShell script's output, written as UTF-8: without it Windows PowerShell writes the
     ANSI code page, and a Cyrillic folder in a command line came back as U+FFFD."""
     utf8 = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
-    return _run(["powershell", "-NoProfile", "-NonInteractive", "-Command", utf8 + script], timeout=timeout)
+    return _run([powershell_program(), "-NoProfile", "-NonInteractive", "-Command", utf8 + script], timeout=timeout)
 
 
 def _missing(*_args: Any, **_kwargs: Any) -> Any:
@@ -243,7 +243,7 @@ def terminate(pid: int, timeout: float = 10.0) -> bool:
         return False
     try:
         result = subprocess.run(
-            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            [windows_program("taskkill.exe"), "/PID", str(pid), "/T", "/F"],
             capture_output=True,
             check=False,
             timeout=max(1.0, timeout),
@@ -604,7 +604,7 @@ def make_private(path: Path, *, created: bool = False) -> bool:
 
 def _icacls() -> str:
     """icacls.exe of Windows itself, never one of the current folder."""
-    return ntpath.join(os.environ.get("SYSTEMROOT") or r"C:\Windows", "System32", "icacls.exe")
+    return windows_program("icacls.exe")
 
 
 def _close(path: Path, account: str) -> None:

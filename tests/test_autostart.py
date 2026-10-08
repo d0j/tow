@@ -18,6 +18,7 @@ from tow.autostart.launchd import LaunchAgent
 from tow.autostart.systemd import SystemdUser, _quoted
 from tow.autostart.windows import WindowsTask, parse_task, same_path
 from tow.paths import data_dir
+from tow.platform import powershell_program, windows_program
 
 NOT_FOUND = CommandResult(1, "", "ERROR: The system cannot find the file specified.")
 
@@ -59,6 +60,11 @@ class Scheduler:
 
     def __call__(self, argv):
         argv = [str(a) for a in argv]
+        # Audit 08.10.2026: Windows' own programs by their System32 path, never a PATH search
+        # (the venv's Scripts folder comes first there); recorded by their short names.
+        assert argv[0].lower().removesuffix(".exe") not in {"powershell", "schtasks"}, argv[0]
+        short = {powershell_program(): "powershell", windows_program("schtasks.exe"): "schtasks"}
+        argv[0] = short.get(argv[0], argv[0])
         self.calls.append(argv)
         if argv[0] == "powershell" and "Export-ScheduledTask -TaskName 'TOW' -TaskPath '\\'" in argv[-1]:
             xml = self.tasks.get("TOW")
