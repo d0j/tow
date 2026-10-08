@@ -8,10 +8,12 @@ import json
 import math
 import os
 import pickle
+import re
+import stat
 import tempfile
 import threading
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, BinaryIO
@@ -20,7 +22,15 @@ from tow.errors import Msg, TowError
 
 if TYPE_CHECKING:
     from cryptography.fernet import Fernet
-from tow.paths import data_dir, download_history_path, explicit_key_file, key_file, legacy_key_file, secrets_path
+from tow.paths import (
+    config_path,
+    data_dir,
+    download_history_path,
+    explicit_key_file,
+    key_file,
+    legacy_key_file,
+    secrets_path,
+)
 from tow.paths import state_path as state_path  # noqa: PLC0414 - re-exported: the web package imports it from here
 from tow.platform import current as current_platform
 from tow.platform import locks
@@ -195,7 +205,57 @@ RECOVERY_STEPS: tuple[tuple[str, str, str | None], ...] = (
     ("tow.bundle", "recover_interrupted_import", None),
     # a restore from a night copy (a check never needs the night-copy code otherwise)
     ("tow.snapshots", "recover_interrupted_restore", ".tow-night-restore.json"),
+    # the temporary files of single-file writes that were killed before their replace
+    ("tow.store", "remove_stale_temporaries", None),
 )
+
+# What tempfile adds between the prefix and the suffix _atomic_write_bytes() gives it (eight
+# of these characters today), then that suffix.
+_TEMPORARY = re.compile(r"[a-z0-9_]+\.tmp")
+# A temporary file this young may still be written (by a writer outside the data lock).
+STALE_TEMPORARY_AGE_SEC = 5.0
+
+
+def is_temporary_of(name: str, stores: Iterable[str]) -> bool:
+    """``name`` is a temporary file _atomic_write_bytes() made for one of ``stores`` (file
+    names): ``.<store>.<random letters>.tmp``. Nothing else matches."""
+    for store in stores:
+        prefix = f".{store}."
+        if name.startswith(prefix) and _TEMPORARY.fullmatch(name[len(prefix) :]):
+            return True
+    return False
+
+
+def _store_paths() -> list[Path]:
+    paths = [state_path(), download_history_path(), encrypted_secrets_path(), secret_undo_path()]
+    with suppress(OSError, RuntimeError):  # no config file yet: nothing of it to clean
+        paths.append(config_path())
+    return paths
+
+
+def remove_stale_temporaries(*, now: float | None = None) -> None:
+    """Remove what a writer killed between its temporary file and the replace left beside the
+    stores (the state's is a full copy of it), never anything else: only plain files named
+    like the temporary of one of the stores, at least STALE_TEMPORARY_AGE_SEC old. Writers
+    hold the data lock, which the caller holds too; a file that cannot go now stays."""
+    cutoff = (time.time() if now is None else now) - STALE_TEMPORARY_AGE_SEC
+    folders: dict[Path, set[str]] = {}
+    for path in _store_paths():
+        folders.setdefault(path.parent, set()).add(path.name)
+    for folder, names in folders.items():
+        try:
+            entries = list(os.scandir(folder))
+        except OSError:
+            continue
+        for entry in entries:
+            if not is_temporary_of(entry.name, names):
+                continue
+            try:
+                info = entry.stat(follow_symlinks=False)
+                if stat.S_ISREG(info.st_mode) and info.st_mtime < cutoff:
+                    os.unlink(entry.path)
+            except OSError:
+                continue
 
 
 def _recovery_steps() -> list[Callable[[], None]]:
