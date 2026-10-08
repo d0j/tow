@@ -230,6 +230,6 @@
 
 <dialog class="log-pop" id="download-pop" aria-labelledby="download-title">
   <div class="log-pop-head"><span id="download-title">{{ t('home.downloads.title') }}</span><button type="button" class="flash-x" id="download-close" aria-label="{{ t('base.close') }}">{{ icon('close', 'sm') }}</button></div>
-  <div class="log-box" id="download-body"><div class="mut">{{ t('home.downloads.loading') }}</div></div>
+  <div class="log-box" id="download-body" role="region" aria-labelledby="download-title" tabindex="0"><div class="mut">{{ t('home.downloads.loading') }}</div></div>
 </dialog>
 {% endblock %}

@@ -111,6 +111,18 @@ def test_header_states_are_said_in_words_not_only_by_colour(client, health, prob
     assert "position: relative" in _desktop_rules()[".hdr-sites .trk"]
 
 
+def test_scrolling_log_boxes_are_named_regions_the_keyboard_reaches(client):
+    """A4: the log of the header, of Settings and the episodes box scroll but took no focus."""
+    _seed()
+    home = client.get("/").text
+    assert '<div class="log-box" id="log-body" role="region" aria-labelledby="log-title" tabindex="0">' in home
+    assert 'id="download-body" role="region" aria-labelledby="download-title" tabindex="0"' in home
+    settings = client.get("/settings").text
+    assert 'id="log-settings-body" role="region" aria-labelledby="settings-log-title" tabindex="0"' in settings
+    assert 'id="settings-log-title"' in settings
+    assert "outline" in _desktop_rules()[".log-box:focus-visible"]
+
+
 def test_personal_timers_have_hidden_words_and_are_drawn_only_when_seen_and_changed(client):
     """A10/P3: each timer had an aria-label on a span without a role, and app.js rewrote the text,
     tooltip and label of all 500 timers every second (~20 ms/s on a 2000-topic Home)."""
