@@ -454,6 +454,24 @@ def test_ci_keeps_the_required_check_names_and_audits_once():
     assert "${{ matrix.audit && '-Audit' || '' }}" in _runs(jobs["gate"])
 
 
+def test_ci_compiles_the_base_python_files_with_a_real_python_3_11():
+    # ast.parse(feature_version=(3, 11)) accepts f"{d["a"]}" (3.12), which Python 3.11 refuses.
+    import tomllib
+
+    _text, flow = _workflow("ci")
+    gate = flow["jobs"]["gate"]
+    rows = [row["os"] for row in gate["strategy"]["matrix"]["include"] if row.get("py311")]
+    assert rows == ["ubuntu-latest"]  # one OS: syntax does not depend on it
+    step = next(step for step in gate["steps"] if step.get("if") == "matrix.py311")
+    assert "uv python install 3.11" in step["run"]
+    compiled = re.search(r'"\$\(uv python find --no-project 3\.11\)" -m py_compile (.+)', step["run"])
+    assert compiled is not None
+    # The files ruff keeps at 3.11 syntax are the ones Python 3.11 compiles.
+    ruff = tomllib.loads((ROOT / "ruff.toml").read_text(encoding="utf-8"))
+    assert set(compiled.group(1).split()) == set(ruff["per-file-target-version"])
+    assert set(ruff["per-file-target-version"].values()) == {"py311"}
+
+
 def test_the_release_workflow_tests_everything_before_it_uploads():
     _text, flow = _workflow("release")
     jobs = flow["jobs"]
