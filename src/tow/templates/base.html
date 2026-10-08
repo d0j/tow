@@ -90,7 +90,8 @@
     <a href="/history" class="log-history-link">{{ t('base.log.history') }}</a>
     <button type="button" class="flash-x" id="log-close" aria-label="{{ t('base.close') }}">{{ icon('close', 'sm') }}</button>
   </div>
-  <div class="log-box" id="log-body"><div class="mut">…</div></div>
+  {#- A box that scrolls is reached by the keyboard and named (A4). -#}
+  <div class="log-box" id="log-body" role="region" aria-labelledby="log-title" tabindex="0"><div class="mut">…</div></div>
 </dialog>
 <script type="application/json" id="tow-i18n">{{ js_texts()|tojson }}</script>
 <script type="application/json" id="tow-content-i18n">{{ content_texts()|tojson }}</script>

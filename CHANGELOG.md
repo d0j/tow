@@ -23,6 +23,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   of the countdown, in words: before, only their colour told it.
 - Home with hundreds of personal timers redraws each second only the timers on screen, and only what changed;
   a screen reader reads a timer's meaning from its text instead of a label rewritten every second.
+- The log in the header and in Settings and the episodes list can be scrolled with the keyboard: each box takes
+  the focus and has a name.
 
 ## [1.27.1] — 2026-10-08
 

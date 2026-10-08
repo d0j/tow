@@ -614,7 +614,7 @@
         <span class="pill mut">{{ log_rows|length }}</span>
       </summary>
       <div class="settings-panel settings-log-body">
-        <div class="log-box" id="log-settings-body">
+        <div class="log-box" id="log-settings-body" role="region" aria-labelledby="settings-log-title" tabindex="0">
           {% for e in log_rows %}
           <div class="log-line"><span class="mut">{{ e.at }}</span> · <b>{{ e.label }}</b>{% if e.detail %} · {{ e.detail }}{% endif %}{% if e.raw %} <details class="raw-error"><summary>{{ t('common.details') }}</summary><code>{{ e.raw }}</code></details>{% endif %}</div>
           {% else %}

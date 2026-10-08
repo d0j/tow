@@ -348,6 +348,7 @@ a.set-link:hover { background: var(--panel2); text-decoration: none; }
 .help-page p, .help-page li { color: var(--fg); }
 .help-page ul, .help-page ol { margin: .2rem 0 .6rem; padding-left: 1.2rem; }
 .log-box { max-height: 18rem; overflow: auto; font: 12px/1.45 ui-monospace, Consolas, monospace; }
+.log-box:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
 .log-line { padding: .15rem 0; border-bottom: 1px solid var(--line); word-break: break-word; }
 /* The raw text of a network error, one click away from the words that say it. */
 .log-line details.raw-error { display: inline; color: var(--mut); font-size: 12px; }
