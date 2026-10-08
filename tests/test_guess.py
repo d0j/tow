@@ -250,3 +250,18 @@ def test_a_page_link_without_an_address_is_skipped_not_a_crash(monkeypatch):
     answer = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post("/sites/guess", data={"url": url})
     assert answer.status_code == 200
     assert answer.json()["ok"] is False
+
+
+def test_a_page_of_nothing_but_links_is_read_to_a_bound(monkeypatch):
+    # 2 MiB of 'href="' took 2.6 s: every one of 350,000 "links" was joined and compared.
+    from tow import guess
+
+    joined = []
+    real = guess.urljoin
+    monkeypatch.setattr(guess, "urljoin", lambda base, link: joined.append(link) or real(base, link))
+    url = "https://forum.example.org/viewtopic.php?t=1"
+    page = ('href="' * (2 * 2**20 // 6))[: 2 * 2**20]
+    assert guess.download_path_from_page({"page_download": True}, url, page) == {"page_download": True}
+    assert len(joined) == guess._MAX_PAGE_LINKS
+    within = '<a href="/x">x</a>' * (guess._MAX_PAGE_LINKS - 1) + '<a href="dl.php?t=1">t</a>'
+    assert guess.download_path_from_page({}, url, within)["download_path"] == "/dl.php?t={id}"
