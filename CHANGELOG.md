@@ -37,6 +37,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   environment was made from, else the newest one by version number (3.14.10 after 3.14.8), never uv's link folder.
 - Windows: a TOW folder whose path is longer than 110 characters, with long paths off, is refused by `install.ps1`
   before it writes anything, and `Start TOW.cmd` says so before it prepares TOW, instead of an unexplained failure.
+- `install.ps1` says at once that Windows on ARM is not supported (the zip is for x64 PCs) instead of installing
+  the x64 zip there; the install guide says so too.
 
 ## [1.27.0] — 2026-10-08
 

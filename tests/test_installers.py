@@ -313,6 +313,18 @@ def test_install_ps1_refuses_a_long_folder_before_writing_anything():
     assert long < text.index("Invoke-WebRequest")
 
 
+def test_install_ps1_refuses_windows_on_arm_before_writing_anything():
+    # Windows on ARM got the x64 zip and failed later, inside its x64 uv and Python.
+    text = PS1.read_text(encoding="utf-8")
+    arm = text.index("-contains 'ARM64'")
+    assert "Session Manager\\Environment' -Name PROCESSOR_ARCHITECTURE" in text  # emulated x64 says AMD64
+    assert "$env:PROCESSOR_ARCHITEW6432, $machine) -contains 'ARM64'" in text  # a 32-bit shell on ARM64
+    assert "Windows on ARM is not supported" in text
+    assert arm < text.index("New-Item -ItemType Directory -Force -Path $Dir")
+    for guide in ("install.md", "ru/install.md"):
+        assert "ARM" in (ROOT / "docs" / guide).read_text(encoding="utf-8").split("## macOS")[0]
+
+
 @pytest.mark.allow_system
 @pytest.mark.parametrize("shell", ["pwsh", "powershell"])
 def test_install_ps1_parses(shell):

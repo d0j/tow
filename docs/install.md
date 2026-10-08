@@ -18,7 +18,8 @@ Windows, macOS or Linux, and needs no administrator rights.
 
 ## Windows
 
-Windows 10 or 11, 64-bit.
+Windows 10 or 11, 64-bit, on an x64 (Intel or AMD) processor. Windows on ARM is not supported: the zip and the
+installer are made for x64.
 
 ### The zip file (easiest)
 
