@@ -5,9 +5,9 @@
 <p class="lead">{{ t('doctor.lead') }}</p>
 {% if report %}
 <div class="grid stats">
-  <div class="card stat"><div class="k">{{ t('doctor.client_address') }}</div><div class="v">{{ t('doctor.set') if report.qbit_host_set else t('doctor.no') }}</div></div>
+  <div class="card stat"><div class="k">{{ t('doctor.client_address') }}</div><div class="v">{{ t('doctor.set') if report.qbit_host_set else t('doctor.not_set') }}</div></div>
   <div class="card stat"><div class="k">{{ t('doctor.topics') }}</div><div class="v">{{ report.topics }}</div></div>
-  <div class="card stat"><div class="k">{{ t('doctor.notifications') }}</div><div class="v">{{ t('doctor.connected') if report.notify_set else t('doctor.no') }}</div></div>
+  <div class="card stat"><div class="k">{{ t('doctor.notifications') }}</div><div class="v">{{ t('doctor.connected') if report.notify_set else t('doctor.not_connected') }}</div></div>
   <div class="card stat"><div class="k">{{ t('doctor.python') }}</div><div class="v">{{ report.python }}</div></div>
 </div>
 {% if report.qbit is not none %}
