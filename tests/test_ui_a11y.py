@@ -259,6 +259,27 @@ def test_a_theme_choice_is_saved_in_the_background_without_a_reload(client):
     assert load_config()["theme"] == "dark"
 
 
+def test_home_search_and_sort_touch_only_what_changes():
+    """P1/P2 (2000 topics): every load re-appended all rows in the order they had (~1.2 s of
+    layout), and each key typed in the search re-filtered and re-highlighted every row (~250 ms
+    per key). The order is applied only when it differs; typing waits for a 130 ms pause; a
+    row's hidden state and a text's marks are written only when they change."""
+    block = JS[JS.index("const searchable = [") : JS.index("const paintLog")]
+    sort = block[block.index("const sortRows") : block.index("// P2: typing waits")]
+    assert "rows.every((row, index) => row === now[index])) return;" in sort
+    assert sort.index("return;") < sort.index("list.append(...rows);")
+    assert "new Intl.Collator(" in block
+    assert "typing = window.setTimeout(() => { announce(); remember(); }, 130);" in block
+    assert "if (el.hidden === visible) el.hidden = !visible;" in block
+    assert 'if ((markedWith.get(target) ?? "") === want) return;' in block
+    assert "dataset.qFolded =" not in block  # the folded words live in a Map, not 2000 attributes
+    assert 'querySelectorAll("[data-hl]")' not in block[block.index("const announce") :]
+    # The remembered order (localStorage) still decides the first sort.
+    assert 'const mode = params.get("s") ?? storedSort() ?? "";' in block
+    # content-visibility on the rows cost ~2000 style recalculations at load (13 s): not used.
+    assert "content-visibility" not in CSS
+
+
 def test_links_inside_running_text_are_underlined(client):
     """A7: "More" in the Backups note was told from its sentence by colour only (axe
     link-in-text-block)."""

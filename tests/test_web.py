@@ -2346,7 +2346,8 @@ def test_search_script_folds_yo_and_matches_all_words():
     app_js = TestClient(app).get("/static/app.js").text
 
     assert 'replaceAll("ё", "е")' in app_js
-    assert "tokens.every((token) => el.dataset.qFolded.includes(token))" in app_js
+    assert "tokens.every((token) => haystack.includes(token))" in app_js
+    assert "const haystacks = new Map(searchable.map((el) => [el, fold(el.dataset.q)]));" in app_js
     assert 'event.key !== "/"' in app_js
 
 

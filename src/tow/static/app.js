@@ -1004,14 +1004,22 @@ const initChoiceMenu = (select, name) => {
 const q = document.getElementById("q");
 if (q) {
   const searchStatus = document.getElementById("search-status");
+  // P2: what a keystroke needs is read once, at load: each row's folded words, its highlighted
+  // texts and its status (a 2000-row Home spent ~250 ms per key querying and rewriting rows).
   const searchable = [...document.querySelectorAll("[data-q]")];
-  searchable.forEach((el) => { el.dataset.qFolded = fold(el.dataset.q); });
+  const haystacks = new Map(searchable.map((el) => [el, fold(el.dataset.q)]));
+  const marked = new Map(searchable.map((el) => [el, [...el.querySelectorAll("[data-hl]")]]));
+  const markedWith = new WeakMap();  // the words a text is highlighted with now ("" = none)
   const tools = document.getElementById("list-tools");
   const list = document.getElementById("topics");
   const sortSelect = document.getElementById("list-sort");
   const trackerSelect = document.getElementById("list-tracker");
   const originalOrder = list ? [...list.querySelectorAll(":scope > .row-wrap")] : [];
-  const tone = (row) => ["bad", "warn", "new", "mut", "ok"].find((name) => row.querySelector(".dot.lg")?.classList.contains(name)) || "mut";
+  const tones = new Map();
+  const tone = (row) => {
+    if (!tones.has(row)) tones.set(row, ["bad", "warn", "new", "mut", "ok"].find((name) => row.querySelector(".dot.lg")?.classList.contains(name)) || "mut");
+    return tones.get(row);
+  };
   const rank = { bad: 0, warn: 1, new: 2, mut: 3, ok: 4 };
   const params = new URL(location.href).searchParams;
   let filter = params.get("f") || "";
@@ -1085,18 +1093,27 @@ if (q) {
     }
   };
 
+  // Only what changes is written: a row's hidden state when it turns, a text's marks when its
+  // words differ from the ones it shows (a hidden row shows none).
   const announce = () => {
     const tokens = fold(q.value).split(/\s+/).filter(Boolean);
+    const words = tokens.join(" ");
     let shown = 0;
     searchable.forEach((el) => {
-      let visible = tokens.every((token) => el.dataset.qFolded.includes(token));
+      const haystack = haystacks.get(el);
+      let visible = tokens.every((token) => haystack.includes(token));
       if (visible && filter === "problem") visible = ["bad", "warn"].includes(tone(el));
       if (visible && filter === "new") visible = tone(el) === "new";
       if (visible && filter === "paused") visible = el.classList.contains("is-paused");
       if (visible && tracker) visible = el.dataset.tracker === tracker;
-      el.hidden = !visible;
+      if (el.hidden === visible) el.hidden = !visible;
       if (visible) shown += 1;
-      el.querySelectorAll("[data-hl]").forEach((target) => highlight(target, visible ? tokens : []));
+      const want = visible ? words : "";
+      marked.get(el).forEach((target) => {
+        if ((markedWith.get(target) ?? "") === want) return;
+        markedWith.set(target, want);
+        highlight(target, visible ? tokens : []);
+      });
     });
     tools?.querySelectorAll("[data-filter]").forEach((chip) => {
       chip.classList.toggle("on", chip.dataset.filter === filter);
@@ -1105,21 +1122,33 @@ if (q) {
     const narrowed = tokens.length || filter || tracker;
     // A filter kept in the address that matches nothing must not leave bare headers.
     const listEmpty = document.getElementById("list-empty");
-    if (listEmpty) listEmpty.hidden = !(narrowed && !shown);
-    if (searchStatus) searchStatus.textContent = narrowed ? (shown ? t("js.search.shown_of", { shown, total: searchable.length }) : t("js.search.nothing")) : t("js.search.shown", { shown });
+    if (listEmpty && listEmpty.hidden !== !(narrowed && !shown)) listEmpty.hidden = !(narrowed && !shown);
+    const said = narrowed ? (shown ? t("js.search.shown_of", { shown, total: searchable.length }) : t("js.search.nothing")) : t("js.search.shown", { shown });
+    if (searchStatus && searchStatus.textContent !== said) searchStatus.textContent = said;
   };
 
+  // P1: the rows move only when the order changes: re-appending 2000 rows in the order they
+  // already had cost a full layout (~1.2 s) on every load.
+  const byName = new Intl.Collator("ru");
   const sortRows = () => {
     if (!list || !sortSelect) return;
     const mode = sortSelect.value;
     const rows = [...originalOrder];
-    if (mode === "name") rows.sort((a, b) => a.dataset.name.localeCompare(b.dataset.name, "ru"));
+    if (mode === "name") rows.sort((a, b) => byName.compare(a.dataset.name, b.dataset.name));
     if (mode === "event") rows.sort((a, b) => (b.dataset.event || "").localeCompare(a.dataset.event || ""));
     if (mode === "status") rows.sort((a, b) => rank[tone(a)] - rank[tone(b)]);
+    const now = list.querySelectorAll(":scope > .row-wrap");
+    if (rows.length === now.length && rows.every((row, index) => row === now[index])) return;
     list.append(...rows);
   };
 
-  q.addEventListener("input", () => { announce(); remember(); });
+  // P2: typing waits for a pause of 130 ms before the list is filtered (a keystroke cost ~250 ms
+  // on a 2000-row Home, so fast typing queued them up).
+  let typing = 0;
+  q.addEventListener("input", () => {
+    window.clearTimeout(typing);
+    typing = window.setTimeout(() => { announce(); remember(); }, 130);
+  });
   tools?.addEventListener("click", (event) => {
     const chip = event.target.closest("button");
     if (!chip || !chip.hasAttribute("data-filter")) return;
