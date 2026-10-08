@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
-from tow.guess import GuessError, guess_from_url
+from tow.guess import GuessError
 from tow.web import _context, services
 from tow.web.site_actions import add_site, delete_site, edit_site, save_site
 from tow.web.site_form import NewSite, SiteEdit
@@ -87,7 +87,7 @@ def topics_guess_title(url: str = Form("")) -> Response:
 @router.post("/sites/guess")
 def sites_guess(url: str = Form("")) -> Response:
     try:
-        g = guess_from_url(url)
+        g = services.guess_site(url)  # a forum's download link is read from the topic page
     except GuessError as e:
         return JSONResponse({"ok": False, "error": t(e.key)})
     cfg = services.load_config()

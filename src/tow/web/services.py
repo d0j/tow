@@ -33,6 +33,7 @@ from tow.content import metadata as content_metadata
 from tow.content import read as read_content
 from tow.doctor import doctor_report, stale_autostart
 from tow.doctor import reason_text as doctor_reason
+from tow.guess import guess_site
 from tow.lifecycle import request_restart, service_status, set_autostart
 from tow.locations import check_writable as folder_write_problem
 from tow.locations import free_bytes
@@ -110,6 +111,7 @@ __all__ = [
     "folder_free",
     "folder_write_problem",
     "free_bytes",
+    "guess_site",
     "guess_topic_title",
     "history_events",
     "install_id",

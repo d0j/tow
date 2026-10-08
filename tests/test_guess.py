@@ -154,3 +154,59 @@ def test_topic_number_is_the_id_parameter_or_the_last_number(url, topic_id, down
 
     assert re.match(guessed["url_regex"], url).group(1) == topic_id
     assert guessed["download_path"] == download_path
+
+
+@pytest.mark.parametrize(
+    ("url", "name"),
+    [
+        ("http://127.0.0.1:18944/forum/viewtopic.php?t=7", "site_18944"),
+        ("http://10.0.0.1/torrent/123", "site"),
+        ("http://[::1]:8080/torrent/123", "site_8080"),
+        ("http://localhost:8080/torrent/123", "site_8080"),
+    ],
+)
+def test_a_site_on_an_address_is_named_by_its_port(url, name):
+    # The address's last-but-one label named the site "0" for 127.0.0.1.
+    assert guess_from_url(url)["name"] == name
+
+
+FORUM_PAGE = """<!doctype html><html><body><a href="./login.php?logout=1">Log out</a>
+<h1 class="maintitle">Show</h1>
+<table class="attach bordered med"><tr><td><a href="dl.php?t=7" class="dl-stub">Download</a></td></tr></table>
+<div class="post_body">see also <a href="download.php?id=999">another torrent</a></div></body></html>"""
+
+
+def test_a_forum_guess_takes_the_download_path_from_the_topic_page(monkeypatch):
+    # The forum links dl.php?t=7 on its topic page; the guess said download.php?id={id},
+    # so every download of the new site failed.
+    from tow import guess
+
+    url = "https://forum.example/forum/viewtopic.php?t=7"
+    monkeypatch.setattr(guess, "_topic_page", lambda page_url: FORUM_PAGE if page_url == url else "")
+
+    guessed = guess.guess_site(url)
+
+    assert guessed["download_path"] == "/forum/dl.php?t={id}"
+    assert guessed["page_download"] is True
+    assert guess.guess_from_url(url)["download_path"] == "/forum/download.php?id={id}"  # the link alone
+
+
+def test_a_page_link_to_another_host_or_without_a_number_keeps_the_guess(monkeypatch):
+    from tow import guess
+
+    url = "https://forum.example/forum/viewtopic.php?t=7"
+    page = '<table class="attach"><tr><td><a href="https://cdn.example/dl.php?t=7">x</a></td></tr></table>'
+    monkeypatch.setattr(guess, "_topic_page", lambda _url: page)
+    assert guess.guess_site(url)["download_path"] == "/forum/download.php?id={id}"
+    monkeypatch.setattr(guess, "_topic_page", lambda _url: "")
+    assert guess.guess_site(url)["download_path"] == "/forum/download.php?id={id}"
+
+
+def test_a_known_sites_guess_does_not_read_its_page(monkeypatch):
+    from tow import guess
+
+    def refuse(_url):
+        raise AssertionError("a known site's rules are not replaced by its page")
+
+    monkeypatch.setattr(guess, "_topic_page", refuse)
+    assert guess.guess_site("https://nnmclub.to/forum/viewtopic.php?t=555")["name"] == "nnmclub"

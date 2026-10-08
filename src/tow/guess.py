@@ -3,9 +3,12 @@ then the shapes most trackers share (phpBB forums, /torrent/<id>, a number in th
 
 from __future__ import annotations
 
+import html
+import ipaddress
+import logging
 import re
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 from tow.i18n import t
 from tow.trackers import presets
@@ -28,10 +31,24 @@ def canon_watch_url(url: str) -> str:
 _SECOND_LEVEL = frozenset({"co", "com", "org", "net", "gov", "ac", "edu", "msk", "spb"})
 
 
-def _name_from_host(host: str) -> str:
+def _is_address(host: str) -> bool:
+    """An IP address or localhost: no label of it names the site."""
+    if host.lower() == "localhost":
+        return True
+    try:
+        ipaddress.ip_address(host.strip("[]"))
+    except ValueError:
+        return False
+    return True
+
+
+def _name_from_host(host: str, port: int | None = None) -> str:
     """N10: a known tracker brand from any label (kinozal.jumpingcrab.com -> kinozal),
     else the registrable domain (tracker.example.org -> example, x.example.co.uk ->
-    example) - the first label used to give "d" for d.rutor.info."""
+    example) - the first label used to give "d" for d.rutor.info. A site on an IP address or
+    localhost is "site" with its port (site_8080): the address gave "0" for 10.0.0.1."""
+    if _is_address(host):
+        return f"site_{port}" if port else "site"
     brands = re.compile(rf"^(?:{'|'.join(presets.brands())})$", re.IGNORECASE)
     labels = [label for label in host.lower().removeprefix("www.").split(".") if label]
     brand = next((label for label in labels if brands.match(label)), "")
@@ -74,7 +91,7 @@ def _url_parts(url: str) -> UrlParts:
         path=p.path or "/",
         query=parse_qs(p.query),
         raw_query=p.query,
-        name=_name_from_host(host),
+        name=_name_from_host(host, port),
         host_rx=_host_rx(authority),
     )
 
@@ -145,6 +162,65 @@ def _number_guess(parts: UrlParts) -> dict[str, Any]:
         templ += "?" + query_templ
         path_rx += r"\?" + query_rx
     return parts.spec(url_regex=parts.rx(path_rx), download_path=templ)
+
+
+_HREF = re.compile(r"""href\s*=\s*["']([^"'<>]+)["']""", re.IGNORECASE)
+_DEFAULT_DOWNLOAD_HREF = r"(?:download|dl)\.php\?(?:id|t)=(\d+)"
+
+
+def download_path_from_page(guessed: dict[str, Any], url: str, page: str) -> dict[str, Any]:
+    """The download path as the topic page's own .torrent link writes it (dl.php?t=7 on a
+    forum whose links TOW would have guessed as download.php?id=), its number as ``{id}``;
+    ``guessed`` unchanged when the page has no such link on the topic's own host."""
+    from tow.mirrors import origin_key
+    from tow.trackers.generic import link_text
+
+    try:
+        pattern = re.compile(str(guessed.get("download_href_regex") or _DEFAULT_DOWNLOAD_HREF), re.IGNORECASE)
+    except re.error:
+        return guessed
+    for found in _HREF.finditer(link_text(page)):
+        target = urlparse(urljoin(url, html.unescape(found.group(1)).strip()))
+        if origin_key(target.geturl()) != origin_key(url):
+            continue  # another host's link: TOW downloads from the site's own mirrors
+        relative = target.path + (f"?{target.query}" if target.query else "")
+        match = pattern.search(relative)
+        if match is None or "{" in relative or "}" in relative:
+            continue
+        return {**guessed, "download_path": relative[: match.start(1)] + "{id}" + relative[match.end(1) :]}
+    return guessed
+
+
+def _topic_page(url: str) -> str:
+    """The topic page's text for a guess ("" when it cannot be read: the guess stands)."""
+    from tow import http as thttp
+    from tow.config import as_bool, load_config
+
+    cfg = load_config()
+    try:
+        with thttp.client(
+            ua=cfg.get("user_agent"),
+            follow_redirects=False,
+            public_only=not as_bool(cfg.get("allow_private_tracker_hosts")),
+        ) as c:
+            response = thttp.get_limited(c, url, max_bytes=thttp.MAX_HTML_RESPONSE_BYTES)
+    except Exception as exc:  # noqa: BLE001 - the page only improves the guess; the link alone still gives one
+        logging.getLogger("tow.guess").warning("topic page not read for the site guess: %s", type(exc).__name__)
+        return ""
+    return thttp.html_text(response) if response.status_code < 300 else ""
+
+
+def guess_site(url: str) -> dict[str, Any]:
+    """``guess_from_url``, with the download path read from the topic page's own .torrent link
+    when the site's .torrent is found on the page (forums): the link's path is guessed wrong
+    otherwise (download.php?id= for a forum that links dl.php?t=)."""
+    guessed = guess_from_url(url)
+    # A known site's own rules know its links; only a guessed forum's are read from its page.
+    if guessed.get("page_download") and presets.get(str(guessed.get("name") or "")) is None:
+        page = _topic_page(canon_watch_url(url))
+        if page:
+            guessed = download_path_from_page(guessed, url, page)
+    return guessed
 
 
 def guess_from_url(url: str) -> dict[str, Any]:
