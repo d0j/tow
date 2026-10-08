@@ -218,7 +218,10 @@
     "new_site": "New site",
     "header": {
       "sites": "Sites",
-      "services": "Services"
+      "services": "Services",
+      "site_ok": "answers",
+      "site_warn": "connection trouble",
+      "not_checked": "not checked yet"
     },
     "undo": {
       "title": "Undo: {what}",

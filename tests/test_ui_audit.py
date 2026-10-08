@@ -494,7 +494,8 @@ def test_header_separates_controls_from_status_with_full_client_label(client, mo
     assert bool(controls.select_one("#undo-form")) is with_undo
     assert not controls.select(".hdr-svc, .hdr-clock")
     client_label = header.select_one(".hdr-svc > span")
-    assert client_label.get_text() == label
+    assert client_label.contents[0] == label  # then its state in hidden words (round-5 audit, A3)
+    assert client_label.select_one(".sr-only").get_text().startswith(": ")
     assert label in client_label["title"]
     assert header.select_one(".hdr-clock").parent == controls.parent
 
@@ -633,7 +634,9 @@ def test_countdown_is_compact_with_accessible_meaning(client):
     clock = re.search(r'<span class="hdr-clock[^>]*id="next-check".*?</span></span>', page, re.DOTALL)
     assert clock is not None
     assert "data-clock-label" not in clock.group(0)
-    assert 'aria-label="Global check timer"' in clock.group(0)
+    # Its meaning is hidden text, not an aria-label on a span without a role (round-5 audit, A10).
+    assert '<span class="sr-only" data-clock-words>Global check timer </span>' in clock.group(0)
+    assert "aria-label" not in clock.group(0)
     assert '<span class="clock-v" data-clock-value>' in clock.group(0)
     js = (Path(__file__).parents[1] / "src" / "tow" / "static" / "app.js").read_text(encoding="utf-8")
     assert "clock.textContent =" not in js  # the label is not overwritten by the value

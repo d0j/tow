@@ -19,6 +19,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   out at the next sign-in; only a damaged file is reset.
 - With many sites the header no longer makes the page wider than the screen and pushes Settings off it: the site
   names scroll sideways between the sections and the controls, and the keyboard reaches them.
+- A screen reader hears the state of each site and of the torrent client in the header, and a failed check
+  of the countdown, in words: before, only their colour told it.
 
 ## [1.27.1] — 2026-10-08
 

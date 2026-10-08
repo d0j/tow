@@ -260,10 +260,16 @@ const healthPoll = (() => {
 
 const clock = document.getElementById("next-check");
 if (clock) {
-  // Compact countdown; its meaning and failures stay in the accessible tooltip.
+  // Compact countdown; its meaning and failures are the tooltip and the hidden text before the
+  // value (a failed check is said in words, not by the red alone). Both change only on a change.
   const clockValue = clock.querySelector?.("[data-clock-value]") || clock;
+  const clockLabel = clock.querySelector?.("[data-clock-words]");
   const showClock = (value) => {
-    clockValue.textContent = value;
+    if (clockValue.textContent !== value) clockValue.textContent = value;
+  };
+  const showWords = (words) => {
+    if (clock.title !== words) clock.title = words;
+    if (clockLabel && clockLabel.textContent !== `${words} `) clockLabel.textContent = `${words} `;
   };
   let last = Number(clock.dataset.last) * 1000;
   let iv = Number(clock.dataset.interval) * 1000;
@@ -295,20 +301,20 @@ if (clock) {
       // Not checked yet is grey (unknown), not red: nothing has failed.
       showClock("—");
       clock.classList.toggle("bad", !checkOk);
-      clock.title = t("js.clock.never_checked");
+      showWords(t("js.clock.never_checked"));
       return;
     }
     const left = last + iv - Date.now();
     if (left <= 0) {
       showClock("00:00:00");
       clock.classList.add("bad");
-      clock.title = checkError ? t("js.clock.last_attempt", { error: errorText(checkError) }) : t("js.clock.overdue_title");
+      showWords(checkError ? t("js.clock.last_attempt", { error: errorText(checkError) }) : t("js.clock.overdue_title"));
       ensurePoll();
       return;
     }
     clock.classList.toggle("bad", !checkOk);
     showClock(fmt(left));
-    clock.title = checkOk ? t("js.clock.until_next") : (checkError ? t("js.clock.last_attempt", { error: errorText(checkError) }) : t("js.clock.last_attempt_failed"));
+    showWords(checkOk ? t("js.clock.until_next") : (checkError ? t("js.clock.last_attempt", { error: errorText(checkError) }) : t("js.clock.last_attempt_failed")));
     if (!checkOk) ensurePoll();
   };
   healthPoll.add({

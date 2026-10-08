@@ -28,17 +28,24 @@
   {% set h = header_health() %}
   {#- A strip that scrolls is reached by the keyboard (tabindex) and named (a group, A4/A10). -#}
   <div class="hdr-sites" role="group" aria-label="{{ t('base.header.sites') }}" tabindex="0">
+    {#- The state is said in words too, not by the colour alone (A3). -#}
+    {% set site_states = {'ok': t('base.header.site_ok'), 'warn': t('base.header.site_warn')} %}
     {% for name, st in h.sites.items() %}
-    <span class="trk {{ st }}" title="{{ site_title(name) }}">{{ site_title(name) }}</span>
+    {% set state = site_states.get(st) or t('base.header.not_checked') %}
+    <span class="trk {{ st }}" title="{{ site_title(name) }}: {{ state }}">{{ site_title(name) }}<span class="sr-only">: {{ state }}</span></span>
     {% endfor %}
   </div>
   <div class="hdr-right">
     <div class="hdr-svc" role="group" aria-label="{{ t('base.header.services') }}">
-      <span class="trk {{ h.qbit_tone }}" title="{{ h.client_label }}: {{ h.qbit }}">{{ h.client_label }}</span>
+      {% set client_state = {'ok': t('web.header.connected'), 'bad': t('web.header.disconnected')}.get(h.qbit_tone) or t('base.header.not_checked') %}
+      <span class="trk {{ h.qbit_tone }}" title="{{ h.client_label }}: {{ h.qbit }}">{{ h.client_label }}<span class="sr-only">: {{ client_state }}</span></span>
       {% set bell = 'mut' if h.bot_ok is none else ('ok' if h.bot_ok else 'bad') %}
       <a class="trk trk-ico {{ bell }}" href="/settings?open=bots" title="{{ h.bot }}" aria-label="{{ h.bot }}">{{ icon('bell', 'sm') }}</a>
     </div>
-    <span class="hdr-clock{% if not h.check_ok %} bad{% endif %}" id="next-check" data-last="{{ h.next_from_ts }}" data-interval="{{ h.interval_sec }}" data-check-ok="{{ '1' if h.check_ok else '0' }}" data-error="{{ h.check_error }}" title="{{ t('timer.global_title') }}" aria-label="{{ t('timer.global_title') }}"><span class="clock-v" data-clock-value>—</span></span>
+    {#- What the countdown counts, and a failed check, in words (hidden text, not an aria-label
+        on a span: A3/A10); app.js keeps it equal to the tooltip. -#}
+    {% set clock_words = t('timer.global_title') if h.check_ok else t('js.clock.last_attempt_failed') %}
+    <span class="hdr-clock{% if not h.check_ok %} bad{% endif %}" id="next-check" data-last="{{ h.next_from_ts }}" data-interval="{{ h.interval_sec }}" data-check-ok="{{ '1' if h.check_ok else '0' }}" data-error="{{ h.check_error }}" title="{{ clock_words }}"><span class="sr-only" data-clock-words>{{ clock_words }} </span><span class="clock-v" data-clock-value>—</span></span>
     <div class="hdr-controls">
     {#- The undo of the action whose message is shown sits in that message (9); the header
         keeps it only for a later page while it lasts. -#}

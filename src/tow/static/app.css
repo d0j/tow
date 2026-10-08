@@ -106,7 +106,8 @@ header.app .ico.on, header.app .ico:hover, header.app .ico:focus-visible {
   min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: thin;
   padding-right: 2.5rem; mask-image: linear-gradient(to right, black calc(100% - 2.5rem), transparent);
 }
-.hdr-sites .trk { flex: 0 0 auto; white-space: nowrap; }
+/* relative: a name's hidden state text stays inside the strip, not at its far end in the page. */
+.hdr-sites .trk { position: relative; flex: 0 0 auto; white-space: nowrap; }
 .hdr-sites:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
 .trk {
   font-size: 12px; font-weight: 650; letter-spacing: .02em; line-height: 1;
