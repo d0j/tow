@@ -80,9 +80,37 @@ def _human(data: Any) -> str:
     return str(data)
 
 
+class _Formatter(argparse.HelpFormatter):
+    """argparse's "usage:" in the command's language (argparse itself only knows gettext)."""
+
+    def add_usage(self, usage: Any, actions: Any, groups: Any, prefix: str | None = None) -> None:
+        if prefix is None:
+            from tow.i18n import t
+
+            prefix = t("cli.argparse.usage") + " "
+        super().add_usage(usage, actions, groups, prefix)
+
+
+class _RawFormatter(_Formatter, argparse.RawDescriptionHelpFormatter):
+    """The same, keeping the line breaks of ``tow --help``'s description and epilog."""
+
+
 class _Parser(argparse.ArgumentParser):
     """argparse with TOW's exit codes: a wrong command or option is 1, not argparse's 2 (2 means
-    "done in part" in TOW, see ``tow --help``)."""
+    "done in part" in TOW, see ``tow --help``). Its own words (the section titles, -h) come from
+    the catalog, in the command's language; every subcommand is a _Parser too."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        from tow.i18n import t
+
+        kwargs.setdefault("formatter_class", _Formatter)
+        add_help = kwargs.get("add_help", True)
+        kwargs["add_help"] = False  # added below, with its text from the catalog
+        super().__init__(*args, **kwargs)
+        self._positionals.title = t("cli.argparse.positionals")
+        self._optionals.title = t("cli.argparse.options")
+        if add_help:
+            self.add_argument("-h", "--help", action="help", default=argparse.SUPPRESS, help=t("cli.argparse.help"))
 
     def error(self, message: str) -> NoReturn:
         self.print_usage(sys.stderr)
@@ -96,7 +124,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="tow",
         description=t("cli.help.description"),
         epilog=t("cli.help.epilog", launcher=_launcher()),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=_RawFormatter,
     )
     sub = p.add_subparsers(dest="cmd", required=True, metavar="<command>")
     as_json = t("cli.help.json")
@@ -148,23 +176,29 @@ def _build_parser() -> argparse.ArgumentParser:
     access_cmd.add_argument("access_action", choices=("on", "off", "status"), help=t("cli.help.access_action"))
     access_cmd.add_argument("--password", action="store_true", help=t("cli.help.access_password"))
     access_cmd.add_argument("--json", action="store_true", help=as_json)
-    secrets_cmd = sub.add_parser("secrets", help=t("cli.help.secrets"))
+
+    def described(parent: Any, name: str, help_key: str, description_key: str) -> argparse.ArgumentParser:
+        """A command with its line in the list and its own description (`tow COMMAND --help`)."""
+        parser: argparse.ArgumentParser = parent.add_parser(name, help=t(help_key), description=t(description_key))
+        return parser
+
+    secrets_cmd = described(sub, "secrets", "cli.help.secrets", "cli.help.secrets_long")
     secrets_sub = secrets_cmd.add_subparsers(dest="secrets_action", required=True, metavar="<action>")
-    secrets_status = secrets_sub.add_parser("status", help=t("cli.help.secrets_status"))
+    secrets_status = described(secrets_sub, "status", "cli.help.secrets_status", "cli.help.secrets_status")
     secrets_status.add_argument("--json", action="store_true", help=as_json)
-    secrets_migrate = secrets_sub.add_parser("migrate", help=t("cli.help.secrets_migrate"))
+    secrets_migrate = described(secrets_sub, "migrate", "cli.help.secrets_migrate", "cli.help.secrets_migrate")
     secrets_migrate.add_argument("--json", action="store_true", help=as_json)
-    secrets_generate = secrets_sub.add_parser("generate-key", help=t("cli.help.secrets_generate"))
+    secrets_generate = described(secrets_sub, "generate-key", "cli.help.secrets_generate", "cli.help.secrets_generate")
     secrets_generate.add_argument("--key-file", type=Path, default=None, help=t("cli.help.key_file"))
     secrets_generate.add_argument("--json", action="store_true", help=as_json)
-    keys_cmd = sub.add_parser("keys", help=t("cli.help.keys"))
+    keys_cmd = described(sub, "keys", "cli.help.keys", "cli.help.keys_long")
     keys_sub = keys_cmd.add_subparsers(dest="keys_action", required=True, metavar="<action>")
-    keys_status = keys_sub.add_parser("status", help=t("cli.help.keys_status"))
+    keys_status = described(keys_sub, "status", "cli.help.keys_status", "cli.help.keys_status")
     keys_status.add_argument("--json", action="store_true", help=as_json)
-    keys_adopt = keys_sub.add_parser("adopt", help=t("cli.help.keys_adopt"))
+    keys_adopt = described(keys_sub, "adopt", "cli.help.keys_adopt", "cli.help.keys_adopt")
     keys_adopt.add_argument("--from", dest="source", type=Path, default=None, help=t("cli.help.keys_from"))
     keys_adopt.add_argument("--json", action="store_true", help=as_json)
-    keys_ensure = keys_sub.add_parser("ensure", help=t("cli.help.keys_ensure"))
+    keys_ensure = described(keys_sub, "ensure", "cli.help.keys_ensure", "cli.help.keys_ensure")
     keys_ensure.add_argument("--json", action="store_true", help=as_json)
     export_cmd = sub.add_parser("export", help=t("cli.help.export"), description=t("cli.help.export"))
     export_cmd.add_argument("--output", required=True, type=Path, help=t("cli.help.export_output"))
@@ -176,26 +210,26 @@ def _build_parser() -> argparse.ArgumentParser:
     import_cmd.add_argument("--path-map", action="append", default=[], help=t("cli.help.import_path_map"))
     import_cmd.add_argument("--apply", action="store_true", help=t("cli.help.import_apply"))
     import_cmd.add_argument("--json", action="store_true", help=as_json)
-    import_rollback = sub.add_parser("import-rollback", help=t("cli.help.import_rollback"))
+    import_rollback = described(sub, "import-rollback", "cli.help.import_rollback", "cli.help.import_rollback_long")
     import_rollback.add_argument("--checkpoint", required=True, type=Path, help=t("cli.help.rollback_checkpoint"))
     import_rollback.add_argument("--apply", action="store_true", help=t("cli.help.rollback_apply"))
     import_rollback.add_argument("--json", action="store_true", help=as_json)
-    backup = sub.add_parser("backup", help=t("cli.help.backup"))
+    backup = described(sub, "backup", "cli.help.backup", "cli.help.backup_long")
     backup.add_argument("--json", action="store_true", help=as_json)
-    restore = sub.add_parser("restore-snapshot", help=t("cli.help.restore_snapshot"))
+    restore = described(sub, "restore-snapshot", "cli.help.restore_snapshot", "cli.help.restore_snapshot_long")
     restore.add_argument("--path", required=True, type=Path, help=t("cli.help.restore_path"))
     restore.add_argument("--apply", action="store_true", help=t("cli.help.restore_apply"))
     restore.add_argument("--json", action="store_true", help=as_json)
     watchdog = sub.add_parser("watchdog", help=t("cli.help.watchdog"), description=t("cli.help.watchdog"))
     watchdog.add_argument("--json", action="store_true", help=as_json)
-    sub.add_parser("password", help=t("cli.help.password"))
-    sub.add_parser("run", help=t("cli.help.run"))
+    described(sub, "password", "cli.help.password", "cli.help.password_long")
+    described(sub, "run", "cli.help.run", "cli.help.run")
     start = sub.add_parser("start", help=t("cli.help.start"), description=t("cli.help.start"))
     start.add_argument("--no-browser", action="store_true", help=t("cli.help.start_no_browser"))
     start.add_argument("--wait", type=float, default=120.0, help=t("cli.help.start_wait"))
-    stop = sub.add_parser("stop", help=t("cli.help.stop"))
+    stop = described(sub, "stop", "cli.help.stop", "cli.help.stop")
     stop.add_argument("--wait", type=float, default=60.0, help=t("cli.help.stop_wait"))
-    sub.add_parser("restart", help=t("cli.help.restart"))
+    described(sub, "restart", "cli.help.restart", "cli.help.restart")
     sub.add_parser("setup", help=t("cli.help.setup"), description=t("cli.help.setup"))
     autostart = sub.add_parser("autostart", help=t("cli.help.autostart"), description=t("cli.help.autostart"))
     # "migrate" (1.18-1.20) only points to the documentation now: accepted, not offered.
@@ -205,7 +239,7 @@ def _build_parser() -> argparse.ArgumentParser:
     autostart.add_argument("--without-login", action="store_true", help=t("cli.help.autostart_without_login"))
     autostart.add_argument("--apply", action="store_true", help=argparse.SUPPRESS)  # migrate (1.18-1.20)
     autostart.add_argument("--json", action="store_true", help=as_json)
-    update = sub.add_parser("update", help=t("cli.help.update"))
+    update = described(sub, "update", "cli.help.update", "cli.help.update_long")
     update.add_argument("--ref", required=True, help=t("cli.help.update_ref"))
     return p
 

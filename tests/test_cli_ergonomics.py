@@ -47,6 +47,12 @@ def test_every_listed_command_and_every_flag_has_a_description():
             assert action.help, (name, action.dest)
 
 
+def test_every_command_describes_itself():
+    # `tow --help` says "every command explains itself": backup, keys, update... printed only usage.
+    for name, parser in _parsers():
+        assert parser.description, name or "tow"
+
+
 def test_task_only_commands_are_not_listed():
     root = cli._build_parser()
     subactions = next(a for a in root._actions if isinstance(a, argparse._SubParsersAction))

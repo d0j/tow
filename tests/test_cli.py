@@ -51,6 +51,48 @@ def test_run_help_describes_a_supervised_service(capsys, language, expected, inc
     assert incorrect not in output
 
 
+@pytest.mark.parametrize(
+    ("language", "own", "foreign"),
+    [
+        ("en", ["usage: tow backup", "options:", "show this help message and exit"], ["использование"]),
+        (
+            "ru",
+            ["использование: tow backup", "параметры:", "показать эту справку и выйти"],
+            ["usage:", "options:", "show this help"],
+        ),
+    ],
+)
+def test_a_command_help_speaks_one_language_with_its_description(capsys, language, own, foreign):
+    # In Russian argparse's own words ("usage:", "options", -h) stayed English, and `backup`
+    # printed no description of its own.
+    from tow.config import load_config, save_config
+
+    config = load_config()
+    config["language"] = language
+    save_config(config)
+    with pytest.raises(SystemExit) as exc:
+        main(["backup", "--help"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    for text in own:
+        assert text in out
+    for text in foreign:
+        assert text not in out
+    assert " ".join(t("cli.help.backup_long", language).split()[:4]) in " ".join(out.split())
+
+
+def test_a_wrong_option_shows_the_usage_in_the_command_language(capsys):
+    from tow.config import load_config, save_config
+
+    config = load_config()
+    config["language"] = "ru"
+    save_config(config)
+    with pytest.raises(SystemExit) as exc:
+        main(["restore-snapshot"])  # --path is required: refused by the command itself
+    assert exc.value.code == cli.EXIT_USAGE
+    assert capsys.readouterr().err.startswith("использование: tow restore-snapshot")
+
+
 def test_the_five_task_commands_are_gone(capsys):
     # 1.21: no `install-task`; `autostart migrate` only says the switch belongs to 1.18-1.20.
     with pytest.raises(SystemExit):
