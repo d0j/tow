@@ -80,10 +80,11 @@
   <button type="button" class="flash-x" aria-label="{{ t('base.close') }}">{{ icon('close', 'sm') }}</button></div>{% endif %}
   {% block body %}{% endblock %}
 </main>
-  <div class="app-version" data-page-version="{{ h.ver }}">
+  {#- The version is the page's footer (a landmark, A12); still `body > .app-version` for the CSS. -#}
+  <footer class="app-version" data-page-version="{{ h.ver }}">
     <a href="/settings?open=updates#acc-updates" title="{{ t('releases.current', version=h.ver) }}">TOW {{ h.ver }}</a>
     <a href="/settings?open=updates#acc-updates" class="release-badge" data-release-badge hidden></a>
-  </div>
+  </footer>
 <dialog id="log-pop" class="log-pop" aria-labelledby="log-title">
   <div class="log-pop-head">
     <span id="log-title">{{ t('base.log.title') }}</span>
