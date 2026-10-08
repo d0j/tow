@@ -4,10 +4,13 @@ rem `tow.cmd setup` installs Python and TOW's environment inside the install (af
 rem clone or a new Python version): see docs/PORTABLE.md.
 setlocal
 call "%~dp0tow-env.cmd"
-rem A moved folder: its environment's Python points to the old place and every command failed with
-rem "uv trampoline failed to canonicalize script path". Said here, like tow-start.cmd does.
+rem The environment must be this folder's own, as tow-start.cmd checks it: its Python runs, TOW's code
+rem (and in an install the base Python) lies inside the folder. A moved folder's environment points to
+rem the old place ("uv trampoline failed to canonicalize script path"); a copy's, while the original is
+rem still there, runs the original's code with this folder's data, and could stop its web server.
 set "TOW_MOVED="
-if /i not "%~1"=="setup" if exist "%TOW_APP%\.venv\Scripts\python.exe" "%TOW_APP%\.venv\Scripts\python.exe" -I -S -c "" >nul 2>&1 || set "TOW_MOVED=1"
+set "TOW_HERE=%TOW_ROOT%"
+if /i not "%~1"=="setup" if exist "%TOW_APP%\.venv\Scripts\python.exe" "%TOW_APP%\.venv\Scripts\python.exe" -I -c "import os, sys, importlib.util as u; n = lambda p: os.path.normcase(os.path.realpath(p)); here = n(os.environ['TOW_HERE']); spec = u.find_spec('tow'); found = [spec.origin] if spec and spec.origin else []; found += [sys.base_prefix] if here != n(os.environ['TOW_APP']) else []; sys.exit(0 if spec and spec.origin and all(n(p).startswith(here + os.sep) for p in found) else 1)" >nul 2>&1 || set "TOW_MOVED=1"
 if defined TOW_MOVED echo TOW's environment still belongs to the folder TOW was moved or copied from. Run "%~f0" setup first.
 if defined TOW_MOVED exit /b 3
 rem An update cut off while it replaced the code (the rule of tow-start.cmd): app\ may hold half of the

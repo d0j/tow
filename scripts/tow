@@ -119,8 +119,12 @@ if [ "${1:-}" = setup ]; then
 fi
 
 if [ -x "$TOW_APP/.venv/bin/tow" ]; then
-    # A moved folder: the environment's Python still points to the old place.
-    if ! "$TOW_APP/.venv/bin/python" -I -S -c '' >/dev/null 2>&1; then
+    # The environment must be this folder's own, as scripts/tow-start checks it: its Python runs,
+    # TOW's code (and in an install the base Python) lies inside the folder. A moved folder's
+    # environment points to the old place; a copy's, while the original is still there, runs the
+    # original's code with this folder's data, and could stop the original's web server.
+    here_check='import os, sys, importlib.util as u; n = lambda p: os.path.normcase(os.path.realpath(p)); here = n(os.environ["TOW_HERE"]); spec = u.find_spec("tow"); found = [spec.origin] if spec and spec.origin else []; found += [sys.base_prefix] if here != n(os.environ["TOW_APP"]) else []; sys.exit(0 if spec and spec.origin and all(n(p).startswith(here + os.sep) for p in found) else 1)'
+    if ! TOW_HERE=$TOW_ROOT TOW_APP=$TOW_APP "$TOW_APP/.venv/bin/python" -I -c "$here_check" >/dev/null 2>&1; then
         echo "TOW's environment still belongs to the folder TOW was moved or copied from. Run \"$TOW_APP/scripts/tow\" setup first." >&2
         exit 3
     fi

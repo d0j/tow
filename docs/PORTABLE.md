@@ -693,7 +693,10 @@ launchers' environment and Python 3.11 syntax.
   the key; the password is then set again on the computer running TOW. The key file stays out
   of update snapshots and night copies like the master key.
 - `scripts/tow.cmd <command>`: the venv's `tow.exe`, else (not set up yet)
-  `uv run --frozen --no-dev --project app tow`; the exit code is TOW's.
+  `uv run --frozen --no-dev --project app tow`; the exit code is TOW's. An environment that is
+  not this folder's own (the start files' question: TOW's code and, in an install, the base
+  Python inside `<TOW>`) is refused with "run setup" (exit code 3): a moved folder's points to
+  the old place, and a copy's, while the original is still there, would run the original's code.
   `tow.cmd setup` → `scripts/tow-setup.cmd`: `uv python install --no-bin --no-registry` (the
   version of `.python-version`, into `runtime\python`), rebuilds a `.venv` whose Python no longer
   runs (moved folder) or lives outside `runtime\python` (an install from before 1.18) — renamed

@@ -106,6 +106,100 @@ def test_a_moved_install_says_to_run_setup_instead_of_a_trampoline_error(tmp_pat
     assert "ran" not in done.stdout
 
 
+def _here_check(launcher: str) -> str:
+    import re
+
+    text = (ROOT / "scripts" / launcher).read_text(encoding="utf-8")
+    pattern = r"here_check='([^']+)'" if launcher == "tow" else r'-I -c "(import os, sys, importlib\.util[^"]+)" >nul'
+    matched = re.search(pattern, text)
+    assert matched is not None
+    return matched[1]
+
+
+@pytest.mark.parametrize("launcher", ["tow", "tow.cmd"])
+@pytest.mark.parametrize(
+    ("case", "expected"),
+    [
+        ("checkout", 0),  # a development checkout: its own code, the developer's Python
+        ("install", 0),  # an install: code and base Python inside the folder
+        ("copy", 1),  # a copy whose environment runs the original's code
+        ("python_outside", 1),  # an install whose base Python is another folder's
+        ("not_installed", 1),  # no tow in the environment at all
+    ],
+)
+def test_the_launcher_runs_only_an_environment_of_its_own_folder(monkeypatch, tmp_path, launcher, case, expected):
+    # Audit 08.10.2026: a copied install whose original was still there ran the original's code
+    # from tow.cmd / scripts/tow (only the start files checked whose environment it is).
+    import importlib.util
+    import runpy
+    import sys
+
+    code = ROOT  # where the imported tow lives (src/tow of this checkout)
+    here, app, base = {
+        "checkout": (code, code, tmp_path / "elsewhere" / "python"),
+        "install": (code.parent, code, code.parent / "runtime" / "python"),
+        "copy": (tmp_path / "TOW", tmp_path / "TOW" / "app", tmp_path / "TOW" / "runtime" / "python"),
+        "python_outside": (code.parent, code, tmp_path / "elsewhere" / "python"),
+        "not_installed": (code, code, tmp_path / "elsewhere" / "python"),
+    }[case]
+    monkeypatch.setenv("TOW_HERE", str(here))
+    monkeypatch.setenv("TOW_APP", str(app))
+    monkeypatch.setattr(sys, "base_prefix", str(base))
+    if case == "not_installed":
+        monkeypatch.setattr(importlib.util, "find_spec", lambda _name: None)
+    probe = tmp_path / "launcher-predicate.py"
+    probe.write_text(_here_check(launcher), encoding="utf-8")
+    with pytest.raises(SystemExit) as exited:
+        runpy.run_path(str(probe))  # the launcher's actual predicate
+    assert exited.value.code == expected
+
+
+def test_both_launchers_ask_the_same_question():
+    windows, posix = _here_check("tow.cmd"), _here_check("tow")
+    assert windows.replace("'", '"') == posix
+    assert "TOW_HERE" in (ROOT / "scripts" / "tow.cmd").read_text(encoding="utf-8")  # never the path in the code
+
+
+@pytest.mark.allow_system  # the launcher in a temp copy of an install whose original is still there
+def test_a_copied_install_says_to_run_setup_instead_of_running_the_originals_code(tmp_path):
+    import os
+    import shutil
+    import subprocess
+    import sys
+
+    root = tmp_path / "Copy of TOW"
+    shutil.copytree(ROOT / "scripts", root / "app" / "scripts")
+    (root / "data").mkdir()
+    env = {key: value for key, value in os.environ.items() if not key.startswith(("TOW_", "UV_"))}
+    venv = root / "app" / ".venv"
+    if os.name == "nt":
+        # A real environment launcher whose Python runs (the original is still there) and whose
+        # tow is the original's code: what a copy's .venv holds.
+        scripts = venv / "Scripts"
+        scripts.mkdir(parents=True)
+        shutil.copy2(Path(sys.prefix) / "Scripts" / "python.exe", scripts / "python.exe")
+        shutil.copy2(Path(sys.prefix) / "pyvenv.cfg", venv / "pyvenv.cfg")
+        site = venv / "Lib" / "site-packages"
+        site.mkdir(parents=True)
+        (site / "_tow.pth").write_text(str(ROOT / "src") + "\n", encoding="utf-8")
+        (scripts / "tow.exe").write_bytes(b"")
+        argv = ["cmd.exe", "/d", "/c", str(root / "app" / "scripts" / "tow.cmd"), "status"]
+    else:
+        scripts = venv / "bin"
+        scripts.mkdir(parents=True)
+        # This test's own interpreter: it runs, and its tow is this checkout's - another folder.
+        (scripts / "python").write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n', encoding="utf-8")
+        (scripts / "python").chmod(0o755)
+        (scripts / "tow").write_text("#!/bin/sh\necho ran\n", encoding="utf-8")
+        (scripts / "tow").chmod(0o755)
+        argv = ["/bin/sh", str(root / "app" / "scripts" / "tow"), "status"]
+    done = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=60, check=False)
+    assert done.returncode == 3, done.stdout + done.stderr
+    assert "moved or copied" in done.stdout + done.stderr
+    assert " setup first" in done.stdout + done.stderr
+    assert "ran" not in done.stdout
+
+
 def test_setup_installs_python_and_the_environment_inside_the_install():
     for name in ("tow-setup.cmd", "tow"):
         text = (ROOT / "scripts" / name).read_text(encoding="utf-8")
