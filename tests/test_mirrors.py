@@ -452,3 +452,102 @@ def test_a_lost_connection_still_counts_towards_the_cooldown(monkeypatch, tmp_pa
         with raises_code("mirrors.all_failed", MirrorFetchError):
             pick_and_get("rutor", ["http://rutor.info"], "/topic/1", fail_threshold=3)
     assert load_state()["mirrors"]["rutor"]["cool"].get("http://rutor.info")
+
+
+def _site(monkeypatch, pages, *, hosts=("http://site.example", "http://mirror.example")):
+    """A configured two-mirror site whose every host answers ``pages[path]``: a status, or an
+    exception to raise. Returns the list of URLs asked."""
+    import httpx
+
+    monkeypatch.setattr("tow.config.load_config", lambda: {"trackers": {"site": {"fetch_hosts": list(hosts)}}})
+    asked: list[str] = []
+
+    class Response:
+        def __init__(self, url, status_code):
+            self.url = url
+            self.status_code = status_code
+            challenged = status_code == 403
+            self.headers = {"content-type": "text/html", **({"cf-mitigated": "challenge"} if challenged else {})}
+            self.text = "<title>Just a moment...</title>" if challenged else "<title>topic</title>"
+            self.content = self.text.encode()
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url):
+            asked.append(url)
+            path = "/" + url.split("/", 3)[3]
+            answer = pages.get(path, 200)
+            if answer == "slow":
+                raise httpx.ReadTimeout("the page is built for too long")
+            if answer == "refused":
+                raise httpx.ConnectError("connection refused")
+            return Response(url, answer)
+
+    monkeypatch.setattr(thttp, "client", lambda **kwargs: Client())
+    return asked
+
+
+def test_a_few_broken_topic_pages_do_not_pause_the_site(monkeypatch, tmp_path):
+    # Soak: two topics behind a Cloudflare check and a slow one in a row put every mirror over
+    # fail_threshold, and all 150 topics of the site waited an hour as "all mirrors paused".
+    monkeypatch.setenv("TOW_HOME", str(tmp_path))
+    asked = _site(monkeypatch, {"/t/1": 403, "/t/2": 403, "/t/3": "slow"})
+    for _ in range(3):  # three checks in a row, the broken topics one after another each time
+        for path in ("/t/1", "/t/2", "/t/3"):
+            with pytest.raises(MirrorFetchError) as error:
+                pick_and_get("site", ["http://site.example", "http://mirror.example"], path, fail_threshold=3)
+            assert error.value.error_class in {"cloudflare", "tracker"}  # amber for the topic
+        response, _host = pick_and_get("site", ["http://site.example", "http://mirror.example"], "/t/4")
+        assert response.status_code == 200  # the healthy topic is checked
+    bucket = load_state()["mirrors"]["site"]
+    assert not bucket["cool"]
+    assert not any(bucket["fail"].values())
+    assert "http://site.example/" in asked  # the front page was asked whose problem it is
+
+
+def test_a_check_page_on_the_front_page_too_still_pauses_the_host(monkeypatch, tmp_path):
+    monkeypatch.setenv("TOW_HOME", str(tmp_path))
+    _site(monkeypatch, {"/": 403, "/t/1": 403, "/t/2": 403, "/t/3": 403}, hosts=("http://site.example",))
+    for path in ("/t/1", "/t/2", "/t/3"):
+        with pytest.raises(MirrorFetchError):
+            pick_and_get("site", ["http://site.example"], path, fail_threshold=3)
+    assert load_state()["mirrors"]["site"]["cool"].get("http://site.example")
+    with raises_code("mirrors.all_paused", MirrorFetchError):
+        pick_and_get("site", ["http://site.example"], "/t/4", fail_threshold=3)
+
+
+def test_a_host_that_hangs_still_cools_down(monkeypatch, tmp_path):
+    monkeypatch.setenv("TOW_HOME", str(tmp_path))
+    _site(monkeypatch, {"/": "slow", "/t/1": "slow", "/t/2": "slow", "/t/3": "slow"}, hosts=("http://site.example",))
+    for path in ("/t/1", "/t/2", "/t/3"):
+        with pytest.raises(MirrorFetchError):
+            pick_and_get("site", ["http://site.example"], path, fail_threshold=3)
+    assert load_state()["mirrors"]["site"]["cool"].get("http://site.example")
+
+
+def test_a_host_refusing_connections_cools_down_without_asking_its_front_page(monkeypatch, tmp_path):
+    monkeypatch.setenv("TOW_HOME", str(tmp_path))
+    hosts = ["http://site.example", "http://mirror.example"]
+    asked = _site(monkeypatch, {"/t/1": "refused", "/t/2": "refused", "/t/3": "refused"}, hosts=tuple(hosts))
+    for path in ("/t/1", "/t/2", "/t/3"):
+        with raises_code("mirrors.all_failed", MirrorFetchError) as error:
+            pick_and_get("site", hosts, path, fail_threshold=3)
+        assert error.value.error_class == "tracker"
+    cool = load_state()["mirrors"]["site"]["cool"]
+    assert set(cool) == set(hosts)
+    assert not any(url.endswith(".example/") for url in asked)
+    with raises_code("mirrors.all_paused", MirrorFetchError):
+        pick_and_get("site", hosts, "/t/4", fail_threshold=3)
+
+
+def test_a_preview_does_not_ask_the_front_page(monkeypatch, tmp_path):
+    monkeypatch.setenv("TOW_HOME", str(tmp_path))
+    asked = _site(monkeypatch, {"/t/1": 403}, hosts=("http://site.example",))
+    with pytest.raises(MirrorFetchError):
+        pick_and_get("site", ["http://site.example"], "/t/1", persist=False)
+    assert asked == ["http://site.example/t/1"]
