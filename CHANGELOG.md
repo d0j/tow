@@ -31,6 +31,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Windows: an update of an install in a folder with Cyrillic letters (such as `C:\Users\Иван\TOW`) recognises
   the web server a stopped TOW left behind and stops it, instead of failing with "port … is still in use after
   stopping TOW".
+- Windows, git install: `scripts\deploy.ps1` runs in Windows PowerShell 5.1 too (it demanded PowerShell 7) and in
+  a folder with `[ ]` in its name; the guides and `tow update` say how to run it when PowerShell refuses scripts.
 
 ## [1.27.0] — 2026-10-08
 

@@ -240,5 +240,12 @@ cp config.example.yaml ../config.yaml
 
 Start at login (LaunchAgent): `./scripts/tow autostart on`.
 
-Update a clone: `.\scripts\deploy.ps1 -Ref v1.25.0` on Windows; on Linux and macOS `./scripts/tow update --ref
-v1.25.0` prints the command. Details: [PORTABLE.md](PORTABLE.md).
+Update a clone: `.\scripts\deploy.ps1 -Ref v1.25.0` on Windows (Windows PowerShell or PowerShell 7, in the `app`
+folder); on Linux and macOS `./scripts/tow update --ref v1.25.0` prints the command. If PowerShell says that
+running scripts is disabled on this system, run it this way (it allows scripts for this one command only):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -Ref v1.25.0
+```
+
+Details: [PORTABLE.md](PORTABLE.md).

@@ -133,7 +133,8 @@ closes network access.
 
 An update stops TOW, snapshots `data/` and `config.yaml`, switches the code, starts TOW and checks the version. If
 anything fails it rolls back by itself. Without git it downloads the release from GitHub and checks it against the
-release's `SHA256SUMS`.
+release's `SHA256SUMS`. In a git clone on Windows, if PowerShell says that running scripts is disabled, use
+`powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -Ref <tag>`.
 
 | Backup | Where | Notes |
 |---|---|---|

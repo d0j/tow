@@ -969,7 +969,9 @@ def test_pages_and_the_cli_show_the_commands_of_the_backend_in_use(capsys):
     with platform.use(WindowsBackend()):
         assert launcher() == "scripts\\tow.cmd"
         _cmd_update(SimpleNamespace(ref="v9.9.9"))
-        assert "deploy.ps1" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "deploy.ps1" in out
+        assert "powershell -NoProfile -ExecutionPolicy Bypass -File" in out  # 5.1 is on every Windows
     with platform.use(PosixBackend("linux")):
         assert launcher() == "scripts/tow"
         _cmd_update(SimpleNamespace(ref="v9.9.9"))

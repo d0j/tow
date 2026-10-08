@@ -341,6 +341,27 @@ def test_deploy_reads_the_updates_utf8_and_gives_the_console_its_code_page_back(
     assert "exit $code" in deploy
 
 
+def test_deploy_runs_in_windows_powershell_5_1_and_in_any_folder():
+    # A git install set up in Windows PowerShell 5.1 was told to run deploy.ps1, which demanded
+    # PowerShell 7; Test-Path without -LiteralPath read a folder like "TOW [old]" as a wildcard.
+    import re as regex
+
+    raw = (ROOT / "scripts" / "deploy.ps1").read_bytes()
+    assert raw.isascii()  # 5.1 reads a file without a BOM in the ANSI code page
+    deploy = raw.decode("ascii")
+    assert "#Requires" not in deploy
+    code = regex.sub(r"(?s)<#.*?#>", "", deploy)
+    code = "\n".join(line.split("#", 1)[0] for line in code.splitlines())
+    for seven_only in ("??", "&&", "||", "?."):
+        assert seven_only not in code
+    assert regex.search(r"\?\s*\S+\s*:", code.replace("::", "")) is None  # no ternary
+    for cmdlet in ("Test-Path", "Get-Content"):
+        uses = regex.findall(rf"{cmdlet}\s+(-\w+)", code)
+        assert uses
+        assert set(uses) == {"-LiteralPath"}
+    assert "-Encoding UTF8" in code  # pyvenv.cfg is UTF-8; 5.1 would read it as ANSI
+
+
 def test_setup_takes_no_options_and_never_runs_under_a_running_tow():
     # 02.10.2026: `tow.cmd setup --help` rebuilt the live install's environment under a running TOW.
     root = Path(__file__).resolve().parents[1] / "scripts"
