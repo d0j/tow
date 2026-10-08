@@ -449,6 +449,68 @@ def test_turning_the_launch_agent_off_unloads_it(install):
     assert agent.enable(without_login=True)["refused"] is True
 
 
+class UnloadingLaunchctl(Launchctl):
+    """launchd after `bootout`: it still lists the agent while `tow run` stops (ExitTimeOut),
+    here for ``polls`` more `launchctl print` calls."""
+
+    def __init__(self, polls):
+        super().__init__()
+        self.polls = polls
+        self.unloading: int | None = None
+
+    def __call__(self, argv):
+        argv = [str(a) for a in argv]
+        if argv[1] == "bootout":
+            self.calls.append(argv)
+            self.unloading = self.polls
+            return CommandResult(0)
+        if argv[1] == "print" and self.unloading is not None:
+            if self.unloading == 0:
+                self.loaded = False
+            else:
+                self.unloading -= 1
+        return super().__call__(argv)
+
+
+def test_turning_the_launch_agent_off_waits_until_launchd_has_unloaded_it(install):
+    # CI on macOS: `tow autostart off` said ok=false (exit 2) because launchctl still listed the
+    # agent right after the bootout, while launchd let the TOW it had started stop.
+    launchctl = UnloadingLaunchctl(polls=3)
+    agent = LaunchAgent(install, launchctl)
+    agent.UNLOAD_POLL_SEC = 0
+    agent.enable()
+
+    result = agent.disable()
+
+    assert result["ok"] is True, result
+    assert "error" not in result
+    assert "tow run" in result["hint"]
+    assert launchctl.loaded is False
+    assert not agent.plist_path.exists()
+    after_bootout = launchctl.calls[launchctl.calls.index(["launchctl", "bootout", "gui/501/io.tow"]) :]
+    assert sum(call[1] == "print" for call in after_bootout) >= 4  # asked until it was gone
+
+
+def test_an_agent_launchd_does_not_unload_in_time_is_reported(install):
+    from tow.autostart.launchd import EXIT_TIMEOUT_SEC
+    from tow.i18n import t
+
+    assert LaunchAgent.UNLOAD_WAIT_SEC > EXIT_TIMEOUT_SEC  # launchd kills what is left by then
+    launchctl = UnloadingLaunchctl(polls=10**6)
+    agent = LaunchAgent(install, launchctl)
+    agent.UNLOAD_POLL_SEC = 0
+    agent.UNLOAD_WAIT_SEC = 0
+    agent.enable()
+
+    result = agent.disable()
+
+    assert result["ok"] is False
+    assert result["changed"] is True
+    assert result["error"] == t("autostart.launchd_still_loaded", seconds=0)
+    assert "hint" not in result
+    assert not agent.plist_path.exists()
+
+
 def test_a_launch_agent_not_loaded_is_bootstrapped_to_start(install):
     launchctl = Launchctl()
     agent = LaunchAgent(install, launchctl)

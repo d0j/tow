@@ -3,6 +3,12 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [Unreleased]
+
+### Fixed
+
+- macOS: turning autostart off no longer reports a failure while launchd is still unloading the agent.
+
 ## [1.28.0] — 2026-10-08
 
 ### Changed

@@ -84,7 +84,8 @@
       "gone": "Nothing to switch: since 1.18 one service manages TOW, and this version no longer knows the five Windows tasks of 1.17. An install that still has them first updates to v1.20.0 and runs “tow autostart migrate --apply” there."
     },
     "systemd_unreachable": "systemd runs this computer, but its user manager did not answer ({error}). Run this in a session that has one (a desktop session, or SSH after “loginctl enable-linger”), then try again.",
-    "launchd_stopped": "launchd unloaded TOW's agent; a TOW it had started has stopped. Start it with “tow run” if you need it now."
+    "launchd_stopped": "launchd unloaded TOW's agent; a TOW it had started has stopped. Start it with “tow run” if you need it now.",
+    "launchd_still_loaded": "launchd has not finished unloading TOW's agent after {seconds} s; its file is removed. Run “tow autostart status” in a minute to see it is off."
   },
   "backup": {
     "snapshot": {
