@@ -106,6 +106,9 @@ torrent back, and the forms then show no free space.
 
 When a new version arrives while the previous one is still seeding the same file, TOW does not touch the old
 torrent. It asks you: **Stop the previous one and add** stops the old torrent (its files stay) and adds the new one.
+While it waits, scheduled checks do not download the new version's `.torrent` again when the topic page's magnet
+still names it, or, on a page without a magnet, when the site has a daily download limit (a newer upload there is
+found once the previous torrent is stopped, or by a check you start); the wait is logged once, not at every check.
 
 ## Statuses and colours
 

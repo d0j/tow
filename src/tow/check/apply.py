@@ -12,6 +12,7 @@ from tow.check import space
 from tow.check.client_ops import (
     PREVIOUS_REVISION_ACTIVE,
     assert_client_can_add,
+    blocked_revision,
     client_unreachable,
     info_confirms,
     info_is_pending_tow_add,
@@ -289,6 +290,19 @@ def _update_client_selection(
             space.started(topic, run, row, h=h, client_id=client_id, kind=kind)
 
 
+def _refuse_still_blocked(work: TopicCheck, metadata: Any, *, h: str, replaces: bool) -> None:
+    """The revision an earlier check could not add because the previous one still runs on the
+    same files (G1), and that one still runs: refused before any add starts, so the wait is not
+    logged as a new add that failed at every check (only its first refusal is)."""
+    topic, client = work.topic, work.client
+    if not replaces or client is None or not h or blocked_revision(topic) != h.upper():
+        return
+    revisions = [work.old, *map(str, topic.get("previous_hashes") or [])]
+    overlap = work.blocked_overlap or live_previous_overlap(client, revisions, metadata.files)
+    if overlap:
+        raise TowError(PREVIOUS_REVISION_ACTIVE, file=overlap, hash=h.upper())
+
+
 def apply_revision(
     work: TopicCheck,
     fetched: Fetched,
@@ -305,6 +319,7 @@ def apply_revision(
     dest = (topic.get("save_path") or "").strip()
     if not dest:
         raise TowError("check.no_save_path")
+    _refuse_still_blocked(work, metadata, h=h, replaces=bool(h != old and old and not migrates))
     operation_id = work.operation_id = new_operation_id("client-add")
     row["operation_id"] = operation_id
     run.record(

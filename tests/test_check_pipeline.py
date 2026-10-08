@@ -504,3 +504,129 @@ def test_topics_of_a_paused_site_are_one_log_line_per_check(monkeypatch, stores)
     assert all(saved[f"t{i}"]["last_error_code"] == "mirrors.all_paused" for i in range(1, 9))  # the rows keep it
     assert all(saved[f"t{i}"]["last_error_class"] == "tracker" for i in range(1, 9))
     assert "8" in format_event(skipped[0])["detail"]
+
+
+# --- a revision waiting for its previous one to stop is not downloaded and logged every check ----
+
+
+def _show(*episodes: int, salt: bytes = b"") -> bytes:
+    from helpers import multi_file_torrent
+
+    files = [{b"length": 1, b"path": [f"e{n:02d}.mkv".encode()]} for n in episodes]
+    return multi_file_torrent(b"Show", files, pieces=(b"x" * 19 + salt)[-20:].rjust(20, b"x"))
+
+
+class _WaitingSite:
+    """A site whose topic has ``blob``; its page shows ``magnet`` (None: no magnet)."""
+
+    name = "site"
+
+    def __init__(self, blob: bytes, *, magnet: bool, limited: bool) -> None:
+        self.blob = blob
+        self.magnet = magnet
+        self.spec = {"download_limit": limited}
+        self.downloads = 0
+        self.pages = 0
+
+    def fetch_torrent(self, url, secrets, ua, *, ignore_cool=False, persist=True):
+        self.downloads += 1
+        return self.blob
+
+    def fetch_magnet(self, url, secrets, ua, *, ignore_cool=False, persist=True):
+        from tow.errors import TowError
+        from tow.torrent import parse_torrent_metadata
+
+        self.pages += 1
+        if not self.magnet:
+            raise TowError("tracker.no_magnet", prefix="site")
+        h = parse_torrent_metadata(self.blob).hash_v1
+        return f"magnet:?xt=urn:btih:{h}", h
+
+    def fetch_title(self, url, secrets, ua, *, ignore_cool=False, persist=True):
+        return "Show"
+
+
+def _wire_waiting(monkeypatch, client: Client, site: _WaitingSite) -> None:
+    cfg = {"trackers": {}, "client": {"id": "main", "kind": "fake"}}
+    monkeypatch.setattr(check_run, "load_config", lambda: cfg)
+    monkeypatch.setattr(check_run, "load_trackers", lambda cfg: {"site": site})
+    monkeypatch.setattr(topic_step, "match_tracker", lambda trackers, url: site)
+    monkeypatch.setattr(client_factory, "default_client_id", lambda cfg: "main")
+    monkeypatch.setattr(client_factory, "from_secrets", lambda cfg, secrets, client_id=None: client)
+    monkeypatch.setattr(check_apply, "free_space_problem", lambda *a, **k: None)
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", lambda *a, **k: {"events": [], "summary": {}})
+
+
+def _kinds() -> list[str]:
+    from tow.log import read_events
+
+    return [str(e.get("kind")) for e in reversed(read_events(limit=500))]
+
+
+@pytest.mark.parametrize(
+    ("magnet", "limited", "downloads_while_waiting"),
+    [(True, False, 0), (False, True, 0), (False, False, 2)],
+)
+def test_a_revision_waiting_for_the_previous_one_is_downloaded_and_logged_once(
+    monkeypatch, stores, magnet, limited, downloads_while_waiting
+):
+    # Soak: while "the previous revision is still active", every check downloaded the same
+    # .torrent again (on a daily-limited site!) and logged client_add_started, client_add_failed
+    # and check_fail for it.
+    from tow.torrent import parse_torrent_metadata
+
+    old_blob, new_blob = _show(1), _show(1, 2)
+    old = parse_torrent_metadata(old_blob).client_hash
+    new = parse_torrent_metadata(new_blob).client_hash
+    save_state({"topics": [_topic(hash=old, selection={"mode": "all", "value": ""})]})
+    client = Client()
+    client.put(old, "/media/tv", tags=["tow"])
+    client.torrents[old]["state"] = "downloading"  # the previous revision runs on e01
+    site = _WaitingSite(new_blob, magnet=magnet, limited=limited)
+    _wire_waiting(monkeypatch, client, site)
+
+    check.run_check(apply=True, notify=False, how="auto")
+    assert site.downloads == 1
+    saved = load_state()["topics"][0]
+    assert saved["last_error_code"] == "check.previous_revision_active"
+    assert saved["last_error_params"]["hash"] == new
+    first = _kinds()
+    assert first.count("client_add_started") == first.count("client_add_failed") == first.count("check_fail") == 1
+
+    for _ in range(2):
+        check.run_check(apply=True, notify=False, how="auto")
+    assert site.downloads == 1 + downloads_while_waiting
+    assert load_state()["topics"][0]["last_error_code"] == "check.previous_revision_active"  # still red
+    later = _kinds()[len(first) :]
+    for kind in ("client_add_started", "client_add_failed", "check_fail", "tracker_found"):
+        assert kind not in later, (kind, later)
+    assert client.adds == []
+
+    check.run_check(apply=True, notify=False, how="manual", ids=["t1"])  # a check you start asks the site
+    assert site.downloads == 2 + downloads_while_waiting
+
+    client.torrents[old]["state"] = "stoppedDL"  # the owner stopped the previous revision
+    check.run_check(apply=True, notify=False, how="auto")
+    assert site.downloads == 3 + downloads_while_waiting  # the current .torrent, not the stored one
+    assert client.adds == [(new, "/media/tv")]
+    assert load_state()["topics"][0]["hash"] == new
+
+
+def test_a_newer_upload_while_waiting_is_downloaded(monkeypatch, stores):
+    from tow.torrent import parse_torrent_metadata
+
+    old_blob = _show(1)
+    old = parse_torrent_metadata(old_blob).client_hash
+    save_state({"topics": [_topic(hash=old, selection={"mode": "all", "value": ""})]})
+    client = Client()
+    client.put(old, "/media/tv", tags=["tow"])
+    client.torrents[old]["state"] = "downloading"
+    site = _WaitingSite(_show(1, 2), magnet=True, limited=True)
+    _wire_waiting(monkeypatch, client, site)
+    check.run_check(apply=True, notify=False, how="auto")
+    site.blob = _show(1, 2, 3)  # the page's magnet names another revision now
+    check.run_check(apply=True, notify=False, how="auto")
+    assert site.downloads == 2
+    saved = load_state()["topics"][0]
+    assert saved["last_error_params"]["hash"] == parse_torrent_metadata(site.blob).client_hash
+    assert _kinds().count("check_fail") == 2  # a new revision waiting is worth a line

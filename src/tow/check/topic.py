@@ -11,9 +11,15 @@ from typing import Any, NamedTuple
 from tow import download_history
 from tow.check import space
 from tow.check.apply import apply_revision
-from tow.check.client_ops import confirm_client_add, magnet_matches_saved_hash
+from tow.check.client_ops import (
+    PREVIOUS_REVISION_ACTIVE,
+    blocked_revision,
+    confirm_client_add,
+    live_previous_overlap,
+    magnet_matches_saved_hash,
+)
 from tow.check.rows import set_error, stamp_result
-from tow.check_steps import resolve_client_hash, store_file_aliases, verify_magnet_metadata
+from tow.check_steps import client_identities, resolve_client_hash, store_file_aliases, verify_magnet_metadata
 from tow.clients.spec import TorrentClientAdapter
 from tow.episodes import parse_season_hint
 from tow.errors import TowError
@@ -31,7 +37,7 @@ from tow.store import (
     load_state,
 )
 from tow.title import title_is_placeholder as _title_placeholder
-from tow.torrent import TorrentPathConflictError, parse_torrent_metadata
+from tow.torrent import TorrentPathConflictError, parse_magnet_hashes, parse_torrent_metadata
 from tow.trackers import GenericHttpTracker, match_tracker, presets
 
 _LOG = logging.getLogger("tow.check")
@@ -348,6 +354,9 @@ class TopicCheck:
     client: TorrentClientAdapter | None  # None: the client did not answer this run
     operation_id: str | None = None  # set once a client operation has started
     started: tuple[str, ...] | None = None  # the topic's _client_marks when its check began
+    # The file the previous revision still runs on, when the revision waiting to be added was
+    # taken from the metadata store instead of the site (_blocked_revision).
+    blocked_overlap: str = ""
 
 
 class Fetched(NamedTuple):
@@ -515,6 +524,8 @@ def _fetch_revision(work: TopicCheck, policy: dict[str, Any]) -> Fetched | None:
         # Pick up tracker cookies a previous topic's login persisted in this run;
         # the snapshot taken at the start would make every topic log in again.
         _reread_secrets(run)
+    if (waiting := _blocked_revision(work)) is not None:
+        return Fetched(waiting, None)
     try:
         blob = work.tracker.fetch_torrent(work.url, run.secrets, run.ua, ignore_cool=run.ignore_cool, persist=run.apply)
     except Exception as torrent_error:  # a tracker refusal may fall back to its magnet; else re-raised
@@ -522,6 +533,62 @@ def _fetch_revision(work: TopicCheck, policy: dict[str, Any]) -> Fetched | None:
             raise  # no temporary magnet add before the prepared identity is verified
         return _fetch_by_magnet(work, policy, torrent_error)
     return Fetched(blob, None)
+
+
+def _blocked_revision(work: TopicCheck) -> bytes | None:
+    """The .torrent of the revision the topic waits to add while its previous revision still
+    runs on the same files (G1), from the metadata store, when it may stand for the site's
+    current one: every check downloaded the same .torrent again (a daily limit spent on
+    nothing) only to be refused again.
+
+    Only while the previous revision still runs (once it stops, the check downloads the current
+    .torrent to add that), and never in a check the owner started. The topic page's magnet
+    says whether the site still has this revision; on a page without one it is not known, and
+    then only a site with a daily download limit is not asked for the .torrent: a newer upload
+    there is found once the previous revision is stopped, or by a check you start."""
+    topic, run, client = work.topic, work.run, work.client
+    waiting = blocked_revision(topic)
+    if not (run.apply and run.how != "manual" and work.old and client is not None and waiting):
+        return None
+    from tow import torrent_cache
+
+    try:
+        blob = torrent_cache.read(work.url)
+        metadata = parse_torrent_metadata(blob) if blob is not None else None
+    except (TowError, OSError, ValueError) as exc:
+        _LOG.info("waiting revision not read from the metadata store: %s", type(exc).__name__)
+        return None
+    if blob is None or metadata is None or waiting not in client_identities(metadata):
+        return None  # the store holds another revision
+    revisions = [work.old, *map(str, topic.get("previous_hashes") or [])]
+    overlap = live_previous_overlap(client, revisions, metadata.files)
+    if not overlap:
+        return None
+    current = _page_names_revision(work, metadata)
+    if current is False or (current is None and not _download_limited(work.tracker)):
+        return None
+    work.blocked_overlap = overlap
+    return blob
+
+
+def _page_names_revision(work: TopicCheck, metadata: Any) -> bool | None:
+    """Whether the topic page's own magnet names this revision; None: the page has none. A
+    site that does not answer fails the check as a download would have."""
+    fetch_magnet = getattr(work.tracker, "fetch_magnet", None)
+    if not callable(fetch_magnet):
+        return None
+    run = work.run
+    try:
+        magnet, _hash = fetch_magnet(work.url, run.secrets, run.ua, ignore_cool=run.ignore_cool, persist=run.apply)
+    except TowError as exc:
+        if exc.code in {"tracker.no_magnet", "tracker.magnet_ambiguous"}:
+            return None
+        raise
+    identities = parse_magnet_hashes(str(magnet or ""))
+    if identities is None:
+        return None
+    btih, btmh = identities
+    return bool((btih and metadata.hash_v1 in btih) or (btmh and metadata.hash_v2 in btmh))
 
 
 def _fetch_by_magnet(work: TopicCheck, policy: dict[str, Any], torrent_error: Exception) -> Fetched | None:
@@ -626,7 +693,9 @@ def _record_found(work: TopicCheck, metadata: Any, plan: Any, *, h: str, migrate
     row["hash"] = h
     row["changed"] = bool(old) and h != old and not migrates
     row["ok"] = True
-    for kind in ("tracker_checked", "tracker_found") if (row["changed"] or not old) else ("tracker_checked",):
+    # A revision found before and still waiting for its previous one to stop is not new again.
+    found = (row["changed"] and blocked_revision(topic) != h.upper()) or not old
+    for kind in ("tracker_checked", "tracker_found") if found else ("tracker_checked",):
         run.record(
             kind,
             component="tracker",
@@ -642,6 +711,16 @@ def _record_found(work: TopicCheck, metadata: Any, plan: Any, *, h: str, migrate
     if nm and _title_placeholder(topic.get("title"), work.url):
         topic["title"] = nm
         row["title"] = nm
+
+
+def _still_waiting(topic: Topic, error: Exception) -> bool:
+    """The check refused the same revision as the last one did, for the same reason: its
+    previous revision still runs on the same files."""
+    if getattr(error, "code", None) != PREVIOUS_REVISION_ACTIVE:
+        return False
+    params = getattr(error, "params", None) or {}
+    waiting = str(params.get("hash") or "").upper()
+    return bool(waiting) and blocked_revision(topic) == waiting
 
 
 def _topic_failed(work: TopicCheck, error: Exception) -> None:
@@ -668,7 +747,8 @@ def _topic_failed(work: TopicCheck, error: Exception) -> None:
         )
     if is_daily_limit(error):
         run.quota.add(tr.name)
-    _fail_log(topic, work.url, error, tr, how=run.how, persist=run.apply, site_skips=run.site_skips)
+    if not _still_waiting(topic, error):  # the wait for the previous revision is logged once
+        _fail_log(topic, work.url, error, tr, how=run.how, persist=run.apply, site_skips=run.site_skips)
     if run.notify:
         run.queue_notification(
             topic,

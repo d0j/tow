@@ -54,6 +54,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   so each started a fraction of a second later than planned (+0.25 s per check, without end). Now it counts from
   the planned start; a check that started more than an interval late (after a long stall) counts from then, without
   a burst of catch-up checks.
+- While a new version waits for its previous torrent to stop ("the previous version of the torrent is still
+  active"), scheduled checks no longer download its `.torrent` again at every check when the topic page's magnet
+  still names it, or, on a page without a magnet, when the site has a daily download limit; and the wait is logged
+  once instead of "add started", "add failed" and "check failed" at every check. A newer upload named by the magnet,
+  a check you start and the stop of the previous torrent still download the current `.torrent`.
 
 ## [1.28.1] — 2026-10-08
 

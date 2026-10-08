@@ -200,6 +200,15 @@ def blocked_by_previous_revision(topic: Topic) -> bool:
     return str(topic.get("last_error") or "").startswith(_LEGACY_PREVIOUS_REVISION)
 
 
+def blocked_revision(topic: Topic) -> str:
+    """The hash of the revision the topic waits to add while its previous one still runs ("":
+    it does not wait, or an older TOW did not record which revision it was)."""
+    if topic.get("last_error_code") != PREVIOUS_REVISION_ACTIVE:
+        return ""
+    params = topic.get("last_error_params")
+    return str((params if isinstance(params, dict) else {}).get("hash") or "").upper()
+
+
 def client_unreachable(run: Any, client_id: str) -> TowError:
     """The topic's client did not answer this run: its own error (or "no connection") as the reason."""
     cause = run.client_errors.get(client_id)
@@ -241,7 +250,7 @@ def assert_client_can_add(
     if replaces_revision:
         overlap = live_previous_overlap(topic_client, [old, *map(str, topic.get("previous_hashes") or [])], files)
         if overlap:
-            raise TowError(PREVIOUS_REVISION_ACTIVE, file=overlap)
+            raise TowError(PREVIOUS_REVISION_ACTIVE, file=overlap, hash=h.upper())
     capabilities = topic_client.capabilities or {}
     if not all(
         capabilities.get(name) is True for name in ("stopped_add", "file_selection", "priority_readback", "start_stop")
