@@ -24,7 +24,7 @@ def test_config_and_import_refuse_a_site_name_that_moves_a_page_address(name):
 @pytest.mark.parametrize("name", ["site name", "", "x" * 65, "сайт", "kinozal.tv", 123, None])
 def test_an_older_odd_site_name_loads_and_passes_its_own_backup(name):
     # Before: config.yaml loaded such a name, but the read-back of TOW's own restore point (and
-    # with it the web update, tow export and the Monitorrent import) refused the same file.
+    # with it the web update and tow export) refused the same file.
     raw = {"trackers": {name: {"fetch_hosts": ["https://tracker.example"]}}}
     assert name in validated(raw)["trackers"]  # legacy config.yaml keeps working
     _validate_config_schema(raw)

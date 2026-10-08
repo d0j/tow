@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-import test_import_monitorrent as monitorrent_fixtures
 import test_web_update as update_fixtures
 from fastapi.testclient import TestClient
 from helpers import flash_kind, shown
@@ -15,7 +14,6 @@ from tow.i18n import t
 from tow.store import load_state, save_secrets, save_state
 from tow.web import app, services
 
-database = monitorrent_fixtures.database
 install = update_fixtures.install
 
 
@@ -111,19 +109,6 @@ def test_restore_result_keeps_both_audit_and_cleanup_warnings(monkeypatch, lang)
     assert kind == "warn"
     assert t("web.settings.audit_missing", lang) in message
     assert t("backup.restore_point.restore_cleanup_warning", lang) in message
-
-
-def test_monitorrent_does_not_hide_cleanup_of_its_verified_restore_point(database, monkeypatch):
-    from tow.import_monitorrent import import_monitorrent
-
-    def fail(**_kwargs):
-        raise PermissionError("synthetic held archive")
-
-    monkeypatch.setattr(restore_points, "_prune", fail)
-    result = import_monitorrent(database, apply=True)
-    assert result["topics_added"] == 1
-    assert result["cleanup_warning"]
-    assert restore_points.point_path(result["restore_point"]).is_file()
 
 
 def test_web_update_keeps_cleanup_warning_across_restart_and_terminal_status(install, monkeypatch):

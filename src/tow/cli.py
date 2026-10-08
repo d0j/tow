@@ -118,12 +118,6 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     perm.add_argument("--owner", metavar="ACCOUNT", help=t("cli.help.permissions_owner"))
     perm.add_argument("--json", action="store_true", help=as_json)
-    im = sub.add_parser("import-monitorrent", help=t("cli.help.import_monitorrent"))
-    im.add_argument("--json", action="store_true", help=as_json)
-    im.add_argument("--db", required=True, type=Path, help=t("cli.help.monitorrent_db"))
-    im.add_argument("--client", help=t("cli.help.monitorrent_client"))
-    im.add_argument("--apply", action="store_true", help=t("cli.help.monitorrent_apply"))
-    im.add_argument("--adopt", action="store_true", help=t("cli.help.monitorrent_adopt"))
     ad = sub.add_parser("adopt", help=t("cli.help.adopt"), description=t("cli.help.adopt"))
     ad.add_argument("topics", nargs="*", metavar="TOPIC_ID", help=t("cli.help.adopt_ids"))
     ad.add_argument("--all-unmarked", action="store_true", help=t("cli.help.adopt_all"))
@@ -371,18 +365,6 @@ def _cmd_password(_args: argparse.Namespace) -> int:
     log_event("settings_password", changed="password", hint=bool(record.get("hint")), where="cli", how="manual")
     _print({"ok": True, "message": t("web.password.saved")}, False)
     return 0
-
-
-def _cmd_import_monitorrent(args: argparse.Namespace) -> int:
-    from tow.import_monitorrent import MonitorrentImportError, import_monitorrent
-
-    try:
-        result = import_monitorrent(args.db, apply=args.apply, client_id=args.client, adopt=args.adopt)
-        _print(result, args.json)
-    except MonitorrentImportError as exc:
-        _print({"ok": False, "error": str(exc)}, args.json)
-        return 3
-    return EXIT_PARTIAL if result.get("adopt_failed") else 0
 
 
 def _cmd_adopt(args: argparse.Namespace) -> int:
@@ -931,7 +913,6 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "version": _cmd_version,
     "secrets": _cmd_secrets,
     "keys": _cmd_keys,
-    "import-monitorrent": _cmd_import_monitorrent,
     "adopt": _cmd_adopt,
     "export": _cmd_export,
     "import": _cmd_import,
