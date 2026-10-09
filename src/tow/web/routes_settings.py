@@ -171,7 +171,7 @@ def settings_updates(enabled: str = Form("")) -> Response:
 
 @router.post("/settings/language")
 @services.locked_state_mutation
-def settings_language(auto: str = Form(""), language: str = Form("")) -> Response:
+def settings_language(request: Request, auto: str = Form(""), language: str = Form("")) -> Response:
     """One list: "auto" (the browser's language) or a language. ``auto=1`` (the older form's
     checkbox) still means automatic."""
 
@@ -184,8 +184,9 @@ def settings_language(auto: str = Form(""), language: str = Form("")) -> Respons
     value = i18n.AUTO if as_bool(auto) or chosen is None else chosen
     cfg["language"] = value
     services.save_config(cfg)
-    if value != i18n.AUTO:
-        i18n.use(value)
+    # The message is in the language the next page has: "Auto" chosen on a Russian page of an
+    # English browser said "Язык сохранён" above an English page.
+    i18n.use(i18n.for_request(cfg, request.headers.get("accept-language")))
     services.log_event("settings_language", language=value, how="manual")
     return flash_redirect("/settings?open=language", "settings.language.saved", "ok")
 

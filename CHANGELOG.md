@@ -189,6 +189,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   and the row had no way to sign in.
 - A long site title on Home ends in "…" (the whole title is its tooltip) instead of wrapping over four lines and making
   the row four times as tall; on Sites "No sign-in needed" no longer runs out of its pill.
+- Switching the language to Auto says "Language saved" in the language the page then has, not in the one it had.
 
 ## [1.28.2] — 2026-10-09
 
