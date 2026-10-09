@@ -6,6 +6,7 @@ from tow.bind import (
     resolve_bind,
     validate_bind,
 )
+from tow.i18n import t
 
 
 def test_bind_defaults_to_loopback_and_accepts_loopback_addresses():
@@ -16,8 +17,13 @@ def test_bind_defaults_to_loopback_and_accepts_loopback_addresses():
 
 
 def test_non_loopback_bind_requires_explicit_lan_opt_in():
-    with pytest.raises(ValueError, match="loopback"):
+    from tow.config import ConfigError
+
+    with pytest.raises(ConfigError) as refused:
         validate_bind("0.0.0.0")
+    # In the owner's language, with the way out (it was an English sentence in a Russian line).
+    assert str(refused.value) == t("config_error.bind_needs_network", bind="0.0.0.0")
+    assert "tow access on" in str(refused.value)
     assert validate_bind("192.168.1.10", allow_lan=True) == "192.168.1.10"
     assert validate_bind("0.0.0.0", allow_lan=True) == "0.0.0.0"
     assert validate_bind("::", allow_lan=True) == "0.0.0.0"

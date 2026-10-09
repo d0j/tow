@@ -51,7 +51,8 @@
     "site_number": "config.yaml: trackers.{site}.{key} должно быть целым числом",
     "site_text_list": "config.yaml: trackers.{site}.{key} должно быть списком строк",
     "site_login_form": "config.yaml: в trackers.{site}.login_form допустимы только user_field и pw_field (текст) и extra (имена и значения — текст)",
-    "theme": "config.yaml: theme должно быть auto, light или dark"
+    "theme": "config.yaml: theme должно быть auto, light или dark",
+    "bind_needs_network": "config.yaml: bind {bind} открывает TOW другим устройствам, а для этого нужно allow_lan: true — выполните tow access on или запишите bind: 127.0.0.1"
   },
   "auth": {
     "password_too_short": {

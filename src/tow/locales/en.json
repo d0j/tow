@@ -51,7 +51,8 @@
     "site_number": "config.yaml: trackers.{site}.{key} must be a whole number",
     "site_text_list": "config.yaml: trackers.{site}.{key} must be a list of texts",
     "site_login_form": "config.yaml: trackers.{site}.login_form may have only user_field and pw_field (texts) and extra (names and values as text)",
-    "theme": "config.yaml: theme must be auto, light or dark"
+    "theme": "config.yaml: theme must be auto, light or dark",
+    "bind_needs_network": "config.yaml: bind {bind} opens TOW to other devices, which needs allow_lan: true — run tow access on, or write bind: 127.0.0.1"
   },
   "auth": {
     "password_too_short": {
