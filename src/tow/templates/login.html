@@ -22,7 +22,7 @@
       {% else %}
       <form method="post" action="/login" class="auth-form">
         <label for="lan-password">{% if credential_kind == "password" %}{{ t('login.password') }}{% else %}{{ t('login.key') }}{% endif %}</label>
-        <input id="lan-password" name="password" type="password" autocomplete="current-password" required {% if not configured %}disabled{% endif %}>
+        <input id="lan-password" name="password" type="password" autocomplete="current-password" required {% if not configured %}disabled{% else %}autofocus{% endif %}>
         <div class="settings-actions"><button type="submit" {% if not configured %}disabled{% endif %}>{{ t('login.submit') }}</button></div>
       </form>
       {% endif %}

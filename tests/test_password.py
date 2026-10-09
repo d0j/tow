@@ -1,6 +1,7 @@
 """The TOW password: first start, change in Settings, reminder and reset of a forgotten one."""
 
 import os
+import re
 import sys
 
 import pytest
@@ -250,6 +251,16 @@ def test_sign_in_page_shows_the_reminder_and_how_to_reset():
     assert "старый там не нужен" in page
     assert "http://127.0.0.1:8787" in page
     assert ("scripts\\tow.cmd password" if sys.platform == "win32" else "scripts/tow password") in page
+
+
+def test_the_sign_in_page_puts_the_cursor_in_the_password_field():
+    """Qa8: the sign-in page (nothing else to do there) opened with the focus nowhere; after a
+    wrong password too. The password field takes it."""
+    _with_password("old-horse-battery")
+    lan = TestClient(app, client=LAN, headers=ORIGIN)
+    assert re.search(r'<input id="lan-password"[^>]*\bautofocus\b', lan.get("/login").text)
+    wrong = lan.post("/login", data={"password": "wrong-password-1"}, follow_redirects=False)
+    assert re.search(r'<input id="lan-password"[^>]*\bautofocus\b', wrong.text)
 
 
 def test_password_change_can_be_undone():
