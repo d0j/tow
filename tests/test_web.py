@@ -2374,6 +2374,23 @@ def test_a_disk_error_line_does_not_repeat_its_class():
     assert _error_line(low, "disk").startswith("Мало места на диске: нужно 12 ГБ")
 
 
+def test_a_check_held_back_by_the_previous_version_does_not_blame_the_client():
+    """Qa8: a check by hand of a topic whose previous version still seeds said "The torrent client
+    did not confirm: the previous version … is still active" - the client confirmed nothing because
+    TOW, by its own rule, did not ask it. The message says the check failed and why."""
+    from helpers import flash_of
+
+    from tow.errors import TowError
+    from tow.web.views import manual_check_flash
+
+    error = TowError("check.previous_revision_active", file="Show.S01E01.mkv")
+    row = {"id": "t1", "ok": False, "error": error.text(), "error_class": "qbit", "error_record": error.record()}
+    text = flash_of(manual_check_flash(row, topic_id="t1").headers["location"])
+    assert text.startswith("проверка не прошла: прежняя версия раздачи ещё активна")
+    refused = dict(row, error="refused", error_record=TowError("check.add_unconfirmed").record())
+    assert flash_of(manual_check_flash(refused, topic_id="t1").headers["location"]).startswith("торрент-клиент")
+
+
 def _row_summaries(page: str) -> list[str]:
     return re.findall(r'<details class="row-edit[^"]*"[^>]*>\s*<summary>(.*?)</summary>', page, flags=re.DOTALL)
 

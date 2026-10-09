@@ -18,7 +18,7 @@ from fastapi.responses import RedirectResponse
 
 from tow import i18n
 from tow.adopt import unmarked_hash
-from tow.check import blocked_by_previous_revision
+from tow.check import PREVIOUS_REVISION_ACTIVE, blocked_by_previous_revision
 from tow.clock import format_ui_timestamp
 from tow.config import flash_ttl, interval_sec_of
 from tow.episodes import expected_for_topic
@@ -214,7 +214,11 @@ def manual_check_flash(
         # files fit (the error says so). Just added now, or still waiting from an earlier check.
         return home_redirect(t("web.check.added_waiting_space", error=error) if row.get("added") else error, "warn")
     cls = row_class(row)
-    if cls == "qbit":
+    record = row.get("error_record")
+    code = str(record.get("code") or "") if isinstance(record, Mapping) else ""
+    # The previous version still seeding is TOW's own guard, not something the client refused
+    # ("The torrent client did not confirm: the previous version … is still active").
+    if cls == "qbit" and code != PREVIOUS_REVISION_ACTIVE:
         flash = t("web.check.added_client_refused" if new_topic else "web.check.client_refused", error=error)
     else:
         flash = t("web.check.added_check_failed" if new_topic else "web.check.check_failed", error=error)

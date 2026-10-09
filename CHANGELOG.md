@@ -192,6 +192,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Switching the language to Auto says "Language saved" in the language the page then has, not in the one it had.
 - A topic waiting for disk space says so once on Home ("Waiting for disk space: 1650.3 GB short…") instead of "Low disk
   space: waiting for disk space: …".
+- A check by hand of a topic whose previous version still seeds says "The check failed: the previous version … is
+  still active", not "The torrent client did not confirm": TOW did not ask the client, by its own rule.
 
 ## [1.28.2] — 2026-10-09
 
