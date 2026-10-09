@@ -647,6 +647,31 @@ def test_a_restart_whose_server_keeps_crashing_is_marked_failed(tmp_path):
     assert [status for _op, status in world.markers][-1] == "failed"  # the marker is not rewritten
 
 
+@pytest.mark.parametrize("when", ["before the stop", "after the stop"])
+def test_a_restart_the_stop_cuts_off_is_marked_failed(tmp_path, when):
+    # Settings followed such a restart for ever: "queued" when asked while a job let TOW stop
+    # slowly, "starting" when TOW stopped before the new server answered.
+    world, sup = make(tmp_path, facts={"last_scheduled_check": 0, "last_backup_ok": T0})
+    run_for(sup, world.clock, 125)
+    check = world.jobs()[0]
+    if when == "before the stop":
+        world.healthy = False  # the new server is still starting when the stop comes
+        layout.request("restart", by="settings", operation_id="restart-cut")
+        sup.tick()
+        layout.request("stop", by="cli")
+    else:
+        layout.request("stop", by="cli")
+        sup.tick()
+        layout.request("restart", by="settings", operation_id="restart-cut")
+    run_for(sup, world.clock, 5)
+    check.code = 0
+    run_for(sup, world.clock, 2)
+    assert sup.finished is True
+    statuses = [status for op, status in world.markers if op == "restart-cut"]
+    assert statuses[-1] == "failed"
+    assert statuses == (["stopping", "starting", "failed"] if when == "before the stop" else ["failed"])
+
+
 def test_stop_waits_for_the_running_job_then_stops_everything(tmp_path):
     world, sup = make(tmp_path, facts={"last_scheduled_check": 0, "last_backup_ok": T0})
     run_for(sup, world.clock, 125)

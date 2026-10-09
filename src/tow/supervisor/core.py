@@ -271,8 +271,14 @@ class Supervisor:
         if stop is not None:
             self.request_stop(stop)
         restart = layout.take_request("restart", self._control_dir)
-        if restart is not None and self.stopping is None:
+        if restart is None:
+            return
+        if self.stopping is None:
             self._restart_server(restart)
+        elif restart.get("operation_id"):
+            # Asked while TOW stops (a check finishing first): Settings followed it as "queued" for ever.
+            with contextlib.suppress(Exception):
+                self.deps.restart_marker(str(restart["operation_id"]), {"status": "failed", "error": "TOW is stopping"})
 
     def _wind_down(self, mono: float) -> None:
         if self.job is not None:
@@ -287,6 +293,8 @@ class Supervisor:
                 self.server.stop_retry_at = mono + STOP_RETRY_SEC
                 return
             self.server.child = None
+        # A restart from Settings whose new server had not answered yet: it never will now.
+        self._operation("failed", error="TOW stopped before the new web server answered")
         self.finished = True
         LOG.info("stopped")
 
