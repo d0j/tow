@@ -741,3 +741,32 @@ def test_the_supervisors_wake_time_counts_for_lateness(clock):
     )
     assert report["wake_ts"] == int(clock.t) - 300
     assert report["checks_ok"] is True
+
+
+def test_tow_watchdog_by_hand_is_a_real_pass_and_says_so(clock, monkeypatch):
+    # Its help and the guides called `tow watchdog` "a diagnostic; it changes nothing", yet by
+    # hand it makes the scheduled pass: its alert goes to the messengers and is remembered.
+    from tow import cli, watchdog
+    from tow.i18n import t
+
+    sent: list[str] = []
+    real_pass = watchdog.run_watchdog
+    monkeypatch.setattr(
+        watchdog,
+        "run_watchdog",
+        lambda: real_pass(
+            is_healthy=lambda _port: False,
+            deploy_running=lambda: False,
+            send=lambda text: sent.append(text) or True,
+            now=clock.now,
+            sleep=clock.sleep,
+        ),
+    )
+
+    assert cli.main(["watchdog"]) == 2
+    assert sent  # told
+    assert watchdog._load_state().get("service") is False  # and remembered
+    for language, nothing in (("en", "changes nothing"), ("ru", "ничего не меняет")):
+        said = t("cli.help.watchdog", language)
+        assert nothing not in said
+        assert ("messengers" if language == "en" else "мессенджеры") in said
