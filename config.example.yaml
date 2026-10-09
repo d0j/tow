@@ -1,6 +1,7 @@
 # TOW configuration template. Copy to config.yaml (dev checkout) or <runtime>\config.yaml
 # (runtime install, see README). The live config.yaml is written by the UI and is not versioned;
-# the UI writes it without these comments, and its first line points back to this file.
+# most saves write it without these comments (the check interval and the message time are
+# changed in place), and its first lines point back to this file.
 # Every key below is optional. A key left out takes the default shown, commented or not, except
 # these commented examples of a setting that is off or unset when left out: backup_keep,
 # restore_points_dir (default data/restore-points), quiet_hours, daily_digest_hour and
@@ -15,9 +16,11 @@ port: 8787
 # How long a message after an action ("Saved") and its Undo stay, seconds. Settings offers 1..30
 # minutes; this file accepts 1..86400, and TOW uses at least 15 and at most 3600.
 flash_ttl_sec: 60
-# Optional release discovery (at most once per 12 hours); manual checks still work when off.
+# Optional release discovery (at most once per 12 hours, an hour after a failed one); manual
+# checks still work when off.
 # check_updates: true
-# Language of the pages and messages: auto (the browser's) or a code such as en, ru.
+# Language of the pages and messages: auto (the browser's; commands in a terminal follow the
+# system's) or a code such as en, ru.
 # language: auto
 # Colours of the pages: auto (as the system), light or dark.
 # theme: auto
