@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from tow import cli
@@ -236,6 +238,101 @@ def test_debug_env_shows_the_traceback(monkeypatch):
 
     with pytest.raises(ValueError, match="port"):
         cli.main(["doctor"])
+
+
+def _sentences_only(out):
+    """Words for a person: no "field: value" line of a dict, no true/false/null, no field name."""
+    import re
+
+    assert out.strip()
+    for line in out.splitlines():
+        assert not re.match(r"^\s*-?\s*'?[a-z_]+'?:(\s|$)", line), line
+    for word in ("true", "false", "null", "key_source", "storage", "password_set", "service_ok", "ok:"):
+        assert not re.search(rf"(?<![\w/.]){word}(?![\w.])", out), (word, out)
+
+
+@pytest.mark.parametrize("language", ["en", "ru"])
+def test_a_command_tells_a_person_its_result_in_sentences(monkeypatch, capsys, tmp_path, language):
+    # `tow keys status`, `secrets status`, `access status`, `backup`, `export`, `import`,
+    # `watchdog`, `autostart status` printed their result as YAML: internal field names
+    # (key_source, storage, service_ok…), true/false, English values in Russian.
+    import re
+
+    from tow.autostart import windows
+    from tow.config import load_config, save_config
+
+    monkeypatch.setenv("TOW_HOME", str(tmp_path / "data"))
+    config = load_config()
+    config.update(language=language, backup_dir=str(tmp_path / "night"))
+    save_config(config)
+    passphrase = "a long passphrase"
+    monkeypatch.setattr("getpass.getpass", lambda prompt="": passphrase)
+    monkeypatch.setattr(
+        "tow.watchdog.run_watchdog",
+        lambda: {
+            "port": 8787,
+            "service_ok": True,
+            "checks_ok": True,
+            "checks_late": False,
+            "backup_ok": None,
+            "alerts": [],
+            "monitoring_ok": True,
+        },
+    )
+    monkeypatch.setattr(
+        "tow.autostart.backend",
+        lambda: SimpleNamespace(
+            status=lambda: {
+                "backend": "windows",
+                "on": False,
+                "ours": False,
+                "stale": False,
+                "state": "absent",
+                "where": windows.TASK_NAME,
+                "error": "",
+            }
+        ),
+    )
+    output = tmp_path / "export.towx"
+    commands = [
+        ["version"],
+        ["keys", "status"],
+        ["secrets", "status"],
+        ["secrets", "migrate"],
+        ["access", "status"],
+        ["backup"],
+        ["export", "--output", str(output)],
+        ["import", "--input", str(output)],
+        ["watchdog"],
+        ["autostart", "status"],
+    ]
+    for argv in commands:
+        assert main(argv) == 0, argv
+        out = capsys.readouterr().out
+        _sentences_only(out)
+        if language == "ru" and argv != ["version"]:
+            assert re.search("[а-яё]", out, re.IGNORECASE), (argv, out)
+    from tow.snapshots import list_snapshots, snapshot_path
+
+    folder = snapshot_path(list_snapshots(limit=1)[0]["name"])
+    assert main(["restore-snapshot", "--path", str(folder)]) == 0
+    _sentences_only(capsys.readouterr().out)
+
+
+def test_a_refusal_says_the_reason_alone(capsys, tmp_path):
+    cli._print({"ok": False, "error": "The reason.", "detail": "a technical cause"}, False)
+    assert capsys.readouterr().out == "The reason.\n"
+    cli._print({"ok": True, "message": "Done."}, False, lambda data: "never this")
+    assert capsys.readouterr().out == "never this\n"
+    cli._print({"ok": True, "message": "Done."}, False)
+    assert capsys.readouterr().out == "Done.\n"
+
+
+def test_a_check_without_a_client_answer_shows_no_empty_client(capsys):
+    cli._print({"qbit": "", "results": [], "preview": True}, False)
+    out = capsys.readouterr().out
+    assert t("cli.check.client", value="") not in out
+    assert out.splitlines()[0] == t("cli.check.preview")
 
 
 def test_text_output_is_readable_not_a_dict_repr(capsys):

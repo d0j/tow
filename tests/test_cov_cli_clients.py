@@ -702,8 +702,7 @@ def test_secrets_status_generate_key_and_refusal_to_overwrite(capsys, tmp_path):
 
     assert cli.main(["secrets", "generate-key", "--key-file", str(key_file)]) == 3
     out = capsys.readouterr().out
-    assert "ok: false" in out
-    assert t("cli.keys.error.exists") in out
+    assert out.strip() == t("cli.keys.error.exists")  # the refusal itself, not "ok: false" and "error:"
     assert key_file.read_bytes() == original
 
 
