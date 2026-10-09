@@ -79,6 +79,8 @@ def _move_back(item: dict[str, Any], current: dict[str, Any]) -> bool:
         from tow.clients.factory import from_secrets
 
         adapter = from_secrets(load_config(), load_secrets(), str(current.get("client_id") or "") or None)
+        if adapter.inspect_torrent(infohash) is None:
+            return False  # the torrent is gone from its client: nothing to move back
         if not client_owned_by_tow(adapter, infohash):
             raise RuntimeError(t("web.topics.not_owned"))
         adapter.set_location(infohash, old_path)
