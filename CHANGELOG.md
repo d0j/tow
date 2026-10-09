@@ -97,6 +97,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A new folder for a topic whose torrent was removed from the torrent client is saved ("Check" adds it there): the
   edit kept the old folder because the client "did not confirm the new location" of a torrent it does not have, and
   undoing such an edit was refused the same way.
+- When a site works again for several topics at once (after you signed in to it again, for example), the messenger
+  gets one "works again" message for the site, as it got one message about its failure, instead of one per topic.
 
 ## [1.28.2] — 2026-10-09
 

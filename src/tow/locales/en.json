@@ -1408,6 +1408,10 @@
       "one": "Problem — {tracker}: {problem} for {n} topic ({topics})",
       "other": "Problem — {tracker}: {problem} for {n} topics ({topics})"
     },
+    "group_recovered": {
+      "one": "{tracker}: works again for {n} topic ({topics})",
+      "other": "{tracker}: works again for {n} topics ({topics})"
+    },
     "quiet_hours": "During quiet hours:",
     "quiet_dropped": {
       "one": "({n} older message did not fit and was dropped)",

@@ -1418,6 +1418,12 @@
       "many": "Сбой — {tracker}: {problem} у {n} раздач ({topics})",
       "other": "Сбой — {tracker}: {problem} у {n} раздачи ({topics})"
     },
+    "group_recovered": {
+      "one": "{tracker}: снова работает у {n} раздачи ({topics})",
+      "few": "{tracker}: снова работает у {n} раздач ({topics})",
+      "many": "{tracker}: снова работает у {n} раздач ({topics})",
+      "other": "{tracker}: снова работает у {n} раздачи ({topics})"
+    },
     "quiet_hours": "Пока были тихие часы:",
     "quiet_dropped": {
       "one": "({n} более раннее сообщение не поместилось и пропущено)",
