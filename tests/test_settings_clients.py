@@ -333,3 +333,20 @@ def test_a_client_address_may_be_a_name_an_ip_or_a_url(legacy_qbit, host):
 
     assert _flash(response) == "сохранено"
     assert load_secrets()["qbittorrent"]["host"] == host
+
+
+def test_a_client_password_is_saved_as_typed(legacy_qbit):
+    """qBittorrent and Transmission accept a password with spaces at its ends; TOW cut them off,
+    and the client then refused the login with a password the owner had typed correctly."""
+    response = _client().post(
+        "/settings/client",
+        data={"host": "127.0.0.1", "port": "8080", "username": "admin", "password": " pass word "},
+        follow_redirects=False,
+    )
+
+    assert _flash(response) == "сохранено"
+    assert load_secrets()["qbittorrent"]["password"] == " pass word "
+    _client().post(
+        "/settings/client", data={"host": "127.0.0.1", "port": "8080", "username": "admin", "password": "  "}
+    )
+    assert load_secrets()["qbittorrent"]["password"] == " pass word "  # blank: kept as it is
