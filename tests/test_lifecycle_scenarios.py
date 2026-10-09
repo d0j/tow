@@ -314,3 +314,56 @@ def test_the_daily_digest_names_the_topics_whose_downloads_completed(world):
     )
 
     assert sent == ["TOW за сутки: добавлено в клиент 1, новых серий и файлов 0, загружено 1\nЗагружено: Show"]
+
+
+@pytest.fixture
+def full_disk(monkeypatch):
+    """The target drive's free space, as the test sets it (MiB)."""
+    import shutil
+
+    disk = {"free": 100 * 1024 * 1024}
+    monkeypatch.setattr(shutil, "disk_usage", lambda _p: SimpleNamespace(total=0, used=0, free=disk["free"]))
+    return disk
+
+
+def _space_pass() -> dict[str, Any]:
+    return check.run_check(apply=True, notify=True, how="progress", space_only=True)["results"][0]
+
+
+def test_a_start_the_space_pass_cannot_confirm_is_in_history_once(world, full_disk):
+    row = _check(how="manual", ids=["t1"])
+    assert row["status"] == "waiting_space"
+    assert _home() == ("bad", "ok")
+    said = len(world.sent)
+    full_disk["free"] = 10 * 1024**3  # room now, but the client does not start it
+    world.client.starts_confirmed = False
+
+    for _ in range(2):
+        row = _space_pass()
+        assert row["ok"] is False
+
+    topic = _topic()
+    assert topic["last_error_code"] == "check.start_unconfirmed"
+    assert "waiting_space" in topic  # it still waits to be started
+    assert _home()[0] == "bad"
+    assert _history("errors").count("check_fail") == 1  # said where the messenger says it, once
+    assert len(world.sent) == said + 1
+
+
+def test_a_waiting_start_held_back_by_the_previous_version_is_logged_once(world, full_disk):
+    world.client.put(OLD, world.folder, state="stoppedUP")
+    _set_topic(hash=OLD)
+    world.site.current = NEW
+    row = _check()
+    assert row["status"] == "waiting_space"  # the new version is added stopped
+    world.client.torrents[OLD]["state"] = "uploading"  # the owner seeds the previous version again
+    full_disk["free"] = 10 * 1024**3  # room now, but the previous version runs on the same files
+
+    for _ in range(3):
+        row = _check()
+        assert row["ok"] is False
+
+    topic = _topic()
+    assert topic["last_error_code"] == "check.previous_revision_active"
+    assert _history("errors").count("check_fail") == 1
+    assert world.client.torrents[NEW]["state"] == "stoppedDL"
