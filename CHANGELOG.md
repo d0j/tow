@@ -208,6 +208,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The sign-in page of another device opens with the cursor in the password field, also after a wrong password.
 - The Guide inside TOW calls `keys/master.key` the master key, as Settings and the user guide do, not "the encryption
   key".
+- "This torrent is already used by another topic" names that topic as Home does, not by its internal id
+  ("2821ad16c798").
 
 ## [1.28.2] — 2026-10-09
 

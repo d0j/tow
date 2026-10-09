@@ -174,7 +174,9 @@ def _conflicting_topic_claim(
                 bool(other_files) and not bool(other.get("selected_files_truncated")) and other_files == wanted_files
             )
         if not paths_equal(other_path, save_path) or not compatible_selection:
-            return str(other.get("id") or other.get("title") or "unknown")
+            # The topic by the name Home shows (its internal id said nothing: "another topic (2821ad16c798)").
+            name = str(other.get("tracker_title") or other.get("title") or "").split(" / ")[0].strip()
+            return name or str(other.get("id") or "unknown")
     return ""
 
 
