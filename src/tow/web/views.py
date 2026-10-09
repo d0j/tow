@@ -278,7 +278,9 @@ _EVENT_LABELS = {
 def _event_display(event: Mapping[str, Any]) -> str:
     kind = str(event.get("kind") or "")
     if event.get("label_code"):  # TOW's own wording ("Back in the client"): the reader's language
-        return render_stored(event["label_code"], event.get("label_params"), str(event.get("label") or ""))
+        # A label of its own, so a capital letter: "files" stood in bold beside "S02E03".
+        text = render_stored(event["label_code"], event.get("label_params"), str(event.get("label") or ""))
+        return text[:1].upper() + text[1:]
     if event.get("label"):
         return str(event["label"])
     label = _EVENT_LABELS.get(kind)

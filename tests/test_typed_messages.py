@@ -148,6 +148,19 @@ def test_progress_labels_are_rendered_for_the_reader():
     assert _event_display({"kind": "new_file", "label": "Show.S01E01.mkv"}) == "Show.S01E01.mkv"
 
 
+def test_a_tow_worded_event_label_starts_with_a_capital():
+    """Qa8: Home's event cell said a bold "files" (and "файлы") beside "S02E03"; TOW's own label
+    words are a label of their own. A file's name is shown as it is."""
+    from tow.web.views import _event_display
+
+    files = {"kind": "client_added", "label": "files", "label_code": "progress.files", "label_params": {}}
+    i18n.use("en")
+    assert _event_display(files) == "Files"
+    i18n.use("ru")
+    assert _event_display(files) == "Файлы"
+    assert _event_display({"kind": "new_file", "label": "rus.srt"}) == "rus.srt"
+
+
 def test_episode_labels_carry_their_code():
     from tow.progress import _episode_keys_label_msg, _label_fields
 
