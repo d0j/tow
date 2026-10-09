@@ -42,6 +42,7 @@ from tow.clock import iso_now
 from tow.errors import TowError
 from tow.events import new_operation_id
 from tow.jsonish import as_dict
+from tow.log import error_fields
 from tow.records import Topic, topics_of
 
 if TYPE_CHECKING:
@@ -375,6 +376,24 @@ def _show_error(topic: Topic, row: dict[str, Any]) -> None:
     topic["last_error_class"] = str(row.get("error_class") or "disk")
 
 
+def _log_failure(topic: Topic, run: CheckRun, error: BaseException, before: tuple[Any, ...]) -> None:
+    """History has a failure of the space pass as it has a check's, once: the pass runs every
+    few minutes, so the same failure again is not logged again, nor is a client that does not
+    answer (the pass logs that once for the client)."""
+    if getattr(error, "code", None) == "check.client_unreachable":
+        return
+    if before == (topic.get("last_error_code"), topic.get("last_error_params"), topic.get("last_error")):
+        return
+    run.record(
+        "check_fail",
+        topic=topic.get("id"),
+        title=topic.get("title"),
+        url=topic.get("url"),
+        **error_fields(error),
+        how=run.how,
+    )
+
+
 def space_pass_row(topic: Topic, run: CheckRun, row: dict[str, Any]) -> None:
     """The supervisor's space pass (no site traffic) for one waiting topic: ``row`` starts as
     a progress-only row; the topic's result changes only when the waiting changed. A file
@@ -389,9 +408,11 @@ def space_pass_row(topic: Topic, run: CheckRun, row: dict[str, Any]) -> None:
     try:
         outcome = recheck(topic, run, row, client, client_id, begun=begun)
     except Exception as error:  # noqa: BLE001 - one topic's failure is its result, never the pass's end
+        before = (topic.get("last_error_code"), topic.get("last_error_params"), topic.get("last_error"))
         row.update({"ok": False, "status": "failed"})
         set_error(row, error)
         stamp_result(topic, row)
+        _log_failure(topic, run, error, before)
         if run.notify:
             run.queue_notification(
                 topic, kind="error", operation_id=new_operation_id("check-error"), error=error, tracker=""

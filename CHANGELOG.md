@@ -80,6 +80,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The daily digest lists the topics whose downloads finished ("Downloaded: …"): that line never appeared, because
   the completion events did not carry the topic's name. It also no longer counts a torrent that was already in the
   torrent client as "added to the client".
+- A torrent waiting for disk space that TOW could not start (the start not confirmed by the torrent client, for
+  example) is in History, as the message about it is; before, only a check's failures were. A start held back because
+  the previous version seeds the same files again is logged once, not at every check.
 
 ## [1.28.2] — 2026-10-09
 
