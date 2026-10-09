@@ -14,8 +14,8 @@ flowchart TD
     RUN -->|child, /healthz every 10 s, restart with backoff| SERVE["tow serve<br/>uvicorn + FastAPI (tow.web)"]
     RUN -->|child, every interval_sec| CHECK["tow check --apply --notify --global-only"]
     RUN -->|child, when a personal timer is due| TIMER["tow check --apply --notify --timer-only"]
-    RUN -->|child, every 30 min| PROG["tow check --progress-only"]
-    RUN -->|child, every 5 min while a torrent waits for disk space| SPACE["tow check --space-only"]
+    RUN -->|child, every 30 min| PROG["tow check --apply --notify --progress-only"]
+    RUN -->|child, every 5 min while a torrent waits for disk space| SPACE["tow check --apply --notify --space-only"]
     RUN -->|child, daily at backup_time| NIGHT["night copy (tow.snapshots)"]
     RUN -->|in-process, every 10 min| WD["watchdog duties<br/>lateness, alerts, heartbeat, outbox"]
     SERVE --> DATA[("data/ · config.yaml · keys/")]
@@ -87,7 +87,7 @@ flowchart TD
   replace the corresponding anchor. Calendar backup slots remain wall-clock based; process
   timeouts still use the monotonic clock, which cannot supply dates across process restarts.
 - Other processes never send signals: they write a request file into `data/run/control/` and the supervisor polls
-  it. SIGTERM and Ctrl+C stop it the same way.
+  it. SIGTERM, SIGHUP (its terminal closed), Ctrl+C and, on Windows, Ctrl+Break stop it the same way.
 - **Checks** hold `check_run_lock` for their whole run (one applying check at a time across processes) and take
   the data lock only to read and to commit, so the UI never waits for tracker or client network time.
 
