@@ -27,7 +27,9 @@ from tow.store import SecretStoreError, atomic_write_text, derive_local_secret, 
 
 RESTORE_POINT_LIMIT = 10
 _ID_RE = re.compile(r"^(?P<stamp>\d{8}T\d{6}Z)-(?P<nonce>[a-f0-9]{8})$")
-_ACCESS_KEYS = ("bind", "port", "allow_lan")
+# This install's own settings, never the restored copy's: its network access and its backup
+# folders (the safety point just made stays listed; a copy from another system keeps night copies working).
+_KEPT_KEYS = ("bind", "port", "allow_lan", "backup_dir", "restore_points_dir")
 
 
 # What failed, whatever the language of the message: callers choose their reaction (the web
@@ -392,7 +394,8 @@ def _restore_bundle(
     restored: str,
     protected: set[str],
 ) -> dict[str, Any]:
-    access_before = {key: load_config().get(key) for key in _ACCESS_KEYS}
+    live = load_config()
+    access_before = {key: live.get(key) for key in _KEPT_KEYS}
     try:
         preview = import_bundle(
             path,

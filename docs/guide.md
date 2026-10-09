@@ -238,8 +238,9 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
   earlier copies too; only the new copy and future-dated ones always stay.
 - Both saved-copy lists offer **Check**, **Restore** and **Delete**. Deletion requires confirmation for the
   dated copy and cannot be undone; it removes only that copy, not current settings, topics or history.
-- Before any restore TOW checks the copy and saves the current state; network access settings stay as they are
-  (when the settings in force cannot be read, a nightly backup restore leaves network access off and says so).
+- Before any restore TOW checks the copy and saves the current state; network access settings and the two backup
+  folders stay as they are (when the settings in force cannot be read, a nightly backup restore leaves network
+  access off and says so, and takes the folders from the copy).
   Restoring a nightly backup keeps the event log (History) as it is: what happened after the copy stays listed.
 - Folders: Settings → Backups → Nightly backups or Backups made by hand → **Folder for …**. Another drive or a
   network share (`\\server\share`) is fine; a network share is chosen on the computer running TOW, not from

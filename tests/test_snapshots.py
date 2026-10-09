@@ -1226,3 +1226,20 @@ def test_a_relative_backup_dir_lives_inside_the_install_and_moves_with_it(tmp_pa
     made = Path(create_snapshot()["snapshot"])
 
     assert made.parent == (install / "backup" / "night").resolve()
+
+
+def test_a_restore_keeps_this_installs_backup_folders(backup, tmp_path):
+    snapshot_cfg = load_config()
+    snapshot_cfg["restore_points_dir"] = str(tmp_path / "points of the copy")
+    save_config(snapshot_cfg)
+    snapshot = Path(create_snapshot()["snapshot"])
+    live = load_config()
+    live["backup_dir"] = str(tmp_path / "night here")
+    live.pop("restore_points_dir")
+    save_config(live)
+
+    restore_snapshot(snapshot, apply=True)
+
+    restored = load_config()
+    assert restored["backup_dir"] == str(tmp_path / "night here")
+    assert "restore_points_dir" not in restored

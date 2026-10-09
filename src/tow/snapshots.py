@@ -78,8 +78,8 @@ _PREFIX = "tow-"
 _PARTIAL_NAME = re.compile(r"\.tow-[0-9]{8}-[0-9]{6}(?:-[0-9a-f]{6})?\.partial")
 _PARTIAL_PROOF = "PARTIAL.json"
 _PARTIAL_FORMAT = "tow-snapshot-partial-v1"
-# Access settings belong to this machine, not to the copy (as for restore points).
-_ACCESS_KEYS = ("bind", "port", "allow_lan")
+# Access settings and backup folders belong to this machine, not to the copy (as for restore points).
+_KEPT_KEYS = ("bind", "port", "allow_lan", "backup_dir", "restore_points_dir")
 
 
 class SnapshotError(RuntimeError):
@@ -1541,11 +1541,12 @@ def _snapshot_config(content: bytes) -> dict[str, Any]:
 
 
 def _keep_local_access(snapshot_config: bytes) -> bytes:
-    """The copy's config with this machine's access settings (the live ones).
+    """The copy's config with this machine's access settings and backup folders (the live ones).
 
     A live config.yaml that cannot be read does not stop the restore - replacing it is often
     the point - and then the restored config is local-only: network access is turned back on
-    from this PC, as always.
+    from this PC, as always; its backup folders are then the copy's (where its restore points
+    were just written).
     """
     restored = _snapshot_config(snapshot_config)
     try:
@@ -1553,7 +1554,7 @@ def _keep_local_access(snapshot_config: bytes) -> bytes:
     except OSError, UnicodeError, yaml.YAMLError:
         current = None
     if isinstance(current, dict):
-        for key in _ACCESS_KEYS:
+        for key in _KEPT_KEYS:
             if key in current:
                 restored[key] = current[key]
             else:

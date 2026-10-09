@@ -65,6 +65,8 @@ MAX_BUNDLE_BYTES = 64 * 1024 * 1024
 REQUIRED_MEMBERS = ("config.yaml", "state.json", "download_history.json", "secrets.json")
 OPTIONAL_MEMBERS = ("secrets_undo.json", "events.json")
 ALLOWED_MEMBERS = {"manifest.json", *REQUIRED_MEMBERS, *OPTIONAL_MEMBERS}
+# The backup folders of the install a bundle is restored into (a restore point keeps them).
+_FOLDER_OVERRIDES = ("backup_dir", "restore_points_dir")
 # Field names that hold credentials. Matched exactly (plus the suffixes below) - a substring
 # match also refused TOW's own metadata (secret_scope, secret_undo_ref, secrets_ref, ...)
 # and blocked every export and restore point after a settings save.
@@ -1261,6 +1263,27 @@ def _config_override_bytes(effective_config: dict[str, Any]) -> bytes:
         raise ExportImportError("cannot apply safe config overrides") from exc
 
 
+def _apply_config_overrides(parsed: dict[str, Any], overrides: dict[str, Any]) -> None:
+    """This install's own settings over the bundle's config.yaml (``parsed`` is changed in place)."""
+    if not set(overrides).issubset({"bind", "port", "allow_lan", *_FOLDER_OVERRIDES}):
+        raise ExportImportError("unsupported config override")
+    # Typed values from the CLI or the web form: no "yes" or "80" written for them.
+    _validate_field(overrides, "bind", str, label="config.yaml")
+    _validate_field(overrides, "port", int, label="config.yaml")
+    _validate_field(overrides, "allow_lan", bool, label="config.yaml")
+    for key in _FOLDER_OVERRIDES:
+        _validate_field(overrides, key, str, label="config.yaml")
+    effective_config = copy.deepcopy(parsed["config"])
+    for key, value in overrides.items():
+        if key in _FOLDER_OVERRIDES and value is None:
+            effective_config.pop(key, None)  # this install has none: the default folder, not the bundle's
+        else:
+            effective_config[key] = copy.deepcopy(value)
+    _validate_config_schema(effective_config)
+    parsed["config_bytes"] = _config_override_bytes(effective_config)
+    parsed["config"] = effective_config
+
+
 def _import_bundle(
     input_path: Path,
     passphrase: str,
@@ -1273,18 +1296,8 @@ def _import_bundle(
     recover_import_transactions()
     parsed = _read_bundle(Path(input_path), passphrase)
     overrides = dict(config_overrides or {})
-    if not set(overrides).issubset({"bind", "port", "allow_lan"}):
-        raise ExportImportError("unsupported config override")
     if overrides:
-        # Typed values from the CLI or the web form: no "yes" or "80" written for them.
-        _validate_field(overrides, "bind", str, label="config.yaml")
-        _validate_field(overrides, "port", int, label="config.yaml")
-        _validate_field(overrides, "allow_lan", bool, label="config.yaml")
-        effective_config = copy.deepcopy(parsed["config"])
-        effective_config.update(copy.deepcopy(overrides))
-        _validate_config_schema(effective_config)
-        parsed["config_bytes"] = _config_override_bytes(effective_config)
-        parsed["config"] = effective_config
+        _apply_config_overrides(parsed, overrides)
     secret_keys = {str(key) for key in (preserve_secret_keys or ())}
     if not secret_keys.issubset({"lan_auth"}):
         raise ExportImportError("unsupported preserved secret key")
