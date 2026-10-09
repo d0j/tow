@@ -1491,24 +1491,33 @@ class Update:
         safe_ref = re.sub(r"[^\w.-]", "_", self.ref)[:60]
         folder = self.root / "backup" / f"update-{stamp}-before-{safe_ref}"
         data = self.root / "data"
+        ours = not folder.exists()
         try:
-            self.manifest = data_files(data)
-            for relative in self.manifest:
-                destination = folder / "data" / relative
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(data / relative, destination)
-            shutil.copy2(self.root / "config.yaml", folder / "config.yaml")
-            self.manifest["../config.yaml"] = _hash(self.root / "config.yaml")
-            (folder / "SNAPSHOT.json").write_text(
-                json.dumps(
-                    {"ref": self.ref, "target": target, "created_at": _now_iso(), "files": self.manifest}, indent=2
+            try:
+                self.manifest = data_files(data)
+                for relative in self.manifest:
+                    destination = folder / "data" / relative
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(data / relative, destination)
+                shutil.copy2(self.root / "config.yaml", folder / "config.yaml")
+                self.manifest["../config.yaml"] = _hash(self.root / "config.yaml")
+                (folder / "SNAPSHOT.json").write_text(
+                    json.dumps(
+                        {"ref": self.ref, "target": target, "created_at": _now_iso(), "files": self.manifest}, indent=2
+                    )
+                    + "\n",
+                    encoding="utf-8",
                 )
-                + "\n",
-                encoding="utf-8",
-            )
-        except OSError as exc:
-            raise UpdateError(self.text("snapshot_failed", error=exc)) from exc
-        self._load_snapshot(folder)  # read back every byte before switching the code
+            except OSError as exc:
+                raise UpdateError(self.text("snapshot_failed", error=exc)) from exc
+            self._load_snapshot(folder)  # read back every byte before switching the code
+        except UpdateError:
+            # Half a copy is no snapshot: on a full disk it only took more of the space, and the
+            # pruning would count it as one of the snapshots it keeps.
+            if ours:
+                with contextlib.suppress(OSError):
+                    remove_tree(folder)
+            raise
         self.snapshot = folder
         self.say("snapshot", path=folder)
         self.write_state(snapshot=str(folder))

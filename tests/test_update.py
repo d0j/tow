@@ -375,12 +375,19 @@ def test_a_supervisor_that_does_not_stop_is_stopped_forcibly(install):
     assert any("stopped forcibly" in line for line in lines)
 
 
-def test_a_failed_snapshot_changes_nothing_and_starts_tow_again(install, monkeypatch):
+@pytest.mark.parametrize("fault", ["disk full", "read-back"])
+def test_a_failed_snapshot_changes_nothing_and_starts_tow_again(install, monkeypatch, fault):
     fake = Fake(install["app"])
     before = head(install)
+    folders = snapshots(install)
+    copy = updater.shutil.copy2
 
-    def broken(*_a, **_k):
-        raise OSError("disk full")
+    def broken(source, destination, *args, **kwargs):
+        if fault == "disk full" and Path(destination).name == "config.yaml":
+            raise OSError("disk full")  # the data is copied already: half a snapshot
+        copy(source, destination, *args, **kwargs)
+        if fault == "read-back" and Path(destination).name == "state.json":
+            Path(destination).write_text("{}", encoding="utf-8")
 
     monkeypatch.setattr(updater.shutil, "copy2", broken)
     code, lines = run(fake)
@@ -388,7 +395,9 @@ def test_a_failed_snapshot_changes_nothing_and_starts_tow_again(install, monkeyp
     assert head(install) == before
     assert state(install)["status"] == "failed"
     assert fake.calls[-1] == "spawn tow run 1.20.0"
-    assert any("the update snapshot failed" in line for line in lines)
+    expected = "the update snapshot failed" if fault == "disk full" else "the update snapshot is damaged"
+    assert any(expected in line for line in lines)
+    assert snapshots(install) == folders  # the half copy is gone: it is not one of the snapshots kept
 
 
 def test_a_target_older_than_one_process_is_refused(install):

@@ -145,6 +145,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A topic waiting for disk space keeps waiting while the torrent client is still checking its torrent (qBittorrent
   checks every torrent when it starts, for example with the computer), moves it or cannot reach its files: that was
   taken for you starting it yourself, the waiting ended, and TOW never started the torrent it had added stopped.
+- An update whose snapshot fails (a full disk, a copy that does not read back) removes the half-made copy from
+  `backup/`: it took more of a full disk and counted as one of the update snapshots kept.
 
 ## [1.28.2] — 2026-10-09
 
