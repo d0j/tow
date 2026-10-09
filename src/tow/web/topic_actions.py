@@ -20,7 +20,6 @@ from tow.errors import TowError
 from tow.folders import paths_equal, remember_save_root, resolve_save_path
 from tow.guess import canon_watch_url
 from tow.log import error_fields
-from tow.notify import event_text
 from tow.records import shown_title
 from tow.store import CheckBusyError, SecretStoreError
 from tow.title import title_is_placeholder
@@ -210,12 +209,12 @@ def _first_check(new: dict[str, Any], tracker: GenericHttpTracker) -> RedirectRe
         )
         return flash_redirect("/", "web.topics.added_blocked", "warn")
     except Exception as e:  # noqa: BLE001 - the topic is saved; its first check's failure is logged and notified
-        _first_check_failed(new, e)
+        _first_check_failed(new, e, tracker.name)
         return flash_redirect("/", "web.topics.added_check_failed", "warn")
     return flash_redirect("/", "web.topics.added_confirmed" if row.get("added") else "web.topics.added_nothing_new")
 
 
-def _first_check_failed(new: dict[str, Any], error: Exception) -> None:
+def _first_check_failed(new: dict[str, Any], error: Exception, tracker: str) -> None:
     services.log_event(
         "add_check_fail",
         topic=new["id"],
@@ -226,7 +225,7 @@ def _first_check_failed(new: dict[str, Any], error: Exception) -> None:
         how="manual",
     )
     try:
-        services.notify_send(services.load_secrets(), event_text(title=new["title"], kind="error", error=error))
+        services.notify_topic_error(new, error, tracker=tracker, how="manual")
     except Exception as notify_exc:  # noqa: BLE001 - a lost message about the failure is logged, never a 500
         services.log_event("add_check_notify_fail", topic=new["id"], error=str(notify_exc), how="manual")
 

@@ -320,7 +320,7 @@ def test_add_keeps_observation_when_check_crashes_and_telegram_fails(monkeypatch
         raise RuntimeError("telegram unreachable")
 
     monkeypatch.setattr("tow.web.services.run_check", crash)
-    monkeypatch.setattr("tow.web.services.notify_send", telegram_down)
+    monkeypatch.setattr("tow.web.services.notify_topic_error", telegram_down)
 
     response = client.post(
         "/topics/add", data={"url": RUTOR_URL, "title": "Show", "save_path": r"M:\anime"}, follow_redirects=False
@@ -331,6 +331,21 @@ def test_add_keeps_observation_when_check_crashes_and_telegram_fails(monkeypatch
     assert [t["url"] for t in topics] == [RUTOR_URL]
     assert _events("add_check_fail")[-1]["topic"] == topics[0]["id"]
     assert _events("add_check_notify_fail")
+
+
+def test_a_crashed_first_check_is_reported_like_a_checks_message(monkeypatch, client):
+    """Its message went straight to the messengers: past the quiet hours and the outbox."""
+    sent = []
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda _url: "")
+    monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr("tow.notify.send", lambda *args, **kwargs: sent.append(args))
+    monkeypatch.setattr("tow.delivery.quiet_now", lambda cfg, now=None: True)
+
+    client.post("/topics/add", data={"url": RUTOR_URL, "title": "Show", "save_path": r"M:\anime"})
+
+    assert sent == []
+    (held,) = load_state()["notify_queue"]  # sent when the quiet hours end
+    assert "Show: boom" in held
 
 
 def test_undo_of_add_removes_only_the_observation(monkeypatch, client):

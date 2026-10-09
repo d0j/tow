@@ -101,7 +101,6 @@ PURE: dict[str, set[str]] = {
     # The messengers' settings in the secrets (a dict) and their cards; a test message is in services.
     "tow.notifiers": {"cards", "health", "kinds", "remove", "store", "title", "validate"},
     # TOW's own temporary folder (AGENTS.md: every path from tow.paths).
-    "tow.notify": {"event_text"},
     "tow.paths": {"tmp_dir"},
     "tow.pulse": {"clock"},
     # shown_title: the name a topic record is shown by, no I/O.
