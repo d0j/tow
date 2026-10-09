@@ -3,6 +3,14 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [Unreleased]
+
+### Fixed
+
+- `history_keep_days` and `history_max_items` in `config.yaml` are checked like every other setting: a word or a
+  negative number is named when TOW starts instead of quietly becoming the default, and a huge number of days no
+  longer makes every check fail.
+
 ## [1.28.2] — 2026-10-09
 
 ### Changed

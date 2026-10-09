@@ -80,6 +80,8 @@ INTERVAL_MIN_MINUTES = 15
 INTERVAL_MAX_MINUTES = 1440
 FLASH_TTL_MIN_SEC = 15
 FLASH_TTL_MAX_SEC = 3600
+HISTORY_MAX_DAYS = 36500
+HISTORY_MAX_ITEMS = 1_000_000
 # Settings → Theme (``theme:``): the pages' colours; "auto" (or no key) follows the system.
 THEMES = ("auto", "light", "dark")
 
@@ -360,6 +362,10 @@ def _validate(data: dict[str, Any]) -> None:
     for key, lower, upper in (
         ("backup_days", 1, 3650),
         ("backup_max_mib", 0, 1048576),
+        # Download history (tow.download_history): 0 = no limit. A wrong value was the default
+        # without a word, and a huge number of days made every check fail on the date.
+        ("history_keep_days", 0, HISTORY_MAX_DAYS),
+        ("history_max_items", 0, HISTORY_MAX_ITEMS),
     ):
         if data.get(key) is not None:
             _int_field(data, key, lower, upper)
