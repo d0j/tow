@@ -93,6 +93,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   the torrent stopped until the next disk space pass. A waiting torrent of a paused site, or of one at its daily
   limit, keeps its "waiting for disk space" error: every check replaced it with the site's, and the wait was sent
   again as news after every check.
+- A new folder for a topic whose torrent was removed from the torrent client is saved ("Check" adds it there): the
+  edit kept the old folder because the client "did not confirm the new location" of a torrent it does not have, and
+  undoing such an edit was refused the same way.
 
 ## [1.28.2] — 2026-10-09
 

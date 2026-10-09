@@ -955,6 +955,37 @@ def test_edit_tracks_a_move_the_client_took_but_did_not_confirm(monkeypatch, cli
     assert _events("qbit_move")[-1]["status"] == "unconfirmed"
 
 
+class AbsentClient(FakeClient):
+    """The torrent was removed from the client: there is nothing to move."""
+
+    def inspect_torrent(self, _infohash: str) -> None:
+        return None
+
+
+def test_a_new_folder_is_saved_for_a_torrent_gone_from_its_client(monkeypatch, client):
+    # The owner wants it downloaded again elsewhere: the edit refused the folder ("the client
+    # did not confirm the new location"), and "Check" added it to the old one.
+    fake = AbsentClient(r"M:\anime")
+    _use_client(monkeypatch, fake)
+    _seed(_topic(hash=INFOHASH, last_error_code="check.removed_from_client"))
+
+    response = client.post(
+        "/topics/t1/edit", data={"title": "Show", "url": RUTOR_URL, "save_path": r"P:\new"}, follow_redirects=False
+    )
+
+    assert _flash(response) == "сохранено, торрента нет в торрент-клиенте: «Проверить» добавит его в новую папку"
+    assert fake.moves == []
+    topic = load_state()["topics"][0]
+    assert topic["save_path"] == r"P:\new"
+    assert "move_pending" not in topic
+
+    undone = client.post("/undo", follow_redirects=False)  # and back: nothing to move either
+
+    assert _flash(undone) == "правка раздачи отменена"
+    assert load_state()["topics"][0]["save_path"] == r"M:\anime"
+    assert fake.moves == []
+
+
 def test_reconcile_accepts_the_old_folder_while_a_move_is_unconfirmed():
     from tow.progress import _check_save_path
 

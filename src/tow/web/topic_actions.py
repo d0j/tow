@@ -232,8 +232,9 @@ def _first_check_failed(new: dict[str, Any], error: Exception) -> None:
 
 class _Moved(NamedTuple):
     """How the client-side move of a topic's folder went: ``outcome`` as ``await_relocation``
-    says it ("done", "moving", "failed"), or "error" when the client refused or did not answer
-    (the topic keeps its old folder); ``suffix`` and ``kind`` for the save message."""
+    says it ("done", "moving", "failed"), "absent" when the client does not have the torrent
+    (nothing to move), or "error" when the client refused or did not answer (the topic keeps its
+    old folder); ``suffix`` and ``kind`` for the save message."""
 
     outcome: str
     suffix: str
@@ -377,6 +378,10 @@ def _move_in_client(topic: dict[str, Any], tid: str, old_hash: str, dest: str) -
     try:
         adapter = services.client_from_secrets(services.load_config(), services.load_secrets(), move_client_id)
         client_kind = str(getattr(adapter, "client_kind", getattr(adapter, "kind", "client")))
+        if adapter.inspect_torrent(old_hash) is None:
+            # Nothing to move: the torrent is gone from its client (Home says so). The new folder
+            # is where "Check" adds it again; refusing it kept the old one for that add.
+            return _Moved("absent", t("web.topics.moved_absent"), "ok")
         if not services.client_owned_by_tow(adapter, old_hash):
             raise RuntimeError(t("web.topics.not_owned"))
         adapter.set_location(old_hash, dest)
