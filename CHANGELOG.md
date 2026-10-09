@@ -222,6 +222,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Turning network access on (Settings or `tow access on`) keeps an address of one network card written in
   `config.yaml` (`bind: 192.168.1.5`); it was replaced with `0.0.0.0`, every address of the computer. Only
   `127.0.0.1` (this computer only) becomes `0.0.0.0`.
+- A topic whose site was deleted is written to the log once ("no site is set up for this link"), not again at
+  every check; the topic stays red until its site is back or the topic is removed.
 
 ## [1.28.2] — 2026-10-09
 
