@@ -971,8 +971,14 @@ def test_serve_with_log_file_rotates_into_it(uvicorn_runs, tmp_path):
     assert kwargs["port"] == 9999
     handler = kwargs["log_config"]["handlers"]["file"]
     assert handler["filename"] == str(log_file)
-    assert handler["class"] == "logging.handlers.RotatingFileHandler"
+    assert handler["class"] == "tow.log.SafeRotatingFileHandler"  # a log held open keeps its older files
     assert log_file.parent.is_dir()
+    import logging.config
+
+    from tow.log import SafeRotatingFileHandler
+
+    configurator = logging.config.DictConfigurator({})
+    assert configurator.resolve(handler["class"]) is SafeRotatingFileHandler  # what uvicorn's dictConfig builds
     assert set(kwargs["log_config"]["loggers"]) == {"uvicorn", "uvicorn.error", "uvicorn.access"}
 
 
