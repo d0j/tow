@@ -746,10 +746,12 @@ def _cmd_export(args: argparse.Namespace) -> int:
     from tow.errors import Msg
     from tow.i18n import t
 
+    output = args.output.absolute()  # a relative name is the terminal's folder: said in full
+
     def run() -> dict[str, Any]:
-        if args.output.exists() and not args.force:  # said before the passphrase is typed twice
+        if output.exists() and not args.force:  # said before the passphrase is typed twice
             raise ExportImportError(
-                "export output already exists", owner_text=Msg("cli.bundle.output_exists", path=str(args.output))
+                "export output already exists", owner_text=Msg("cli.bundle.output_exists", path=str(output))
             )
         first = getpass(t("cli.bundle.passphrase"))
         if len(first) < MIN_EXPORT_PASSPHRASE:
@@ -760,7 +762,7 @@ def _cmd_export(args: argparse.Namespace) -> int:
         second = getpass(t("cli.bundle.passphrase_repeat"))
         if first != second:
             raise ExportImportError("export passphrases do not match", owner_text=Msg("cli.bundle.passphrase_mismatch"))
-        return export_bundle(args.output, first, include_log=args.include_log, overwrite=args.force)
+        return export_bundle(output, first, include_log=args.include_log, overwrite=args.force)
 
     return _guarded(args, run, "cli.bundle.export_failed", text=_export_text)
 
