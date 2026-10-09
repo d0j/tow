@@ -1083,3 +1083,6 @@ def test_the_facts_say_whether_a_topic_waits_for_disk_space():
     assert _facts()["space_waiting"] is True
     save_state({"topics": [{"id": "t1", "waiting_space": {"hash": "B" * 40}, "paused": True}]})
     assert _facts()["space_waiting"] is False
+    # A file selection changed in TOW is applied by the next check; the space pass skips it.
+    save_state({"topics": [{"id": "t1", "waiting_space": {"hash": "B" * 40}, "selection_dirty": True}]})
+    assert _facts()["space_waiting"] is False

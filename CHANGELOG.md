@@ -179,6 +179,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   Python traceback.
 - An update from Settings that the updater refused before installing anything (for example a version that cannot
   read today's data) says that it was refused before installation, no longer "The update did not complete".
+- The disk-space pass no longer runs every 5 minutes for a waiting topic whose file selection you changed in TOW: it
+  leaves such a topic to the next check, and only asked the torrent client and wrote the event log for nothing.
 
 ## [1.28.2] — 2026-10-09
 
