@@ -133,6 +133,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   `service_ok: false`, `ok: false`), some of them with English values in Russian.
 - A command line `tow` refuses (a missing or unknown argument, a wrong value) is said in the command's language,
   without TOW's internal names (`access_action`) or Python's ("invalid float value"); in Russian it was English.
+- A damaged `update-state.json` (an update's record, for example cut short by a power failure right after the
+  update) no longer makes every save in Settings fail with "The update record cannot be verified": that record only
+  tells about the last update, and a damaged one counts as none.
 
 ## [1.28.2] — 2026-10-09
 
