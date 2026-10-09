@@ -493,7 +493,9 @@ before the update does the same).
 3. Snapshot `data/` and `config.yaml` into `backup/update-<time>-before-<ref>` with a SHA-256
    manifest (`SNAPSHOT.json`). Never copied: `master.key`, `lan-auth.token`, `sessions.json`,
    `browser-auth/`, `keys/`, `run/`, `tmp/`, `logs/`, lock files.
-4. `git checkout --detach <target>`, `uv sync --frozen --no-dev` with that environment.
+4. `git checkout --detach <target>`, then the work tree is compared with that commit (on Windows git keeps
+   a file another program holds open and still reports success: such a switch fails and is rolled back);
+   `uv sync --frozen --no-dev` with that environment.
 5. Start: the autostart if it is on (`schtasks /Run /TN TOW`; `systemctl --user start tow.service`;
    `launchctl bootstrap gui/<uid> ~/Library/LaunchAgents/io.tow.plist` when the agent is not
    loaded, else `kickstart`), otherwise `tow run` detached in the background (pythonw, no
@@ -501,7 +503,7 @@ before the update does the same).
 6. Health: `/healthz` must report the **target version** and `/health.json` must answer (it reads
    the state), within `--health-timeout` (90 s); no proxies.
 7. On failure every rollback step runs in its own `try` and is recorded: stop the new one, check
-   out the previous code, `uv sync`, put data and config back from the snapshot **if the new
+   out the previous code (forced, judged by the work tree, tried for half a minute), `uv sync`, put data and config back from the snapshot **if the new
    version changed them** (what the snapshot leaves out is never touched — the failed version's
    logs stay, they say why it failed), start the previous version and check it reports the
    previous version. The outcome is `rolled_back` (previous version answers) or `failed` (it says
