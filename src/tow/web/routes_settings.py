@@ -175,8 +175,12 @@ def settings_language(auto: str = Form(""), language: str = Form("")) -> Respons
     """One list: "auto" (the browser's language) or a language. ``auto=1`` (the older form's
     checkbox) still means automatic."""
 
-    cfg = services.load_config()
     chosen = i18n.canonical(language)
+    if chosen is None and language.strip() and language.strip().lower() != i18n.AUTO and not as_bool(auto):
+        # A language TOW does not have (a page from before a language file was removed, a crafted
+        # form) was saved as automatic with "language saved": said instead, nothing changed.
+        return flash_redirect("/settings?open=language", "settings.language.unknown", "err")
+    cfg = services.load_config()
     value = i18n.AUTO if as_bool(auto) or chosen is None else chosen
     cfg["language"] = value
     services.save_config(cfg)
@@ -190,8 +194,10 @@ def settings_language(auto: str = Form(""), language: str = Form("")) -> Respons
 @services.locked_state_mutation
 def settings_theme(theme: str = Form("")) -> Response:
     """Settings → Theme: the pages' colours for every device - as the system, light or dark."""
+    if theme not in THEMES:  # was saved as "auto" with "theme saved"; the page sends only these
+        return flash_redirect("/settings?open=theme", "settings.theme.unknown", "err")
     cfg = services.load_config()
-    cfg["theme"] = theme if theme in THEMES else "auto"
+    cfg["theme"] = theme
     services.save_config(cfg)
     services.log_event("settings_theme", theme=cfg["theme"], how="manual")
     return flash_redirect("/settings?open=theme", "settings.theme.saved", "ok")

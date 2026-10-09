@@ -507,10 +507,17 @@ def test_settings_theme_is_saved_and_every_page_is_drawn_in_it(client, choice):
 
 
 def test_an_unknown_theme_is_not_saved_and_config_yaml_refuses_it(client):
-    from tow.config import ConfigError, load_config, validated
+    from helpers import shown
 
-    client.post("/settings/theme", data={"theme": "neon"}, follow_redirects=False)
-    assert load_config()["theme"] == "auto"
+    from tow.config import ConfigError, load_config, validated
+    from tow.i18n import t
+
+    client.post("/settings/theme", data={"theme": "dark"})
+    for theme in ("neon", "DARK", ""):
+        response = client.post("/settings/theme", data={"theme": theme}, follow_redirects=False)
+        # Was saved as "auto" with "theme saved": said, and the chosen theme stays.
+        assert t("settings.theme.unknown", "ru") in shown(response.headers["location"])
+        assert load_config()["theme"] == "dark"
     with pytest.raises(ConfigError):
         validated({"theme": "neon"})
 

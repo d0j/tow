@@ -1542,7 +1542,8 @@
       "saved": "language saved",
       "messages_note": "Messages to messengers use the same language.",
       "pill_auto": "Auto · {name}",
-      "messages_note_auto": "In automatic mode, messages to messengers use the language your browser last opened TOW in."
+      "messages_note_auto": "In automatic mode, messages to messengers use the language your browser last opened TOW in.",
+      "unknown": "TOW has no such language — nothing was saved"
     },
     "page": {
       "title": "Settings",
@@ -1747,7 +1748,8 @@
       "dark": "Dark",
       "hint": "The colours of TOW's pages on every device. “As the system” follows the light or dark mode of the computer or phone that opens them.",
       "saved": "theme saved",
-      "q": "theme appearance colours dark light night mode"
+      "q": "theme appearance colours dark light night mode",
+      "unknown": "No such theme — nothing was saved"
     }
   },
   "setup": {
