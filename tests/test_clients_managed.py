@@ -631,6 +631,37 @@ def test_completed_stopped_torrent_can_confirm_start(client, tmp_path, monkeypat
     assert (info["state"], info["progress"]) == (state, progress)
 
 
+def test_a_start_the_client_drops_while_it_checks_is_given_again(client, tmp_path, monkeypatch):
+    """A real Deluge checks the files it found when a complete torrent is started and drops the
+    start given meanwhile: the torrent was "started" while it checked and stopped right after."""
+    adapter, server = client
+    server.torrents[K] = Torrent(TORRENT, str(tmp_path), ["tow"], paused=True)
+    starts: list[str] = []
+    dropped = {"left": 1}
+    real_start, real_inspect = adapter._start, adapter.inspect_torrent
+
+    def start(infohash: str) -> None:
+        starts.append(infohash)
+        if dropped["left"]:
+            dropped["left"] -= 1  # the client checks the files and forgets this start
+            return
+        real_start(infohash)
+
+    script = iter(["checkingUP"])
+
+    def inspect(infohash: str) -> dict[str, Any] | None:
+        info = real_inspect(infohash)
+        state = next(script, None)
+        return info and ({**info, "state": state, "progress": 1.0} if state else {**info, "progress": 1.0})
+
+    monkeypatch.setattr(adapter, "_start", start)
+    monkeypatch.setattr(adapter, "inspect_torrent", inspect)
+    adapter._start(H)
+    info = adapter._wait_started(H)
+    assert len(starts) == 2  # once by the caller, once again after the check
+    assert not info["state"].startswith(("stopped", "paused")), info
+
+
 @pytest.mark.parametrize("state", ["error", "missingFiles", "unknown"])
 def test_ownership_wait_preserves_unsafe_state(client, tmp_path, monkeypatch, state):
     adapter, _ = client
