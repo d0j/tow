@@ -83,6 +83,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A torrent waiting for disk space that TOW could not start (the start not confirmed by the torrent client, for
   example) is in History, as the message about it is; before, only a check's failures were. A start held back because
   the previous version seeds the same files again is logged once, not at every check.
+- "Stop the previous one and add" on a paused topic says to resume it first instead of stopping the previous torrent:
+  the check after the stop skipped the paused topic, so the previous torrent stopped and nothing replaced it.
 
 ## [1.28.2] — 2026-10-09
 

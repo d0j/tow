@@ -2593,6 +2593,25 @@ def test_a_revision_tow_did_not_add_is_never_stopped(monkeypatch):
     )
 
 
+def test_a_paused_topic_does_not_stop_its_previous_revision(monkeypatch):
+    _topic_state(
+        hash="OLD",
+        previous_hashes=["OLDER"],
+        paused=True,
+        last_error="previous torrent revision is still active on an overlapping file: S01E01.mkv",
+    )
+    client = _RevisionClient()
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *a, **k: client)
+    monkeypatch.setattr("tow.web.services.run_check", lambda **kw: (_ for _ in ()).throw(AssertionError("no check")))
+
+    response = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
+        "/topics/t1/replace-revision", follow_redirects=False
+    )
+
+    assert client.stopped == []  # the check would skip it: nothing would replace the stopped one
+    assert "раздача на паузе: сначала снимите её с паузы" in shown(response.headers["location"])
+
+
 def test_no_stop_button_without_an_overlap_error():
     _topic_state(hash="OLD", last_error="nnmclub: all hosts failed")
 

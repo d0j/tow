@@ -2173,6 +2173,7 @@
       "paused": "topic paused: scheduled checks skip it",
       "resumed": "topic resumed",
       "replace_not_needed": "the previous torrent does not need to be stopped",
+      "replace_paused": "the topic is paused: resume it first, then stop the previous torrent",
       "cannot_stop": "this client cannot stop a torrent",
       "replace_failed": "the previous torrent was not stopped: {error}",
       "adopt_failed": "the torrent was not adopted into TOW: {error}",
