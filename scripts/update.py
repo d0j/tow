@@ -1713,19 +1713,24 @@ class Update:
             raise UpdateError(self.text("data_newer", ref=self.ref, found=found, known=known))
 
     def run(self) -> int:
-        self.check_install()
-        if not self.recover_archive():
-            return 1
-        code = self.code
-        previous = code.current()
-        previous_version = self.version()
         try:
-            target = code.prepare(self.ref)  # fetch, or download and unpack: TOW still runs
-            if target is not None:
-                self.refuse_unreadable_data(target)
-        except BaseException:
-            code.discard()
-            raise
+            self.check_install()
+            if not self.recover_archive():
+                return 1
+            code = self.code
+            previous = code.current()
+            previous_version = self.version()
+            try:
+                target = code.prepare(self.ref)  # fetch, or download and unpack: TOW still runs
+                if target is not None:
+                    self.refuse_unreadable_data(target)
+            except BaseException:
+                code.discard()
+                raise
+        except OSError as exc:
+            # TOW still runs and nothing was switched: a leftover app.new held by another program,
+            # a folder that cannot be read. A refusal in words, not a traceback.
+            raise UpdateError(self.text("aborted", error=exc)) from exc
         if target is None:
             self.say("up_to_date", version=previous_version)
             # An install an older updater brought to this version (one without these files'
@@ -1873,11 +1878,6 @@ def update(ref: str, *, system: System | None = None, app: Path = APP, **options
             return work.run()
         except UpdateError as exc:  # refused before anything changed
             work._say(str(exc))
-            return 2
-        except OSError as exc:
-            # Before TOW stops (after that, run() records every failure itself): a leftover
-            # app.new held by another program, a folder that cannot be read. Said, not a traceback.
-            work.say("aborted", error=exc)
             return 2
         finally:
             _unlock(handle)
