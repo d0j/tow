@@ -163,6 +163,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A restore point that cannot be written (the folder is read-only or full, a file is held by another program) says
   why in the system's words, for **Create a backup**, a restore and an update from Settings alike, instead of
   "cannot create export bundle safely".
+- A restore or a TOW file import that cannot save the current state first (a full disk, a file held open) no longer
+  leaves a half copy of every store in `data/import-checkpoints/`, one more at each attempt, which nothing removed.
 
 ## [1.28.2] — 2026-10-09
 
