@@ -2276,6 +2276,26 @@ def test_progress_only_pass_never_asks_the_tracker(monkeypatch):
     assert load_state()["topics"][0]["last_check"] == "earlier"
 
 
+def test_a_progress_pass_keeps_a_failed_scheduled_check_failed(monkeypatch):
+    # The progress pass (every 30 min) and the space pass (every 5) wrote a fresh health record:
+    # the header said the checks were fine again, and the watchdog never counted the scheduled
+    # checks that failed one after another.
+    client = FakeClient()
+    client.present = True
+    _wire_fake_check(monkeypatch, client)
+    _seed_watched_topic(last_check="earlier")
+    for _ in range(2):
+        check.record_check_failure(RuntimeError("secrets"), how="auto")
+    check.run_check(apply=True, notify=False, how="progress", progress_only=True)
+    health = load_state()["health"]
+    assert (health["check_ok"], health["check_error"], health["check_failures"]) == (False, "error", 2)
+    check.run_check(apply=True, notify=False, how="auto")  # a scheduled check that runs clears it
+    health = load_state()["health"]
+    assert health.get("check_ok", True) is True
+    assert not health.get("check_error")
+    assert not health.get("check_failures")
+
+
 def test_cli_progress_only_is_its_own_kind_of_run(monkeypatch):
     from tow import cli
 
