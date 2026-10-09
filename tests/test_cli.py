@@ -93,6 +93,52 @@ def test_a_wrong_option_shows_the_usage_in_the_command_language(capsys):
     assert capsys.readouterr().err.startswith("использование: tow restore-snapshot")
 
 
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        (["restore-snapshot"], "не указано: --path"),
+        (["access"], "не указано: {on,off,status}"),
+        (["access", "maybe"], "'maybe' — не одно из 'on', 'off', 'status'"),
+        (["autostart"], "не указано: {on,off,status}"),
+        (["permissions", "x"], "'x' — не одно из 'status', 'fix'"),
+        (["stop", "--wait", "abc"], "--wait: 'abc' — недопустимое значение"),
+        (["status", "extra"], "неизвестные аргументы: extra"),
+        (["serve", "--port"], "--port: нужно значение"),
+        (["check", "--global-only", "--timer-only"], "нельзя указывать вместе с --global-only"),
+    ],
+)
+def test_a_refused_command_line_is_said_in_the_command_language(capsys, argv, expected):
+    # argparse's own messages stayed English ("the following arguments are required") and
+    # named TOW's variables (access_action, autostart_action) and Python's types ("float").
+    from tow.config import load_config, save_config
+
+    config = load_config()
+    config["language"] = "ru"
+    save_config(config)
+    with pytest.raises(SystemExit) as exc:
+        main(argv)
+    assert exc.value.code == cli.EXIT_USAGE
+    err = capsys.readouterr().err
+    assert expected in err
+    for word in ("required", "invalid", "unrecognized", "expected", "_action", "float", "int value"):
+        assert word not in err
+
+
+def test_an_english_refusal_names_no_variable_or_python_type(capsys):
+    from tow.config import load_config, save_config
+
+    config = load_config()
+    config["language"] = "en"
+    save_config(config)
+    for argv, expected in ((["access"], "missing: {on,off,status}"), (["stop", "--wait", "x"], "'x' is not a valid")):
+        with pytest.raises(SystemExit):
+            main(argv)
+        err = capsys.readouterr().err
+        assert expected in err
+        assert "access_action" not in err
+        assert "float" not in err
+
+
 def test_the_five_task_commands_are_gone(capsys):
     # 1.21: no `install-task`; `autostart migrate` only says the switch belongs to 1.18-1.20.
     with pytest.raises(SystemExit):

@@ -451,7 +451,18 @@
       "usage": "использование:",
       "positionals": "аргументы",
       "options": "параметры",
-      "help": "показать эту справку и выйти"
+      "help": "показать эту справку и выйти",
+      "required": "не указано: %s",
+      "one_required": "нужен один из них: %s",
+      "unrecognized": "неизвестные аргументы: %s",
+      "argument": "параметр %(argument_name)s: %(message)s",
+      "invalid_choice": "%(value)r — не одно из %(choices)s",
+      "invalid_value": "%(value)r — недопустимое значение",
+      "expected_one": "нужно значение",
+      "expected_some": "нужно хотя бы одно значение",
+      "not_allowed_with": "нельзя указывать вместе с %s",
+      "ambiguous": "%(option)s неоднозначно: %(matches)s",
+      "ignored": "не принимает значения: %r"
     },
     "setup": {
       "use_launcher": "`setup` пересобирает окружение TOW, поэтому выполняется запускающим скриптом, а не самим TOW. Остановите TOW и выполните в папке установки: {launcher} setup",
