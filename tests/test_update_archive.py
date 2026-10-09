@@ -1080,6 +1080,26 @@ def test_start_files_are_left_alone_where_they_are_not_the_bundles(install, gith
     assert (install["root"] / "Start TOW.cmd").is_file()
 
 
+def test_an_install_already_on_the_latest_release_gets_its_start_files_too(install, github):
+    # An older updater (without the refresh) brought it to this version: "Update TOW.cmd" said
+    # "nothing to update" and the zip's old start files stayed until a newer release came out.
+    root = install["root"]
+    _old_zip_files(root)
+    (install["app"] / "scripts").mkdir()
+    (install["app"] / "scripts" / "root_files.py").write_bytes(ROOT_FILES_SOURCE)
+    github.latest("v1.22.0")
+    machine = Machine(install["app"], github, windows=True)
+
+    code, lines = run(machine)
+
+    assert code == 0, lines
+    assert machine.calls == []  # TOW was never stopped
+    assert lines[0] == "TOW 1.22.0 is the latest release: nothing to update"
+    assert (root / "Start TOW.cmd").read_bytes() == _root_files().rendered()["Start TOW.cmd"]
+    assert b"runtime\\update.py" in (root / "Update TOW.cmd").read_bytes()
+    assert not (root / "update-state.json").exists()  # no update ran
+
+
 def test_a_start_file_that_cannot_be_written_does_not_stop_the_others(install, github):
     root = install["root"]
     _old_zip_files(root)

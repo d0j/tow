@@ -48,8 +48,9 @@ Steps (each one checked; nothing is reported as done without its read-back):
    copies and anything else in backup/ are never touched);
 9. an install without git: the Windows bundle's start files ("Start TOW.cmd", "Stop TOW.cmd",
    "Update TOW.cmd", scripts/root_files.py) are written again from the code before the switch
-   and from the new code after it, and ``runtime/update.py`` from the new code: an install
-   that began with an older zip no longer keeps that zip's files.
+   and from the new code after it (from the installed code when it is the target already),
+   and ``runtime/update.py`` from the new code: an install that began with an older zip no
+   longer keeps that zip's files.
 
 ``<TOW>/update-state.json`` records the run (the watchdog holds back for 30 minutes while it says
 ``in_progress``).
@@ -1696,6 +1697,10 @@ class Update:
             raise
         if target is None:
             self.say("up_to_date", version=previous_version)
+            # An install an older updater brought to this version (one without these files'
+            # refresh) gets the start files of the version it runs here, not only at the next.
+            self.refresh_root_files(self.app, record=False)
+            self.refresh_runtime_copy()
             return 0
         self.say("start", previous=code.short(previous), target=code.short(target), ref=self.ref, root=self.root)
         self.write_state(
