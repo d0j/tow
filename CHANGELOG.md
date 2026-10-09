@@ -105,6 +105,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - `tow secrets generate-key --key-file` names the whole path of the key it wrote (a relative name is the
   terminal's folder), and its help says that it writes such a file also while passwords and tokens are saved;
   only keys/master.key is refused then.
+- The user guide's troubleshooting names the messages of 1.28.2 (a data file another program holds open, TOW's
+  code incomplete), and its list of folders has the restore points.
 - Russian texts no longer put a number before a word that must agree with it ("из 1 зеркал", "8192 символов",
   "1/21 файлов"): the site check, the selection count on Home and in messages, the selection length limit and the
   log size in the Guide.

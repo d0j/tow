@@ -333,6 +333,8 @@ The left column is the text TOW shows (on Home, in a row, in a message or on a p
 | The last scheduled check is blocked: saved passwords and tokens cannot be opened. … · The master key is missing … | The master key is missing or wrong. | `tow keys status`; put back `keys/master.key` from your copy, or `tow keys adopt --from FILE`. |
 | state.json was written by a newer TOW … | You went back to an older version. | Update TOW again, or restore a backup made by this version. |
 | TOW was not started: an update was cut off while it replaced the code … | An update stopped half-way (the computer turned off, the updater was killed). | Run the update again (`Update TOW`): it puts the previous version back first. |
+| TOW could not write its data file just now — another program may be keeping it open … | An antivirus or a backup tool holds a file in `data/` open. | Try again in a moment; if it keeps happening, exclude the TOW folder from that program. |
+| TOW was not started: its code is incomplete … | Files of TOW's code are gone (an antivirus, a cleanup tool, a copy that did not finish). | Run the update file with the version you had: [If something goes wrong](install.md#if-something-goes-wrong). |
 | Sign-in from other devices is off — TOW opens only on its own computer. | Network access is off. | Turn it on at the computer running TOW. |
 | No password for other devices is set yet. | Network access is on, but there is no password. | Set it on the computer running TOW: Settings → Network access. |
 | Warning: other accounts on this computer can change the TOW folder … · … can open … | Other accounts may get into the TOW folder (an install in `C:\TOW` made from an administrator terminal belongs to Administrators, so TOW cannot close it at start). | `tow permissions` shows why. `tow permissions fix` closes it; when another account owns the folder, run it once in a terminal opened with **Run as administrator** (Linux, macOS: with `sudo`): the folder becomes your account's — the one autostart runs as — and nothing outside it changes. When you typed another account's administrator password to open that terminal, name your own account: `tow permissions fix --owner PC\name`. |
@@ -377,5 +379,6 @@ chosen one, or the one your browser last asked for.
 | `data/logs/` | `run.log` and the logs of the web server and the scheduled jobs (old parts are deleted by themselves). |
 | `keys/master.key` | The master key. Never in any copy. |
 | `backup/` | Nightly backups and pre-update snapshots. |
+| `data/restore-points/` | Restore points (**Create a backup**, and before risky changes), unless Settings → Backups names another folder. |
 
 An empty password field in any form means “keep the saved one”; saved passwords are never shown.
