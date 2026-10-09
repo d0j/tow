@@ -390,6 +390,21 @@ def test_unreadable_job_fails_closed(install, content):
     assert not install[1]
 
 
+@pytest.mark.parametrize("content", ["", '{"status": "ok", "ref"', "[]"], ids=["empty", "cut-off", "not-an-object"])
+def test_a_damaged_updater_record_blocks_neither_settings_nor_an_update(install, monkeypatch, content):
+    # update-state.json is the updater's information about its last run; a power cut right
+    # after a terminal update can leave it empty. It made every Settings save answer 503.
+    (install[0] / "update-state.json").write_text(content)
+    assert web_update.status()["status"] == "idle"
+    monkeypatch.setattr(services, "web_update_status", web_update.status)
+    response = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
+        "/settings/service/restart", follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert web_update.start("1.22.21")["ok"] is True
+    assert (install[0] / "update-state.json").read_text() == content  # evidence kept as it is
+
+
 def test_previous_successful_compatible_version_is_available(install):
     (install[0] / "update-state.json").write_text(json.dumps({"status": "ok", "previous_version": "1.22.21"}))
     assert web_update.status()["rollback_version"] == "1.22.21"

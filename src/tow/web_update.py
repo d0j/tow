@@ -58,6 +58,18 @@ def _read(path: Path) -> dict[str, Any]:
     return value
 
 
+def _updater_record() -> dict[str, Any]:
+    """The updater's record of its last run (``<TOW>/update-state.json``): information only.
+
+    A damaged or half-written record (a power cut right after a terminal update) is no record:
+    it never blocks Settings or a new update. Only the web job's own journal fails closed.
+    """
+    try:
+        return _read(root() / "update-state.json")
+    except WebUpdateError:
+        return {}
+
+
 def _runtime_app() -> Path:
     app = repo_root().resolve()
     if app != (root() / "app").resolve() or not (app / "scripts" / "update.py").is_file():
@@ -169,7 +181,7 @@ def status() -> dict[str, Any]:
     except WebUpdateError as exc:
         return {"supported": False, "reason": str(exc), "current": __version__, "status": "idle", "previous": ""}
     job = _read(_job_file())
-    updater = _read(root() / "update-state.json")
+    updater = _updater_record()
     active, unverified = _activity(job)
     job = _recover_completed(job, updater, active)
     previous = updater.get("previous_version") if updater.get("status") == "ok" else ""
@@ -276,7 +288,7 @@ def start(version: str) -> dict[str, Any]:
     with persistence_lock():
         path = _job_file()
         old = _read(path)
-        old = _completed_job(old, _read(root() / "update-state.json"))
+        old = _completed_job(old, _updater_record())
         if _active(old):
             raise WebUpdateError("releases.busy")
         if old.get("status") in _ACTIVE:
