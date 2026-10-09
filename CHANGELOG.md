@@ -165,6 +165,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   "cannot create export bundle safely".
 - A restore or a TOW file import that cannot save the current state first (a full disk, a file held open) no longer
   leaves a half copy of every store in `data/import-checkpoints/`, one more at each attempt, which nothing removed.
+- A nightly backup stopped at its 30-minute limit (a slow network folder) is recorded as failed: Settings and the
+  watchdog kept showing the last good copy as if nothing had happened.
 
 ## [1.28.2] — 2026-10-09
 

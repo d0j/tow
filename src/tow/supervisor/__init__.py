@@ -219,6 +219,18 @@ def _forget_data_lost() -> None:
         LOG.warning("data folder loss note not removed: %s", type(exc).__name__)
 
 
+def _job_stopped(name: str, minutes: float) -> None:
+    """A night copy stopped at its time limit (or by a stop) wrote no result of its own:
+    Settings and the watchdog kept showing the last good copy as if nothing had failed."""
+    if name != "backup":
+        return
+    from tow.i18n import t
+    from tow.log import owner_language
+    from tow.snapshots import record_failure
+
+    record_failure(t("backup.snapshot.stopped", owner_language(), minutes=max(1, round(minutes))))
+
+
 def _send(text: str) -> bool:
     from tow.watchdog import send_to_messengers
 
@@ -246,6 +258,7 @@ def default_deps() -> Deps:
         stop_pid=_stop_pid,
         own_server=lambda port: healthy(port, install=layout.install_id()),
         tow_server=healthy,
+        job_stopped=_job_stopped,
     )
 
 

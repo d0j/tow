@@ -98,6 +98,7 @@
       "restore_cleanup_warning": "The data is restored, but cleanup of safety copies is incomplete. Check folder access and files held by other programs; the next restore will try again.",
       "unknown": "unknown nightly backup",
       "cannot_write": "cannot write the nightly backup: {reason}",
+      "stopped": "the nightly backup did not finish in {minutes} min and was stopped",
       "manifest_unreadable": "the copy's file list (MANIFEST.json) is missing or unreadable",
       "manifest_too_large": "the copy's file list (MANIFEST.json) exceeds 1 MB",
       "record_size": "restore metadata exceeds the permitted size",
