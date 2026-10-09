@@ -2071,6 +2071,7 @@
     "check": {
       "not_confirmed": "проверка не подтверждена",
       "added_client_refused": "добавлено в TOW, но торрент-клиент не подтвердил: {error}",
+      "added_waiting_space": "добавлено в торрент-клиент, но ещё не запущено: {error}",
       "added_check_failed": "добавлено в TOW, проверка не прошла: {error}",
       "client_refused": "торрент-клиент не подтвердил: {error}",
       "check_failed": "проверка не прошла: {error}",

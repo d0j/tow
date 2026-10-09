@@ -85,6 +85,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   the previous version seeds the same files again is logged once, not at every check.
 - "Stop the previous one and add" on a paused topic says to resume it first instead of stopping the previous torrent:
   the check after the stop skipped the paused topic, so the previous torrent stopped and nothing replaced it.
+- A check by hand, or a new topic's first check, that added the torrent stopped because its files do not fit yet
+  says "added to the torrent client, not started yet: waiting for disk space…" as a warning, instead of the alert
+  "the check failed: …"; a check of a torrent that still waits says just why it waits.
 
 ## [1.28.2] — 2026-10-09
 
