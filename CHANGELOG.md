@@ -99,6 +99,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   undoing such an edit was refused the same way.
 - When a site works again for several topics at once (after you signed in to it again, for example), the messenger
   gets one "works again" message for the site, as it got one message about its failure, instead of one per topic.
+- A site's daily download limit ends early only when a check by hand really reached the site: "Check" on a torrent
+  waiting for disk space, or one whose site did not answer, ended the limit, and the next scheduled checks asked the
+  site again the same day.
 
 ## [1.28.2] — 2026-10-09
 

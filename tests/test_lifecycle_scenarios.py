@@ -556,3 +556,19 @@ def test_a_torrent_removed_from_the_client_is_said_and_added_again_by_check(worl
     assert world.client.adds == [OLD, OLD]
     assert _home() == ("ok", "ok")
     assert _history("downloads") == ["client_added", "client_removed", "client_added", "client_restored"]
+
+
+def test_a_check_by_hand_that_did_not_reach_a_limited_site_keeps_its_daily_limit(world, full_disk):
+    from tow.check import run as check_run_module
+
+    _check()  # added stopped: it waits for room
+    assert _topic()["waiting_space"]["hash"] == OLD
+    state = load_state()
+    state["daily_limit"] = {"fake": check_run_module._today()}  # the site said "no more today"
+    save_state(state)
+    fetches = world.site.fetches
+
+    _check(how="manual", ids=["t1"])  # "Check": only the client is asked
+
+    assert world.site.fetches == fetches
+    assert load_state()["daily_limit"] == {"fake": check_run_module._today()}  # the limit still holds
