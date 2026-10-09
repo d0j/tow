@@ -159,7 +159,7 @@ def test_files_that_do_not_fit_are_added_stopped_and_wait(world):
     assert topic["last_error_code"] == "check.waiting_space"
     assert topic["last_error_class"] == "disk"  # red: the owner can free space
     assert topic["last_error"].startswith("ждёт места на диске: не хватает 40,5 ГБ (нужно 50,0 ГБ, свободно 10,0 ГБ")
-    assert topic["last_error"].endswith("TOW запустит раздачу сам, когда место появится")
+    assert topic["last_error"].endswith("TOW запустит торрент сам, когда место появится")
     assert len(world.sent) == 1
     assert world.sent[0].startswith("Сбой — Show: ждёт места на диске: не хватает 40,5 ГБ")
 
