@@ -5,6 +5,7 @@
   {% set error_words = topic.last_error_human or topic.last_error %}
   {% if topic.last_error %}<p class="form-error{% if topic.torrent_tone == 'warn' %} warn{% endif %}" role="note">{% if topic.last_check %}{{ t('home.topic.last_error_at', at=topic.last_check, error=error_words) }}{% else %}{{ t('home.topic.last_error', error=error_words) }}{% endif %}</p>
   {%- if error_words != topic.last_error %}<details class="technical-details raw-error"><summary>{{ t('common.details') }}</summary><code>{{ topic.last_error }}</code></details>{% endif %}{% endif %}
+  {% if topic.sign_in_href %}<p><a class="btn" href="{{ topic.sign_in_href }}">{{ t('home.topic.sign_in') }}</a></p>{% endif %}
   {% if topic.replaces_revision %}
   <form method="post" action="/topics/{{ topic.id|urlencode }}/replace-revision" data-confirm="{{ t('home.topic.replace_confirm') }}">
     <button type="submit" data-busy-label="{{ t('common.busy.checking') }}">{{ t('home.topic.replace') }}</button>

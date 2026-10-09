@@ -2473,6 +2473,31 @@ def test_attention_banner_lists_what_needs_the_owner(monkeypatch):
     assert "Нужен вход на сайт NNM-Club (раздач: 2)" in page  # the title, as the Sites page names it
 
 
+def test_a_row_whose_site_asks_for_a_sign_in_offers_the_sign_in():
+    """Qa8: "Needs attention" says "Sign in to NNM-Club: open the topic's row", and the row's panel
+    had no way to sign in (the prompt opened only after a failed check by hand). The panel now
+    links the site's sign-in prompt; a topic with another error gets no such link."""
+    from tow.store import save_state
+
+    url = "https://nnmclub.to/forum/viewtopic.php?t="
+    save_state(
+        {
+            "topics": [
+                {"id": "a", "title": "A", "url": url + "1", "last_error_class": "tracker_auth", "last_error": "x"},
+                {"id": "b", "title": "B", "url": url + "2", "last_error_class": "qbit", "last_error": "y"},
+            ],
+            "mirrors": {},
+        }
+    )
+    client = TestClient(app)
+    panel = client.get("/topics/a/edit-panel").text
+    assert 'href="/?credential_topic=a"' in panel
+    assert "Войти на сайт" in panel
+    assert "credential_topic" not in client.get("/topics/b/edit-panel").text
+    prompt = client.get("/?credential_topic=a").text
+    assert 'class="credential-prompt" open' in prompt
+
+
 def test_no_banner_when_all_is_well():
     import time as _time
 

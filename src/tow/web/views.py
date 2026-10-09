@@ -470,6 +470,13 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
                         else ""
                     )
                 ),
+                # The site asks for a sign-in: the row opens the prompt ("Needs attention" sends
+                # the owner to the row, and the row had no way to sign in).
+                "sign_in_href": (
+                    "/?credential_topic=" + quote(str(topic.get("id") or ""))
+                    if cls == "tracker_auth" and tr is not None and tr.spec.get("login_path")
+                    else ""
+                ),
                 "last_error_human": humanize(last_error),
                 "error_line": _error_line(humanize(last_error), cls, site),
                 "search_href": _search_href(tr, state, series),
