@@ -267,7 +267,9 @@ def doctor_run(request: Request) -> Response:
     degraded = len(report.get("degraded") or [])
     kind = "warn" if degraded else "ok"
     if report.get("ok"):
-        flash = t("web.doctor.ok") + (t("web.doctor.degraded", count=degraded) if degraded else "")
+        # "All is well; mirrors not answering: 1" said two things at once: one mirror down among
+        # working ones is said as such.
+        flash = t("web.doctor.ok_degraded", count=degraded) if degraded else t("web.doctor.ok")
     else:
         # Sites that do not answer are amber (transport); a torrent client that does not is red.
         kind = "warn"

@@ -287,3 +287,14 @@ def test_client_password_is_not_kept_for_a_changed_address(monkeypatch, form, ac
     else:
         assert "flash=" in response.headers["location"]
         assert saved == {"host": "http://qbit.lan", "port": 8080, "username": "admin", "password": "stored"}
+
+
+def test_the_diagnostics_row_says_what_diagnostics_shows():
+    """Qa8: the Settings row promised "the running service", and Diagnostics shows the client,
+    the sites and autostart: the row names those."""
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    settings = client.get("/settings").text
+    assert "Связь с торрент-клиентом и сайтами, автозапуск" in settings
+    assert "работающим сервисом" not in settings
+    doctor = client.get("/doctor").text
+    assert "Автозапуск" in doctor
