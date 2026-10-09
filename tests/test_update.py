@@ -375,6 +375,30 @@ def test_a_supervisor_that_does_not_stop_is_stopped_forcibly(install):
     assert any("stopped forcibly" in line for line in lines)
 
 
+def test_a_file_the_checkout_could_not_replace_is_rolled_back_not_reported_as_updated(install):
+    # Windows: a tracked file held by another program (an editor, an antivirus scan) is not
+    # replaced, git still ends with success, and the old pyproject.toml even passed the health
+    # check: "TOW 1.20.0 is running" on a mix of both versions, and every later update was
+    # refused for "local changes".
+    class Held(Fake):
+        def git(self, *args: str) -> str:
+            before = (self.app / "pyproject.toml").read_bytes()
+            output = super().git(*args)
+            if args[:1] == ("checkout",) and "--force" not in args:
+                (self.app / "pyproject.toml").write_bytes(before)  # the held file stays as it was
+            return output
+
+    fake = Held(install["app"])
+    before = head(install)
+    code, lines = run(fake)
+    assert code == 1
+    assert state(install)["status"] == "rolled_back"
+    assert any("the code could not be switched (pyproject.toml)" in line for line in lines)
+    assert head(install) == before
+    assert git(install["app"], "status", "--porcelain", "--untracked-files=no") == ""
+    assert fake.calls[-1] == "spawn tow run 1.20.0"
+
+
 @pytest.mark.parametrize("fault", ["disk full", "read-back"])
 def test_a_failed_snapshot_changes_nothing_and_starts_tow_again(install, monkeypatch, fault):
     fake = Fake(install["app"])

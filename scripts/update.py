@@ -861,9 +861,22 @@ class GitCode:
 
     def switch(self, target: str) -> None:
         self.sys.git("checkout", "--quiet", "--detach", target)
+        self._switched(target)
 
     def switch_back(self, previous: str) -> None:
-        self.sys.git("checkout", "--quiet", "--detach", previous)
+        # Forced: a forward checkout cut short left files of the target, which are no local edits.
+        self.sys.git("checkout", "--quiet", "--force", "--detach", previous)
+        self._switched(previous)
+
+    def _switched(self, commit: str) -> None:
+        """The work tree is exactly ``commit``. On Windows git cannot replace a file another
+        program holds (an editor, an antivirus scan); it says so, yet ends the checkout with
+        success, and the old file stays: TOW would run a mix of both versions - and the version
+        the health check expects is read from such a file."""
+        changed = self.sys.git("status", "--porcelain", "--untracked-files=no")
+        if self.sys.git("rev-parse", "HEAD") != commit or changed:
+            names = ", ".join(line.split(maxsplit=1)[-1] for line in changed.splitlines()[:5])
+            raise UpdateError(self.work.text("switch_failed", error=names or commit[:7], app=self.work.app))
 
     def discard(self) -> None:
         """Nothing was unpacked: a fetch leaves the checkout as it is."""
