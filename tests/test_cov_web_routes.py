@@ -1437,7 +1437,8 @@ def test_prefer_unknown_mirror_changes_nothing(client):
             {"ok": True, "degraded": ["a", "b"]},
             "http://127.0.0.1/sites",
             "/sites",
-            "проверка связи: всё в порядке; зеркала не отвечают: 2",
+            # Qa8: "all is well; mirrors not answering" said two things at once.
+            "проверка связи: торрент-клиент и все сайты отвечают; зеркала не отвечают: 2",
         ),
         ({"ok": True}, "http://127.0.0.1/settings?open=x", "/settings", "проверка связи: всё в порядке"),
         (

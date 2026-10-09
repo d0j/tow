@@ -196,6 +196,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   still active", not "The torrent client did not confirm": TOW did not ask the client, by its own rule.
 - The mirror table in Diagnostics no longer has an empty column header, which a screen reader announced as a column
   without a name.
+- The connection check no longer says "all is well; mirrors not answering: 1": with one mirror down among working ones
+  it says that the torrent client and every site answer and how many mirrors do not. The Diagnostics row in Settings
+  names what Diagnostics shows (the client, the sites, autostart), not "the running service".
 
 ## [1.28.2] — 2026-10-09
 

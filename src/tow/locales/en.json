@@ -1625,7 +1625,7 @@
       "secret_store": "Saved passwords and tokens cannot be opened: the master key is missing or does not match. Put keys/master.key back from your copy, or run <code>{launcher} keys status</code> to see why. More in the <a href=\"{help}\">guide</a>.",
       "help_note": "How TOW works: statuses, messages, backups and updates",
       "doctor_link": "Diagnostics",
-      "doctor_note": "Connection to the torrent client, the sites and the running service",
+      "doctor_note": "Connection to the torrent client and the sites, autostart",
       "doctor_q": "diagnostics doctor connection check sites client service",
       "sign_out": "Sign out on this device",
       "sign_out_note": "Only this phone or computer; other devices stay signed in",
@@ -2366,7 +2366,7 @@
     },
     "doctor": {
       "ok": "connection check: all is well",
-      "degraded": "; mirrors not answering: {count}",
+      "ok_degraded": "connection check: the torrent client and every site answer; mirrors not answering: {count}",
       "prefix": "connection check: ",
       "client_down": "the torrent client does not answer",
       "dead": "not a single mirror answers: {sites}",
