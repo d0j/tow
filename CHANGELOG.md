@@ -56,6 +56,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   History, not one at every check.
 - A torrent added stopped because its files did not fit, whose add could not be confirmed at once, is no longer
   started by the next check without the room: that check finishes the add and the torrent waits for disk space.
+- A torrent removed in qBittorrent a moment before a check reached its topic is reported as removed from the client
+  again, not as "comparing with the torrent client failed".
 - A messenger that answers "too many requests" with a wait that is no number ("nan") is waited for the usual pause
   and asked again, instead of the delivery failing with an internal error.
 - A check no longer keeps in memory every topic page of a site whose check ends early (a sign-in page, a magnet that
