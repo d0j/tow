@@ -127,6 +127,24 @@ def test_daily_digest_once_a_day_after_its_hour():
     ]
 
 
+def test_the_digest_counts_no_add_for_a_torrent_already_in_the_client():
+    sent, send = _sender()
+    now = datetime(2026, 10, 1, 9, 30).astimezone()
+    recent = (now - timedelta(hours=1)).isoformat()
+    path = log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    events = [
+        {"kind": "client_added", "title": "Сериал А", "status": "succeeded", "created_at": recent},
+        # Already in the client: verified (or its hash relabelled), nothing was added.
+        {"kind": "client_updated", "title": "Сериал Б", "status": "skipped", "created_at": recent},
+    ]
+    path.write_text("\n".join(json.dumps(e, ensure_ascii=False) for e in events) + "\n", encoding="utf-8")
+
+    assert delivery.maybe_digest(cfg={"daily_digest_hour": 9}, send=send, now=now) is True
+
+    assert sent == ["TOW за сутки: добавлено в клиент 1, новых серий и файлов 0, загружено 0"]
+
+
 def test_the_digest_is_queued_in_the_same_write_as_its_day(monkeypatch):
     now = datetime(2026, 10, 1, 9, 30).astimezone()
 
