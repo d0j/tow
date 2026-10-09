@@ -431,7 +431,7 @@ def test_forms_as_app_js_posts_them_still_pass():
     bodiless = client.build_request("POST", "/settings/theme")
     bodiless.headers.pop("content-length", None)  # no length and no transfer coding: no body
     assert client.send(bodiless, follow_redirects=False).status_code == 303
-    assert load_config()["theme"] == "auto"
+    assert load_config()["theme"] == "dark"  # an empty form chooses no theme: nothing changed
 
 
 def test_the_largest_topic_form_fits_the_cap():

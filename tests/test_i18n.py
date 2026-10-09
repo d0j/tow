@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from helpers import shown
 
 from tow import i18n
 
@@ -303,7 +304,9 @@ def test_language_is_one_list_with_automatic_first():
         ({"language": "ru"}, "ru"),
         ({"language": "RU"}, "ru"),
         ({"language": "auto"}, "auto"),
-        ({"language": "xx"}, "auto"),  # not a language TOW has: automatic
+        ({"language": "xx"}, "en"),  # not a language TOW has: refused, nothing changed
+        ({"language": "en-US"}, "en"),
+        ({"language": ""}, "auto"),  # nothing chosen: automatic
         ({"auto": "0", "language": "ru"}, "ru"),  # the older form (a checkbox and a list)
         ({"auto": "1", "language": "ru"}, "auto"),
     ],
@@ -318,6 +321,8 @@ def test_saving_the_language(form, saved):
     )
     assert response.status_code == 303
     assert load_config()["language"] == saved
+    refused = saved == "en"
+    assert (i18n.translate("settings.language.unknown", "en") in shown(response.headers["location"])) is refused
 
 
 def test_a_chosen_language_wins_over_the_browser():

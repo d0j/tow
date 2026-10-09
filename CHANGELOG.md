@@ -20,6 +20,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   (9091, 8112), not qBittorrent's 8080. A port written with other digits ("٨٠٨٠") or as "8_080" is refused.
 - Settings → Backups → Keep nightly backups, days: a number written with other digits ("٧", "７") or as "1_0" is
   refused instead of being saved as 7 or 10.
+- Settings → Language and Theme: a language TOW does not have (such as one whose file was removed while the page
+  stayed open) or a theme other than the three offered is refused with a message instead of being saved as
+  automatic with "language saved" or "theme saved".
 
 ## [1.28.2] — 2026-10-09
 
