@@ -23,6 +23,17 @@ from tow.clients import factory as client_factory
 from tow.store import load_state, save_download_history, save_state
 from tow.torrent import TorrentFile
 
+
+@pytest.fixture(autouse=True)
+def _room_for_every_add(monkeypatch):
+    r"""These tests are about the add, not about disk space: the files always fit. On a machine
+    whose drive had less than 512 MiB free (the folder "M:\TV" is a relative path on Linux
+    and macOS) the add waited for space instead, and the outcomes were not the ones tested."""
+    from tow.check import apply as check_apply
+
+    monkeypatch.setattr(check_apply, "free_space_problem", lambda *_args, **_kwargs: None)
+
+
 V1 = "A" * 40
 V2 = "B" * 64
 NEW = "D" * 40
@@ -64,7 +75,7 @@ class Client:
         info = self.torrents.get(infohash.upper())
         return None if info is None else {"hash": infohash.upper(), "files": [], **info}
 
-    def add_torrent_selected(self, content, save_path, infohash, selected_indices):
+    def add_torrent_selected(self, content, save_path, infohash, selected_indices, *, start=True):
         self.adds += 1
         registered = (self.register_as or infohash).upper()
         self.torrents[registered] = {"hash": registered, "save_path": save_path, "tags": ["tow"], **self.after_add}

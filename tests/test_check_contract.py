@@ -5,6 +5,7 @@ from typing import ClassVar
 import pytest
 
 from tow import check, check_transaction
+from tow.check import apply as check_apply
 from tow.check import client_ops
 from tow.check import notices as check_notices
 from tow.check import reconcile as check_reconcile
@@ -23,6 +24,16 @@ from tow.store import (
     save_state,
 )
 from tow.torrent import TorrentFile
+
+FREE_SPACE_PROBLEM = check_apply.free_space_problem  # the real one, for the test about it
+
+
+@pytest.fixture(autouse=True)
+def _room_for_every_add(monkeypatch):
+    r"""These tests are about the add, not about disk space: the files always fit. On a machine
+    whose drive had less than 512 MiB free (the folder "M:\TV" is a relative path on Linux
+    and macOS) the add waited for space instead, and the outcomes were not the ones tested."""
+    monkeypatch.setattr(check_apply, "free_space_problem", lambda *_args, **_kwargs: None)
 
 
 class FakeTracker:
@@ -64,7 +75,7 @@ class FakeClient:
     def has_hash(self, infohash):
         return self.present
 
-    def add_torrent_selected(self, content, save_path, infohash, selected_indices):
+    def add_torrent_selected(self, content, save_path, infohash, selected_indices, *, start=True):
         self.add_calls += 1
         self.selected_indices = tuple(selected_indices)
         if self.add_error:
@@ -1124,7 +1135,7 @@ def test_revision_overlap_guard_includes_untagged_old_torrents(monkeypatch, old_
                 "files": [{"index": 0, "name": "Show.mkv", "size": 1, "priority": 1}],
             }
 
-        def add_torrent_selected(self, content, save_path, infohash, selected_indices):
+        def add_torrent_selected(self, content, save_path, infohash, selected_indices, *, start=True):
             self.add_calls += 1
             self.hashes.add(infohash)
             return self.inspect_torrent(infohash)
@@ -1576,7 +1587,7 @@ def test_revision_overlap_guard_compares_readable_non_ascii_names_exactly(monkey
                 ],
             }
 
-        def add_torrent_selected(self, content, save_path, infohash, selected_indices):
+        def add_torrent_selected(self, content, save_path, infohash, selected_indices, *, start=True):
             self.add_calls += 1
             self.hashes.add(infohash)
             return self.inspect_torrent(infohash)
@@ -2107,6 +2118,7 @@ def test_an_add_that_cannot_fit_is_added_stopped_and_waits(monkeypatch, tmp_path
     )
     monkeypatch.setattr(shutil, "disk_usage", lambda _p: SimpleNamespace(total=0, used=0, free=10 * 1024**3))
     monkeypatch.setattr("tow.folders.seen_from_here", lambda _p: True)  # M: is this computer's drive
+    monkeypatch.setattr(check_apply, "free_space_problem", FREE_SPACE_PROBLEM)
     _seed_watched_topic(hash="")
 
     row = check.run_check(apply=True, notify=False, how="test")["results"][0]
