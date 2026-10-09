@@ -961,6 +961,27 @@ def test_observations_of_a_run_read_one_listing_and_read_backs_stay_fresh(monkey
     assert api.calls.count("webapiVersion") == 1  # asked by the ping, then kept
 
 
+def test_a_torrent_removed_after_the_listing_is_gone_not_an_error(monkeypatch):
+    # The listing is up to a minute old: a torrent the owner removed meanwhile is still in it,
+    # and asking its files raised qBittorrent's 404 - a red reconcile error instead of the
+    # usual "removed from the client".
+    from qbittorrentapi import NotFound404Error
+
+    api = _ListingAPI()
+    monkeypatch.setattr(qbittorrent, "Client", lambda **_kwargs: api)
+    client = qbittorrent.QBittorrentClient("http://qbit", 8080, "user", "password")
+    assert client.observe_torrent("A" * 40) is not None  # the listing is read
+    del api.rows["A" * 40]  # removed in qBittorrent
+
+    def files(*, torrent_hash):
+        if torrent_hash.upper() not in api.rows:
+            raise NotFound404Error("Torrent hash was not found")
+        return []
+
+    api.torrents_files = files
+    assert client.observe_torrent("A" * 40) is None
+
+
 def test_the_listing_is_read_again_after_a_minute(monkeypatch):
     api = _ListingAPI()
     monkeypatch.setattr(qbittorrent, "Client", lambda **_kwargs: api)

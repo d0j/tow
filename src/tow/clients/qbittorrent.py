@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from typing import Any, ClassVar
 from urllib.parse import quote
 
-from qbittorrentapi import Client
+from qbittorrentapi import Client, NotFound404Error
 
 from tow.clients import files
 from tow.clients.managed import OWNER, PENDING, ClientError, ManagedClient
@@ -110,11 +110,17 @@ class QBittorrentClient(ManagedClient):
     def observe_torrent(self, infohash: str) -> dict[str, Any] | None:
         """``inspect_torrent`` for an observation (reconcile): the torrent's row from the
         run's listing, its files asked. A torrent the listing does not show (or shows twice)
-        is asked on its own before it counts as gone. Never for a read-back."""
+        is asked on its own before it counts as gone, and so is one whose files are not found:
+        removed since the listing was read. Never for a read-back."""
         rows = self._listed(infohash)
         if len(rows) != 1:
             return self.inspect_torrent(infohash)
-        return self._report(rows[0], self._c.torrents_files(torrent_hash=infohash.lower()), infohash)
+        try:
+            listed_files = self._c.torrents_files(torrent_hash=infohash.lower())
+        except NotFound404Error:
+            self._changing()  # the listing is older than the client's torrents
+            return self.inspect_torrent(infohash)
+        return self._report(rows[0], listed_files, infohash)
 
     def ping(self) -> str:
         ver = str(self._c.app.version)
