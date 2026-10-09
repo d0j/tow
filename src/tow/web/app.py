@@ -23,6 +23,7 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from tow import access
 from tow.config import ConfigError
+from tow.snapshots import SnapshotError
 from tow.store import StoreCorruptionError, StoreWriteError
 from tow.web import (
     middleware,
@@ -87,6 +88,16 @@ async def _store_corruption(_request: Request, exc: StoreCorruptionError) -> Res
     # The stored error can contain a local path or a damaged value. The browser needs only a
     # stable failure message; recovery details remain with the local diagnostic tools.
     return Response(t("web.data_unavailable"), status_code=503)
+
+
+async def _snapshot_failed(request: Request, exc: SnapshotError) -> Response:
+    """A night copy's error no page caught: an interrupted restore that cannot be checked or
+    undone refuses every take of the data lock (Settings, a save), and that was a bare "Internal
+    Server Error". Its words name what to do and the files to keep - on this computer; from the
+    network, as for damaged data, that the data is unavailable."""
+    _CONFIG_LOG.error("TOW data is unavailable: a nightly backup operation failed (%s)", type(exc).__name__)
+    text = str(exc) if access.is_local(request) else t("web.data_unavailable")
+    return Response(text, status_code=503, media_type="text/plain; charset=utf-8")
 
 
 def _back_to(request: Request) -> str:
@@ -189,6 +200,7 @@ def create_app() -> FastAPI:
     app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.exception_handler(StoreCorruptionError)(_store_corruption)
     app.exception_handler(StoreWriteError)(_store_write_failed)
+    app.exception_handler(SnapshotError)(_snapshot_failed)
     app.exception_handler(access.LocalOnly)(_local_only)
     app.exception_handler(StarletteHTTPException)(_http_error)
     app.middleware("http")(middleware.secure)

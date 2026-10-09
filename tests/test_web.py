@@ -261,6 +261,29 @@ def test_optional_lan_password_login_issues_session(monkeypatch):
     assert 'id="page-title"' in home.text
 
 
+def test_a_blocked_restore_recovery_is_said_instead_of_a_server_error(monkeypatch):
+    # An interrupted night-copy restore whose journal cannot be read refuses the data lock;
+    # Settings answered a bare 500 Internal Server Error.
+    from tow.i18n import t
+    from tow.snapshots import SnapshotError
+
+    blocked = t("backup.snapshot.recovery_blocked", "ru", reason="Access is denied", marker="RESTORE.json")
+
+    def refuse(**_kwargs):
+        raise SnapshotError(blocked)
+
+    monkeypatch.setattr("tow.web.services.release_status", refuse)
+    local = TestClient(app, raise_server_exceptions=False).get("/updates.json")
+    assert local.status_code == 503
+    assert local.text == blocked
+    remote = TestClient(app, raise_server_exceptions=False, client=("192.168.1.20", 50000))
+    monkeypatch.setattr("tow.access.network_open", lambda _cfg: True)
+    monkeypatch.setattr("tow.web.middleware._session_refusal", lambda _request: None)
+    answer = remote.get("/updates.json", headers={"Host": "192.168.1.10:8787"})
+    assert answer.status_code == 503
+    assert "RESTORE.json" not in answer.text
+
+
 def test_get_recovers_site_transaction_before_handler(monkeypatch):
     calls = []
     monkeypatch.setattr("tow.web.services.recover_store_transaction", lambda: calls.append(True) or False)
