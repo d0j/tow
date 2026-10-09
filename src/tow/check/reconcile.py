@@ -214,6 +214,7 @@ def _reconcile_one(
             client_kind=topic_client.client_kind,
             topic_id=topic.get("id"),
             topic=topic.get("id"),
+            title=topic.get("title"),
             hash=topic.get("hash"),
             status="failed",
             **error_fields(exc),
@@ -233,6 +234,8 @@ def _reconcile_one(
                     "client_kind": topic_client.client_kind,
                     "topic_id": topic.get("id"),
                     "topic": topic.get("id"),
+                    # The daily digest names what completed by the event's own title.
+                    "title": topic.get("title"),
                     "hash": topic.get("hash"),
                     "status": "succeeded",
                     "how": run.how,

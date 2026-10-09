@@ -245,7 +245,8 @@ def maybe_digest(*, cfg: dict[str, Any], send: Send, now: datetime | None = None
         for e in history_events(group="downloads", limit=2000)
         if (moment := _moment(str(e.get("created_at") or ""))) is not None and moment >= since_at
     ]
-    added = sum(1 for e in events if e.get("kind") in {"client_added", "client_updated"})
+    # client_updated is a torrent already in the client, verified or relabelled: nothing was added.
+    added = sum(1 for e in events if e.get("kind") == "client_added")
     found = sum(1 for e in events if e.get("kind") in {"new_file", "revision_updated"})
     completed = [e for e in events if e.get("kind") in {"episode_completed", "file_completed"}]
     # in the order they happened (history comes newest first)

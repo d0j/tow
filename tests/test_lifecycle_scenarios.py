@@ -295,3 +295,22 @@ def test_a_changed_file_selection_reaches_the_client_and_history(world):
     assert _topic()["selection_dirty"] is False
     assert _history("downloads")[-1] == "client_selection_updated"
     assert _home()[0] == "ok"
+
+
+def test_the_daily_digest_names_the_topics_whose_downloads_completed(world):
+    from datetime import datetime
+
+    from tow import delivery
+
+    _check(how="manual", ids=["t1"])  # added to the client
+    world.reconcile.events = ["episode_completed"]
+    _check()
+    sent: list[str] = []
+
+    assert delivery.maybe_digest(
+        cfg={"daily_digest_hour": 0},
+        send=lambda *, text, **_kw: sent.append(text) or True,
+        now=datetime.now().astimezone(),
+    )
+
+    assert sent == ["TOW за сутки: добавлено в клиент 1, новых серий и файлов 0, загружено 1\nЗагружено: Show"]
