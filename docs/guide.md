@@ -38,7 +38,7 @@ client to add, start, stop or move a torrent. It only ever changes torrents it a
 
 | Screen | What is there |
 |---|---|
-| **Home** | Your topics: status dot, site icon, name, folder, latest event, progress. **+** adds a topic. Click a row to edit it. Filters and search hide rows; when nothing matches, **Show all topics** clears them. **Sort**: *As added*, *By name*, *By latest event* or *Errors first*; this device remembers the choice. Until the first topic is added, Home shows three first steps: the torrent client, a messenger (optional), a topic link. |
+| **Home** | Your topics: status dot, site icon, name, folder, latest event, progress. **+** adds a topic. Click a row to edit it; a name typed there is shown instead of the site's title (Home, messages, History), and an empty name shows the site's title again. Filters and search hide rows; when nothing matches, **Show all topics** clears them. **Sort**: *As added*, *By name*, *By latest event* or *Errors first*; this device remembers the choice. Until the first topic is added, Home shows three first steps: the torrent client, a messenger (optional), a topic link. |
 | **Sites** | Sites and their mirrors, sign-in state, pause and check per site (the icons in its row). **+** adds a site: paste a link to any topic of it first, the rest fills in; patterns and paths are under **Advanced**. |
 | **Settings** | Language, theme (as the system, light or dark), torrent clients, notifications, checks, network access and password, version and updates, the TOW service, backups, the log; below them **Diagnostics**, the **Guide** and, on a device signed in over the network, **Sign out on this device**. |
 | **Log** | The scroll icon in the header: the latest events, live. |

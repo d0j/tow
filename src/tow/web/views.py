@@ -26,7 +26,7 @@ from tow.errors import Msg, TowError, render_stored
 from tow.log import error_class, owner_language
 from tow.net_errors import humanize
 from tow.progress import progress_summary
-from tow.records import CheckRow
+from tow.records import CheckRow, shown_title
 from tow.status import TRACKER_WARNING_CLASSES, project_home_status
 from tow.trackers import GenericHttpTracker, load_trackers, match_tracker
 from tow.web import _context, services
@@ -188,7 +188,7 @@ def credential_prompt(request: Request) -> dict[str, Any] | None:
     )
     return {
         "id": topic_id,
-        "title": str(topic.get("tracker_title") or topic.get("title") or ""),
+        "title": shown_title(topic),
         "tracker": tracker.name,
         "username": username,
         "browser_auth": browser_enabled,
@@ -437,6 +437,8 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
     for topic in state.get("topics") or []:
         url = topic.get("url") or ""
         tr = _context.tracker_of(url)
+        # The site's title finds the next season and the topic on the site; the row shows the
+        # owner's own name once set.
         title = topic.get("tracker_title") or topic.get("title") or ""
         summary = topic_progress_summary(topic, history)
         record = (history.get("topics") or {}).get(str(topic.get("id") or "")) or {}
@@ -463,7 +465,8 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "replaces_revision": blocked_by_previous_revision(topic),
                 "adoptable": bool(unmarked_hash(topic)),
                 "tracker": tr.name if tr else t("web.site_unknown"),
-                "series": title.split(" / ")[0],
+                "name": shown_title(topic),
+                "series": shown_title(topic).split(" / ")[0],
                 "download_summary": summary,
                 "last_event_label": _event_display(event) if event else "",
                 "last_event_at": ui_time(event.get("at")) if event else "",

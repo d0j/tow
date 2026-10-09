@@ -21,6 +21,7 @@ from tow.folders import paths_equal, remember_save_root, resolve_save_path
 from tow.guess import canon_watch_url
 from tow.log import error_fields
 from tow.notify import event_text
+from tow.records import shown_title
 from tow.store import CheckBusyError, SecretStoreError
 from tow.title import title_is_placeholder
 from tow.topic_form import (
@@ -324,6 +325,21 @@ def _save_edit(
     return flash_redirect("/", t("web.common.saved") + suffix, kind)
 
 
+def _rename(topic: dict[str, Any], candidate: dict[str, Any], name: str) -> None:
+    """The edit panel's name on ``candidate``. The name as the panel showed it changes nothing; a
+    name the owner typed is shown instead of the site's title (``title_set``); the site's own
+    title or an empty field shows the site's title again."""
+    site_title = str(topic.get("tracker_title") or "").strip()
+    if name and name == shown_title(topic).strip():
+        return
+    if not name or name == site_title:
+        candidate.pop("title_set", None)
+        candidate["title"] = name or site_title or str(topic.get("title") or "")
+    else:
+        candidate["title"] = name
+        candidate["title_set"] = True
+
+
 def _edited(topic: dict[str, Any], form: TopicForm) -> tuple[dict[str, Any], dict[str, Any], bool]:
     """A copy of ``topic`` with the form's changes but the folder, the selection rule and whether
     the selection changed; ``Refused`` when the form cannot be saved."""
@@ -333,8 +349,7 @@ def _edited(topic: dict[str, Any], form: TopicForm) -> tuple[dict[str, Any], dic
             set_interval(candidate, parse_interval(form.check_interval_min))
     except TowError as exc:
         raise Refused(exc) from exc
-    if form.title.strip():
-        candidate["title"] = form.title.strip()
+    _rename(topic, candidate, form.title.strip())
     if form.url.strip():
         url = canon_watch_url(form.url.strip())
         if not match_tracker(load_trackers(services.load_config()), url):

@@ -213,6 +213,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Restoring a backup keeps this computer's backup folders, as it keeps the address, port and network access. The
   restored copy's folders replaced them: the restore point made just before the restore disappeared from Settings,
   and a copy from another system stopped the nightly backups.
+- A topic renamed in its edit panel is shown by that name on Home (also in search and when sorting by name), in
+  the edit panel and in messages. Saving said "Saved", but Home and the messages kept showing the site's title, so
+  only History used the new name. Clearing the name shows the site's title again; topics never renamed still
+  follow the site's title.
 
 ## [1.28.2] — 2026-10-09
 

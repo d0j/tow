@@ -20,7 +20,7 @@ from tow.clients import factory as client_factory
 from tow.config import load_config
 from tow.errors import TowError
 from tow.log import error_fields, log_event
-from tow.records import topics_of
+from tow.records import shown_title, topics_of
 from tow.store import check_run_lock, load_secrets, load_state, persistence_lock, save_state
 
 # What a check reports for a torrent in the client without TOW's mark (tow.check).
@@ -91,7 +91,7 @@ def unmarked_topics(*, ids: list[str] | None = None) -> dict[str, Any]:
             unreachable[client_id] = str(exc) or type(exc).__name__
             continue
         if info is not None and not _owned(info.get("tags")):
-            title = str(topic.get("tracker_title") or topic.get("title") or "")
+            title = shown_title(topic)
             found.append({"id": str(topic.get("id")), "title": title, "hash": h, "client_id": client_id})
     unknown = [tid for tid in dict.fromkeys(ids or []) if tid not in known]
     return {"found": found, "unknown": unknown, "unreachable": unreachable}

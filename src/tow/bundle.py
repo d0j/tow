@@ -377,6 +377,7 @@ def _validate_state_topic(index: int, topic: Any) -> None:
         raise ExportImportError(f"{label}.id may have only letters, digits, - and _ (at most 64)")
     for key in (
         "paused",
+        "title_set",
         "once_done",
         "selection_dirty",
         "selection_verified",
