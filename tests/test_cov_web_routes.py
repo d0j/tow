@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import flash_of, open_network, wait_for_check_job
+from helpers import flash_kind, flash_of, open_network, wait_for_check_job
 
 from tow import store_transaction
 from tow.auth import SESSION_COOKIE
@@ -1016,6 +1016,26 @@ def test_a_failed_check_of_a_topic_tow_had_is_not_called_an_add(monkeypatch, cli
     response = client.post("/topics/t1/check", follow_redirects=False)
 
     assert _flash(response) == flash
+
+
+WAITING = "ждёт места на диске: не хватает 40,5 ГБ; TOW запустит раздачу сам, когда место появится"
+
+
+@pytest.mark.parametrize(
+    ("added", "flash"),
+    [(True, "добавлено в торрент-клиент, но ещё не запущено: " + WAITING), (False, WAITING)],
+)
+def test_a_torrent_waiting_for_disk_space_is_not_called_a_failed_check(monkeypatch, client, added, flash):
+    # The new version is in the client, stopped, and TOW starts it once it fits: "the check
+    # failed" contradicted the add the check had just made.
+    _seed(_topic())
+    row = {"ok": False, "status": "waiting_space", "added": added, "error": WAITING, "error_class": "disk"}
+    monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: {"results": [{"id": "t1", **row}]})
+
+    response = client.post("/topics/t1/check", follow_redirects=False)
+
+    assert _flash(response) == flash
+    assert flash_kind(response.headers["location"]) == "warn"
 
 
 def _wait_job(client, response) -> dict:

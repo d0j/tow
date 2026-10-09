@@ -2055,6 +2055,7 @@
     "check": {
       "not_confirmed": "check not confirmed",
       "added_client_refused": "added to TOW, but the torrent client did not confirm: {error}",
+      "added_waiting_space": "added to the torrent client, not started yet: {error}",
       "added_check_failed": "added to TOW, the check failed: {error}",
       "client_refused": "the torrent client did not confirm: {error}",
       "check_failed": "the check failed: {error}",

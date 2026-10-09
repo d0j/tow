@@ -204,6 +204,10 @@ def manual_check_flash(
     if not row or row.get("ok"):
         return None
     error = humanize(str(row.get("error") or t("web.check.not_confirmed")).strip())
+    if row.get("status") == "waiting_space":
+        # Not a failed check: the torrent is in the client, stopped, and TOW starts it once its
+        # files fit (the error says so). Just added now, or still waiting from an earlier check.
+        return home_redirect(t("web.check.added_waiting_space", error=error) if row.get("added") else error, "warn")
     cls = row_class(row)
     if cls == "qbit":
         flash = t("web.check.added_client_refused" if new_topic else "web.check.client_refused", error=error)
