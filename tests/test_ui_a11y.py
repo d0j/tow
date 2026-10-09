@@ -363,3 +363,20 @@ def test_personal_timers_have_hidden_words_and_are_drawn_only_when_seen_and_chan
     assert "arrived = window.setTimeout(tickTimers, 150);" in JS
     assert "if (last.text !== text) {" in JS
     assert "if (last.title !== title) {" in JS
+
+
+def test_the_diagnostics_table_has_no_empty_column_header(client):
+    """Qa8 (axe empty-table-header): the column of the status dots had an empty <th>; a header
+    cell must name its column, so that cell is a plain one."""
+    _seed(
+        doctor={
+            "probes": [
+                {"tracker": "rutor", "host": "https://rutor.info", "ok": True, "status": 200},
+                {"tracker": "rutor", "host": "https://new-rutor.org", "ok": False, "error": "timed out"},
+            ]
+        }
+    )
+    page = client.get("/doctor").text
+    table = page[page.index("<table") : page.index("</table>")]
+    assert "<tr><td></td><th>" in table
+    assert not re.search(r"<th>\s*</th>", table)
