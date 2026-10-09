@@ -169,6 +169,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   watchdog kept showing the last good copy as if nothing had happened.
 - When an interrupted restore of a nightly backup cannot be checked or undone (a file of it held by another
   program), the pages say so and what to do instead of "Internal Server Error".
+- A `config.yaml` that is gone while TOW runs (a move of the running TOW folder that failed half-way took it along)
+  is said on every page and by every command like an unreadable one, with the way back, instead of "Internal Server
+  Error" and "the command could not be completed"; `/healthz` still answers, so `tow run` no longer restarts its web
+  server over it.
 
 ## [1.28.2] — 2026-10-09
 

@@ -158,7 +158,9 @@ def load_config() -> dict[str, Any]:
     global _validated_cache
     path = config_path()
     if not path.is_file():
-        raise FileNotFoundError(f"TOW config not found: {path}; create it or set TOW_CONFIG")
+        # Named like any other unreadable config (the page that says so, the CLI's sentence): a
+        # file moved or deleted while TOW ran made every page a bare "Internal Server Error".
+        raise ConfigError("config_error.missing", path=str(path))
     with _CACHE_LOCK:
         known = _validated_cache
     if known is not None and known[0] == _file_key(path):

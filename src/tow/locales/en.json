@@ -26,6 +26,7 @@
     "number": "The YAML settings contain a number or a date that cannot be read (too large or invalid). Processing was stopped."
   },
   "config_error": {
+    "missing": "config.yaml cannot be read: there is no such file at {path}",
     "mapping": "config.yaml must be a mapping of settings (name: value)",
     "syntax": "config.yaml cannot be read: the YAML is broken at line {line}, column {column}.",
     "encoding": "config.yaml cannot be read: it is not saved as UTF-8. Open it in a text editor and save it as UTF-8 (in Notepad: Save as, Encoding: UTF-8).",
