@@ -153,6 +153,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   for local changes. The rollback checks out the previous code by force and checks it the same way.
 - An update of a git install refused because its repository cannot be reached (no network) or does not have the
   tag says so and that nothing was updated, instead of git's own message alone ("fatal: Needed a single revision").
+- A restart asked in Settings → TOW service while TOW was stopping (a check finishing first), or cut off by a stop
+  before the new web server answered, is shown as failed, no longer as "queued" or "starting" for good.
 
 ## [1.28.2] — 2026-10-09
 
