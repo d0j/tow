@@ -741,6 +741,31 @@ def test_export_refuses_mismatched_passphrases(monkeypatch, capsys, tmp_path):
     assert not output.exists()
 
 
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        (["export", "--output", "{taken}"], ("cli.bundle.output_exists", "taken")),
+        (["import", "--input", "{missing}"], ("cli.bundle.no_input", "missing")),
+        (["import", "--input", "{taken}", "--path-map", "no-equals-sign"], ("cli.bundle.path_map", None)),
+    ],
+)
+def test_a_refusal_known_before_the_passphrase_asks_for_none(monkeypatch, capsys, tmp_path, argv, expected):
+    # Typing a 12-character passphrase twice to then hear "the file already exists", or
+    # being told a missing file "is not a TOW backup file", wasted the owner's effort.
+    paths = {"taken": tmp_path / "taken.towx", "missing": tmp_path / "missing.towx"}
+    paths["taken"].write_bytes(b"x")
+    asked = []
+    monkeypatch.setattr("getpass.getpass", lambda prompt="": asked.append(prompt) or "correct horse battery")
+    argv = [str(paths[a[1:-1]]) if a.startswith("{") else a for a in argv]
+
+    assert cli.main([*argv, "--json"]) == 3
+    key, path = expected
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error == (t(key, "ru", path=str(paths[path])) if path else t(key, "ru"))
+    assert asked == []
+    assert paths["taken"].read_bytes() == b"x"
+
+
 def test_export_unexpected_failure_does_not_leak_details(monkeypatch, capsys, tmp_path):
     _passphrases(monkeypatch, "correct horse battery", "correct horse battery")
 

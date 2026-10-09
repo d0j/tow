@@ -637,23 +637,33 @@ def _cmd_keys(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_password(_args: argparse.Namespace) -> int:
-    """Reset a forgotten password on the computer running TOW (whoever runs this has the PC)."""
+def _ask_password() -> dict[str, Any]:
+    """A new password typed twice, then its reminder, stored as the first-start page does it. A
+    mistyped or too short password is refused before the reminder: no point typing one for it."""
     from getpass import getpass
 
     from tow import access
+    from tow.auth import AuthConfigurationError, require_password_length
+    from tow.i18n import t
+
+    first = getpass(t("cli.password.prompt"))
+    second = getpass(t("cli.password.repeat"))
+    if first != second:
+        raise AuthConfigurationError("web.password.differ")
+    require_password_length(first)
+    return access.set_password(first, second, input(t("cli.password.hint_prompt")))
+
+
+def _cmd_password(_args: argparse.Namespace) -> int:
+    """Reset a forgotten password on the computer running TOW (whoever runs this has the PC)."""
     from tow.auth import AuthConfigurationError
     from tow.i18n import t
     from tow.log import log_event
     from tow.store import SecretStoreError
 
     try:
-        first = getpass(t("cli.password.prompt"))
-        second = getpass(t("cli.password.repeat"))
-        if first != second:  # asked before the reminder: no point typing one for a mistyped password
-            raise AuthConfigurationError("web.password.differ")
         # The same path as the first-start page and Settings: checked, stored, every device signed out.
-        record = access.set_password(first, second, input(t("cli.password.hint_prompt")))
+        record = _ask_password()
     except (AuthConfigurationError, SecretStoreError) as exc:
         _print({"ok": False, "error": str(exc)}, False)
         return 3
@@ -736,6 +746,10 @@ def _cmd_export(args: argparse.Namespace) -> int:
     from tow.i18n import t
 
     def run() -> dict[str, Any]:
+        if args.output.exists() and not args.force:  # said before the passphrase is typed twice
+            raise ExportImportError(
+                "export output already exists", owner_text=Msg("cli.bundle.output_exists", path=str(args.output))
+            )
         first = getpass(t("cli.bundle.passphrase"))
         if len(first) < MIN_EXPORT_PASSPHRASE:
             raise ExportImportError(
@@ -753,10 +767,15 @@ def _cmd_export(args: argparse.Namespace) -> int:
 def _cmd_import(args: argparse.Namespace) -> int:
     from getpass import getpass
 
-    from tow.bundle import import_bundle
+    from tow.bundle import ExportImportError, import_bundle, parse_path_maps
+    from tow.errors import Msg
     from tow.i18n import t
 
     def run() -> dict[str, Any]:
+        # A missing file or a wrong --path-map is said before the passphrase is asked for.
+        if not args.input.is_file():
+            raise ExportImportError("import input missing", owner_text=Msg("cli.bundle.no_input", path=str(args.input)))
+        parse_path_maps(args.path_map)
         passphrase = getpass(t("cli.bundle.passphrase"))
         return import_bundle(args.input, passphrase, apply=args.apply, path_maps=args.path_map)
 
@@ -1192,7 +1211,6 @@ def _cmd_access(args: argparse.Namespace) -> int:
     the one running TOW, as on the Settings card). On needs a password: asked here when none
     is set (or with --password)."""
     import copy
-    from getpass import getpass
 
     from tow import access, store_transaction
     from tow.auth import AuthConfigurationError
@@ -1210,13 +1228,9 @@ def _cmd_access(args: argparse.Namespace) -> int:
     enabled = args.access_action == "on"
     try:
         if enabled and (args.password or not access.password_is_set(load_secrets())):
-            first = getpass(t("cli.password.prompt"))
-            second = getpass(t("cli.password.repeat"))
-            if first != second:
-                raise AuthConfigurationError("web.password.differ")
             # Checked, stored and every device signed out, as `tow password` does it - before the
             # network opens: never a network without its password.
-            record = access.set_password(first, second, input(t("cli.password.hint_prompt")))
+            record = _ask_password()
             log_event("settings_password", changed="password", hint=bool(record.get("hint")), where="cli", how="manual")
         with persistence_lock():
             cfg = copy.deepcopy(load_config())
