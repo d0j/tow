@@ -136,6 +136,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A damaged `update-state.json` (an update's record, for example cut short by a power failure right after the
   update) no longer makes every save in Settings fail with "The update record cannot be verified": that record only
   tells about the last update, and a damaged one counts as none.
+- An update from Settings that a power failure cut off while it replaced the code no longer blocks the next one for
+  good once `Update TOW.cmd` has put the previous version back and found nothing else to do.
 
 ## [1.28.2] — 2026-10-09
 
