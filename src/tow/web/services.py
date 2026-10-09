@@ -82,6 +82,7 @@ from tow.supervisor.layout import install_id, next_check_at, topic_timer_status
 from tow.title import guess_topic_title
 from tow.undo import apply as apply_undo
 from tow.undo import cleanup as cleanup_secret_undo
+from tow.undo import stamped_here as undo_stamped_here
 from tow.watchdog import last_problem as watchdog_problem
 from tow.web_update import log_tail as web_update_log
 from tow.web_update import start as start_web_update
@@ -160,6 +161,7 @@ __all__ = [
     "store_transaction",
     "test_notifier",
     "topic_timer_status",
+    "undo_stamped_here",
     "watchdog_problem",
     "web_update_log",
     "web_update_status",

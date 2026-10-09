@@ -49,7 +49,7 @@
     <div class="hdr-controls">
     {#- The undo of the action whose message is shown sits in that message (9); the header
         keeps it only for a later page while it lasts. -#}
-    {% set undo_in_flash = flash and undo_just_made() and can_undo() %}
+    {% set undo_in_flash = undo_in_message(flash) %}
     {% if can_undo() and not undo_in_flash %}
     <form method="post" action="/undo" id="undo-form" data-ttl="{{ undo_left_sec() }}">
       <button class="ghost sm undo-btn" type="submit" data-keep title="{{ t('base.undo.title', what=undo_label()) }}"><span class="undo-ico">{{ icon('undo', 'sm') }}</span><span class="undo-text">{{ t('base.undo.button') }}</span></button>

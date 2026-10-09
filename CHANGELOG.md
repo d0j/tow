@@ -178,6 +178,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   read today's data) says that it was refused before installation, no longer "The update did not complete".
 - The disk-space pass no longer runs every 5 minutes for a waiting topic whose file selection you changed in TOW: it
   leaves such a topic to the next check, and only asked the torrent client and wrote the event log for nothing.
+- The "Undo" button in a message belongs to the action of that message only. A check right after a save, a pause
+  right after an edit or a mirror chosen right after a change of the site showed "Undo" too, and it put back the
+  earlier change; that undo now stays in the header, where its tooltip says what it puts back.
 
 ## [1.28.2] — 2026-10-09
 

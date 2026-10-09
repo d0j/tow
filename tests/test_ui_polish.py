@@ -667,14 +667,15 @@ def test_a_log_line_starts_with_a_capital():
 
 
 def _undo_ready():
-    from tow.clock import iso_now
+    """An action that the owner can undo, stamped in this context (as a request that made it)."""
+    from tow import undo
     from tow.store import load_state, save_state
 
     save_state(
         {"topics": [{"id": "t1", "title": "Show", "url": "http://rutor.info/torrent/1/x", "save_path": "Z:\\a"}]}
     )
     state = load_state()
-    state["undo"] = {"kind": "topic_add", "id": "t1", "ts": iso_now()}
+    undo.stamp(state, "topic_add", id="t1")
     save_state(state)
 
 
@@ -688,6 +689,45 @@ def test_the_undo_button_sits_in_the_message_of_its_action(client):
     assert "data-undo-left" in flash
     assert page.count('action="/undo"') == 1  # not in the header too
     assert "можно отменить" not in page
+
+
+def test_a_later_message_never_carries_an_earlier_undo(client):
+    """Qa8: "Save", then "Check" (as the client's steps say) showed "Connected · Undo", and that
+    Undo put the saved client back; a pause, then a check, offered the pause's Undo on "No
+    changes". The message of an action that made no undo has none; the header keeps it."""
+    import contextvars
+
+    from tow.web.views import flash_location
+
+    contextvars.copy_context().run(_undo_ready)  # an earlier request made the undo
+    page = client.get(flash_location("/", "web.common.no_changes", "ok")).text
+    flash = page[page.index('id="flash"') : page.index("</div>", page.index('id="flash"'))]
+    assert "flash-undo" not in flash
+    header = page[page.index('<header class="app">') : page.index("</header>")]
+    assert 'id="undo-form"' in header
+
+
+def test_after_an_edit_a_pause_or_a_check_keeps_the_undo_in_the_header(client, monkeypatch):
+    """The real routes: an edit's message carries its undo; a pause or a check right after it does
+    not (their Undo would have put the edit back, not the pause or the check)."""
+    from tow.store import save_state
+    from tow.web import services
+
+    def flash_of(page: str) -> str:
+        part = page[page.index('id="flash"') :]
+        return part[: part.index("</div>")]
+
+    url = "http://rutor.info/torrent/1/x"
+    save_state({"topics": [{"id": "t1", "title": "Show", "url": url, "save_path": "Z:\\a"}]})
+    edited = client.post("/topics/t1/edit", data={"title": "Show 2", "url": url, "save_path": "Z:\\a"})
+    assert 'class="flash-undo"' in flash_of(edited.text)
+    paused = client.post("/topics/t1/pause")
+    assert "flash-undo" not in flash_of(paused.text)
+    monkeypatch.setattr(services, "run_check", lambda **kw: {"results": [{"id": "t1", "ok": True, "changed": False}]})
+    checked = client.post("/topics/t1/check")
+    assert "flash-undo" not in flash_of(checked.text)
+    header = checked.text[checked.text.index('<header class="app">') : checked.text.index("</header>")]
+    assert 'id="undo-form"' in header
 
 
 def test_without_the_message_the_header_keeps_the_undo(client):

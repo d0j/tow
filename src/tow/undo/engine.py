@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Callable
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -36,6 +37,9 @@ from tow.undo.records import secret_refs
 PENDING = "secret_undo_cleanup_pending"
 _HINT_SEC = 15  # the "you can undo" hint belongs to the page right after the action
 _MAX_CLEANUP_ATTEMPTS = 3
+# The stamp of the record this request (this context: a web request runs in its own copy) made;
+# its message carries the undo, a later message (a check right after a save) does not.
+_STAMPED_HERE: ContextVar[str] = ContextVar("tow_undo_stamped_here", default="")
 
 
 @dataclass(frozen=True)
@@ -230,6 +234,18 @@ def stamp(
         release(state, previous, txn)
     record["ts"] = datetime.now(UTC).isoformat()
     state["undo"] = record
+    _STAMPED_HERE.set(record["ts"])
+
+
+def stamped_here() -> str:
+    """The stamp of the record this request made ("" when it made none)."""
+    return _STAMPED_HERE.get()
+
+
+def stamp_of(state: dict[str, Any] | None = None) -> str:
+    """The stamp of the live record ("" when there is none or it has run out)."""
+    record = _record(state)
+    return str(record.get("ts") or "") if isinstance(record, dict) and is_live(record) else ""
 
 
 def invalidate(state: dict[str, Any], txn: store_transaction.StoreTransaction | None = None) -> bool:
