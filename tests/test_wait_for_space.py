@@ -397,9 +397,27 @@ def test_the_forms_hint_measures_the_folder_as_an_add_does(tmp_path, monkeypatch
         remote.setattr("tow.folders.seen_from_here", lambda _path: False)  # a remote client's /downloads
         assert space.folder_free("/downloads/tv") == {"free": None, "margin": space.FREE_SPACE_MARGIN}
     assert space.folder_free("") == {"free": None, "margin": space.FREE_SPACE_MARGIN}
-    answer = TestClient(app).get("/content/space", params={"path": str(tmp_path)})
+    answer = TestClient(app).get("/content/space", params={"path": str(tmp_path)}, headers={"X-TOW-Space": "1"})
     assert answer.status_code == 200
     assert isinstance(answer.json()["free"], int)
+
+
+def test_only_tows_own_forms_get_the_hint(monkeypatch):
+    # A GET is not checked for its origin: an image on any site could make TOW look at a folder
+    # of its choosing, on Windows \\host\share of another computer (which gets the sign-in).
+    from fastapi.testclient import TestClient
+
+    from tow.web import app, services
+
+    asked: list[str] = []
+    monkeypatch.setattr(services, "folder_free", lambda path: asked.append(path) or {"free": 1, "margin": 0})
+    client = TestClient(app)
+    for headers in ({}, {"X-TOW-Space": "0"}, {"Sec-Fetch-Site": "cross-site", "Accept": "application/json"}):
+        answer = client.get("/content/space", params={"path": r"\\203.0.113.7\share"}, headers=headers)
+        assert answer.status_code == 403
+    assert asked == []
+    assert client.get("/content/space", params={"path": "D:\\TV"}, headers={"X-TOW-Space": "1"}).status_code == 200
+    assert asked == ["D:\\TV"]
 
 
 def test_both_forms_show_the_hint_under_the_folder_and_warn_when_it_will_not_fit():
@@ -412,6 +430,7 @@ def test_both_forms_show_the_hint_under_the_folder_and_warn_when_it_will_not_fit
         assert "data-space-hint" in folder[:700]  # right under the folder field
     script = (src / "static" / "content.js").read_text(encoding="utf-8")
     assert "/content/space?path=" in script
+    assert '"X-TOW-Space": "1"' in script  # the header the route requires
     assert "need + margin > free" in script  # the add's own rule: the chosen bytes and the margin
     assert '"content.js.space_short"' in script
     assert ".space-hint.warn { color: var(--warn); }" in (src / "static" / "app.css").read_text(encoding="utf-8")

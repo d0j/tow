@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Annotated, Any
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
@@ -77,9 +77,20 @@ async def content_prepare(
     return await _answer(prepare)
 
 
+# The header TOW's own forms send with the free-space question (content.js). Another site's page
+# cannot send it: a header outside the CORS-safelisted ones needs a preflight TOW never allows.
+SPACE_HEADER = "X-TOW-Space"
+
+
 @router.get("/content/space")
-async def content_space(path: str = "") -> JSONResponse:
-    """The free space of the folder the add or edit form names (a hint; the add decides)."""
+async def content_space(request: Request, path: str = "") -> JSONResponse:
+    """The free space of the folder the add or edit form names (a hint; the add decides).
+
+    Answered only to TOW's own forms: a GET is not checked for its origin, and a link or an image
+    on any site the owner opens could make TOW look at a folder of its choosing - on Windows a
+    ``\\\\host\\share`` of another computer, which sends that computer the account's sign-in."""
+    if request.headers.get(SPACE_HEADER) != "1":
+        return _error_response(TowError("content.unavailable"), 403)
     return await _answer(lambda: services.folder_free(path))
 
 

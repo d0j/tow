@@ -112,7 +112,7 @@
       let reply = null;
       if (path && spaceHint && typeof fetch === "function") {
         try {
-          const response = await fetch(`/content/space?path=${encodeURIComponent(path)}`, { headers: { Accept: "application/json" } });
+          const response = await fetch(`/content/space?path=${encodeURIComponent(path)}`, { headers: { Accept: "application/json", "X-TOW-Space": "1" } });
           reply = response.ok ? await response.json() : null;
         } catch {
           reply = null; // no answer: no hint, the add still decides
