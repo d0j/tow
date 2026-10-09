@@ -181,11 +181,29 @@ def update_file(resume_at: int | None) -> bytes | None:
 
 def _write(path: Path, data: bytes) -> None:
     temporary = path.with_name(f".{path.name}.tmp")
-    with temporary.open("wb") as handle:
-        handle.write(data)
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(temporary, path)
+    try:
+        with temporary.open("wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass  # not made, or held too: the next update writes it again
+        raise
+
+
+class RefreshError(OSError):
+    """Some start files could not be written; ``written`` and ``kept`` say what happened to the
+    others, which were still written (an update.py of an older version reads only the text)."""
+
+    def __init__(self, failed: dict[str, OSError], written: list[str], kept: list[str]) -> None:
+        super().__init__("; ".join(f"{name}: {error.strerror or error}" for name, error in failed.items()))
+        self.failed = failed
+        self.written = written
+        self.kept = kept
 
 
 def refresh(root: Path, *, resume_at: int | None = None) -> tuple[list[str], list[str]]:
@@ -193,27 +211,43 @@ def refresh(root: Path, *, resume_at: int | None = None) -> tuple[list[str], lis
 
     ``resume_at``: where a run of the current "Update TOW.cmd" goes on (``resume_offset`` of the
     file as it was when this update began); found in the file when not given. An "Update TOW.cmd"
-    TOW did not write (no line that runs update.py) is kept: it may be the one running."""
+    TOW did not write (no line that runs update.py) is kept: it may be the one running. A file
+    that cannot be read or written does not stop the others: RefreshError names it at the end."""
     written: list[str] = []
     kept: list[str] = []
+    failed: dict[str, OSError] = {}
     for name, data in rendered().items():
-        path = root / name
         try:
-            current: bytes | None = path.read_bytes()
-        except FileNotFoundError:
-            current = None
-        if name == "Update TOW.cmd" and current is not None:
-            if current == data:
-                continue
-            fitted = update_file(resume_at if resume_at is not None else resume_offset(current))
-            if fitted is None:
-                kept.append(name)
-                continue
-            if fitted == current:
-                continue
-            data = fitted
-        elif current == data:
+            outcome = _refresh_one(root / name, data, resume_at)
+        except OSError as exc:
+            failed[name] = exc
             continue
-        _write(path, data)
-        written.append(name)
+        if outcome == "written":
+            written.append(name)
+        elif outcome == "kept":
+            kept.append(name)
+    if failed:
+        raise RefreshError(failed, written, kept)
     return written, kept
+
+
+def _refresh_one(path: Path, data: bytes, resume_at: int | None) -> str:
+    """Write one start file when it differs: "written", "same", or "kept" (an "Update TOW.cmd"
+    that cannot be replaced safely)."""
+    try:
+        current: bytes | None = path.read_bytes()
+    except FileNotFoundError:
+        current = None
+    if path.name == "Update TOW.cmd" and current is not None:
+        if current == data:
+            return "same"
+        fitted = update_file(resume_at if resume_at is not None else resume_offset(current))
+        if fitted is None:
+            return "kept"
+        if fitted == current:
+            return "same"
+        data = fitted
+    elif current == data:
+        return "same"
+    _write(path, data)
+    return "written"
