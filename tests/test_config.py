@@ -470,3 +470,15 @@ def test_the_checks_card_says_when_a_new_interval_applies():
 
     page = TestClient(app).get("/settings").text
     assert "Новый интервал начинает действовать в течение минуты" in page
+
+
+def test_the_example_config_states_when_release_discovery_runs():
+    # It said release discovery runs at most every 12 hours; after a failed one it runs an hour later.
+    from pathlib import Path
+
+    from tow import releases
+
+    text = " ".join((Path(__file__).parents[1] / "config.example.yaml").read_text(encoding="utf-8").split())
+    assert releases.CHECK_INTERVAL == 12 * 3600
+    assert releases.FAILURE_INTERVAL == 3600
+    assert "at most once per 12 hours, an hour after a failed one" in text
