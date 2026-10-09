@@ -103,6 +103,21 @@ def test_quiet_hours_overflow_is_counted_in_the_morning_message():
     assert "notify_queue_dropped" not in state
 
 
+def test_recoveries_of_one_site_are_one_message_as_its_failure_was():
+    sent, send = _sender()
+    recovered = [
+        PendingNotification("recovered", f"op-{n}", {"id": str(n), "title": f"Сериал {n}"}, "kinozal") for n in range(4)
+    ]
+    alone = [PendingNotification("recovered", "op-x", {"id": "x", "title": "Другой"}, "rutor")]
+
+    delivery.deliver(recovered + alone, cfg={}, send=send)
+
+    assert sent == [
+        "kinozal: снова работает у 4 раздач (Сериал 0, Сериал 1, Сериал 2, Сериал 3)",
+        "Другой — снова работает",
+    ]
+
+
 def test_daily_digest_once_a_day_after_its_hour():
     sent, send = _sender()
     now = datetime(2026, 10, 1, 9, 30).astimezone()

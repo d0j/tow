@@ -465,3 +465,28 @@ def test_a_waiting_torrent_of_a_paused_site_is_said_once(world, full_disk):
     assert topic["last_error_code"] == "check.waiting_space"  # what it waits for: the site is not asked
     assert _home()[0] == "bad"
     assert len(world.sent) == said  # the same wait, not news every hour
+
+
+def test_a_site_whose_sign_in_expired_for_many_topics_says_so_once_and_once_again_when_it_works(world):
+    state = load_state()
+    first = state["topics"][0]
+    state["topics"] = [
+        {**first, "id": f"t{n}", "title": f"Show {n}", "url": f"https://tracker.example/{n}"} for n in range(1, 5)
+    ]
+    save_state(state)
+    check.run_check(apply=True, notify=True, how="manual")  # all four added
+    said = len(world.sent)
+
+    def signed_out() -> None:
+        raise TowError("tracker.sign_in_page", cls="tracker_auth", prefix="fake")
+
+    world.site.on_fetch = signed_out
+    check.run_check(apply=True, notify=True, how="auto")
+    assert len(world.sent) == said + 1  # one message for the site, not one per topic
+    assert world.sent[-1].startswith("Сбой — fake:")
+
+    world.site.on_fetch = None  # the owner signed in again
+    check.run_check(apply=True, notify=True, how="auto")
+
+    assert len(world.sent) == said + 2
+    assert world.sent[-1].startswith("fake: снова работает")

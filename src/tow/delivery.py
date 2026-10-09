@@ -65,6 +65,9 @@ def compose(items: Iterable[PendingNotification]) -> list[tuple[str, str, Topic 
         if item.kind == "error" and item.tracker:
             first = next(iter(error_parts(item.error)), "")
             groups.setdefault((item.tracker, error_class(first)), []).append(item)
+        elif item.kind == "recovered" and item.tracker:
+            # As the failure was one message for the site, so is its end ("" is no error class).
+            groups.setdefault((item.tracker, ""), []).append(item)
     grouped = {id(item) for members in groups.values() if len(members) >= GROUP_MIN for item in members}
     messages: list[tuple[str, str, Topic | None]] = []
     for (tracker, cls), members in groups.items():
@@ -74,14 +77,17 @@ def compose(items: Iterable[PendingNotification]) -> list[tuple[str, str, Topic 
             short_series_title(str(m.topic.get("tracker_title") or m.topic.get("title") or ""), lang) for m in members
         ]
         listed = ", ".join(names[:5]) + (t("notify.and_more", lang, count=len(names) - 5) if len(names) > 5 else "")
-        text = t(
-            "notify.group_failure",
-            lang,
-            tracker=tracker,
-            problem=cls_label(cls, lang),
-            n=len(members),
-            topics=listed,
-        )
+        if not cls:
+            text = t("notify.group_recovered", lang, tracker=tracker, n=len(members), topics=listed)
+        else:
+            text = t(
+                "notify.group_failure",
+                lang,
+                tracker=tracker,
+                problem=cls_label(cls, lang),
+                n=len(members),
+                topics=listed,
+            )
         messages.append((text, members[0].operation_id, None))
     for item in items:
         if id(item) in grouped:
