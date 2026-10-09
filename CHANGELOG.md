@@ -228,6 +228,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   name): the next check asked the renamed site again for a download it does not allow today.
 - The message about a new topic whose first check failed unexpectedly waits for the end of the quiet hours and goes
   through the messengers' queue like every other message; it was sent at once, also during the quiet hours.
+- "Waiting for disk space" is sent once per wait: after the torrent client was unreachable for a while and came
+  back, the same wait was announced again.
 
 ## [1.28.2] — 2026-10-09
 
