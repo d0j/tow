@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import quote, unquote
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from fastapi import Request
 from fastapi.responses import RedirectResponse
@@ -90,6 +90,15 @@ def request_flash(request: Request) -> dict[str, str] | None:
     """The message a redirect left for this page: ``{"text", "kind"}``; None for no, an unknown
     or an expired token - and for a ``?flash=<text>`` link of an older TOW (never shown)."""
     token = request.query_params.get("flash") or ""
+    return _FLASHES.get(token) if token else None
+
+
+def flash_at(location: str) -> dict[str, str] | None:
+    """The message a redirect to ``location`` leaves (as ``request_flash`` reads it there)."""
+    try:
+        token = (parse_qs(urlsplit(location).query).get("flash") or [""])[0]
+    except ValueError:
+        return None
     return _FLASHES.get(token) if token else None
 
 

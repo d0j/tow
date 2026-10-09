@@ -217,6 +217,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   the edit panel and in messages. Saving said "Saved", but Home and the messages kept showing the site's title, so
   only History used the new name. Clearing the name shows the site's title again; topics never renamed still
   follow the site's title.
+- Settings → Theme: a choice that could not be saved (the data file busy) is said to have failed, with the reason;
+  the status said "Theme saved".
 
 ## [1.28.2] — 2026-10-09
 

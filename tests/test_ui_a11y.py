@@ -263,6 +263,35 @@ def test_a_theme_choice_is_saved_in_the_background_without_a_reload(client):
     assert load_config()["theme"] == "dark"
 
 
+@pytest.mark.parametrize("why", ["busy", "unknown"])
+def test_a_theme_save_that_failed_is_not_announced_as_saved(client, monkeypatch, why):
+    """A refused background save came back as a JSON redirect like a saved one, and the status
+    said "Theme saved". The redirect's message kind goes with it and the script tells them apart."""
+    from tow.i18n import t
+    from tow.store import StoreWriteError
+    from tow.web import services
+
+    def busy(_cfg):
+        raise StoreWriteError(13, "held by another program")
+
+    if why == "busy":
+        monkeypatch.setattr(services, "save_config", busy)
+    theme = "dark" if why == "busy" else "sepia"
+    failed = client.post(
+        "/settings/theme", data={"theme": theme}, headers={"X-TOW-Fetch": "1", "Referer": "http://testserver/settings"}
+    )
+    assert failed.status_code == 200
+    flash = failed.json()["flash"]
+    assert flash["kind"] == "err"
+    assert flash["text"] == t("web.data_busy" if why == "busy" else "settings.theme.unknown")
+    monkeypatch.undo()
+    saved = client.post("/settings/theme", data={"theme": "light"}, headers={"X-TOW-Fetch": "1"})
+    assert saved.json()["flash"]["kind"] == "ok"
+    block = JS[JS.index("// Settings → Theme:") : JS.index('window.addEventListener("beforeunload"')]
+    refusal = block.index('if (data.flash && data.flash.kind !== "ok") throw new Error(')
+    assert refusal < block.index('t("js.settings.theme_saved"')
+
+
 def test_home_search_and_sort_touch_only_what_changes():
     """P1/P2 (2000 topics): every load re-appended all rows in the order they had (~1.2 s of
     layout), and each key typed in the search re-filtered and re-highlighted every row (~250 ms
