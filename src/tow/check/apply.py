@@ -238,15 +238,18 @@ def _update_client_selection(
     owned_add_recovery = h != old and (is_owned_add_recovery(topic) or _unrecorded_own_add(run.state, topic, h))
     completed_pending_add = resume or owned_add_recovery
     waiting = space.waiting_for(topic, h)
-    shortfall = _shortfall(run, client_id, dest, metadata, plan) if waiting is not None else None
+    # A waiting torrent, and an unfinished add left stopped (an earlier add whose files did not
+    # fit and whose read-back failed): measured before anything starts it.
+    measured = waiting is not None or (completed_pending_add and space.is_stopped(info))
+    shortfall = _shortfall(run, client_id, dest, metadata, plan) if measured else None
     if waiting is not None and shortfall is None:
         revisions = [str(value) for value in topic.get("previous_hashes") or []]
         if overlap := live_previous_overlap(topic_client, revisions, metadata.files):
             raise TowError(PREVIOUS_REVISION_ACTIVE, file=overlap, hash=h.upper())
-    starts_waiting = waiting is not None and shortfall is None
-    topic_client.configure_torrent_selection(
-        blob, h, plan.selected_indices, ensure_started=completed_pending_add or starts_waiting
-    )
+    starts = (completed_pending_add or waiting is not None) and shortfall is None
+    # Only when it must stay stopped (an adapter written for an older TOW does not know it).
+    stays_stopped: dict[str, bool] = {"keep_stopped": True} if shortfall is not None else {}
+    topic_client.configure_torrent_selection(blob, h, plan.selected_indices, ensure_started=starts, **stays_stopped)
     after = topic_client.inspect_torrent(h)
     if not info_confirms(after, h, dest, require_tow_ownership=True):
         raise TowError("check.selection_unconfirmed")
@@ -272,22 +275,18 @@ def _update_client_selection(
         selected_files_preview=list(plan.selected_files[:20]),
         selection_truncated=len(plan.selected_files) > 20,
         recovered=pending_recovery or owned_add_recovery,
+        started=shortfall is None,
         status="succeeded",
         how=run.how,
     )
-    if completed_pending_add and run.notify:
-        run.queue_notification(
-            topic,
-            kind="updated" if old and h != old else "added",
-            operation_id=operation_id,
-            tracker=str(row.get("tracker") or ""),
-        )
-    if waiting is not None:
-        kind = str(waiting.get("kind") or "added")
-        if shortfall is not None:
-            space.wait_for_space(topic, run, row, h=h, client_id=client_id, info=after, shortfall=shortfall, kind=kind)
-        else:
-            space.started(topic, run, row, h=h, client_id=client_id, kind=kind)
+    kind = str((waiting or {}).get("kind") or ("updated" if old and h != old else "added"))
+    if shortfall is not None:
+        # Not started: "added" is told when TOW starts it; now the owner hears the wait.
+        space.wait_for_space(topic, run, row, h=h, client_id=client_id, info=after, shortfall=shortfall, kind=kind)
+    elif waiting is not None:
+        space.started(topic, run, row, h=h, client_id=client_id, kind=kind)
+    elif completed_pending_add and run.notify:
+        run.queue_notification(topic, kind=kind, operation_id=operation_id, tracker=str(row.get("tracker") or ""))
 
 
 def _refuse_still_blocked(work: TopicCheck, metadata: Any, *, h: str, replaces: bool) -> None:

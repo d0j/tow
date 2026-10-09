@@ -281,6 +281,17 @@ def test_pending_torrent_is_started_and_released(client):
     assert client.wanted_torrent_indices() == {E01, E02}
 
 
+def test_a_pending_torrent_whose_files_do_not_fit_is_released_but_stays_stopped(client):
+    # An unfinished add of TOW's was always started when its add was finished: one added
+    # stopped because its files did not fit started without the room.
+    client.seed(tags=[OWNER, PENDING], state="stoppedDL", wanted={E01})
+    info = client.configure_torrent_selection(TORRENT, H, [E01, E02], keep_stopped=True)
+    assert info["tags"] == [OWNER]  # the add is finished...
+    assert info["state"] == "stoppedDL"  # ...and waits for room
+    assert ("start",) not in client.calls
+    assert client.wanted_torrent_indices() == {E01, E02}
+
+
 # --- configure_torrent_selection: rollback ----------------------------------------------------
 
 

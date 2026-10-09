@@ -54,6 +54,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   nor when the topic was paused, deleted or edited while the check ran.
 - A torrent that waited for disk space and then waits for its previous version to stop is one "check failed" line in
   History, not one at every check.
+- A torrent added stopped because its files did not fit, whose add could not be confirmed at once, is no longer
+  started by the next check without the room: that check finishes the add and the torrent waits for disk space.
 - A messenger that answers "too many requests" with a wait that is no number ("nan") is waited for the usual pause
   and asked again, instead of the delivery failing with an internal error.
 - A check no longer keeps in memory every topic page of a site whose check ends early (a sign-in page, a magnet that

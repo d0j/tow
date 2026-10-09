@@ -72,6 +72,7 @@ class TorrentClientAdapter(Protocol):
         selected_indices: list[int] | tuple[int, ...],
         *,
         ensure_started: bool = False,
+        keep_stopped: bool = False,
     ) -> dict[str, Any]: ...
 
     def materialize_magnet(
