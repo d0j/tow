@@ -105,6 +105,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - `tow secrets generate-key --key-file` names the whole path of the key it wrote (a relative name is the
   terminal's folder), and its help says that it writes such a file also while passwords and tokens are saved;
   only keys/master.key is refused then.
+- The README says to save a torrent client or a messenger before **Check** (Check tests the saved settings), shows
+  the rollback command with the quotes PowerShell needs, says that **Create a backup** makes a restore point and that
+  a new version may wait for disk space; the guides use the term table (TOW file, the updater) throughout.
+- Reading a topic's files for **Choose files** (and its magnet preview) sends the sites the same User-Agent as a
+  check: without `user_agent` in `config.yaml` it sent just "TOW", which a site may refuse.
 - `tow secrets generate-key --key-file` and `tow export --output` name the whole path of the file they wrote (a
   relative name is the terminal's folder), and the help of generate-key says that it writes such a file also while
   passwords and tokens are saved; only keys/master.key is refused then.

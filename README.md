@@ -27,13 +27,13 @@ every new version to your torrent client.
 
 - **Keep watching or add once.** All files, checked files, chosen episodes (`S01E03-E05`, `04x01-03`) or patterns
   (`*.mkv`); one check interval for all topics, or a personal one per topic.
-- **Confirmed adds.** The torrent is added stopped, files are selected, the selection is read back, then it starts.
-  A failure is reported as a failure.
+- **Confirmed adds.** The torrent is added stopped, files are selected, the selection is read back, then it starts
+  (or waits, stopped, until the disk has room). A failure is reported as a failure.
 - **Mirrors.** Several addresses per site with fallback and cooldown; daily download limits respected; sign-in by
   password or a browser window.
 - **Notifications.** One message per topic per check, quiet hours, a daily digest, a queue that survives restarts.
 - **History and undo.** Every file and version is recorded; the last change can be undone.
-- **Backups and updates.** Signed nightly backups, restore points, encrypted `.towx` files; updates from the
+- **Backups and updates.** Signed nightly backups, restore points, encrypted TOW files (`.towx`); updates from the
   Settings page that put the previous version back by themselves if anything fails.
 - **One folder, two languages.** Code, settings, data, key, backups and its own Python: move it and it keeps
   working. English and Russian; a new language is one JSON file.
@@ -79,8 +79,9 @@ Step by step, with what each screen shows: [docs/install.md](docs/install.md). A
 
 ## Usage
 
-1. **Settings → Torrent clients.** Turn on the Web UI in your client; enter address, port, login, password; **Check**.
-2. **Settings → Notifications** (optional). Follow *How to connect* for a messenger; **Check**.
+1. **Settings → Torrent clients.** Turn on the Web UI in your client; enter address, port, login, password; **Save**,
+   then **Check**.
+2. **Settings → Notifications** (optional). Follow *How to connect* for a messenger; **Save**, then **Check**.
 3. **Home → +.** Paste a topic link, choose the folder and what to download, **Add**.
 4. **Read the dot.** Green — confirmed. Blue — something new. Yellow — the site is unreachable for now. Red — open
    the row for the reason.
@@ -94,10 +95,10 @@ Linux and macOS. `tow --help` lists all commands.
 |---|---|
 | `tow run` | one supervised service: web UI, schedule, nightly backups, watchdog |
 | `tow start` | `tow run` in the background, then the page in the browser (what the start files do) |
-| `tow status` | one line: running, client, sites, topics, last and next check (`--json`) |
+| `tow status` | one line: running, client, sites, topics, last and next check, autostart (`--json`) |
 | `tow stop` · `tow restart` | stop TOW · restart its web server |
 | `tow autostart on\|off\|status` | start with the system |
-| `tow check --apply` | check every topic now |
+| `tow check --apply` | check every active topic now |
 | `tow doctor` | ask the torrent client and the sites now |
 | `tow permissions [fix]` | who can get into the TOW folder; `fix` closes it (as administrator when another account owns it) |
 | `tow adopt ID…` · `tow adopt --all-unmarked` | adopt topics whose torrent is in the client without the `tow` mark: lists them, asks, then adds only the mark (`--yes`: without asking) |
@@ -130,7 +131,7 @@ closes network access.
 | Update from the page (1.22.20 or newer) | Settings → Version and updates → **Check for updates**, **Update** | the same; with autostart through systemd or launchd, use the line below | the same |
 | Update to the latest release | double-click `Update TOW.cmd` | Linux: `~/TOW/update-tow` · macOS: double-click `Update TOW.command` | `.\scripts\deploy.ps1 -Ref <tag>` · `tow update --ref <tag>` prints the command |
 | Go back from the page | Settings → Version and updates → **Install another version or roll back** (1.22.21 or newer) | the same | the same |
-| Go back | `Update TOW.cmd v1.23.0` (v1.23.0 or newer once v1.23 ran: older ones cannot read its data) | Linux: `~/TOW/update-tow v1.23.0` · macOS: `~/TOW/"Update TOW.command" v1.23.0` (the same) | the same with the older tag (v1.18.0 or newer; v1.23.0 or newer once v1.23 ran) |
+| Go back | PowerShell in the TOW folder: `& ".\Update TOW.cmd" v1.23.0` (v1.23.0 or newer once v1.23 ran: older ones cannot read its data) | Linux: `~/TOW/update-tow v1.23.0` · macOS: `~/TOW/"Update TOW.command" v1.23.0` (the same) | the same with the older tag (v1.18.0 or newer; v1.23.0 or newer once v1.23 ran) |
 | After moving the folder | `Start TOW.cmd` prepares it again; then `tow autostart on` if you use it | the start file does it too; then `tow autostart on` | `tow stop`, `tow setup`, `tow autostart on` |
 | Restore a nightly backup | `tow restore-snapshot --path <copy> --apply` | the same | the same |
 | Remove | [docs/install.md](docs/install.md#remove-tow) | the same | the same |
@@ -143,8 +144,8 @@ release's `SHA256SUMS`. In a git clone on Windows, if PowerShell says that runni
 | Backup | Where | Notes |
 |---|---|---|
 | Nightly backup | `TOW/backup/night/` | daily at 03:30; keep 7 days by default |
-| Restore point | `TOW/data/restore-points/` | before risky changes, last 10 |
-| `.towx` file | where you save it | Settings → Backups; restoring needs the same `master.key` |
+| Restore point | `TOW/data/restore-points/` | **Create a backup**, and before risky changes; last 10 |
+| TOW file (`.towx`) | where you save it | Settings → Backups; restoring needs the same `master.key` |
 | `tow export` / `tow import` | where you save it | protected by its own passphrase; works across installs |
 
 Settings → Backups checks, restores and deletes saved copies. Nightly backups are signed, not encrypted as a whole:

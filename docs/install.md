@@ -129,10 +129,11 @@ TOW/
   Start TOW.cmd / Start TOW.command / start-tow     start (and open the page)
   Stop TOW.cmd  / Stop TOW.command  / stop-tow      stop
   Update TOW.cmd / Update TOW.command / update-tow  update to the latest release
+  README.txt       (Windows zip) these steps in short
   config.yaml      settings
   data/            your topics, history, logs
   keys/master.key  the master key
-  backup/          nightly backups
+  backup/          nightly backups, snapshots taken before updates
   app/             the program
   runtime/         its Python and libraries
 ```
@@ -160,8 +161,8 @@ nothing).
 
 ## Back up the master key
 
-The first start creates `TOW/keys/master.key`. It encrypts every saved password and token. Backups and `.towx`
-files do not contain it, on purpose. **Copy it to a USB stick or a password manager now.** Without it, saved
+The first start creates `TOW/keys/master.key`. It encrypts every saved password and token. Backups and TOW
+files (`.towx`) do not contain it, on purpose. **Copy it to a USB stick or a password manager now.** Without it, saved
 passwords cannot be read, not even from a backup.
 
 ## Remove TOW
@@ -201,7 +202,7 @@ that the folder is your former TOW install.
 | Running `Update TOW.cmd` again after a cut-off update says "can't open file …\app\scripts\update.py" | The TOW folder still has the update file of an older zip (up to 1.28.1 an update did not replace it). Open PowerShell in the TOW folder and run the copy of the updater the cut-off update left, with TOW's Python (the folder in `runtime\python` whose name starts with `cpython-3.` and has three numbers): `& ".\runtime\python\cpython-3.14.8-windows-x86_64-none\python.exe" runtime\update.py --ref latest`. It puts the previous version back, installs the release and writes the current start files. |
 | "TOW: TOW_ROOT=… is not the folder of this TOW, so it is ignored" | A `TOW_ROOT` variable is left from a move or another install. TOW uses its own folder; remove the variable (Windows: **Edit environment variables for your account**; Linux, macOS: your shell profile). |
 | "TOW's environment still belongs to the folder TOW was moved or copied from" (or "TOW did not run: its environment runs the code in …") | The folder was moved or copied. Double-click the start file, which prepares it, or run `app\scripts\tow.cmd setup` (macOS, Linux: `~/TOW/app/scripts/tow setup`). |
-| TOW does not start with the computer after the folder was moved or copied | The autostart still names the old folder. Turn it on in the new folder: `app\scripts\tow.cmd autostart on` (macOS, Linux: `app/scripts/tow autostart on`). After a move, Diagnostics and `tow status` say so too. |
+| TOW does not start with the computer after the folder was moved or copied | The autostart still names the old folder. Turn it on in the new folder: `app\scripts\tow.cmd autostart on` (macOS, Linux: `app/scripts/tow autostart on`). After a move, Diagnostics (at the end of Settings) and `tow status` say so too. |
 | A page that says only "untrusted host" | TOW does not answer that address. On the computer use <http://127.0.0.1:8787> or <http://localhost:8787>; from another device the computer's IP address, its plain name or `name.local`, not `name.lan` or a Tailscale MagicDNS name ([Remote access](../README.md#remote-access)). |
 
 ## Manual install with git
