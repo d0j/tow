@@ -10,6 +10,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - `history_keep_days` and `history_max_items` in `config.yaml` are checked like every other setting: a word or a
   negative number is named when TOW starts instead of quietly becoming the default, and a huge number of days no
   longer makes every check fail.
+- A `heartbeat_url` without a server name (`https://` alone, or with a space in it) is named when TOW starts; it
+  was taken, and then every ping of the watchdog failed.
 
 ## [1.28.2] — 2026-10-09
 

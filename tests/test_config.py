@@ -265,6 +265,10 @@ def test_client_enabled_flag_written_as_text_is_respected(raw, enabled):
         ("quiet_hours: 0-24", '"0-24" does not name a part of the day'),
         ("quiet_hours: 8-8", '"8-8" does not name a part of the day'),
         ("quiet_hours: 25-3", '"25-3" does not name a part of the day'),
+        ("heartbeat_url: http://hc-ping.example/abc", "heartbeat_url must be an https:// address"),
+        # Taken before, then every ping of the watchdog failed.
+        ("heartbeat_url: https://", "heartbeat_url must be an https:// address"),
+        ("heartbeat_url: 'https:// hc-ping.example'", "heartbeat_url must be an https:// address"),
     ],
 )
 def test_notification_settings_are_validated(line, message):

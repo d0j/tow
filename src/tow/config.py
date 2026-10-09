@@ -375,7 +375,10 @@ def _validate(data: dict[str, Any]) -> None:
         except ValueError:
             raise ConfigError("config_error.backup_time") from None
     pulse = data.get("heartbeat_url")
-    if pulse is not None and not (isinstance(pulse, str) and pulse.startswith("https://")):
+    # "https://" alone, or with a space for a host, was taken and then failed every ping.
+    if pulse is not None and not (
+        isinstance(pulse, str) and pulse.startswith("https://") and web_address(pulse) and not re.search(r"\s", pulse)
+    ):
         raise ConfigError("config_error.heartbeat_url")
     if data.get("daily_digest_hour") is not None:
         _int_field(data, "daily_digest_hour", 0, 23)
