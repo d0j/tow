@@ -133,6 +133,9 @@ def _new_topic(form: TopicForm) -> _Added:
         raise Refused(str(exc), field="selection") from exc
     # Only now the site's page for a title (up to the site's timeouts): a refusal above is at once.
     name = form.title.strip()
+    # Typed or changed by the owner: not empty, not a link, and not the title TOW guessed
+    # into the field (no guess at all: what is there was typed).
+    owner_named = bool(name) and not title_is_placeholder(name, url) and name != form.guessed_title.strip()
     if title_is_placeholder(name, url):
         name = services.guess_topic_title(url) or name or url
     topic = new_topic(
@@ -145,6 +148,8 @@ def _new_topic(form: TopicForm) -> _Added:
         prepared=prepared,
         interval=interval,
     )
+    if owner_named:
+        topic["title_set"] = True
     return _Added(topic, tracker, policy, interval)
 
 

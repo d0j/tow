@@ -104,3 +104,33 @@ def test_a_message_names_the_renamed_topic_and_still_reads_episodes_from_the_sit
 )
 def test_shown_title(topic, shown):
     assert shown_title(topic) == shown
+
+
+@pytest.mark.parametrize(
+    ("typed", "guessed", "owner_named", "saved"),
+    [
+        ("Show A", "Show A", False, "Show A"),  # left as TOW guessed it
+        ("My show", "Show A", True, "My show"),  # changed by the owner
+        ("My show", "", True, "My show"),  # no guess: what is there was typed
+        ("", "", False, "Guessed on submit"),  # empty: TOW guesses it then
+        (URL, "", False, "Guessed on submit"),  # the link itself is no name
+    ],
+)
+def test_a_name_typed_or_changed_in_the_add_form_is_the_owners(monkeypatch, typed, guessed, owner_named, saved):
+    monkeypatch.setattr("tow.web.services.run_check", lambda **kw: {"qbit": "ok", "results": []})
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda _url: "Guessed on submit")
+    save_state({"topics": [], "mirrors": {}})
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+
+    response = client.post(
+        "/topics/add",
+        data={"url": URL, "title": typed, "guessed_title": guessed, "save_path": r"D:\TV"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    (topic,) = load_state()["topics"]
+    assert topic["title"] == saved
+    assert topic.get("title_set", False) is owner_named
+    form = client.get("/").text
+    assert 'id="topic-guessed-title" name="guessed_title"' in form

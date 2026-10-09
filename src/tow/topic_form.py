@@ -39,6 +39,9 @@ class TopicForm:
     check_interval_min: str | None = ""
     content_token: str = ""
     selection_indices: str = ""
+    # The add form: the title TOW guessed and put into the name field (empty when none was):
+    # a name other than it is the owner's own (``Topic.title_set``).
+    guessed_title: str = ""
 
     def draft(self) -> dict[str, str]:
         """The fields a refused add brings back into the form."""

@@ -213,10 +213,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Restoring a backup keeps this computer's backup folders, as it keeps the address, port and network access. The
   restored copy's folders replaced them: the restore point made just before the restore disappeared from Settings,
   and a copy from another system stopped the nightly backups.
-- A topic renamed in its edit panel is shown by that name on Home (also in search and when sorting by name), in
-  the edit panel and in messages. Saving said "Saved", but Home and the messages kept showing the site's title, so
-  only History used the new name. Clearing the name shows the site's title again; topics never renamed still
-  follow the site's title.
+- A name the owner gives a topic - typed or changed in the add form, or in its edit panel - is shown by that name
+  on Home (also in search and when sorting by name), in the edit panel and in messages. Saving said "Saved", but
+  Home and the messages kept showing the site's title, so only History used the new name. The title TOW fills in
+  itself, or a cleared name, follows the site's title; topics never renamed behave as before.
 - Settings → Theme: a choice that could not be saved (the data file busy) is said to have failed, with the reason;
   the status said "Theme saved".
 - Turning network access on (Settings or `tow access on`) keeps an address of one network card written in

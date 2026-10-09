@@ -127,10 +127,12 @@ def topics_add(
     check_interval_min: str = Form(""),
     content_token: str = Form(""),
     selection_indices: str = Form(""),
+    guessed_title: str = Form(""),
 ) -> Response:
     form = TopicForm(
         url=url.strip(),
         title=title,
+        guessed_title=guessed_title,
         save_path=save_path,
         client_id=client_id,
         selection_mode=selection_mode,
