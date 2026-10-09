@@ -149,6 +149,24 @@ def test_site_rename_and_undo_reconcile_all_stores(monkeypatch):
     assert secrets["trackers"]["rutor"]["password"] == "fixture-secret"
 
 
+def test_a_renamed_site_keeps_todays_daily_limit_and_undo_gives_it_back(monkeypatch):
+    """The limit reached today was kept under the old name: the next check asked the renamed
+    site again (a download it does not allow today)."""
+    _cfg, state, _secrets = _setup(monkeypatch)
+    state["daily_limit"] = {"rutor": "2026-10-09", "other": "2026-10-09"}
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+
+    client.post(
+        "/sites/rutor",
+        data={"fetch_hosts": "http://rutor", "url_regex": r"rutor/(\d+)", "new_name": "rutor_new"},
+        follow_redirects=False,
+    )
+
+    assert state["daily_limit"] == {"rutor_new": "2026-10-09", "other": "2026-10-09"}
+    client.post("/undo", follow_redirects=False)
+    assert state["daily_limit"] == {"rutor": "2026-10-09", "other": "2026-10-09"}
+
+
 def test_edit_does_not_expand_login_hosts_to_new_fetch_mirror(monkeypatch):
     cfg, _state, _secrets = _setup(monkeypatch)
     cfg["trackers"] = {
