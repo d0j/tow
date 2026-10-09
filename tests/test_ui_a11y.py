@@ -380,3 +380,13 @@ def test_the_diagnostics_table_has_no_empty_column_header(client):
     table = page[page.index("<table") : page.index("</table>")]
     assert "<tr><td></td><th>" in table
     assert not re.search(r"<th>\s*</th>", table)
+
+
+def test_the_version_has_room_at_the_end_of_every_page():
+    """Qa8: the floating version steps aside for a control under it, and at the end of a long list
+    the last row was always under it: the version was never seen. The page ends with room for
+    it; border-box keeps a short page from growing past the window."""
+    updates = (SRC / "static" / "updates.css").read_text(encoding="utf-8")
+    body = _rules(updates)["body:has(> .app-version)"]
+    assert "padding-bottom: 2.2rem" in body
+    assert "box-sizing: border-box" in body
