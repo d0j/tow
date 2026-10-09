@@ -199,6 +199,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The connection check no longer says "all is well; mirrors not answering: 1": with one mirror down among working ones
   it says that the torrent client and every site answer and how many mirrors do not. The Diagnostics row in Settings
   names what Diagnostics shows (the client, the sites, autostart), not "the running service".
+- The site sign-in window on Home, closed with Esc, no longer opens again when the page is reloaded, and the keyboard
+  focus goes to the topic's row instead of staying on a field of the closed window.
 
 ## [1.28.2] — 2026-10-09
 

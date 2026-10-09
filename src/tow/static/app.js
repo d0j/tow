@@ -235,8 +235,22 @@ if (checkJob) {
 
 // D5: the credential prompt is a real modal (focus stays in it, Esc closes it).
 document.querySelectorAll("dialog.credential-prompt[open]").forEach((dialog) => {
+  const topic = new URL(location.href).searchParams.get("credential_topic") || "";
   dialog.close();
   dialog.showModal();
+  // Closed by Esc: the address no longer opens it again on a reload, and the focus goes to the
+  // topic's row (it stayed on a field of the closed dialog). The close event of the reopening
+  // above arrives while the dialog is open again and changes nothing.
+  dialog.addEventListener("close", () => {
+    if (dialog.open) return;
+    const u = new URL(location.href);
+    u.searchParams.delete("credential_topic");
+    u.searchParams.delete("browser_auth_id");
+    history.replaceState({}, "", u.pathname + u.search + u.hash);
+    const summary = topic ? document.getElementById(`row-${topic}`)?.querySelector(":scope > details > summary") : null;
+    if (summary) summary.focus();
+    else document.activeElement?.blur?.();
+  });
 });
 
 // A9: a message or an undo button whose time is up does not vanish under the pointer or the
