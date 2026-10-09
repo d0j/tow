@@ -68,6 +68,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   and asked again, instead of the delivery failing with an internal error.
 - A check no longer keeps in memory every topic page of a site whose check ends early (a sign-in page, a magnet that
   confirms the saved revision) until the check ends: with many such topics a check used hundreds of megabytes.
+- A topic you pause or edit while a check runs keeps its last result: the check that left it alone no longer showed
+  it green and sent "works again" while its new version was still not added.
 
 ## [1.28.2] — 2026-10-09
 
