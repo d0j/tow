@@ -105,6 +105,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - `tow secrets generate-key --key-file` names the whole path of the key it wrote (a relative name is the
   terminal's folder), and its help says that it writes such a file also while passwords and tokens are saved;
   only keys/master.key is refused then.
+- The Guide in Settings and the user guide no longer say that the check icon on Sites ends a mirror's pause (it
+  only shows which mirrors answer; a check you start tries resting mirrors), that clicking an address in a site's row
+  makes it the main mirror (the choice is inside the open row), or that the password can be changed only on this
+  computer. They name the messages after adding a topic and the wait for disk space, the master key, the full
+  labels ("All files of the torrent", "Check all topics now"), the update file of each system and sudo for
+  `permissions fix` on Linux and macOS.
 - The README says to save a torrent client or a messenger before **Check** (Check tests the saved settings), shows
   the rollback command with the quotes PowerShell needs, says that **Create a backup** makes a restore point and that
   a new version may wait for disk space; the guides use the term table (TOW file, the updater) throughout.

@@ -9,7 +9,7 @@
 
   {% if secret_store_error %}
   <div class="flash" role="alert">
-    <span>{{ tm('settings.page.secret_store', help='/settings/help') }}</span>
+    <span>{{ tm('settings.page.secret_store', help='/settings/help#export-import', launcher=os_launcher()) }}</span>
   </div>
   {% endif %}
 
