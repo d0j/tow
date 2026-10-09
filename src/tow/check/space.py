@@ -2,10 +2,11 @@
 drive is added STOPPED with its file selection, confirmed by read-back like every add, and
 started by TOW itself once there is room.
 
-The topic keeps ``waiting_space`` = {hash, client, needed, free, path, since, selection, kind}
-(``selection`` fingerprints the files the client downloads, ``kind`` is the message the start
-sends: ``added`` or ``updated``). Its error (``check.waiting_space``, class ``disk``: red, the
-owner can free space) is reported once. While it waits, a check asks only the client, never
+The topic keeps ``waiting_space`` = {hash, client, needed, free, path, since, selection, kind,
+reported} (``selection`` fingerprints the files the client downloads, ``kind`` is the message
+the start sends: ``added`` or ``updated``, ``reported`` that the owner heard of this wait).
+Its error (``check.waiting_space``, class ``disk``: red, the owner can free space) is reported
+once per wait, also when the client was away meanwhile. While it waits, a check asks only the client, never
 the site: no new ``.torrent`` download, no second add. Every check and the supervisor's
 ``space`` pass (every few minutes, only while a topic waits) look again: still short - the
 numbers are refreshed; room now - TOW starts it, reads the start back and tells the owner;
@@ -232,6 +233,8 @@ def wait_for_space(
         "selection": selection_key(info),
         "kind": kind,
     }
+    if earlier.get("reported") is True:
+        topic["waiting_space"]["reported"] = True
     _report_waiting(topic, run, row, h=h, error=shortfall.error())
 
 
@@ -250,9 +253,12 @@ def _keep_waiting(topic: Topic, run: CheckRun, row: dict[str, Any], *, h: str, w
 
 
 def _report_waiting(topic: Topic, run: CheckRun, row: dict[str, Any], *, h: str, error: TowError) -> None:
+    """The row of a topic that waits; the owner hears of the wait once (``reported`` on it): a
+    client away for a while and back again changes nothing about the wait."""
     row.update({"ok": False, "hash": h, "status": "waiting_space", "waiting_space": True})
     set_error(row, error)
-    if run.notify:
+    waiting = waiting_of(topic)
+    if run.notify and waiting.get("reported") is not True:
         run.queue_notification(
             topic,
             kind="error",
@@ -260,6 +266,8 @@ def _report_waiting(topic: Topic, run: CheckRun, row: dict[str, Any], *, h: str,
             tracker=str(row.get("tracker") or ""),
             error=error,
         )
+        if waiting and topic.get("error_notified"):
+            waiting["reported"] = True
 
 
 def started(topic: Topic, run: CheckRun, row: dict[str, Any], *, h: str, client_id: str, kind: str) -> None:

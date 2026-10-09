@@ -706,3 +706,24 @@ def test_a_reselect_of_a_stopped_revision_that_does_not_wait_is_not_blocked_by_t
     assert calls == [False]
     assert [f["priority"] for f in world.client.torrents[NEW]["files"]] == [0, 1]
     assert world.client.torrents[NEW]["state"] == "stoppedDL"
+
+
+@pytest.mark.parametrize("passes", [_check, _space_pass])
+def test_the_waiting_message_is_not_sent_again_after_a_client_outage(world, passes):
+    """The wait is the same before and after the client was away: the owner heard of it once."""
+    _check()
+    assert [text for text in world.sent if "ждёт места" in text]
+
+    def down():
+        raise ConnectionError("connection refused")
+
+    world.client.ping = down
+    world.client.inspect_torrent = lambda h: down()
+    passes()
+    assert _topic()["waiting_space"]["hash"] == NEW  # still waiting, only not seen
+    del world.client.ping, world.client.inspect_torrent  # the client is back
+    for _ in range(2):
+        passes()
+
+    assert len([text for text in world.sent if "ждёт места" in text]) == 1
+    assert _topic()["last_error_code"] == "check.waiting_space"
