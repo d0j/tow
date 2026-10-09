@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import logging.handlers
 import os
 import signal
 import sys
@@ -42,9 +41,9 @@ def _logging() -> list[logging.Handler]:
     """
     path = layout.logs_dir() / "run.log"
     path.parent.mkdir(parents=True, exist_ok=True)
-    handler = logging.handlers.RotatingFileHandler(
-        path, maxBytes=RUN_LOG_BYTES, backupCount=RUN_LOG_BACKUPS, encoding="utf-8"
-    )
+    from tow.log import SafeRotatingFileHandler
+
+    handler = SafeRotatingFileHandler(path, maxBytes=RUN_LOG_BYTES, backupCount=RUN_LOG_BACKUPS, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     handlers: list[logging.Handler] = [handler]
     if _interactive(sys.stderr):  # pythonw (Task Scheduler) has no stderr at all

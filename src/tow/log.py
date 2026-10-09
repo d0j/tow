@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
+import logging.handlers
 import os
 import re
 import sys
@@ -332,21 +334,56 @@ def locked_log_path() -> Iterator[Path]:
         yield log_path()
 
 
+def rotate_files(path: Path, backups: int) -> None:
+    """``path`` becomes ``<name>.1``, ``.1`` becomes ``.2`` and so on; the oldest (``.<backups>``) goes.
+
+    All or nothing: on Windows a file another program holds open (the History page reading it,
+    a ``Get-Content -Wait`` in a terminal) cannot be renamed. Deleting the oldest file first and
+    then shifting lost one rotated file at every attempt while the live one stayed held - and
+    every later event tried again - until no history was left. Now the oldest is only parked
+    until every rename has succeeded, and a failed rename puts back what was moved (``OSError``).
+    """
+    names = [path, *(path.with_name(f"{path.name}.{index}") for index in range(1, backups + 1))]
+    parked = path.with_name(f"{path.name}.{backups}.old")
+    moved: list[tuple[Path, Path]] = []
+    try:
+        if names[-1].exists():
+            os.replace(names[-1], parked)
+            moved.append((names[-1], parked))
+        for index in range(backups - 1, -1, -1):
+            if names[index].exists():
+                os.replace(names[index], names[index + 1])
+                moved.append((names[index], names[index + 1]))
+    except OSError:
+        for source, target in reversed(moved):
+            with suppress(OSError):
+                os.replace(target, source)
+        raise
+    with suppress(OSError):
+        parked.unlink()
+
+
+class SafeRotatingFileHandler(logging.handlers.RotatingFileHandler):
+    """``RotatingFileHandler`` with ``rotate_files``: a log held open by another program (a
+    terminal following it) grows on, its older files intact, and is rotated once it is free."""
+
+    def doRollover(self) -> None:
+        if self.stream:
+            self.stream.close()
+            self.stream = None
+        with suppress(OSError):  # held by another program: rotated at a later record
+            rotate_files(Path(self.baseFilename), self.backupCount)
+        if not self.delay:
+            self.stream = self._open()
+
+
 def _rotate_if_needed(path: Path) -> None:
     try:
         if not path.is_file() or path.stat().st_size < MAX_BYTES:
             return
     except OSError:
         return
-    oldest = path.with_name(f"{path.name}.{BACKUPS}")
-    if oldest.exists():
-        oldest.unlink()
-    for i in range(BACKUPS - 1, 0, -1):
-        src = path.with_name(f"{path.name}.{i}")
-        dst = path.with_name(f"{path.name}.{i + 1}")
-        if src.exists():
-            src.replace(dst)
-    path.replace(path.with_name(f"{path.name}.1"))
+    rotate_files(path, BACKUPS)
 
 
 def log_event(kind: str, **fields: Any) -> bool:

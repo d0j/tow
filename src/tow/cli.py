@@ -905,7 +905,7 @@ def _serve_log_config(path: Path) -> dict[str, Any]:
     """uvicorn's log to a rotated file: the task runs hidden, its console goes nowhere."""
     path.parent.mkdir(parents=True, exist_ok=True)
     handler = {
-        "class": "logging.handlers.RotatingFileHandler",
+        "class": "tow.log.SafeRotatingFileHandler",  # a log held by a terminal keeps its older files
         "filename": str(path),
         "maxBytes": 5 * 1024 * 1024,
         "backupCount": 3,
