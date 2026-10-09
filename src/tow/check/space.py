@@ -177,7 +177,8 @@ def selection_key(info: dict[str, Any] | None) -> str:
     return hashlib.sha256(",".join(indexes).encode()).hexdigest()[:16]
 
 
-def _stopped(info: dict[str, Any] | None) -> bool:
+def is_stopped(info: dict[str, Any] | None) -> bool:
+    """The client keeps the torrent stopped (or paused, as qBittorrent 4 says)."""
     return str((info or {}).get("state") or "").casefold().startswith(_STOPPED)
 
 
@@ -321,7 +322,7 @@ def recheck(
     if not info_owned_by_tow(info, h):
         forget(topic)
         return FOREIGN
-    if not _stopped(info):
+    if not is_stopped(info):
         if not _running(info):
             return _keep_waiting(topic, run, row, h=h, waiting=waiting)
         forget(topic)  # the owner started it: his decision
@@ -351,7 +352,7 @@ def recheck(
     client.start_owned_torrent(h)
     after = client.inspect_torrent(h)  # the start counts only once the client confirms it
     if not info_confirms(after, h, dest, require_tow_ownership=True) or (
-        _stopped(after) and not completed_progress((after or {}).get("progress"))
+        is_stopped(after) and not completed_progress((after or {}).get("progress"))
     ):
         raise TowError("check.start_unconfirmed")
     row.update({"ok": True, "status": "succeeded", "started": True})

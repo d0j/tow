@@ -429,7 +429,11 @@ class ManagedClient:
         selected_indices: list[int] | tuple[int, ...],
         *,
         ensure_started: bool = False,
+        keep_stopped: bool = False,
     ) -> dict[str, Any]:
+        """The new file selection, read back. The torrent runs afterwards when it ran before,
+        when ``ensure_started`` asks it, and when it is an unfinished add of TOW's (pending) -
+        never with ``keep_stopped``: its files do not fit on the drive (``tow.check.space``)."""
         metadata = parse_torrent_metadata(content)
         valid_hashes = {metadata.client_hash.casefold()}
         if metadata.hash_v1:
@@ -452,7 +456,7 @@ class ManagedClient:
             verified = self._apply_selection(
                 infohash, metadata.files, {int(index) for index in selected_indices}, metadata.name
             )
-            if pending or not was_stopped or ensure_started:
+            if not keep_stopped and (pending or not was_stopped or ensure_started):
                 self._require_owned(infohash)
                 self._start(infohash)
                 verified = self._wait_started(infohash)

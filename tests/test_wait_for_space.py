@@ -82,10 +82,10 @@ class Client:
             self.torrents[h]["state"] = "downloading"
         return {"hash": h}
 
-    def configure_torrent_selection(self, content, h, selected, *, ensure_started=False):
+    def configure_torrent_selection(self, content, h, selected, *, ensure_started=False, keep_stopped=False):
         was_stopped = self.torrents[h]["state"].startswith("stopped")
         self._wanted(h, selected)
-        if ensure_started or not was_stopped:
+        if not keep_stopped and (ensure_started or not was_stopped):
             self.torrents[h]["state"] = "downloading"
         return self.inspect_torrent(h)
 
@@ -415,6 +415,34 @@ def test_a_wait_for_the_previous_revision_to_stop_is_logged_once(world):
         assert row["error_record"]["code"] == "check.previous_revision_active"
     assert _topic()["last_error_params"]["hash"] == NEW  # which revision waits
     assert [event["kind"] for event in read_events(limit=50)].count("check_fail") == 1
+
+
+def test_an_unconfirmed_stopped_add_is_not_started_by_its_recovery_without_room(world):
+    # The add went in stopped (it does not fit) but its read-back failed once: the next check
+    # finished the add the usual way - and started it, with 10 GiB free for 50 GiB.
+    inspect = world.client.inspect_torrent
+    reads = {"n": 0}
+
+    def read_back_fails_once(h):
+        reads["n"] += 1
+        info = inspect(h)
+        if info is not None and reads["n"] == 2:  # the add's own read-back sees another folder
+            info["save_path"] = "Z:\\elsewhere"
+        return info
+
+    world.client.inspect_torrent = read_back_fails_once
+    _check()
+    assert world.client.adds == [(NEW, False)]
+    assert _topic()["last_error_code"] == "check.add_unconfirmed"
+    row = _check()  # still 10 GiB free
+    topic = _topic()
+    assert world.client.torrents[NEW]["state"] == "stoppedDL"
+    assert row["status"] == "waiting_space"
+    assert topic["waiting_space"]["hash"] == NEW
+    assert topic["last_error_code"] == "check.waiting_space"
+    world.disk["free"] = 60 * GIB
+    _space_pass()
+    assert world.client.starts == [NEW]
 
 
 def test_a_folder_not_seen_from_here_never_waits(world, monkeypatch):
