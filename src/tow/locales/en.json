@@ -812,14 +812,14 @@
       "title": "1. Sections",
       "home": "<b>Home</b> — the topics TOW watches: link, name, folder in the torrent client.",
       "sites": "<b>Sites</b> — where the topics come from (rutor, kinozal…). A site can have several mirror addresses: if one does not answer, TOW takes the next.",
-      "settings": "<b>Settings</b> — the language and theme, torrent clients, notifications, how often to check, access from other devices, updates, the service and backups; at the end, Diagnostics, this guide and signing out.",
+      "settings": "<b>Settings</b> — the language, the theme, torrent clients, notifications, how often to check, access from other devices, version and updates, the service, backups and the log; at the end, Diagnostics, this guide and, on another device, signing out.",
       "log": "<b>Log</b> (the scroll icon in the header) — recent events. Passwords never get there. The log does not grow forever: {n} files of {size} each are kept."
     },
     "s2": {
       "title": "2. How to add a topic",
       "step2": "You can keep the suggested name and folder. The folder is where the torrent client saves the files.",
-      "step3": "TOW checks the topic at once and, if the client is reachable, hands it to the client; you get the message “… — added to the torrent client”.",
-      "dot": "<b>The dot</b> in a row is the result of the last check: green — all fine, blue — something new found, yellow — the site is temporarily unavailable (TOW will try again), red — your help is needed (the reason is under the name; open the row — click or tap it, or press Enter — for the full text), grey — not checked yet.",
+      "step3": "TOW checks the topic at once and, if the client is reachable, hands it to the client: the page says “topic added; the torrent client confirmed the torrent”, and connected messengers get “… — added to the torrent client”. If its files do not fit on the disk, the torrent is added stopped and TOW starts it by itself when there is room.",
+      "dot": "<b>The dot</b> in a row is the result of the last check: green — all fine, blue — something new found, yellow — the site is temporarily unavailable (TOW will try again), red — your help is needed (the reason is in the row's “Latest event”; open the row — click or tap it, or press Enter — for the full text), grey — not checked yet.",
       "icon": "<b>The site icon</b> shows the site alone: a torrent client or folder error does not color it.",
       "adopt": "<b>Adopt into TOW</b> — when a check finds the topic's torrent already in the client without TOW's mark (added by hand or by another program), the row turns red and its edit panel offers “Adopt into TOW”: TOW marks that torrent as its own (the tag or label tow) and manages it from the next check. Its files, folder and state stay as they are.",
       "step1": "Home → <b>+</b> → paste the link to the <b>topic page</b> on the site."
@@ -829,12 +829,12 @@
       "step1": "Sites →",
       "step2": "The easiest way is to paste a link to any topic on that site — the fields fill in by themselves.",
       "step3": "If the file cannot be downloaded without signing in, enter the site's user name and password. They are stored encrypted.",
-      "step4": "The address you click in the site's row becomes the main one; the globe icon opens it.",
-      "note": "If a site address does not answer three times in a row, TOW skips it for an hour (rutor: 30 minutes) and tries the others; the check icon in the site's row (“Check the site's mirrors”) ends this pause. When a site says “download limit for today”, scheduled checks leave it alone until tomorrow; a check you start still tries it."
+      "step4": "With several mirrors, open the site's row and press a mirror under “Main mirror — TOW tries it first” to make it the main one; the globe icon opens the main mirror (or one that answers).",
+      "note": "If a site address does not answer three times in a row, TOW skips it for an hour (rutor: 30 minutes) and tries the others. A check you start (the check icon in a topic's row on Home, or “Check all topics now”) tries resting mirrors too, and a mirror that answers ends its pause; the check icon in the site's row (“Check the site's mirrors”) only shows which mirrors answer. When a site says “download limit for today”, scheduled checks leave it alone until tomorrow; a check you start still tries it."
     },
     "s4": {
       "title": "4. Notifications",
-      "text": "Telegram, Discord, WhatsApp and ntfy are in Settings → Notifications. Each has “How to connect” steps and a “Check” button. Every message goes to all connected messengers. If a messenger is unavailable, the message waits and goes out later by itself. The bell in the header: green — messages get through, red — some messenger did not accept a message, grey — nothing is connected."
+      "text": "Telegram, Discord, WhatsApp and ntfy are in Settings → Notifications. Each has “How to connect” steps and, once saved, a “Check” button that sends a test message. Every message goes to all connected messengers. If a messenger is unavailable, the message waits and goes out later by itself. The bell in the header: green — messages get through, red — some messenger did not accept a message, grey — nothing is connected."
     },
     "s5": {
       "title": "5. Checks and the clock in the header",
@@ -845,17 +845,17 @@
       "night": "<b>Nightly backups</b> are made automatically every night; if a backup fails, you get a message. You can choose the folder, including another drive or a network folder.",
       "create": "<b>Create a backup</b> makes a restore point — a copy “just in case” before important changes. <b>Restore</b> first checks the restore point and saves the current state.",
       "note": "A backup holds the settings, topics, history and encrypted passwords. Downloaded files and the torrent client itself are not in it. The address, port and access from other devices stay as they are when you restore.",
-      "file": "<b>TOW file</b> (<code>.towx</code>) — a full encrypted copy of this TOW. Restoring it needs the same encryption key (<code>keys/master.key</code>): on another computer, put that key there first — it is not in the file, so keep it separately, for example on a USB stick. To move TOW to an install with a different key, use <code>tow export</code> and <code>tow import</code> in a terminal: their file is protected by a passphrase instead."
+      "file": "<b>TOW file</b> (<code>.towx</code>) — a full encrypted copy of this TOW. Restoring it needs the same master key (<code>keys/master.key</code>): on another computer, put that key there first — it is not in the file, so keep it separately, for example on a USB stick. To move TOW to an install with a different key, use <code>{launcher} export</code> and <code>{launcher} import</code> in a terminal in the TOW folder: their file is protected by a passphrase instead."
     },
     "s7": {
       "title": "7. Access from a phone or laptop",
-      "text": "On this computer TOW opens without a password. From other devices — only with a password (Settings → Network access); a device stays signed in for 90 days. Access and the password can only be changed on this computer.",
+      "text": "On this computer TOW opens without a password. From other devices — only with a password (Settings → Network access); a device stays signed in for 90 days. Network access is switched on or off only on this computer; from another device the password can be changed only with the current one, and a forgotten one is reset on this computer.",
       "sign_out": "On a phone or laptop, “Sign out on this device” at the end of Settings signs that device out; Settings → Network access → “Sign out everywhere” signs out every device."
     },
     "s8": {
       "title": "8. Where the data is",
       "config": "— settings and the list of sites (without passwords).",
-      "secrets": "— encrypted passwords and tokens. The encryption key is kept apart from the data.",
+      "secrets": "— encrypted passwords and tokens. The master key is kept apart from the data.",
       "state": "— topics and their state.",
       "log": "— the event log behind History and the Log window.",
       "logs": "— run.log and the logs of the web server and of each scheduled job.",
@@ -863,8 +863,8 @@
     },
     "s9": {
       "title": "9. Updates and access to the TOW folder",
-      "update": "<b>Updates</b> — Settings → Version and updates says when a new release is out; the <b>Update</b> button installs it from the page. The update makes an update snapshot first and goes back by itself if the new version does not start. “More: history, rollback and log” → “Install another version or roll back” installs an earlier version (from 1.22.21). Without the page: “Update TOW” in the TOW folder.",
-      "permissions": "<b>Who can get into the TOW folder</b> — if TOW warns at start that other accounts of this computer can open its folders, run <code>{launcher} permissions</code> in a terminal in the TOW folder to see why, and <code>{launcher} permissions fix</code> to close them (in a terminal opened with “Run as administrator” when another account owns the folder)."
+      "update": "<b>Updates</b> — Settings → Version and updates says when a new release is out; the <b>Update</b> button installs it from the page. The update makes an update snapshot first and goes back by itself if the new version does not start. “More: history, rollback and log” → “Install another version or roll back” installs an earlier version (from 1.22.21). Without the page: the update file in the TOW folder (“Update TOW.cmd” on Windows, “Update TOW.command” on macOS, “update-tow” on Linux).",
+      "permissions": "<b>Who can get into the TOW folder</b> — if TOW warns at start that other accounts of this computer can open its folders, run <code>{launcher} permissions</code> in a terminal in the TOW folder to see why, and <code>{launcher} permissions fix</code> to close them (when another account owns the folder: on Windows in a terminal opened with “Run as administrator”, on Linux and macOS with sudo)."
     }
   },
   "history": {
@@ -1619,7 +1619,7 @@
       "title": "Settings",
       "help_link": "Guide",
       "help_q": "guide how it works help",
-      "secret_store": "Saved passwords and tokens cannot be opened: the master key is missing or does not match. Put keys/master.key back from your copy, or run <code>tow keys status</code> to see why. More in the <a href=\"{help}\">guide</a>.",
+      "secret_store": "Saved passwords and tokens cannot be opened: the master key is missing or does not match. Put keys/master.key back from your copy, or run <code>{launcher} keys status</code> to see why. More in the <a href=\"{help}\">guide</a>.",
       "help_note": "How TOW works: statuses, messages, backups and updates",
       "doctor_link": "Diagnostics",
       "doctor_note": "Connection to the torrent client, the sites and the running service",
@@ -1700,7 +1700,7 @@
       "pill_local": "This computer only",
       "pill_password": "Network: with password",
       "pill_no_password": "Network closed: no password",
-      "intro": "On this computer TOW opens without a password. From other devices — a phone, a laptop, through Tailscale — only with a password; a device stays signed in for 90 days, even after TOW restarts. After a password change every device has to sign in again.",
+      "intro": "On this computer TOW opens without a password. From other devices — a phone, a laptop, through Tailscale — only with a password; a device stays signed in for 90 days, even after TOW restarts. After a password change the other devices have to sign in again.",
       "legend": "Access from other devices",
       "allow": "Open TOW from other devices (with a password)",
       "allow_hint": "Turning it on takes effect after TOW restarts; turning it off works at once.",

@@ -24,7 +24,7 @@ How TOW thinks, what each screen and colour means, and what to do about each mes
 | Term | Meaning |
 |---|---|
 | **Topic** | A page on a torrent site that holds one torrent, for example a series. TOW remembers its link, a name, a folder and a torrent client. |
-| **Follow the topic** | *Yes*: TOW checks the topic on a schedule and adds every new version. *No, once*: TOW adds it one time and then only follows the download progress. |
+| **Follow the topic** | *Yes, add new versions*: TOW checks the topic on a schedule and adds every new version. *No, add once*: TOW adds it one time and then only follows the download progress. |
 | **Version** | One `.torrent` of a topic. Sites replace the `.torrent` when episodes are added; each replacement is a new version with a new hash. |
 | **Site** | A torrent site TOW knows how to read: how to recognise its links, where the `.torrent` is, how to sign in. Known sites come preconfigured. |
 | **Mirror** | Another address of the same site. TOW tries them in order and remembers the one that worked. |
@@ -43,7 +43,7 @@ client to add, start, stop or move a torrent. It only ever changes torrents it a
 | **Settings** | Language, theme (as the system, light or dark), torrent clients, notifications, checks, network access and password, version and updates, the TOW service, backups, the log; below them **Diagnostics**, the **Guide** and, on a device signed in over the network, **Sign out on this device**. |
 | **Log** | The scroll icon in the header: the latest events, live. |
 | **History** | Downloads, errors, changes and notifications, with filters and search. It has no icon in the header: the link **History of downloads and changes** in the Log window opens it. |
-| **Diagnostics** | At the end of Settings: the connection to the torrent client and to every site. The in-app **Guide** is next to it. |
+| **Diagnostics** | At the end of Settings: the connection to the torrent client, to every site and to the running TOW service. The in-app **Guide** is next to it. |
 
 The ↻ in the header depends on the page: on Home it is **Check all topics now**, on **Sites** **Check the connection
 to the sites** (Diagnostics). The clock in the header counts down to the next scheduled check; before the first check
@@ -64,7 +64,7 @@ If the site is not known yet, add it first on **Sites** — pasting any topic li
 
 | Choice | Example | Notes |
 |---|---|---|
-| All files | — | The whole torrent. |
+| All files of the torrent | — | The whole torrent. |
 | Choose files | Check files or folders in the contents tree | Literal paths and sizes are retained; new files stay unselected. Missing or resized selected files require review. |
 | Episodes by number | `S01E03-E05, S01E07` · `04x01-03` · `5-8` | Video and its subtitles count as one episode. Use `S01E05` when an episode number exists in several seasons. |
 | Files by pattern | `*.mkv` · `Subs/*.srt` | Glob patterns: `*`, `?` and `[]` are special. A pattern cannot leave the torrent's folder. |
@@ -84,7 +84,7 @@ If nothing matches, or the match is unclear, nothing is started. A range of epis
 *waiting for episodes*, not an error.
 
 Specials (`Season 00`, `S00`, OVA and bonus folders) stay separate files, not ordinary season episodes.
-They can be downloaded with **All files** or **Files by pattern**, without inflating the episode counter.
+They can be downloaded with **All files of the torrent** or **Files by pattern**, without inflating the episode counter.
 Invalid episode ranges or unsafe file patterns are refused when saving, before a client check.
 
 How an add works, for every client: the torrent is added **stopped** and tagged `tow` + `tow-pending`; the files
@@ -155,17 +155,20 @@ manual checks and progress checks do not reset it.
 ## Sites, mirrors and sign-in
 
 - **Mirrors.** TOW starts with the main mirror and moves on until one returns the `.torrent`; that one becomes the
-  main mirror. Click a mirror on **Sites** to make it the main one.
+  main mirror. To choose it yourself, open the site's row on **Sites** and press a mirror under “Main mirror — TOW
+  tries it first”.
 - **Cooldown.** A mirror that fails three times in a row rests for an hour (rutor: 30 minutes); the others keep
-  working. A site's `fail_threshold` and `cooldown_sec` in `config.yaml` change the count and the pause. The site's
-  check icon in its row (“Check the site's mirrors”) ends the pause. Only the mirror's own failures count: it refuses
+  working. A site's `fail_threshold` and `cooldown_sec` in `config.yaml` change the count and the pause. A check you
+  start (the row's ↻ on Home, **Check all topics now**) tries resting mirrors too, and a mirror that answers ends its
+  pause; the check icon in the site's row on **Sites** (“Check the site's mirrors”) only shows which mirrors answer.
+  Only the mirror's own failures count: it refuses
   or drops the connection, does not answer, answers with a server error, or shows a Cloudflare check on its front
   page too. A Cloudflare check or a slow answer on one topic's page alone is that topic's error (yellow) and does not
   pause the mirror for the other topics.
 - **Daily limit.** When a site says the download limit for today is reached, scheduled checks leave that site alone
-  until tomorrow and do not try other mirrors (they share the limit). A check you start (the row's ↻, **Check all**)
+  until tomorrow and do not try other mirrors (they share the limit). A check you start (the row's ↻, **Check all topics now**)
   still tries it.
-- **Sign-in.** Sites that need it get a login and password on **Sites**, stored encrypted. A site that only allows
+- **Sign-in.** Sites that need it get a user name and password on **Sites**, stored encrypted. A site that only allows
   signing in through a browser (NNM-Club) opens a browser window (Chrome, Chromium or Edge) on the computer
   running TOW; the session is saved after you sign in. When the saved session has expired (the site answers with a
   page instead of the `.torrent`, or shows the topic without its download link), TOW signs in again with the saved
@@ -309,9 +312,9 @@ The left column is the text TOW shows (on Home, in a row, in a message or on a p
 | Message | Meaning | What to do |
 |---|---|---|
 | The torrent client is unavailable: new versions are not added. · torrent client unreachable | TOW cannot reach the client's Web UI. | Start the client, check its Web UI is on; Settings → Torrent clients → **Check**. |
-| Sign in to *site* (topics: *n*): open the topic's row. · the page has no torrent link — sign in to the site | The site wants a signed-in user for the `.torrent`. | Open the row → **Sign in**, or enter the login on **Sites**. |
+| Sign in to *site* (topics: *n*): open the topic's row. · the page has no torrent link — sign in to the site | The site wants a signed-in user for the `.torrent`. | Open the row → **Sign in**, or enter the user name and password on **Sites**. |
 | *site*: no mirror answered: … · no connection | Every mirror failed. | Usually temporary. If it lasts, open the site in a browser and add a working mirror on **Sites**. |
-| *site*: all mirrors are paused · *site*: the site is paused | Mirrors are resting after failures, or you paused the site. | Wait for the pause to end (an hour; rutor: 30 minutes), or press the check icon in the site's row on **Sites**. A site you paused: resume it there. |
+| *site*: all mirrors are paused · *site*: the site is paused | Mirrors are resting after failures, or you paused the site. | Wait for the pause to end (an hour; rutor: 30 minutes), or start a check yourself (the row's ↻ on Home): it tries resting mirrors too. A site you paused: resume it on **Sites**. |
 | the site is behind a Cloudflare check — open it in a browser | The site shows a browser challenge. | TOW does not bypass it. Try another mirror or wait. |
 | daily download limit reached | The site's download quota for today is used up. | Nothing; TOW tries again tomorrow. |
 | the previous version of the torrent is still active on the same file: … | A new version overlaps a torrent that is still seeding. | **Stop the previous one and add** in the row, or stop it in the client. |
@@ -320,7 +323,7 @@ The left column is the text TOW shows (on Home, in a row, in a message or on a p
 | waiting for disk space: … GB short (needs … GB, … GB free in …); TOW starts it by itself when there is room | The new version's files do not fit on the target drive (measured only for a torrent client on this computer). It is in the client, stopped, with its files selected. | Free the space it names (or choose fewer files for the topic): TOW starts the torrent within minutes. |
 | not enough disk space: … GB needed, … GB free | Shown by TOW 1.27.1 and earlier, which did not add such a torrent. | Free space or choose another folder. |
 | no site is set up for this link | The link belongs to an unknown site. | **Sites → +**, paste the link. |
-| the torrent was removed from the client; press the row's check icon to add it back | The torrent is gone from the client. Scheduled checks and **Check all** only report it, so a torrent you removed on purpose does not come back by itself. | Press the row's check icon: TOW adds the current version again (stopped, with its files chosen, confirmed, then started; or waiting for disk space). Or **Remove from TOW**. |
+| the torrent was removed from the client; press the row's check icon to add it back | The torrent is gone from the client. Scheduled checks and **Check all topics now** only report it, so a torrent you removed on purpose does not come back by itself. | Press the row's check icon: TOW adds the current version again (stopped, with its files chosen, confirmed, then started; or waiting for disk space). Or **Remove from TOW**. |
 | the torrent in the client was not added by TOW (it has no label tow), so TOW cannot check a partial file selection there — … · the torrent in the client was not added by TOW — its file selection was not changed | The torrent has no `tow` mark, and TOW does not change torrents it did not add. | If it is the topic's torrent, open the topic and choose **Adopt into TOW** (or `tow adopt ID`): TOW marks it and changes nothing else. Or change it in the client, or remove it there and let TOW add it. |
 | the torrent is already in the client without the label tow, so TOW cannot manage it — … · the torrent was added (paused), but the client did not keep the label tow on it — … | The torrent has no `tow` mark: you or another program added it, or the client could not set the mark while adding. TOW does not change such a torrent. | Open the topic and choose **Adopt into TOW** (or `tow adopt --all-unmarked` for many): TOW marks the torrent, changes nothing else, and manages it from the next check. After the second message the button appears once the next check has found the torrent. Deluge keeps one label per torrent: one with a label of yours is adopted only with `tow adopt --replace-label ID`, which replaces that label with `tow`. Or remove it in the client and let TOW add it again. |
 | another check is running right now; press “Check” again in a minute | One check at a time. | Wait. |

@@ -64,6 +64,43 @@ def test_rendered_help_separates_topic_timers_server_recovery_and_watchdog_obser
 
 
 @pytest.mark.parametrize(
+    ("language", "untrue", "true"),
+    [
+        (
+            "en",
+            ["ends this pause", "The address you click in the site's row", "can only be changed on this computer"],
+            ["only shows which mirrors answer", "Main mirror — TOW tries it first", "only with the current one"],
+        ),
+        (
+            "ru",
+            ["снимает эту паузу", "Адрес, нажатый в строке сайта", "Менять доступ и пароль можно только"],
+            ["только показывает, какие зеркала отвечают", "Основное зеркало", "только зная текущий"],
+        ),
+    ],
+)
+def test_the_guide_says_what_the_sites_page_and_the_password_card_really_do(language, untrue, true):
+    # The Guide promised that the Sites check icon ends a mirror's pause (it only probes the
+    # front pages; a check you start tries resting mirrors), that clicking an address in the
+    # row makes it the main one (the choice is inside the open row) and that the password can
+    # only be changed on this computer (another device changes it with the current one).
+    from tow.config import load_config, save_config
+    from tow.paths import launcher
+    from tow.platform import is_windows
+    from tow.web import create_app
+
+    cfg = load_config()
+    cfg.update(language=language)
+    save_config(cfg)
+    text = " ".join(TestClient(create_app()).get("/settings/help").text.split())
+    for words in untrue:
+        assert words not in text
+    for words in true:
+        assert words in text
+    assert f"{launcher(windows=is_windows())} export" in text  # the launcher, not a bare `tow`
+    assert "{launcher}" not in text
+
+
+@pytest.mark.parametrize(
     ("header", "expected"),
     [
         ("ru-RU,ru;q=0.9,en-US;q=0.8", "ru"),
