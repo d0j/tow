@@ -142,7 +142,7 @@ def test_pages_ok():
     ):
         assert essential in text, essential
     assert re.search(r"раз в <b>\d+ (ч|мин)</b>", text)  # the real interval, not a hard-coded one
-    assert "хранится 5 файлов по 5,0 МБ" in text  # the real log limits
+    assert "хранится не больше 5, по 5,0 МБ каждый" in text  # the real log limits
     # plain words for the owner; commands and internals live in the README
     for jargon in ("regex", "hash", "media bytes", "Fernet", "TOW_MASTER_KEY", "морде", "plaintext", "tow secrets"):
         assert jargon not in text, jargon
@@ -2302,7 +2302,7 @@ def test_site_probe_reports_how_many_mirrors_answer(monkeypatch):
 
     location = shown(client.post(f"/sites/{name}/probe", follow_redirects=False).headers["location"])
 
-    assert f"{name}: отвечают 1 из 2 зеркал" in location
+    assert f"{name}: отвечающих зеркал — 1 из 2" in location
 
 
 def test_rows_and_the_edit_panel_show_the_error_in_words():

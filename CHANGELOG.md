@@ -105,6 +105,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - `tow secrets generate-key --key-file` names the whole path of the key it wrote (a relative name is the
   terminal's folder), and its help says that it writes such a file also while passwords and tokens are saved;
   only keys/master.key is refused then.
+- Russian texts no longer put a number before a word that must agree with it ("из 1 зеркал", "8192 символов",
+  "1/21 файлов"): the site check, the selection count on Home and in messages, the selection length limit and the
+  log size in the Guide.
 - The Guide in Settings and the user guide no longer say that the check icon on Sites ends a mirror's pause (it
   only shows which mirrors answer; a check you start tries resting mirrors), that clicking an address in a site's row
   makes it the main mirror (the choice is inside the open row), or that the password can be changed only on this

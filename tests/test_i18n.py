@@ -1023,3 +1023,27 @@ def test_history_shows_labels_not_identifiers():
     assert i18n.translate("log.check_result", ok=3, n=4) in row["detail"]
     assert i18n.translate("log.check_preview") in row["detail"]
     assert "apply=" not in row["detail"]
+
+
+_RU_COUNTED = re.compile(r"\{(\w+)\}\s+(файл|зерка|символ|раздач|правил|адрес|сайт|верси|сери|копи)[а-яё]*")
+_RU_COUNTED_OK = {
+    # constants whose number agrees with the word: 12 символов, 500 правил, 512 символов, 16 адресов
+    ("cli.bundle.passphrase_short", "length"),
+    ("selection.rule_count", "limit"),
+    ("tracker.regex_too_long", "limit"),
+    ("web.site_form.mirrors_too_many", "limit"),
+}
+
+
+def test_a_russian_count_never_stands_before_a_word_it_must_agree_with():
+    """«из 1 зеркал», «8192 символов», «1/21 файлов»: a number placed before its word needs the
+    plural form of that number, which a plain text cannot have. Such a text is a plural entry
+    (one/few/many) or puts the word first («файлов: 1/21»)."""
+    found = [
+        f"{key}: {match.group(0)}"
+        for key, value in i18n._load("ru")[0].items()
+        if isinstance(value, str)
+        for match in _RU_COUNTED.finditer(value)
+        if (key, match.group(1)) not in _RU_COUNTED_OK
+    ]
+    assert found == []
