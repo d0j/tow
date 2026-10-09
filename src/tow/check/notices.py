@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from tow.check.topic import CheckRun
 from tow.events import new_operation_id
 from tow.log import error_class, log_event
-from tow.notify import NotificationBatch
+from tow.notify import NotificationBatch, PendingNotification
 from tow.records import Topic, topics_of
 from tow.status import TRACKER_WARNING_CLASSES
 
@@ -137,3 +137,19 @@ def flush_notifications(cfg: dict[str, Any], secrets: dict[str, Any], *, how: st
     delivery.dispatch(send)
     if notify:
         delivery.maybe_digest(cfg=cfg, send=send)
+
+
+def notify_topic_error(topic: dict[str, Any], error: Any, *, tracker: str = "", how: str) -> None:
+    """A topic's failure outside a check run (the first check of a new topic crashed), sent as
+    a check's messages are: held during the quiet hours, through the messengers' queue."""
+    from tow import delivery
+    from tow.config import load_config
+    from tow.store import load_secrets
+
+    secrets = load_secrets()
+
+    def send(*, text: str, operation_id: str, topic: Topic | None) -> bool:
+        return _audited_send(secrets, text=text, operation_id=operation_id, topic=topic, how=how)
+
+    item = PendingNotification("error", new_operation_id("add-check"), cast(Topic, topic), tracker, error)
+    delivery.deliver([item], cfg=load_config(), send=send)

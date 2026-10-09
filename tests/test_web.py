@@ -1951,7 +1951,7 @@ def test_add_secret_gate_is_not_reported_as_success(monkeypatch):
 
     sent = []
     monkeypatch.setattr("tow.web.services.run_check", blocked)
-    monkeypatch.setattr("tow.web.services.notify_send", lambda *args, **kwargs: sent.append((args, kwargs)))
+    monkeypatch.setattr("tow.web.services.notify_topic_error", lambda *args, **kwargs: sent.append((args, kwargs)))
     c = TestClient(app, headers={"Origin": "http://127.0.0.1"})
 
     response = c.post(

@@ -26,6 +26,7 @@ from tow.access import set_session_cookie, sign_out, sign_out_everywhere
 from tow.adopt import adopt_topic
 from tow.browser_auth import browser_auth
 from tow.check import await_relocation, client_owned_by_tow, record_check_failure, run_check
+from tow.check.notices import notify_topic_error
 from tow.check.space import folder_free
 from tow.clients.factory import from_secrets as client_from_secrets
 from tow.config import load_config
@@ -41,7 +42,6 @@ from tow.locations import free_bytes
 from tow.log import history_events, log_event, read_events
 from tow.mirrors import prefer_host as _prefer_host
 from tow.notifiers import test as test_notifier
-from tow.notify import send as notify_send
 from tow.ratelimit import LoginThrottle
 from tow.releases import release_status
 from tow.restore_points import (
@@ -129,7 +129,7 @@ __all__ = [
     "network_credential",
     "next_check_at",
     "night_cleanup_status",
-    "notify_send",
+    "notify_topic_error",
     "persistence_lock",
     "prefer_host",
     "prepare_content",
