@@ -63,7 +63,7 @@ def _interactive(stream: Any) -> bool:
         return False
 
 
-def _cap_log(path: Path, limit: int) -> None:
+def cap_log(path: Path, limit: int) -> None:
     """An appended log that reached ``limit`` becomes ``<name>.1`` (the older one goes), so it
     never grows for ever; a missing file or one held open stays as it is."""
     with contextlib.suppress(OSError):
@@ -76,7 +76,7 @@ def _spawn(argv: list[str], output: Path, append: bool) -> Any:
 
     output.parent.mkdir(parents=True, exist_ok=True)
     if append:  # serve-stderr.log: every start of the web server writes on
-        _cap_log(output, APPENDED_LOG_BYTES)
+        cap_log(output, APPENDED_LOG_BYTES)
     with output.open("ab" if append else "wb") as handle:
         return _os.spawn(argv, cwd=layout.install_root(), env=layout.child_env(), stdout=handle, stderr=handle)
 
