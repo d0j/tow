@@ -98,9 +98,9 @@ def topics_tracker_login(tid: str, username: str = Form(""), password: str = For
                 services.log_event(
                     "site_login_restore_failed", tracker=tracker.name, topic=tid, status="failed", how="manual"
                 )
-        return home_redirect("web.login_retry.failed", "err", site=tracker.name, error=exc, credential_topic=tid)
+        return home_redirect("web.login_retry.failed", "err", site=_title(tracker), error=exc, credential_topic=tid)
     row = topic_check_row(str(tid), out)
-    flash, prompt, kind = _tracker_login_retry_flash(row, tracker.name)
+    flash, prompt, kind = _tracker_login_retry_flash(row, _title(tracker))
     if (
         prompt
         and row
@@ -119,27 +119,32 @@ def topics_tracker_login(tid: str, username: str = Form(""), password: str = For
             services.log_event(
                 "site_login_restore_failed", tracker=tracker.name, topic=tid, status="failed", how="manual"
             )
-            flash, kind = t("web.topics.restore_failed", site=tracker.name), "err"
+            flash, kind = t("web.topics.restore_failed", site=_title(tracker)), "err"
     return home_redirect(flash, kind, credential_topic=str(tid) if prompt else None)
 
 
-def _tracker_login_retry_flash(row: CheckRow | None, tracker_name: str) -> tuple[str, bool, str]:
+def _title(tracker: GenericHttpTracker) -> str:
+    """The site as the pages name it (its title), not its settings key."""
+    return str(tracker.spec.get("title") or tracker.name)
+
+
+def _tracker_login_retry_flash(row: CheckRow | None, site: str) -> tuple[str, bool, str]:
     """(message, ask for the login again, the message's kind) after a login was saved and checked."""
     if not row:
-        return t("web.login_retry.no_result", site=tracker_name), True, "warn"
+        return t("web.login_retry.no_result", site=site), True, "warn"
     if not row.get("ok"):
         error = str(row.get("error") or t("web.check.not_confirmed")).strip()
         if row_class(row) == "qbit":
             return t("web.login_retry.client_refused", error=error), False, "err"
-        failed = t("web.login_retry.failed", site=tracker_name, error=error)
+        failed = t("web.login_retry.failed", site=site, error=error)
         return failed, row_class(row) == "tracker_auth", "err"
     if row.get("fallback_reason") == "tracker_auth" or row.get("source") in {"magnet", "matching_magnet"}:
-        return t("web.login_retry.magnet", site=tracker_name), True, "warn"
+        return t("web.login_retry.magnet", site=site), True, "warn"
     if row.get("added"):
-        return t("web.login_retry.added", site=tracker_name), False, "ok"
+        return t("web.login_retry.added", site=site), False, "ok"
     if row.get("skipped"):
-        return t("web.login_retry.skipped", site=tracker_name), False, "ok"
-    return t("web.login_retry.ok", site=tracker_name), False, "ok"
+        return t("web.login_retry.skipped", site=site), False, "ok"
+    return t("web.login_retry.ok", site=site), False, "ok"
 
 
 def _browser_auth_callback(
@@ -209,7 +214,9 @@ def _browser_auth_callback(
         )
         if row and row.get("ok") and not magnet_fallback:
             services.log_event("browser_auth", topic=topic_id, tracker=tracker_name, status="verified", how="manual")
-            return {"ok": True, "message": i18n.t("web.browser_auth.verified", lang, site=tracker_name)}
+            spec = (services.load_config().get("trackers") or {}).get(tracker_name)
+            site = str((spec.get("title") if isinstance(spec, Mapping) else "") or tracker_name)
+            return {"ok": True, "message": i18n.t("web.browser_auth.verified", lang, site=site)}
         if not row:
             return {"ok": False, "message": i18n.t("web.browser_auth.no_result", lang)}
         error = str(row.get("error") or row.get("fallback_reason") or i18n.t("web.check.not_confirmed", lang)).strip()

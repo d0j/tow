@@ -16,7 +16,7 @@ from tow.web.site_form import NewSite, SiteEdit
 from tow.web.site_store import with_login
 from tow.web.templating import TEMPLATES, site_tones
 from tow.web.text import t
-from tow.web.views import add_draft, flash_redirect, request_flash
+from tow.web.views import add_draft, flash_redirect, request_flash, site_title_of
 
 router = APIRouter()
 
@@ -205,7 +205,9 @@ def sites_probe(name: str) -> Response:
     # D3: every mirror answering is ok; a mirror that does not answer is transport trouble -
     # amber (the status-colour contract), as the site's row shows it; no site checked is an error.
     kind = "ok" if probes and answering == len(probes) else "warn" if probes else "err"
-    return flash_redirect("/sites", "web.sites.probe", kind, site=name, answering=answering, total=len(probes))
+    return flash_redirect(
+        "/sites", "web.sites.probe", kind, site=site_title_of(name), answering=answering, total=len(probes)
+    )
 
 
 @router.post("/sites/{name}/prefer")
@@ -277,7 +279,7 @@ def doctor_run(request: Request) -> Response:
         for probe in report.get("probes") or []:
             name = str(probe.get("tracker"))
             by_site[name] = by_site.get(name, False) or bool(probe.get("ok"))
-        dead = sorted(name for name, ok in by_site.items() if not ok)
+        dead = sorted(site_title_of(name) for name, ok in by_site.items() if not ok)
         if dead:
             problems.append(t("web.doctor.dead", sites=", ".join(dead)))
         if not problems:

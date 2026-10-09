@@ -449,7 +449,7 @@ def test_tracker_login_auth_failure_drops_unverified_new_login(monkeypatch, clie
 
     response = client.post("/topics/t1/tracker-login", data={"username": "u", "password": "p"}, follow_redirects=False)
 
-    assert _flash(response) == "вход на kinozal не удался: tracker auth failed"
+    assert _flash(response) == "вход на Kinozal не удался: tracker auth failed"
     assert _query(response)["credential_topic"] == "t1"
     assert "kinozal" not in (load_secrets().get("trackers") or {})
 
@@ -464,7 +464,7 @@ def test_tracker_login_transport_failure_keeps_the_new_login(monkeypatch, client
 
     response = client.post("/topics/t1/tracker-login", data={"username": "u", "password": "p"}, follow_redirects=False)
 
-    assert _flash(response) == "вход на kinozal не удался: all hosts failed"
+    assert _flash(response) == "вход на Kinozal не удался: all hosts failed"
     assert load_secrets()["trackers"]["kinozal"] == {"username": "u", "password": "p"}
     # History says what failed: the check of a topic TOW has, not an add.
     assert [event["topic"] for event in _events("check_fail")] == ["t1"]
@@ -483,7 +483,7 @@ def test_tracker_login_rejected_row_restores_previous_partial_entry(monkeypatch,
         "/topics/t1/tracker-login", data={"username": "new-user", "password": "new-pw"}, follow_redirects=False
     )
 
-    assert _flash(response) == "вход на kinozal не удался: tracker auth required"
+    assert _flash(response) == "вход на Kinozal не удался: tracker auth required"
     assert _query(response)["credential_topic"] == "t1"
     assert load_secrets()["trackers"]["kinozal"] == {"username": "old-user"}
 
@@ -508,7 +508,7 @@ def test_tracker_login_never_overwrites_a_concurrent_secret_change(monkeypatch, 
     response = client.post("/topics/t1/tracker-login", data={"username": "u", "password": "p"}, follow_redirects=False)
 
     assert _flash(response) == (
-        "вход на kinozal не удался: tracker auth required; прежний пароль не восстановлен: данные уже изменились"
+        "вход на Kinozal не удался: tracker auth required; прежний пароль не восстановлен: данные уже изменились"
     )
     assert load_secrets() == concurrent
 
@@ -527,7 +527,7 @@ def test_tracker_login_reports_when_restore_itself_fails(monkeypatch, client):
 
     response = client.post("/topics/t1/tracker-login", data={"username": "u", "password": "p"}, follow_redirects=False)
 
-    assert _flash(response) == "вход на kinozal не подтверждён; не удалось восстановить прежний пароль"
+    assert _flash(response) == "вход на Kinozal не подтверждён; не удалось восстановить прежний пароль"
     assert _query(response)["credential_topic"] == "t1"
     assert _events("site_login_restore_failed")
 
@@ -1453,7 +1453,7 @@ def test_prefer_unknown_mirror_changes_nothing(client):
             },
             "http://127.0.0.1/topics/t1/edit",
             "/doctor",
-            "проверка связи: торрент-клиент не отвечает; ни одно зеркало не отвечает: rutor",
+            "проверка связи: торрент-клиент не отвечает; ни одно зеркало не отвечает: Rutor",
         ),
         ({"ok": False, "qbit": "ok"}, None, "/", "проверка связи: есть проблемы"),
     ],

@@ -1316,7 +1316,7 @@ def test_tracker_login_saves_encrypted_site_credentials_and_retries_topic(monkey
     assert response.status_code == 303
     location = shown(response.headers["location"])
     assert "credential_topic=" not in location
-    assert "вход на nnmclub выполнен" in location
+    assert "вход на NNM-Club выполнен" in location  # the site by its title, not its key
     assert "nnm-pass" not in location
     assert saved[-1]["trackers"]["nnmclub"] == {"username": "nnm-user", "password": "nnm-pass"}
     assert seen == {
@@ -2318,7 +2318,7 @@ def test_undo_hint_only_on_the_page_right_after_the_action():
 def test_site_probe_reports_how_many_mirrors_answer(monkeypatch):
     from tow.config import load_config
 
-    name = next(iter(load_config()["trackers"]))
+    name, spec = next(iter(load_config()["trackers"].items()))
     monkeypatch.setattr(
         "tow.web.services.doctor_report",
         lambda **_kw: {"probes": [{"tracker": name, "ok": True}, {"tracker": name, "ok": False}]},
@@ -2327,7 +2327,7 @@ def test_site_probe_reports_how_many_mirrors_answer(monkeypatch):
 
     location = shown(client.post(f"/sites/{name}/probe", follow_redirects=False).headers["location"])
 
-    assert f"{name}: отвечающих зеркал — 1 из 2" in location
+    assert f"{spec['title']}: отвечающих зеркал — 1 из 2" in location  # the title, as Sites names it
 
 
 def test_rows_and_the_edit_panel_show_the_error_in_words():
@@ -2470,7 +2470,7 @@ def test_attention_banner_lists_what_needs_the_owner(monkeypatch):
     assert "Требует внимания" in page
     assert "Плановые проверки не выполнялись с" in page
     assert "Торрент-клиент недоступен" in page
-    assert "Нужен вход на сайт nnmclub (раздач: 2)" in page
+    assert "Нужен вход на сайт NNM-Club (раздач: 2)" in page  # the title, as the Sites page names it
 
 
 def test_no_banner_when_all_is_well():
