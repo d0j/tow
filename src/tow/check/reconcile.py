@@ -28,6 +28,9 @@ from tow.store import (
     save_download_history,
 )
 
+# The error of a failed progress reconcile (tow.check_steps.mark_reconcile_failure).
+RECONCILE_FAILED = "check.reconcile_failed"
+
 
 def _relabel_source_hash(record: HistoryRecord | None, old: str, new: str) -> None:
     for item in ((record or {}).get("items") or {}).values():
@@ -247,9 +250,14 @@ def _reconcile_one(
                 episodes=episodes,
             )
     _note_season_complete(topic, row, run, history_topics.get(topic_key), reconcile)
-    if checked_ok and (history_topics.get(topic_key) or {}).get("client_present") is False:
+    present = (history_topics.get(topic_key) or {}).get("client_present") is not False
+    if checked_ok and not present:
         # B4: the torrent was removed from the client; "раздача исчезла" was sent once.
         fail_row(topic, row, TowError("check.removed_from_client"))
+    elif not checked_ok and row.get("ok") and present and topic.get("last_error_code") == RECONCILE_FAILED:
+        # A reconcile failure that a progress pass (or a check that skipped the topic) set is
+        # over once a reconcile works again: no real check may come for hours to clear it.
+        stamp_result(topic, row)
 
 
 def _note_season_complete(
