@@ -52,6 +52,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   own (loading after its restart, checking, moving the files): that was taken for the owner starting it, the error
   went away and TOW never started it. It is also not started on a drive that is unplugged or asleep for the moment,
   nor when the topic was paused, deleted or edited while the check ran.
+- A torrent that waited for disk space and then waits for its previous version to stop is one "check failed" line in
+  History, not one at every check.
 - A messenger that answers "too many requests" with a wait that is no number ("nan") is waited for the usual pause
   and asked again, instead of the delivery failing with an internal error.
 - A check no longer keeps in memory every topic page of a site whose check ends early (a sign-in page, a magnet that

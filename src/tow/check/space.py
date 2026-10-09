@@ -342,7 +342,7 @@ def recheck(
     names = [SimpleNamespace(path=str(item.get("name") or "")) for item in _wanted_rows(info)]
     overlap = live_previous_overlap(client, list(map(str, topic.get("previous_hashes") or [])), names)
     if overlap:
-        raise TowError(PREVIOUS_REVISION_ACTIVE, file=overlap)
+        raise TowError(PREVIOUS_REVISION_ACTIVE, file=overlap, hash=h)  # which revision waits: logged once
     if not run.apply:
         row["would_start"] = True
         return WOULD_START
