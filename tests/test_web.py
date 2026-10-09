@@ -2362,6 +2362,18 @@ def test_a_removed_topic_gives_one_reason_not_a_transport_error():
     assert line == "Раздача удалена с сайта"
 
 
+def test_a_disk_error_line_does_not_repeat_its_class():
+    """Qa8: Home said "Мало места: ждёт места на диске: не хватает 1650,3 ГБ…" - the class label in
+    front of words that already say it. A disk error's own words are the line."""
+    from tow.errors import TowError
+    from tow.web.views import _error_line
+
+    waiting = TowError("check.waiting_space", missing=1650.3, needed=1800.0, free=150.2, path="D:\\").text()
+    assert _error_line(waiting, "disk").startswith("Ждёт места на диске: не хватает 1650,3 ГБ")
+    low = TowError("check.low_disk", needed=12, free=3, path="D:\\").text()
+    assert _error_line(low, "disk").startswith("Мало места на диске: нужно 12 ГБ")
+
+
 def _row_summaries(page: str) -> list[str]:
     return re.findall(r'<details class="row-edit[^"]*"[^>]*>\s*<summary>(.*?)</summary>', page, flags=re.DOTALL)
 
