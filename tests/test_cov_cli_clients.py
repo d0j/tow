@@ -706,6 +706,14 @@ def test_secrets_status_generate_key_and_refusal_to_overwrite(capsys, tmp_path):
     assert key_file.read_bytes() == original
 
 
+def test_a_key_file_given_relative_is_named_by_its_whole_path(monkeypatch, capsys, tmp_path):
+    # "A new master key was created: rel.key" did not say where: in the terminal's folder.
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["secrets", "generate-key", "--key-file", "rel.key"]) == 0
+    assert (tmp_path / "rel.key").is_file()
+    assert capsys.readouterr().out.strip() == t("cli.keys.generated", path=tmp_path / "rel.key")
+
+
 def test_secrets_migrate_encrypts_legacy_secrets_without_printing_them(monkeypatch, capsys):
     from tow.paths import secrets_path
     from tow.store import load_secrets
