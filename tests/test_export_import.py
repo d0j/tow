@@ -527,6 +527,27 @@ def test_incomplete_import_transaction_is_recovered_before_next_import(tmp_path,
     assert json.loads(transaction.read_text(encoding="utf-8"))["status"] == "rolled_back"
 
 
+@pytest.mark.parametrize("member", ["state.json", "TRANSACTION.json"])
+def test_a_checkpoint_that_cannot_be_written_leaves_no_half_copy(tmp_path, monkeypatch, member):
+    # A full disk: each restore attempt left one more half copy of every store that nothing removed.
+    from tow import bundle as tow_bundle
+
+    dest = tmp_path / "destination"
+    _seed_source(monkeypatch, dest)
+    real = tow_bundle._atomic_write
+
+    def full(path, content):
+        if Path(path).name == member:
+            raise OSError(28, "No space left on device")
+        return real(path, content)
+
+    monkeypatch.setattr(tow_bundle, "_atomic_write", full)
+    with pytest.raises(OSError, match="No space left"):
+        tow_bundle._create_import_checkpoint()
+    root = dest / "data" / "import-checkpoints"
+    assert not root.exists() or list(root.iterdir()) == []
+
+
 def test_crashed_import_is_rolled_back_before_any_other_writer(tmp_path, monkeypatch):
     # N3: not only the next import - the next writer of any kind (check, web edit) recovers first.
     from tow import bundle as tow_bundle

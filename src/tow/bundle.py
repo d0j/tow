@@ -866,6 +866,16 @@ def _create_import_checkpoint() -> Path:
     checkpoint = data_dir() / "import-checkpoints" / f"{iso_now().replace(':', '-')}-{uuid.uuid4().hex[:10]}"
     files_dir = checkpoint / "files"
     files_dir.mkdir(parents=True, exist_ok=False)
+    try:
+        return _fill_import_checkpoint(checkpoint, files_dir)
+    except BaseException:
+        # Nothing was imported yet. A half copy of every store (a full disk, a file held open)
+        # has no journal, so the pruning never removed it: one more per attempt, on that disk.
+        shutil.rmtree(checkpoint, ignore_errors=True)
+        raise
+
+
+def _fill_import_checkpoint(checkpoint: Path, files_dir: Path) -> Path:
     entries = []
     for member, target in _checkpoint_targets():
         exists = _checkpoint_file(target, missing=True)
