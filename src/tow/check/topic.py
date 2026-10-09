@@ -370,7 +370,8 @@ def check_topic(topic: Topic, run: CheckRun) -> CheckRow:
         _topic_failed(work, TowError("content.path_conflict"))
     except Exception as error:  # noqa: BLE001 - any failure of one topic is its result, never the run's end
         _topic_failed(work, error)
-    stamp_result(topic, row)
+    if row.get("skip") != "withdrawn":
+        stamp_result(topic, row)
     return row
 
 

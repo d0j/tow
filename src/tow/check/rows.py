@@ -65,7 +65,18 @@ def withdrawn_meanwhile(topic: Topic, row: dict[str, Any], old: str, started: tu
         if current.get("paused")
         else "check.edited_meanwhile"
     )
-    row.update({"ok": True, "hash": old, "changed": False, "status": "skipped", "skipped": t(key, owner_language())})
+    # Nothing was handed to the client: the topic keeps its last result (an error it had stays,
+    # never a green "ok" or a "works again" message for a check that did not finish).
+    row.update(
+        {
+            "ok": True,
+            "hash": old,
+            "changed": False,
+            "status": "skipped",
+            "skip": "withdrawn",
+            "skipped": t(key, owner_language()),
+        }
+    )
     return True
 
 
