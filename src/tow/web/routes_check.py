@@ -104,6 +104,8 @@ def _check_topic(tid: str, *, adopted: bool = False) -> Response:
             return redirect
     if row and row.get("added"):
         return flash_redirect("/", "web.check.added")
+    if row and row.get("started"):  # a torrent that waited for disk space, started now
+        return flash_redirect("/", "web.check.started")
     if row and row.get("selection_updated"):
         return flash_redirect("/", "web.check.selection_updated")
     if row and row.get("changed"):

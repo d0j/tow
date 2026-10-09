@@ -88,6 +88,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A check by hand, or a new topic's first check, that added the torrent stopped because its files do not fit yet
   says "added to the torrent client, not started yet: waiting for disk space…" as a warning, instead of the alert
   "the check failed: …"; a check of a torrent that still waits says just why it waits.
+- "Check" on a topic whose torrent waits for disk space starts it once its files fit and says "started in the
+  torrent client" (it said "no changes"); for a one-time topic it said "the one-time topic is already done" and left
+  the torrent stopped until the next disk space pass. A waiting torrent of a paused site, or of one at its daily
+  limit, keeps its "waiting for disk space" error: every check replaced it with the site's, and the wait was sent
+  again as news after every check.
 
 ## [1.28.2] — 2026-10-09
 

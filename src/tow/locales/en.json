@@ -2062,6 +2062,7 @@
       "blocked": "check blocked: saved passwords and tokens cannot be opened — see Settings",
       "added": "added to the torrent client",
       "selection_updated": "file selection updated",
+      "started": "started in the torrent client",
       "changed": "new version",
       "no_changes_reason": "no changes: {reason}",
       "adopted": "adopted into TOW: the torrent has the label tow now; nothing else was changed",

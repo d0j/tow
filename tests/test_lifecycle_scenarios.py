@@ -415,3 +415,53 @@ def test_a_dry_run_writes_nothing_whatever_the_topics_wait_for(world, full_disk,
     assert world.sent == sent
     assert remembered == []
     capsys.readouterr()
+
+
+def _check_by_hand() -> str:
+    """The row's "Check" button, as the owner presses it: the message Home shows after it."""
+    from fastapi.testclient import TestClient
+    from helpers import flash_of
+
+    from tow.web import app
+
+    browser = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    return flash_of(browser.post("/topics/t1/check", follow_redirects=False).headers["location"])
+
+
+@pytest.mark.parametrize("tracking_mode", ["watch", "once"])
+def test_check_starts_a_waiting_torrent_once_there_is_room_and_says_so(world, full_disk, tracking_mode):
+    _set_topic(tracking_mode=tracking_mode, selection={"mode": "all", "value": "", "tracking_mode": tracking_mode})
+    assert _check_by_hand().startswith("добавлено в торрент-клиент, но ещё не запущено: ждёт места на диске")
+    assert _topic()["waiting_space"]["hash"] == OLD
+    full_disk["free"] = 10 * 1024**3  # the owner freed space and presses "Check"
+    fetches = world.site.fetches
+
+    said = _check_by_hand()
+
+    topic = _topic()
+    assert world.client.torrents[OLD]["state"] == "downloading"
+    assert said == "запущено в торрент-клиенте"
+    assert "waiting_space" not in topic
+    assert _home()[0] == "ok"
+    assert _history("downloads")[-1] == "client_started"
+    if tracking_mode == "once":
+        assert topic["once_done"] is True
+        assert world.site.fetches == fetches  # a one-time topic is not fetched again
+
+
+def test_a_waiting_torrent_of_a_paused_site_is_said_once(world, full_disk):
+    _check()
+    assert _topic()["last_error_code"] == "check.waiting_space"
+    said = len(world.sent)
+    state = load_state()
+    state["mirrors"] = {"fake": {"frozen": True}}  # the owner pauses the site
+    save_state(state)
+
+    for _ in range(3):
+        _check()
+        _space_pass()
+
+    topic = _topic()
+    assert topic["last_error_code"] == "check.waiting_space"  # what it waits for: the site is not asked
+    assert _home()[0] == "bad"
+    assert len(world.sent) == said  # the same wait, not news every hour

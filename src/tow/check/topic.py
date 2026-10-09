@@ -110,10 +110,15 @@ def _skip_row(
     how: str,
     apply: bool,
     site_skips: dict[tuple[str, str], dict[str, Any]] | None = None,
+    waits: bool = False,
 ) -> bool:
-    """Fill ``row`` and return True when the topic is not fetched in this run."""
+    """Fill ``row`` and return True when the topic is not fetched in this run. ``waits``: its
+    torrent waits in its client for disk space - that is looked at whatever its site's state,
+    which counts only once the wait is over (``_site_skipped``)."""
     url = str(topic.get("url") or "")
-    if topic.get("paused") or topic.get("once_done"):
+    # A one-time topic whose torrent still waits for disk space is looked at in its client (it
+    # is started there once its files fit), never at its site.
+    if topic.get("paused") or (topic.get("once_done") and not space.waiting_of(topic)):
         row.update(
             {
                 "ok": True,
@@ -132,6 +137,25 @@ def _skip_row(
         stamp_result(topic, row)
         return True
     row["tracker"] = tr.name
+    if waits:
+        return False
+    return _site_skipped(topic, row, tr, old=old, quota=quota, state=state, how=how, apply=apply, site_skips=site_skips)
+
+
+def _site_skipped(
+    topic: Topic,
+    row: dict[str, Any],
+    tr: Any,
+    *,
+    old: str,
+    quota: set[str],
+    state: dict[str, Any],
+    how: str,
+    apply: bool,
+    site_skips: dict[tuple[str, str], dict[str, Any]] | None = None,
+) -> bool:
+    """Fill ``row`` and return True when the topic's site is not asked in this run: its daily
+    download limit is reached, it is paused, or a preview would spend its download limit."""
     mirror_state = mirror_of(state, tr.name)
     if tr.name in quota:
         error = TowError("check.daily_limit")
@@ -151,7 +175,7 @@ def _skip_row(
     else:
         return False
     set_error(row, error)
-    _fail_log(topic, url, error, tr, how=how, persist=apply, site_skips=site_skips)
+    _fail_log(topic, str(topic.get("url") or ""), error, tr, how=how, persist=apply, site_skips=site_skips)
     stamp_result(topic, row)
     return True
 
@@ -344,6 +368,10 @@ def check_topic(topic: Topic, run: CheckRun) -> CheckRow:
         "ok": False,
     }
     old = str(topic.get("hash") or "").upper()
+    # Its torrent waits in the client for disk space: the client is asked (``_waits_for_space``)
+    # even while its site is not - a paused site or one at its daily limit kept overwriting the
+    # wait with its own error, and the wait was said again after every check.
+    waits = bool(space.waiting_of(topic)) and not topic.get("selection_dirty")
     if _skip_row(
         topic,
         row,
@@ -354,6 +382,7 @@ def check_topic(topic: Topic, run: CheckRun) -> CheckRow:
         how=run.how,
         apply=run.apply,
         site_skips=run.site_skips,
+        waits=waits,
     ):
         return row
     assert tr is not None  # _skip_row handled "no tracker"
@@ -364,7 +393,11 @@ def check_topic(topic: Topic, run: CheckRun) -> CheckRow:
     row["client_kind"] = topic_client.client_kind if topic_client is not None else None
     work = TopicCheck(topic, run, tr, url, row, old, client_id, topic_client, started=started)
     try:
-        if not _waits_for_space(work):
+        if (
+            not _waits_for_space(work)
+            and not _once_done_after_wait(work)
+            and not (waits and _site_skipped_after_wait(work))
+        ):
             _check_revision(work)
     except TorrentPathConflictError:
         _topic_failed(work, TowError("content.path_conflict"))
@@ -373,6 +406,23 @@ def check_topic(topic: Topic, run: CheckRun) -> CheckRow:
     if row.get("skip") != "withdrawn":
         stamp_result(topic, row)
     return row
+
+
+def _site_skipped_after_wait(work: TopicCheck) -> bool:
+    """The wait for disk space ended in this check: its site is asked now only when it would
+    have been asked without the wait."""
+    run = work.run
+    return _site_skipped(
+        work.topic,
+        work.row,
+        work.tracker,
+        old=work.old,
+        quota=run.quota,
+        state=run.state,
+        how=run.how,
+        apply=run.apply,
+        site_skips=run.site_skips,
+    )
 
 
 def _waits_for_space(work: TopicCheck) -> bool:
@@ -386,6 +436,17 @@ def _waits_for_space(work: TopicCheck) -> bool:
         return False
     outcome = space.recheck(topic, work.run, work.row, work.client, work.client_id, begun=work.started)
     return outcome in {space.WAITING, space.WITHDRAWN}
+
+
+def _once_done_after_wait(work: TopicCheck) -> bool:
+    """A one-time topic's torrent is in its client: once its wait for disk space is over (TOW
+    started it, or the owner did, chose other files or removed it), its check ends here."""
+    if not work.topic.get("once_done"):
+        return False
+    if not work.row.get("started"):
+        # Not "skipped": the reconcile still reports a torrent removed from its client.
+        work.row.update({"ok": True, "hash": work.old, "changed": False, "status": "succeeded"})
+    return True
 
 
 def _check_revision(work: TopicCheck) -> None:
