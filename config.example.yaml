@@ -12,8 +12,8 @@
 bind: 127.0.0.1
 allow_lan: false
 port: 8787
-# How long a message after an action ("Saved") stays on the page, seconds (Settings: 15..3600;
-# this file accepts 1..86400).
+# How long a message after an action ("Saved") and its Undo stay, seconds. Settings offers 1..30
+# minutes; this file accepts 1..86400, and TOW uses at least 15 and at most 3600.
 flash_ttl_sec: 60
 # Optional release discovery (at most once per 12 hours); manual checks still work when off.
 # check_updates: true
@@ -56,8 +56,8 @@ interval_sec: 3600
 # restore_points_dir: D:\TOW-restore-points
 
 # --- download history --------------------------------------------------------------------
-# Files of older revisions and topics no longer watched are kept this many days, at most this
-# many files per topic (0 = no limit).
+# Files of older revisions and topics no longer watched are kept this many days (0..36500), at
+# most this many files per topic (0..1000000); 0 = no limit.
 # history_keep_days: 730
 # history_max_items: 5000
 

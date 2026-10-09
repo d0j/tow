@@ -29,6 +29,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - When `config.yaml` has a `bind` that opens TOW to other devices while `allow_lan` is off, TOW says so in the
   chosen language and names the way out (`tow access on`, or `bind: 127.0.0.1`); a Russian start line carried an
   English sentence that pointed to Settings, which could not open.
+- Settings → Checks says that a new global timer applies within a minute and counts from the last check. The Guide's
+  list of what Settings holds names the language and updates too, and `config.example.yaml` gives the real range
+  of the Undo time (Settings: 1–30 minutes) and of the download history limits.
 
 ## [1.28.2] — 2026-10-09
 
