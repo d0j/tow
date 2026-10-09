@@ -40,6 +40,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The free-space hint of the add and edit forms answers only TOW's own pages. Any website open in the browser could
   ask it about a folder of its choosing, and on Windows a `\\computer\share` of another computer made TOW connect to
   that computer, which then received the Windows account's sign-in.
+- Signing in from another device works again when `data/sessions.json` has a readable epoch but a damaged list of
+  signed-out sessions: the file is rewritten once, as for any damaged sessions file, instead of every sign-in going
+  straight back to the sign-in page.
 - A messenger that answers "too many requests" with a wait that is no number ("nan") is waited for the usual pause
   and asked again, instead of the delivery failing with an internal error.
 - A check no longer keeps in memory every topic page of a site whose check ends early (a sign-in page, a magnet that

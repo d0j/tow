@@ -233,16 +233,23 @@ def _sessions_state() -> tuple[int, dict[str, int]]:
             if _cache.get("path") == str(path):
                 return _cache["epoch"], _cache["revoked"]  # type: ignore[return-value]
         return -1, {}
+    # A damaged file: a session signed in a later epoch no longer matches, so this fails closed
+    # for "Sign out everywhere"; single sign-outs are forgotten.
+    epoch, revoked = _parsed_sessions(raw)
+    with _sessions_lock:
+        _cache.update(stamp=stamp, path=str(path), epoch=epoch, revoked=revoked)
+    return epoch, revoked
+
+
+def _parsed_sessions(raw: bytes) -> tuple[int, dict[str, int]]:
+    """(epoch, revoked) of the file's bytes; (-1, {}) for a damaged file - one rule for every
+    reader, so a file the sessions check refuses is never taken for a good one."""
     try:
         data = json.loads(raw.decode("utf-8"))
         epoch = int(data.get("epoch") or 0)
         revoked = {str(key): int(value) for key, value in dict(data.get("revoked") or {}).items()}
     except UnicodeError, ValueError, TypeError, AttributeError:
-        # A damaged file: a session signed in a later epoch no longer matches, so this fails
-        # closed for "Sign out everywhere"; single sign-outs are forgotten.
-        epoch, revoked = -1, {}
-    with _sessions_lock:
-        _cache.update(stamp=stamp, path=str(path), epoch=epoch, revoked=revoked)
+        return -1, {}
     return epoch, revoked
 
 
@@ -286,11 +293,10 @@ def _signing_epoch() -> int:
         except OSError as exc:
             raise AuthConfigurationError("auth.sessions_unreadable") from exc
         # Readable now: the earlier reads may only have met a writer's moment (Windows). A good
-        # file is never reset - that signed every device out after a brief sharing clash.
-        try:
-            good = int(json.loads(raw.decode("utf-8")).get("epoch") or 0)
-        except UnicodeError, ValueError, TypeError, AttributeError:
-            good = -1
+        # file is never reset - that signed every device out after a brief sharing clash. Good
+        # as the sessions check reads it: a readable epoch beside a damaged list of signed-out
+        # sessions still reads as damaged there, and every sign-in was refused at once.
+        good = _parsed_sessions(raw)[0]
         if good >= 0:
             clear_sessions()  # the next read takes the file as it is
             return good

@@ -138,14 +138,24 @@ def test_an_unreadable_sessions_file_fails_closed():
     assert not session_is_valid(cookie, TOKEN)
 
 
-def test_a_sign_in_after_a_damaged_sessions_file_holds(password):
+@pytest.mark.parametrize(
+    "damaged",
+    [
+        "{broken",
+        # A readable epoch beside a damaged list of signed-out sessions: the file was taken for
+        # a good one and kept, while the sessions check read it as damaged - the same loop.
+        '{"revoked": [1]}',
+        '{"epoch": 7, "revoked": {"k": null}}',
+    ],
+)
+def test_a_sign_in_after_a_damaged_sessions_file_holds(password, damaged):
     """Round-3 audit: with data/sessions.json damaged every sign-in answered 303 with a cookie
     signed for epoch 0 that the next page refused (epoch unknown): a silent loop that locked
     out every device on the network. The sign-in rewrites the file once and says so."""
     from tow.log import read_events
 
     old = issue_session(lan_password_session_key(password))
-    (data_dir() / "sessions.json").write_text("{broken", encoding="utf-8")
+    (data_dir() / "sessions.json").write_text(damaged, encoding="utf-8")
     device = TestClient(app, client=LAN, headers=ORIGIN)
 
     response = device.post("/login", data={"password": "old-horse-battery"}, follow_redirects=False)
