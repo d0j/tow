@@ -84,7 +84,7 @@ def test_days_form_saves_exact_integer_without_deleting_anything(days):
     assert "сейчас существующие копии не удалялись" in flash_of(response.headers["location"])
 
 
-@pytest.mark.parametrize("days", ["", "0", "-1", "7.5", "3651", "true", "NaN", "9" * 5000])
+@pytest.mark.parametrize("days", ["", "0", "-1", "7.5", "3651", "true", "NaN", "9" * 5000, "٧", "７", "1_0"])
 def test_bad_days_form_keeps_config(days):
     before = config_path().read_bytes()
     response = _client().post("/settings/backup/retention", data={"days": days}, follow_redirects=False)

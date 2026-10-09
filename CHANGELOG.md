@@ -18,6 +18,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   that the form cannot show (10 minutes, 45 seconds) stays as it is.
 - Settings → Torrent clients: a Transmission or Deluge saved with the port field empty gets its own default port
   (9091, 8112), not qBittorrent's 8080. A port written with other digits ("٨٠٨٠") or as "8_080" is refused.
+- Settings → Backups → Keep nightly backups, days: a number written with other digits ("٧", "７") or as "1_0" is
+  refused instead of being saved as 7 or 10.
 
 ## [1.28.2] — 2026-10-09
 
