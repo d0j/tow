@@ -1279,6 +1279,15 @@ def test_freeze_toggles_site_pause(client):
     assert [e["status"] for e in _events("site_pause")] == ["paused", "resumed"]
 
 
+def test_site_changes_are_in_history(client):
+    from tow.log import history_events
+
+    client.post("/sites/rutor/freeze", follow_redirects=False)
+    client.post("/sites/rutor", data={"fetch_hosts": "http://rutor.info"}, follow_redirects=False)
+
+    assert [row["kind"] for row in history_events(group="changes")] == ["site_save", "site_pause"]
+
+
 @pytest.mark.parametrize(
     ("form", "flash"),
     [

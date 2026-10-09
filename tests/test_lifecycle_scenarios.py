@@ -283,3 +283,15 @@ def test_a_reconcile_failure_in_a_progress_pass_ends_with_the_next_pass_that_wor
     assert _home()[0] == "ok"
     assert len(world.sent) == said + 1
     assert world.sent[-1] == "Show — снова работает"
+
+
+def test_a_changed_file_selection_reaches_the_client_and_history(world):
+    _check(how="manual", ids=["t1"])
+    _set_topic(selection_dirty=True)  # the owner chose the files again on the edit form
+
+    row = _check()
+
+    assert row["selection_updated"] is True
+    assert _topic()["selection_dirty"] is False
+    assert _history("downloads")[-1] == "client_selection_updated"
+    assert _home()[0] == "ok"
