@@ -459,6 +459,28 @@ def test_the_night_copy_catches_up_at_start_and_remembers_the_attempt(tmp_path):
     assert world2.jobs() == []  # a restarted supervisor does not copy again right away
 
 
+def test_a_night_copy_stopped_at_its_time_limit_is_recorded_as_failed(tmp_path):
+    # It wrote no result of its own: Settings kept the last good copy, the watchdog saw no failure.
+    world, sup = make(tmp_path, facts={"last_scheduled_check": T0, "last_backup_ok": T0 - 30 * 3600})
+    stopped = []
+    sup.deps.job_stopped = lambda name, minutes: stopped.append((name, round(minutes)))
+    run_for(sup, world.clock, 3)
+    backup = world.jobs()[0]
+    run_for(sup, world.clock, 1801)
+    assert backup.pid in world.stopped
+    assert sup.jobs_done["backup"]["stopped"] is True
+    assert stopped == [("backup", 30)]
+
+
+def test_the_stopped_night_copy_is_said_where_settings_reads_it(monkeypatch):
+    from tow import snapshots, supervisor
+
+    supervisor._job_stopped("check", 60)  # only a night copy has such a record
+    assert snapshots.status().get("last_error") is None
+    supervisor._job_stopped("backup", 30.2)
+    assert snapshots.status()["last_error"] == "ночная копия не завершилась за 30 мин и была остановлена"
+
+
 class StateWorld(World):
     """Children that finish after 20 s and write health the way `tow check` does: every check
     moves at_ts, a scheduled one also auto_at_ts. The facts are the real ones

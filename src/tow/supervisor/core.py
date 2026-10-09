@@ -102,6 +102,8 @@ class Deps:
     own_server: Callable[[int], bool] = field(default=lambda _port: False)
     # A TOW answers /healthz on the port - this install's or another folder's.
     tow_server: Callable[[int], bool] = field(default=lambda _port: False)
+    # A job stopped before it ended (its time limit, or TOW stopping): its name and minutes.
+    job_stopped: Callable[[str, float], Any] = field(default=lambda _name, _minutes: None)
 
 
 @dataclass
@@ -572,6 +574,10 @@ class Supervisor:
                 job.stop_retry_at = mono + STOP_RETRY_SEC
                 return False
             LOG.warning("%s stopped after %.0f s", job.name, mono - job.started_mono)
+            try:
+                self.deps.job_stopped(job.name, (mono - job.started_mono) / 60)
+            except Exception as exc:  # noqa: BLE001 - the loop goes on; the job's own record is the next one's
+                LOG.warning("%s stop not recorded: %s", job.name, type(exc).__name__)
         code = job.child.poll()
         self.jobs_done[job.name] = {
             "at": _now_iso(job.started_wall),
