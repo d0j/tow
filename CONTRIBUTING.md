@@ -38,7 +38,8 @@ The hooks run it for you: **pre-commit** runs `-Staged`, **post-rewrite** runs `
 rebase (git ignores its result, so it can only warn, loudly), **pre-push** requires the full gate on exactly the
 content being pushed. CI runs the same gate on Windows, Linux and macOS.
 
-Linux checks and installer smoke tests run on both Ubuntu 24.04 and 26.04. The legacy
+Linux checks and the `install.sh` smoke tests run on both Ubuntu 24.04 and 26.04 (the update test of
+the `installers` workflow on 24.04). The legacy
 `ubuntu-latest` check name is retained for branch protection, but its runner is explicitly
 `ubuntu-24.04`; GitHub's future migration of the floating label cannot remove older-LTS coverage.
 
@@ -119,7 +120,8 @@ Linux checks and installer smoke tests run on both Ubuntu 24.04 and 26.04. The l
 The release commit (version in `pyproject.toml`, changelogs) has the subject `release: vX.Y.Z - <summary>`.
 Pull requests that touch the installers, the updater or the dependencies also run the `installers`
 workflow: the Windows bundle and `install.ps1`, and the update of the latest release to the pull request
-(`scripts/update-smoke.py`: a broken copy must roll back, then the real update) on Windows and Linux.
+(`scripts/update-smoke.py`: a broken copy must roll back, then the real update) on Windows, Linux and
+macOS.
 
 Merge the release commit through a pull request that is up to date with `main` (its last `ci` run then
 covers the merge; otherwise wait for `ci` on `main`). Fetch `origin/main` and create

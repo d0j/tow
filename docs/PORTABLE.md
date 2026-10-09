@@ -33,7 +33,7 @@ or created for the refused form.
   data/run/                 run.lock, run.pid, status.json, schedule.json, control/ (tow run's files)
   keys/master.key           the master key — inside the install, outside data/ (data snapshots,
                             exports and night copies never contain it)
-  backup/                   night copies (default backup/night), pre-update snapshots, key copies
+  backup/                   night copies (default backup/night), pre-update snapshots
   runtime/python/           the uv-managed Python (UV_PYTHON_INSTALL_DIR)
   runtime/cache/            uv cache (UV_CACHE_DIR)
   runtime/bin/uv(.exe)      uv itself, when the bundle or an installer brought it
@@ -183,7 +183,8 @@ The owner's guide is [install.md](install.md); the README links the stable relea
   The three Windows start files come from `scripts/root_files.py`, which `build-bundle.py` writes
   into the zip and `update.py` writes into `<TOW>` again (§4): up to 1.28.1 an update never
   replaced them, so an install that began with an older zip kept that zip's files.
-- **Installers** refuse a folder that holds an install (they name the update file) or anything
+- **Installers** refuse a folder that holds an install (`install.ps1` names the update file,
+  `install.sh` the `tow update` command) or anything
   but what an uninstall keeps: `data/`, `keys/`, `config.yaml`, `backup/` and the `.tow-install`
   marker. Around those they install again and change nothing of them (an existing `config.yaml`
   stays; `--port` / `-Port` only rewrites its `port:`). Kept data without the marker (an older
@@ -195,11 +196,11 @@ The owner's guide is [install.md](install.md); the README links the stable relea
   turns autostart off, stops TOW, removes the Linux menu entry that names this folder and
   keeps `data/`, `keys/`, `config.yaml`, `backup/` unless `--purge`. `install.sh` reads
   answers from `/dev/tty` (its stdin is the script under `curl | sh`); `install.ps1` runs in
-  Windows PowerShell 5.1 and 7, keeps its settings inside a function and never `exit`s (under
-  `irm | iex` that would close the owner's window); it is ASCII (irm decodes a release asset in
+  Windows PowerShell 5.1 and 7, keeps its settings inside a function and `exit`s only when run as
+  a file (under `irm | iex` an exit would close the owner's window); it is ASCII (irm decodes a release asset in
   any code page). `TOW_INSTALL_SOURCE` / `TOW_INSTALL_SUMS` install from local files (tests).
-- `install.sh` takes uv `-unknown-linux-gnu` on glibc, `-musl` elsewhere, `-apple-darwin` on
-  macOS; `--desktop` (Linux) writes `$XDG_DATA_HOME/applications/tow.desktop` (the only write
+- `install.sh` takes uv `-unknown-linux-gnu` on glibc, `-musl` elsewhere (ARMv7: `-gnueabihf`,
+  `-musleabihf`), `-apple-darwin` on macOS; `--desktop` (Linux) writes `$XDG_DATA_HOME/applications/tow.desktop` (the only write
   outside the folder besides autostart, both on request).
 
 ## 2. One supervised service: `tow run`
@@ -246,8 +247,9 @@ blocks for long.
   process 15 s later if a request hangs); on Linux and macOS by its own parent pid changing
   (re-parented), which a reused pid cannot hide.
 - **Schedule** (`tow.supervisor.schedule`, tested with a fake clock):
-  - check every `interval_sec` after the last *scheduled* one: the supervisor's own last start,
-    kept in `data/run/schedule.json` (`check_started_at`), so a restart keeps the cadence;
+  - check every `interval_sec` after the last *scheduled* one was due (one that started more than
+    an interval late counts from its start, without catch-ups): the supervisor's own last planned
+    start, kept in `data/run/schedule.json` (`check_started_at`), so a restart keeps the cadence;
     `health.auto_at_ts` only until there is one; never `health.at_ts`, which every manual check
     and progress pass moves (in 1.18–1.20 an install whose first check was manual got no
     scheduled check again). The first one two minutes after start. The child is
@@ -477,7 +479,7 @@ before the update does the same).
 1. One update at a time (`<TOW>/.update.lock`); refuse a development checkout and local edits of
    tracked files; `git fetch --tags --prune origin`; resolve the ref; refuse a target older than **v1.18.0** — the minimum rollback target
    of the supervised-service layout (older versions have no `tow run`) — and a target that cannot
-   read `data/state.json`: its `STATE_SCHEMA_VERSION` (none: v1.18–v1.20, format 1) is lower than
+   read `data/state.json`: its `STATE_SCHEMA_VERSION` (none: v1.18, which reads format 1) is lower than
    the file's `schema_version` (v1.22 reads format 1, v1.23 writes 2), or the file cannot be
    verified. Both before TOW stops. The refusal names the first version that reads the data's
    format (`STATE_FORMAT_SINCE` in `update.py`, kept in step with `tow.store` by a test).
@@ -693,8 +695,8 @@ autostart and processes faked: success with pruning, a target that does not answ
 data and config put back, the new version's log kept), a rollback step that fails, a previous
 version that does not come back, local edits, a concurrent update, a supervisor that ignores the
 stop (its web server and job stopped as well, the manager first; a reused pid left alone), a dead
-supervisor's web server, a failed snapshot, a target older than v1.18.0, a five-task install, the
-launchers' environment and Python 3.11 syntax.
+supervisor's web server, a failed snapshot, a target older than v1.18.0, the launchers'
+environment and Python 3.11 syntax.
 
 ## 5. Platform code in one package (built)
 
@@ -738,7 +740,8 @@ launchers' environment and Python 3.11 syntax.
   on Windows) is refused instead of becoming a folder inside the install - in Settings and, since
   1.21, also when a carried config.yaml names one (`backup_root()` / `restore_points_dir()` raise
   with `locations.other_system_config`; nothing is created); the protected message
-  names this system's folders. Pages show `scripts\tow.cmd` / `scripts/tow`, `data\` / `data/`
+  names this system's folders. Pages show `app\scripts\tow.cmd` / `app/scripts/tow` (`scripts\…`
+  in a development checkout), `data\` / `data/`
   and a folder example per system (template globals `os_launcher`, `os_sep`, `os_example_folder`).
 - Callers moved onto it: `pulse.py` (machine facts, shutdown records, port owner, stop tree),
   `browser_auth.py` (browser lookup, own process group/session on every system, window, tree
@@ -753,11 +756,13 @@ launchers' environment and Python 3.11 syntax.
   alone needs (the child interpreter, spawning an owned child with `popen_options`, the port
   probe) and takes `process_alive`, `terminate`, `port_owner`, `bind_children` and
   `die_with_parent` from `tow.platform`.
-- File locks stay where they are (`store.py`, `log.py`): `msvcrt` on Windows, `fcntl` elsewhere.
+- File locks are `tow.platform.locks` (`msvcrt` on Windows, `flock` elsewhere), used by `store.py`,
+  `log.py`, `supervisor/layout.py` and `web_update.py`.
 
 ## 6. Launchers (built)
 
-- `scripts/tow-env.cmd` (shared by the Windows launchers `tow.cmd` and `tow-setup.cmd`): `TOW_APP`
+- `scripts/tow-env.cmd` (shared by the Windows launchers `tow.cmd`, `tow-setup.cmd` and
+  `tow-start.cmd`): `TOW_APP`
   (the code), `TOW_ROOT` (discovery as in §1; one set before is kept only when it names the
   folder above `TOW_APP`, `scripts/tow` the same), `TOW_EXE`, `TOW_HOME`, `TOW_CONFIG`, the uv
   variables of §1 for a runtime install, `TOW_UV` (`runtime\bin\uv.exe` when present). A legacy
@@ -837,11 +842,13 @@ Built so far (this workstream):
   folder, `HOME` a folder inside it and the `XDG_*_HOME` variables are unset, so autostart files
   never reach the runner's home.
 - mypy is clean with `--platform linux` and `--platform darwin` too.
-- CI (`.github/workflows/ci.yml`): the full gate runs on Windows, Ubuntu and macOS for every push
-  and pull request, and all three must pass (green since 1.21.0); the dependency audit runs on one
-  of them (uv.lock is the same everywhere).
+- CI (`.github/workflows/ci.yml`): the full gate runs on Windows, Ubuntu 24.04, Ubuntu 26.04 and
+  macOS for every push to `main` and every pull request, and all four must pass (green since
+  1.21.0); the dependency audit runs on one of them (uv.lock is the same everywhere), and
+  `install.sh` is smoke-tested on Ubuntu and macOS.
 - Installers (`.github/workflows/installers.yml`): on pull requests that touch `scripts/`,
-  `install/`, the updater or the dependencies, weekly and by hand, the Windows bundle is built from
+  `install/`, the updater, what it relies on (`store.py`, `supervisor/layout.py`, `cli.py`, the
+  texts) or the dependencies, weekly and by hand, the Windows bundle is built from
   the commit and tested as on a tag (below), and `scripts/update-smoke.py` updates the latest
   published release (the bundle on Windows, install.sh on Ubuntu and macOS) to the commit's source
   archive with the real updater (`--source`/`--sums`): a broken copy that changes `data/` and
@@ -870,7 +877,7 @@ Built so far (this workstream):
   commit with the same tree, such as the head of the merged pull request (the gate is not run
   again, and the run of the same content on `main` is not waited for);
   then GitHub's source archive of the tag (its version must be the tag's): Windows builds the bundle
-  from it and runs `scripts/bundle-smoke.ps1 -Offline` (unpacked into a path with a space and
+  from it and runs `scripts/bundle-smoke.ps1 -Offline -Move` (unpacked into a path with a space and
   Cyrillic letters, `Start TOW.cmd` with every proxy pointing at a closed port, `/healthz`,
   `tow status`, a second start, `Stop TOW.cmd`, uv's and Python's places outside the folder
   unchanged) and `scripts/install-smoke.ps1` (`install.ps1` on Windows PowerShell 5.1 with
