@@ -65,6 +65,9 @@ def test_a_config_moved_away_while_tow_runs_is_said_too(monkeypatch, capsys):
 
         assert cli.main(["status"]) == 3
         assert "there is no such file" in capsys.readouterr().err
+        monkeypatch.delenv("TOW_CONFIG", raising=False)  # the launchers set it only when the file is there
+        assert cli.main(["status"]) == 3
+        assert "there is no such file" in capsys.readouterr().err
     finally:
         path.write_bytes(good)
 

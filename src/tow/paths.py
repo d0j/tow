@@ -158,13 +158,12 @@ def data_dir(*, create: bool = True) -> Path:
 
 
 def config_path() -> Path:
+    """``TOW_CONFIG``, else the install's own ``config.yaml`` - also while it is missing: reading
+    it then says the file is not there (``config_error.missing``), not an unexplained failure."""
     value = _env_path(_CONFIG_ENV)
     if value is not None:
         return value
-    bundled = root() / "config.yaml"
-    if bundled.is_file():
-        return bundled
-    raise RuntimeError("TOW_CONFIG must be configured for portable runtime")
+    return root() / "config.yaml"
 
 
 def keys_dir() -> Path:
