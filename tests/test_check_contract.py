@@ -1229,6 +1229,8 @@ def test_incompatible_topics_cannot_mutate_the_same_client_hash(monkeypatch):
 
     assert result["results"][0]["ok"] is False
     assert result["results"][0]["error_record"]["code"] == "check.hash_claimed"
+    # Qa8: the message named the other topic by its internal id; it names it as Home does.
+    assert result["results"][0]["error_record"]["params"]["topic"] == "Show"
     assert client.add_calls == 0
 
 
