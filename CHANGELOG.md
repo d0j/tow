@@ -219,6 +219,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   follow the site's title.
 - Settings → Theme: a choice that could not be saved (the data file busy) is said to have failed, with the reason;
   the status said "Theme saved".
+- Turning network access on (Settings or `tow access on`) keeps an address of one network card written in
+  `config.yaml` (`bind: 192.168.1.5`); it was replaced with `0.0.0.0`, every address of the computer. Only
+  `127.0.0.1` (this computer only) becomes `0.0.0.0`.
 
 ## [1.28.2] — 2026-10-09
 

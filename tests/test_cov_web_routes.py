@@ -856,6 +856,18 @@ def test_settings_access_undo_restores_bind(client):
     assert _events("settings_access_undo")[-1]["bind"] == "127.0.0.1"
 
 
+def test_settings_access_keeps_a_network_address_written_in_the_config(client):
+    cfg = load_config()
+    cfg["bind"] = "192.168.1.5"  # one network card, written by hand
+    save_config(cfg)
+    _set_lan_password(client)
+
+    client.post("/settings/access", data={"allow_lan": "1"}, follow_redirects=False)
+
+    cfg = load_config()
+    assert (cfg["bind"], cfg["allow_lan"]) == ("192.168.1.5", True)
+
+
 def test_settings_access_ignores_a_password_field(client):
     # Older pages posted lan_password here and the reminder was silently dropped; now ignored.
     client.post("/settings/access", data={"allow_lan": "1", "lan_password": LAN_PASSWORD}, follow_redirects=False)

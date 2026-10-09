@@ -188,6 +188,23 @@ def test_access_on_asks_for_a_password_when_none_is_set(monkeypatch, capsys):
     assert access.password_is_set(load_secrets())  # off keeps the password
 
 
+@pytest.mark.parametrize(("written", "listens"), [("192.168.1.5", "192.168.1.5"), ("localhost", "0.0.0.0")])
+def test_access_on_keeps_a_network_address_written_in_the_config(monkeypatch, written, listens):
+    """`tow access on` is the way out the start names for `bind: 192.168.1.5` without allow_lan;
+    it replaced that address with 0.0.0.0 (every network card)."""
+    from tow.config import load_config, save_config
+
+    answers = iter(["correct horse battery", "correct horse battery"])
+    monkeypatch.setattr("getpass.getpass", lambda _prompt: next(answers))
+    monkeypatch.setattr("builtins.input", lambda _prompt: "")
+    cfg = load_config()
+    cfg["bind"] = written
+    save_config(cfg)
+    assert cli.main(["access", "on"]) == 0
+    cfg = load_config()
+    assert (cfg["allow_lan"], cfg["bind"]) == (True, listens)
+
+
 def test_access_on_refuses_mismatched_passwords_and_keeps_the_network_closed(monkeypatch, capsys):
     from tow.config import load_config
 

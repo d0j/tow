@@ -23,6 +23,7 @@ from tow.auth import (
     lan_password_session_key,
     with_hint,
 )
+from tow.bind import network_bind
 from tow.config import as_bool
 from tow.store import SecretStoreError
 from tow.store_transaction import StoreTransaction, TransactionError
@@ -92,7 +93,7 @@ def setup_save(
     cfg["setup_done"] = True
     lan = as_bool(allow_lan)
     if lan:
-        cfg.update(allow_lan=True, bind="0.0.0.0")
+        cfg.update(allow_lan=True, bind=network_bind(cfg.get("bind")))
     try:
         services.commit_stores(config=cfg, secrets=secrets)  # never a password without its network setting
     except TransactionError:
