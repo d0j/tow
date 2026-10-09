@@ -94,6 +94,7 @@
     "snapshot": {
       "inside_data": "the nightly backups folder must be outside the TOW data folder",
       "cleanup_warning": "The new copy is saved and verified, but cleanup of old copies is incomplete. Check folder access and files held by other programs; TOW will try again at the next copy.",
+      "over_budget": "The new copy is saved and verified, but the copies kept are larger than the size limit ({limit} MB, backup_max_mib in config.yaml): the newest copy is never deleted. Raise the limit, or set 0 for no limit.",
       "cleanup_unknown": "Cleanup status is unknown. Check folder access and create a new nightly backup to retry cleanup. Existing copies are checked before restoration.",
       "cleanup_legacy": "The saved cleanup result uses an older format. The next nightly backup will confirm the result in the new format; existing copies remain available for verification and restoration.",
       "restore_cleanup_warning": "The data is restored, but cleanup of safety copies is incomplete. Check folder access and files held by other programs; the next restore will try again.",

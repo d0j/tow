@@ -1243,3 +1243,105 @@ def test_a_restore_keeps_this_installs_backup_folders(backup, tmp_path):
     restored = load_config()
     assert restored["backup_dir"] == str(tmp_path / "night here")
     assert "restore_points_dir" not in restored
+
+
+def test_a_copy_that_fails_its_check_and_cannot_be_renamed_back_is_not_left_as_a_copy(backup, monkeypatch):
+    """The rename back was inside contextlib.suppress: when it failed, the unverified copy stayed
+    under its copy name, signed - listed, offered for restore and counted as a kept copy."""
+    import tow.snapshots
+
+    _clock(monkeypatch, [f"20261001-0000{n:02d}" for n in range(10)])
+    for _ in range(3):
+        create_snapshot()
+    real_rename = tow.snapshots._rename_with_retry
+
+    def held(source, target, **kwargs):
+        if source.name.startswith("tow-"):  # back to its partial name: a file in it is held
+            raise PermissionError(13, "Access is denied")
+        real_rename(source, target, **kwargs)
+
+    def unreadable(_path, **_kwargs):
+        raise SnapshotError("file damaged in the copy: state.json")
+
+    monkeypatch.setattr(tow.snapshots, "_rename_with_retry", held)
+    monkeypatch.setattr(tow.snapshots, "verify_snapshot", unreadable)
+    with pytest.raises(SnapshotError):
+        create_snapshot()
+
+    assert "tow-20261001-000003" not in {item["name"] for item in list_snapshots()}
+    assert not (backup / "tow-20261001-000003" / "MANIFEST.json").exists()
+
+
+def test_one_damaged_copy_does_not_stop_the_pruning_of_the_others(backup, monkeypatch):
+    _clock(monkeypatch, [f"20261001-0000{n:02d}" for n in range(10)])
+    cfg = load_config()
+    cfg["backup_keep"] = 10
+    save_config(cfg)
+    for _ in range(4):
+        create_snapshot()
+    (backup / "tow-20261001-000003" / "restore-points").write_text("not a folder", encoding="utf-8")
+    cfg["backup_keep"] = 2
+    save_config(cfg)
+
+    result = create_snapshot()
+
+    kept = sorted(p.name for p in backup.iterdir())
+    # pruned although another copy is damaged; the damaged one is left alone and said
+    assert kept == ["tow-20261001-000002", "tow-20261001-000003", "tow-20261001-000004"]
+    assert "cleanup_warning" in result
+
+
+def test_copies_over_the_size_limit_are_not_blamed_on_folder_access(backup, monkeypatch):
+    from tow.log import log_path
+    from tow.snapshots import status
+
+    cfg = load_config()
+    cfg.pop("backup_keep")
+    cfg["backup_max_mib"] = 1
+    save_config(cfg)
+    log_path().parent.mkdir(parents=True, exist_ok=True)
+    with log_path().open("ab") as handle:  # the event log is copied too: the copy is over 1 MB
+        handle.write(b"{}\n" * 600_000)
+
+    result = create_snapshot()
+
+    assert "cleanup_warning" not in result
+    assert result["budget_warning"] == t("backup.snapshot.over_budget", "ru", limit=1)
+    assert status()["last_cleanup_pending"] is False
+
+
+def test_a_restore_that_died_before_its_marker_leaves_no_folder_for_ever(backup, monkeypatch):
+    """A crash after the journal but before the marker left a "prepared" before-restore folder
+    that nothing would ever recover or remove; a crash during a write left a temporary file that
+    kept the folder from being recognized and removed."""
+    import tow.snapshots
+
+    snapshot = Path(create_snapshot()["snapshot"])
+
+    class Crash(BaseException):  # the process dies: no except clause runs
+        pass
+
+    real = tow.snapshots.atomic_write_bytes
+
+    def dies_at_the_marker(path, content):
+        if Path(path).name == tow.snapshots._MARKER:
+            raise Crash()
+        real(path, content)
+
+    monkeypatch.setattr(tow.snapshots, "atomic_write_bytes", dies_at_the_marker)
+    with pytest.raises(Crash):
+        restore_snapshot(snapshot, apply=True)
+    monkeypatch.setattr(tow.snapshots, "atomic_write_bytes", real)
+    (prepared,) = data_dir().glob("before-restore-*")
+    assert json.loads((prepared / "RESTORE.json").read_text(encoding="utf-8"))["status"] == "prepared"
+    unjournaled = data_dir() / "before-restore-20260101-000000"  # died while copying a store
+    unjournaled.mkdir()
+    (unjournaled / "state.json").write_text("{}", encoding="utf-8")
+    (unjournaled / ".secrets.enc.k2j4x9_a.tmp").write_bytes(b"half")
+
+    result = restore_snapshot(snapshot, apply=True)
+
+    assert not prepared.exists()
+    assert not unjournaled.exists()
+    assert "cleanup_warning" not in result
+    assert len(list(data_dir().glob("before-restore-*"))) == 1  # this restore's own

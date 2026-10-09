@@ -634,12 +634,10 @@ def _create_snapshot(*, how: str, proven: dict[str, str] | None = None) -> dict[
     except SnapshotError as exc:
         # Never listed, restored or counted for retention: back to a partial folder, removed
         # now (or by the next copy when the folder cannot be read right now).
-        with contextlib.suppress(OSError):
-            _rename_with_retry(target, partial)
-            _remove_stale_partials(root, key)
+        _withdraw_unverified(target, partial, root, key, {"MANIFEST.json", *files})
         raise SnapshotError(t("backup.snapshot.unverified", owner_language(), name=target.name, reason=exc)) from exc
     # Never the copy just verified, even when the clock went back and it does not sort last.
-    pruned, cleanup_pending = _prune_night_copies(root, target, key, policy)
+    pruned, cleanup_pending, over_budget = _prune_night_copies(root, target, key, policy)
     cleanup_pending = cleanup_pending or stale_pending
     size = sum(item["size"] for item in files.values())
     log_event(
@@ -649,6 +647,7 @@ def _create_snapshot(*, how: str, proven: dict[str, str] | None = None) -> dict[
         bytes=size,
         pruned=len(pruned),
         cleanup_pending=cleanup_pending,
+        over_budget=over_budget,
         missing=missing,
         how=how,
     )
@@ -663,7 +662,26 @@ def _create_snapshot(*, how: str, proven: dict[str, str] | None = None) -> dict[
     if cleanup_pending:
         result["cleanup_warning"] = t("backup.snapshot.cleanup_warning", owner_language())
         log_event("backup_cleanup_pending", copy_kind="night", how=how)
+    if over_budget:
+        result["over_budget_mib"] = policy["max_mib"]
+        result["budget_warning"] = t("backup.snapshot.over_budget", owner_language(), limit=policy["max_mib"])
     return result
+
+
+def _withdraw_unverified(target: Path, partial: Path, root: Path, key: bytes, expected: set[str]) -> None:
+    """A copy that failed its read-back stops being a copy. Renamed back to its partial name
+    (the next copy removes a partial folder of ours), else removed, else at least without its
+    signed MANIFEST: still named as a copy, it would be listed, offered for restore and counted
+    as one of the copies kept, so an older good one could be pruned in its place."""
+    try:
+        _rename_with_retry(target, partial)
+    except OSError:
+        if not _remove_copy(target, root, "MANIFEST.json", expected):
+            with contextlib.suppress(OSError):
+                (target / "MANIFEST.json").unlink()
+        return
+    with contextlib.suppress(OSError):
+        _remove_stale_partials(root, key)
 
 
 def _partial_proof(folder: str, key: bytes) -> dict[str, Any]:
@@ -740,7 +758,11 @@ def _copy_disk_bytes(folder: Path) -> int:
     return total
 
 
-def _prune_night_copies(root: Path, target: Path, key: bytes, policy: dict[str, Any]) -> tuple[list[str], bool]:
+def _prune_night_copies(root: Path, target: Path, key: bytes, policy: dict[str, Any]) -> tuple[list[str], bool, bool]:
+    """(removed, cleanup pending, over budget): a copy that cannot be read is left alone and
+    makes cleanup pending, but the others are still pruned; the kept copies larger than the
+    size budget (only the new copy and future-dated ones are never removed) is said apart,
+    as no retry of the cleanup changes it."""
     removed: list[str] = []
     pending = False
     try:
@@ -748,20 +770,25 @@ def _prune_night_copies(root: Path, target: Path, key: bytes, policy: dict[str, 
         entries = []
         fixed = {name for name, _path in _fixed_members()}
         for folder in _snapshots(root):
-            manifest = _owned_manifest(folder, key)
-            if manifest is None or any(
-                name not in fixed and _POINT_MEMBER.fullmatch(name) is None for name in manifest["files"]
-            ):
-                continue
-            if _owned_tree(folder, {"MANIFEST.json", *manifest["files"]}):
-                created = copy_time(str(manifest["created_at"]))
-                entries.append((folder.name, created, _copy_disk_bytes(folder)))
-                if folder != target:
-                    others.append((folder, {"MANIFEST.json", *manifest["files"]}))
+            try:
+                manifest = _owned_manifest(folder, key)
+                if manifest is None or any(
+                    name not in fixed and _POINT_MEMBER.fullmatch(name) is None for name in manifest["files"]
+                ):
+                    continue
+                if _owned_tree(folder, {"MANIFEST.json", *manifest["files"]}):
+                    created = copy_time(str(manifest["created_at"]))
+                    entries.append((folder.name, created, _copy_disk_bytes(folder)))
+                    if folder != target:
+                        others.append((folder, {"MANIFEST.json", *manifest["files"]}))
+            except OSError, ValueError, TypeError, KeyError, OverflowError, SnapshotError:
+                if folder == target:
+                    raise
+                pending = True  # one damaged copy: kept, and the others are still pruned
         anchor = next((when for name, when, _size in entries if name == target.name), None)
         if anchor is None:
-            return [], True  # the verified new copy no longer proves ownership; retain older copies
-        retained, pending = retained_copies(entries, newest=target.name, now=anchor, policy=policy)
+            return [], True, False  # the verified new copy no longer proves ownership; retain older copies
+        retained, over_budget = retained_copies(entries, newest=target.name, now=anchor, policy=policy)
         for folder, expected in others:
             if folder.name in retained:
                 continue
@@ -770,8 +797,8 @@ def _prune_night_copies(root: Path, target: Path, key: bytes, policy: dict[str, 
             else:
                 pending = True
     except OSError, ValueError, TypeError, KeyError, OverflowError, SnapshotError:
-        pending = True  # the new verified copy is usable even when cleanup cannot be checked
-    return removed, pending
+        return removed, True, False  # the new verified copy is usable even when cleanup cannot be checked
+    return removed, pending, over_budget
 
 
 def _owned_tree(folder: Path, expected: set[str]) -> bool:
@@ -1300,6 +1327,27 @@ def _copy_members_in(folder: Path) -> set[str]:
     return names
 
 
+# A file atomic_write_bytes was writing when the process died: ``.<name>.<random>.tmp``.
+_WRITE_LEFTOVER = re.compile(r"\.(?P<name>.+)\.[A-Za-z0-9_]+\.tmp")
+
+
+def _remove_write_leftovers(folder: Path) -> None:
+    """The half-written files a crash left in a before-restore folder (of its stores, its
+    journal or its restore points): with them it was never removed, as a folder with files of
+    unknown names is never swept up."""
+    known = {name for name, _path in _fixed_members()} | {_JOURNAL}
+    for parent, prefix in ((folder, ""), (folder / "restore-points", "restore-points/")):
+        if not _ordinary_directory(parent, missing=True):
+            continue
+        for path in parent.iterdir():
+            match = _WRITE_LEFTOVER.fullmatch(path.name)
+            if match is None:
+                continue
+            name = prefix + match["name"]
+            if (name in known or _POINT_MEMBER.fullmatch(name)) and _ordinary_file(path):
+                path.unlink()
+
+
 def _remove_unjournaled(folder: Path) -> bool:
     """A before-restore folder without a journal holds only copies of stores; nothing refers to it."""
     try:
@@ -1354,13 +1402,24 @@ def _prune_safety_copies(keep: int) -> tuple[list[str], bool]:
     except OSError:
         return [], True
     finished = []
+    removed = []
     pending = False
     for folder in folders:
         if folder.name == marked:
             continue
         try:
+            _remove_write_leftovers(folder)
             journal = _read_journal(folder)
-            if journal["status"] == "prepared" or not _owned_safety(folder, journal):
+            if journal["status"] == "prepared":
+                # Named by no marker, under the data lock: its restore stopped before the marker
+                # was written, so before any live write, and nothing refers to it.
+                expected = {_JOURNAL, *(entry["name"] for entry in journal["entries"] if entry["existed"])}
+                if _owned_safety(folder, journal) and _remove_copy(folder, data_dir(), _JOURNAL, expected):
+                    removed.append(folder.name)
+                else:
+                    pending = True
+                continue
+            if not _owned_safety(folder, journal):
                 continue
         except FileNotFoundError:
             # No journal: its restore stopped before the marker (so before any live write).
@@ -1377,7 +1436,6 @@ def _prune_safety_copies(keep: int) -> tuple[list[str], bool]:
                 pending = True
         except OSError, ValueError:
             pending = True
-    removed = []
     for folder, expected in finished[: max(0, len(finished) - keep)]:
         if _remove_copy(folder, data_dir(), _JOURNAL, expected):
             removed.append(folder.name)
