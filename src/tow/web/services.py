@@ -212,6 +212,12 @@ def _content_source(url: str, client_id: str) -> tuple[dict[str, Any], str, str,
     return cfg, url, str(client["id"]), tracker
 
 
+def _user_agent(cfg: dict[str, Any]) -> str | None:
+    """config.yaml's ``user_agent``; None lets the HTTP client send TOW's browser string, as a check does."""
+    value = cfg.get("user_agent")
+    return value if isinstance(value, str) and value.strip() else None
+
+
 def prepare_content(
     url: str, client_id: str, blob: bytes | None, allow_limited: bool, *, fresh: bool = False
 ) -> dict[str, object]:
@@ -231,7 +237,8 @@ def prepare_content(
             raise TowError("content.limited")
         # An explicit preparation is a normal tracker action, not dry-run: sign-in and
         # mirror state must work just as they do during a normal check.
-        blob = tracker.fetch_torrent(url, load_secrets(), str(cfg.get("user_agent") or "TOW"), persist=True)
+        # The User-Agent of a check: the configured one, else TOW's browser string (None).
+        blob = tracker.fetch_torrent(url, load_secrets(), _user_agent(cfg), persist=True)
     # A local file is not evidence of the topic: it only previews contents, is never saved as
     # the topic's metadata and never becomes its revision (content.site_revision).
     result = content.prepare(blob, url, client_id, from_site=not local)
@@ -275,7 +282,7 @@ def prepare_magnet_content(url: str, client_id: str) -> dict[str, object]:
     if not _MAGNET_PREVIEWS.acquire(blocking=False):
         raise TowError("content.magnet_busy")
     try:
-        magnet, identity = tracker.fetch_magnet(url, secrets, str(cfg.get("user_agent") or "TOW"), persist=True)
+        magnet, identity = tracker.fetch_magnet(url, secrets, _user_agent(cfg), persist=True)
         hashes = parse_magnet_hashes(magnet)
         if hashes is None or identity.upper() not in hashes[0] | hashes[1]:
             raise TowError("content.magnet_failed")
