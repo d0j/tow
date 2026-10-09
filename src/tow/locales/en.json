@@ -444,7 +444,7 @@
       "setup": "rebuild the environment: a command of the launcher, not of this environment",
       "update": "how to update this install to a release",
       "update_long": "An update replaces this very environment, so it does not run from here: this command prints what runs it (the install's base Python with app/scripts/update.py, deploy.ps1 in a git clone on Windows, or the update file in the TOW folder for an install without git). The update stops TOW, keeps a snapshot of data/ and config.yaml, installs the release, starts TOW and goes back by itself if anything fails.",
-      "update_ref": "the release tag, for example v1.21.0",
+      "update_ref": "the release tag, for example v1.22.0; an install without git also takes latest",
       "keys_ensure": "create the master key on a new install (nothing happens when one is in use)",
       "autostart": "start TOW with the computer (Task Scheduler, systemd, launchd)",
       "autostart_action": "on, off or status (“migrate” of 1.18–1.20 only points to the documentation)",

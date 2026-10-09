@@ -102,6 +102,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A site's daily download limit ends early only when a check by hand really reached the site: "Check" on a torrent
   waiting for disk space, or one whose site did not answer, ended the limit, and the next scheduled checks asked the
   site again the same day.
+- The help of `tow update --ref` gives v1.22.0 as its example and says that an install without git also takes
+  `latest`: its example, v1.21.0, was a tag such an install refuses.
 - The help of `tow watchdog` and the guides say what it does: one watchdog pass, as `tow run` makes every 10
   minutes, whose alerts go to the messengers too. They called it a diagnostic that changes nothing.
 - `tow export` says that the file already exists before it asks for the passphrase twice; `tow import` says that

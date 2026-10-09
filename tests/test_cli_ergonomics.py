@@ -219,3 +219,14 @@ def test_the_console_writes_utf8_when_redirected_or_on_a_code_page(monkeypatch, 
     assert out.encoding.lower() == becomes
     if becomes == "utf-8":
         out.write("TOW — проверка")  # the em dash and Russian no longer fail
+
+
+@pytest.mark.parametrize("language", ["en", "ru"])
+def test_the_update_help_gives_an_example_every_install_accepts(language):
+    # "for example v1.21.0": `tow update` itself refuses that tag on an install without git.
+    from tow.i18n import t
+
+    found = re.search(r"v(\d+)\.(\d+)\.(\d+)", t("cli.help.update_ref", language))
+    assert found
+    assert tuple(int(part) for part in found.groups()) >= (1, 22, 0)
+    assert "latest" in t("cli.help.update_ref", language)
