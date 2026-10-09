@@ -156,4 +156,9 @@ def site_name(url: object) -> Any:
 def tracker_of(url: object) -> GenericHttpTracker | None:
     """The site ``url`` belongs to (``match_tracker`` over this request's sites)."""
     name = site_name(url)
-    return None if name is None else trackers()[name]
+    sites = trackers()
+    if name is None or name in sites:
+        return None if name is None else sites[name]
+    # The sites changed between this request's two reads of them (a site renamed or deleted
+    # meanwhile, which starts a new request context): asked again of the sites it has now.
+    return match_tracker(sites, url)  # type: ignore[arg-type]  # site_name took only a str to a name
