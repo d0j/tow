@@ -37,6 +37,8 @@ PURE: dict[str, set[str]] = {
         "password_hint",
         "with_hint",
     },
+    # network_bind: the address network access listens on, from the configured one; no I/O.
+    "tow.bind": {"network_bind"},
     "tow.bundle": {"MAX_BUNDLE_BYTES"},
     "tow.check": {"blocked_by_previous_revision"},
     # The client list in the configuration (a dict): read and changed in memory, saved by the route.

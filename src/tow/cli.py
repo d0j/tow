@@ -1217,6 +1217,7 @@ def _cmd_access(args: argparse.Namespace) -> int:
 
     from tow import access, store_transaction
     from tow.auth import AuthConfigurationError
+    from tow.bind import network_bind
     from tow.config import as_bool, load_config
     from tow.i18n import t
     from tow.log import log_event
@@ -1237,7 +1238,8 @@ def _cmd_access(args: argparse.Namespace) -> int:
             log_event("settings_password", changed="password", hint=bool(record.get("hint")), where="cli", how="manual")
         with persistence_lock():
             cfg = copy.deepcopy(load_config())
-            cfg.update(allow_lan=enabled, bind="0.0.0.0" if enabled else "127.0.0.1", setup_done=True)
+            bind = network_bind(cfg.get("bind")) if enabled else "127.0.0.1"
+            cfg.update(allow_lan=enabled, bind=bind, setup_done=True)
             store_transaction.commit(config=cfg)
     except (AuthConfigurationError, SecretStoreError, store_transaction.TransactionError) as exc:
         _print({"ok": False, "error": str(exc)}, args.json)

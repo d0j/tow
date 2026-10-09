@@ -21,6 +21,14 @@ def is_loopback_bind(host: str | None) -> bool:
         return False
 
 
+def network_bind(current: str | None) -> str:
+    """The address to listen on when network access is turned on: a specific address written in
+    config.yaml (one network card, ``192.168.1.5``) stays; this computer only becomes every
+    address (``0.0.0.0``)."""
+    value = resolve_bind(current)
+    return "0.0.0.0" if is_loopback_bind(value) else value
+
+
 def validate_bind(host: str | None, *, allow_lan: bool = False) -> str:
     """The address to listen on; a ConfigError (a ValueError, in the owner's language) when it
     opens TOW to the network while network access is off."""

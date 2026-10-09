@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from tow import access, i18n, store_transaction, undo
 from tow.auth import MAX_HINT_LENGTH, password_hint
+from tow.bind import network_bind
 from tow.clock import format_ui_timestamp
 from tow.config import (
     INTERVAL_MAX_MINUTES,
@@ -307,7 +308,7 @@ def settings_access(allow_lan: str = Form("")) -> Response:
         if not access.password_is_set(existing_secrets):
             return flash_redirect("/settings?open=access", "web.settings.set_password_first", "warn")
     cfg["allow_lan"] = enabled
-    cfg["bind"] = "0.0.0.0" if enabled else "127.0.0.1"
+    cfg["bind"] = network_bind(old_bind) if enabled else "127.0.0.1"
     state = services.load_state()
 
     def write(txn: StoreTransaction) -> None:
