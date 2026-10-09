@@ -32,6 +32,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Settings → Checks says that a new global timer applies within a minute and counts from the last check. The Guide's
   list of what Settings holds names the language and updates too, and `config.example.yaml` gives the real range
   of the Undo time (Settings: 1–30 minutes) and of the download history limits.
+- Settings → Torrent clients keeps a password exactly as typed: spaces at its ends were cut off, and the client then
+  refused a password that was typed correctly. An empty field still keeps the saved password.
 
 ## [1.28.2] — 2026-10-09
 

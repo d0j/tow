@@ -397,8 +397,8 @@ def settings_client(
     q["host"] = host.strip()
     q["port"] = port_number
     q["username"] = username.strip()
-    if password.strip():
-        q["password"] = password.strip()
+    if password.strip():  # empty keeps the saved one; a typed one is kept as typed, spaces included
+        q["password"] = password
     secret_scope = (
         ["clients", str(configuration.get("secrets_ref") or configuration["id"])]
         if cfg.get("clients")
