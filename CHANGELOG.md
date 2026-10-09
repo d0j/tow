@@ -26,6 +26,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Choosing the files of a topic (and a magnet preview) asks the site with the same User-Agent as a check: the one
   in `config.yaml`, else TOW's browser string. Without `user_agent` it said only "TOW", which a site may refuse
   while its checks work.
+- When `config.yaml` has a `bind` that opens TOW to other devices while `allow_lan` is off, TOW says so in the
+  chosen language and names the way out (`tow access on`, or `bind: 127.0.0.1`); a Russian start line carried an
+  English sentence that pointed to Settings, which could not open.
 
 ## [1.28.2] — 2026-10-09
 

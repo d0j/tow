@@ -22,9 +22,13 @@ def is_loopback_bind(host: str | None) -> bool:
 
 
 def validate_bind(host: str | None, *, allow_lan: bool = False) -> str:
+    """The address to listen on; a ConfigError (a ValueError, in the owner's language) when it
+    opens TOW to the network while network access is off."""
+    from tow.config import ConfigError
+
     value = resolve_bind(host)
     if not allow_lan and not is_loopback_bind(value):
-        raise ValueError("a non-loopback bind requires allow_lan: true (Settings -> network access)")
+        raise ConfigError("config_error.bind_needs_network", bind=value)
     return value
 
 
