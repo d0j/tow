@@ -205,6 +205,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   list and was never seen.
 - The latest event on Home and in the download history starts with a capital letter when TOW words it ("Files", not
   "files"); a file's name is shown as it is.
+- The sign-in page of another device opens with the cursor in the password field, also after a wrong password.
 
 ## [1.28.2] — 2026-10-09
 
