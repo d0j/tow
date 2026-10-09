@@ -23,6 +23,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Settings → Language and Theme: a language TOW does not have (such as one whose file was removed while the page
   stayed open) or a theme other than the three offered is refused with a message instead of being saved as
   automatic with "language saved" or "theme saved".
+- Choosing the files of a topic (and a magnet preview) asks the site with the same User-Agent as a check: the one
+  in `config.yaml`, else TOW's browser string. Without `user_agent` it said only "TOW", which a site may refuse
+  while its checks work.
 
 ## [1.28.2] — 2026-10-09
 

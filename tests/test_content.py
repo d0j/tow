@@ -664,3 +664,27 @@ def test_add_and_edit_read_the_prepared_torrent_once(monkeypatch):
     client.post(f"/topics/{saved['id']}/edit", data={**form, "content_token": token, "selection_indices": "[0]"})
     assert load_state()["topics"][0]["selection"]["files"] == [{"path": FILES[0].path, "size": 100}]
     assert len(reads) == 2, "one decryption per submitted form"
+
+
+@pytest.mark.parametrize(("configured", "sent"), [(None, None), ("Agent/1.0", "Agent/1.0")])
+def test_preparing_contents_sends_the_same_user_agent_as_a_check(monkeypatch, configured, sent):
+    """Without user_agent in config.yaml a check sends TOW's browser string (the client's
+    default); the contents of a topic were fetched as "TOW", which a site may refuse."""
+    from types import SimpleNamespace
+
+    from tow import trackers
+
+    agents = []
+    tracker = SimpleNamespace(
+        name="fixture", spec={}, fetch_torrent=lambda _url, _secrets, ua, **_kw: agents.append(ua) or blob()
+    )
+    cfg = {"clients": [{"id": "main", "kind": "qbittorrent", "default": True}]}
+    if configured:
+        cfg["user_agent"] = configured
+    monkeypatch.setattr(services, "load_config", lambda: cfg)
+    monkeypatch.setattr(trackers, "load_trackers", lambda *_args: {"fixture": tracker})
+    monkeypatch.setattr(trackers, "match_tracker", lambda *_args: tracker)
+
+    services.prepare_content(URL, "main", None, False, fresh=True)
+
+    assert agents == [sent]
