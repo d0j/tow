@@ -105,6 +105,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - `tow secrets generate-key --key-file` names the whole path of the key it wrote (a relative name is the
   terminal's folder), and its help says that it writes such a file also while passwords and tokens are saved;
   only keys/master.key is refused then.
+- `tow secrets generate-key --key-file` and `tow export --output` name the whole path of the file they wrote (a
+  relative name is the terminal's folder), and the help of generate-key says that it writes such a file also while
+  passwords and tokens are saved; only keys/master.key is refused then.
 - The help of `tow update --ref` gives v1.22.0 as its example and says that an install without git also takes
   `latest`: its example, v1.21.0, was a tag such an install refuses.
 - The help of `tow watchdog` and the guides say what it does: one watchdog pass, as `tow run` makes every 10

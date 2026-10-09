@@ -714,6 +714,13 @@ def test_a_key_file_given_relative_is_named_by_its_whole_path(monkeypatch, capsy
     assert capsys.readouterr().out.strip() == t("cli.keys.generated", path=tmp_path / "rel.key")
 
 
+def test_an_export_given_relative_is_named_by_its_whole_path(monkeypatch, capsys, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    _passphrases(monkeypatch, "correct horse battery", "correct horse battery")
+    assert cli.main(["export", "--output", "rel.towx", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["output"] == str(tmp_path / "rel.towx")
+
+
 def test_secrets_migrate_encrypts_legacy_secrets_without_printing_them(monkeypatch, capsys):
     from tow.paths import secrets_path
     from tow.store import load_secrets
