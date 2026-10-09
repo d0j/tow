@@ -961,6 +961,7 @@
       "last_error_at": "Last error ({at}): {error}",
       "replace_confirm": "Stop the previous version of this torrent in the torrent client (its files stay) and add the new one?",
       "replace": "Stop the previous one and add",
+      "sign_in": "Sign in to the site",
       "adopt": "Adopt into TOW",
       "adopt_confirm": "Mark this torrent in the torrent client as TOW's (the tag or label tow)? Its files, folder, file selection and state stay as they are; from the next check on TOW manages it like a torrent it added.",
       "summary": "Current selection: {selection}; mode: {mode}{done}.",
