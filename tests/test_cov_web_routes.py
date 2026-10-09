@@ -1620,7 +1620,7 @@ def test_untrusted_site_journal_blocks_requests_without_touching_stores(client, 
     response = client.get("/healthz")
 
     assert response.status_code == 503
-    assert "recovery unavailable" in response.text
+    assert response.text == "TOW не может откатить прерванное изменение сайта; попробуйте позже"
     assert load_config() == changed  # nothing was half-restored from an untrusted journal
     assert root.exists()
 

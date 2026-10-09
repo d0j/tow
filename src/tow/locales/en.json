@@ -2384,7 +2384,16 @@
       "saved_sign_in_again": "Password saved. Sign in again on this device: TOW could not write its sign-in file data/sessions.json.",
       "sign_out_failed": "No device was signed out: TOW could not write its sign-in file data/sessions.json. Check that TOW's data can be changed, then try again."
     },
-    "network_closed": "TOW is open only on the computer it runs on: access from other devices is turned off."
+    "network_closed": "TOW is open only on the computer it runs on: access from other devices is turned off.",
+    "refused": {
+      "untrusted_host": "untrusted host",
+      "length_required": "content length required",
+      "upload_too_large": "upload too large",
+      "request_too_large": "request too large",
+      "unsupported_media": "unsupported media type",
+      "forbidden": "forbidden",
+      "recovery_unavailable": "TOW site transaction recovery unavailable"
+    }
   },
   "site": {
     "nnmclub": {

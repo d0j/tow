@@ -78,7 +78,49 @@ def test_internet_peers_are_refused_whatever_the_host_header_says(lan_config, pe
     response = TestClient(app, client=(peer, 50000)).get("/healthz", headers={"Host": "192.168.1.2:8787"})
     assert (response.status_code == 200) is allowed, (response.status_code, response.text)
     if not allowed:
-        assert response.text == "untrusted host"
+        assert response.text == "TOW не отвечает по этому адресу (untrusted host)"  # the request's language
+
+
+@pytest.mark.parametrize("language", ["en", "ru"])
+def test_refusals_before_any_page_are_said_in_the_requests_language(monkeypatch, language):
+    """They were plain English in every language. The English words stay: README and the install
+    guides quote "untrusted host"."""
+    from tow.i18n import t
+
+    monkeypatch.setattr("tow.web.services.load_config", lambda: {"bind": "127.0.0.1", "language": language})
+    local = TestClient(app, client=("127.0.0.1", 50000))
+    foreign = local.get("/healthz", headers={"Host": "evil.example:8787"})
+    chunked = local.post("/check", headers={"Origin": "http://127.0.0.1", "Transfer-Encoding": "chunked"}, content=b"")
+    too_large = local.post("/check", headers={"Origin": "http://127.0.0.1", "Content-Length": str(10**9)})
+    as_json = local.post("/login", json={"password": "x"}, headers={"Origin": "http://127.0.0.1"})
+    other_site = local.post("/check", headers={"Origin": "http://evil.example"})
+
+    said = {
+        403: [foreign.text, other_site.text],
+        411: [chunked.text],
+        413: [too_large.text],
+        415: [as_json.text],
+    }
+    assert [foreign.status_code, chunked.status_code, too_large.status_code, as_json.status_code] == [
+        403,
+        411,
+        413,
+        415,
+    ]
+    assert said == {
+        403: [t("web.refused.untrusted_host", language), t("web.refused.forbidden", language)],
+        411: [t("web.refused.length_required", language)],
+        413: [t("web.refused.request_too_large", language)],
+        415: [t("web.refused.unsupported_media", language)],
+    }
+    assert "untrusted host" in foreign.text
+    if language == "en":
+        assert said == {
+            403: ["untrusted host", "forbidden"],
+            411: ["content length required"],
+            413: ["request too large"],
+            415: ["unsupported media type"],
+        }
 
 
 def test_healthz_names_the_install_only_to_this_computer(lan_config):
