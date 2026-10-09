@@ -667,3 +667,30 @@ def test_update_status_localizes_only_known_reasons(monkeypatch, error):
     assert ("error_message" in result) is (error != "foreign-secret")
     if "error_message" in result:
         assert result["error_message"] != error
+
+
+def test_folders_of_earlier_updates_are_pruned_but_never_the_current_or_a_live_one(install, monkeypatch):
+    """Every web update left runtime/web-update/<id>/ (a copy of the updater, its log) for ever."""
+    import os
+
+    parent = install[0] / "runtime" / "web-update"
+    ids = [f"{index:032x}" for index in range(1, 8)]  # the oldest first
+    for age, job_id in enumerate(reversed(ids)):
+        folder = parent / job_id
+        folder.mkdir(parents=True)
+        (folder / "update.log").write_text("done\n", encoding="utf-8")
+        (folder / "worker.lock").write_bytes(b"\0")
+        os.utime(folder, (time.time() - 3600 * (age + 1),) * 2)
+    current, live = ids[0], ids[1]  # the oldest two: the job.json one and one still holding its lease
+    (parent / "job.json").write_text(
+        json.dumps({"id": current, "status": "failed", "started_at": 1, "finished_at": 2}), encoding="utf-8"
+    )
+    (parent / "notes").mkdir()  # not a job folder
+    real_lease = web_update._lease_active
+    monkeypatch.setattr(web_update, "_lease_active", lambda job_id: job_id == live or real_lease(job_id))
+
+    result = web_update.start("1.22.21")
+
+    left = {path.name for path in parent.iterdir() if path.is_dir()}
+    newest = set(ids[-web_update.JOB_FOLDERS_KEPT :])
+    assert left == {current, live, "notes", result["id"], *newest}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -24,6 +25,10 @@ from tow.restore_points import RestorePointError, create_restore_point
 from tow.store import StoreCorruptionError, atomic_write_bytes, decode_json_bytes, persistence_lock
 
 MINIMUM_WEB_VERSION = (1, 22, 21)
+# Folders of earlier web updates (their copied updater and update.log) kept besides the current
+# job's; older ones are removed when the next update starts.
+JOB_FOLDERS_KEPT = 3
+_JOB_ID = re.compile(r"[a-f0-9]{32}")
 _ACTIVE = frozenset({"queued", "preparing", "stopping", "backup", "installing", "checking", "rolling_back"})
 _TERMINAL = frozenset({"ok", "refused", "failed", "rolled_back", "recovered"})
 
@@ -242,6 +247,31 @@ def _recover_completed(job: dict[str, Any], updater: dict[str, Any], active: boo
     return {**job, "status": "recovered", "error": "", "finished_at": finished.timestamp()}
 
 
+def _prune_job_folders(current: str) -> None:
+    """The folders of earlier web updates beyond the newest ``JOB_FOLDERS_KEPT``: never the
+    ``current`` job's (job.json names it), never one whose worker still holds its lease, never
+    anything but a plain folder named like a job; one that cannot be removed now stays."""
+    import shutil
+
+    parent = _job_file().parent
+    folders = []
+    with contextlib.suppress(OSError):
+        for entry in parent.iterdir():
+            with contextlib.suppress(OSError):
+                if _JOB_ID.fullmatch(entry.name) and entry.name != current and platform.is_plain_dir(entry.lstat()):
+                    folders.append((entry.stat().st_mtime, entry))
+    folders.sort(reverse=True)
+    for _mtime, folder in folders[JOB_FOLDERS_KEPT:]:
+        try:
+            # A worker older than the lease has none: only the current job can still run then.
+            if (folder / "worker.lock").exists() and _lease_active(folder.name):
+                continue
+        except WebUpdateError:
+            continue  # not as a job folder looks: left alone
+        with contextlib.suppress(OSError):
+            shutil.rmtree(folder)
+
+
 def log_tail() -> str:
     job = _read(_job_file())
     _active(job)  # validate the stored identifier before using it in a filename
@@ -298,6 +328,7 @@ def start(version: str) -> dict[str, Any]:
         python = Path(getattr(sys, "_base_executable", sys.executable)).resolve()
         if not python.is_file() or python.is_relative_to(app / ".venv"):
             raise WebUpdateError("releases.no_python")
+        _prune_job_folders(str(old.get("id") or ""))
         # Archive creation is serialized with store writes and verified by export_bundle.
         try:
             safety = create_restore_point()

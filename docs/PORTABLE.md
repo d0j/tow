@@ -408,7 +408,8 @@ the archive does not contain it. Download a portable backup for moving to anothe
 copy alone does not protect against disk loss. Media files are never included or changed.
 
 The updater and its base Python run outside `app/` and `.venv/`, so replacing the environment or closing the
-web page does not stop the update. Its durable record and bounded redacted log live in `runtime/web-update/`.
+web page does not stop the update. Its durable record and bounded redacted log live in `runtime/web-update/`; the next update removes the
+folders of all but the three newest earlier jobs (never the current one, never one whose worker still runs).
 Normal web mutations are refused while the job is active. The existing updater stops TOW, creates and verifies
 an additional exact snapshot of `config.yaml` and persistent data in `backup/`, then switches code, synchronizes
 the locked environment and requires the correct version and readable data. A failed installation or health

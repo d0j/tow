@@ -317,6 +317,9 @@ def run_supervisor(deps: Deps | None = None) -> int:
     supervisor: Supervisor | None = None
     try:
         handlers = _logging()
+        # launchd appends what tow run prints to data/logs/launchd.log (tow.autostart.launchd)
+        # and never trims it: capped at each start like the other appended logs.
+        cap_log(layout.logs_dir() / "launchd.log", APPENDED_LOG_BYTES)
         supervisor = Supervisor(deps or default_deps(), python=_os.child_python())
         if deps is None:
             # Windows: a job object ends the web server with this process, however it ends.

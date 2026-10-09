@@ -820,3 +820,21 @@ def test_serve_with_a_parent_watches_it(monkeypatch):
     assert watched == [(4242, Server)]
     assert cli.main(["serve", "--port", "18998"]) == 0  # by hand: nothing to watch
     assert watched == [(4242, Server)]
+
+
+def test_launchds_log_is_capped_at_each_start(run_env, monkeypatch):
+    # launchd appends tow run's output to data/logs/launchd.log, which nothing ever trimmed.
+    from tow import supervisor
+
+    monkeypatch.setattr(supervisor, "APPENDED_LOG_BYTES", 100)
+    log = layout.logs_dir() / "launchd.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_bytes(b"old" * 40)
+    world = _world_that_stops_after(2)
+    deps = world.deps()
+    deps.sleep = world.sleep  # type: ignore[attr-defined]
+
+    assert run_supervisor(deps) == 0
+
+    assert log.with_name("launchd.log.1").read_bytes() == b"old" * 40
+    assert not log.exists()  # launchd opens a new one at the next start
