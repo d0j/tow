@@ -120,8 +120,13 @@ def _facts() -> dict[str, Any]:
         "topic_timers": active_policies(state),
         "timer_policies": all_policies(state),
         # A revision waits in its client for disk space (tow.check.space): the space pass runs.
+        # Not for a file selection changed in TOW meanwhile: the pass leaves it to the next check,
+        # and ran every 5 minutes for nothing but a client ping and a line in the log.
         "space_waiting": any(
-            isinstance(topic.get("waiting_space"), dict) and topic.get("waiting_space") and not topic.get("paused")
+            isinstance(topic.get("waiting_space"), dict)
+            and topic.get("waiting_space")
+            and not topic.get("paused")
+            and not topic.get("selection_dirty")
             for topic in topics_of(state)
         ),
     }
