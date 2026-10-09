@@ -21,6 +21,9 @@
 .app-version > a { color: var(--mut); text-decoration: none; }
 .app-version > a:hover, .app-version > a:focus-visible { text-decoration: underline; }
 .app-version.is-obstructing { visibility: hidden; pointer-events: none; }
+/* Room for the version at the end of every page: on a long list it stepped aside for the last row and
+   was never seen. border-box: a short page does not grow past the window for it. */
+body:has(> .app-version) { box-sizing: border-box; padding-bottom: 2.2rem; }
 .app-version .release-badge {
   color: var(--nav-fg-hi);
   background: var(--panel2);

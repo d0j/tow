@@ -201,6 +201,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   names what Diagnostics shows (the client, the sites, autostart), not "the running service".
 - The site sign-in window on Home, closed with Esc, no longer opens again when the page is reloaded, and the keyboard
   focus goes to the topic's row instead of staying on a field of the closed window.
+- The TOW version in the corner shows at the end of a long page too: it stepped aside for the last row of a long topic
+  list and was never seen.
 
 ## [1.28.2] — 2026-10-09
 
