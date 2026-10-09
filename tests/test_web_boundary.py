@@ -70,7 +70,18 @@ PURE: dict[str, set[str]] = {
     # Save folders: the one a form names and the recent ones kept in the state (a dict).
     "tow.folders": {"paths_equal", "recent_save_roots", "remember_save_root", "resolve_save_path"},
     "tow.guess": {"GuessError", "canon_watch_url", "guess_from_url"},
-    "tow.i18n": {"AUTO", "available", "canonical", "codes", "current", "setting", "t", "translate", "use"},
+    "tow.i18n": {
+        "AUTO",
+        "available",
+        "canonical",
+        "codes",
+        "current",
+        "for_request",
+        "setting",
+        "t",
+        "translate",
+        "use",
+    },
     # A backup folder's place and the reason it is refused, by its name only.
     "tow.locations": {"LOCATIONS", "is_network_share", "problem", "resolve"},
     "tow.log": {
