@@ -482,3 +482,39 @@ def test_a_host_header_that_is_more_than_a_host_and_port_is_refused(host):
 def test_any_real_port_is_a_host_and_port(host):
     response = TestClient(app, client=("127.0.0.1", 50000)).get("/healthz", headers={"Host": host})
     assert response.status_code == 200, response.status_code
+
+
+def test_a_device_on_the_network_is_told_in_words_when_access_is_off():
+    """Off works at once (the request is refused by the config, before a restart): a phone got
+    the bare "LAN access is disabled" in English."""
+    from tow.config import load_config, save_config
+    from tow.i18n import translate
+
+    cfg = load_config()
+    cfg["language"] = "auto"  # the visitor's language
+    save_config(cfg)
+    phone = TestClient(app, client=LAN, headers={"Host": "192.168.1.2:8787"})
+    for lang in ("en", "ru"):
+        response = phone.get("/", headers={"Accept-Language": lang})
+        assert response.status_code == 403
+        assert response.text == translate("web.network_closed", lang)
+
+
+def test_turning_network_access_off_says_it_works_at_once():
+    from helpers import flash_of
+
+    from tow.access import new_record
+    from tow.config import load_config, save_config
+    from tow.store import load_secrets, save_secrets
+
+    save_secrets({**load_secrets(), "lan_auth": new_record("correct horse battery", "correct horse battery")})
+    cfg = load_config()
+    cfg.update(allow_lan=True, bind="0.0.0.0")
+    save_config(cfg)
+    local = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+
+    closed = local.post("/settings/access", data={"allow_lan": ""}, follow_redirects=False)
+
+    assert flash_of(closed.headers["location"]) == "доступ сохранён: другим устройствам TOW отказывает уже сейчас"
+    opened = local.post("/settings/access", data={"allow_lan": "1"}, follow_redirects=False)
+    assert "перезапустите TOW" in flash_of(opened.headers["location"])

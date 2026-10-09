@@ -283,7 +283,7 @@ Settings → **Version and updates**; the version in the corner of every page op
 - On the computer running TOW, it opens **without a password**.
 - Other devices (a phone, a laptop, over a VPN) can sign in only with the **password**, and only after network access
   is turned on (Settings → Network access, or `tow access on`, which asks for a password when none is set; it takes
-  effect after a restart; `tow access off` closes it again). A device stays
+  effect after a restart; `tow access off` closes it again, at once). A device stays
   signed in for 90 days. Open TOW there by the computer's IP address, its plain name or `name.local`
   ([Remote access](../README.md#remote-access)).
 - The password has at least 8 characters. After 5 wrong passwords in 10 minutes a device has to wait 30 seconds,
@@ -352,7 +352,7 @@ every one. The others:
 | `tow doctor --notify` | asks the torrent client and the sites, and sends the report to the messengers too |
 | `tow watchdog` | is TOW up and are the checks running (a diagnostic; it changes nothing) |
 | `tow backup` | makes a nightly backup now (as **Back up now** does) |
-| `tow access status` | whether network access is on; `on` / `off` change it after `tow restart` |
+| `tow access status` | whether network access is on; `on` opens it after `tow restart`, `off` closes it at once |
 | `tow export --output FILE` | the settings, topics, history, passwords and tokens in one file protected by a passphrase; `--include-log` adds the log, `--force` replaces an existing file |
 | `tow import --input FILE` | a preview of restoring that file; `--apply` restores it; `--path-map OLD=NEW` changes the start of the topics' folders (another computer; can be given several times) |
 | `tow import-rollback --checkpoint FOLDER` | puts back what an import replaced (a preview unless `--apply`) |

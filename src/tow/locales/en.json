@@ -472,7 +472,7 @@
     },
     "access": {
       "on": "Access from other devices is on (with the password).",
-      "off": "Access from other devices is off: TOW opens on this computer only.",
+      "off": "Access from other devices is off: TOW opens on this computer only. It takes effect at once.",
       "restart": "It takes effect after `tow restart`."
     },
     "adopt": {
@@ -1634,7 +1634,7 @@
       "intro": "On this computer TOW opens without a password. From other devices — a phone, a laptop, through Tailscale — only with a password; a device stays signed in for 90 days, even after TOW restarts. After a password change every device has to sign in again.",
       "legend": "Access from other devices",
       "allow": "Open TOW from other devices (with a password)",
-      "allow_hint": "Takes effect after TOW restarts.",
+      "allow_hint": "Turning it on takes effect after TOW restarts; turning it off works at once.",
       "new_password": "New password",
       "password": "Password",
       "min8": "At least 8 characters",
@@ -2266,7 +2266,8 @@
       "ping_login": "the client did not accept the user name or password",
       "ping_unreachable": "the client does not answer at this address and port, or its web interface is off",
       "point_created": "restore point created",
-      "file_other_key_next": "Copy keys/master.key of the TOW that made the file into the keys folder of this TOW and try again, or move the data with a passphrase instead: tow export on that computer, tow import here."
+      "file_other_key_next": "Copy keys/master.key of the TOW that made the file into the keys folder of this TOW and try again, or move the data with a passphrase instead: tow export on that computer, tow import here.",
+      "access_closed": "access saved: other devices are refused from now on"
     },
     "sites": {
       "login_saved": "sign-in saved",
@@ -2302,7 +2303,8 @@
       "signed_out": "every other device has been signed out; they need the password to come back",
       "saved_sign_in_again": "Password saved. Sign in again on this device: TOW could not write its sign-in file data/sessions.json.",
       "sign_out_failed": "No device was signed out: TOW could not write its sign-in file data/sessions.json. Check that TOW's data can be changed, then try again."
-    }
+    },
+    "network_closed": "TOW is open only on the computer it runs on: access from other devices is turned off."
   },
   "site": {
     "nnmclub": {

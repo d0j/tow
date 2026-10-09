@@ -180,7 +180,9 @@ def test_access_on_asks_for_a_password_when_none_is_set(monkeypatch, capsys):
     cfg = load_config()
     assert (cfg["allow_lan"], cfg["bind"]) == (True, "0.0.0.0")
     assert access.password_is_set(load_secrets())
+    assert "tow restart" in capsys.readouterr().out  # on needs the server to listen anew
     assert cli.main(["access", "off"]) == 0
+    assert "tow restart" not in capsys.readouterr().out  # off works at once
     cfg = load_config()
     assert (cfg["allow_lan"], cfg["bind"]) == (False, "127.0.0.1")
     assert access.password_is_set(load_secrets())  # off keeps the password
