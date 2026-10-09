@@ -181,6 +181,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The "Undo" button in a message belongs to the action of that message only. A check right after a save, a pause
   right after an edit or a mirror chosen right after a change of the site showed "Undo" too, and it put back the
   earlier change; that undo now stays in the header, where its tooltip says what it puts back.
+- When TOW's data files cannot be read, the page that says so is readable in Russian too: it was sent without its
+  character set, and a browser showed mojibake.
 
 ## [1.28.2] — 2026-10-09
 
