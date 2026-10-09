@@ -155,6 +155,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   tag says so and that nothing was updated, instead of git's own message alone ("fatal: Needed a single revision").
 - A restart asked in Settings → TOW service while TOW was stopping (a check finishing first), or cut off by a stop
   before the new web server answered, is shown as failed, no longer as "queued" or "starting" for good.
+- `data/logs/run-stderr.log`, which every start through the start files or `tow start` adds to, no longer grows
+  without end: at 5 MiB it becomes `run-stderr.log.1` (the older one goes), as `serve-stderr.log` does.
 
 ## [1.28.2] — 2026-10-09
 

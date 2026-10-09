@@ -211,6 +211,27 @@ def test_a_tow_run_that_ended_says_why_in_the_window(monkeypatch, capsys):
     assert starter.output_since(10**9) == []
 
 
+def test_the_start_log_is_capped_and_a_new_start_still_says_why(monkeypatch, capsys):
+    # run-stderr.log took every start's output and was never capped.
+    from tow import supervisor
+
+    monkeypatch.setattr(supervisor, "APPENDED_LOG_BYTES", 64)
+    log = starter.stderr_log()
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text("an earlier start\n" * 10, encoding="utf-8")
+
+    def ended(port, *, wait, browser):
+        with log.open("a", encoding="utf-8") as handle:
+            handle.write("TOW is not started: port 8787 is already in use by another program.\n")
+        return {"ok": False, "state": "exited", "url": "", "pid": 1, "browser": False}
+
+    monkeypatch.setattr(starter, "start", ended)
+    assert cli.main(["start"]) == 3
+    assert "port 8787 is already in use by another program" in capsys.readouterr().out
+    assert log.with_name("run-stderr.log.1").read_text(encoding="utf-8") == "an earlier start\n" * 10
+    assert "an earlier start" not in log.read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize("key", ["supervisor.port_busy", "supervisor.port_busy_tow"])
 @pytest.mark.parametrize("lang", ["en", "ru"])
 def test_a_taken_port_is_said_once(monkeypatch, capsys, key, lang):

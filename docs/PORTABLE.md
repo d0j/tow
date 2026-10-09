@@ -807,7 +807,8 @@ environment and Python 3.11 syntax.
 - `tow start` (1.22, `tow.supervisor.starter`): when this install's `tow run` runs, only the
   page opens; otherwise `python -m tow run` (`pythonw.exe` on Windows) starts detached and
   hidden (`platform.spawn_detached`: it outlives the window or terminal; its early output goes
-  to `data/logs/run-stderr.log`), and the page opens once `/healthz` answers as this install
+  to `data/logs/run-stderr.log`, which a start finding it at 5 MiB moves to `run-stderr.log.1`),
+  and the page opens once `/healthz` answers as this install
   (`--wait`, 120 s; another TOW folder on the same port does not count).
   A `tow run` that ends before it answers (another program on the port, a broken config) is
   reported at once with the log - unless another `tow run` took over meanwhile.

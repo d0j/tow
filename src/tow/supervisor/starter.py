@@ -43,7 +43,14 @@ def stderr_log() -> Path:
 
 
 def output_size() -> int:
-    """How much the started ``tow run`` logs have already written (before a new start)."""
+    """How much the started ``tow run`` logs have already written (before a new start).
+
+    Every start appends to the file: one that reached the cap of the web server's appended log
+    becomes ``run-stderr.log.1`` first (the older one goes), so it never grows for ever.
+    """
+    from tow.supervisor import APPENDED_LOG_BYTES, _cap_log
+
+    _cap_log(stderr_log(), APPENDED_LOG_BYTES)
     try:
         return stderr_log().stat().st_size
     except OSError:
