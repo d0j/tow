@@ -244,6 +244,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   of the other old copies; copies larger than the size limit (`backup_max_mib`) are said as such, not as
   "check folder access"; and a restore that a crash stopped early no longer leaves its `before-restore-…` folder
   in the data folder for ever.
+- Requests TOW refuses before any page (an address it does not answer, a request without its size or too large, a
+  write from another site) are answered in the page's language; they were always in English. The English words
+  are unchanged ("untrusted host").
 
 ## [1.28.2] — 2026-10-09
 

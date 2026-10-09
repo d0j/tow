@@ -148,6 +148,12 @@ def _redirect_for_fetch(request: Request, response: Response) -> Response:
     return converted
 
 
+def _refused(key: str, status_code: int) -> Response:
+    """A request refused before any page: its reason in the request's language (set before the
+    checks); the English words are the ones the guides quote ("untrusted host")."""
+    return PlainTextResponse(i18n.t(key), status_code=status_code)
+
+
 def _body_refusal(request: Request) -> Response | None:
     """A write's body, judged by its headers before anything reads it: an upload needs its size
     and stays under its own limit; any other write is a form of at most FORM_REQUEST_LIMIT, sent
@@ -158,22 +164,22 @@ def _body_refusal(request: Request) -> Response | None:
     upload = request.method == "POST" and path in _UPLOAD_LIMITS
     declared = request.headers.get("content-length")
     if "transfer-encoding" in request.headers:  # a chunked body says its size only at its end
-        return Response("content length required", status_code=411)
+        return _refused("web.refused.length_required", 411)
     if declared is None and not upload:
         content_length = 0  # HTTP/1.1: no length and no transfer coding is a request without a body
     else:
         try:
             content_length = int(declared or "")
         except ValueError:
-            return Response("content length required", status_code=411)
+            return _refused("web.refused.length_required", 411)
         if content_length < 0 or (upload and content_length == 0):
-            return Response("content length required", status_code=411)
+            return _refused("web.refused.length_required", 411)
     if content_length > (_UPLOAD_LIMITS[path] if upload else FORM_REQUEST_LIMIT):
-        return Response("upload too large" if upload else "request too large", status_code=413)
+        return _refused("web.refused.upload_too_large" if upload else "web.refused.request_too_large", 413)
     if path == "/login" and request.method == "POST":
         media_type = (request.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
         if media_type != "application/x-www-form-urlencoded":
-            return Response("unsupported media type", status_code=415)
+            return _refused("web.refused.unsupported_media", 415)
     return None
 
 
@@ -181,7 +187,7 @@ def _refusal(request: Request, cfg: dict[str, Any]) -> Response | None:
     """Who may not ask at all: a foreign host, the network while it is closed, an oversized or
     unsized body, a write from another site. Checks of the request alone, no I/O."""
     if not _trusted_request_host(request, cfg):
-        return Response("untrusted host", status_code=403)
+        return _refused("web.refused.untrusted_host", 403)
     if not access.network_open(cfg) and not access.is_local(request):
         # A phone or laptop is told why, in its language (set above), not "LAN access is disabled".
         return PlainTextResponse(i18n.t("web.network_closed"), status_code=403)
@@ -191,7 +197,7 @@ def _refusal(request: Request, cfg: dict[str, Any]) -> Response | None:
         origin = request.headers.get("origin")
         req_host = request.headers.get("host") or (request.url.hostname or "")
         if not origin_matches_request(origin, req_host, request.url.scheme):
-            return Response("forbidden", status_code=403)
+            return _refused("web.refused.forbidden", 403)
     return None
 
 
@@ -320,7 +326,7 @@ async def secure(request: Request, call_next: Callable[[Request], Awaitable[Resp
             try:
                 await run_in_threadpool(_recover_before_dispatch, path != "/healthz")
             except RuntimeError:
-                return Response("TOW site transaction recovery unavailable", status_code=503)
+                return _refused("web.refused.recovery_unavailable", 503)
         if request.method in _WRITE_METHODS and not path.startswith("/updates/") and path not in {"/login", "/logout"}:
             try:
                 update = await run_in_threadpool(services.web_update_status)
