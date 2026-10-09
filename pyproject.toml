@@ -66,7 +66,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-timeout>=2.4",
     "pytest-xdist>=3.8",
-    "ruff>=0.16.6",
+    "ruff>=0.16.10",
     "types-regex>=2026.6.28",
 ]
 
