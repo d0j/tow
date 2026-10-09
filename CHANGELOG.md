@@ -167,6 +167,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   leaves a half copy of every store in `data/import-checkpoints/`, one more at each attempt, which nothing removed.
 - A nightly backup stopped at its 30-minute limit (a slow network folder) is recorded as failed: Settings and the
   watchdog kept showing the last good copy as if nothing had happened.
+- When an interrupted restore of a nightly backup cannot be checked or undone (a file of it held by another
+  program), the pages say so and what to do instead of "Internal Server Error".
 
 ## [1.28.2] — 2026-10-09
 
