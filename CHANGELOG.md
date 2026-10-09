@@ -102,6 +102,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A site's daily download limit ends early only when a check by hand really reached the site: "Check" on a torrent
   waiting for disk space, or one whose site did not answer, ended the limit, and the next scheduled checks asked the
   site again the same day.
+- `tow export` says that the file already exists before it asks for the passphrase twice; `tow import` says that
+  the file does not exist (it said "not a TOW backup file") and refuses a wrong `--path-map` before it asks for the
+  passphrase; `tow password` and `tow access on` refuse a password shorter than 8 characters before they ask for
+  its reminder.
 - `tow version`, `keys status`, `secrets status`, `access status`, `autostart status`, `watchdog`, `backup`,
   `restore-snapshot`, `export`, `import` and `import-rollback` say their result in sentences in the command's
   language, and a refusal says only its reason: they printed their internal fields (`key_source: missing`,

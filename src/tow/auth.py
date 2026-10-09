@@ -32,9 +32,14 @@ class AuthConfigurationError(TowError):
     """The password or the LAN authentication token is missing or unusable (``auth.*``)."""
 
 
-def hash_lan_password(password: str) -> dict[str, str | int]:
+def require_password_length(password: object) -> None:
+    """Refuse a password shorter than the minimum (``tow password`` asks before the reminder)."""
     if not isinstance(password, str) or len(password) < _MIN_PASSWORD_LENGTH:
         raise AuthConfigurationError("auth.password_too_short", n=_MIN_PASSWORD_LENGTH)
+
+
+def hash_lan_password(password: str) -> dict[str, str | int]:
+    require_password_length(password)
     salt = _secrets.token_bytes(_PASSWORD_SALT_BYTES)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, _PASSWORD_ITERATIONS, _PASSWORD_DIGEST_BYTES)
     return {

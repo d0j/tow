@@ -3,6 +3,7 @@
 import os
 import sys
 
+import pytest
 from fastapi.testclient import TestClient
 from helpers import shown
 
@@ -289,6 +290,22 @@ def test_command_line_refuses_different_passwords(monkeypatch):
     monkeypatch.setattr("builtins.input", lambda _prompt="": "")
 
     assert cli.main(["password"]) == 3
+    assert "lan_auth" not in load_secrets()
+
+
+@pytest.mark.parametrize("command", [["password"], ["access", "on"]])
+def test_command_line_refuses_a_short_password_before_the_reminder(monkeypatch, capsys, command):
+    # The reminder was asked for a password that was then refused as too short.
+    from tow import cli
+    from tow.i18n import t
+
+    monkeypatch.setattr("getpass.getpass", lambda _prompt="": "short")
+    reminders = []
+    monkeypatch.setattr("builtins.input", lambda prompt="": reminders.append(prompt) or "")
+
+    assert cli.main(command) == 3
+    assert reminders == []
+    assert t("auth.password_too_short", n=8) in capsys.readouterr().out
     assert "lan_auth" not in load_secrets()
 
 

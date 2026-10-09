@@ -535,7 +535,8 @@
       "import_notes": "Not in the file: autostart (turn it on with tow autostart on) and the torrents themselves, which stay in the torrent client.",
       "log_unrecorded": "The import could not be written to the event log.",
       "rollback_preview": "A preview: nothing was changed. These would be put back: {files}. Add --apply to put them back.",
-      "rolled_back": "Put back: {files}."
+      "rolled_back": "Put back: {files}.",
+      "no_input": "There is no file {path}; nothing was imported."
     },
     "secrets": {
       "encrypted": "Passwords and tokens: saved, encrypted in {file}.",
