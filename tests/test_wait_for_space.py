@@ -242,6 +242,29 @@ def test_the_owner_starting_it_himself_ends_the_wait(world):
     assert world.client.starts == []
 
 
+@pytest.mark.parametrize("state", ["checkingResumeData", "checkingDL", "moving", "missingFiles", "error", "unknown"])
+@pytest.mark.parametrize("look", ["space pass", "check"])
+def test_a_torrent_the_client_has_not_settled_on_keeps_waiting(world, state, look):
+    # qBittorrent checks every torrent's resume data when it starts (with the computer, like
+    # TOW): that was taken for the owner starting it, the waiting ended, and the torrent TOW had
+    # added stopped was never started.
+    _check()
+    world.client.torrents[NEW]["state"] = state
+    fetched = world.tracker.fetches
+    _space_pass() if look == "space pass" else _check()
+    topic = _topic()
+    assert topic["waiting_space"]["hash"] == NEW
+    assert topic["last_error_code"] == "check.waiting_space"
+    assert "не хватает 40,5 ГБ" in topic["last_error"]
+    assert world.tracker.fetches == fetched  # still only the client is asked
+    assert len(world.sent) == 1
+    world.client.torrents[NEW]["state"] = "stoppedDL"  # settled: still stopped, and now it fits
+    world.disk["free"] = 60 * GIB
+    _space_pass()
+    assert world.client.starts == [NEW]
+    assert "waiting_space" not in _topic()
+
+
 def test_the_owner_choosing_other_files_in_the_client_ends_the_wait(world):
     _check()
     world.client.torrents[NEW]["files"][0]["priority"] = 0
