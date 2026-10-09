@@ -298,3 +298,20 @@ def test_the_diagnostics_row_says_what_diagnostics_shows():
     assert "работающим сервисом" not in settings
     doctor = client.get("/doctor").text
     assert "Автозапуск" in doctor
+
+
+def test_the_guide_calls_the_master_key_by_its_name():
+    """Qa8: the in-app Guide called keys/master.key "the encryption key" ("ключ шифрования"), while
+    Settings, the messages and the user guide say "master key" ("мастер-ключ")."""
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    ru = client.get("/settings/help").text
+    assert "ключ шифрования" not in ru.lower()
+    assert "мастер-ключ (<code>keys/master.key</code>)" in ru
+    from tow.config import load_config, save_config
+
+    cfg = load_config()
+    cfg["language"] = "en"
+    save_config(cfg)
+    en = client.get("/settings/help").text
+    assert "encryption key" not in en.lower()
+    assert "the same master key (<code>keys/master.key</code>)" in en
