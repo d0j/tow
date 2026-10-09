@@ -3,7 +3,7 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
-## [Unreleased]
+## [1.28.3] — 2026-10-09
 
 ### Fixed
 
