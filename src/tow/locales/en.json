@@ -431,7 +431,7 @@
       "restore_snapshot_long": "Restores the data from a nightly backup (its folder in backup_dir), also while TOW runs. Without --apply it only checks the copy (that needs this install's master key) and shows what would change. With --apply it first keeps the current data in data/before-restore-* and puts it back by itself if anything fails. Network access stays as it is, and History keeps what happened after the copy.",
       "restore_path": "the nightly backup's folder",
       "restore_apply": "restore (without it: check and preview only)",
-      "watchdog": "is TOW up and are the checks running? (a diagnostic; it changes nothing)",
+      "watchdog": "one watchdog pass now, as tow run makes every 10 minutes: is TOW up and are the checks running? Its alerts go to the messengers too; it restarts nothing",
       "password": "set a new TOW password and reminder (the old one is not needed)",
       "password_long": "Sets a new password for signing in from other devices, and its reminder, on the computer running TOW: the old password is not needed. The password has at least 8 characters; the reminder may not share four letters or digits in a row with it. Every device signed in over the network signs in again.",
       "run": "run TOW as one supervised service: web page, schedule, nightly backups and watchdog",

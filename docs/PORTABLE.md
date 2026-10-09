@@ -277,7 +277,8 @@ blocks for long.
     replaced while TOW runs (its id `data/.tow-data`, written once, is not the one `tow run`
     saw at its start) is said once (`watchdog.alert.data_lost`, Settings and `run.log`; the
     messengers too while their tokens are still readable) with the way back: a night copy.
-    `tow watchdog` makes the same pass by hand as a diagnostic; it changes nothing either;
+    `tow watchdog` makes the same pass by hand (its alerts go to the messengers too, and it records
+    what it saw like a scheduled pass); it never restarts anything either;
   - jobs run one at a time (a check also holds `check_run_lock` against a check from the web
     page), each with a time limit (check and timer 1 h, progress and space 10 min, night copy
     30 min); output goes to

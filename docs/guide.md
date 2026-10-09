@@ -350,7 +350,7 @@ every one. The others:
 | `tow start --no-browser` | starts TOW in the background without opening the page (also `TOW_NO_BROWSER=1`) |
 | `tow check` | a preview of a check that changes nothing; `--apply` hands what it finds to the client and saves it, `--dry-run` keeps it a preview even with `--apply`, `--notify` also sends the messages |
 | `tow doctor --notify` | asks the torrent client and the sites, and sends the report to the messengers too |
-| `tow watchdog` | is TOW up and are the checks running (a diagnostic; it changes nothing) |
+| `tow watchdog` | one watchdog pass now, as `tow run` makes every 10 minutes: is TOW up and are the checks running; its alerts go to the messengers too, and it restarts nothing |
 | `tow backup` | makes a nightly backup now (as **Back up now** does) |
 | `tow access status` | whether network access is on; `on` opens it after `tow restart`, `off` closes it at once |
 | `tow export --output FILE` | the settings, topics, history, passwords and tokens in one file protected by a passphrase; `--include-log` adds the log, `--force` replaces an existing file |
