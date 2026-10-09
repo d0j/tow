@@ -236,6 +236,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - `deploy.ps1` on an install without `app\.venv` takes only a Python 3.11 or newer that the Python launcher knows
   (also one installed by uv); it took the launcher's default, which could be 3.10, and the update then refused to
   run.
+- Two things that only grew are trimmed: the folders an update started from Settings leaves in `runtime/web-update`
+  (the three newest are kept besides the current one) and `data/logs/launchd.log` on macOS (at each start, like
+  the other appended logs).
 
 ## [1.28.2] — 2026-10-09
 
