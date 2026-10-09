@@ -111,6 +111,9 @@ SNAPSHOT_RE = re.compile(r"^(?:update|data)-(\d{8}-\d{6})-before-")
 MINIMUM_TARGET = (1, 18, 0)
 # Seconds after a health check in which a rollback still stops the version it started.
 STOP_GRACE = 300.0
+# A rollback's checkout of the previous code, tried this often this many seconds apart.
+SWITCH_BACK_TRIES = 6
+SWITCH_BACK_PAUSE = 5.0
 UNIT_NAME = "tow.service"
 AGENT_LABEL = "io.tow"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -873,9 +876,20 @@ class GitCode:
         self._switched(target)
 
     def switch_back(self, previous: str) -> None:
-        # Forced: a forward checkout cut short left files of the target, which are no local edits.
-        self.sys.git("checkout", "--quiet", "--force", "--detach", previous)
-        self._switched(previous)
+        """Forced: a forward checkout cut short left files of the target, which are no local edits.
+        The tree itself is the answer, not git's exit code: git also fails over a held file it
+        did not need to write back (it is still the previous version's). Tried a few times: a
+        file held for a moment (an antivirus scan) is released, and TOW must not stay stopped."""
+        for attempt in range(SWITCH_BACK_TRIES):
+            with contextlib.suppress(UpdateError):
+                self.sys.git("checkout", "--quiet", "--force", "--detach", previous)
+            try:
+                self._switched(previous)
+                return
+            except UpdateError:
+                if attempt + 1 == SWITCH_BACK_TRIES:
+                    raise
+                self.sys.sleep(SWITCH_BACK_PAUSE)
 
     def _switched(self, commit: str) -> None:
         """The work tree is exactly ``commit``. On Windows git cannot replace a file another
