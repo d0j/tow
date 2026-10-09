@@ -242,6 +242,95 @@ def test_log_rotates(monkeypatch):
     assert "check" in p.read_text(encoding="utf-8")
 
 
+def _held(monkeypatch, *held: Path) -> None:
+    """Windows refuses to rename a file another program holds open: so does os.replace here."""
+    real = os.replace
+
+    def replace(source, target, *args, **kwargs):
+        if Path(source) in held:
+            raise PermissionError(32, "The process cannot access the file", str(source))
+        return real(source, target, *args, **kwargs)
+
+    monkeypatch.setattr(os, "replace", replace)
+
+
+def _rotated(path: Path) -> dict[str, str]:
+    return {
+        candidate.name: candidate.read_text(encoding="utf-8")
+        for candidate in sorted(path.parent.glob(path.name + "*"))
+        if candidate != path
+    }
+
+
+def test_a_held_event_log_keeps_every_rotated_file(monkeypatch):
+    # The live log held open (History reading it, a terminal following it): the rotation used to
+    # delete .4 and shift the others before the last rename failed - at every new event, until
+    # the whole history was gone.
+    import tow.log as logmod
+
+    monkeypatch.setattr(logmod, "MAX_BYTES", 80)
+    path = log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("live " * 30 + "\n", encoding="utf-8")
+    for index in range(1, 5):
+        path.with_name(f"tow.jsonl.{index}").write_text(f"older {index}\n", encoding="utf-8")
+    before = _rotated(path)
+    with monkeypatch.context() as held:
+        _held(held, path)
+        for _ in range(6):
+            assert log_event("check", ok=1, n=1) is True
+        assert _rotated(path) == before  # nothing lost, nothing renamed
+        assert path.read_text(encoding="utf-8").count('"kind": "check"') == 6
+    live = path.read_text(encoding="utf-8")
+    assert log_event("check", ok=1, n=2) is True  # free again: rotated as always
+    assert _rotated(path) == {
+        "tow.jsonl.1": live,
+        "tow.jsonl.2": "older 1\n",
+        "tow.jsonl.3": "older 2\n",
+        "tow.jsonl.4": "older 3\n",
+    }
+
+
+def test_a_held_rotated_file_stops_the_rotation_without_a_loss(monkeypatch):
+    import tow.log as logmod
+
+    monkeypatch.setattr(logmod, "MAX_BYTES", 80)
+    path = log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("live " * 30 + "\n", encoding="utf-8")
+    for index in range(1, 5):
+        path.with_name(f"tow.jsonl.{index}").write_text(f"older {index}\n", encoding="utf-8")
+    before = _rotated(path)
+    _held(monkeypatch, path.with_name("tow.jsonl.2"))  # the History page reads an older file
+    assert log_event("check", ok=1, n=1) is True
+    assert _rotated(path) == before
+
+
+def test_run_and_serve_logs_keep_their_older_files_while_held(monkeypatch, tmp_path):
+    import logging
+
+    from tow.log import SafeRotatingFileHandler
+
+    path = tmp_path / "serve.log"
+    handler = SafeRotatingFileHandler(path, maxBytes=60, backupCount=3, encoding="utf-8")
+    try:
+        for index in range(1, 4):
+            path.with_name(f"serve.log.{index}").write_text(f"older {index}\n", encoding="utf-8")
+        record = logging.LogRecord("uvicorn", logging.INFO, __file__, 1, "x" * 40, None, None)
+        with monkeypatch.context() as held:
+            _held(held, path)
+            for _ in range(5):
+                handler.emit(record)
+            assert _rotated(path) == {f"serve.log.{index}": f"older {index}\n" for index in range(1, 4)}
+        handler.emit(record)  # free again: the grown log is rotated as one
+        assert path.with_name("serve.log.1").read_text(encoding="utf-8").count("x" * 40) == 5
+        assert path.with_name("serve.log.2").read_text(encoding="utf-8") == "older 1\n"
+        assert path.with_name("serve.log.3").read_text(encoding="utf-8") == "older 2\n"
+        assert not path.with_name("serve.log.3.old").exists()
+    finally:
+        handler.close()
+
+
 def test_rotation_and_append_are_serialized_between_processes(tmp_path):
     p = tmp_path / "tow.jsonl"
     p.write_bytes(b"x" * (MAX_BYTES + 1))

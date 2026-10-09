@@ -138,6 +138,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   tells about the last update, and a damaged one counts as none.
 - An update from Settings that a power failure cut off while it replaced the code no longer blocks the next one for
   good once `Update TOW.cmd` has put the previous version back and found nothing else to do.
+- The event log (`tow.jsonl`), `run.log` and `serve.log` no longer lose their older files when the current one is
+  held open by another program at rotation time (the History page reading it, a terminal following it): each attempt
+  deleted one older file, at every new line, until no history was left. The log now grows on and is rotated once it
+  is free.
 
 ## [1.28.2] — 2026-10-09
 
