@@ -218,7 +218,9 @@ def _run(app: Path, job_path: Path, job: dict[str, Any], version: str, updater: 
     result = "ok" if code == 0 else "refused" if code == 2 else outcome
     if code != 0 and result not in {"refused", "failed", "rolled_back"}:
         result = "failed"
-    job.update(status=result, finished_at=time.time(), error="" if code == 0 else "releases.update_failed")
+    # A refusal changed nothing: the page says so itself ("refused before installation"), not
+    # that the update did not complete.
+    job.update(status=result, finished_at=time.time(), error="" if code in (0, 2) else "releases.update_failed")
     write_job(job_path, job)
     return code
 

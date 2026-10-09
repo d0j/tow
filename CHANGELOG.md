@@ -176,6 +176,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - An update of an install without git whose leftover `app.new` from a cut-off update cannot be removed (a file in it
   held by another program) says "update aborted" with the reason and leaves TOW running, instead of ending in a
   Python traceback.
+- An update from Settings that the updater refused before installing anything (for example a version that cannot
+  read today's data) says that it was refused before installation, no longer "The update did not complete".
 
 ## [1.28.2] — 2026-10-09
 

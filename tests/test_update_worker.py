@@ -239,7 +239,9 @@ def test_a_target_that_cannot_read_the_data_is_refused_before_stop(git_install, 
     job_id = "e" * 32
     path.write_text(json.dumps({"id": job_id, "status": "queued", "target": "1.21.0"}))
     assert update_worker.run(git_install["app"], path, job_id, "1.21.0", updater) == 2
-    assert json.loads(path.read_text())["status"] == "refused"
+    job = json.loads(path.read_text())
+    assert job["status"] == "refused"
+    assert job["error"] == ""  # the page says "refused before installation", not "did not complete"
     assert not (git_install["root"] / "update-state.json").exists()  # nothing was stopped
 
 
