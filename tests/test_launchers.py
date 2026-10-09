@@ -365,6 +365,17 @@ def test_deploy_runs_in_windows_powershell_5_1_and_in_any_folder():
     assert "-Encoding UTF8" in code  # pyvenv.cfg is UTF-8; 5.1 would read it as ANSI
 
 
+def test_deploy_says_no_python_was_found_in_windows_powershell_5_1_too():
+    # 5.1 turns a native program's stderr sent to $null into errors: with 'Stop', py.exe's "No
+    # suitable Python runtime found" ended the script as a raw NativeCommandError (checked in
+    # Windows PowerShell 5.1) before its own "no base Python found".
+    deploy = (ROOT / "scripts" / "deploy.ps1").read_text(encoding="ascii")
+    finder = deploy[deploy.index("function Find-BasePython") : deploy.index('throw "no base Python found')]
+    py = finder.index("& $launcher.Source")
+    assert "$ErrorActionPreference = 'Continue'" in finder[:py]  # inside the function only
+    assert deploy.index("$ErrorActionPreference = 'Stop'") < deploy.index("function Find-BasePython")
+
+
 def test_setup_takes_no_options_and_never_runs_under_a_running_tow():
     # 02.10.2026: `tow.cmd setup --help` rebuilt the live install's environment under a running TOW.
     root = Path(__file__).resolve().parents[1] / "scripts"

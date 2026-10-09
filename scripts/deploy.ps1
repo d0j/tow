@@ -46,6 +46,10 @@ function Find-BasePython {
     }
     $launcher = Get-Command py.exe -ErrorAction SilentlyContinue
     if ($launcher) {
+        # In this function only: Windows PowerShell 5.1 turns a native program's stderr sent to
+        # $null into errors, and 'Stop' ended the script there ("No suitable Python runtime
+        # found" as a raw NativeCommandError) instead of at the message below.
+        $ErrorActionPreference = 'Continue'
         # -X utf8: the path comes back as UTF-8, which the console encoding set below reads.
         $found = & $launcher.Source -3 -X utf8 -c 'import sys; print(sys.executable)' 2>$null | Select-Object -First 1
         if ($LASTEXITCODE -eq 0 -and $found) { return $found.Trim() }
