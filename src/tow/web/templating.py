@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import socket
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -193,6 +194,13 @@ def undo_just_made() -> bool:
     return undo.undo_just_made(_context.state())
 
 
+def undo_in_message(flash: Mapping[str, Any] | None) -> bool:
+    """The message shown is the one of the action that made the live undo: its "Undo" goes in it.
+    A later message (a check, a mirror chosen, a pause) never carries an earlier change's undo."""
+    stamp = str((flash or {}).get("undo") or "")
+    return bool(stamp) and stamp == undo.stamp_of(_context.state())
+
+
 def undo_left_sec() -> int:
     return undo.undo_left_sec(_context.state())
 
@@ -290,6 +298,7 @@ def configure(templates: Jinja2Templates = TEMPLATES) -> None:
     env["os_example_folder"] = lambda: "D:\\TV" if platform.is_windows() else "/srv/media"
     env["can_undo"] = can_undo
     env["undo_just_made"] = undo_just_made
+    env["undo_in_message"] = undo_in_message
     env["undo_left_sec"] = undo_left_sec
     env["flash_ttl_sec"] = flash_ttl_sec
     env["login_help"] = login_help

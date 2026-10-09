@@ -107,7 +107,12 @@ def flash_location(url: str, message: Any, kind: str = "ok", /, **params: Any) -
     text = flash_text(message, **params)
     if not text:
         return url
-    token = _FLASHES.put({"text": text, "kind": kind if kind in FLASH_KINDS else "ok"})
+    record = {"text": text, "kind": kind if kind in FLASH_KINDS else "ok"}
+    # The undo this action made goes with its message: a check right after a save says
+    # "Connected" without an "Undo" that would put the save back.
+    if stamped := services.undo_stamped_here():
+        record["undo"] = stamped
+    token = _FLASHES.put(record)
     path, hash_mark, fragment = url.partition("#")
     joined = f"{path}{'&' if '?' in path else '?'}flash={token}"
     return joined + hash_mark + fragment
