@@ -301,6 +301,11 @@ def validate_tracker_regex(value: str, *, label: str = "url", flags: int = 0) ->
 class GenericHttpTracker:
     # A topic page fetched for its download link also gives the title: one request, not two.
     PAGE_REUSE_SEC = 120.0
+    # Pages kept for that: the title is asked right after the page, in the same topic's check.
+    # A page whose title is never asked (a check that ends early: a sign-in page, the magnet
+    # confirming the saved revision) is not kept for the rest of the run - with every topic
+    # of a site ending so, a run held all their pages (up to 4 MiB each).
+    KEPT_PAGES = 4
 
     def __init__(self, name: str, spec: dict[str, Any]) -> None:
         self.name = name
@@ -310,6 +315,16 @@ class GenericHttpTracker:
         self.spec = {**known, **spec} if known else spec
         self._pages: dict[str, tuple[float, str]] = {}
         self._rx = validate_tracker_regex(spec["url_regex"], label="url")
+
+    def _keep_page(self, tid: str, page_html: str) -> None:
+        """Keep a topic page for its title (``fetch_title``): only recent pages, and few."""
+        now = time.monotonic()
+        self._pages.pop(tid, None)
+        for key in [key for key, (at, _page) in self._pages.items() if now - at >= self.PAGE_REUSE_SEC]:
+            del self._pages[key]
+        while len(self._pages) >= self.KEPT_PAGES:
+            del self._pages[next(iter(self._pages))]  # the oldest: kept in the order they came
+        self._pages[tid] = (now, page_html)
 
     def parse_id(self, url: str) -> str | None:
         candidate = url.strip()
@@ -576,7 +591,7 @@ class GenericHttpTracker:
                 # A login during the fetch saved its session: the download goes with it.
                 cookies = self._cookie_jar(load_secrets()) or cookies
             page_html = thttp.html_text(page)
-            self._pages[tid] = (time.monotonic(), page_html)
+            self._keep_page(tid, page_html)
             if guest_page(page_html):
                 refreshed = (
                     None if attempt else self._relogin(secrets, ua, cookies, ignore_cool=ignore_cool, persist=persist)
@@ -627,7 +642,7 @@ class GenericHttpTracker:
             persist=persist,
         )
         page_html = thttp.html_text(response)
-        self._pages[tid] = (time.monotonic(), page_html)  # the title comes from the same page
+        self._keep_page(tid, page_html)  # the title comes from the same page
         result = self._page_magnet(page_html)
         if result is None:
             raise TrackerError("tracker.no_magnet", prefix=self.name)

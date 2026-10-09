@@ -187,6 +187,21 @@ def test_the_magnet_of_the_topics_own_block_wins_over_one_in_a_comment(site):
     )
 
 
+def test_pages_whose_title_is_never_asked_are_not_kept_for_the_whole_run(site):
+    # A check that ends before the title (the magnet confirms the saved revision, a sign-in
+    # page) left every topic page of the site in the tracker until the run ended.
+    for tid in range(1, 31):
+        site.pages[f"/torrent/{tid}"] = _page(f"magnet:?xt=urn:btih:{V1}")
+    tracker = _tracker(fetch_hosts=["https://demo.example"])
+    for tid in range(1, 31):
+        tracker.fetch_magnet(f"https://demo.example/torrent/{tid}", {}, None, persist=False)
+
+    assert len(tracker._pages) <= tracker.KEPT_PAGES
+    asked = len(site.requests)
+    assert tracker.fetch_title("https://demo.example/torrent/30", {}, None, persist=False) == "Show"
+    assert len(site.requests) == asked  # the latest page still gives its title without a request
+
+
 def test_a_missing_topic_page_is_a_mirror_error(site):
     with pytest.raises(MirrorFetchError) as error:
         _tracker(fetch_hosts=["https://demo.example"]).fetch_magnet(
