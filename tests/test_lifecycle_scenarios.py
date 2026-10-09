@@ -63,8 +63,11 @@ class Client:
         self.torrents: dict[str, dict[str, Any]] = {}
         self.adds: list[str] = []
         self.starts_confirmed = True
+        self.down = False
 
     def ping(self) -> str:
+        if self.down:
+            raise ConnectionError("refused")
         return "ok"
 
     def has_any_torrent(self) -> bool:
@@ -100,6 +103,9 @@ class Client:
         if self.starts_confirmed:
             self.torrents[h]["state"] = "downloading"
         return self.inspect_torrent(h)
+
+    def adopt_torrent(self, h, *, replace_label=False):
+        self.torrents[h]["tags"].append("tow")
 
     def stop_owned_torrent(self, h):
         self.torrents[h]["state"] = "stoppedUP"
@@ -490,3 +496,63 @@ def test_a_site_whose_sign_in_expired_for_many_topics_says_so_once_and_once_agai
 
     assert len(world.sent) == said + 2
     assert world.sent[-1].startswith("fake: снова работает")
+
+
+def test_a_client_that_goes_down_and_comes_back_is_said_once_each_way(world):
+    _check(how="manual", ids=["t1"])
+    said = len(world.sent)
+
+    world.client.down = True
+    for _ in range(2):
+        row = _check()
+        assert row["ok"] is False
+    assert _home() == ("bad", "ok")  # the client's fault, not the site's
+    assert world.sent[said:] == ["Торрент-клиент недоступен"]  # once, not per topic or per check
+    assert _history("errors") == []  # the client's own event, not one per topic
+    world.client.down = False
+    _check()
+
+    assert _home() == ("ok", "ok")
+    assert world.sent[said:] == ["Торрент-клиент недоступен", "Торрент-клиент снова доступен"]
+
+
+def test_a_torrent_already_in_the_client_is_adopted_by_the_owner_then_managed(world):
+    world.client.put(OLD, world.folder, tags=())  # added by hand before the topic
+    row = _check(how="manual", ids=["t1"])
+    assert row["ok"] is False
+    assert _topic()["last_error_code"] == "check.not_owned_existing"
+    assert _home() == ("bad", "ok")
+    from tow.adopt import adopt_topic, unmarked_hash
+
+    assert unmarked_hash(_topic(), {"client": {"id": "main"}}) == OLD  # Home offers to adopt it
+
+    adopt_topic("t1", how="manual")
+    row = _check(how="manual", ids=["t1"])
+
+    topic = _topic()
+    assert row["ok"] is True
+    assert topic["hash"] == OLD
+    assert "tow" in world.client.torrents[OLD]["tags"]
+    assert world.client.adds == []  # adopted, never added again
+    assert _home() == ("ok", "ok")
+    assert "client_adopted" in _history("downloads")
+    assert world.sent[-1] == "Show — снова работает"
+
+
+def test_a_torrent_removed_from_the_client_is_said_and_added_again_by_check(world):
+    _check(how="manual", ids=["t1"])
+    world.client.put("C" * 40, world.folder, tags=())  # the client lists other torrents too
+    del world.client.torrents[OLD]  # the owner removed it in the client
+
+    _check()  # a scheduled check reports it
+    assert _topic()["last_error_code"] == "check.removed_from_client"
+    assert _home() == ("bad", "ok")
+    assert world.sent[-1].startswith("Show — Fake — S01E01–02 из 2 — торрент исчез из торрент-клиента")
+    _check()
+    assert world.client.adds == [OLD]  # a scheduled check never adds it again
+
+    assert _check_by_hand() == "добавлено в торрент-клиент"
+
+    assert world.client.adds == [OLD, OLD]
+    assert _home() == ("ok", "ok")
+    assert _history("downloads") == ["client_added", "client_removed", "client_added", "client_restored"]
