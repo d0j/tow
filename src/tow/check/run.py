@@ -175,9 +175,10 @@ def _daily_limits(
 ) -> dict[str, str]:
     """{site: today} for the sites under their daily download limit after this run.
 
-    A manual check that reached a limited site without hitting the limit ends it early.
+    A manual check that reached a limited site without hitting the limit ends it early; one
+    that did not reach it (a torrent waiting in its client, a site that did not answer) does not.
     """
-    tried = {str(row.get("tracker")) for row in results if row.get("tracker")}
+    tried = {str(row.get("tracker")) for row in results if row.get("tracker") and row.get("site_answered")}
     kept = {name for name in limited_today if name in quota or name not in tried}
     return dict.fromkeys(sorted(kept | quota), today)
 
