@@ -151,7 +151,7 @@
       "portable_check_failed": "the TOW file did not pass the check",
       "validation_failed": "the restore point did not pass the check",
       "no_checkpoint": "restore applied without an import checkpoint",
-      "lan_access_failed": "could not keep the network access settings",
+      "lan_access_failed": "could not keep the network access and backup folder settings",
       "rollback_failed": "restore failed, and undoing it failed too: data may have changed. Restore the restore point made just before it (Backups made by hand)",
       "data_kept": "restore failed; current data was kept",
       "reason_not_tow": "it is not a TOW backup file",
@@ -846,7 +846,7 @@
       "title": "6. Backups",
       "night": "<b>Nightly backups</b> are made automatically every night; if a backup fails, you get a message. You can choose the folder, including another drive or a network folder.",
       "create": "<b>Create a backup</b> makes a restore point — a copy “just in case” before important changes. <b>Restore</b> first checks the restore point and saves the current state.",
-      "note": "A backup holds the settings, topics, history and encrypted passwords. Downloaded files and the torrent client itself are not in it. The address, port and access from other devices stay as they are when you restore.",
+      "note": "A backup holds the settings, topics, history and encrypted passwords. Downloaded files and the torrent client itself are not in it. The address, port, access from other devices and the backup folders stay as they are when you restore.",
       "file": "<b>TOW file</b> (<code>.towx</code>) — a full encrypted copy of this TOW. Restoring it needs the same master key (<code>keys/master.key</code>): on another computer, put that key there first — it is not in the file, so keep it separately, for example on a USB stick. To move TOW to an install with a different key, use <code>{launcher} export</code> and <code>{launcher} import</code> in a terminal in the TOW folder: their file is protected by a passphrase instead."
     },
     "s7": {

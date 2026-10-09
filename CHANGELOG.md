@@ -210,6 +210,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   key".
 - "This torrent is already used by another topic" names that topic as Home does, not by its internal id
   ("2821ad16c798").
+- Restoring a backup keeps this computer's backup folders, as it keeps the address, port and network access. The
+  restored copy's folders replaced them: the restore point made just before the restore disappeared from Settings,
+  and a copy from another system stopped the nightly backups.
 
 ## [1.28.2] — 2026-10-09
 

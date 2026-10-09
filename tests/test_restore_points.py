@@ -712,3 +712,34 @@ def test_data_too_large_for_a_restore_point_is_said_in_the_owner_language(monkey
     assert caught.value.kind == CREATE_FAILED
     reason = t("backup.restore_point.data_too_large", language, mib=64)
     assert str(caught.value) == t("backup.restore_point.cannot_create", language, reason=reason)
+
+
+@pytest.mark.parametrize("live_has_folders", [True, False])
+def test_restore_keeps_this_installs_backup_folders(monkeypatch, tmp_path, live_has_folders):
+    _seed(monkeypatch, tmp_path)
+    cfg = load_config()
+    cfg["backup_dir"] = str(tmp_path / "night of the point")
+    cfg["restore_points_dir"] = str(tmp_path / "points of the point")
+    save_config(cfg)
+    saved = create_restore_point()
+
+    live = load_config()
+    if live_has_folders:
+        live["backup_dir"] = str(tmp_path / "night here")
+        live["restore_points_dir"] = str(tmp_path / "points here")
+    else:
+        live.pop("backup_dir")
+        live.pop("restore_points_dir")
+    save_config(live)
+    here = restore_points.restore_points_dir()
+    here.mkdir(parents=True, exist_ok=True)
+    name = f"{saved['id']}.towx"
+    (here / name).write_bytes((tmp_path / "points of the point" / name).read_bytes())
+
+    result = restore_from_point(saved["id"])
+
+    restored = load_config()
+    assert restored.get("backup_dir") == live.get("backup_dir")
+    assert restored.get("restore_points_dir") == live.get("restore_points_dir")
+    # The safety point just made is in the folder Settings lists.
+    assert result["safety_point"] in {point["id"] for point in list_restore_points()}
