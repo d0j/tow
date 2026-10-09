@@ -367,3 +367,51 @@ def test_a_waiting_start_held_back_by_the_previous_version_is_logged_once(world,
     assert topic["last_error_code"] == "check.previous_revision_active"
     assert _history("errors").count("check_fail") == 1
     assert world.client.torrents[NEW]["state"] == "stoppedDL"
+
+
+def _data_files() -> dict[str, bytes]:
+    from tow.paths import data_dir
+
+    root = data_dir()
+    return {str(path.relative_to(root)): path.read_bytes() for path in sorted(root.rglob("*")) if path.is_file()}
+
+
+def test_a_dry_run_writes_nothing_whatever_the_topics_wait_for(world, full_disk, monkeypatch, capsys):
+    from tow import cli
+
+    full_disk["free"] = 10 * 1024**3
+    _check(how="manual", ids=["t1"])  # added; the next version waits for room below
+    world.site.current = NEW
+    world.client.torrents[OLD]["state"] = "stoppedUP"
+    state = load_state()
+    state["topics"] += [
+        {"id": "t2", "title": "New", "url": "https://tracker.example/2", "save_path": world.folder},
+        {"id": "t3", "title": "Paused", "url": "https://tracker.example/3", "save_path": world.folder, "paused": True},
+    ]
+    state["daily_limit"] = {"other": "2000-01-01"}  # yesterday's limit an apply would drop
+    save_state(state)
+    full_disk["free"] = 100 * 1024 * 1024
+    _check(ids=["t1"])  # t1's new version is added stopped and waits for room
+    assert _topic()["waiting_space"]["hash"] == NEW
+    full_disk["free"] = 10 * 1024**3  # room now: an apply would start it
+    world.reconcile.events = ["episode_completed"]
+    remembered: list[str] = []
+    monkeypatch.setattr(torrent_cache, "remember", lambda blob, url: remembered.append(url))
+    before, adds, sent = _data_files(), list(world.client.adds), list(world.sent)
+
+    for args in (
+        ["check"],
+        ["check", "--dry-run", "--notify"],
+        ["check", "--space-only"],
+        ["check", "--progress-only"],
+    ):
+        assert cli.main([*args, "--json"]) in {0, 2}
+    out = check.run_check(apply=False, notify=True, how="manual")
+    assert all(row.get("preview") or row.get("status") in {"preview", "skipped"} or row["ok"] for row in out["results"])
+
+    assert _data_files() == before
+    assert world.client.adds == adds
+    assert world.client.torrents[NEW]["state"] == "stoppedDL"  # never started by a preview
+    assert world.sent == sent
+    assert remembered == []
+    capsys.readouterr()
