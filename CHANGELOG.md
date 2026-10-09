@@ -37,6 +37,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Turning network access off (Settings or `tow access off`) is said to work at once, as it does: Settings and the
   command asked for a restart that only turning it on needs. A phone or laptop that opens TOW while access is off
   reads why in its language instead of "LAN access is disabled".
+- The free-space hint of the add and edit forms answers only TOW's own pages. Any website open in the browser could
+  ask it about a folder of its choosing, and on Windows a `\\computer\share` of another computer made TOW connect to
+  that computer, which then received the Windows account's sign-in.
 - A messenger that answers "too many requests" with a wait that is no number ("nan") is waited for the usual pause
   and asked again, instead of the delivery failing with an internal error.
 - A check no longer keeps in memory every topic page of a site whose check ends early (a sign-in page, a magnet that
