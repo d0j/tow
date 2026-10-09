@@ -17,7 +17,15 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from tow import access, i18n, store_transaction, undo
 from tow.auth import MAX_HINT_LENGTH, password_hint
 from tow.clock import format_ui_timestamp
-from tow.config import INTERVAL_MAX_MINUTES, INTERVAL_MIN_MINUTES, THEMES, as_bool, flash_ttl, interval_sec_of
+from tow.config import (
+    INTERVAL_MAX_MINUTES,
+    INTERVAL_MIN_MINUTES,
+    THEMES,
+    as_bool,
+    flash_ttl,
+    interval_sec_of,
+    whole_number,
+)
 from tow.log import error_class
 from tow.notifiers import cards as notifier_cards
 from tow.restore_points import RestorePointError
@@ -97,9 +105,9 @@ def settings_page(request: Request) -> Response:
             "search_words": _search_words(),
             # The messenger just saved / checked stays open even when it is not connected yet.
             "open_card": str(request.query_params.get("card") or ""),
-            "interval_min": max(1, interval_sec_of(cfg) // 60),
+            "interval_min": _shown_minutes(interval_sec_of(cfg)),
             "interval_label": _interval_label(interval_sec_of(cfg)),
-            "flash_ttl_min": max(1, flash_ttl_sec() // 60),
+            "flash_ttl_min": _shown_minutes(flash_ttl_sec()),
             "allow_lan": as_bool(cfg.get("allow_lan")),
             "check_updates": as_bool(cfg.get("check_updates", True)),
             "lan_password_set": access.password_is_set(s),
@@ -501,20 +509,29 @@ def _ping_reason(exc: Exception) -> str:
     return t("web.settings.ping_unreachable")
 
 
+def _shown_minutes(seconds: int) -> int:
+    """What the Checks form shows for a setting kept in seconds (whole minutes, at least 1)."""
+    return max(1, seconds // 60)
+
+
+# Empty defaults: a field sent empty is refused below, not taken as FastAPI's default value.
 @router.post("/settings/interval")
 @services.locked_state_mutation
-def settings_interval(interval_min: str = Form("60"), flash_ttl_min: str = Form("1")) -> Response:
+def settings_interval(interval_min: str = Form(""), flash_ttl_min: str = Form("")) -> Response:
     cfg_before = services.load_config()
     old_sec = interval_sec_of(cfg_before)
     old_ttl_sec = flash_ttl(cfg_before.get("flash_ttl_sec"))
-    try:
-        requested, requested_ttl = int(interval_min.strip()), int(flash_ttl_min.strip())
-    except ValueError:
-        # Nothing is guessed: "abc" or "1.5" is refused, not silently replaced by a default.
+    requested, requested_ttl = whole_number(interval_min), whole_number(flash_ttl_min)
+    if requested is None or requested_ttl is None:
+        # Nothing is guessed: "", "abc", "1.5" or "٦٠" is refused, not replaced by a default.
         return flash_redirect("/settings?open=intervals", "web.settings.bad_minutes", "err")
-    minutes = max(INTERVAL_MIN_MINUTES, min(INTERVAL_MAX_MINUTES, requested))
-    new_sec = minutes * 60
-    ttl_min = max(1, min(30, requested_ttl))
+    # A field sent back as the page showed it keeps its value: config.yaml may hold one the
+    # form cannot show (45 s, 10 min), and changing the other field must not round or clamp it.
+    same, same_ttl = requested == _shown_minutes(old_sec), requested_ttl == _shown_minutes(old_ttl_sec)
+    minutes = requested if same else max(INTERVAL_MIN_MINUTES, min(INTERVAL_MAX_MINUTES, requested))
+    ttl_min = requested_ttl if same_ttl else max(1, min(30, requested_ttl))
+    new_sec = old_sec if same else minutes * 60
+    new_ttl_sec = old_ttl_sec if same_ttl else ttl_min * 60
     # D3: a clamped value is said, not silently replaced.
     clamped = []
     if minutes != requested:
@@ -524,7 +541,7 @@ def settings_interval(interval_min: str = Form("60"), flash_ttl_min: str = Form(
     if ttl_min != requested_ttl:
         clamped.append(t("web.settings.clamped_messages", minutes=ttl_min))
     clamp_note = t("web.settings.clamp_note", items=", ".join(clamped)) if clamped else ""
-    if new_sec == old_sec and ttl_min * 60 == old_ttl_sec:
+    if new_sec == old_sec and new_ttl_sec == old_ttl_sec:
         if clamped:  # 5000 minutes is 1440, which it already was: say so, not only "no changes"
             kept = t("web.settings.clamp_kept", items=", ".join(clamped))
             return flash_redirect("/settings?open=intervals", t("web.common.no_changes") + kept, "warn")
@@ -534,7 +551,8 @@ def settings_interval(interval_min: str = Form("60"), flash_ttl_min: str = Form(
 
     def write(txn: StoreTransaction) -> None:
         settings_undo(txn, state, undo_secrets, old_sec, [], old_ttl_sec)
-        txn.set_flash_ttl_sec(ttl_min * 60)
+        if new_ttl_sec != old_ttl_sec:
+            txn.set_flash_ttl_sec(new_ttl_sec)
         if new_sec != old_sec:
             txn.set_interval_sec(new_sec)  # `tow run` reads it from the config within a minute
         txn.save_state(state)

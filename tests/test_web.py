@@ -2216,6 +2216,47 @@ def test_an_interval_that_is_not_a_whole_number_is_refused(value):
     assert interval_sec_of(load_config()) == before
 
 
+@pytest.mark.parametrize("field", ["interval_min", "flash_ttl_min"])
+@pytest.mark.parametrize("value", ["", "   ", "٦٠", "６０", "1_000"])
+def test_an_empty_or_unusual_number_in_checks_is_refused_not_taken_as_a_default(field, value):
+    from tow.config import interval_sec_of, load_config
+    from tow.i18n import t
+
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    client.post("/settings/interval", data={"interval_min": "30", "flash_ttl_min": "5"})
+    data = {"interval_min": "30", "flash_ttl_min": "5", field: value}
+
+    response = client.post("/settings/interval", data=data, follow_redirects=False)
+
+    assert t("web.settings.bad_minutes", "ru") in shown(response.headers["location"])
+    cfg = load_config()
+    assert (interval_sec_of(cfg), cfg["flash_ttl_sec"]) == (1800, 300)
+
+
+@pytest.mark.parametrize(
+    ("hand_written", "posted", "expected"),
+    [
+        # The Undo time changed: an interval the form cannot show (10 min) is kept, not clamped.
+        ({"interval_sec": 600, "flash_ttl_sec": 60}, {"interval_min": "10", "flash_ttl_min": "5"}, (600, 300)),
+        # The interval changed: 45 seconds of Undo (shown as 1 min) stay 45 seconds.
+        ({"interval_sec": 3600, "flash_ttl_sec": 45}, {"interval_min": "30", "flash_ttl_min": "1"}, (1800, 45)),
+    ],
+)
+def test_a_checks_field_sent_back_unchanged_keeps_its_value(hand_written, posted, expected):
+    from tow.config import load_config, save_config
+
+    cfg = load_config()
+    cfg.update(hand_written)
+    save_config(cfg)
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+
+    response = client.post("/settings/interval", data=posted, follow_redirects=False)
+
+    cfg = load_config()
+    assert (cfg["interval_sec"], cfg["flash_ttl_sec"]) == expected
+    assert "допустимо" not in shown(response.headers["location"])  # nothing was clamped
+
+
 def test_a_value_clamped_to_the_current_one_says_so():
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
     client.post("/settings/interval", data={"interval_min": "1440", "flash_ttl_min": "1"})

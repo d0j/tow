@@ -12,6 +12,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   longer makes every check fail.
 - A `heartbeat_url` without a server name (`https://` alone, or with a space in it) is named when TOW starts; it
   was taken, and then every ping of the watchdog failed.
+- Settings → Checks: a field left empty is refused ("Minutes: enter a whole number…") instead of quietly becoming
+  60 minutes or 1 minute with "Saved", and a number written with other digits ("٦٠", "６０") or "1_000" is refused
+  too. Changing one of the two fields no longer changes the other: an interval or an Undo time from `config.yaml`
+  that the form cannot show (10 minutes, 45 seconds) stays as it is.
 
 ## [1.28.2] — 2026-10-09
 

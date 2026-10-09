@@ -209,11 +209,23 @@ class ConfigError(TowError, ValueError):
 LANGUAGE_UNREAD = "config_error.language_unread"
 
 
+_WHOLE_NUMBER = re.compile(r"[+-]?[0-9]{1,18}")
+
+
+def whole_number(text: object) -> int | None:
+    """A whole number written as text (config.yaml, a form field), or None.
+
+    ASCII digits with an optional sign, and few of them (spaces around are fine): int() alone
+    also takes "٣٠", "１５" and "1_000", str.isdigit() takes "²", and int() refuses 4300+ digits."""
+    if not isinstance(text, str) or not _WHOLE_NUMBER.fullmatch(text.strip()):
+        return None
+    return int(text.strip())
+
+
 def _int_field(data: dict[str, Any], key: str, low: int, high: int) -> None:
     value = data.get(key)
-    # ASCII digits, and few of them: str.isdigit() takes "²" and int() refuses 4300+ digits.
-    if isinstance(value, str) and re.fullmatch(r"[0-9]{1,18}", value.strip()):
-        value = int(value.strip())
+    if isinstance(value, str) and (number := whole_number(value)) is not None:
+        value = number
     if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
         raise ConfigError("config_error.whole_number", key=key, low=low, high=high)
     data[key] = value
