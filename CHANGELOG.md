@@ -203,6 +203,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   focus goes to the topic's row instead of staying on a field of the closed window.
 - The TOW version in the corner shows at the end of a long page too: it stepped aside for the last row of a long topic
   list and was never seen.
+- The latest event on Home and in the download history starts with a capital letter when TOW words it ("Files", not
+  "files"); a file's name is shown as it is.
 
 ## [1.28.2] — 2026-10-09
 
