@@ -230,6 +230,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   through the messengers' queue like every other message; it was sent at once, also during the quiet hours.
 - "Waiting for disk space" is sent once per wait: after the torrent client was unreachable for a while and came
   back, the same wait was announced again.
+- Updating an install that is a git clone refuses, before TOW stops, when files git does not track stand where the
+  new version has files, and names them; the update stopped TOW first, then failed to switch the code and rolled
+  back.
 
 ## [1.28.2] — 2026-10-09
 
