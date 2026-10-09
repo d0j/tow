@@ -194,6 +194,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   space: waiting for disk space: …".
 - A check by hand of a topic whose previous version still seeds says "The check failed: the previous version … is
   still active", not "The torrent client did not confirm": TOW did not ask the client, by its own rule.
+- The mirror table in Diagnostics no longer has an empty column header, which a screen reader announced as a column
+  without a name.
 
 ## [1.28.2] — 2026-10-09
 

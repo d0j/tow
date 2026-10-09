@@ -18,7 +18,7 @@
   <p class="mut">{{ t('doctor.sites_note') }}</p>
   {% if report.probes %}
   <div class="table-wrap"><table class="table table-stack">
-    <thead><tr><th></th><th>{{ t('doctor.th_site') }}</th><th>{{ t('doctor.th_mirror') }}</th><th>{{ t('doctor.th_status') }}</th></tr></thead>
+    <thead><tr><td></td><th>{{ t('doctor.th_site') }}</th><th>{{ t('doctor.th_mirror') }}</th><th>{{ t('doctor.th_status') }}</th></tr></thead>
     <tbody>
     {% for p in report.probes %}
       <tr>
