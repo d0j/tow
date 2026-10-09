@@ -216,6 +216,8 @@ def _backup_text(result: dict[str, Any]) -> str:
         lines.append(t("cli.backup.pruned", n=len(result["pruned"])))
     if result.get("cleanup_warning"):
         lines.append(str(result["cleanup_warning"]))
+    if result.get("budget_warning"):
+        lines.append(str(result["budget_warning"]))
     return "\n".join(lines)
 
 

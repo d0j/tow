@@ -230,7 +230,10 @@ def settings_backup_now() -> Response:
         message += t("web.backup.copy_missing", names=names)
     if result.get("cleanup_warning"):
         message += f" · {t('backup.snapshot.cleanup_warning')}"
-    return _backup_redirect(message, "warn" if result.get("missing") or result.get("cleanup_warning") else "ok")
+    if result.get("budget_warning"):
+        message += f" · {t('backup.snapshot.over_budget', limit=result.get('over_budget_mib'))}"
+    warned = result.get("missing") or result.get("cleanup_warning") or result.get("budget_warning")
+    return _backup_redirect(message, "warn" if warned else "ok")
 
 
 @router.post("/settings/backup/night/{name}/restore")

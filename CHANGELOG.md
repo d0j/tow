@@ -239,6 +239,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Two things that only grew are trimmed: the folders an update started from Settings leaves in `runtime/web-update`
   (the three newest are kept besides the current one) and `data/logs/launchd.log` on macOS (at each start, like
   the other appended logs).
+- Nightly backups: a new copy that failed its check and could not be renamed back no longer stays as a copy that
+  is listed, offered for restore and counted among the copies kept; one damaged copy no longer stops the removal
+  of the other old copies; copies larger than the size limit (`backup_max_mib`) are said as such, not as
+  "check folder access"; and a restore that a crash stopped early no longer leaves its `before-restore-…` folder
+  in the data folder for ever.
 
 ## [1.28.2] — 2026-10-09
 
