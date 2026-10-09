@@ -102,6 +102,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A site's daily download limit ends early only when a check by hand really reached the site: "Check" on a torrent
   waiting for disk space, or one whose site did not answer, ended the limit, and the next scheduled checks asked the
   site again the same day.
+- A command line `tow` refuses (a missing or unknown argument, a wrong value) is said in the command's language,
+  without TOW's internal names (`access_action`) or Python's ("invalid float value"); in Russian it was English.
 
 ## [1.28.2] — 2026-10-09
 

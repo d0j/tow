@@ -447,7 +447,18 @@
       "usage": "usage:",
       "positionals": "positional arguments",
       "options": "options",
-      "help": "show this help message and exit"
+      "help": "show this help message and exit",
+      "required": "missing: %s",
+      "one_required": "one of these is needed: %s",
+      "unrecognized": "unknown arguments: %s",
+      "argument": "%(argument_name)s: %(message)s",
+      "invalid_choice": "%(value)r is not one of %(choices)s",
+      "invalid_value": "%(value)r is not a valid value",
+      "expected_one": "needs a value",
+      "expected_some": "needs at least one value",
+      "not_allowed_with": "cannot be used together with %s",
+      "ambiguous": "%(option)s is ambiguous: %(matches)s",
+      "ignored": "takes no value: %r"
     },
     "setup": {
       "use_launcher": "`setup` rebuilds TOW's environment, so it runs from the launcher, not from TOW itself. Stop TOW, then run in the install folder: {launcher} setup",

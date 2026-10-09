@@ -98,6 +98,34 @@ class _RawFormatter(_Formatter, argparse.RawDescriptionHelpFormatter):
     """The same, keeping the line breaks of ``tow --help``'s description and epilog."""
 
 
+# argparse's own messages, by its English text (it looks each one up through its module's
+# ``_`` when it says it): the catalog's say them in the command's language, with the same
+# %-placeholders argparse fills in afterwards. The type name of "invalid float value" is left
+# out: it is Python's word, not the owner's.
+_ARGPARSE_TEXTS = {
+    "the following arguments are required: %s": "cli.argparse.required",
+    "one of the arguments %s is required": "cli.argparse.one_required",
+    "unrecognized arguments: %s": "cli.argparse.unrecognized",
+    "argument %(argument_name)s: %(message)s": "cli.argparse.argument",
+    "invalid choice: %(value)r (choose from %(choices)s)": "cli.argparse.invalid_choice",
+    "invalid choice: %(value)r, maybe you meant %(closest)r? (choose from %(choices)s)": "cli.argparse.invalid_choice",
+    "invalid %(type)s value: %(value)r": "cli.argparse.invalid_value",
+    "expected one argument": "cli.argparse.expected_one",
+    "expected at most one argument": "cli.argparse.expected_one",
+    "expected at least one argument": "cli.argparse.expected_some",
+    "not allowed with argument %s": "cli.argparse.not_allowed_with",
+    "ambiguous option: %(option)s could match %(matches)s": "cli.argparse.ambiguous",
+    "ignored explicit argument %r": "cli.argparse.ignored",
+}
+
+
+def _argparse_text(message: str) -> str:
+    from tow.i18n import t
+
+    key = _ARGPARSE_TEXTS.get(message)
+    return t(key) if key else message
+
+
 class _Parser(argparse.ArgumentParser):
     """argparse with TOW's exit codes: a wrong command or option is 1, not argparse's 2 (2 means
     "done in part" in TOW, see ``tow --help``). Its own words (the section titles, -h) come from
@@ -123,6 +151,9 @@ class _Parser(argparse.ArgumentParser):
 def _build_parser() -> argparse.ArgumentParser:
     from tow.i18n import t
 
+    # argparse knows only gettext: its error messages come from the catalog (an unknown one
+    # stays argparse's own English).
+    setattr(argparse, "_", _argparse_text)  # noqa: B010 - argparse's module-level lookup, not an attribute of ours
     p = _Parser(
         prog="tow",
         description=t("cli.help.description"),
@@ -145,6 +176,7 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="?",
         choices=("status", "fix"),
         default="status",
+        metavar="{status,fix}",
         help=t("cli.help.permissions_action"),
     )
     perm.add_argument("--owner", metavar="ACCOUNT", help=t("cli.help.permissions_owner"))
@@ -176,7 +208,9 @@ def _build_parser() -> argparse.ArgumentParser:
     s.add_argument("--log-file", type=Path, default=None, help=t("cli.help.serve_log"))
     s.add_argument("--parent-pid", type=int, default=None, help=argparse.SUPPRESS)  # `tow run`: end with it
     access_cmd = sub.add_parser("access", help=t("cli.help.access"), description=t("cli.help.access_long"))
-    access_cmd.add_argument("access_action", choices=("on", "off", "status"), help=t("cli.help.access_action"))
+    access_cmd.add_argument(
+        "access_action", choices=("on", "off", "status"), metavar="{on,off,status}", help=t("cli.help.access_action")
+    )
     access_cmd.add_argument("--password", action="store_true", help=t("cli.help.access_password"))
     access_cmd.add_argument("--json", action="store_true", help=as_json)
 
@@ -237,7 +271,10 @@ def _build_parser() -> argparse.ArgumentParser:
     autostart = sub.add_parser("autostart", help=t("cli.help.autostart"), description=t("cli.help.autostart"))
     # "migrate" (1.18-1.20) only points to the documentation now: accepted, not offered.
     autostart.add_argument(
-        "autostart_action", choices=("on", "off", "status", "migrate"), help=t("cli.help.autostart_action")
+        "autostart_action",
+        choices=("on", "off", "status", "migrate"),
+        metavar="{on,off,status}",
+        help=t("cli.help.autostart_action"),
     )
     autostart.add_argument("--without-login", action="store_true", help=t("cli.help.autostart_without_login"))
     autostart.add_argument("--apply", action="store_true", help=argparse.SUPPRESS)  # migrate (1.18-1.20)
