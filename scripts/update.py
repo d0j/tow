@@ -177,6 +177,10 @@ TEXTS = {
     "archive_ref": "an install without git updates to a release tag (for example v1.22.0) or latest, not to {ref}",
     "fetch_failed": "TOW's repository (origin) could not be reached ({error}); nothing was updated",
     "no_ref": "{ref} is neither a tag nor a commit of TOW's repository (origin); nothing was updated",
+    "untracked_clash": (
+        "{app} holds files that are not part of TOW where {ref} has files of its own ({files}): move them out of"
+        " the folder; nothing was updated"
+    ),
     "switch_failed": "the code could not be switched ({error}): close programs and windows that use files in {app}",
     "data_newer": (
         "{ref} cannot read this install's data (state.json format {found}; it reads up to {known}): go back no"
@@ -862,7 +866,32 @@ class GitCode:
         except UpdateError as exc:
             raise UpdateError(self.work.text("no_ref", ref=ref)) from exc
         self.work.refuse_too_old(target)
+        self.refuse_clashes(target)
         return target
+
+    def refuse_clashes(self, target: str) -> None:
+        """Files git does not track (not ignored either) where the target has files: its checkout
+        refuses to overwrite them, which was found only after TOW had stopped. Refused here, in
+        words, while TOW still runs. (Ignored files git replaces itself.)"""
+        untracked = [
+            name for name in self.sys.git("ls-files", "--others", "--exclude-standard", "-z").split("\0") if name
+        ]
+        if not untracked:
+            return
+        files = {name for name in self.sys.git("ls-tree", "-r", "--name-only", "-z", target).split("\0") if name}
+        folders = {
+            "/".join(parts[:end]) for parts in (name.split("/") for name in files) for end in range(1, len(parts))
+        }
+
+        def clashes(name: str) -> bool:
+            parts = name.split("/")
+            parents = ("/".join(parts[:end]) for end in range(1, len(parts)))
+            return name in files or name in folders or any(parent in files for parent in parents)
+
+        found = [name for name in untracked if clashes(name)]
+        if found:
+            listed = ", ".join(found[:5]) + (", …" if len(found) > 5 else "")
+            raise UpdateError(self.work.text("untracked_clash", app=self.work.app, ref=self.work.ref, files=listed))
 
     def short(self, value: str) -> str:
         return value[:7]

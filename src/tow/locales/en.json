@@ -1977,6 +1977,7 @@
     "archive_ref": "an install without git updates to a release tag (for example v1.22.0) or latest, not to {ref}",
     "fetch_failed": "TOW's repository (origin) could not be reached ({error}); nothing was updated",
     "no_ref": "{ref} is neither a tag nor a commit of TOW's repository (origin); nothing was updated",
+    "untracked_clash": "{app} holds files that are not part of TOW where {ref} has files of its own ({files}): move them out of the folder; nothing was updated",
     "switch_failed": "the code could not be switched ({error}): close programs and windows that use files in {app}",
     "data_newer": "{ref} cannot read this install's data (state.json format {found}; it reads up to {known}): go back no further than the version that wrote it; nothing was updated",
     "data_newer_since": "{ref} cannot read this install's data (state.json format {found}; it reads up to {known}): go back no further than {since}, the first version that reads it; nothing was updated",

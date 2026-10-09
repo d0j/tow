@@ -896,3 +896,30 @@ def test_tow_update_prints_how_to_run_it(capsys, tmp_path, monkeypatch):
     assert "update.py" not in out
     assert "TOW.cmd" not in out
     assert "update-tow" not in out
+
+
+@pytest.mark.parametrize("name", ["src/tow/store.py", "src"])
+def test_untracked_files_where_the_target_has_files_are_refused_before_anything_stops(install, name):
+    """git refuses a checkout over them: that was found only after TOW had stopped."""
+    path = install["app"] / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("left by hand\n", encoding="utf-8")
+    (install["app"] / "notes.txt").write_text("no clash: the target has no such file\n", encoding="utf-8")
+    fake = Fake(install["app"])
+    before = head(install)
+
+    code, lines = run(fake)
+
+    assert code == 2
+    assert fake.calls == []  # TOW was not stopped
+    assert lines[-1].startswith(f"{install['app']} holds files that are not part of TOW where v1.21.0 has")
+    assert f"({name})" in lines[-1]
+    assert head(install) == before
+    assert not (install["root"] / "update-state.json").exists()
+
+
+def test_untracked_files_that_clash_with_nothing_do_not_stop_an_update(install):
+    (install["app"] / "notes.txt").write_text("the owner's own notes\n", encoding="utf-8")
+    code, _lines = run(Fake(install["app"]))
+    assert code == 0
+    assert (install["app"] / "notes.txt").is_file()
