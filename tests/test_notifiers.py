@@ -6,6 +6,7 @@ Every test talks to a fake HTTP transport; nothing leaves the machine.
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Callable
 
 import httpx
@@ -218,6 +219,24 @@ def test_rate_limit_is_waited_out(http):
     assert notifiers.send_all(DISCORD, "x") == {"discord": (True, "")}
     assert len(seen) == 2
     assert sleeps == [2.0]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        httpx.Response(429, headers={"Retry-After": "nan"}),
+        httpx.Response(429, content=b'{"retry_after": NaN}', headers={"content-type": "application/json"}),
+    ],
+)
+def test_a_wait_that_is_no_number_is_the_usual_pause(http, answer):
+    # time.sleep(nan) raises: the delivery ended as TOW's own error instead of a retry.
+    set_handler, seen, sleeps = http
+    answers = iter([answer, httpx.Response(204)])
+    set_handler(lambda _r: next(answers))
+    assert notifiers.send_all(DISCORD, "x") == {"discord": (True, "")}
+    assert len(seen) == 2
+    assert sleeps
+    assert all(math.isfinite(wait) for wait in sleeps)
 
 
 def test_a_wait_longer_than_the_cap_is_left_to_the_next_delivery(http):

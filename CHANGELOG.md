@@ -37,6 +37,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Turning network access off (Settings or `tow access off`) is said to work at once, as it does: Settings and the
   command asked for a restart that only turning it on needs. A phone or laptop that opens TOW while access is off
   reads why in its language instead of "LAN access is disabled".
+- A messenger that answers "too many requests" with a wait that is no number ("nan") is waited for the usual pause
+  and asked again, instead of the delivery failing with an internal error.
 
 ## [1.28.2] — 2026-10-09
 

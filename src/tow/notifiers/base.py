@@ -7,6 +7,7 @@ the page (``text``). A plain text instead of a key is shown as it is.
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass
 from typing import Any, Protocol, get_protocol_members, runtime_checkable
@@ -148,13 +149,23 @@ def backoff_sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
+def _seconds(value: object) -> float | None:
+    """A wait in seconds; None for anything else - "nan" and NaN are no number (time.sleep
+    refuses them), "inf" is longer than any cap."""
+    try:
+        seconds = float(value) if isinstance(value, (str, int, float)) and not isinstance(value, bool) else None
+    except ValueError:
+        return None
+    return None if seconds is None or math.isnan(seconds) else seconds
+
+
 def _retry_after(response: httpx.Response) -> float | None:
     """How long the service asks to wait: the Retry-After header, or ``retry_after`` in the
     answer (Telegram keeps it under ``parameters``)."""
     try:
         header = response.headers.get("retry-after")
         if header:
-            return float(header)
+            return _seconds(header)
         body = response.json()
     except TypeError, ValueError:
         return None
@@ -163,10 +174,7 @@ def _retry_after(response: httpx.Response) -> float | None:
     value = body.get("retry_after")
     if value is None and isinstance(body.get("parameters"), dict):
         value = body["parameters"].get("retry_after")
-    try:
-        return float(value) if value is not None and not isinstance(value, bool) else None
-    except TypeError, ValueError:
-        return None
+    return _seconds(value)
 
 
 # Failures that prove the request never reached the service: sending it again cannot repeat it.
