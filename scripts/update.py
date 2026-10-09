@@ -1590,10 +1590,11 @@ class Update:
 
     # --- the start files of an install without git ------------------------------------------
 
-    def refresh_root_files(self, app: Path) -> None:
+    def refresh_root_files(self, app: Path, *, record: bool = True) -> None:
         """The Windows bundle's start files of ``app``'s version into <TOW> (its
         scripts/root_files.py; a version without it is left out). Said, and recorded in
-        update-state.json; a failure here never fails the update."""
+        update-state.json (``record``: not when no update ran); a failure here never fails the
+        update, and the files written before it are still said and recorded."""
         if not isinstance(self.code, ArchiveCode) or not self.sys.windows:
             return
         if not any((self.root / name).exists() for name in ROOT_FILE_NAMES):
@@ -1610,12 +1611,14 @@ class Update:
             written, kept = module.refresh(self.root, resume_at=self.resume_at)
         except Exception as exc:  # noqa: BLE001 - the update itself is not changed by its start files
             self.say("root_files_failed", error=str(exc) or type(exc).__name__)
-            return
+            # root_files.RefreshError: one file failed, the others were written (and say so).
+            written, kept = list(getattr(exc, "written", None) or []), list(getattr(exc, "kept", None) or [])
         for name in kept:
             self.say("root_files_kept", name=name)
         if written:
             self.say("root_files", version=version, names=", ".join(written))
-            self.write_state(root_files=sorted({*self.state.get("root_files", []), *written}))
+            if record:
+                self.write_state(root_files=sorted({*self.state.get("root_files", []), *written}))
 
     def refresh_runtime_copy(self) -> None:
         """``runtime/update.py`` (what the start files run while app/scripts may be missing) from
@@ -1624,13 +1627,15 @@ class Update:
         new = self.app / "scripts" / "update.py"
         if not isinstance(self.code, ArchiveCode) or not stable.is_file() or not new.is_file():
             return
+        temporary = stable.with_name(".update.py.tmp")
         try:
             if new.read_bytes() == stable.read_bytes():
                 return
-            temporary = stable.with_name(".update.py.tmp")
             shutil.copy2(new, temporary)
             os.replace(temporary, stable)
         except OSError as exc:
+            with contextlib.suppress(OSError):
+                temporary.unlink()  # never left beside the copy (missing when the copy failed)
             self.say("root_files_failed", error=exc)
 
     # --- the run -----------------------------------------------------------------------------

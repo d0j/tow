@@ -1080,6 +1080,39 @@ def test_start_files_are_left_alone_where_they_are_not_the_bundles(install, gith
     assert (install["root"] / "Start TOW.cmd").is_file()
 
 
+def test_a_start_file_that_cannot_be_written_does_not_stop_the_others(install, github):
+    root = install["root"]
+    _old_zip_files(root)
+    (root / "Stop TOW.cmd").unlink()
+    (root / "Stop TOW.cmd").mkdir()  # cannot be read or replaced
+    extra = {"scripts/root_files.py": ROOT_FILES_SOURCE}
+    github.release("v1.23.0", tarball("1.23.0", extra=extra))
+
+    code, lines = run(Machine(install["app"], github, windows=True), "v1.23.0")
+
+    assert code == 0, lines  # the update itself is not changed by its start files
+    assert (root / "Start TOW.cmd").read_bytes() == _root_files().rendered()["Start TOW.cmd"]
+    assert any(line.startswith("the start files could not be written again (Stop TOW.cmd: ") for line in lines)
+    assert "the start files were written again from TOW 1.23.0: Start TOW.cmd, Update TOW.cmd" in lines
+    assert state(install)["root_files"] == ["Start TOW.cmd", "Update TOW.cmd"]
+    assert not [path.name for path in root.iterdir() if path.name.endswith(".tmp")]
+
+
+def test_a_start_file_whose_replace_fails_leaves_no_temporary_file(tmp_path, monkeypatch):
+    module = _root_files()
+
+    def refused(_source, _target):
+        raise PermissionError(13, "held by another program")
+
+    folder = tmp_path / "TOW"
+    folder.mkdir()
+    monkeypatch.setattr(os, "replace", refused)
+    with pytest.raises(module.RefreshError) as failure:
+        module.refresh(folder)
+    assert set(failure.value.failed) == {"Start TOW.cmd", "Stop TOW.cmd", "Update TOW.cmd"}
+    assert os.listdir(folder) == []
+
+
 @pytest.mark.parametrize(
     ("ref", "message"),
     [
