@@ -145,6 +145,7 @@ _CHECK_CLEARABLE_FIELDS = (
 # pending selection change and relocation; the check's facts still land.
 OWNER_FIELDS = (
     "title",
+    "title_set",
     "url",
     "save_path",
     "client_id",

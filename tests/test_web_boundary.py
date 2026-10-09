@@ -102,7 +102,8 @@ PURE: dict[str, set[str]] = {
     "tow.notify": {"event_text"},
     "tow.paths": {"tmp_dir"},
     "tow.pulse": {"clock"},
-    "tow.records": {"CheckRow"},
+    # shown_title: the name a topic record is shown by, no I/O.
+    "tow.records": {"CheckRow", "shown_title"},
     "tow.restore_points": {"CREATE_FAILED", "INVALID_FILE", "ROLLBACK_FAILED", "RestorePointError", "invalid_file"},
     "tow.selection": {"SelectionPendingError", "normalize_policy", "resolve_selection"},
     "tow.snapshots": {"SnapshotError"},

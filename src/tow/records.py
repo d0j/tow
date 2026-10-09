@@ -36,6 +36,7 @@ class Topic(TypedDict, total=False):
     # what the owner set
     id: str
     title: str
+    title_set: bool  # the owner renamed the topic: ``title`` is shown, not the site's (``shown_title``)
     url: str
     save_path: str
     client_id: str
@@ -188,6 +189,15 @@ def topics_of(state: Mapping[str, Any]) -> list[Topic]:
     """The state's topics (an empty list when there are none or the field is broken)."""
     topics = state.get("topics")
     return [cast(Topic, topic) for topic in topics if isinstance(topic, dict)] if isinstance(topics, list) else []
+
+
+def shown_title(topic: Mapping[str, Any]) -> str:
+    """The name a topic is shown by: the owner's own name once set in the edit panel, else the
+    site's current title, else the name it was added with."""
+    title = str(topic.get("title") or "")
+    if topic.get("title_set") is True and title.strip():
+        return title
+    return str(topic.get("tracker_title") or title)
 
 
 def health_of(state: Mapping[str, Any]) -> Health:

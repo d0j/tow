@@ -12,6 +12,7 @@ from typing import Any, cast
 from tow import access
 from tow.config import flash_ttl, interval_sec_of, load_config
 from tow.log import error_fields, log_event
+from tow.records import shown_title
 from tow.store import load_secrets
 from tow.undo import snapshots
 from tow.undo.engine import KINDS, Context, Kind, Outcome, Refused, Restore, t
@@ -28,6 +29,7 @@ from tow.undo.records import (
 # Topic fields the edit form changes; undoing an edit restores exactly these.
 TOPIC_EDIT_FIELDS = (
     "title",
+    "title_set",
     "url",
     "client_id",
     "selection",
@@ -42,7 +44,7 @@ TOPIC_EDIT_FIELDS = (
 def _short_title(record: dict[str, Any]) -> str:
     item = record.get("item")
     item = item if isinstance(item, dict) else {}
-    return str(item.get("tracker_title") or item.get("title") or "").split(" / ")[0][:40]
+    return shown_title(item).split(" / ")[0][:40]
 
 
 # --------------------------------------------------------------------------- topics

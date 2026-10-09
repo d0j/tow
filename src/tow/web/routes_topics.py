@@ -13,6 +13,7 @@ from tow import undo
 from tow.clients.factory import client_configurations, default_client_id
 from tow.errors import TowError
 from tow.folders import recent_save_roots
+from tow.records import shown_title
 from tow.topic_form import TopicForm
 from tow.web import _context, services, topic_actions
 from tow.web.templating import TEMPLATES
@@ -67,7 +68,7 @@ def topic_downloads(tid: str, limit: int = 100, offset: int = 0) -> dict[str, An
     last_event = record.get("last_event") or None
     return {
         "ok": True,
-        "topic": {"id": tid, "title": topic.get("tracker_title") or topic.get("title") or ""},
+        "topic": {"id": tid, "title": shown_title(topic)},
         "summary": topic_progress_summary(topic, history),
         "last_event": event_output(last_event) if last_event else None,
         "last_completed": last_out,

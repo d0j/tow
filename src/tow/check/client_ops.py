@@ -18,7 +18,7 @@ from tow.folders import paths_equal
 from tow.jsonish import as_dict
 from tow.log import error_fields
 from tow.notify import NotificationBatch
-from tow.records import Topic, topics_of
+from tow.records import Topic, shown_title, topics_of
 from tow.torrent import parse_magnet_hashes, windows_path_key
 
 
@@ -175,7 +175,7 @@ def _conflicting_topic_claim(
             )
         if not paths_equal(other_path, save_path) or not compatible_selection:
             # The topic by the name Home shows (its internal id said nothing: "another topic (2821ad16c798)").
-            name = str(other.get("tracker_title") or other.get("title") or "").split(" / ")[0].strip()
+            name = shown_title(other).split(" / ")[0].strip()
             return name or str(other.get("id") or "unknown")
     return ""
 

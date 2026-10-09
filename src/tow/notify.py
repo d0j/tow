@@ -211,7 +211,10 @@ def event_text(
     selected_files: int | None = None,
     total_files: int | None = None,
     recovered: bool = False,
+    episode_source: str = "",
 ) -> str:
+    """A message about a topic; ``episode_source`` is the site's title the episodes are read
+    from when ``title`` is the owner's own name (by default ``title`` itself)."""
     lang = i18n.message_language()
     text = _event_text(
         lang,
@@ -220,6 +223,7 @@ def event_text(
         error=error,
         tracker=tracker,
         episodes=episodes,
+        episode_source=episode_source,
         selected_files=selected_files,
         total_files=total_files,
     )
@@ -238,6 +242,7 @@ def _event_text(
     episodes: str = "",
     selected_files: int | None = None,
     total_files: int | None = None,
+    episode_source: str = "",
 ) -> str:
     error = error_text(error, lang)
     if kind in {"qbit_down", "qbit_up"}:
@@ -261,7 +266,7 @@ def _event_text(
     parts = [short_series_title(title, lang)]
     if _tracker_text(tracker):
         parts.append(_tracker_text(tracker))
-    episode = " ".join((episodes or "").split()).strip() or _episode_text(title, lang)
+    episode = " ".join((episodes or "").split()).strip() or _episode_text(episode_source or title, lang)
     if episode:
         parts.append(episode)
     action = t(f"notify.action.{kind}", lang) if kind in _ACTIONS else ""

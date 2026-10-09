@@ -30,7 +30,7 @@ from tow.clock import local_zone
 from tow.i18n import t
 from tow.log import cls_label, error_class, history_events
 from tow.notify import PendingNotification, error_parts, event_text, short_series_title
-from tow.records import Topic
+from tow.records import Topic, shown_title
 from tow.store import load_state, persistence_lock, save_state
 
 GROUP_MIN = 3
@@ -73,9 +73,7 @@ def compose(items: Iterable[PendingNotification]) -> list[tuple[str, str, Topic 
     for (tracker, cls), members in groups.items():
         if len(members) < GROUP_MIN:
             continue
-        names = [
-            short_series_title(str(m.topic.get("tracker_title") or m.topic.get("title") or ""), lang) for m in members
-        ]
+        names = [short_series_title(shown_title(m.topic), lang) for m in members]
         listed = ", ".join(names[:5]) + (t("notify.and_more", lang, count=len(names) - 5) if len(names) > 5 else "")
         if not cls:
             text = t("notify.group_recovered", lang, tracker=tracker, n=len(members), topics=listed)
@@ -93,7 +91,8 @@ def compose(items: Iterable[PendingNotification]) -> list[tuple[str, str, Topic 
         if id(item) in grouped:
             continue
         text = event_text(
-            title=str(item.topic.get("tracker_title") or item.topic.get("title") or ""),
+            title=shown_title(item.topic),
+            episode_source=str(item.topic.get("tracker_title") or item.topic.get("title") or ""),
             kind=item.kind,
             tracker=item.tracker,
             error=item.error,
