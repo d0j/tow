@@ -142,9 +142,6 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   held open by another program at rotation time (the History page reading it, a terminal following it): each attempt
   deleted one older file, at every new line, until no history was left. The log now grows on and is rotated once it
   is free.
-- A topic waiting for disk space keeps waiting while the torrent client is still checking its torrent (qBittorrent
-  checks every torrent when it starts, for example with the computer), moves it or cannot reach its files: that was
-  taken for you starting it yourself, the waiting ended, and TOW never started the torrent it had added stopped.
 - An update whose snapshot fails (a full disk, a copy that does not read back) removes the half-made copy from
   `backup/`: it took more of a full disk and counted as one of the update snapshots kept.
 - An update of a git install whose code could not be switched completely - on Windows a file of `app\` held by
