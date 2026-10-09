@@ -965,8 +965,9 @@ def _cmd_access(args: argparse.Namespace) -> int:
         _print({"ok": False, "error": str(exc)}, args.json)
         return EXIT_CANNOT_RUN
     log_event("settings_access", allow_lan=enabled, bind=cfg["bind"], where="cli", how="manual")
-    message = t("cli.access.on") if enabled else t("cli.access.off")
-    _print({"ok": True, "network": enabled, "message": message + " " + t("cli.access.restart")}, args.json)
+    # Off works at once (every request reads the config); on needs the server to listen anew.
+    message = t("cli.access.on") + " " + t("cli.access.restart") if enabled else t("cli.access.off")
+    _print({"ok": True, "network": enabled, "message": message}, args.json)
     return EXIT_OK
 
 

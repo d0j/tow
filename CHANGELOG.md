@@ -34,6 +34,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   of the Undo time (Settings: 1–30 minutes) and of the download history limits.
 - Settings → Torrent clients keeps a password exactly as typed: spaces at its ends were cut off, and the client then
   refused a password that was typed correctly. An empty field still keeps the saved password.
+- Turning network access off (Settings or `tow access off`) is said to work at once, as it does: Settings and the
+  command asked for a restart that only turning it on needs. A phone or laptop that opens TOW while access is off
+  reads why in its language instead of "LAN access is disabled".
 
 ## [1.28.2] — 2026-10-09
 

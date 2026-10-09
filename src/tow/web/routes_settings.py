@@ -317,7 +317,10 @@ def settings_access(allow_lan: str = Form("")) -> Response:
     if refused := save_together("/settings?open=access", write):
         return refused
     services.log_event("settings_access", allow_lan=enabled, bind=cfg["bind"], how="manual")
-    return flash_redirect("/settings?open=access", "web.settings.access_saved", "ok")
+    # Off works at once (the middleware refuses the network by the config); on needs a restart.
+    return flash_redirect(
+        "/settings?open=access", "web.settings.access_saved" if enabled else "web.settings.access_closed", "ok"
+    )
 
 
 def _interval_label(seconds: int) -> str:

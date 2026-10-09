@@ -17,7 +17,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import Request
-from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from tow import access, i18n
@@ -177,7 +177,8 @@ def _refusal(request: Request, cfg: dict[str, Any]) -> Response | None:
     if not _trusted_request_host(request, cfg):
         return Response("untrusted host", status_code=403)
     if not access.network_open(cfg) and not access.is_local(request):
-        return Response("LAN access is disabled", status_code=403)
+        # A phone or laptop is told why, in its language (set above), not "LAN access is disabled".
+        return PlainTextResponse(i18n.t("web.network_closed"), status_code=403)
     if request.method in _WRITE_METHODS:
         if (refused := _body_refusal(request)) is not None:
             return refused
