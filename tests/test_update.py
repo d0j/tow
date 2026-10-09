@@ -424,6 +424,30 @@ def test_a_failed_snapshot_changes_nothing_and_starts_tow_again(install, monkeyp
     assert snapshots(install) == folders  # the half copy is gone: it is not one of the snapshots kept
 
 
+def test_a_tag_the_origin_does_not_have_is_refused_in_words(install):
+    fake = Fake(install["app"])
+    before = head(install)
+    code, lines = run(fake, ref="v9.9.9")
+    assert code == 2
+    assert lines[-1] == "v9.9.9 is neither a tag nor a commit of TOW's repository (origin); nothing was updated"
+    assert head(install) == before
+    assert fake.calls == []  # nothing stopped
+
+
+def test_an_origin_out_of_reach_is_refused_in_words(install):
+    git(install["app"], "remote", "set-url", "origin", str(install["root"] / "no-such-origin"))
+    fake = Fake(install["app"])
+    before = head(install)
+    code, lines = run(fake)
+    assert code == 2
+    assert lines[-1].startswith(
+        "TOW's repository (origin) could not be reached (git fetch --tags --prune origin failed:"
+    )
+    assert lines[-1].endswith("; nothing was updated")
+    assert head(install) == before
+    assert fake.calls == []
+
+
 def test_a_target_older_than_one_process_is_refused(install):
     fake = Fake(install["app"])
     before = head(install)
