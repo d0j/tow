@@ -376,6 +376,23 @@ def test_deploy_says_no_python_was_found_in_windows_powershell_5_1_too():
     assert deploy.index("$ErrorActionPreference = 'Stop'") < deploy.index("function Find-BasePython")
 
 
+def test_deploy_takes_only_a_python_the_updater_runs_on():
+    # "py -3" named the launcher's default, which may be 3.10 (update.py needs 3.11) and never a
+    # Python uv installed; and Select-Object -First 1 on a program's output stops the pipeline
+    # early in PowerShell 7, so $LASTEXITCODE kept an earlier program's code. Checked by hand in
+    # Windows PowerShell 5.1 and PowerShell 7.6 with a 3.10 listed first.
+    deploy = (ROOT / "scripts" / "deploy.ps1").read_text(encoding="ascii")
+    finder = deploy[deploy.index("$launcher = Get-Command py.exe") : deploy.index('throw "no base Python found')]
+    code = " ".join(line.split("#", 1)[0] for line in finder.splitlines())
+    assert "& $launcher.Source -0p" in code  # every Python the launcher knows
+    assert "-3 " not in code
+    assert "sys.version_info >= (3, 11)" in code
+    assert "Select-Object" not in code
+    assert "@(& $path -X utf8 -c $check 2>$null)" in finder
+    updater = (ROOT / "scripts" / "update.py").read_text(encoding="utf-8")
+    assert "if sys.version_info < (3, 11):" in updater  # the same floor
+
+
 def test_setup_takes_no_options_and_never_runs_under_a_running_tow():
     # 02.10.2026: `tow.cmd setup --help` rebuilt the live install's environment under a running TOW.
     root = Path(__file__).resolve().parents[1] / "scripts"

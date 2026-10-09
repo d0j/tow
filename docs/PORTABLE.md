@@ -469,8 +469,8 @@ Python (the one `app/.venv/pyvenv.cfg` names), not the venv, so `uv sync` can re
 on Windows. `tow update --ref <tag>` prints the exact command; on Windows
 `app\scripts\deploy.ps1 -Ref <tag>` (`-HealthTimeoutSec` 90, `-CheckWaitMinutes`, `-KeepSnapshots`;
 Windows PowerShell 5.1 or 7, ASCII, `-LiteralPath`; `powershell -ExecutionPolicy Bypass -File …`
-where the execution policy refuses scripts) finds that Python (or any Python 3.11+ through
-`py -3`) and runs it. uv, Python and uv's cache come from one resolver, `launcher_env`, the same as the launchers give: `runtime/bin/uv` before uv on
+where the execution policy refuses scripts) finds that Python (or else the first Python 3.11+ the
+Python launcher lists, `py -0p`) and runs it. uv, Python and uv's cache come from one resolver, `launcher_env`, the same as the launchers give: `runtime/bin/uv` before uv on
 PATH, `UV_PYTHON_INSTALL_DIR`, `UV_PYTHON_BIN_DIR`, `UV_CACHE_DIR` under `<TOW>/runtime`,
 `UV_PROJECT_ENVIRONMENT=app/.venv`, `UV_MANAGED_PYTHON=1` (so an install whose Python is still
 outside `runtime/` gets it there on its first update, which needs the network; `tow setup`
