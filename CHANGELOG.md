@@ -102,6 +102,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A site's daily download limit ends early only when a check by hand really reached the site: "Check" on a torrent
   waiting for disk space, or one whose site did not answer, ended the limit, and the next scheduled checks asked the
   site again the same day.
+- `tow secrets generate-key --key-file` names the whole path of the key it wrote (a relative name is the
+  terminal's folder), and its help says that it writes such a file also while passwords and tokens are saved;
+  only keys/master.key is refused then.
 - The help of `tow update --ref` gives v1.22.0 as its example and says that an install without git also takes
   `latest`: its example, v1.21.0, was a tag such an install refuses.
 - The help of `tow watchdog` and the guides say what it does: one watchdog pass, as `tow run` makes every 10

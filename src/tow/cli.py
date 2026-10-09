@@ -560,7 +560,8 @@ def _cmd_secrets(args: argparse.Namespace) -> int:
         elif args.secrets_action == "generate-key":
             from tow.i18n import t
 
-            path = generate_master_key(args.key_file)
+            # A relative --key-file is the terminal's folder: the message names the whole path.
+            path = generate_master_key(args.key_file.absolute() if args.key_file else None)
             _print({"ok": True, "key_file_created": True, "message": t("cli.keys.generated", path=path)}, args.json)
         return 0
     except SecretStoreError as exc:
