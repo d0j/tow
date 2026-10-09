@@ -142,9 +142,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   a messenger server cannot be reached: the delivery's claim is named `owner` now, and one an older TOW left is
   recognised in its exact form. A real credential in state, config or history is still refused.
 - A Windows zip install that began with an older zip no longer keeps that zip's `Start TOW.cmd`, `Stop TOW.cmd` and
-  `Update TOW.cmd` for good: an update writes the new version's files into the TOW folder, before it replaces the
-  code and again after. With a 1.22 `Update TOW.cmd`, running the update again after a cut-off update failed with
-  "can't open file …\app\scripts\update.py"; the guide says how to recover such an install by hand.
+  `Update TOW.cmd` for good: an update writes the start files into the TOW folder, the installed version's before it
+  replaces the code and the new version's after. With a 1.22 `Update TOW.cmd`, running the update again after a
+  cut-off update failed with "can't open file …\app\scripts\update.py"; the install guide says how to recover such an
+  install by hand.
 - `Start TOW.cmd` and `Stop TOW.cmd` say that an update was cut off and to run `Update TOW.cmd` again, or that TOW's
   code is incomplete, instead of "The system cannot find the path specified" followed by "TOW did not start: the
   reason is above" with no reason above.
