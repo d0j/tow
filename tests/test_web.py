@@ -189,7 +189,9 @@ def test_store_error_response_does_not_expose_local_exception_details():
     response = TestClient(isolated).get("/test-store-error")
     assert response.status_code == 503
     assert "must-not-be-displayed" not in response.text
-    assert "данные TOW недоступны" in response.text
+    # Qa8: without a charset a browser read the Russian words as Windows-1252 (mojibake).
+    assert response.headers["content-type"] == "text/plain; charset=utf-8"
+    assert response.text.startswith("Данные TOW недоступны")
 
 
 def test_post_forms_use_fetch_transport_for_origin_compatibility():

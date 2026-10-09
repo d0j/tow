@@ -16,7 +16,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
@@ -86,8 +86,10 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 async def _store_corruption(_request: Request, exc: StoreCorruptionError) -> Response:
     # The stored error can contain a local path or a damaged value. The browser needs only a
-    # stable failure message; recovery details remain with the local diagnostic tools.
-    return Response(t("web.data_unavailable"), status_code=503)
+    # stable failure message; recovery details remain with the local diagnostic tools. Plain text in
+    # UTF-8, as a sentence: without a charset a browser showed the Russian words as mojibake.
+    text = t("web.data_unavailable")
+    return PlainTextResponse(text[:1].upper() + text[1:], status_code=503)
 
 
 async def _snapshot_failed(request: Request, exc: SnapshotError) -> Response:
