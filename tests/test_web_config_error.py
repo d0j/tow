@@ -44,6 +44,31 @@ def test_the_page_gives_one_instruction_and_the_cli_says_the_error_once(broken_c
     assert not [entry for entry in caplog.records if entry.name == "tow.i18n"]
 
 
+def test_a_config_moved_away_while_tow_runs_is_said_too(monkeypatch, capsys):
+    # A move of the running install's folder that failed half-way took config.yaml along: every
+    # page and /healthz answered "Internal Server Error", so tow run restarted its web server.
+    import importlib
+
+    monkeypatch.setattr(importlib.import_module("tow.web.app"), "_config_logged", [])
+    path = config_path()
+    good = path.read_bytes()
+    path.unlink()
+    try:
+        page = _local().get("/", headers={**HTML, "Accept-Language": "en"})
+        assert page.status_code == 503
+        assert "there is no such file at" in page.text
+        assert "nightly backup" in page.text
+        health = _local().get("/healthz")
+        assert health.status_code == 200
+        assert "there is no such file" in health.json()["config_error"]
+        from tow import cli
+
+        assert cli.main(["status"]) == 3
+        assert "there is no such file" in capsys.readouterr().err
+    finally:
+        path.write_bytes(good)
+
+
 def test_a_page_names_the_file_the_place_and_the_way_back(broken_config):
     response = _local().get("/", headers={**HTML, "Accept-Language": "en"})
     assert response.status_code == 503
