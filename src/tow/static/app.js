@@ -641,6 +641,8 @@ if (topicUrl) {
     const n = (s) => s.toLowerCase().replace(/[^a-z0-9а-яё]+/gi, "");
     const junk = !cur || /^https?:/i.test(cur) || cur === url || (n(cur) && n(slug) && n(cur) === n(slug));
     if (!junk) return;
+    // The title TOW puts into the field goes with the form: a name other than it is the owner's.
+    const guessedEl = document.getElementById("topic-guessed-title");
     const body = new FormData();
     body.set("url", url);
     const sequence = ++guessSequence;
@@ -649,6 +651,7 @@ if (topicUrl) {
       const j = await r.json();
       if (sequence !== guessSequence || titleEl.value.trim() !== cur) return;
       if (j.ok && j.title) {
+        if (guessedEl) guessedEl.value = j.title;
         titleEl.value = j.title;
         titleEl.dispatchEvent(new Event("input", { bubbles: true }));
       }
