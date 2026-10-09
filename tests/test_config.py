@@ -449,3 +449,24 @@ def test_a_config_saved_in_another_encoding_says_to_save_it_as_utf8():
     page = TestClient(app).get("/", headers={"Accept": "text/html"})
     assert page.status_code != 500
     assert "UTF-8" in page.text
+
+
+def test_the_example_config_states_the_bounds_the_code_uses():
+    """config.example.yaml said Settings offers 15..3600 seconds of Undo; the form offers 1..30 minutes."""
+    from tow.config import FLASH_TTL_MAX_SEC, FLASH_TTL_MIN_SEC, HISTORY_MAX_DAYS, HISTORY_MAX_ITEMS
+    from tow.paths import repo_root
+
+    text = (repo_root() / "config.example.yaml").read_text(encoding="utf-8")
+    assert "Settings offers 1..30\n# minutes" in text
+    assert f"at least {FLASH_TTL_MIN_SEC} and at most {FLASH_TTL_MAX_SEC}" in text
+    assert f"(0..{HISTORY_MAX_DAYS})" in text
+    assert f"(0..{HISTORY_MAX_ITEMS})" in text
+
+
+def test_the_checks_card_says_when_a_new_interval_applies():
+    from fastapi.testclient import TestClient
+
+    from tow.web import app
+
+    page = TestClient(app).get("/settings").text
+    assert "Новый интервал начинает действовать в течение минуты" in page

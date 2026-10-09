@@ -747,7 +747,7 @@
       "title": "1. Sections",
       "home": "<b>Home</b> — the topics TOW watches: link, name, folder in the torrent client.",
       "sites": "<b>Sites</b> — where the topics come from (rutor, kinozal…). A site can have several mirror addresses: if one does not answer, TOW takes the next.",
-      "settings": "<b>Settings</b> — the theme, torrent clients, notifications, how often to check, access from other devices, the service and backups; at the end, Diagnostics, this guide and signing out.",
+      "settings": "<b>Settings</b> — the language and theme, torrent clients, notifications, how often to check, access from other devices, updates, the service and backups; at the end, Diagnostics, this guide and signing out.",
       "log": "<b>Log</b> (the scroll icon in the header) — recent events. Passwords never get there. The log does not grow forever: {n} files of {size} each are kept."
     },
     "s2": {
@@ -1622,7 +1622,7 @@
       "title": "Checks",
       "check_topics": "Global timer",
       "show_undo": "Show “Undo” for",
-      "check_hint": "Active topics without a personal timer are checked every {interval}. Set a personal timer when adding or editing a topic.",
+      "check_hint": "Active topics without a personal timer are checked every {interval}. A new interval applies within a minute and counts from the last check. Set a personal timer when adding or editing a topic.",
       "undo_hint": "How long the Undo button stays after a change."
     },
     "access": {
