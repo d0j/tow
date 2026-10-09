@@ -129,5 +129,5 @@ def test_a_charset_that_is_no_page_encoding_is_not_used(charset):
 def test_the_fuzzed_pages_decode_without_an_error_or_a_lone_surrogate():
     undefined = b"<meta charset=undefined><a href=dl.php?t=1>\xcf</a>"
     assert thttp.html_text(_response(undefined, "text/html")) == "<meta charset=undefined><a href=dl.php?t=1>П</a>"
-    escapes = b'<meta charset="unicode_escape"><h1>Show \udfff</h1>'
+    escapes = rb'<meta charset="unicode_escape"><h1>Show \udfff</h1>'  # the six characters, not a code point
     assert thttp.html_text(_response(escapes, "text/html")) == escapes.decode("ascii")
