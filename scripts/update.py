@@ -172,6 +172,8 @@ TEXTS = {
         " cannot update it again); nothing was updated"
     ),
     "archive_ref": "an install without git updates to a release tag (for example v1.22.0) or latest, not to {ref}",
+    "fetch_failed": "TOW's repository (origin) could not be reached ({error}); nothing was updated",
+    "no_ref": "{ref} is neither a tag nor a commit of TOW's repository (origin); nothing was updated",
     "switch_failed": "the code could not be switched ({error}): close programs and windows that use files in {app}",
     "data_newer": (
         "{ref} cannot read this install's data (state.json format {found}; it reads up to {known}): go back no"
@@ -847,8 +849,15 @@ class GitCode:
         return self.sys.git("rev-parse", "HEAD")
 
     def prepare(self, ref: str) -> str:
-        self.sys.git("fetch", "--tags", "--prune", "origin")
-        target = self.sys.git("rev-parse", "--verify", f"{ref}^{{commit}}")
+        # Refused in words that say nothing changed, not with git's own message alone.
+        try:
+            self.sys.git("fetch", "--tags", "--prune", "origin")
+        except UpdateError as exc:
+            raise UpdateError(self.work.text("fetch_failed", error=exc)) from exc
+        try:
+            target = self.sys.git("rev-parse", "--verify", f"{ref}^{{commit}}")
+        except UpdateError as exc:
+            raise UpdateError(self.work.text("no_ref", ref=ref)) from exc
         self.work.refuse_too_old(target)
         return target
 

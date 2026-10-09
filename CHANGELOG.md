@@ -151,6 +151,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   another program (an editor, an antivirus scan) is not replaced, while git still reports success - is rolled back
   and names the file. It reported "TOW … is running" on a mix of both versions, and every later update was refused
   for local changes. The rollback checks out the previous code by force and checks it the same way.
+- An update of a git install refused because its repository cannot be reached (no network) or does not have the
+  tag says so and that nothing was updated, instead of git's own message alone ("fatal: Needed a single revision").
 
 ## [1.28.2] — 2026-10-09
 
