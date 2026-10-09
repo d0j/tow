@@ -18,7 +18,9 @@ from tow.check.client_ops import (
     live_previous_overlap,
     magnet_matches_saved_hash,
 )
+from tow.check.rows import client_marks as _client_marks
 from tow.check.rows import set_error, stamp_result
+from tow.check.rows import withdrawn_meanwhile as _withdrawn_meanwhile
 from tow.check_steps import client_identities, resolve_client_hash, store_file_aliases, verify_magnet_metadata
 from tow.clients.spec import TorrentClientAdapter
 from tow.episodes import parse_season_hint
@@ -30,11 +32,9 @@ from tow.records import CheckRow, Topic, mirror_of
 from tow.selection import SelectionPendingError, policy_from_topic, resolve_selection
 from tow.store import (
     FileStamp,
-    StoreCorruptionError,
     encrypted_secrets_path,
     file_stamp,
     load_secrets,
-    load_state,
 )
 from tow.title import title_is_placeholder as _title_placeholder
 from tow.torrent import TorrentPathConflictError, parse_magnet_hashes, parse_torrent_metadata
@@ -165,37 +165,6 @@ def _mark_preview(
         row["would_migrate_hash_identity"] = migrates
         row["would_update_selection"] = updates_selection
         row["status"] = "preview"
-
-
-def _client_marks(topic: Topic) -> tuple[str, ...]:
-    """What the client is changed with: the link (which torrent), the folder, the client and
-    the file selection."""
-    return tuple(repr(topic.get(key)) for key in ("url", "save_path", "client_id", "selection"))
-
-
-def _withdrawn_meanwhile(topic: Topic, row: dict[str, Any], old: str, started: tuple[str, ...] | None) -> bool:
-    """The owner paused or deleted the topic, or changed its link, folder, client or file selection,
-    after this run started (its copy is from the start): look at the state now, right before
-    the client is changed, and skip it then - the next check works with what is saved."""
-    try:
-        current = next(
-            (t for t in load_state(quarantine=False).get("topics") or [] if str(t.get("id")) == str(topic.get("id"))),
-            None,
-        )
-    except StoreCorruptionError:
-        return False  # the commit will fail closed on its own
-    edited = current is not None and started is not None and _client_marks(current) != started
-    if current is not None and not current.get("paused") and not edited:
-        return False
-    key = (
-        "check.deleted_meanwhile"
-        if current is None
-        else "check.paused_meanwhile"
-        if current.get("paused")
-        else "check.edited_meanwhile"
-    )
-    row.update({"ok": True, "hash": old, "changed": False, "status": "skipped", "skipped": t(key, owner_language())})
-    return True
 
 
 @dataclass
@@ -409,11 +378,13 @@ def _waits_for_space(work: TopicCheck) -> bool:
     """The topic's revision waits in the client for disk space (``tow.check.space``): only the
     client is asked - the site's .torrent is not downloaded again, nothing is added again.
     False: the check goes on as always (it was started now, or the waiting ended; a new file
-    selection of the owner is applied by the check, which starts it when it fits)."""
+    selection of the owner is applied by the check, which starts it when it fits). True also
+    when the owner paused, deleted or edited the topic meanwhile: it is skipped, as before an add."""
     topic = work.topic
     if not topic.get("waiting_space") or topic.get("selection_dirty"):
         return False
-    return space.recheck(topic, work.run, work.row, work.client, work.client_id) == space.WAITING
+    outcome = space.recheck(topic, work.run, work.row, work.client, work.client_id, begun=work.started)
+    return outcome in {space.WAITING, space.WITHDRAWN}
 
 
 def _check_revision(work: TopicCheck) -> None:

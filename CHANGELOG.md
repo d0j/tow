@@ -48,6 +48,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   asks to try again instead.
 - Home and the header no longer fail with a server error when a site is renamed or deleted while the page is being
   built.
+- A torrent waiting for disk space is no longer given up when the torrent client only passes through a state of its
+  own (loading after its restart, checking, moving the files): that was taken for the owner starting it, the error
+  went away and TOW never started it. It is also not started on a drive that is unplugged or asleep for the moment,
+  nor when the topic was paused, deleted or edited while the check ran.
 - A messenger that answers "too many requests" with a wait that is no number ("nan") is waited for the usual pause
   and asked again, instead of the delivery failing with an internal error.
 - A check no longer keeps in memory every topic page of a site whose check ends early (a sign-in page, a magnet that
