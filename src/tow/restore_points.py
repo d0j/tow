@@ -277,9 +277,12 @@ def _create_restore_point(*, protected: set[str] | None = None) -> dict[str, Any
     except (ExportImportError, OSError, RestorePointError) as exc:
         # The exporter owns its failed writes. An existing or concurrently created
         # file at this name is not ours to delete.
-        # Name the cause (OSError without its filename: no local paths in the UI flash).
-        if isinstance(exc, OSError):
-            reason = exc.strerror or type(exc).__name__
+        # Name the cause (OSError without its filename: no local paths in the UI flash). The
+        # exporter wraps a system error (a full disk, a read-only folder, a file held open) in its
+        # own English sentence: the system's words are found behind it.
+        system = _system_error(exc)
+        if system is not None:
+            reason = system.strerror or type(system).__name__
         elif isinstance(exc, ExportImportError) and exc.reason == "too_large":
             reason = t("backup.restore_point.data_too_large", owner_language(), mib=MAX_BUNDLE_BYTES // 2**20)
         else:
@@ -295,6 +298,18 @@ def _create_restore_point(*, protected: set[str] | None = None) -> dict[str, Any
         logging.getLogger("tow.restore_points").warning("%s", view["cleanup_warning"])
     _record_cleanup(bool(view.get("cleanup_warning")), root)
     return view
+
+
+def _system_error(exc: BaseException) -> OSError | None:
+    """The ``OSError`` an error is or was raised from (its cause or context chain), if any."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        if isinstance(current, OSError):
+            return current
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return None
 
 
 def restore_from_point(point_id: str) -> dict[str, Any]:
