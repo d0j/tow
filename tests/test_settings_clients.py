@@ -279,6 +279,8 @@ def test_deluge_card_has_no_login_field(legacy_qbit):
         ("nas", "99999", "web.settings.bad_port"),
         ("nas", "0", "web.settings.bad_port"),
         ("nas", "80a", "web.settings.bad_port"),
+        ("nas", "٨٠٨٠", "web.settings.bad_port"),
+        ("nas", "8_080", "web.settings.bad_port"),
         ("../../x", "8080", "web.settings.bad_client_host"),
         ("<b>x</b>", "8080", "web.settings.bad_client_host"),
         ("my nas", "8080", "web.settings.bad_client_host"),
@@ -294,6 +296,29 @@ def test_an_invalid_client_address_or_port_is_never_stored(legacy_qbit, host, po
 
     assert _flash(response) == t(key, "ru")
     assert load_secrets() == before
+
+
+@pytest.mark.parametrize(("kind", "port"), [("transmission", 9091), ("deluge", 8112), ("qbittorrent", 8080)])
+def test_an_empty_client_port_is_that_clients_own_default(legacy_qbit, kind, port):
+    from tow.clients.spec import get
+
+    assert get(kind).default_port == port
+    c = _client()
+    client_id = "default"
+    if kind != "qbittorrent":
+        c.post("/settings/client/add", data={"kind": kind})
+        client_id = kind
+
+    response = c.post(
+        "/settings/client",
+        data={"client_id": client_id, "kind": kind, "host": "nas", "port": "", "password": "pw"},
+        follow_redirects=False,
+    )
+
+    assert _flash(response) == "сохранено"
+    secrets = load_secrets()
+    block = secrets["clients"][client_id] if kind != "qbittorrent" else secrets["qbittorrent"]
+    assert block["port"] == port
 
 
 @pytest.mark.parametrize(
