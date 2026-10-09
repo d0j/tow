@@ -321,7 +321,7 @@ def attention(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> list[str]:
         if topic.get("paused") or topic.get("last_error_class") != "tracker_auth":
             continue
         tracker = match_tracker(trackers, str(topic.get("url") or ""))
-        name = tracker.name if tracker else t("web.site_unknown")
+        name = _site_title(cfg, tracker.name) if tracker else t("web.site_unknown")
         need_login[name] = need_login.get(name, 0) + 1
     for name, count in sorted(need_login.items()):
         items.append(t("web.attention.need_login", site=name, count=count))
@@ -407,6 +407,11 @@ def _site_title(cfg: Mapping[str, Any], name: str) -> str:
     """A site as the pages name it ("NNM-Club"), not its settings key ("nnmclub")."""
     site = (cfg.get("trackers") or {}).get(name)
     return str((site.get("title") if isinstance(site, Mapping) else "") or name)
+
+
+def site_title_of(name: str) -> str:
+    """A site by the title the pages show (`_site_title` of the current settings)."""
+    return _site_title(_context.config(), name)
 
 
 def _with_site_title(params: Any, tracker: Any, title: str) -> Any:

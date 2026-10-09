@@ -183,6 +183,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   earlier change; that undo now stays in the header, where its tooltip says what it puts back.
 - When TOW's data files cannot be read, the page that says so is readable in Russian too: it was sent without its
   character set, and a browser showed mojibake.
+- "Needs attention" on Home, the result of a site's mirror check, the connection check and the messages after a
+  site sign-in name the site by its title, as the Sites page does ("NNM-Club"), not by its settings key ("nnmclub").
 
 ## [1.28.2] — 2026-10-09
 
