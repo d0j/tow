@@ -563,6 +563,18 @@ def _kinds() -> list[str]:
     return [str(e.get("kind")) for e in reversed(read_events(limit=500))]
 
 
+def test_a_topic_of_a_deleted_site_is_logged_once(monkeypatch, stores):
+    """Every check logged check_fail "no site" again for a topic whose site was deleted."""
+    save_state({"topics": [_topic(hash=OLD)]})
+    _wire(monkeypatch, {"main": Client()}, Tracker())
+    monkeypatch.setattr(topic_step, "match_tracker", lambda trackers, url: None)  # the site was deleted
+    for _ in range(3):
+        row = check.run_check(apply=True, notify=False, how="auto")["results"][0]
+        assert row["ok"] is False
+    assert load_state()["topics"][0]["last_error_code"] == "check.no_tracker"  # still red
+    assert _kinds().count("check_fail") == 1
+
+
 @pytest.mark.parametrize(
     ("magnet", "limited", "downloads_while_waiting"),
     [(True, False, 0), (False, True, 0), (False, False, 2)],

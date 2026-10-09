@@ -133,7 +133,8 @@ def _skip_row(
     if not tr:
         error = TowError("check.no_tracker")
         set_error(row, error)
-        _fail_log(topic, url, error, how=how, persist=apply)
+        if topic.get("last_error_code") != error.code:  # its site still gone: logged once, as a wait is
+            _fail_log(topic, url, error, how=how, persist=apply)
         stamp_result(topic, row)
         return True
     row["tracker"] = tr.name
