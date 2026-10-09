@@ -944,11 +944,11 @@ def test_wording_of_the_audit(lang):
     assert "+" not in catalog["log"]["kind"]["site_add"]
     # The button is named as it is called.
     assert catalog["settings"]["backups"]["create"] in catalog["locations"]["manual"]
-    # A .towx from Settings needs the same master key; tow export/import moves TOW to another key.
+    # A .towx from Settings needs the same master key; export/import moves TOW to another key.
     file_help = catalog["help"]["s6"]["file"]
     assert "master.key" in file_help
-    assert "tow export" in file_help
-    assert "tow import" in file_help
+    assert "{launcher} export" in file_help  # the launcher, as the page writes it
+    assert "{launcher} import" in file_help
     assert catalog["history"]["group"]["all"] == catalog["home"]["tools"]["all"]
 
 
