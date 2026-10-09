@@ -1874,6 +1874,11 @@ def update(ref: str, *, system: System | None = None, app: Path = APP, **options
         except UpdateError as exc:  # refused before anything changed
             work._say(str(exc))
             return 2
+        except OSError as exc:
+            # Before TOW stops (after that, run() records every failure itself): a leftover
+            # app.new held by another program, a folder that cannot be read. Said, not a traceback.
+            work.say("aborted", error=exc)
+            return 2
         finally:
             _unlock(handle)
     finally:

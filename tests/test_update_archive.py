@@ -260,6 +260,23 @@ def test_refused_targets_stop_nothing(install, github, ref, release, message):
     assert leftovers(install) == []
 
 
+def test_a_leftover_that_cannot_be_removed_is_said_and_stops_nothing(install, github, monkeypatch):
+    # app.new of an earlier cut-off update, held by another program: its removal failed quietly,
+    # the unpacked release could not take its place, and the run ended in a traceback.
+    archive = tarball("1.23.0")
+    github.latest("v1.23.0")
+    github.release("v1.23.0", archive, listed=sums(**{"tow-source.tar.gz": archive}))
+    (install["root"] / "app.new" / "held").mkdir(parents=True)
+    (install["root"] / "app.new" / "held" / "file").write_text("in use", encoding="utf-8")
+    monkeypatch.setattr(updater, "remove_tree", lambda _path: None)  # as when a file in it is held
+    machine = Machine(install["app"], github)
+    code, lines = run(machine)
+    assert code == 2
+    assert lines[-1].startswith("update aborted: ")
+    assert machine.calls == []  # TOW was not stopped
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+
+
 def test_a_download_that_fails_says_where(install, github):
     github.routes[f"/{REPO}/releases/latest"] = (500, b"oops", {})
     code, lines = run(Machine(install["app"], github))
