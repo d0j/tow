@@ -242,7 +242,7 @@ def _update_client_selection(
     if waiting is not None and shortfall is None:
         revisions = [str(value) for value in topic.get("previous_hashes") or []]
         if overlap := live_previous_overlap(topic_client, revisions, metadata.files):
-            raise TowError(PREVIOUS_REVISION_ACTIVE, file=overlap)
+            raise TowError(PREVIOUS_REVISION_ACTIVE, file=overlap, hash=h.upper())
     starts_waiting = waiting is not None and shortfall is None
     topic_client.configure_torrent_selection(
         blob, h, plan.selected_indices, ensure_started=completed_pending_add or starts_waiting

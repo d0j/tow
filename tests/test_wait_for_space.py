@@ -394,6 +394,29 @@ def test_a_wait_recorded_for_another_client_is_dropped_quietly(world):
     assert topic["last_error_code"] == "check.waiting_space"  # not "removed from client"
 
 
+def test_a_wait_for_the_previous_revision_to_stop_is_logged_once(world):
+    from tow.log import read_events
+
+    topic = _topic()
+    topic["hash"] = OLD
+    save_state({"topics": [topic]})
+    world.client.torrents[OLD] = {
+        "hash": OLD,
+        "save_path": str(world.folder),
+        "state": "stoppedUP",
+        "tags": ["tow"],
+        "files": [{"index": 0, "name": "Show/e01.mkv", "size": 1, "progress": 1.0, "priority": 1}],
+    }
+    _check()
+    world.client.torrents[OLD]["state"] = "uploading"  # the owner started the previous one again
+    world.disk["free"] = 60 * GIB
+    for _ in range(3):
+        row = _check()
+        assert row["error_record"]["code"] == "check.previous_revision_active"
+    assert _topic()["last_error_params"]["hash"] == NEW  # which revision waits
+    assert [event["kind"] for event in read_events(limit=50)].count("check_fail") == 1
+
+
 def test_a_folder_not_seen_from_here_never_waits(world, monkeypatch):
     monkeypatch.setattr("tow.folders.seen_from_here", lambda _path: False)
     row = _check()
