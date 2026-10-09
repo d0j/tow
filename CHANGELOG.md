@@ -76,7 +76,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - History shows a site's changes and its pause, torrent clients added, removed or made the default, a new file
   selection confirmed by the torrent client, a topic's folder moved (or not) in the torrent client and a new topic
   whose first check failed. They were only in the event log of the settings: a site's changes never reached History
-  at all, because it looked for another name of them.
+  at all, because it looked for another name of them. A check that fails right after you sign in to a site is
+  logged as a failed check, not as a failed add.
 - The daily digest lists the topics whose downloads finished ("Downloaded: …"): that line never appeared, because
   the completion events did not carry the topic's name. It also no longer counts a torrent that was already in the
   torrent client as "added to the client".

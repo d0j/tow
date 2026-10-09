@@ -89,7 +89,8 @@ def topics_tracker_login(tid: str, username: str = Form(""), password: str = For
             )
         return home_redirect("web.topics.login_blocked", "err", credential_topic=tid)
     except Exception as exc:  # noqa: BLE001 - the check after a saved login: any failure is shown, never a 500
-        services.log_event("add_check_fail", topic=tid, tracker=tracker.name, **error_fields(exc), how="manual")
+        # A failed check of a topic TOW has (History: "check failed"), not of a new one ("add failed").
+        services.log_event("check_fail", topic=tid, tracker=tracker.name, **error_fields(exc), how="manual")
         if error_class(exc) == "tracker_auth":
             try:
                 restore_unverified_password(tracker.name, old_entry, username.strip(), password.strip())

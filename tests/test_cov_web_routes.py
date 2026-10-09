@@ -466,6 +466,9 @@ def test_tracker_login_transport_failure_keeps_the_new_login(monkeypatch, client
 
     assert _flash(response) == "вход на kinozal не удался: all hosts failed"
     assert load_secrets()["trackers"]["kinozal"] == {"username": "u", "password": "p"}
+    # History says what failed: the check of a topic TOW has, not an add.
+    assert [event["topic"] for event in _events("check_fail")] == ["t1"]
+    assert _events("add_check_fail") == []
 
 
 def test_tracker_login_rejected_row_restores_previous_partial_entry(monkeypatch, client):
