@@ -399,6 +399,38 @@ def test_a_file_the_checkout_could_not_replace_is_rolled_back_not_reported_as_up
     assert fake.calls[-1] == "spawn tow run 1.20.0"
 
 
+@pytest.mark.parametrize("held_for", [2, 99])
+def test_a_rollback_checkout_waits_for_a_file_held_for_a_moment(install, held_for):
+    # The held file also made the forced checkout back fail (git exits 1 over a file it may not
+    # even need to write), and TOW stayed stopped "on a mix" with a by-hand instruction.
+    class Held(Fake):
+        backs = 0
+
+        def git(self, *args: str) -> str:
+            if args[:1] == ("checkout",) and "--force" in args:
+                self.backs += 1
+                if self.backs <= held_for:
+                    raise updater.UpdateError("error: unable to unlink old 'pyproject.toml': Invalid argument")
+            before = (self.app / "pyproject.toml").read_bytes()
+            output = super().git(*args)
+            if args[:1] == ("checkout",) and "--force" not in args:
+                (self.app / "pyproject.toml").write_bytes(before)
+            return output
+
+    fake = Held(install["app"])
+    before = head(install)
+    code, lines = run(fake)
+    assert code == 1
+    record = state(install)
+    if held_for < updater.SWITCH_BACK_TRIES:
+        assert record["status"] == "rolled_back"
+        assert head(install) == before
+        assert fake.calls[-1] == "spawn tow run 1.20.0"
+    else:
+        assert record["status"] == "failed"
+        assert any(line.startswith("TOW was not started") for line in lines)
+
+
 @pytest.mark.parametrize("fault", ["disk full", "read-back"])
 def test_a_failed_snapshot_changes_nothing_and_starts_tow_again(install, monkeypatch, fault):
     fake = Fake(install["app"])

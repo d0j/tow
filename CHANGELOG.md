@@ -150,7 +150,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - An update of a git install whose code could not be switched completely - on Windows a file of `app\` held by
   another program (an editor, an antivirus scan) is not replaced, while git still reports success - is rolled back
   and names the file. It reported "TOW … is running" on a mix of both versions, and every later update was refused
-  for local changes. The rollback checks out the previous code by force and checks it the same way.
+  for local changes. The rollback checks out the previous code by force and checks it the same way, for up to half a
+  minute while the file is held, instead of leaving TOW stopped at the first try.
 - An update of a git install refused because its repository cannot be reached (no network) or does not have the
   tag says so and that nothing was updated, instead of git's own message alone ("fatal: Needed a single revision").
 - A restart asked in Settings → TOW service while TOW was stopping (a check finishing first), or cut off by a stop
