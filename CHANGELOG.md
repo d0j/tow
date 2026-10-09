@@ -147,6 +147,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   taken for you starting it yourself, the waiting ended, and TOW never started the torrent it had added stopped.
 - An update whose snapshot fails (a full disk, a copy that does not read back) removes the half-made copy from
   `backup/`: it took more of a full disk and counted as one of the update snapshots kept.
+- An update of a git install whose code could not be switched completely - on Windows a file of `app\` held by
+  another program (an editor, an antivirus scan) is not replaced, while git still reports success - is rolled back
+  and names the file. It reported "TOW … is running" on a mix of both versions, and every later update was refused
+  for local changes. The rollback checks out the previous code by force and checks it the same way.
 
 ## [1.28.2] — 2026-10-09
 
