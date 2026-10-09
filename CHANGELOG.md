@@ -7,7 +7,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
-- `history_keep_days` and `history_max_items` in `config.yaml` are checked like every other setting: a word or a
+- Deluge: a torrent whose files are already in its folder (a new version over the files of the previous one, a topic
+  added again) no longer stays stopped after TOW starts it. Deluge checks the files it finds and drops a start given
+  meanwhile; TOW counted the check as started. It now waits for the check and gives the start again when the
+  torrent is still stopped.- `history_keep_days` and `history_max_items` in `config.yaml` are checked like every other setting: a word or a
   negative number is named when TOW starts instead of quietly becoming the default, and a huge number of days no
   longer makes every check fail.
 - A `heartbeat_url` without a server name (`https://` alone, or with a space in it) is named when TOW starts; it

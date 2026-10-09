@@ -307,7 +307,9 @@ def test_active_states_confirm_a_start(monkeypatch, state):
 
 def test_a_finished_torrent_paused_by_qbittorrent_4_counts_as_started(monkeypatch):
     api = QbitApi(api="4", state="pausedUP", progress=1.0, amount_left=0)
-    assert _adapter(monkeypatch, api)._wait_started(H)["state"] == "pausedUP"
+    adapter = _adapter(monkeypatch, api)
+    monkeypatch.setattr(adapter, "_start", lambda infohash: None)  # its seeding limit pauses it again at once
+    assert adapter._wait_started(H)["state"] == "pausedUP"
 
 
 def test_missing_files_after_start_is_an_unsafe_state(monkeypatch):

@@ -82,6 +82,8 @@ class ManagedClient:
     # Read-back polling: how many times and how often (tests set the pause to zero).
     POLLS = 50
     PAUSE = 0.1
+    # How often a start the client dropped is given again before a stopped torrent is judged.
+    START_REPEATS = 2
 
     # --- primitives every client implements ---------------------------------------------------
 
@@ -204,10 +206,30 @@ class ManagedClient:
         return self._wait(infohash, self._stopped, "client.managed.stop_unconfirmed")
 
     def _wait_started(self, infohash: str) -> dict[str, Any]:
+        """The start, confirmed. A torrent that checks the files it found has not started yet:
+        Deluge drops a start given while it checks, and the torrent stays stopped afterwards, so
+        a stopped torrent is given the start again (START_REPEATS times). A complete torrent the
+        client keeps stopped (a seeding limit already reached) counts once the repeats are spent;
+        a check longer than the polls counts as started, as the client checks on its own."""
+        polls = 0
+        repeats = 0
+
         def started(info: dict[str, Any]) -> bool:
-            if not str(info.get("state") or ""):
+            nonlocal polls, repeats
+            polls += 1
+            state = str(info.get("state") or "")
+            if not state:
                 return False
-            return not self._stopped(info) or completed_progress(info.get("progress"))
+            if state.casefold().startswith("checking"):
+                return polls >= self.POLLS
+            if not self._stopped(info):
+                return True
+            if repeats < self.START_REPEATS:
+                repeats += 1
+                self._require_owned(infohash)
+                self._start(infohash)
+                return False
+            return completed_progress(info.get("progress"))
 
         return self._wait(infohash, started, "client.managed.start_unconfirmed")
 

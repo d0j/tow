@@ -329,7 +329,10 @@ def test_failed_start_of_a_stopped_torrent_rolls_back_without_starting_it(client
         client.configure_torrent_selection(TORRENT, H, [E02, NFO], ensure_started=True)
     assert str(error.value) == _msg("client.managed.start_unconfirmed")
     assert client.priorities() == before
-    rollback = client.calls[client.calls.index(("start",)) + 1 :]
+    # The start is given again (a client may drop one while it checks the files), then rolled back.
+    assert client.calls.count(("start",)) == 1 + type(client).START_REPEATS
+    last_start = len(client.calls) - 1 - client.calls[::-1].index(("start",))
+    rollback = client.calls[last_start + 1 :]
     assert rollback == [("stop",), ("set_wanted", frozenset({client.client_id_of(E01)}), tuple(sorted(before)))]
     assert client.torrents[H]["state"] == "stoppedDL"
 
