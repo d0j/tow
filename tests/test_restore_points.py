@@ -680,6 +680,26 @@ def test_a_large_download_history_fits_a_restore_point(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
+def test_a_folder_that_cannot_be_written_is_said_in_the_systems_words(monkeypatch, tmp_path, language):
+    # A read-only or full restore points folder said "cannot create export bundle safely", the
+    # exporter's own English words, in every language.
+    from tow import bundle
+
+    _seed(monkeypatch, tmp_path, language)
+
+    def refused(path, content):
+        raise PermissionError(13, "Access is denied", str(path))
+
+    monkeypatch.setattr(bundle, "atomic_create_bytes", refused)
+    with pytest.raises(RestorePointError) as caught:
+        create_restore_point()
+
+    assert caught.value.kind == CREATE_FAILED
+    assert str(caught.value) == t("backup.restore_point.cannot_create", language, reason="Access is denied")
+    assert str(tmp_path) not in str(caught.value)  # no local paths in the message
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
 def test_data_too_large_for_a_restore_point_is_said_in_the_owner_language(monkeypatch, tmp_path, language):
     from tow import bundle
 

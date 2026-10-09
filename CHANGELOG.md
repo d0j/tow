@@ -160,6 +160,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A scheduled check that failed as a whole stays marked as failed until a scheduled check runs again: the progress
   pass (every 30 minutes) and the disk-space pass (every 5) turned the header clock back to normal, and the watchdog,
   which alerts after several such failures in a row, never counted more than one.
+- A restore point that cannot be written (the folder is read-only or full, a file is held by another program) says
+  why in the system's words, for **Create a backup**, a restore and an update from Settings alike, instead of
+  "cannot create export bundle safely".
 
 ## [1.28.2] — 2026-10-09
 
