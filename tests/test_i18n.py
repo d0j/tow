@@ -372,6 +372,21 @@ def test_a_chosen_language_wins_over_the_browser():
     assert '<html lang="en">' in c.get("/settings", headers={"Accept-Language": "en"}).text
 
 
+def test_the_language_saved_message_is_in_the_language_of_the_next_page():
+    """Qa8: "Auto" chosen on a Russian page in an English browser said "Язык сохранён" above the
+    English page that followed; a chosen language says it in that language."""
+    from helpers import flash_of
+
+    from tow.web import app
+
+    _set_language("ru")
+    c = TestClient(app, headers={"Origin": "http://127.0.0.1", "Accept-Language": "en-US,en;q=0.9"})
+    to_auto = c.post("/settings/language", data={"language": "auto"}, follow_redirects=False)
+    assert flash_of(to_auto.headers["location"]) == "language saved"
+    to_ru = c.post("/settings/language", data={"language": "ru"}, follow_redirects=False)
+    assert flash_of(to_ru.headers["location"]) == "язык сохранён"
+
+
 def test_messages_follow_the_owners_browser_when_auto():
     from tow.web import app
 
