@@ -793,6 +793,10 @@ if (settingsPage) {
           headers: { Accept: "text/html", "X-TOW-Fetch": "1" },
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        // A refusal (the data file busy, a theme TOW does not have) is a redirect too: its
+        // message's kind tells it from "saved".
+        const data = (response.headers.get("content-type") || "").includes("application/json") ? await response.json() : {};
+        if (data.flash && data.flash.kind !== "ok") throw new Error(data.flash.text || t("js.submit.unknown_error"));
         if (mine === sequence && status) status.textContent = t("js.settings.theme_saved", { theme: label });
       } catch (error) {
         if (mine === sequence && status) status.textContent = t("js.submit.failed", { error: error.message || t("js.submit.unknown_error") });

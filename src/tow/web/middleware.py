@@ -26,6 +26,7 @@ from tow.bind import origin_matches_request
 from tow.bundle import MAX_BUNDLE_BYTES
 from tow.torrent import MAX_TORRENT_BYTES
 from tow.web import _context, services, site_store
+from tow.web.views import flash_at
 
 _PORTABLE_UPLOAD_REQUEST_LIMIT = MAX_BUNDLE_BYTES + 2 * 1024 * 1024
 _UPLOAD_LIMITS = {
@@ -129,14 +130,19 @@ def _redirect_for_fetch(request: Request, response: Response) -> Response:
     """A form posted by app.js gets {"redirect": url} instead of a 303 (D6).
 
     fetch() follows a 303 itself, so the server rendered the next page once for the
-    fetch and once more for the location change. Cookies set on the redirect stay.
+    fetch and once more for the location change. Cookies set on the redirect stay. The message
+    the redirect leaves goes with it ({"flash": {"kind", "text"}}): a save in the background
+    (the theme) that opens no page tells a refusal from "saved" by its kind.
     """
     if request.headers.get("x-tow-fetch") != "1" or response.status_code not in (302, 303):
         return response
     location = response.headers.get("location")
     if not location:
         return response
-    converted = JSONResponse({"redirect": location}, headers={"Cache-Control": "no-store"})
+    body: dict[str, Any] = {"redirect": location}
+    if flash := flash_at(location):
+        body["flash"] = {"kind": flash.get("kind", "ok"), "text": flash.get("text", "")}
+    converted = JSONResponse(body, headers={"Cache-Control": "no-store"})
     for cookie in response.headers.getlist("set-cookie"):
         converted.headers.append("set-cookie", cookie)
     return converted
