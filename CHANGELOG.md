@@ -190,6 +190,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A long site title on Home ends in "…" (the whole title is its tooltip) instead of wrapping over four lines and making
   the row four times as tall; on Sites "No sign-in needed" no longer runs out of its pill.
 - Switching the language to Auto says "Language saved" in the language the page then has, not in the one it had.
+- A topic waiting for disk space says so once on Home ("Waiting for disk space: 1650.3 GB short…") instead of "Low disk
+  space: waiting for disk space: …".
 
 ## [1.28.2] — 2026-10-09
 

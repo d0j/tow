@@ -380,9 +380,9 @@ def _error_line(error: str, cls: str, site: str = "") -> str:
     if len(detail) > 90:
         detail = detail[:89].rstrip() + "…"
     label = CLS_RU.label(cls, lang, i18n.t("web.error_line.error", lang))
-    # A paused mirror's own words already say what happened ("all mirrors are paused"): no
-    # "Mirror paused:" in front of them.
-    same = detail.lower().startswith(label.lower()) or cls == "frozen"
+    # A paused mirror's own words already say what happened ("all mirrors are paused"), and so do
+    # a disk's ("waiting for disk space: …"): no "Mirror paused:" or "Low disk space:" in front.
+    same = detail.lower().startswith(label.lower()) or cls in ("frozen", "disk")
     line = detail if same else f"{label}: {detail}"
     return line[:1].upper() + line[1:]
 
