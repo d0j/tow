@@ -62,6 +62,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   writes the others and says which were written; no temporary file is left next to them.
 - `Update TOW.cmd` on an install that already runs the latest release now writes that release's start files too: an
   install an older updater brought to 1.28.2 kept its first zip's files until a newer release came out.
+- `deploy.ps1` in Windows PowerShell 5.1 says "no base Python found" when it finds none, instead of ending with the
+  Python launcher's raw error.
 - A messenger that answers "too many requests" with a wait that is no number ("nan") is waited for the usual pause
   and asked again, instead of the delivery failing with an internal error.
 - A check no longer keeps in memory every topic page of a site whose check ends early (a sign-in page, a magnet that
