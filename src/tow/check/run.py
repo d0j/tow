@@ -234,6 +234,15 @@ def _commit_run_state(result: _RunResult, history_rebuilt: bool = False) -> None
     _note_history_rebuilt(health, previous_health, rebuilt=history_rebuilt)
     health["auto_at_ts"] = health["at_ts"] if how == "auto" else previous_health.get("auto_at_ts")
     health["auto_ok_at_ts"] = health["at_ts"] if how == "auto" else _last_good_scheduled_check(previous_health)
+    if how == "progress":
+        # A progress or space pass checks no site: a scheduled check that failed as a whole stays
+        # failed - in the header and for the watchdog, which counts such failures in a row (M6).
+        if "check_ok" in previous_health:
+            health["check_ok"] = previous_health["check_ok"]
+        if "check_error" in previous_health:
+            health["check_error"] = previous_health["check_error"]
+        if "check_failures" in previous_health:
+            health["check_failures"] = previous_health["check_failures"]
     health["clients_ok"] = pool.health()
     if not pool.asked:  # no client was asked: keep what the last check or the diagnostics saw
         del health["qbit"], health["client"], health["qbit_ok"], health["clients_ok"]

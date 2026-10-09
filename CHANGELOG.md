@@ -157,6 +157,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   before the new web server answered, is shown as failed, no longer as "queued" or "starting" for good.
 - `data/logs/run-stderr.log`, which every start through the start files or `tow start` adds to, no longer grows
   without end: at 5 MiB it becomes `run-stderr.log.1` (the older one goes), as `serve-stderr.log` does.
+- A scheduled check that failed as a whole stays marked as failed until a scheduled check runs again: the progress
+  pass (every 30 minutes) and the disk-space pass (every 5) turned the header clock back to normal, and the watchdog,
+  which alerts after several such failures in a row, never counted more than one.
 
 ## [1.28.2] — 2026-10-09
 
