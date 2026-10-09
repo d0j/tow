@@ -17,7 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from tow import i18n
 from tow.bundle import MAX_BUNDLE_BYTES
 from tow.clock import format_ui_timestamp, machine_now
-from tow.config import as_bool
+from tow.config import as_bool, whole_number
 from tow.log import error_class
 from tow.paths import tmp_dir
 from tow.restore_points import CREATE_FAILED, INVALID_FILE, ROLLBACK_FAILED, RestorePointError, invalid_file
@@ -44,11 +44,8 @@ def settings_backup_automatic(enabled: str = Form("")) -> Response:
 @router.post("/settings/backup/retention")
 @services.locked_state_mutation
 def settings_backup_retention(days: str = Form("")) -> Response:
-    try:
-        age = int(days)
-        if not 1 <= age <= 3650:
-            raise ValueError("invalid retention settings")
-    except ValueError:
+    age = whole_number(days)  # not int(): it also takes "٧" and "1_0"
+    if age is None or not 1 <= age <= 3650:
         return _backup_redirect("web.backup.retention_invalid", "err")
     cfg = services.load_config()
     cfg["backup_days"] = age
