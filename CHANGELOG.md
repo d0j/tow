@@ -39,6 +39,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   reads why in its language instead of "LAN access is disabled".
 - A messenger that answers "too many requests" with a wait that is no number ("nan") is waited for the usual pause
   and asked again, instead of the delivery failing with an internal error.
+- A check no longer keeps in memory every topic page of a site whose check ends early (a sign-in page, a magnet that
+  confirms the saved revision) until the check ends: with many such topics a check used hundreds of megabytes.
 
 ## [1.28.2] — 2026-10-09
 
