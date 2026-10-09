@@ -35,6 +35,10 @@ def topics_replace_revision(tid: str) -> Response:
         return flash_redirect("/", "web.topics.not_found", "err")
     if not blocked_by_previous_revision(topic):
         return flash_redirect("/", "web.topics.replace_not_needed", "warn")
+    if topic.get("paused"):
+        # The check after the stop skips a paused topic: the previous torrent would stop and
+        # nothing would replace it.
+        return flash_redirect("/", "web.topics.replace_paused", "warn")
     try:
         client = services.client_from_secrets(
             services.load_config(), services.load_secrets(), topic.get("client_id") or None
