@@ -65,3 +65,25 @@ def test_help_anchor_mobile_clearance_matches_the_two_row_header():
     mobile = CSS.partition("@media (max-width: 720px) {")[2]
     body = dict(_rules(mobile)).get(".settings-section, .help-page h2[id]", "")
     assert "scroll-margin-top: 5.5rem" in body
+
+
+def test_long_site_names_and_sign_in_pills_stay_in_their_columns():
+    """Qa8: a long site title wrapped over four lines in Home's narrow Site column (the row four
+    times as tall), and "No sign-in needed" ran out of its 5.5 rem pill on Sites. The title ends
+    in "…" at desktop width (its tooltip says it all) and wraps on a phone; the sign-in column is
+    as wide as its longest pill, which keeps its own width."""
+
+    def first(selector: str) -> str:  # the base rule comes before any media override
+        return next(body for name, body in _rules(CSS) if name == selector)
+
+    tracker = first(".topic-tracker")
+    for rule in ("overflow: hidden", "text-overflow: ellipsis", "white-space: nowrap", "min-width: 0"):
+        assert rule in tracker
+    phones = [block for block in CSS.split("@media (max-width: 720px) {")[1:] if ".topic-tracker" in block]
+    assert phones
+    assert "white-space: normal" in dict(_rules(phones[0]))[".topic-tracker"]
+    home = (Path(__file__).parents[1] / "src" / "tow" / "templates" / "index.html").read_text(encoding="utf-8")
+    assert 'class="topic-tracker" data-label="{{ t(\'home.row.site\') }}" title="{{ site_title(topic.tracker)' in home
+    sites = first(".list-head.sites, details.row-edit.sites > summary")
+    assert "minmax(10rem,1fr) 8rem 6.4rem" in sites
+    assert "justify-self: start" in first("details.row-edit.sites > summary > .pill")

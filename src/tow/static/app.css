@@ -319,6 +319,9 @@ code, .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 .clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .topic-name { display: flex; align-items: center; flex-wrap: wrap; gap: .2rem .4rem; min-width: 0; }
 .topic-name > .clip { flex: 1 1 8rem; }
+/* A long site title ends in "…" (the whole title is its tooltip): it wrapped over four lines and made
+   the row four times as tall. A phone, with a line of its own for it, wraps it (below). */
+.topic-tracker { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topic-timer { display: inline-flex; align-items: center; gap: .2rem; flex-shrink: 0; color: var(--mut); font-size: 11px; font-variant-numeric: tabular-nums; }
 .topic-timer [data-timer-value] { font-family: ui-monospace, Consolas, monospace; }
 .addition { display: flex; flex-direction: column; line-height: 1.25; }
@@ -334,8 +337,11 @@ code, .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 .progress-link { font-weight: 700; white-space: nowrap; }
 .progress-link.complete { color: var(--ok); }
 .list-head.sites, details.row-edit.sites > summary {
-  grid-template-columns: 7.5rem minmax(10rem,1fr) 5.5rem 6.4rem;
+  grid-template-columns: 7.5rem minmax(10rem,1fr) 8rem 6.4rem;
 }
+/* The sign-in pill keeps its own width in a column wide enough for the longest one ("No sign-in
+   needed" ran out of a 5.5 rem pill). */
+details.row-edit.sites > summary > .pill { justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 details.row-edit.set > summary, a.set-link {
   grid-template-columns: 1fr auto;
 }
@@ -1047,6 +1053,7 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
      instead of being cut off at the right edge. */
   .topic-path .clip-start { white-space: normal; direction: ltr; text-overflow: clip; overflow-wrap: anywhere; }
   .topic-name > .clip { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
+  .topic-tracker { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
   .topic-event.clip, .topic-event .row-error { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
   /* The version sits at the end of the page instead of floating over text (the floating
      badge only steps aside for controls; a phone has no free corner for it). */

@@ -187,6 +187,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   site sign-in name the site by its title, as the Sites page does ("NNM-Club"), not by its settings key ("nnmclub").
 - A topic whose site asks for a sign-in has "Sign in to the site" in its row: "Needs attention" sent you to the row,
   and the row had no way to sign in.
+- A long site title on Home ends in "…" (the whole title is its tooltip) instead of wrapping over four lines and making
+  the row four times as tall; on Sites "No sign-in needed" no longer runs out of its pill.
 
 ## [1.28.2] — 2026-10-09
 
