@@ -50,9 +50,24 @@ function Find-BasePython {
         # $null into errors, and 'Stop' ended the script there ("No suitable Python runtime
         # found" as a raw NativeCommandError) instead of at the message below.
         $ErrorActionPreference = 'Continue'
+        # Every Python the launcher knows (py -0p: " -V:3.12 *  C:\...\python.exe", the default
+        # one marked), the default first; only one update.py runs on (3.11 or newer) is taken.
+        # "py -3" alone may name 3.10, and it does not see a Python that uv installed.
+        $paths = @()
+        foreach ($row in @(& $launcher.Source -0p 2>$null)) {
+            if ([string]$row -match '^\s*-\S+\s+(\*\s+)?(\S.*\.exe)\s*$') {
+                if ($Matches[1]) { $paths = @($Matches[2]) + $paths } else { $paths += $Matches[2] }
+            }
+        }
         # -X utf8: the path comes back as UTF-8, which the console encoding set below reads.
-        $found = & $launcher.Source -3 -X utf8 -c 'import sys; print(sys.executable)' 2>$null | Select-Object -First 1
-        if ($LASTEXITCODE -eq 0 -and $found) { return $found.Trim() }
+        $check = 'import sys; print(sys.executable) if sys.version_info >= (3, 11) else sys.exit(3)'
+        foreach ($path in $paths) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+            # All of its output, not Select-Object -First 1: PowerShell 7 then stops the pipeline
+            # before the program ends, and $LASTEXITCODE kept the previous Python's refusal.
+            $found = @(& $path -X utf8 -c $check 2>$null)
+            if ($LASTEXITCODE -eq 0 -and $found.Count -gt 0) { return ([string]$found[0]).Trim() }
+        }
     }
     throw "no base Python found for $App (app\.venv\pyvenv.cfg is missing); run update.py with any Python 3.11+"
 }

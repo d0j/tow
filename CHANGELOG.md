@@ -233,6 +233,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Updating an install that is a git clone refuses, before TOW stops, when files git does not track stand where the
   new version has files, and names them; the update stopped TOW first, then failed to switch the code and rolled
   back.
+- `deploy.ps1` on an install without `app\.venv` takes only a Python 3.11 or newer that the Python launcher knows
+  (also one installed by uv); it took the launcher's default, which could be 3.10, and the update then refused to
+  run.
 
 ## [1.28.2] — 2026-10-09
 
