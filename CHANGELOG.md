@@ -73,6 +73,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A topic whose download progress could not be read (its torrent in another folder than TOW's, for example) turns
   back from red as soon as a progress pass reads it again, with "works again", instead of keeping the error until its
   next check, hours or with a personal timer days later.
+- History shows a site's changes and its pause, torrent clients added, removed or made the default, a new file
+  selection confirmed by the torrent client, a topic's folder moved (or not) in the torrent client and a new topic
+  whose first check failed. They were only in the event log of the settings: a site's changes never reached History
+  at all, because it looked for another name of them.
 
 ## [1.28.2] — 2026-10-09
 
