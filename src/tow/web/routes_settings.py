@@ -447,14 +447,17 @@ def settings_client_ping(client_id: str = Form("")) -> Response:
             raise ConnectionError  # answered as the client library's own "no connection"
         cfg = services.load_config()
         version = services.client_from_secrets(cfg, services.load_secrets(), client_id or None).ping()
-        msg, kind = t("web.settings.ping_ok", version=version), "ok"
-        _client_answered(client_id)
     except Exception as e:  # noqa: BLE001 - a client library fails in its own ways: "Check" names the class only
         reason = _ping_reason(e)
         msg = t("web.settings.ping_failed", error=reason) if reason else t("web.settings.ping_silent")
         kind = "err"
         services.log_event("qbit_unreachable", client_id=client_id or None, error=reason, cls="qbit", how="manual")
         _client_answered(client_id, answered=False)
+    else:
+        # Outside the client's "except": a save that fails (a data file held by another
+        # program) is the app's "try again", never "no connection" for a client that answered.
+        msg, kind = t("web.settings.ping_ok", version=version), "ok"
+        _client_answered(client_id)
     return flash_redirect("/settings?open=clients", msg, kind)
 
 
@@ -466,14 +469,17 @@ def _client_answered(client_id: str, *, answered: bool = True) -> None:
     own "not answering", it would swallow that check's message about the client."""
     import time
 
-    from tow.clients.factory import default_client_id
+    from tow.clients.factory import client_configurations, default_client_id
 
     with services.persistence_lock():
         state = services.load_state()
         raw = state.get("health")
         health: dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
-        default = default_client_id(services.load_config())
+        cfg = services.load_config()
+        default = default_client_id(cfg)
         wanted = client_id or default
+        if wanted not in {str(client["id"]) for client in client_configurations(cfg)}:
+            return  # a form naming no configured client: nothing about it to record
         marks = health.get("ping_failed")
         failed = {k: v for k, v in (marks.items() if isinstance(marks, dict) else ()) if k != wanted}
         if answered:

@@ -198,6 +198,38 @@ def test_a_client_that_refuses_check_shows_as_not_answering_at_once(legacy_qbit,
     assert "ping_failed" in load_state()["health"]
 
 
+def test_a_client_that_answered_is_never_called_down_when_its_answer_cannot_be_saved(legacy_qbit, monkeypatch):
+    # The save of the answer ran inside the ping's own "except Exception": a data file held by
+    # another program (StoreWriteError) said "no connection", logged the client unreachable
+    # and marked it failed - the header turned red for a client that had just answered.
+    from tow.log import read_events
+    from tow.store import StoreWriteError
+    from tow.web import services
+
+    class Alive:
+        def ping(self):
+            return "5.0.1"
+
+    save_state({"topics": [], "health": {"qbit_ok": True, "clients_ok": {"default": True}, "check_ok": True}})
+    monkeypatch.setattr("tow.web.services.client_answers", lambda _client_id: True)
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a: Alive())
+    real_save = services.save_state
+    calls = []
+
+    def held_once(state):
+        calls.append(1)
+        if len(calls) == 1:
+            raise StoreWriteError(13, "held by another program")
+        real_save(state)
+
+    monkeypatch.setattr(services, "save_state", held_once)
+    response = _client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
+
+    assert not _flash(response).startswith("нет связи")
+    assert "ping_failed" not in load_state()["health"]
+    assert "qbit_unreachable" not in [event["kind"] for event in read_events(limit=20)]
+
+
 def test_check_of_a_client_nobody_listens_for_fails_after_one_quick_try(legacy_qbit, monkeypatch):
     """QA 1.24.1: "Check" took ~24 s when nothing listened (the library's retries, each one a
     Windows connect with its own retries). One connection attempt of 3 s now answers it."""
