@@ -364,7 +364,14 @@
         "write_failed": "The key could not be written to the keys folder of the install."
       },
       "first_run": "TOW created its master key: {path}. Back it up now, away from this computer (a USB stick, a password manager): without it the saved passwords and tokens cannot be read, not even from a backup. This message is shown once.",
-      "in_use": "A master key is in use already; nothing was created."
+      "in_use": "A master key is in use already; nothing was created.",
+      "source_install": "Master key: {path}",
+      "source_file": "Master key: {path} (named by TOW_MASTER_KEY_FILE).",
+      "source_legacy": "Master key: {path}, where TOW kept it before 1.18; tow keys adopt moves it into keys/.",
+      "source_env": "Master key: from the variable TOW_MASTER_KEY.",
+      "source_missing": "No master key yet: TOW creates keys/master.key at its first start (or: tow keys ensure).",
+      "install_file": "This install's own key file: {path}",
+      "install_file_missing": "This install has no key file of its own yet ({path})."
     },
     "help": {
       "description": "TOW watches topics on torrent sites and hands new versions to your torrent client.",
@@ -484,7 +491,11 @@
     "access": {
       "on": "Access from other devices is on (with the password).",
       "off": "Access from other devices is off: TOW opens on this computer only. It takes effect at once.",
-      "restart": "It takes effect after `tow restart`."
+      "restart": "It takes effect after `tow restart`.",
+      "status_on": "Network access is on (address {bind}).",
+      "status_off": "Network access is off: TOW opens on this computer only.",
+      "password_set": "A password is set.",
+      "password_unset": "No password is set."
     },
     "adopt": {
       "none": "No topic has a torrent in its client without the label tow.",
@@ -515,7 +526,49 @@
       "restored": "The import failed; the previous data was put back.",
       "not_restored": "The import failed, and putting the previous data back failed too. TOW tries again the next time it reads its data.",
       "no_checkpoint": "There is no import checkpoint at {path}.",
-      "rollback_failed": "The import was not rolled back."
+      "rollback_failed": "The import was not rolled back.",
+      "exported": "Written: {path} ({size}). The passwords and tokens in it are encrypted with the passphrase; the master key is not in it.",
+      "import_preview": "A preview: nothing was changed. The file holds {files}. Add --apply to import it.",
+      "imported": "Imported: {files}. What it replaced is kept in {checkpoint}; tow import-rollback --checkpoint with that folder and --apply puts it back.",
+      "path_mapped": "Folders starting with {old} now start with {new}.",
+      "path_unmapped": "--path-map did not change this folder: {path}",
+      "import_notes": "Not in the file: autostart (turn it on with tow autostart on) and the torrents themselves, which stay in the torrent client.",
+      "log_unrecorded": "The import could not be written to the event log.",
+      "rollback_preview": "A preview: nothing was changed. These would be put back: {files}. Add --apply to put them back.",
+      "rolled_back": "Put back: {files}."
+    },
+    "secrets": {
+      "encrypted": "Passwords and tokens: saved, encrypted in {file}.",
+      "none": "No passwords or tokens are saved yet.",
+      "migrated": "The old plain-text file of passwords and tokens is encrypted now.",
+      "nothing_to_migrate": "There is no old plain-text file of passwords and tokens: nothing to encrypt."
+    },
+    "backup": {
+      "made": "Nightly backup made: {path} (files: {n}, {size}).",
+      "missing": "Not in it, as they do not exist yet: {files}.",
+      "pruned": "Older copies removed: {n}."
+    },
+    "restore": {
+      "preview": "The nightly backup {path} of {at} (TOW {version}) is checked; it holds {files}. Add --apply to restore it.",
+      "done": "Restored from the nightly backup {path} of {at}. The data from before is kept in {safety}.",
+      "interval": "The global timer came back with the copy: every {minutes} min."
+    },
+    "watchdog": {
+      "up": "TOW answers on port {port}.",
+      "down": "TOW does not answer on port {port}: {cause}.",
+      "checks_ok": "Scheduled checks run on time.",
+      "checks_late": "Scheduled checks are late.",
+      "checks_failing": "Scheduled checks start but fail (failed runs in a row: {n}).",
+      "backup_ok": "Nightly backups are made.",
+      "backup_bad": "Nightly backups are not made: look at Settings → Backups.",
+      "backup_off": "Nightly backups are turned off."
+    },
+    "autostart": {
+      "on": "Autostart is on ({where}): TOW starts when you sign in.",
+      "without_login": "It starts with the computer, before anyone signs in.",
+      "off": "Autostart is off.",
+      "differs": "Autostart of this TOW ({where}) is turned off or set up differently: tow autostart on writes it again.",
+      "unread": "The autostart could not be read: {error}"
     }
   },
   "client": {
