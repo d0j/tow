@@ -355,7 +355,7 @@ def settings_client(
     client_id: str = Form(""),
     kind: str = Form("qbittorrent"),
     host: str = Form(""),
-    port: str = Form("8080"),
+    port: str = Form(""),  # empty: the client's own default port (Transmission 9091, not 8080)
     username: str = Form(""),
     password: str = Form(""),
 ) -> Response:
@@ -374,11 +374,8 @@ def settings_client(
     s = services.load_secrets()
     undo_secrets = copy.deepcopy(s)
     old_sec = interval_sec_of(cfg)
-    try:
-        port_number = int(port.strip() or spec.default_port)
-    except ValueError:
-        port_number = 0
-    if not 1 <= port_number <= 65535:
+    port_number = whole_number(port) if port.strip() else spec.default_port
+    if port_number is None or not 1 <= port_number <= 65535:
         return flash_redirect("/settings?open=clients", "web.settings.bad_port", "err")
     if host.strip() and not _client_host_ok(host.strip()):
         return flash_redirect("/settings?open=clients", "web.settings.bad_client_host", "err")

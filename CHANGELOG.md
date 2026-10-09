@@ -16,6 +16,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   60 minutes or 1 minute with "Saved", and a number written with other digits ("٦٠", "６０") or "1_000" is refused
   too. Changing one of the two fields no longer changes the other: an interval or an Undo time from `config.yaml`
   that the form cannot show (10 minutes, 45 seconds) stays as it is.
+- Settings → Torrent clients: a Transmission or Deluge saved with the port field empty gets its own default port
+  (9091, 8112), not qBittorrent's 8080. A port written with other digits ("٨٠٨٠") or as "8_080" is refused.
 
 ## [1.28.2] — 2026-10-09
 
