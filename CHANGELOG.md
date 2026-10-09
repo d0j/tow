@@ -46,6 +46,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A torrent client that answered **Check** in Settings is no longer reported as not answering (and shown red in the
   header) when TOW could not save that answer because another program held its data file for a moment; the page
   asks to try again instead.
+- Home and the header no longer fail with a server error when a site is renamed or deleted while the page is being
+  built.
 - A messenger that answers "too many requests" with a wait that is no number ("nan") is waited for the usual pause
   and asked again, instead of the delivery failing with an internal error.
 - A check no longer keeps in memory every topic page of a site whose check ends early (a sign-in page, a magnet that

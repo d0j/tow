@@ -222,6 +222,35 @@ def test_the_site_of_a_link_is_the_one_match_tracker_finds_and_is_kept_for_the_s
     assert runs == ["narrow", "wide", "other"]
 
 
+def test_a_site_renamed_during_the_request_is_no_server_error(monkeypatch):
+    # The name came from the kept lookup of the sites as they were; a save in the same process
+    # (another request renaming the site) then made this request read the sites again, and
+    # trackers()[name] raised KeyError: the page failed with a server error.
+    from tow.web import _context
+
+    pattern = r"^https?://example\.org/topic\?t=(\d+)"
+    cfg = {"value": _sites(("old", pattern))}
+    monkeypatch.setattr("tow.web.services.load_config", lambda: cfg["value"])
+    generation = {"value": 0}
+    monkeypatch.setattr(_context, "write_generation", lambda: generation["value"])
+    link = "https://example.org/topic?t=1"
+    original = _context.site_name
+
+    def renamed_meanwhile(url):
+        name = original(url)
+        cfg["value"] = _sites(("new", pattern))
+        generation["value"] += 1  # what a save of this process does to every open request
+        return name
+
+    def found():
+        _context.site_name(link)  # the lookup is kept for these sites
+        monkeypatch.setattr(_context, "site_name", renamed_meanwhile)
+        tracker = _context.tracker_of(link)
+        return tracker.name if tracker else None
+
+    assert _in_a_request(found) == "new"
+
+
 def test_home_and_the_header_name_the_same_sites_after_the_lookup_is_kept(monkeypatch, stores):
     """The header's site icons and Home's site column come from the kept lookup and do not change
     between the first and the second request."""
