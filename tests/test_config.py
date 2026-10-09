@@ -276,6 +276,34 @@ def test_notification_settings_are_validated(line, message):
         load_config()
 
 
+@pytest.mark.parametrize(
+    "line",
+    [
+        "history_keep_days: abc",
+        "history_keep_days: -3",
+        # timedelta(days=...) of this overflows: every check failed on it.
+        "history_keep_days: 1000000000000",
+        "history_max_items: [5]",
+        "history_max_items: -1",
+    ],
+)
+def test_download_history_limits_are_validated_not_replaced_by_the_default(line):
+    from tow.config import ConfigError
+
+    _write(f"{line}\n")
+
+    with pytest.raises(ConfigError, match=line.split(":")[0]):
+        load_config()
+
+
+def test_download_history_limits_accept_zero_and_numbers_written_as_text():
+    from tow.download_history import retention
+
+    _write("history_keep_days: 0\nhistory_max_items: '100'\n")
+
+    assert retention(load_config()) == (0, 100)
+
+
 def test_saving_does_not_write_defaults_the_file_did_not_have():
     import yaml
 
