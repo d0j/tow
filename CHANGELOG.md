@@ -70,6 +70,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   confirms the saved revision) until the check ends: with many such topics a check used hundreds of megabytes.
 - A topic you pause or edit while a check runs keeps its last result: the check that left it alone no longer showed
   it green and sent "works again" while its new version was still not added.
+- A topic whose download progress could not be read (its torrent in another folder than TOW's, for example) turns
+  back from red as soon as a progress pass reads it again, with "works again", instead of keeping the error until its
+  next check, hours or with a personal timer days later.
 
 ## [1.28.2] — 2026-10-09
 

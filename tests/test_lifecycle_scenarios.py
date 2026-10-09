@@ -15,6 +15,7 @@ from tow.check import reconcile as check_reconcile
 from tow.check import run as check_run
 from tow.check import topic as topic_step
 from tow.clients import factory as client_factory
+from tow.errors import TowError
 from tow.log import history_events
 from tow.status import project_home_status
 from tow.store import load_download_history, load_state, save_download_history, save_state
@@ -260,3 +261,25 @@ def test_a_pause_during_a_check_keeps_the_topics_last_result(world):
     assert topic["last_ok"] is False
     assert _home()[0] == "bad"
     assert world.sent == sent_before
+
+
+def test_a_reconcile_failure_in_a_progress_pass_ends_with_the_next_pass_that_works(world):
+    _check(how="manual", ids=["t1"])
+    assert _home()[0] == "ok"
+    world.reconcile.failure = TowError("progress.path_differs", topic=world.folder, client=r"D:\Other")
+
+    check.run_check(apply=True, notify=True, how="progress", progress_only=True)
+    assert _topic()["last_error_code"] == "check.reconcile_failed"
+    assert _home()[0] == "bad"
+    assert "reconcile_failed" in _history("errors")
+    said = len(world.sent)
+
+    world.reconcile.failure = None  # the owner put the torrent back into its folder
+    check.run_check(apply=True, notify=True, how="progress", progress_only=True)
+
+    topic = _topic()
+    assert not topic.get("last_error")
+    assert "last_error_code" not in topic
+    assert _home()[0] == "ok"
+    assert len(world.sent) == said + 1
+    assert world.sent[-1] == "Show — снова работает"
