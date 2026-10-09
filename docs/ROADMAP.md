@@ -26,8 +26,8 @@ These hold in every release:
 | Runtime | One portable folder, one supervised service (`tow run`), autostart for Windows, Linux and macOS, version/release display and explicit web update with verified archive, snapshot, health check and rollback (terminal for service-managed POSIX). |
 | Interface | Theme as the system, light or dark; Home sorting remembered per device; keyboard and screen-reader access to the header, rows and messages. |
 | Languages | English and Russian; a new language is one JSON file. |
-| Structure | The check as a package of steps (`tow.check`: run, topic, apply, client operations, reconcile, notices); thin web routes over `tow.web.services`; one crash journal for multi-file writes (`tow.journal`). |
-| Quality | Over 6,900 tests in random order on every core with a guard against network, processes and writes outside the temp folder; branch coverage ≥ 89%; strict mypy; ruff with a complexity cap. Blocking CI on Windows, Ubuntu 24.04/26.04 and macOS. |
+| Structure | The check as a package of steps (`tow.check`: run, topic, apply, client operations, reconcile, space, notices, rows); thin web routes over `tow.web.services`; one crash journal for multi-file writes (`tow.journal`). |
+| Quality | Over 7,400 tests in random order on every core with a guard against network, processes and writes outside the temp folder; branch coverage ≥ 89%; strict mypy; ruff with a complexity cap. Blocking CI on Windows, Ubuntu 24.04/26.04 and macOS. |
 
 ## Next
 
