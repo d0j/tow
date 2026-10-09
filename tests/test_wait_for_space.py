@@ -328,6 +328,72 @@ def test_a_new_revision_keeps_the_running_previous_one_untouched_while_it_waits(
     assert world.client.torrents[OLD]["state"] == "stoppedUP"  # the old one is never touched
 
 
+@pytest.mark.parametrize("passing", ["checkingResumeData", "moving", "checkingDL", "missingFiles", "error", "unknown"])
+def test_a_state_the_client_passes_through_keeps_the_wait(world, passing):
+    # Any state but "stopped" counted as the owner's start: a qBittorrent restart
+    # (checkingResumeData) or a move of the files ended the wait, cleared the error, and the
+    # torrent was never started once there was room.
+    _check()
+    world.client.torrents[NEW]["state"] = passing
+    world.disk["free"] = 60 * GIB
+    _space_pass()
+    topic = _topic()
+    assert topic["waiting_space"]["hash"] == NEW
+    assert topic["last_error_code"] == "check.waiting_space"
+    assert world.client.starts == []  # nothing is started in a state of the client's own
+    world.client.torrents[NEW]["state"] = "stoppedDL"
+    _space_pass()
+    assert world.client.starts == [NEW]
+
+
+def test_a_topic_paused_while_the_run_goes_on_is_not_started(world):
+    _check()
+    world.disk["free"] = 60 * GIB
+    inspect = world.client.inspect_torrent
+
+    def owner_pauses_meanwhile(h):
+        state = load_state()
+        state["topics"][0]["paused"] = True
+        save_state(state)
+        return inspect(h)
+
+    world.client.inspect_torrent = owner_pauses_meanwhile
+    row = _check()
+    assert world.client.starts == []
+    assert row["status"] == "skipped"
+    assert _topic()["paused"] is True
+
+
+def test_a_drive_that_is_not_there_for_now_does_not_start_the_waiting_torrent(world, monkeypatch):
+    # "Cannot be measured" made a new add not wait - and started a waiting torrent on a drive
+    # that was unplugged or a share that was asleep.
+    _check()
+    with monkeypatch.context() as gone:
+        gone.setattr("tow.folders.seen_from_here", lambda _path: False)
+        _space_pass()
+        gone.setattr("tow.folders.seen_from_here", lambda _path: True)
+        gone.setattr(shutil, "disk_usage", lambda _p: (_ for _ in ()).throw(OSError("asleep")))
+        _space_pass()
+    assert world.client.starts == []
+    topic = _topic()
+    assert topic["waiting_space"]["free"] == 10 * GIB
+    assert topic["last_error_code"] == "check.waiting_space"
+    world.disk["free"] = 60 * GIB
+    _space_pass()
+    assert world.client.starts == [NEW]
+
+
+def test_a_wait_recorded_for_another_client_is_dropped_quietly(world):
+    _check()
+    topic = _topic()
+    topic["waiting_space"]["client"] = "other"
+    save_state({"topics": [topic]})
+    _space_pass()
+    topic = _topic()
+    assert "waiting_space" not in topic
+    assert topic["last_error_code"] == "check.waiting_space"  # not "removed from client"
+
+
 def test_a_folder_not_seen_from_here_never_waits(world, monkeypatch):
     monkeypatch.setattr("tow.folders.seen_from_here", lambda _path: False)
     row = _check()

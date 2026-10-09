@@ -7,8 +7,10 @@ from typing import Any
 from tow import errors
 from tow.clock import iso_now
 from tow.errors import TowError
-from tow.log import error_class
+from tow.i18n import t
+from tow.log import error_class, owner_language
 from tow.records import Topic
+from tow.store import StoreCorruptionError, load_state
 
 
 def set_error(row: dict[str, Any], error: BaseException | str) -> None:
@@ -34,6 +36,37 @@ def fail_row(topic: Topic, row: dict[str, Any], error: TowError) -> None:
     row.update({"ok": False, "status": "failed"})
     set_error(row, error)
     stamp_result(topic, row)
+
+
+def client_marks(topic: Topic) -> tuple[str, ...]:
+    """What the client is changed with: the link (which torrent), the folder, the client and
+    the file selection."""
+    return tuple(repr(topic.get(key)) for key in ("url", "save_path", "client_id", "selection"))
+
+
+def withdrawn_meanwhile(topic: Topic, row: dict[str, Any], old: str, started: tuple[str, ...] | None) -> bool:
+    """The owner paused or deleted the topic, or changed its link, folder, client or file selection,
+    after this run started (its copy is from the start): look at the state now, right before
+    the client is changed, and skip it then - the next check works with what is saved."""
+    try:
+        current = next(
+            (t for t in load_state(quarantine=False).get("topics") or [] if str(t.get("id")) == str(topic.get("id"))),
+            None,
+        )
+    except StoreCorruptionError:
+        return False  # the commit will fail closed on its own
+    edited = current is not None and started is not None and client_marks(current) != started
+    if current is not None and not current.get("paused") and not edited:
+        return False
+    key = (
+        "check.deleted_meanwhile"
+        if current is None
+        else "check.paused_meanwhile"
+        if current.get("paused")
+        else "check.edited_meanwhile"
+    )
+    row.update({"ok": True, "hash": old, "changed": False, "status": "skipped", "skipped": t(key, owner_language())})
+    return True
 
 
 def stamp_result(topic: Topic, row: dict[str, Any]) -> None:

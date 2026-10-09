@@ -35,7 +35,7 @@ from tow.check.client_ops import (
     info_owned_by_tow,
     live_previous_overlap,
 )
-from tow.check.rows import fail_row, set_error, stamp_result
+from tow.check.rows import client_marks, fail_row, set_error, stamp_result, withdrawn_meanwhile
 from tow.clients.managed import completed_progress
 from tow.clients.spec import TorrentClientAdapter
 from tow.clock import iso_now
@@ -52,10 +52,13 @@ FREE_SPACE_MARGIN = 512 * 1024 * 1024
 WAITING_SPACE = "check.waiting_space"
 _GIB = 1024**3
 _STOPPED = ("stopped", "paused")
+# The states of a running torrent, in qBittorrent's words (every adapter reports these).
+_RUNNING = ("downloading", "uploading", "stalled", "queued", "forced", "metadl")
 
 # What a look at a waiting topic found (``recheck``).
 WAITING, STARTED, WOULD_START = "waiting", "started", "would_start"
 GONE, FOREIGN, OWNER, STALE = "gone", "foreign", "owner", "stale"
+WITHDRAWN = "withdrawn"  # the owner paused, deleted or edited the topic while the run went on
 
 
 @dataclass(frozen=True)
@@ -96,25 +99,34 @@ def _on_disk(candidates: Iterable[Path], size: int) -> int:
 def measure(dest: str, wanted: Iterable[tuple[tuple[Path, ...], int, int]]) -> Shortfall | None:
     """Whether the files ``wanted`` - (where each may already lie, its size, the bytes the
     client already has) - fit in ``dest``; None when they do or when it cannot be known."""
+    return _measured(dest, wanted)[1]
+
+
+def _measured(dest: str, wanted: Iterable[tuple[tuple[Path, ...], int, int]]) -> tuple[bool, Shortfall | None]:
+    """``measure`` with whether it is known at all: (False, None) for a folder this computer
+    does not see or free space it cannot read - a new add then does not wait, but a torrent
+    that already waits is not started on a drive that is gone for the moment."""
     from tow.folders import seen_from_here
 
     items = list(wanted)
     needed = sum(size for _where, size, _done in items)
-    if needed <= 0 or not seen_from_here(dest):
-        return None  # /downloads of a remote client, or a drive this PC does not have
+    if needed <= 0:
+        return True, None
+    if not seen_from_here(dest):
+        return False, None  # /downloads of a remote client, or a drive this PC does not have
     needed -= sum(min(size, max(done, _on_disk(where, size))) for where, size, done in items)
     if needed <= 0:
-        return None
+        return True, None
     probe = Path(dest)
     while not probe.exists() and probe.parent != probe:
         probe = probe.parent
     try:
         free = shutil.disk_usage(probe).free
     except OSError:
-        return None
+        return False, None
     if needed + FREE_SPACE_MARGIN <= free:
-        return None
-    return Shortfall(needed=needed, free=free, path=str(probe))
+        return True, None
+    return True, Shortfall(needed=needed, free=free, path=str(probe))
 
 
 def folder_free(dest: str) -> dict[str, Any]:
@@ -169,6 +181,12 @@ def _stopped(info: dict[str, Any] | None) -> bool:
     return str((info or {}).get("state") or "").casefold().startswith(_STOPPED)
 
 
+def _running(info: dict[str, Any] | None) -> bool:
+    """The client runs the torrent (someone started it). Not a state it passes through on its
+    own - loading after a restart, checking, moving the files - nor an error state."""
+    return str((info or {}).get("state") or "").casefold().startswith(_RUNNING)
+
+
 def waiting_of(topic: Topic) -> dict[str, Any]:
     return as_dict(topic.get("waiting_space"))
 
@@ -212,7 +230,24 @@ def wait_for_space(
         "selection": selection_key(info),
         "kind": kind,
     }
-    error = shortfall.error()
+    _report_waiting(topic, run, row, h=h, error=shortfall.error())
+
+
+def _keep_waiting(topic: Topic, run: CheckRun, row: dict[str, Any], *, h: str, waiting: dict[str, Any]) -> str:
+    """Nothing can be decided now (the client passes through a state of its own, the drive is
+    not there for the moment): the topic waits as it did, with the numbers last measured."""
+
+    def number(value: object) -> int:
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    last = Shortfall(
+        needed=number(waiting.get("needed")), free=number(waiting.get("free")), path=str(waiting.get("path") or "")
+    )
+    _report_waiting(topic, run, row, h=h, error=last.error())
+    return WAITING
+
+
+def _report_waiting(topic: Topic, run: CheckRun, row: dict[str, Any], *, h: str, error: TowError) -> None:
     row.update({"ok": False, "hash": h, "status": "waiting_space", "waiting_space": True})
     set_error(row, error)
     if run.notify:
@@ -251,18 +286,30 @@ def started(topic: Topic, run: CheckRun, row: dict[str, Any], *, h: str, client_
 
 
 def recheck(
-    topic: Topic, run: CheckRun, row: dict[str, Any], client: TorrentClientAdapter | None, client_id: str
+    topic: Topic,
+    run: CheckRun,
+    row: dict[str, Any],
+    client: TorrentClientAdapter | None,
+    client_id: str,
+    *,
+    begun: tuple[str, ...] | None = None,
 ) -> str:
     """Look at a waiting topic's torrent in its client - never at the site - and start it when
-    its files fit now. Returns WAITING, STARTED, WOULD_START (a dry run) or why the waiting
-    ended without TOW: GONE, FOREIGN (TOW's mark removed), OWNER (started or reselected by the
-    owner), STALE (the record is of an earlier revision). Raises when the client does not
-    answer, a previous revision still runs on the same files, or the start is not confirmed
-    (the topic keeps waiting)."""
+    its files fit now. Returns WAITING, STARTED, WOULD_START (a dry run), WITHDRAWN (the owner
+    paused, deleted or edited the topic since ``begun``, its ``client_marks`` when the run
+    began: nothing is started) or why the waiting ended without TOW: GONE, FOREIGN (TOW's mark
+    removed), OWNER (started or reselected by the owner), STALE (the record is of an earlier
+    revision or another client). Raises when the client does not answer, a previous revision
+    still runs on the same files, or the start is not confirmed (the topic keeps waiting).
+
+    A state the client passes through on its own (loading after its restart, checking, moving
+    the files, an error) and a drive that cannot be measured right now decide nothing: the
+    topic keeps waiting as it was."""
     waiting = waiting_of(topic)
     h = str(waiting.get("hash") or "").upper()
-    if not h or h != str(topic.get("hash") or "").upper():
-        forget(topic)  # a record left from an earlier revision
+    recorded_client = str(waiting.get("client") or "")
+    if not h or h != str(topic.get("hash") or "").upper() or (recorded_client and recorded_client != client_id):
+        forget(topic)  # a record left from an earlier revision, or of a client the topic left
         return STALE
     row.update({"hash": h, "changed": False})
     if client is None:
@@ -274,12 +321,21 @@ def recheck(
     if not info_owned_by_tow(info, h):
         forget(topic)
         return FOREIGN
-    if not _stopped(info) or selection_key(info) != waiting.get("selection"):
-        forget(topic)  # the owner started it or chose its files in the client: his decision
+    if not _stopped(info):
+        if not _running(info):
+            return _keep_waiting(topic, run, row, h=h, waiting=waiting)
+        forget(topic)  # the owner started it: his decision
+        return OWNER
+    if not info.get("files"):
+        return _keep_waiting(topic, run, row, h=h, waiting=waiting)  # its files not listed (yet)
+    if selection_key(info) != waiting.get("selection"):
+        forget(topic)  # the owner chose its files in the client: his decision
         return OWNER
     dest = str(info.get("save_path") or topic.get("save_path") or "")
-    shortfall = None if client_id in run.remote_clients else measure(dest, _client_wanted(info, dest))
+    known, shortfall = (True, None) if client_id in run.remote_clients else _measured(dest, _client_wanted(info, dest))
     kind = str(waiting.get("kind") or "added")
+    if not known:
+        return _keep_waiting(topic, run, row, h=h, waiting=waiting)
     if shortfall is not None:
         wait_for_space(topic, run, row, h=h, client_id=client_id, info=info, shortfall=shortfall, kind=kind)
         return WAITING
@@ -290,6 +346,8 @@ def recheck(
     if not run.apply:
         row["would_start"] = True
         return WOULD_START
+    if withdrawn_meanwhile(topic, row, h, begun):
+        return WITHDRAWN  # the next check works with what the owner saved
     client.start_owned_torrent(h)
     after = client.inspect_torrent(h)  # the start counts only once the client confirms it
     if not info_confirms(after, h, dest, require_tow_ownership=True) or (
@@ -323,11 +381,12 @@ def space_pass_row(topic: Topic, run: CheckRun, row: dict[str, Any]) -> None:
     (and starts the torrent when the new selection fits)."""
     if topic.get("selection_dirty"):
         return
+    begun = client_marks(topic)  # this run's copy, as it was read when the run began
     client_id, client = run.get_client_for(topic)
     row["client_id"] = client_id
     row["client_kind"] = client.client_kind if client is not None else None
     try:
-        outcome = recheck(topic, run, row, client, client_id)
+        outcome = recheck(topic, run, row, client, client_id, begun=begun)
     except Exception as error:  # noqa: BLE001 - one topic's failure is its result, never the pass's end
         row.update({"ok": False, "status": "failed"})
         set_error(row, error)
@@ -349,4 +408,5 @@ def space_pass_row(topic: Topic, run: CheckRun, row: dict[str, Any]) -> None:
     elif outcome in {STARTED, OWNER}:
         row.update({"ok": True, "status": "succeeded" if outcome == STARTED else "skipped"})
         stamp_result(topic, row)
-    # STALE: a record left from an earlier revision, dropped; the topic's result stays.
+    # STALE: a record left from an earlier revision or client, dropped; the topic's result stays.
+    # WITHDRAWN: the owner paused, deleted or edited it meanwhile; the row says so, nothing else.
