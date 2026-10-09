@@ -230,10 +230,12 @@ def _recover_completed(job: dict[str, Any], updater: dict[str, Any], active: boo
             return job
     except OSError, ValueError, TypeError, KeyError, OverflowError:
         return job
+    # "recovered": a cut-off archive switch was undone by a later terminal run that then ended
+    # (the release was installed already, or the run was refused): the previous version is back.
     expected = updater.get("target_version") if updater.get("status") == "ok" else updater.get("previous_version")
     if (
         not isinstance(updater.get("status"), str)
-        or updater["status"] not in {"ok", "rolled_back"}
+        or updater["status"] not in {"ok", "rolled_back", "recovered"}
         or expected != __version__
     ):
         return job

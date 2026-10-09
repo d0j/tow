@@ -619,6 +619,22 @@ def test_a_completed_terminal_recovery_unblocks_a_dead_job_without_get_writes(in
     assert len(install[1]) == 2
 
 
+def test_a_terminal_run_that_undid_a_cut_off_switch_unblocks_a_dead_job(install):
+    # Update TOW.cmd after a power cut mid-switch: the previous version is put back and the run
+    # ends there ("latest" is installed already), recorded as "recovered" - not ok/rolled_back.
+    web_update.start("1.22.21")
+    path = install[0] / "runtime" / "web-update" / "job.json"
+    job = json.loads(path.read_text())
+    job.update(status="installing", started_at=time.time() - 120)
+    path.write_text(json.dumps(job))
+    assert web_update.status()["status"] == "interrupted"
+    (install[0] / "update-state.json").write_text(
+        json.dumps({"status": "recovered", "previous_version": "1.22.20", "finished_at": datetime.now(UTC).isoformat()})
+    )
+    assert web_update.status()["status"] == "recovered"
+    assert web_update.start("1.22.22")["ok"] is True
+
+
 @pytest.mark.parametrize("newer", [False, True])
 def test_terminal_recovery_does_not_hide_a_later_web_failure(install, newer):
     web_update.start("1.22.21")
