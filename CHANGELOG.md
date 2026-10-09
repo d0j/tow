@@ -173,6 +173,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   is said on every page and by every command like an unreadable one, with the way back, instead of "Internal Server
   Error" and "the command could not be completed"; `/healthz` still answers, so `tow run` no longer restarts its web
   server over it.
+- An update of an install without git whose leftover `app.new` from a cut-off update cannot be removed (a file in it
+  held by another program) says "update aborted" with the reason and leaves TOW running, instead of ending in a
+  Python traceback.
 
 ## [1.28.2] — 2026-10-09
 
