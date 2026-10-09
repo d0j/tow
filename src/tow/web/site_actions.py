@@ -164,6 +164,10 @@ def edit_site(name: str, form: SiteEdit) -> RedirectResponse:
             mirrors[key] = mirrors.pop(name)
         else:
             mirrors.pop(name, None)
+        # A daily download limit reached today stays reached under the new name.
+        limits = new_state.get("daily_limit")
+        if isinstance(limits, dict) and name in limits:
+            limits[key] = limits.pop(name)
     old_secrets = services.load_secrets()
     new_secrets = _renamed_login(old_secrets, name, key, form)
     undo_fields = {

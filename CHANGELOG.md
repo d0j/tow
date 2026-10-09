@@ -224,6 +224,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   `127.0.0.1` (this computer only) becomes `0.0.0.0`.
 - A topic whose site was deleted is written to the log once ("no site is set up for this link"), not again at
   every check; the topic stays red until its site is back or the topic is removed.
+- A site renamed on the Sites page keeps today's reached daily download limit (and Undo gives it back to the old
+  name): the next check asked the renamed site again for a download it does not allow today.
 
 ## [1.28.2] — 2026-10-09
 

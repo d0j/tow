@@ -161,6 +161,9 @@ def _site(ctx: Context) -> Restore:
     mirrors = ctx.state.setdefault("mirrors", {})
     if renamed:
         mirrors.pop(renamed, None)
+        limits = ctx.state.get("daily_limit")
+        if isinstance(limits, dict) and renamed in limits:
+            limits[name] = limits.pop(renamed)
     if record.get("mirror_present"):
         mirrors[name] = copy.deepcopy(record.get("mirror"))
     else:
