@@ -2213,6 +2213,39 @@ def test_manual_check_of_a_missing_topic_says_so(monkeypatch):
     assert "раздача не найдена" in location
 
 
+def test_a_failed_check_names_the_site_by_its_title(monkeypatch):
+    """QA9: Home's row said "Fake Site: no mirror answered", the message after "Check" the same
+    error with the site's settings key ("fakesite: ...")."""
+    from tow.config import load_config, save_config
+    from tow.errors import as_value
+
+    cfg = load_config()
+    cfg["trackers"] = {
+        "fakesite": {
+            "title": "Fake Site",
+            "url_regex": r"^https://tracker\.example/t/(\d+)$",
+            "fetch_hosts": ["https://tracker.example"],
+            "download_path": "/dl/{id}",
+        }
+    }
+    save_config(cfg)
+    error = {"code": "mirrors.http_status", "params": {"status": 503}, "cls": "tracker"}
+    row = {
+        "id": "t1",
+        "ok": False,
+        "error": "fakesite: ни одно зеркало не ответило: сайт ответил ошибкой 503",
+        "error_class": "tracker",
+        "error_record": {"code": "mirrors.all_failed", "params": {"tracker": "fakesite", "error": as_value(error)}},
+    }
+    monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: {"qbit": "ok", "results": [row]})
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+
+    text = shown(client.post("/topics/t1/check", follow_redirects=False).headers["location"])
+
+    assert "Fake Site: ни одно зеркало не ответило" in text
+    assert "fakesite" not in text
+
+
 def test_clamped_interval_is_reported_not_silent():
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
 
