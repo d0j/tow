@@ -1504,6 +1504,11 @@ const landOnProblem = () => {
   target.focus({ preventScroll: true });
 };
 landOnProblem();
+// The browser's own move to #anchor, when the page has been read, takes the focus away from a
+// control that is not that spot (Chromium): once the page has loaded, the focus is put back.
+window.addEventListener("load", () => {
+  if (!document.activeElement || document.activeElement === document.body) landOnProblem();
+}, { once: true });
 
 // Last: the rows are in their order (sort, filter) before the focus comes back to one (A5).
 restoreFocus();
