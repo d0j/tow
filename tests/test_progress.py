@@ -1955,10 +1955,10 @@ def test_move_in_progress_is_not_a_save_path_error_and_clears_when_done(tmp_path
 
 
 def test_history_index_skips_moved_items_and_finds_readded_ones():
-    from tow.progress import _HistoryIndex
+    from tow.progress.history import HistoryIndex
 
     items = {"a": {"relative_path": "Show/E01.mkv"}, "b": {"relative_path": "show/e01.MKV"}}
-    index = _HistoryIndex(items)
+    index = HistoryIndex(items)
     assert [identity for identity, _ in index.at_path("SHOW/E01.mkv")] == ["a", "b"]
 
     items["c"] = items.pop("a")  # migrated to another identity
