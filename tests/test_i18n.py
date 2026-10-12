@@ -1052,7 +1052,7 @@ def _call_name(node: ast.Call) -> str | None:
 def _logged_kinds() -> dict[str, str]:
     """Every event kind the code can write to the log, with where: literal ``log_event`` /
     ``_record`` / ``run.record`` kinds, the kinds a loop logs, ``_change_clients`` events and the
-    reconcile events progress.py collects."""
+    reconcile events tow.progress collects."""
     found: dict[str, str] = {}
     for path in SRC.rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
