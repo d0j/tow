@@ -132,8 +132,8 @@ def test_plain_kind_of_a_missing_or_unreadable_entry(monkeypatch, tmp_path):
 @pytest.mark.parametrize(("mode", "attributes", "kind"), [row for row in LINKS_AND_JUNCTIONS if row[2] == "other"])
 def test_links_and_junctions_keep_each_callers_own_error(monkeypatch, tmp_path, system, mode, attributes, kind):
     from tow import bundle
-    from tow.snapshots import members as night_members
     from tow.bundle import checkpoint as bundle_checkpoint
+    from tow.snapshots import members as night_members
 
     entry = tmp_path / "entry"
     _fake_lstat(monkeypatch, entry, mode, attributes)
@@ -150,8 +150,8 @@ def test_links_and_junctions_keep_each_callers_own_error(monkeypatch, tmp_path, 
 
 def test_a_missing_entry_keeps_each_callers_own_answer(monkeypatch, tmp_path):
     from tow import bundle
-    from tow.snapshots import members as night_members
     from tow.bundle import checkpoint as bundle_checkpoint
+    from tow.snapshots import members as night_members
 
     gone = tmp_path / "gone"
     assert night_members.ordinary_file(gone, missing=True) is False
@@ -160,10 +160,8 @@ def test_a_missing_entry_keeps_each_callers_own_answer(monkeypatch, tmp_path):
         night_members.ordinary_file(gone)
     with pytest.raises(FileNotFoundError):
         night_members.ordinary_directory(gone)
-    assert bundle._checkpoint_file(gone, missing=True) is False
-    assert bundle._checkpoint_directory(gone, missing=True) is False
-    from tow.bundle import checkpoint as bundle_checkpoint
-
+    assert bundle_checkpoint.checkpoint_file(gone, missing=True) is False
+    assert bundle_checkpoint._checkpoint_directory(gone, missing=True) is False
     with pytest.raises(bundle.ExportImportError, match=r"^import checkpoint file is missing$") as missing:
         bundle_checkpoint.checkpoint_file(gone)
     assert missing.value.__suppress_context__
