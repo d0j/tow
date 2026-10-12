@@ -59,7 +59,8 @@ PURE: dict[str, set[str]] = {
         "set_default_client",
     },
     "tow.clients.managed": {"ClientError"},
-    "tow.clients.spec": {"get"},
+    # DEFAULT_KIND: the client kind a form that names none means (a constant).
+    "tow.clients.spec": {"DEFAULT_KIND", "get"},
     "tow.clock": {"format_ui_timestamp", "iso_now", "machine_now"},
     # whole_number: reads a typed number, no I/O.
     "tow.config": {

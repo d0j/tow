@@ -29,6 +29,17 @@ def test_legacy_client_is_default():
     assert client_configuration(cfg)["kind"] == "qbittorrent"
 
 
+def test_one_default_kind_everywhere():
+    from tow.clients.spec import DEFAULT_KIND, get
+    from tow.config import DEFAULTS
+
+    assert DEFAULTS["client"]["kind"] == DEFAULT_KIND  # config keeps a literal: it does not import the clients
+    assert get(DEFAULT_KIND) is not None
+    assert get(DEFAULT_KIND).ready
+    assert client_configurations({})[0]["kind"] == DEFAULT_KIND
+    assert client_configurations({"clients": [{"id": "main"}]})[0]["kind"] == DEFAULT_KIND
+
+
 def test_client_ids_must_be_unique_and_non_empty():
 
     with raises_code("client.factory.empty_id", ValueError):

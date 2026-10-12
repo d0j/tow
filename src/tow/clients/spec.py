@@ -8,6 +8,9 @@ from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from tow import i18n, plugins
 
+# The client of a configuration that names none. config.DEFAULTS holds the same kind as a
+# literal: config sits below the clients and does not import them (tests/test_client_registry.py).
+DEFAULT_KIND = "qbittorrent"
 # The modules of tow.clients that are not clients (tests/test_layers.py reads it too).
 HELPERS = frozenset({"address", "spec", "factory", "managed", "files"})
 _LOG = logging.getLogger("tow.clients")

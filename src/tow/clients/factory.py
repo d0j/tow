@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from tow.clients.spec import ClientSpec, TorrentClientAdapter, get, ready
+from tow.clients.spec import DEFAULT_KIND, ClientSpec, TorrentClientAdapter, get, ready
 from tow.config import as_bool
 from tow.errors import TowError
 
@@ -29,7 +29,7 @@ def client_configurations(cfg: dict[str, Any]) -> list[dict[str, Any]]:
 
     if not rows:
         legacy = dict(cfg.get("client") or {})
-        kind = str(legacy.get("kind") or "qbittorrent").lower()
+        kind = str(legacy.get("kind") or DEFAULT_KIND).lower()
         legacy.setdefault("kind", kind)
         legacy.setdefault("id", "default")
         legacy.setdefault("enabled", True)
@@ -37,7 +37,7 @@ def client_configurations(cfg: dict[str, Any]) -> list[dict[str, Any]]:
         rows.append(legacy)
     else:
         for row in rows:
-            row["kind"] = str(row.get("kind") or "qbittorrent").lower()
+            row["kind"] = str(row.get("kind") or DEFAULT_KIND).lower()
             row.setdefault("id", row["kind"])
             row.setdefault("enabled", True)
 
@@ -84,7 +84,7 @@ def client_name(row: dict[str, Any]) -> str:
     without a title is told apart by its id. The pages and `tow status` say it the same way."""
     if row.get("title"):
         return str(row["title"])
-    kind = str(row.get("kind") or "qbittorrent").lower()
+    kind = str(row.get("kind") or DEFAULT_KIND).lower()
     spec = get(kind)
     name = spec.title if spec is not None else kind
     client_id = str(row.get("id") or "")
@@ -101,8 +101,9 @@ def client_secret_block(
     """Return one client secret block without exposing or merging instances."""
     configuration = client_configuration(cfg, client_id)
     if not cfg.get("clients"):
-        spec = get(str(configuration.get("kind") or "qbittorrent").lower())
-        key = spec.secrets_key if spec is not None else "qbittorrent"
+        spec = get(str(configuration.get("kind") or DEFAULT_KIND).lower())
+        # A kind without a module: the default client's block (its SECRETS_KEY is its kind).
+        key = spec.secrets_key if spec is not None else DEFAULT_KIND
         return secrets.setdefault(key, {}) if ensure else (secrets.get(key) or {})
 
     ref = str(configuration.get("secrets_ref") or configuration["id"])
@@ -161,7 +162,7 @@ def from_secrets(
     configuration = client_configuration(cfg, client_id)
     if not configuration.get("enabled", True):
         raise ClientUnavailableError("client.factory.disabled", id=str(configuration["id"]))
-    kind = str(configuration.get("kind") or "qbittorrent").lower()
+    kind = str(configuration.get("kind") or DEFAULT_KIND).lower()
     spec = get(kind)
     if spec is None or not spec.ready:
         raise ClientUnavailableError("client.factory.not_implemented", kind=kind)

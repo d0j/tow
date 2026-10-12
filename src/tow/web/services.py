@@ -333,12 +333,13 @@ def client_answers(client_id: str | None, timeout: float = 3.0) -> bool:
 
     from tow.clients.address import base_url
     from tow.clients.factory import client_configuration, client_secret_block
+    from tow.clients.spec import DEFAULT_KIND
     from tow.clients.spec import get as client_spec
 
     cfg = load_config()
     block = client_secret_block(cfg, load_secrets(), client_id)
     host = str(block.get("host") or "").strip()
-    spec = client_spec(str(client_configuration(cfg, client_id).get("kind") or "qbittorrent").lower())
+    spec = client_spec(str(client_configuration(cfg, client_id).get("kind") or DEFAULT_KIND).lower())
     if not host or spec is None:
         return True
     try:
