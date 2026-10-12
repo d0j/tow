@@ -78,6 +78,7 @@
   "remove": "def(secrets: 'dict[str, Any]', kind: 'str') -> 'None'",
   "send_all": "def(secrets: 'dict[str, Any]', text: 'str') -> 'dict[str, tuple[bool, str]]'",
   "settings_of": "def(secrets: 'dict[str, Any]', kind: 'str') -> 'dict[str, Any] | None'",
+  "storage_scope": "def(kind: 'str') -> 'list[str]'",
   "store": "def(secrets: 'dict[str, Any]', kind: 'str', values: 'dict[str, Any]') -> 'None'",
   "summary": "def(secrets: 'dict[str, Any]', state: 'dict[str, Any]') -> 'str'",
   "targets": "def(secrets: 'dict[str, Any]') -> 'list[tuple[str, str, Notifier, dict[str, Any]]]'",

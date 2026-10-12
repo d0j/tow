@@ -69,6 +69,13 @@ def title(module: Notifier, lang: str | None = None) -> str:
     return i18n.translate(key, lang or ui_language()) if i18n.has(key) else str(module.TITLE)
 
 
+def storage_scope(kind: str) -> list[str]:
+    """Where the messenger's settings live in the secrets: its own block (``STORAGE``) or
+    ``notifiers.<kind>`` - the part an undo of its settings puts back."""
+    storage = getattr(get(kind), "STORAGE", None)
+    return [storage] if storage else ["notifiers", kind]
+
+
 def raw_settings(secrets: dict[str, Any], kind: str) -> dict[str, Any] | None:
     storage = getattr(get(kind), "STORAGE", None)
     raw = secrets.get(storage) if storage else (secrets.get("notifiers") or {}).get(kind)

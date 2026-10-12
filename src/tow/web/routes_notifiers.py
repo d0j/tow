@@ -34,19 +34,14 @@ async def settings_notifier_save(request: Request, kind: str) -> Response:
     return await run_in_threadpool(_save_notifier, kind, form)
 
 
-def _notifier_scope(kind: str) -> list[str]:
+def _raw_notifier(secrets: dict[str, Any], kind: str) -> dict[str, Any] | None:
+    """Partly filled settings still keep their saved secrets when the form leaves them empty.
+    A block that is not a mapping reads as no saved settings."""
     from tow import notifiers
 
-    storage = getattr(notifiers.kinds()[kind], "STORAGE", None)
-    return [storage] if storage else ["notifiers", kind]
-
-
-def _raw_notifier(secrets: dict[str, Any], kind: str) -> dict[str, Any] | None:
-    """Partly filled settings still keep their saved secrets when the form leaves them empty."""
-    scope = _notifier_scope(kind)
-    raw = secrets.get(scope[0])
-    if len(scope) == 2:
-        raw = raw.get(scope[1]) if isinstance(raw, dict) else None
+    raw: Any = secrets
+    for name in notifiers.storage_scope(kind):
+        raw = raw.get(name) if isinstance(raw, dict) else None
     return raw if isinstance(raw, dict) else None
 
 
@@ -98,7 +93,9 @@ def _save_notifier(kind: str, form: dict[str, str]) -> RedirectResponse:
     undo_secrets = copy.deepcopy(s)
     old_sec = interval_sec_of(services.load_config())
     notifiers.store(s, kind, values)
-    if refused := save_secrets_with_undo(_notifier_target(kind), undo_secrets, s, old_sec, _notifier_scope(kind)):
+    if refused := save_secrets_with_undo(
+        _notifier_target(kind), undo_secrets, s, old_sec, notifiers.storage_scope(kind)
+    ):
         return refused
     services.log_event("settings_notifier", integration_id=kind, how="manual")
     servers = [str(values.get(field) or "") for field in _server_fields(kind)]
@@ -132,7 +129,9 @@ def settings_notifier_remove(kind: str) -> Response:
     undo_secrets = copy.deepcopy(s)
     old_sec = interval_sec_of(services.load_config())
     notifiers.remove(s, kind)
-    if refused := save_secrets_with_undo(_notifier_target(kind), undo_secrets, s, old_sec, _notifier_scope(kind)):
+    if refused := save_secrets_with_undo(
+        _notifier_target(kind), undo_secrets, s, old_sec, notifiers.storage_scope(kind)
+    ):
         return refused
     services.log_event("settings_notifier_removed", integration_id=kind, how="manual")
     return _notifier_redirect(t("web.settings.notifier_off", title=notifiers.kinds()[kind].TITLE), kind)
