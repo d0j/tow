@@ -96,15 +96,9 @@ def _human(data: Any) -> str:
 
 def _size(value: Any) -> str:
     """A size in the command's language: "1.5 MB", "1,5 МБ"."""
-    from tow.i18n import format_decimal, t
+    from tow.i18n import current, format_size
 
-    size = max(0, int(value or 0))
-    if size < 1024:
-        return t("web.bytes.b", size=size)
-    for key, power in (("web.bytes.tb", 4), ("web.bytes.gb", 3), ("web.bytes.mb", 2)):
-        if size >= 1024**power:
-            return t(key, size=format_decimal(size / 1024**power, 1))
-    return t("web.bytes.kb", size=format_decimal(size / 1024, 1))
+    return format_size(int(value or 0), current())
 
 
 def _names(items: Any) -> str:

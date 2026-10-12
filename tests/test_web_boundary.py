@@ -170,7 +170,8 @@ HELPER_ALLOWED: dict[str, set[str]] = {
         "tow.undo.undo_label",
         "tow.undo.undo_left_sec",
     },
-    "text": {"tow.i18n.fill", "tow.i18n.format_decimal"},
+    # format_size took the place of format_decimal: the size text is one shared formatter now.
+    "text": {"tow.i18n.fill", "tow.i18n.format_size"},
     "views": {
         "tow.adopt.unmarked_hash",
         "tow.backup_retention.retention_settings",
