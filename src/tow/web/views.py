@@ -1,5 +1,6 @@
 """Shared view helpers: messages after an action (flash) and redirects, the add form's draft, the
-topic rows of Home with their status and attention lines, and the messages of a manual check."""
+topic rows of Home with their status and attention lines, the messages of a manual check, whether
+the first-start page is due, and the service and backup cards of Settings."""
 
 from __future__ import annotations
 
@@ -16,11 +17,11 @@ from urllib.parse import parse_qs, quote, unquote, urlsplit
 from fastapi import Request
 from fastapi.responses import RedirectResponse
 
-from tow import i18n
+from tow import access, i18n
 from tow.adopt import unmarked_hash
 from tow.check import PREVIOUS_REVISION_ACTIVE, blocked_by_previous_revision
 from tow.clock import format_ui_timestamp
-from tow.config import flash_ttl, interval_sec_of
+from tow.config import as_bool, flash_ttl, interval_sec_of
 from tow.episodes import expected_for_topic
 from tow.errors import Msg, TowError, render_stored
 from tow.log import error_class, owner_language
@@ -39,6 +40,14 @@ def flash_ttl_sec() -> int:
     except TypeError, ValueError:
         n = 60
     return flash_ttl(n)
+
+
+def first_run(cfg: dict[str, Any]) -> bool:
+    """No password yet and the owner has not put it off: Home opens the first-start page."""
+    if as_bool(cfg.get("setup_done")):
+        return False
+    secrets = _context.secrets_or_none()
+    return secrets is not None and not access.password_is_set(secrets)
 
 
 class _TokenStore:
@@ -521,6 +530,71 @@ def topic_progress_summary(topic: Mapping[str, Any], history: Mapping[str, Any])
         "completion_known": False,
         "is_complete": False,
     }
+
+
+def service_view() -> dict[str, Any]:
+    """The service card of Settings: the status, the watchdog's last problem, autostart and the
+    last requested restart, in words."""
+    service = services.service_status()
+    from tow.diagnostic_json import epoch
+    from tow.pulse import clock
+
+    problem = services.watchdog_problem()
+    problem_at = epoch(problem.get("at")) if problem else None
+    service["watchdog_problem"] = (
+        {"at": clock(problem_at) if problem_at else "—", "lines": str(problem["text"]).splitlines()}
+        if problem
+        else None
+    )
+    # The same finding as Diagnostics: this account's autostart starts another TOW folder, so
+    # the unchecked box here is not "nothing is set up".
+    detail = service.get("autostart_detail")
+    service["autostart_foreign"] = (
+        isinstance(detail, dict)
+        and detail.get("ours") is False
+        and not detail.get("stale")
+        and detail.get("state", "present") == "present"
+    )
+    # Its program is gone (that folder was moved or deleted): the OS keeps trying in vain, and
+    # turning autostart on here takes it over.
+    service["autostart_stale"] = services.stale_autostart(detail)
+    supervisor = service.get("supervisor")
+    server = supervisor.get("server") if isinstance(supervisor, dict) else None
+    up_since = server.get("up_since") if isinstance(server, dict) else None
+    try:
+        service["running_since"] = format_ui_timestamp(str(up_since)) if up_since else None
+    except TypeError, ValueError:
+        service["running_since"] = None
+    restart = service.get("restart")
+    if not isinstance(restart, dict):
+        service["restart_view"] = None
+        return service
+    status = str(restart.get("status") or "unknown")
+    reason = {
+        "settings": t("web.service.reason.settings"),
+        "restore": t("web.service.reason.restore"),
+        "manual": t("web.service.reason.manual"),
+    }.get(str(restart.get("reason") or "settings"), t("web.service.reason.unknown"))
+    state = {
+        "ready": t("web.service.state.ready"),
+        "queued": t("web.service.state.queued"),
+        "stopping": t("web.service.state.stopping"),
+        "starting": t("web.service.state.starting"),
+        "started": t("web.service.state.started"),
+        "failed": t("web.service.state.failed"),
+    }.get(status, t("web.service.state.unknown"))
+    created_at = restart.get("created_at")
+    try:
+        at = format_ui_timestamp(str(created_at)) if created_at else t("web.service.date_unknown")
+    except TypeError, ValueError:
+        at = t("web.service.date_unknown")
+    service["restart_view"] = {
+        "at": at,
+        "reason": reason,
+        "state": state,
+        "failed": status == "failed",
+    }
+    return service
 
 
 def _epoch_time(value: float) -> str:

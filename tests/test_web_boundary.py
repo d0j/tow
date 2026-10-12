@@ -198,10 +198,7 @@ HELPER_ALLOWED: dict[str, set[str]] = {
     },
 }
 # Route module -> the other route modules it imports: what existed when the rule came; may only shrink.
-ROUTE_IMPORTS_ALLOWED: dict[str, set[str]] = {
-    "routes_home": {"routes_password"},
-    "routes_settings": {"routes_service"},
-}
+ROUTE_IMPORTS_ALLOWED: dict[str, set[str]] = {}
 # Not helpers: the package, the app factory and the gateway itself.
 NOT_HELPERS = {"__init__", "app", "services"}
 
@@ -287,9 +284,15 @@ def test_route_modules_call_the_outside_only_through_services():
 
 
 def test_every_listed_helper_is_still_used():
-    used = {(module, name) for path in _route_modules() for module, name, _line in _outside_names(path)}
+    # PURE covers the helper modules too (a pure helper one needs goes into PURE, see
+    # HELPER_ALLOWED): an entry is stale only when no route, action or helper module uses it.
+    used = {
+        (module, name)
+        for path in [*_route_modules(), *_helper_modules()]
+        for module, name, _line in _outside_names(path)
+    }
     stale = sorted(f"{module}.{name}" for module, names in PURE.items() for name in names if (module, name) not in used)
-    assert stale == [], "no route module uses these any more; remove them from PURE:\n" + "\n".join(stale)
+    assert stale == [], "no module of tow.web uses these any more; remove them from PURE:\n" + "\n".join(stale)
 
 
 def test_the_scan_sees_every_way_out(tmp_path, monkeypatch):

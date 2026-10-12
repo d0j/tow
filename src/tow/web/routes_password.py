@@ -31,17 +31,9 @@ from tow.web import _context, services
 from tow.web.site_store import save_together
 from tow.web.templating import TEMPLATES
 from tow.web.text import t
-from tow.web.views import flash_redirect
+from tow.web.views import first_run, flash_redirect
 
 router = APIRouter()
-
-
-def first_run(cfg: dict[str, Any]) -> bool:
-    """No password yet and the owner has not put it off: Home opens the first-start page."""
-    if as_bool(cfg.get("setup_done")):
-        return False
-    secrets = _context.secrets_or_none()
-    return secrets is not None and not access.password_is_set(secrets)
 
 
 def _setup_page(request: Request, error: str = "", status_code: int = 200) -> Response:

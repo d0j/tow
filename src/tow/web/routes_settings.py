@@ -31,11 +31,10 @@ from tow.restore_points import RestorePointError
 from tow.store import SecretStoreError
 from tow.store_transaction import StoreTransaction
 from tow.web import _context, services
-from tow.web.routes_service import service_view
 from tow.web.site_store import save_together, settings_undo
 from tow.web.templating import TEMPLATES
 from tow.web.text import format_bytes, t
-from tow.web.views import backup_view, flash_redirect, flash_ttl_sec, request_flash
+from tow.web.views import backup_view, flash_redirect, flash_ttl_sec, request_flash, service_view
 
 router = APIRouter()
 
