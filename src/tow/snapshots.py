@@ -39,7 +39,7 @@ from tow.diagnostic_json import check_epochs, check_types, encode_object, read_o
 from tow.i18n import t
 from tow.log import locked_log_path, log_event, log_path, owner_language
 from tow.paths import config_path, data_dir, download_history_path, state_path
-from tow.platform import child_path, is_plain_dir, is_plain_file
+from tow.platform import child_path, is_plain_file, plain_kind
 from tow.store import (
     SecretStoreError,
     StateVersionError,
@@ -1235,25 +1235,19 @@ def _validate_restore_journal(journal: dict[str, Any]) -> None:
 
 
 def _ordinary_directory(path: Path, *, missing: bool = False) -> bool:
-    try:
-        info = path.lstat()
-    except FileNotFoundError:
-        if missing:
-            return False
-        raise
-    if not is_plain_dir(info):
+    kind = plain_kind(path, missing_ok=missing)
+    if kind is None:
+        return False
+    if kind != "dir":
         raise ValueError("night-copy restore directory is unsafe")
     return True
 
 
 def _ordinary_file(path: Path, *, missing: bool = False) -> bool:
-    try:
-        info = path.lstat()
-    except FileNotFoundError:
-        if missing:
-            return False
-        raise
-    if not is_plain_file(info):
+    kind = plain_kind(path, missing_ok=missing)
+    if kind is None:
+        return False
+    if kind != "file":
         raise ValueError("night-copy restore file is unsafe")
     return True
 

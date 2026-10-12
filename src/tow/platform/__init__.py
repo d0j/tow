@@ -19,7 +19,7 @@ import threading
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 NAMES = ("windows", "linux", "macos")
 
@@ -227,6 +227,24 @@ def is_plain_dir(info: os.stat_result) -> bool:
     return stat.S_ISDIR(info.st_mode) and not is_link_like(info)
 
 
+def plain_kind(path: Path, *, missing_ok: bool = True) -> Literal["file", "dir", "other"] | None:
+    """What ``path`` itself is, from ``lstat`` (a link is never followed): ``"file"`` for a plain
+    file, ``"dir"`` for a plain directory, ``"other"`` for a link, junction, mount point or special
+    file, and None when nothing is there. ``missing_ok=False`` lets that FileNotFoundError through
+    instead; any other OSError is always the caller's."""
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        if missing_ok:
+            return None
+        raise
+    if is_plain_file(info):
+        return "file"
+    if is_plain_dir(info):
+        return "dir"
+    return "other"
+
+
 def child_path(root: Path | str, name: str) -> Path:
     """``root / name`` for one plain name directly inside ``root``: no separator, drive, ``.``
     or ``..`` (ValueError otherwise). Also for a network share (``\\\\nas\\share``).
@@ -326,6 +344,7 @@ __all__ = [
     "is_plain_dir",
     "is_plain_file",
     "is_windows",
+    "plain_kind",
     "private_folders",
     "private_root",
     "set_backend",

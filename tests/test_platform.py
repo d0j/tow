@@ -83,6 +83,94 @@ def test_links_and_reparse_points_are_never_plain_files_or_folders(mode, attribu
     assert platform.is_plain_file(SimpleNamespace(st_mode=mode)) is (mode == stat.S_IFREG)  # type: ignore[arg-type]
 
 
+LINKS_AND_JUNCTIONS = [
+    (stat.S_IFREG, 0, "file"),
+    (stat.S_IFDIR, 0, "dir"),
+    (stat.S_IFLNK, 0, "other"),  # a symbolic link
+    (stat.S_IFIFO, 0, "other"),
+    (stat.S_IFDIR, stat.FILE_ATTRIBUTE_REPARSE_POINT, "other"),  # a Windows junction or mount point
+    (stat.S_IFREG, stat.FILE_ATTRIBUTE_REPARSE_POINT, "other"),  # a Windows file symlink
+]
+BACKENDS = {"windows": lambda: WindowsBackend(), "linux": lambda: PosixBackend("linux", home="/home/user")}
+
+
+def _fake_lstat(monkeypatch, target, mode, attributes):
+    real = platform.Path.lstat
+
+    def lstat(path, *args, **kwargs):
+        if path == target:
+            return SimpleNamespace(st_mode=mode, st_file_attributes=attributes)
+        return real(path, *args, **kwargs)
+
+    monkeypatch.setattr(platform.Path, "lstat", lstat)
+
+
+@pytest.mark.parametrize("system", list(BACKENDS))
+@pytest.mark.parametrize(("mode", "attributes", "kind"), LINKS_AND_JUNCTIONS)
+def test_plain_kind_names_what_the_entry_itself_is(monkeypatch, tmp_path, system, mode, attributes, kind):
+    entry = tmp_path / "entry"
+    _fake_lstat(monkeypatch, entry, mode, attributes)
+    with platform.use(BACKENDS[system]()):
+        assert platform.plain_kind(entry) == kind
+        assert platform.plain_kind(entry, missing_ok=False) == kind
+
+
+def test_plain_kind_of_a_missing_or_unreadable_entry(monkeypatch, tmp_path):
+    (tmp_path / "file").write_text("x", encoding="utf-8")
+    (tmp_path / "folder").mkdir()
+    assert platform.plain_kind(tmp_path / "file") == "file"
+    assert platform.plain_kind(tmp_path / "folder") == "dir"
+    assert platform.plain_kind(tmp_path / "gone") is None
+    with pytest.raises(FileNotFoundError):
+        platform.plain_kind(tmp_path / "gone", missing_ok=False)
+    monkeypatch.setattr(platform.Path, "lstat", lambda _path: (_ for _ in ()).throw(PermissionError("denied")))
+    with pytest.raises(PermissionError):
+        platform.plain_kind(tmp_path / "file")
+
+
+@pytest.mark.parametrize("system", list(BACKENDS))
+@pytest.mark.parametrize(("mode", "attributes", "kind"), [row for row in LINKS_AND_JUNCTIONS if row[2] == "other"])
+def test_links_and_junctions_keep_each_callers_own_error(monkeypatch, tmp_path, system, mode, attributes, kind):
+    from tow import bundle, snapshots
+
+    entry = tmp_path / "entry"
+    _fake_lstat(monkeypatch, entry, mode, attributes)
+    with platform.use(BACKENDS[system]()):
+        with pytest.raises(ValueError, match=r"^night-copy restore file is unsafe$"):
+            snapshots._ordinary_file(entry, missing=True)
+        with pytest.raises(ValueError, match=r"^night-copy restore directory is unsafe$"):
+            snapshots._ordinary_directory(entry)
+        with pytest.raises(bundle.ExportImportError, match=r"^import checkpoint file is unsafe$"):
+            bundle._checkpoint_file(entry)
+        with pytest.raises(bundle.ExportImportError, match=r"^import checkpoint directory is unsafe$"):
+            bundle._checkpoint_directory(entry, missing=True)
+
+
+def test_a_missing_entry_keeps_each_callers_own_answer(monkeypatch, tmp_path):
+    from tow import bundle, snapshots
+
+    gone = tmp_path / "gone"
+    assert snapshots._ordinary_file(gone, missing=True) is False
+    assert snapshots._ordinary_directory(gone, missing=True) is False
+    with pytest.raises(FileNotFoundError):
+        snapshots._ordinary_file(gone)
+    with pytest.raises(FileNotFoundError):
+        snapshots._ordinary_directory(gone)
+    assert bundle._checkpoint_file(gone, missing=True) is False
+    assert bundle._checkpoint_directory(gone, missing=True) is False
+    with pytest.raises(bundle.ExportImportError, match=r"^import checkpoint file is missing$") as missing:
+        bundle._checkpoint_file(gone)
+    assert missing.value.__suppress_context__
+    with pytest.raises(bundle.ExportImportError, match=r"^import checkpoint directory is missing$"):
+        bundle._checkpoint_directory(gone)
+    monkeypatch.setattr(platform.Path, "lstat", lambda _path: (_ for _ in ()).throw(PermissionError("denied")))
+    with pytest.raises(bundle.ExportImportError, match=r"^import checkpoint directory cannot be inspected$") as denied:
+        bundle._checkpoint_directory(gone)
+    assert isinstance(denied.value.__cause__, PermissionError)
+    with pytest.raises(PermissionError):
+        snapshots._ordinary_file(gone)
+
+
 def test_the_account_is_named_by_the_session_and_numbered_only_on_posix(monkeypatch):
     monkeypatch.delenv("USER", raising=False)
     monkeypatch.setenv("USERNAME", "owner")
