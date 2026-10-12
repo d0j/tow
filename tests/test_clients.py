@@ -56,6 +56,7 @@ def test_client_texts_come_from_the_language_files():
 def test_a_broken_client_module_does_not_take_the_others_down(monkeypatch, caplog):
     import importlib
 
+    from tow import plugins
     from tow.clients import spec
 
     real = importlib.import_module
@@ -65,7 +66,7 @@ def test_a_broken_client_module_does_not_take_the_others_down(monkeypatch, caplo
             raise ImportError("No module named 'some_missing_dependency'")
         return real(name, *args, **kwargs)
 
-    monkeypatch.setattr(spec.importlib, "import_module", import_module)
+    monkeypatch.setattr(plugins.importlib, "import_module", import_module)
     spec._discover.cache_clear()
     try:
         assert [s.kind for s in ready()] == ["qbittorrent", "transmission"]

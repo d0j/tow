@@ -30,7 +30,7 @@ def adapter_problems(adapter: object) -> list[str]:
 def _client_classes():
     """Every adapter class a client module defines (its from_secrets returns one)."""
     for info in pkgutil.iter_modules(tow.clients.__path__):
-        if info.name in spec.SKIP or info.name.startswith("_"):
+        if info.name in spec.HELPERS or info.name.startswith("_"):
             continue
         module = importlib.import_module(f"tow.clients.{info.name}")
         if not getattr(module, "READY", False):
@@ -95,7 +95,7 @@ def test_a_module_without_the_contract_is_named():
 
 def _messenger_modules():
     for info in pkgutil.iter_modules(tow.notifiers.__path__):
-        if info.name.startswith("_") or info.name in registry._SKIP:
+        if info.name.startswith("_") or info.name in registry.HELPERS:
             continue
         yield info.name, importlib.import_module(f"tow.notifiers.{info.name}")
 

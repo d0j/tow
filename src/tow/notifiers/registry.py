@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import functools
 import hashlib
-import importlib
 import json
 import logging
-import pkgutil
 import re
+from types import ModuleType
 from typing import Any, cast
 
-from tow import i18n
+from tow import i18n, plugins
 from tow.i18n import t
 from tow.notifiers.base import Notifier, notifier_problems, text, ui_language
 
-_SKIP = frozenset({"base", "registry", "outbox", "view"})
+# The modules of tow.notifiers that are not messengers (tests/test_layers.py reads it too).
+HELPERS = frozenset({"base", "registry", "outbox", "view"})
 
 
 _LOG = logging.getLogger("tow.notifiers")
@@ -25,25 +25,22 @@ SKIPPED: list[tuple[str, str]] = []
 
 @functools.cache
 def _discover() -> tuple[tuple[str, Notifier], ...]:
+    """The messenger modules by ORDER (``cache_clear()`` scans again)."""
     import tow.notifiers as package
 
-    found: dict[str, Notifier] = {}
-    SKIPPED.clear()
-    for info in pkgutil.iter_modules(package.__path__):
-        if info.name.startswith("_") or info.name in _SKIP:
-            continue
-        # One broken messenger (a missing dependency, a typo) must not take the others down.
-        try:
-            module = importlib.import_module(f"tow.notifiers.{info.name}")
-            if not getattr(module, "KIND", None):
-                continue  # a helper module, not a messenger
-            if missing := notifier_problems(module):
-                raise TypeError(f"not a messenger module, missing {', '.join(missing)}")
-            found[str(module.KIND)] = cast(Notifier, module)
-        except Exception as exc:  # noqa: BLE001 - a broken plugin is skipped and named, never fatal
-            SKIPPED.append((info.name, f"{type(exc).__name__}: {exc}"))
-            _LOG.warning("messenger module %s skipped: %s: %s", info.name, type(exc).__name__, exc)
-    return tuple(sorted(found.items(), key=lambda item: _order(item[1])))
+    found, skipped = plugins.scan(package, helpers=HELPERS, load=_messenger, label="messenger", logger=_LOG)
+    SKIPPED[:] = skipped
+    by_kind = {str(module.KIND): module for module in found}
+    return tuple(sorted(by_kind.items(), key=lambda item: _order(item[1])))
+
+
+def _messenger(module: ModuleType) -> Notifier | None:
+    """The module as a messenger; None for a helper module (no KIND), TypeError for an incomplete one."""
+    if not getattr(module, "KIND", None):
+        return None
+    if missing := notifier_problems(module):
+        raise TypeError(f"not a messenger module, missing {', '.join(missing)}")
+    return cast(Notifier, module)
 
 
 def _order(module: Notifier) -> int:

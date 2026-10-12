@@ -54,7 +54,7 @@ def _messenger_modules() -> list[str]:
     return [
         info.name
         for info in pkgutil.iter_modules(notifiers.__path__)
-        if not info.name.startswith("_") and info.name not in registry._SKIP
+        if not info.name.startswith("_") and info.name not in registry.HELPERS
     ]
 
 
@@ -109,6 +109,7 @@ def test_every_messenger_text_is_in_every_language():
 def test_a_broken_messenger_module_does_not_take_the_others_down(monkeypatch, caplog):
     import importlib
 
+    from tow import plugins
     from tow.notifiers import registry
 
     real = importlib.import_module
@@ -118,7 +119,7 @@ def test_a_broken_messenger_module_does_not_take_the_others_down(monkeypatch, ca
             raise ImportError("No module named 'some_missing_dependency'")
         return real(name, *args, **kwargs)
 
-    monkeypatch.setattr(registry.importlib, "import_module", import_module)
+    monkeypatch.setattr(plugins.importlib, "import_module", import_module)
     registry._discover.cache_clear()
     try:
         assert "whatsapp" not in notifiers.kinds()

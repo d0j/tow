@@ -1,7 +1,10 @@
 # Extending TOW
 
 How to add a torrent client, a messenger, a site, a language or a page. Each is a module that TOW discovers by
-itself, plus its texts in the language files; a contract test checks every module that is found. Background:
+itself, plus its texts in the language files; a contract test checks every module that is found. Clients and
+messengers are found by one scan (`tow.plugins`): a module that fails to load is skipped and named in `SKIPPED`
+while the others keep working, and a module of the package that is not a plugin is listed in its `HELPERS`
+(`clients/spec.py`, `notifiers/registry.py`). Background:
 [architecture.md](architecture.md). Development setup and the gate: [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 | Add | Where | Contract | Checked by |

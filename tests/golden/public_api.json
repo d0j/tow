@@ -39,7 +39,7 @@
   "ClientSpec.note": "property",
   "ClientSpec.steps": "property",
   "DEFAULT_FIELDS": "value tuple",
-  "SKIP": "value frozenset",
+  "HELPERS": "value frozenset",
   "SKIPPED": "value list",
   "TorrentClientAdapter": "class(*args, **kwargs)",
   "TorrentClientAdapter.add_torrent_selected": "def(self, content: 'bytes', save_path: 'str | None', infohash: 'str', selected_indices: 'list[int] | tuple[int, ...]', *, start: 'bool' = True) -> 'dict[str, Any]'",
