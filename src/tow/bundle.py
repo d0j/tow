@@ -28,7 +28,7 @@ from tow.config import SAFE_ID, ConfigError, validated, web_address
 from tow.errors import Msg, TowError
 from tow.log import EXPORT_EVENT_KEYS, export_event_projection, log_event, read_events
 from tow.paths import config_path, data_dir, download_history_path, secrets_path, state_path
-from tow.platform import is_plain_dir, is_plain_file
+from tow.platform import plain_kind
 from tow.store import (
     STATE_SCHEMA_VERSION,
     SecretStoreError,
@@ -976,28 +976,28 @@ def recover_interrupted_import() -> None:
 
 def _checkpoint_file(path: Path, *, missing: bool = False) -> bool:
     try:
-        info = path.lstat()
-    except FileNotFoundError:
+        kind = plain_kind(path)
+    except OSError as exc:
+        raise ExportImportError("import checkpoint file cannot be inspected") from exc
+    if kind is None:
         if missing:
             return False
         raise ExportImportError("import checkpoint file is missing") from None
-    except OSError as exc:
-        raise ExportImportError("import checkpoint file cannot be inspected") from exc
-    if not is_plain_file(info):
+    if kind != "file":
         raise ExportImportError("import checkpoint file is unsafe")
     return True
 
 
 def _checkpoint_directory(path: Path, *, missing: bool = False) -> bool:
     try:
-        info = path.lstat()
-    except FileNotFoundError:
+        kind = plain_kind(path)
+    except OSError as exc:
+        raise ExportImportError("import checkpoint directory cannot be inspected") from exc
+    if kind is None:
         if missing:
             return False
         raise ExportImportError("import checkpoint directory is missing") from None
-    except OSError as exc:
-        raise ExportImportError("import checkpoint directory cannot be inspected") from exc
-    if not is_plain_dir(info):
+    if kind != "dir":
         raise ExportImportError("import checkpoint directory is unsafe")
     return True
 

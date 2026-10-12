@@ -355,5 +355,7 @@ Stable names other modules build on.
 - `is_plain_file(info)`, `is_plain_dir(info)`, `is_link_like(info)` — an `lstat` result that is a
   regular file or folder and no link, or one that is a link or a Windows reparse point (junction,
   mount point). Every such check goes through them; only `update_worker.py` and
-  `scripts/update.py` keep their own copy (standard library only).
+  `scripts/update.py` keep their own copy (standard library only). `plain_kind(path,
+  missing_ok=True)` asks the path itself: `"file"`, `"dir"`, `"other"` (a link, junction or
+  special file) or `None` when nothing is there; each caller keeps its own error for each answer.
 - `user_id()`, `user_name()` — this account's numeric id (POSIX; 0 on Windows) and login name.
