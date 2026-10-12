@@ -1023,7 +1023,7 @@ mark { background: rgba(240,180,41,.35); color: inherit; border-radius: 2px; }
 .attention-fold.ico, .attention-unfold { display: none; }
 .attention-js .attention-fold.ico {
   display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
-  width: var(--btn-h); height: var(--btn-h); margin: -.2rem -.35rem -.2rem 0; padding: 0;
+  width: var(--btn-h); height: var(--btn-h); margin: 0 -.35rem 0 0; padding: 0;
   color: var(--mut); background: transparent; border: 0; border-radius: 6px;
 }
 .attention-fold.ico svg { transform: rotate(180deg); }
@@ -1114,4 +1114,6 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
   .issue-note:target { animation: none; outline: 2px solid var(--acc); outline-offset: 2px; }
 }
 .issue-note { margin: 0 0 .8rem; color: var(--fg); background: var(--pill-warn-bg); border: 1px solid var(--warn); }
+/* A link inside a message's sentence is told from the words by more than colour (WCAG 1.4.1). */
+.secret-store a { text-decoration: underline; }
 .secret-store-copy { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-left: .4rem; }
