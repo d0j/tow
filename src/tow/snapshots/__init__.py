@@ -14,6 +14,7 @@ every target is checked to stay where it belongs.
 The package re-exports what the rest of TOW uses; inside it:
 
 - ``errors``: ``SnapshotError`` and the reason of a failure;
+- ``members``: what a copy holds, where each member goes, plain files and folders;
 
 What is not in a module of its own yet is still here.
 """
@@ -43,12 +44,26 @@ from tow.backup_retention import MIB, copy_time, retained_copies, retention_sett
 from tow.config import interval_sec_of, load_config
 from tow.diagnostic_json import check_epochs, check_types, encode_object, read_object
 from tow.i18n import t
-from tow.log import locked_log_path, log_event, log_path, owner_language
-from tow.paths import config_path, data_dir, download_history_path, state_path
-from tow.platform import child_path, is_plain_file, plain_kind
+from tow.log import locked_log_path, log_event, owner_language
+from tow.paths import config_path, data_dir
+from tow.platform import child_path, is_plain_file
 from tow.snapshots.errors import SnapshotError, reason
+from tow.snapshots.members import (
+    NOT_RESTORED,
+    POINT_MEMBER,
+    VALIDATED_MEMBERS,
+    copy_members_in,
+    fixed_members,
+    live_members,
+    member_target,
+    ordinary_directory,
+    ordinary_file,
+    owned_tree,
+    parse_copy_config,
+    points_dir_setting,
+    read_metadata_bytes,
+)
 from tow.store import (
-    RegularReadError,
     SecretStoreError,
     StateVersionError,
     atomic_write_bytes,
@@ -60,8 +75,6 @@ from tow.store import (
     encrypted_secrets_path,
     load_secrets,
     persistence_lock,
-    read_regular_bytes,
-    secret_undo_path,
     validate_download_history_bytes,
     validate_state_bytes,
 )
@@ -101,15 +114,11 @@ __all__ = [
 FORMAT = "tow-snapshot-v2"  # a signed MANIFEST
 UNSIGNED_FORMAT = "tow-snapshot-v1"  # copies made before 1.17: checked, never restored automatically
 _SIGNATURE_PURPOSE = "night-copies"
-_POINT_MEMBER = re.compile(r"restore-points/(?P<id>[A-Za-z0-9-]{1,64})\.towx")
 MAX_MANIFEST_BYTES = 1024 * 1024
 MAX_MEMBER_SIZE = 2**63 - 1
 _READ_CHUNK_BYTES = 1024 * 1024
-_VALIDATED_MEMBERS = ("config.yaml", "state.json", "download_history.json", "secrets.enc", "secrets-undo.enc")
 # Exists only while a settings change can still be undone: its absence is normal.
 _OPTIONAL_MEMBERS = frozenset({"secrets-undo.enc"})
-# Copied for the record, never restored: History keeps what happened after the copy was made.
-_NOT_RESTORED = "tow.jsonl"
 _PREFIX = "tow-"
 # A copy being written: ``.tow-<stamp>.partial`` with a signed proof that this install made it.
 _PARTIAL_NAME = re.compile(r"\.tow-[0-9]{8}-[0-9]{6}(?:-[0-9a-f]{6})?\.partial")
@@ -247,75 +256,6 @@ def record_failure(error: str) -> None:
     log_event("backup_failed", error=error[:300], how="auto")
 
 
-def _fixed_members() -> list[tuple[str, Path]]:
-    """(name inside the snapshot, live path) of the stores every copy carries."""
-    return [
-        ("state.json", state_path()),
-        ("download_history.json", download_history_path()),
-        ("secrets.enc", encrypted_secrets_path()),
-        ("secrets-undo.enc", secret_undo_path()),
-        ("tow.jsonl", log_path()),
-        ("config.yaml", config_path()),
-    ]
-
-
-def _members() -> list[tuple[str, Path]]:
-    """(name inside the snapshot, live path) - the allowlist, with this install's restore points."""
-    members = _fixed_members()
-    from tow.restore_points import RestorePointError, list_restore_points, point_path
-
-    try:
-        members.extend(
-            (f"restore-points/{point['id']}.towx", point_path(point["id"])) for point in list_restore_points()
-        )
-    except RestorePointError as exc:  # restore_points_dir of another system: said, not skipped
-        raise SnapshotError(str(exc)) from exc
-    return members
-
-
-def _points_dir_setting(copy_config: bytes | None = None) -> str:
-    """``restore_points_dir`` of the live config.
-
-    A live config that cannot be read (replacing it is often the point of a restore) says
-    nothing: the copy's own setting is used, else the default folder.
-    """
-    try:
-        cfg = load_config()
-    except OSError, UnicodeError, TypeError, ValueError, yaml.YAMLError:
-        cfg = _snapshot_config(copy_config) if copy_config is not None else {}
-    return str(cfg.get("restore_points_dir") or "")
-
-
-def _member_target(name: str, *, points_dir: str | None = None) -> Path:
-    """Where member ``name`` of a copy goes, refusing every name TOW does not write itself.
-
-    A restore point is accepted only under its real id pattern, and its target must stay
-    directly inside the restore points folder (``restore-points/\\Windows\\...`` or
-    ``restore-points//Users/...`` would otherwise escape it). ``points_dir`` is that
-    folder's setting (by default the live one, see ``_points_dir_setting``).
-    """
-    fixed = dict(_fixed_members())
-    if name in fixed:
-        return fixed[name]
-    lang = owner_language()
-    match = _POINT_MEMBER.fullmatch(name) if isinstance(name, str) else None
-    if match is None:
-        if isinstance(name, str) and name.startswith("restore-points/"):
-            raise SnapshotError(t("backup.snapshot.unsafe_path", lang, name=name))
-        raise SnapshotError(t("backup.snapshot.unexpected_file", lang, name=name))
-    from tow.restore_points import RestorePointError, point_path, restore_points_dir
-
-    cfg = {"restore_points_dir": _points_dir_setting() if points_dir is None else points_dir}
-    try:
-        target = point_path(match.group("id"), must_exist=False, cfg=cfg)
-        inside = target.resolve().parent == restore_points_dir(cfg=cfg).resolve()
-    except (RestorePointError, OSError) as exc:
-        raise SnapshotError(t("backup.snapshot.unsafe_path", lang, name=name)) from exc
-    if not inside:
-        raise SnapshotError(t("backup.snapshot.unsafe_path", lang, name=name))
-    return target
-
-
 def _signing_key() -> bytes:
     try:
         return derive_local_secret(_SIGNATURE_PURPOSE).encode("ascii")
@@ -339,8 +279,8 @@ def _signature_matches(manifest: dict[str, Any], key: bytes) -> bool:
 def _read_manifest(path: Path) -> dict[str, Any]:
     lang = owner_language()
     try:
-        _ordinary_directory(path)
-        _ordinary_file(path / "MANIFEST.json")
+        ordinary_directory(path)
+        ordinary_file(path / "MANIFEST.json")
         with (path / "MANIFEST.json").open("rb") as handle:
             content = handle.read(MAX_MANIFEST_BYTES + 1)
         if len(content) > MAX_MANIFEST_BYTES:
@@ -511,12 +451,12 @@ def snapshot_delete_view(name: str) -> dict[str, Any]:
         try:
             path = snapshot_path(name)
             manifest = _owned_manifest(path, _signing_key())
-            fixed = {member for member, _target in _fixed_members()}
+            fixed = {member for member, _target in fixed_members()}
             if manifest is None or any(
-                member not in fixed and _POINT_MEMBER.fullmatch(member) is None for member in manifest["files"]
+                member not in fixed and POINT_MEMBER.fullmatch(member) is None for member in manifest["files"]
             ):
                 raise ValueError("copy ownership could not be verified")
-            if not _owned_tree(path, {"MANIFEST.json", *manifest["files"]}):
+            if not owned_tree(path, {"MANIFEST.json", *manifest["files"]}):
                 raise ValueError("copy contains foreign files")
             return {"name": name, "created_at": manifest["created_at"], "revision": copy_revision(path)}
         except (OSError, ValueError, KeyError) as exc:
@@ -551,7 +491,7 @@ def _copy_snapshot_member(source: Path, destination: Path, name: str) -> dict[st
     """Copy/hash the same bounded blocks; a missing source is distinct from an unsafe one."""
     lang = owner_language()
     try:
-        if not _ordinary_file(source, missing=True):
+        if not ordinary_file(source, missing=True):
             return None
         digest = hashlib.sha256()
         seen = 0
@@ -613,7 +553,7 @@ def _create_snapshot(*, how: str, proven: dict[str, str] | None = None) -> dict[
     previous_members = _previous_members(root, key)
     partial_created = False
     try:
-        members = _members()
+        members = live_members()
         _check_copy_space(root, members)
         partial.mkdir(parents=True, exist_ok=False)
         partial_created = True
@@ -629,7 +569,7 @@ def _create_snapshot(*, how: str, proven: dict[str, str] | None = None) -> dict[
                     missing.append(name)  # said in the result, the log and the MANIFEST
                 continue
             files[name] = meta
-        for name in _VALIDATED_MEMBERS:
+        for name in VALIDATED_MEMBERS:
             if name in files and files[name]["sha256"] != (proven or {}).get(name):
                 content = _verified_member(partial / name, name, files[name], collect=True)
                 assert content is not None
@@ -721,9 +661,9 @@ def _partial_proof(folder: str, key: bytes) -> dict[str, Any]:
 
 def _partial_owner_proof(folder: Path, key: bytes) -> str | None:
     """The member proving a partial folder is this install's: its signed proof, else a signed MANIFEST."""
-    if _ordinary_file(folder / _PARTIAL_PROOF, missing=True):
+    if ordinary_file(folder / _PARTIAL_PROOF, missing=True):
         try:
-            proof = json.loads(_read_metadata_bytes(folder / _PARTIAL_PROOF, limit=MAX_MANIFEST_BYTES))
+            proof = json.loads(read_metadata_bytes(folder / _PARTIAL_PROOF, limit=MAX_MANIFEST_BYTES))
         except UnicodeError, ValueError, RecursionError:
             return None
         if (
@@ -750,9 +690,9 @@ def _remove_stale_partials(root: Path, key: bytes) -> bool:
         return True
     for folder in candidates:
         try:
-            if not _ordinary_directory(folder, missing=True) or (proof := _partial_owner_proof(folder, key)) is None:
+            if not ordinary_directory(folder, missing=True) or (proof := _partial_owner_proof(folder, key)) is None:
                 continue
-            if not _remove_copy(folder, root, proof, {proof, "MANIFEST.json", *_copy_members_in(folder)}):
+            if not _remove_copy(folder, root, proof, {proof, "MANIFEST.json", *copy_members_in(folder)}):
                 pending = True
         except OSError, ValueError:
             pending = True
@@ -764,7 +704,7 @@ def _check_copy_space(root: Path, members: list[tuple[str, Path]]) -> None:
     size = 0
     for name, source in members:
         try:
-            if _ordinary_file(source, missing=True):
+            if ordinary_file(source, missing=True):
                 size += source.stat().st_size
         except ValueError as exc:
             raise SnapshotError(t("backup.snapshot.source_changed", owner_language(), name=name)) from exc
@@ -797,15 +737,15 @@ def _prune_night_copies(root: Path, target: Path, key: bytes, policy: dict[str, 
     try:
         others = []
         entries = []
-        fixed = {name for name, _path in _fixed_members()}
+        fixed = {name for name, _path in fixed_members()}
         for folder in _snapshots(root):
             try:
                 manifest = _owned_manifest(folder, key)
                 if manifest is None or any(
-                    name not in fixed and _POINT_MEMBER.fullmatch(name) is None for name in manifest["files"]
+                    name not in fixed and POINT_MEMBER.fullmatch(name) is None for name in manifest["files"]
                 ):
                     continue
-                if _owned_tree(folder, {"MANIFEST.json", *manifest["files"]}):
+                if owned_tree(folder, {"MANIFEST.json", *manifest["files"]}):
                     created = copy_time(str(manifest["created_at"]))
                     entries.append((folder.name, created, _copy_disk_bytes(folder)))
                     if folder != target:
@@ -830,47 +770,30 @@ def _prune_night_copies(root: Path, target: Path, key: bytes, policy: dict[str, 
     return removed, pending, over_budget
 
 
-def _owned_tree(folder: Path, expected: set[str]) -> bool:
-    """No foreign file, special file or link may be swept up with an owned copy."""
-    _ordinary_directory(folder)
-    for path in folder.iterdir():
-        if path.name == "restore-points":
-            _ordinary_directory(path)
-            for point in path.iterdir():
-                if f"restore-points/{point.name}" not in expected:
-                    return False
-                _ordinary_file(point)
-        elif path.name in expected:
-            _ordinary_file(path)
-        else:
-            return False
-    return True
-
-
 def _remove_copy(folder: Path, parent: Path, marker: str, expected: set[str]) -> bool:
     """Remove an already-owned copy, retaining its proof until the final directory step."""
     try:
         if Path(marker).name != marker or marker not in expected:
             return False
-        _ordinary_directory(folder)
+        ordinary_directory(folder)
         if folder.resolve().parent != parent.resolve():
             return False
         proof = folder / marker
-        _ordinary_file(proof)
+        ordinary_file(proof)
         limit = MAX_MANIFEST_BYTES if marker == "MANIFEST.json" else MAX_RESTORE_JOURNAL_BYTES
-        content = _read_metadata_bytes(proof, limit=limit)
-        if not _owned_tree(folder, expected):
+        content = read_metadata_bytes(proof, limit=limit)
+        if not owned_tree(folder, expected):
             return False
         for child in sorted(folder.iterdir()):
             if child == proof:
                 continue
             if child.name == "restore-points":
-                _ordinary_directory(child)
+                ordinary_directory(child)
                 shutil.rmtree(child)
             else:
                 if child.name not in expected:
                     return False
-                _ordinary_file(child)
+                ordinary_file(child)
                 child.unlink()
             try:
                 child.lstat()
@@ -885,7 +808,7 @@ def _remove_copy(folder: Path, parent: Path, marker: str, expected: set[str]) ->
             folder.lstat()
         except FileNotFoundError:
             return True
-        _ordinary_directory(folder)
+        ordinary_directory(folder)
         if folder.resolve().parent == parent.resolve():
             # Never overwrite a marker that a concurrent writer supplied.
             with proof.open("xb") as handle:
@@ -919,8 +842,8 @@ def _verified_member(source: Path, name: str, meta: Any, *, collect: bool) -> by
     content = bytearray() if collect else None
     seen = 0
     try:
-        _ordinary_directory(source.parent)
-        _ordinary_file(source)
+        ordinary_directory(source.parent)
+        ordinary_file(source)
         with source.open("rb") as handle:
             info = os.fstat(handle.fileno())
             if not stat.S_ISREG(info.st_mode) or info.st_size != size:
@@ -964,17 +887,17 @@ def _read_verified(
         raise SnapshotError(t("backup.snapshot.unsigned", lang))
     contents: dict[str, bytes] = {}
     for name, meta in manifest["files"].items():
-        _member_target(name)  # a strict name, and a target that stays where it belongs
-        content = _verified_member(path / name, name, meta, collect=retain and name != _NOT_RESTORED)
+        member_target(name)  # a strict name, and a target that stays where it belongs
+        content = _verified_member(path / name, name, meta, collect=retain and name != NOT_RESTORED)
         if content is not None:
             contents[name] = content
         del content
     if retain:
         if "config.yaml" in contents:
-            _snapshot_config(contents["config.yaml"])
+            parse_copy_config(contents["config.yaml"])
         _check_payloads(contents)
     elif payloads:
-        for name in _VALIDATED_MEMBERS:
+        for name in VALIDATED_MEMBERS:
             if name not in manifest["files"]:
                 continue
             content = _verified_member(path / name, name, manifest["files"][name], collect=True)
@@ -993,7 +916,7 @@ def verify_snapshot(path: Path, *, payloads: bool = True) -> dict[str, Any]:
 
 def _check_member(name: str, content: bytes) -> None:
     if name == "config.yaml":
-        _snapshot_config(content)
+        parse_copy_config(content)
     else:
         _check_payloads({name: content})
 
@@ -1004,12 +927,12 @@ def _proven_sources() -> dict[str, str]:
     copy made under the lock uses a proof only for bytes with the same hash; a store that
     changed in between, or failed here, is checked again from the copy."""
     proven: dict[str, str] = {}
-    for name, source in _fixed_members():
-        if name not in _VALIDATED_MEMBERS:
+    for name, source in fixed_members():
+        if name not in VALIDATED_MEMBERS:
             continue
         try:
             limit = MAX_INPUT_BYTES if name == "config.yaml" else MAX_MEMBER_SIZE
-            if not _ordinary_file(source, missing=True) or source.stat().st_size > limit:
+            if not ordinary_file(source, missing=True) or source.stat().st_size > limit:
                 continue
             content = source.read_bytes()
             _check_member(name, content)
@@ -1058,7 +981,7 @@ def restore_snapshot(path: Path, *, apply: bool = False) -> dict[str, Any]:
         return result
     with persistence_lock():
         before_interval = _interval()
-        points_dir = _points_dir_setting(contents.get("config.yaml"))
+        points_dir = points_dir_setting(contents.get("config.yaml"))
         plan = _restore_plan(contents, points_dir)  # everything merged and checked before the first write
         safety, cleanup_pending = _apply_restore(plan, snapshot=path.name, points_dir=points_dir)
     result.update({"applied": True, "safety_copy": str(safety)})
@@ -1113,19 +1036,19 @@ def _restore_plan(contents: dict[str, bytes], points_dir: str) -> list[tuple[str
     targets of restore points are those of the config in force while the files are written."""
     plan: list[tuple[str, Path, bytes | None]] = []
     for name, content in contents.items():
-        if name == _NOT_RESTORED:
+        if name == NOT_RESTORED:
             continue
         if name == "config.yaml":
             content = _keep_local_access(content)
         elif name == "secrets.enc":
             content = _keep_local_password(content)
-        plan.append((name, _member_target(name, points_dir=points_dir), content))
+        plan.append((name, member_target(name, points_dir=points_dir), content))
     if "secrets.enc" not in contents and encrypted_secrets_path().is_file():
         plan.append(("secrets.enc", encrypted_secrets_path(), _keep_local_password(None)))
     plan.extend(
-        (name, _member_target(name), None)
+        (name, member_target(name), None)
         for name in _REMOVED_WHEN_ABSENT
-        if name not in contents and _member_target(name).is_file()
+        if name not in contents and member_target(name).is_file()
     )
     return sorted(plan, key=lambda step: step[0] == "config.yaml")
 
@@ -1142,7 +1065,7 @@ def _begin_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str,
         safety.mkdir(parents=True, exist_ok=False)
         created = True
         for name, target, _content in plan:
-            if _ordinary_file(target, missing=True):
+            if ordinary_file(target, missing=True):
                 saved = target.read_bytes()
                 atomic_write_bytes(safety / name, saved)
                 entries.append({"name": name, "existed": True, "sha256": hashlib.sha256(saved).hexdigest()})
@@ -1167,27 +1090,8 @@ def _begin_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str,
     return safety
 
 
-def _read_metadata_bytes(path: Path, *, limit: int) -> bytes:
-    """Bound a regular opened record before allocating or interpreting its contents."""
-    try:
-        _ordinary_file(path)
-    except ValueError as exc:
-        raise ValueError(t("backup.snapshot.record_type", owner_language())) from exc
-    try:
-        return read_regular_bytes(path, limit)
-    except RegularReadError as exc:
-        raise ValueError(t(_RECORD_REFUSED[exc.kind], owner_language())) from None
-
-
-_RECORD_REFUSED = {
-    "type": "backup.snapshot.record_type",
-    "size": "backup.snapshot.record_size",
-    "changed": "backup.snapshot.record_changed",
-}
-
-
 def _read_restore_record(path: Path, *, limit: int) -> dict[str, Any]:
-    raw = _read_metadata_bytes(path, limit=limit)
+    raw = read_metadata_bytes(path, limit=limit)
     try:
         value = decode_json_bytes(raw)
     except (UnicodeError, ValueError, RecursionError) as exc:
@@ -1223,7 +1127,7 @@ def _write_journal(safety: Path, journal: dict[str, Any], status: str) -> None:
 
 
 def _read_journal(safety: Path) -> dict[str, Any]:
-    _ordinary_directory(safety)
+    ordinary_directory(safety)
     journal = _read_restore_record(safety / _JOURNAL, limit=MAX_RESTORE_JOURNAL_BYTES)
     _validate_restore_journal(journal)
     return journal
@@ -1240,12 +1144,12 @@ def _validate_restore_journal(journal: dict[str, Any]) -> None:
     ):
         raise ValueError("not a night-copy restore journal")
     names: set[str] = set()
-    fixed = dict(_fixed_members())
+    fixed = dict(fixed_members())
     for entry in journal["entries"]:
         if not isinstance(entry, dict):
             raise TypeError("malformed night-copy restore entry")
         name = entry.get("name")
-        if not isinstance(name, str) or (name not in fixed and _POINT_MEMBER.fullmatch(name) is None):
+        if not isinstance(name, str) or (name not in fixed and POINT_MEMBER.fullmatch(name) is None):
             raise ValueError("unexpected night-copy restore member")
         if name in names or not isinstance(entry.get("existed"), bool):
             raise ValueError("malformed night-copy restore entry")
@@ -1258,26 +1162,8 @@ def _validate_restore_journal(journal: dict[str, Any]) -> None:
             raise ValueError("unexpected night-copy restore checksum")
 
 
-def _ordinary_directory(path: Path, *, missing: bool = False) -> bool:
-    kind = plain_kind(path, missing_ok=missing)
-    if kind is None:
-        return False
-    if kind != "dir":
-        raise ValueError("night-copy restore directory is unsafe")
-    return True
-
-
-def _ordinary_file(path: Path, *, missing: bool = False) -> bool:
-    kind = plain_kind(path, missing_ok=missing)
-    if kind is None:
-        return False
-    if kind != "file":
-        raise ValueError("night-copy restore file is unsafe")
-    return True
-
-
 def _rollback_target(name: str, config_bytes: bytes | None, points_dir: str | None) -> Path:
-    fixed = dict(_fixed_members())
+    fixed = dict(fixed_members())
     if name in fixed:
         return fixed[name]
     # Point targets are where the restore wrote them, not those of a partially restored config.
@@ -1285,12 +1171,12 @@ def _rollback_target(name: str, config_bytes: bytes | None, points_dir: str | No
 
     if points_dir is None:  # a journal of 1.23.11 or earlier: the saved config says where
         if config_bytes is None:
-            return _member_target(name)
+            return member_target(name)
         config = load_yaml(config_bytes)
         if not isinstance(config, dict):
             raise TypeError("night-copy restore config is malformed")
         points_dir = str(config.get("restore_points_dir") or "")
-    match = _POINT_MEMBER.fullmatch(name)
+    match = POINT_MEMBER.fullmatch(name)
     if match is None or re.fullmatch(r"[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}", match["id"]) is None:
         raise ValueError("night-copy restore point is malformed")
     root = resolve_checked(points_dir, MANUAL).resolve()
@@ -1304,23 +1190,23 @@ def _rollback_plan(safety: Path) -> list[tuple[str, Path, bytes | None]]:
         name = entry["name"]
         backup = safety / name
         if backup.parent != safety:
-            _ordinary_directory(backup.parent, missing=not entry["existed"])
+            ordinary_directory(backup.parent, missing=not entry["existed"])
         if entry["existed"]:
-            _ordinary_file(backup)
+            ordinary_file(backup)
             content = backup.read_bytes()
             if hashlib.sha256(content).hexdigest() != entry["sha256"]:
                 raise SnapshotError(t("backup.snapshot.file_damaged", owner_language(), name=name))
             saved[name] = content
         else:
-            if _ordinary_file(backup, missing=True):
+            if ordinary_file(backup, missing=True):
                 raise ValueError("unexpected night-copy restore backup")
             saved[name] = None
     plan = []
     for name, content in saved.items():
         target = _rollback_target(name, saved.get("config.yaml"), journal.get("points_dir"))
-        _ordinary_file(target, missing=True)
+        ordinary_file(target, missing=True)
         if target.parent.exists():
-            _ordinary_directory(target.parent)
+            ordinary_directory(target.parent)
         plan.append((name, target, content))
     return sorted(plan, key=lambda step: step[0] != "config.yaml")
 
@@ -1328,19 +1214,7 @@ def _rollback_plan(safety: Path) -> list[tuple[str, Path, bytes | None]]:
 def _owned_safety(safety: Path, journal: dict[str, Any]) -> bool:
     """Never prune an unrecognized file or descend into a link/junction."""
     expected = {_JOURNAL, *(entry["name"] for entry in journal["entries"] if entry["existed"])}
-    return _owned_tree(safety, expected)
-
-
-def _copy_members_in(folder: Path) -> set[str]:
-    """The member names a copy of TOW's stores may hold, with the restore points present in it."""
-    names = {name for name, _path in _fixed_members()}
-    if _ordinary_directory(folder / "restore-points", missing=True):
-        names.update(
-            member
-            for point in (folder / "restore-points").iterdir()
-            if _POINT_MEMBER.fullmatch(member := f"restore-points/{point.name}")
-        )
-    return names
+    return owned_tree(safety, expected)
 
 
 # A file atomic_write_bytes was writing when the process died: ``.<name>.<random>.tmp``.
@@ -1351,25 +1225,25 @@ def _remove_write_leftovers(folder: Path) -> None:
     """The half-written files a crash left in a before-restore folder (of its stores, its
     journal or its restore points): with them it was never removed, as a folder with files of
     unknown names is never swept up."""
-    known = {name for name, _path in _fixed_members()} | {_JOURNAL}
+    known = {name for name, _path in fixed_members()} | {_JOURNAL}
     for parent, prefix in ((folder, ""), (folder / "restore-points", "restore-points/")):
-        if not _ordinary_directory(parent, missing=True):
+        if not ordinary_directory(parent, missing=True):
             continue
         for path in parent.iterdir():
             match = _WRITE_LEFTOVER.fullmatch(path.name)
             if match is None:
                 continue
             name = prefix + match["name"]
-            if (name in known or _POINT_MEMBER.fullmatch(name)) and _ordinary_file(path):
+            if (name in known or POINT_MEMBER.fullmatch(name)) and ordinary_file(path):
                 path.unlink()
 
 
 def _remove_unjournaled(folder: Path) -> bool:
     """A before-restore folder without a journal holds only copies of stores; nothing refers to it."""
     try:
-        if not _ordinary_directory(folder, missing=True):
+        if not ordinary_directory(folder, missing=True):
             return True
-        if not _owned_tree(folder, _copy_members_in(folder)):
+        if not owned_tree(folder, copy_members_in(folder)):
             return False
         shutil.rmtree(folder)
     except OSError, ValueError:
@@ -1448,7 +1322,7 @@ def _prune_safety_copies(keep: int) -> tuple[list[str], bool]:
         finished.append((folder, {_JOURNAL, *(entry["name"] for entry in journal["entries"] if entry["existed"])}))
         try:
             (folder / _UNDO_IN_SAFETY).unlink(missing_ok=True)
-            if _ordinary_file(folder / _UNDO_IN_SAFETY, missing=True):
+            if ordinary_file(folder / _UNDO_IN_SAFETY, missing=True):
                 pending = True
         except OSError, ValueError:
             pending = True
@@ -1600,20 +1474,6 @@ def _keep_local_password(copy_secrets: bytes | None) -> bytes:
         ) from exc
 
 
-def _snapshot_config(content: bytes) -> dict[str, Any]:
-    try:
-        parsed = load_yaml(content.decode("utf-8"))
-    except YamlLimitError as exc:
-        raise SnapshotError(str(exc)) from exc
-    except (UnicodeError, yaml.YAMLError) as exc:
-        raise SnapshotError(t("backup.snapshot.config_not_mapping", owner_language())) from exc
-    if parsed is None:
-        parsed = {}
-    if not isinstance(parsed, dict):
-        raise SnapshotError(t("backup.snapshot.config_not_mapping", owner_language()))
-    return parsed
-
-
 def _keep_local_access(snapshot_config: bytes) -> bytes:
     """The copy's config with this machine's access settings and backup folders (the live ones).
 
@@ -1622,7 +1482,7 @@ def _keep_local_access(snapshot_config: bytes) -> bytes:
     from this PC, as always; its backup folders are then the copy's (where its restore points
     were just written).
     """
-    restored = _snapshot_config(snapshot_config)
+    restored = parse_copy_config(snapshot_config)
     try:
         current = load_yaml(read_yaml_text(config_path()))
     except OSError, UnicodeError, yaml.YAMLError:

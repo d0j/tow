@@ -5,6 +5,7 @@ import yaml
 
 from tow import bundle, cli, config, i18n, snapshots
 from tow.paths import config_path
+from tow.snapshots import members as night_members
 
 CYCLE = b"extra: &loop [*loop]\n"
 
@@ -74,7 +75,7 @@ def test_falsy_non_mapping_configs_are_not_silently_replaced_by_defaults(source)
         config.load_config()
     assert caught.value.code == "config_error.mapping"
     with pytest.raises(snapshots.SnapshotError):
-        snapshots._snapshot_config(source)
+        night_members.parse_copy_config(source)
     assert config_path().read_bytes() == source
 
 
@@ -82,7 +83,7 @@ def test_falsy_non_mapping_configs_are_not_silently_replaced_by_defaults(source)
 def test_empty_mapping_and_empty_document_remain_compatible(source):
     config_path().write_bytes(source)
     assert isinstance(config.load_config(), dict)
-    assert snapshots._snapshot_config(source) == {}
+    assert night_members.parse_copy_config(source) == {}
 
 
 @pytest.mark.parametrize("language", ["ru", "en"])

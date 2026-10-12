@@ -131,15 +131,16 @@ def test_plain_kind_of_a_missing_or_unreadable_entry(monkeypatch, tmp_path):
 @pytest.mark.parametrize("system", list(BACKENDS))
 @pytest.mark.parametrize(("mode", "attributes", "kind"), [row for row in LINKS_AND_JUNCTIONS if row[2] == "other"])
 def test_links_and_junctions_keep_each_callers_own_error(monkeypatch, tmp_path, system, mode, attributes, kind):
-    from tow import bundle, snapshots
+    from tow import bundle
+    from tow.snapshots import members as night_members
 
     entry = tmp_path / "entry"
     _fake_lstat(monkeypatch, entry, mode, attributes)
     with platform.use(BACKENDS[system]()):
         with pytest.raises(ValueError, match=r"^night-copy restore file is unsafe$"):
-            snapshots._ordinary_file(entry, missing=True)
+            night_members.ordinary_file(entry, missing=True)
         with pytest.raises(ValueError, match=r"^night-copy restore directory is unsafe$"):
-            snapshots._ordinary_directory(entry)
+            night_members.ordinary_directory(entry)
         with pytest.raises(bundle.ExportImportError, match=r"^import checkpoint file is unsafe$"):
             bundle._checkpoint_file(entry)
         with pytest.raises(bundle.ExportImportError, match=r"^import checkpoint directory is unsafe$"):
@@ -147,15 +148,16 @@ def test_links_and_junctions_keep_each_callers_own_error(monkeypatch, tmp_path, 
 
 
 def test_a_missing_entry_keeps_each_callers_own_answer(monkeypatch, tmp_path):
-    from tow import bundle, snapshots
+    from tow import bundle
+    from tow.snapshots import members as night_members
 
     gone = tmp_path / "gone"
-    assert snapshots._ordinary_file(gone, missing=True) is False
-    assert snapshots._ordinary_directory(gone, missing=True) is False
+    assert night_members.ordinary_file(gone, missing=True) is False
+    assert night_members.ordinary_directory(gone, missing=True) is False
     with pytest.raises(FileNotFoundError):
-        snapshots._ordinary_file(gone)
+        night_members.ordinary_file(gone)
     with pytest.raises(FileNotFoundError):
-        snapshots._ordinary_directory(gone)
+        night_members.ordinary_directory(gone)
     assert bundle._checkpoint_file(gone, missing=True) is False
     assert bundle._checkpoint_directory(gone, missing=True) is False
     with pytest.raises(bundle.ExportImportError, match=r"^import checkpoint file is missing$") as missing:
@@ -168,7 +170,7 @@ def test_a_missing_entry_keeps_each_callers_own_answer(monkeypatch, tmp_path):
         bundle._checkpoint_directory(gone)
     assert isinstance(denied.value.__cause__, PermissionError)
     with pytest.raises(PermissionError):
-        snapshots._ordinary_file(gone)
+        night_members.ordinary_file(gone)
 
 
 def test_the_account_is_named_by_the_session_and_numbered_only_on_posix(monkeypatch):
