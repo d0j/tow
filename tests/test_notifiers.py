@@ -12,7 +12,7 @@ from collections.abc import Callable
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from helpers import flash_of
+from helpers import flash_kind, flash_of
 
 from tow import notifiers
 from tow.check import notices as check_notices
@@ -669,6 +669,33 @@ def test_save_check_and_remove_from_the_page(http):
 
     c.post("/undo", follow_redirects=False)
     assert load_secrets()["notifiers"]["discord"] == {"webhook_url": DISCORD_URL}
+
+
+@pytest.mark.parametrize(
+    ("change", "page"),
+    [
+        (("/settings/notifier/discord", {"webhook_url": DISCORD_URL}), "/settings?open=bots&card=discord"),
+        (
+            ("/settings/notifier/telegram", {"token": TG_TOKEN, "chat_ids": "123456789"}),
+            "/settings?open=bots&card=telegram",
+        ),
+        (("/settings/interval", {"interval_min": "120", "flash_ttl_min": "1"}), "/settings?open=intervals"),
+        (("/settings/client", {"client_id": "", "host": "127.0.0.1", "port": "8080"}), "/settings?open=clients"),
+    ],
+)
+def test_undo_of_a_settings_change_opens_the_card_it_was_made_on(change, page):
+    """QA9: "Undo" after a messenger, the checks or a client login were saved went to Settings with
+    every card closed; the owner had to find the card again to see what came back."""
+    from urllib.parse import urlsplit
+
+    c = _client()
+    path, data = change
+    saved = c.post(path, data=data, follow_redirects=False)
+    assert "не сохранено" not in _flash(saved).casefold()
+    undone = c.post("/undo", follow_redirects=False)
+    assert flash_kind(undone.headers["location"]) == "ok"
+    location = urlsplit(undone.headers["location"])
+    assert location.path + "?" + "&".join(p for p in location.query.split("&") if not p.startswith("flash=")) == page
 
 
 def test_saving_again_with_an_empty_secret_keeps_it():

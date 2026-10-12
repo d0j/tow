@@ -16,6 +16,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The page shown while `config.yaml` cannot be read follows a dark theme and is read correctly by screen readers.
 - Settings → Checks: a number outside the allowed range now says "Saved; changed to fit the allowed range: …" instead
   of "Saved; saved: …".
+- Settings: Undo after saving a messenger, a torrent client's connection or the checks opens that card again instead of
+  Settings with every card closed.
 
 ## [1.28.3] — 2026-10-09
 
