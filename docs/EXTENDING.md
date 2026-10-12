@@ -1,11 +1,11 @@
 # Extending TOW
 
-How to add a torrent client, a messenger, a site, a language or a page. Each is a module that TOW discovers by
-itself, plus its texts in the language files; a contract test checks every module that is found. Clients and
-messengers are found by one scan (`tow.plugins`): a module that fails to load is skipped and named in `SKIPPED`
-while the others keep working, and a module of the package that is not a plugin is listed in its `HELPERS`
-(`clients/spec.py`, `notifiers/registry.py`). Background:
-[architecture.md](architecture.md). Development setup and the gate: [CONTRIBUTING.md](../CONTRIBUTING.md).
+How to add a torrent client, a messenger, a site, a language, a page, a command or an issue. Each is a module that
+TOW discovers by itself, plus its texts in the language files; a contract test checks every module that is found.
+Clients and messengers are found by one scan (`tow.plugins`): a module that fails to load is skipped and named in
+`SKIPPED` while the others keep working, and a module of the package that is not a plugin is listed in its `HELPERS`
+(`clients/spec.py`, `notifiers/registry.py`). Background: [architecture.md](architecture.md). Development setup and
+the gate: [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 | Add | Where | Contract | Checked by |
 |---|---|---|---|
@@ -15,6 +15,7 @@ while the others keep working, and a module of the package that is not a plugin 
 | [Language](#language) | `src/tow/locales/<code>.json` | the keys of `en.json` | `test_i18n.py` |
 | [Page or action](#page-or-action) | `src/tow/web/routes_<topic>.py` | `APIRouter`, `tow.web.services` | `test_routes.py` |
 | [Command](#command) | `src/tow/cli/commands/<group>.py` | `Command` (`cli/command.py`), `COMMANDS` | `test_golden_help.py`, `test_cli.py` |
+| [Issue](#issue) | `src/tow/issues/kinds/<kind>.py` | `KIND`, `ORDER`, `collect(snapshot)` (`issues/model.py`) | `test_issues.py`, `test_attention_links.py` |
 
 ## Torrent client
 
@@ -196,6 +197,44 @@ In tests, replace the outside world in one place — `monkeypatch.setattr("tow.w
 patch a web helper where it is looked up (`"tow.web.routes_home.topic_rows"`), and import route functions from
 their modules. UI rules (26 px buttons from the shared `button, .btn` rule, no inline `style=`, no inline script)
 are enforced by `tests/test_ui_standard.py` and the CSP.
+
+## Issue
+
+**Today:** `data_lost`, `check_stale`, `check_blocked`, `client_down`, `history_rebuilt`, `site_needs_login`.
+
+An issue is something that needs the owner now, said from saved state: Home's "Needs attention" lists it as a
+link to the problem, and `tow status` counts it. A kind is one module in `src/tow/issues/kinds/`, found by
+`tow.plugins.scan` (a module that fails to load is skipped, named in `tow.issues.SKIPPED` and logged). It declares:
+
+- `KIND` — its name; `ORDER` — its place among the kinds of the same severity;
+- `collect(snapshot) -> list[Issue]` — pure: it reads only the `Snapshot` (`state`, `config`, `now`,
+  `next_check_at`, `data_lost`, and `health`, `topics` from the state) and never a file, a client or a site. A fact
+  kept elsewhere becomes a new `Snapshot` field, filled by the callers (`tow.web.views.issues_now` through
+  `tow.web.services`, and `tow status`).
+
+Each `Issue` (`issues/model.py`) carries:
+
+- `kind`, and an `id` stable while the problem lasts (`<kind>` or `<kind>:<subject>`): two issues with one id are
+  one problem; `collect` merges them, adds their `count`, joins their `subjects` and takes `target_many`;
+- `severity` — a `tow.status` tone, `"bad"` or `"warn"`; from an error class, `tow.status.error_tone(cls)`;
+- `message` — a catalog key (`issues.<kind>`, in every language file) and its values; a value named `at` is a time
+  in epoch seconds. Say what is wrong, or the action the link takes ("Sign in to {site}"), never "open X";
+- `target` — `Target(page, open, filter, anchor)`: the page (`home`, `settings`, `history`), what it opens (a
+  Settings section, a Home topic), the page's own filters, and the id of the element that shows the problem in full.
+  An empty `anchor` lands on the issue's own note on that page (History shows those);
+- `fix` — `Fix(action, subject, label)`, the control that resolves it, or `None` when there is nothing to do. The
+  page marks that control with `{{ fix_attrs('<action>', subject) }}` (and a `<details>` that holds it with
+  `{{ fix_open(...) }}`); the link's `?fix=` focuses it, with or without a script.
+
+**Steps:**
+
+1. Add `src/tow/issues/kinds/<kind>.py` with `KIND`, `ORDER` and `collect`; kinds do not import each other
+   (`tests/test_layers.py`).
+2. Add `issues.<kind>` to every language file.
+3. Make sure the target page has the anchor and the fix control (`fix_attrs`); a new page goes into
+   `ISSUE_PAGES` in `tow/web/views.py`.
+4. Test the rule in `tests/test_issues.py` and follow the link in `tests/test_attention_links.py` (`LANDINGS`
+   names a test per kind and fails without one).
 
 ## Command
 
