@@ -9,7 +9,7 @@ from typing import Any, ClassVar, Protocol, runtime_checkable
 from tow import i18n, plugins
 
 # The modules of tow.clients that are not clients (tests/test_layers.py reads it too).
-HELPERS = frozenset({"spec", "factory", "managed", "files"})
+HELPERS = frozenset({"address", "spec", "factory", "managed", "files"})
 _LOG = logging.getLogger("tow.clients")
 # Client modules that failed to load: (module name, reason). The others work without them.
 SKIPPED: list[tuple[str, str]] = []

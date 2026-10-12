@@ -12,9 +12,9 @@ from typing import Any, ClassVar
 
 import httpx
 
+from tow.clients.address import base_url
 from tow.clients.managed import OWNER, PENDING, ClientError, ManagedClient
 from tow.clients.spec import ClientField, TorrentClientAdapter
-from tow.clients.transmission import base_url
 from tow.torrent import MAX_TORRENT_BYTES, parse_magnet_hashes, parse_torrent_metadata
 
 KIND = "deluge"

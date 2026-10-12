@@ -19,9 +19,10 @@ from helpers import bencode, make_torrent
 from qbittorrentapi.torrents import TorrentFilesList, TorrentInfoList
 
 from tow.clients import qbittorrent
+from tow.clients.address import base_url
 from tow.clients.deluge import DelugeClient
 from tow.clients.managed import ClientError, ManagedClient
-from tow.clients.transmission import TransmissionClient, base_url
+from tow.clients.transmission import TransmissionClient
 from tow.torrent import parse_torrent_metadata
 
 PIECE = 16384
