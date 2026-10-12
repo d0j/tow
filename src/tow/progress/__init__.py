@@ -4,11 +4,10 @@ import hashlib
 import json
 import math
 import re
-import stat
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from pathlib import Path, PurePath
+from pathlib import Path
 from typing import Any
 
 from tow.clients.files import map_files, normalize_path
@@ -29,6 +28,7 @@ from tow.folders import paths_equal
 from tow.i18n import t
 from tow.jsonish import as_dict
 from tow.log import owner_language
+from tow.progress.confirmation import CONFIRMATION_REUSE_SEC, filesystem_confirmation, safe_relative_path
 from tow.records import DownloadHistory, HistoryItem, HistoryRecord, Topic
 from tow.selection import (
     SelectionError,
@@ -40,57 +40,19 @@ from tow.selection import (
 )
 from tow.torrent import TorrentFile
 
+__all__ = [
+    "CONFIRMATION_REUSE_SEC",
+    "filesystem_confirmation",
+    "progress_summary",
+    "reconcile_topic",
+    "safe_relative_path",
+]
+
 
 def _get(value: Any, key: str, default: Any = None) -> Any:
     if isinstance(value, dict):
         return value.get(key, default)
     return getattr(value, key, default)
-
-
-# How long a file seen on disk counts as confirmed (see reconcile_topic).
-CONFIRMATION_REUSE_SEC = 24 * 3600
-
-
-def safe_relative_path(save_path: str, client_file_name: str) -> str | None:
-    """The client's name of a file as a path inside its save folder, or None when it is not one.
-
-    Decided from the text alone: it runs for every file of every torrent on every pass, and
-    resolving each path woke sleeping drives and a NAS for nothing. A link inside the folder
-    that leads out of it is caught where a file is looked at on disk (filesystem_confirmation).
-    """
-    raw = str(client_file_name or "").replace("\\", "/")
-    if raw.startswith("/"):
-        return None
-    parts = [part for part in raw.split("/") if part not in ("", ".")]
-    if not parts or any(part == ".." for part in parts) or ":" in parts[0]:
-        return None
-    folder = PurePath(save_path)
-    # Each part must stay one plain name below the folder ("C:x" is a drive on Windows).
-    if folder.joinpath(*parts).parts != (*folder.parts, *parts):
-        return None
-    return "/".join(parts)
-
-
-def filesystem_confirmation(
-    save_path: str, relative_path: str, expected_size: int | None, *, base: Path | None = None
-) -> bool | None:
-    from tow.folders import seen_from_here
-
-    folder = Path(save_path)
-    if not seen_from_here(save_path):
-        return None  # /downloads of a remote client, or a drive this PC does not see
-    try:
-        base = base or folder.resolve()
-        path = (base / Path(*relative_path.split("/"))).resolve()
-        path.relative_to(base)
-        details = path.stat()
-        if not stat.S_ISREG(details.st_mode):
-            return False
-        return not (expected_size is not None and details.st_size < int(expected_size))
-    except FileNotFoundError:
-        return False
-    except OSError, ValueError, TypeError:
-        return None
 
 
 def _completion_key(item: HistoryItem) -> tuple[float, int, int, str]:
