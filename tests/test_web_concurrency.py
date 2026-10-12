@@ -92,7 +92,8 @@ def test_check_lock_without_waiting_refuses_a_held_lock_across_handles():
 
     from tow.paths import data_dir
     from tow.platform import locks
-    from tow.store import _CHECK_RUN_LOCK_NAME, CheckBusyError, check_run_lock, init_lock_file
+    from tow.storage.locks import _CHECK_RUN_LOCK_NAME
+    from tow.store import CheckBusyError, check_run_lock, init_lock_file
 
     with check_run_lock(wait=False):  # free: taken at once
         # this process (another thread or the same) holds it
