@@ -187,6 +187,36 @@ def _spec_of(mod: Any) -> ClientSpec | None:
     )
 
 
+_FIELD_NAMES = frozenset({"host", "port", "username", "password"})
+
+
+def client_module_problems(module: object) -> list[str]:
+    """What is wrong with the constants of a client module (empty: nothing).
+
+    ``TITLE``, ``SECRETS_KEY``, ``DEFAULT_PORT`` and ``ORDER`` must be declared; ``FIELDS`` may
+    be left out (the address, port, login and password). Discovery does not refuse a module for
+    these - it falls back to a default - so ``tests/test_plugin_contracts.py`` checks them."""
+    found = []
+    for name in ("TITLE", "SECRETS_KEY"):
+        value = getattr(module, name, None)
+        if not isinstance(value, str) or not value.strip():
+            found.append(f"{name} (not a text)")
+    port = getattr(module, "DEFAULT_PORT", None)
+    if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
+        found.append("DEFAULT_PORT (not a port number)")
+    order = getattr(module, "ORDER", None)
+    if not isinstance(order, int) or isinstance(order, bool):
+        found.append("ORDER (not a whole number)")
+    fields = getattr(module, "FIELDS", DEFAULT_FIELDS)
+    if not isinstance(fields, tuple) or not all(isinstance(field, ClientField) for field in fields):
+        found.append("FIELDS (not a tuple of ClientField)")
+    else:
+        names = [field.name for field in fields]
+        if len(set(names)) != len(names) or not set(names) <= _FIELD_NAMES or not {"host", "port"} <= set(names):
+            found.append(f"FIELDS (host and port, and only {', '.join(sorted(_FIELD_NAMES))}, each once)")
+    return sorted(found)
+
+
 def discover() -> dict[str, ClientSpec]:
     """Every client module, in display order (scanned once per process)."""
     return dict(_discover())
