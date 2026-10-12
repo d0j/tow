@@ -7,6 +7,7 @@ import json
 import pytest
 
 from tow import cli
+from tow.cli.commands import security
 from tow.paths import data_dir, key_file
 
 
@@ -24,14 +25,14 @@ def _events(kind: str) -> list[dict]:
 
 def test_a_new_install_gets_its_key_once_and_is_told_to_back_it_up(no_key, capsys):
     assert not key_file().exists()
-    assert cli._first_run_key() == key_file()
+    assert security.first_run_key() == key_file()
     assert key_file().is_file()
     out = capsys.readouterr().out
     assert "master.key" in out
     assert len(_events("master_key_created")) == 1
     # Once: a key in use is never replaced and the notice is not repeated.
     before = key_file().read_bytes()
-    assert cli._first_run_key() is None
+    assert security.first_run_key() is None
     assert key_file().read_bytes() == before
     assert capsys.readouterr().out == ""
     assert len(_events("master_key_created")) == 1
@@ -48,7 +49,7 @@ def test_existing_secrets_without_their_key_are_never_given_a_new_one(no_key, mo
 
     encrypted_secrets_path().parent.mkdir(parents=True, exist_ok=True)
     encrypted_secrets_path().write_text("{}", encoding="utf-8")
-    assert cli._first_run_key() is None
+    assert security.first_run_key() is None
     assert not key_file().exists()
     assert cli.main(["keys", "ensure", "--json"]) == 3
     assert "tow keys adopt --from" in json.loads(capsys.readouterr().out)["error"]

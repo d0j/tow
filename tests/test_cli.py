@@ -1,9 +1,10 @@
+import dataclasses
 from types import SimpleNamespace
 
 import pytest
 
 from tow import cli
-from tow.cli import main, render
+from tow.cli import commands, main, render
 from tow.i18n import t
 
 
@@ -182,11 +183,17 @@ def test_starting_with_unreadable_yaml_says_where_in_the_owners_words(monkeypatc
     assert captured.err.strip() in expected, captured.err
 
 
+def _runs(monkeypatch, name, run):
+    """The command ``name`` of the table runs ``run`` instead."""
+    table = tuple(dataclasses.replace(c, run=run) if c.name == name else c for c in commands.COMMANDS)
+    monkeypatch.setattr(commands, "COMMANDS", table)
+
+
 def test_unexpected_cli_error_does_not_echo_secret(monkeypatch, capsys):
     def broken(_args):
         raise RuntimeError("password=must-not-be-displayed")
 
-    monkeypatch.setitem(cli._COMMANDS, "version", broken)
+    _runs(monkeypatch, "version", broken)
     assert cli.main(["version", "--json"]) == cli.EXIT_CANNOT_RUN
     out = capsys.readouterr().out
     assert "must-not-be-displayed" not in out
@@ -198,13 +205,13 @@ def test_a_folder_tow_cannot_write_is_named_with_its_cause(monkeypatch, capsys):
     def denied(_args):
         raise PermissionError(13, "Access is denied", "C:\\TOW\\data\\state.json")
 
-    monkeypatch.setitem(cli._COMMANDS, "version", denied)
+    _runs(monkeypatch, "version", denied)
     assert cli.main(["version", "--json"]) == cli.EXIT_CANNOT_RUN
     out = capsys.readouterr().out
     assert "C:\\\\TOW\\\\data\\\\state.json" in out  # JSON-escaped
     assert "Access is denied" in out
     assert "не удалось выполнить команду" not in out
-    monkeypatch.setitem(cli._COMMANDS, "version", lambda _args: (_ for _ in ()).throw(ConnectionError("x")))
+    _runs(monkeypatch, "version", lambda _args: (_ for _ in ()).throw(ConnectionError("x")))
     assert cli.main(["version", "--json"]) == cli.EXIT_CANNOT_RUN  # no file: the general sentence
     assert "не удалось выполнить команду" in capsys.readouterr().out
 
@@ -405,3 +412,17 @@ def test_export_refuses_a_short_passphrase(monkeypatch, capsys, tmp_path):
     assert refusal == {"ok": False, "error": t("cli.bundle.passphrase_short", "en", length=12)}
     assert "at least 12 characters" in refusal["error"]
     assert not (tmp_path / "x.towx").exists()
+
+
+def test_the_table_says_how_each_command_runs():
+    """Which commands find their install themselves, speak as a child of `tow run`, warn about open
+    folders, or leave the folders to themselves: the rows of the one command table."""
+
+    def named(flag):
+        return {c.name for c in commands.COMMANDS if getattr(c, flag)}
+
+    assert len({c.name for c in commands.COMMANDS}) == len(commands.COMMANDS)
+    assert named("layout") == {"run", "start", "stop", "restart", "autostart"}
+    assert named("background") == {"run", "serve", "check", "watchdog", "backup"}
+    assert named("warn_open_folders") == {"run", "start", "serve"}
+    assert {c.name for c in commands.COMMANDS if not c.protects_folders} == {"permissions"}

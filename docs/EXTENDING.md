@@ -14,6 +14,7 @@ while the others keep working, and a module of the package that is not a plugin 
 | [Site](#site) | `src/tow/trackers/presets/<name>.py` | `SitePreset` (`trackers/presets/__init__.py`) | `test_tracker_presets.py` |
 | [Language](#language) | `src/tow/locales/<code>.json` | the keys of `en.json` | `test_i18n.py` |
 | [Page or action](#page-or-action) | `src/tow/web/routes_<topic>.py` | `APIRouter`, `tow.web.services` | `test_routes.py` |
+| [Command](#command) | `src/tow/cli/commands/<group>.py` | `Command` (`cli/command.py`), `COMMANDS` | `test_golden_help.py`, `test_cli.py` |
 
 ## Torrent client
 
@@ -195,6 +196,27 @@ In tests, replace the outside world in one place — `monkeypatch.setattr("tow.w
 patch a web helper where it is looked up (`"tow.web.routes_home.topic_rows"`), and import route functions from
 their modules. UI rules (26 px buttons from the shared `button, .btn` rule, no inline `style=`, no inline script)
 are enforced by `tests/test_ui_standard.py` and the CSP.
+
+## Command
+
+Every `tow` command is a row of one ordered table, `COMMANDS` in `src/tow/cli/commands/__init__.py`, in the
+order `tow --help` lists them. A row is a `Command` (`cli/command.py`) declared in the module of its group
+(`commands/service.py`, `data.py`, `security.py`, `checks.py`):
+
+- `name`; `configure(sub)` adds its parser with `parser.add_command` (its line in `tow --help` and its
+  description, both catalog keys under `cli.help.*`; `listed=False` keeps it out of the list) and its options,
+  `--json` with `parser.json_option`;
+- `run(args)` does it and returns an exit code (`EXIT_*` of `cli/command.py`). It imports what it needs inside
+  the function, so `import tow.cli` stays cheap for every command; what it prints goes through `cli/render.py`
+  (`render.show` with a `*_text` for a person, the whole result with `--json`);
+- how it runs: `layout` (it finds its install itself, started without a launcher), `background` (a child of
+  `tow run`: outside a terminal it speaks the message language), `warn_open_folders` (it starts or serves TOW),
+  `protects_folders=False` (it handles the install's folders itself, as `permissions` does).
+
+`tow.cli` runs the row the command line names behind one error boundary: an unexpected exception is exit code 3
+and a sentence, never a traceback. A new command changes `tow --help`: regenerate the golden pages
+(`uv run --frozen python tests/test_golden_help.py`) and review the diff. A module of `tow.cli` imports the
+others, never the package itself; only `tow.__main__` imports the package (`tests/test_layers.py`).
 
 ## Periodic work and the runtime
 
