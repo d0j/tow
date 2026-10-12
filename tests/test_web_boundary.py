@@ -6,14 +6,20 @@ type, or a function that formats, parses, validates or computes on what it is gi
 writes nothing of the install, no client, no site and no service. Those are listed below. Anything
 else is ``services.<name>``, where the tests replace it; a route that needs a new one adds it to
 ``tow.web.services``, not to this list.
+
+The web's helper modules (views, templating, middleware...) are held to the same rule with a
+ratchet of their own (``HELPER_ALLOWED``). A route module does not import another route module,
+and every route module is in ``tow.web.app.ROUTERS``.
 """
 
 from __future__ import annotations
 
 import ast
+import importlib
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / "src"
+WEB = SRC / "tow" / "web"
 
 # Module -> the pure helpers route modules import from it (or use as ``module.name``).
 PURE: dict[str, set[str]] = {
@@ -131,6 +137,68 @@ PURE: dict[str, set[str]] = {
     "tow.web_update": {"WebUpdateError"},
 }
 
+# Helper module of tow.web -> what it uses from outside the web beyond PURE, directly instead of
+# through services: what they used when the rule came. May only shrink; a new need goes through
+# tow.web.services (or, for a pure helper, into PURE with why).
+HELPER_ALLOWED: dict[str, set[str]] = {
+    "_context": {"tow.store.write_generation"},
+    "middleware": {
+        "tow.access.credential",
+        "tow.access.session_is_valid",
+        "tow.auth.SESSION_COOKIE",
+        "tow.bind.origin_matches_request",
+        "tow.i18n.remember_browser_language",
+    },
+    "site_form": {"tow.net_guard.is_public", "tow.trackers.generic.validate_tracker_regex"},
+    "site_store": {"tow.store_transaction.transaction", "tow.undo.cleanup_needed"},
+    "templating": {
+        "tow.auth.SESSION_COOKIE",
+        "tow.clients.factory.client_name",
+        "tow.clock.parse_timestamp",
+        "tow.config.port_of",
+        "tow.i18n.datetime_pattern",
+        "tow.i18n.texts_with_prefix",
+        "tow.notifiers.summary",
+        "tow.paths.launcher",
+        "tow.platform.is_windows",
+        "tow.status.site_check_tone",
+        "tow.undo.can_undo",
+        "tow.undo.stamp_of",
+        "tow.undo.undo_just_made",
+        "tow.undo.undo_label",
+        "tow.undo.undo_left_sec",
+    },
+    "text": {"tow.i18n.fill", "tow.i18n.format_decimal"},
+    "views": {
+        "tow.adopt.unmarked_hash",
+        "tow.backup_retention.retention_settings",
+        "tow.check.PREVIOUS_REVISION_ACTIVE",
+        "tow.episodes.expected_for_topic",
+        "tow.errors.Msg",
+        "tow.errors.render_stored",
+        "tow.i18n.datetime_pattern",
+        "tow.i18n.has",
+        "tow.locations.free_bytes",
+        "tow.locations.is_default",
+        "tow.log.CLS_RU",
+        "tow.net_errors.humanize",
+        "tow.progress.progress_summary",
+        "tow.snapshots.list_snapshots",
+        "tow.snapshots.status",
+        "tow.snapshots.status_failed",
+        "tow.status.TRACKER_WARNING_CLASSES",
+        "tow.status.project_home_status",
+        "tow.trackers.presets.search_path",
+    },
+}
+# Route module -> the other route modules it imports: what existed when the rule came; may only shrink.
+ROUTE_IMPORTS_ALLOWED: dict[str, set[str]] = {
+    "routes_home": {"routes_password"},
+    "routes_settings": {"routes_service"},
+}
+# Not helpers: the package, the app factory and the gateway itself.
+NOT_HELPERS = {"__init__", "app", "services"}
+
 
 def _outside(module: str) -> bool:
     return (module == "tow" or module.startswith("tow.")) and not (module == "tow.web" or module.startswith("tow.web."))
@@ -173,6 +241,31 @@ def _outside_names(path: Path) -> list[tuple[str, str, int]]:
 def _route_modules() -> list[Path]:
     web = SRC / "tow" / "web"
     return sorted([*web.glob("routes_*.py"), *web.glob("*_actions.py")])
+
+
+def _helper_modules() -> list[Path]:
+    web = SRC / "tow" / "web"
+    return sorted(
+        path
+        for path in web.glob("*.py")
+        if path.stem not in NOT_HELPERS and not path.stem.startswith("routes_") and not path.stem.endswith("_actions")
+    )
+
+
+def _web_modules_imported(path: Path) -> set[str]:
+    """The modules of tow.web (by their name in the package) the file imports, at any depth."""
+    found: set[str] = set()
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.ImportFrom) and not node.level and node.module:
+            if node.module == "tow.web":
+                found |= {alias.name for alias in node.names if _is_module(f"tow.web.{alias.name}")}
+            elif node.module.startswith("tow.web."):
+                found.add(node.module.split(".")[2])
+        elif isinstance(node, ast.ImportFrom) and node.level == 1:
+            found |= {node.module.split(".")[0]} if node.module else {alias.name for alias in node.names}
+        elif isinstance(node, ast.Import):
+            found |= {alias.name.split(".")[2] for alias in node.names if alias.name.startswith("tow.web.")}
+    return found
 
 
 def test_route_modules_call_the_outside_only_through_services():
@@ -218,3 +311,92 @@ def test_the_scan_sees_every_way_out(tmp_path, monkeypatch):
         ("tow.store", "load_state", 8),
         ("tow.web_update", "WebUpdateError", 7),
     ]
+
+
+def _helper_uses() -> dict[str, set[str]]:
+    """Helper module -> "module.name" it uses from outside the web that PURE does not cover."""
+    return {
+        path.stem: {
+            f"{module}.{name}" for module, name, _line in _outside_names(path) if name not in PURE.get(module, set())
+        }
+        for path in _helper_modules()
+    }
+
+
+def test_helper_modules_reach_the_outside_only_through_services_or_their_ratchet():
+    unexpected = sorted(
+        f"tow/web/{helper}.py uses {name}"
+        for helper, names in _helper_uses().items()
+        for name in names - HELPER_ALLOWED.get(helper, set())
+    )
+    assert unexpected == [], (
+        "call it through tow.web.services (or, for a pure helper, add it to PURE with why):\n" + "\n".join(unexpected)
+    )
+
+
+def test_every_helper_exception_is_still_used():
+    uses = _helper_uses()
+    stale = sorted(
+        f"{helper}: {name}" for helper, names in HELPER_ALLOWED.items() for name in names - uses.get(helper, set())
+    )
+    assert stale == [], (
+        "no longer used (or now in PURE); remove from HELPER_ALLOWED (it may only shrink):\n" + "\n".join(stale)
+    )
+
+
+def test_the_helper_scan_covers_the_helpers():
+    helpers = {path.stem for path in _helper_modules()}
+    assert {"_context", "middleware", "site_form", "site_store", "templating", "text", "views"} <= helpers
+    assert set(HELPER_ALLOWED) <= helpers
+    assert not any(stem.startswith("routes_") or stem in NOT_HELPERS for stem in helpers)
+
+
+def _route_imports() -> dict[str, set[str]]:
+    return {
+        path.stem: {name for name in _web_modules_imported(path) if name.startswith("routes_") and name != path.stem}
+        for path in sorted((SRC / "tow" / "web").glob("routes_*.py"))
+    }
+
+
+def test_a_route_module_does_not_import_another():
+    found = _route_imports()
+    unexpected = sorted(
+        f"tow/web/{route}.py imports {other}"
+        for route, others in found.items()
+        for other in others - ROUTE_IMPORTS_ALLOWED.get(route, set())
+    )
+    assert unexpected == [], "share it through a helper module (views, site_store...):\n" + "\n".join(unexpected)
+    stale = sorted(
+        f"{route} -> {other}"
+        for route, others in ROUTE_IMPORTS_ALLOWED.items()
+        for other in others - found.get(route, set())
+    )
+    assert stale == [], "gone; remove from ROUTE_IMPORTS_ALLOWED (it may only shrink):\n" + "\n".join(stale)
+
+
+def test_the_web_import_scan_sees_every_form(tmp_path, monkeypatch):
+    web = tmp_path / "tow" / "web"
+    web.mkdir(parents=True)
+    for name in ("__init__", "routes_a", "routes_b", "routes_c", "routes_d", "routes_e", "views"):
+        (web / f"{name}.py").write_text("", encoding="utf-8")
+    route = web / "routes_x.py"
+    route.write_text(
+        "from tow.web import routes_a, views\n"
+        "from tow.web.routes_b import router\n"
+        "import tow.web.routes_c\n"
+        "from . import routes_d\n"
+        "def lazy():\n"
+        "    from .routes_e import helper\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(f"{__name__}.SRC", tmp_path)
+    assert _web_modules_imported(route) == {"routes_a", "routes_b", "routes_c", "routes_d", "routes_e", "views"}
+
+
+def test_every_route_module_is_in_routers():
+    app = importlib.import_module("tow.web.app")
+    stems = sorted(path.stem for path in WEB.glob("routes_*.py"))
+    routers = {stem: importlib.import_module(f"tow.web.{stem}").router for stem in stems}
+    included = sorted(stem for stem, router in routers.items() if any(router is entry for entry in app.ROUTERS))
+    assert included == stems, "add the router of every routes_*.py to tow.web.app.ROUTERS"
+    assert len(app.ROUTERS) == len(stems), "ROUTERS holds a router twice, or one of no routes_*.py"
