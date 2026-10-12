@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from tow.web import _context, services
 from tow.web.templating import TEMPLATES
 from tow.web.text import t
-from tow.web.views import request_flash
+from tow.web.views import issue_notes, request_flash
 
 router = APIRouter()
 
@@ -18,15 +18,31 @@ def history_page(request: Request, group: str = "", q: str = "") -> Response:
     from tow.log import HISTORY_GROUPS, format_event, index_event_titles
 
     group = group if group in HISTORY_GROUPS else ""
-    title_index = index_event_titles(_context.state().get("topics") or [])
-    rows = [
-        format_event(event, title_index=title_index)
-        for event in services.history_events(group=group, text=q, title_index=title_index)
-    ]
+    state = _context.state()
+    title_index = index_event_titles(state.get("topics") or [])
+    rows = []
+    seen: set[str] = set()
+    for event in services.history_events(group=group, text=q, title_index=title_index):
+        row = format_event(event, title_index=title_index)
+        # The newest line of each kind has an address ("Needs attention" links to the newest
+        # failed check: #latest-check_blocked).
+        kind = str(event.get("kind") or "")
+        if kind and kind not in seen:
+            seen.add(kind)
+            row["anchor"] = f"latest-{kind}"
+        rows.append(row)
     return TEMPLATES.TemplateResponse(
         request,
         "history.html",
-        {"title": t("web.title.history"), "rows": rows, "group": group, "q": q, "flash": request_flash(request)},
+        {
+            "title": t("web.title.history"),
+            "rows": rows,
+            "group": group,
+            "q": q,
+            "flash": request_flash(request),
+            # What needs the owner and is explained here, in a note of its own.
+            "notes": issue_notes(state, _context.config(), "history"),
+        },
     )
 
 

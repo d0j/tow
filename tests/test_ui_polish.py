@@ -907,7 +907,7 @@ def test_home_row_edit_panel_and_history_say_the_error_in_words(client):
     assert "соединение отклонено" in panel
     assert '<details class="technical-details raw-error"><summary>Подробности</summary><code>' in panel
     history = client.get("/history").text
-    line = history[history.index('<div class="log-line">') :]
+    line = history[history.index('<div class="log-line"') :]
     line = line[: line.index("</div>")]
     assert "соединение отклонено" in line
     assert '<details class="raw-error"><summary>Подробности</summary><code>' in line

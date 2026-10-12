@@ -71,6 +71,8 @@ def index(request: Request) -> Response:
             "flash": request_flash(request),
             # The banner, and what folds it: the set of problems it was folded for, its colour.
             "attention": attention_view(state, cfg),
+            # A "Needs attention" link opens this topic's row (?open=<id>).
+            "landing_topic": str(request.query_params.get("open") or ""),
             "first_steps": None if state.get("topics") else _first_steps(cfg, state),
         },
     )

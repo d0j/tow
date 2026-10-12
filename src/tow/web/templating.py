@@ -16,12 +16,15 @@ from typing import Any
 
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
+from jinja2 import pass_context
+from markupsafe import Markup
 
 from tow import __version__, access, i18n, paths, platform, undo
 from tow.auth import SESSION_COOKIE, password_hint
 from tow.clients.factory import client_name
 from tow.clock import parse_timestamp
 from tow.config import interval_sec_of, port_of
+from tow.issues import Fix
 from tow.jsonish import as_dict
 from tow.status import site_check_tone
 from tow.web import _context, services
@@ -277,6 +280,26 @@ def sentence(text: object) -> str:
     return value[:1].upper() + value[1:]
 
 
+@pass_context
+def fix_attrs(context: Mapping[str, Any], action: str, subject: object = "") -> Markup:
+    """Marks the control that fixes an issue (``data-fix``, the ``Fix.ref`` of tow.issues). The
+    page a "Needs attention" link opened with ``?fix=`` that names it focuses it, without a
+    script too (``autofocus``); app.js unfolds what holds it and brings it into view."""
+    ref = Fix(action, str(subject or "")).ref
+    request = context.get("request")
+    wanted = request.query_params.get("fix", "") if isinstance(request, Request) else ""
+    return Markup(' data-fix="{}"{}').format(ref, Markup(" autofocus") if wanted == ref else "")
+
+
+@pass_context
+def fix_open(context: Mapping[str, Any], action: str, subject: object = "") -> Markup:
+    """`` open`` for a <details> that holds the control ``fix_attrs`` marks, when the page opened
+    for that control (a closed <details> takes no focus)."""
+    request = context.get("request")
+    wanted = request.query_params.get("fix", "") if isinstance(request, Request) else ""
+    return Markup(" open") if wanted == Fix(action, str(subject or "")).ref else Markup("")
+
+
 def configure(templates: Jinja2Templates = TEMPLATES) -> None:
     """The globals every template may call."""
     templates.env.filters["sentence"] = sentence
@@ -305,3 +328,5 @@ def configure(templates: Jinja2Templates = TEMPLATES) -> None:
     env["network_session"] = network_session
     env["site_title"] = site_title
     env["client_name"] = client_name
+    env["fix_attrs"] = fix_attrs
+    env["fix_open"] = fix_open

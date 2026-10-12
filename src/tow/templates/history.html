@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block body %}
 <h1 id="page-title">{{ t('history.title') }}</h1>
+{% for note in notes %}<p class="notice issue-note" id="{{ note.id }}" tabindex="-1">{{ note.text }}</p>{% endfor %}
 <div class="history-filter">
   <div class="chips" role="group" aria-label="{{ t('history.filter') }}">
     {% for value, label in [('', t('history.group.all')), ('downloads', t('history.group.downloads')), ('errors', t('history.group.errors')), ('changes', t('history.group.changes')), ('notifications', t('history.group.notifications'))] %}
@@ -16,7 +17,7 @@
 </div>
 <div class="card log-box history-box">
   {% for e in rows %}
-  <div class="log-line"><span class="mut">{{ e.at }}</span> · <b>{{ e.label }}</b>{% if e.detail %} · {{ e.detail }}{% endif %}{% if e.raw %} <details class="raw-error"><summary>{{ t('common.details') }}</summary><code>{{ e.raw }}</code></details>{% endif %}</div>
+  <div class="log-line"{% if e.anchor %} id="{{ e.anchor }}"{% endif %}><span class="mut">{{ e.at }}</span> · <b>{{ e.label }}</b>{% if e.detail %} · {{ e.detail }}{% endif %}{% if e.raw %} <details class="raw-error"><summary>{{ t('common.details') }}</summary><code>{{ e.raw }}</code></details>{% endif %}</div>
   {% else %}
   {#- "Nothing found" only when a search or a group narrowed it; an empty log says so. -#}
   <div class="mut">{{ t('history.empty') if (q or group) else t('history.no_events') }}</div>

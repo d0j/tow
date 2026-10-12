@@ -7,14 +7,17 @@
     <h1 id="page-title">{{ t('settings.page.title') }}</h1>
   </header>
 
-  {% if secret_store_error %}
-  <div class="flash" role="alert">
+  {#- Also while the last check stayed blocked by them ("Needs attention" lands here): the
+      command that says why is one copy away. -#}
+  {% if secret_store_error or hh.check_error == 'secrets_migration_required' %}
+  <div class="flash secret-store" id="secret-store" role="alert">
     <span>{{ tm('settings.page.secret_store', help='/settings/help#export-import', launcher=os_launcher()) }}</span>
+    <span class="secret-store-copy"><button type="button" class="ghost sm" data-copy-text="{{ os_launcher() }} keys status"{{ fix_attrs('copy_keys_status') }}>{{ t('settings.page.copy_command') }}</button> <span id="copy-command-status" class="field-hint" role="status"></span></span>
   </div>
   {% endif %}
 
   <div class="settings-content" id="settings-acc">
-    <details class="settings-section settings-accordion acc" id="acc-language" data-q="{{ language_setting.search }}">
+    <details class="settings-section settings-accordion acc" id="acc-language"{% if open_section == 'language' %} open{% endif %} data-q="{{ language_setting.search }}">
       <summary>
         <span class="settings-summary-title">{{ t('settings.language.title') }}{% if lang() != 'en' %} · Language{% endif %}</span>
         <span class="pill mut">{% if language_setting.auto %}{{ t('settings.language.pill_auto', name=language_setting.current_name) }}{% else %}{{ language_setting.current_name }}{% endif %}</span>
@@ -35,7 +38,7 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc" id="acc-theme" data-q="{{ t('settings.theme.q') }}">
+    <details class="settings-section settings-accordion acc" id="acc-theme"{% if open_section == 'theme' %} open{% endif %} data-q="{{ t('settings.theme.q') }}">
       <summary>
         <span class="settings-summary-title">{{ t('settings.theme.title') }}</span>
         {% set themes = [('auto', 'monitor', t('settings.theme.auto')), ('light', 'sun', t('settings.theme.light')), ('dark', 'moon', t('settings.theme.dark'))] %}
@@ -60,7 +63,7 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc" id="acc-clients" data-q="{{ search_words.clients }}">
+    <details class="settings-section settings-accordion acc" id="acc-clients"{% if open_section == 'clients' %} open{% endif %} data-q="{{ search_words.clients }}">
       <summary>
         <span id="settings-clients-title" class="settings-summary-title">{{ t('settings.clients.title') }}</span>
         {#- What is set up, not how many cards there are: "1 client" read as working when it was not. -#}
@@ -81,6 +84,7 @@
                 <span class="pill {{ 'mut' if c.host else 'warn' }}">{{ t('settings.clients.configured') if c.host else t('settings.clients.not_configured') }}</span>
               </span>
             </div>
+            {% if c.id in clients_down %}<p class="form-error" role="status">{{ t('settings.clients.not_answering') }}</p>{% endif %}
             {% if c.steps %}
             <details class="technical-details notifier-steps" {% if not c.host %}open{% endif %}>
               <summary>{{ t('settings.common.how_to_connect') }}</summary>
@@ -118,7 +122,7 @@
               </fieldset>
               <div class="settings-actions">
                 <button type="submit">{{ t('settings.common.save') }}</button>
-                <button class="ghost" type="submit" form="ping-{{ c.form_id }}" data-keep data-check-saved data-busy-label="{{ t('common.busy.checking') }}"{% if not c.host %} data-needs-address disabled title="{{ t('js.settings.save_address_first') }}"{% endif %}>{{ t('settings.common.check') }}</button>
+                <button class="ghost" type="submit" form="ping-{{ c.form_id }}" data-keep data-check-saved data-busy-label="{{ t('common.busy.checking') }}"{% if not c.host %} data-needs-address disabled title="{{ t('js.settings.save_address_first') }}"{% endif %}{{ fix_attrs('check_client', c.id) }}>{{ t('settings.common.check') }}</button>
                 {% if c.multi and not c.default %}
                 <button class="ghost" type="submit" form="default-{{ c.form_id }}">{{ t('settings.clients.make_main') }}</button>
                 <button class="ghost danger" type="submit" form="remove-{{ c.form_id }}">{{ t('settings.common.remove') }}</button>
@@ -166,7 +170,7 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc" id="acc-bots" data-q="{{ search_words.notify }}">
+    <details class="settings-section settings-accordion acc" id="acc-bots"{% if open_section == 'bots' %} open{% endif %} data-q="{{ search_words.notify }}">
       <summary>
         <span id="settings-bots-title" class="settings-summary-title">{{ t('settings.notify.title') }}</span>
         <span class="pill {{ 'ok' if hh.bot_ok else ('mut' if hh.bot_ok is none else 'bad') }}">{{ t('settings.notify.pill_ok') if hh.bot_ok else (t('settings.notify.pill_none') if hh.bot_ok is none else t('settings.notify.pill_down')) }}</span>
@@ -238,7 +242,7 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc" id="acc-intervals" data-q="{{ t('settings.intervals.q') }}">
+    <details class="settings-section settings-accordion acc" id="acc-intervals"{% if open_section == 'intervals' %} open{% endif %} data-q="{{ t('settings.intervals.q') }}">
       <summary>
         <span id="settings-intervals-title" class="settings-summary-title">{{ t('settings.intervals.title') }}</span>
         <span class="pill mut">{{ interval_label }}</span>
@@ -263,7 +267,7 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc" id="acc-access" data-q="{{ t('settings.access.q') }}">
+    <details class="settings-section settings-accordion acc" id="acc-access"{% if open_section == 'access' %} open{% endif %} data-q="{{ t('settings.access.q') }}">
       <summary>
         <span id="settings-access-title" class="settings-summary-title">{{ t('settings.access.title') }}</span>
         <span class="pill {{ 'mut' if not allow_lan else ('ok' if lan_password_set else 'warn') }}">{% if not allow_lan %}{{ t('settings.access.pill_local') }}{% elif lan_password_set %}{{ t('settings.access.pill_password') }}{% else %}{{ t('settings.access.pill_no_password') }}{% endif %}</span>
@@ -351,7 +355,7 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc" id="acc-updates" data-q="{{ t('releases.search') }}">
+    <details class="settings-section settings-accordion acc" id="acc-updates"{% if open_section == 'updates' %} open{% endif %} data-q="{{ t('releases.search') }}">
       <summary>
         <span class="settings-summary-title">{{ t('releases.title') }}</span>
         <span class="pill mut">{{ hh.ver }}</span>
@@ -406,7 +410,7 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc" id="acc-service" data-q="{{ t('settings.service.q') }}">
+    <details class="settings-section settings-accordion acc" id="acc-service"{% if open_section == 'service' %} open{% endif %} data-q="{{ t('settings.service.q') }}">
       <summary>
         <span id="settings-service-title" class="settings-summary-title">{{ t('settings.service.title') }}</span>
         <span class="pill {{ 'ok' if service.autostart else 'mut' }}">{{ t('settings.service.autostart_on') if service.autostart else t('settings.service.autostart_off') }}</span>
@@ -439,7 +443,7 @@
         {% endif %}
         <div class="service-restart">
           <form method="post" action="/settings/service/restart" data-return-target="acc-service" data-confirm="{{ t('settings.service.restart_confirm') }}">
-            <button type="submit">{{ t('settings.service.restart') }}</button>
+            <button type="submit"{{ fix_attrs('restart_service') }}>{{ t('settings.service.restart') }}</button>
           </form>
           <p>{{ t('settings.service.restart_note') }}</p>
         </div>
@@ -472,7 +476,7 @@
 
     {% set point_cleanup_unknown = backups.point_cleanup_read_error or (backups.point_cleanup_unrecorded and restore_points) %}
     {% set night_cleanup_unknown = backups.cleanup_read_error or (backups.cleanup_unrecorded and backups.snapshots) %}
-    <details class="settings-section settings-accordion acc" id="acc-transfer" data-q="{{ t('settings.backups.q') }}">
+    <details class="settings-section settings-accordion acc" id="acc-transfer"{% if open_section == 'transfer' %} open{% endif %} data-q="{{ t('settings.backups.q') }}">
       <summary>
         <span id="settings-transfer-title" class="settings-summary-title">{{ t('settings.backups.title') }}</span>
         <span class="pill {{ 'warn' if backups.read_error else ('bad' if backups.failed else ('warn' if backups.cleanup_pending or backups.point_cleanup_pending or point_cleanup_unknown or night_cleanup_unknown else ('ok' if backups.last_ok else 'mut'))) }}">{% if backups.read_error %}{{ t('settings.backups.pill_unknown') }}{% elif backups.failed %}{{ t('settings.backups.pill_failed') }}{% elif backups.cleanup_pending or backups.point_cleanup_pending %}{{ t('settings.backups.pill_cleanup') }}{% elif point_cleanup_unknown or night_cleanup_unknown %}{{ t('settings.backups.pill_unknown') }}{% elif backups.last_ok %}{{ t('settings.backups.pill_last', at=backups.last_ok) }}{% else %}{{ t('settings.backups.pill_none') }}{% endif %}</span>
@@ -524,7 +528,7 @@
               <p class="field-hint" id="backup-days-hint">{{ t('settings.backups.retention_note') }}{% if backups.retention.mode == 'count' %} {{ t('settings.backups.retention_legacy', count=backups.retention.keep) }}{% endif %}</p>
             </form>
             {% if backups.snapshots %}
-            <details class="backup-inventory">
+            <details class="backup-inventory"{{ fix_open('restore_night') }}>
             <summary>{{ t('settings.backups.saved_count', n=backups.snapshots|length) }} · {{ backups.total_size }}</summary>
             <div class="restore-point-list" aria-label="{{ t('settings.backups.night_title') }}">
               {% for snap in backups.snapshots %}
@@ -535,7 +539,8 @@
                     <button class="ghost" type="submit" data-busy-label="{{ t('common.busy.checking') }}">{{ t('settings.common.check') }}</button>
                   </form>
                   <form method="post" action="/settings/backup/night/{{ snap.name|urlencode }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.night_restore_confirm', at=snap.at) }} {{ t('settings.backups.night_restore_access') }}">
-                    <button class="danger" type="submit" data-busy-label="{{ t('common.busy.restoring') }}">{{ t('settings.common.restore') }}</button>
+                    {#- The newest copy: what "Needs attention" offers when the data folder was lost. -#}
+                    <button class="danger" type="submit" data-busy-label="{{ t('common.busy.restoring') }}"{% if loop.first %}{{ fix_attrs('restore_night') }}{% endif %}>{{ t('settings.common.restore') }}</button>
                   </form>
                   <a class="btn ghost danger" href="/settings/backup/night/{{ snap.name|urlencode }}/delete">{{ t('settings.common.delete') }}</a>
                 </div>
@@ -563,7 +568,7 @@
             {% if restore_points_error %}
             <p class="notice error" role="alert">{{ t('settings.backups.list_error') }}</p>
             {% elif restore_points %}
-            <details class="backup-inventory">
+            <details class="backup-inventory"{{ fix_open('restore_night') }}>
             <summary>{{ t('settings.backups.saved_count', n=restore_points|length) }} · {{ restore_points_size }}</summary>
             <div class="restore-point-list" aria-label="{{ t('settings.backups.manual_list') }}">
               {% for point in restore_points %}
@@ -610,7 +615,7 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc settings-log" id="acc-log" data-q="{{ t('settings.log.q') }}">
+    <details class="settings-section settings-accordion acc settings-log" id="acc-log"{% if open_section == 'log' %} open{% endif %} data-q="{{ t('settings.log.q') }}">
       <summary>
         <span id="settings-log-title" class="settings-summary-title">{{ t('settings.log.title') }}</span>
         <span class="pill mut">{{ log_rows|length }}</span>

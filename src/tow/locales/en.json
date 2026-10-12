@@ -1674,6 +1674,7 @@
       "main": "Main",
       "configured": "Set up",
       "not_configured": "Not set up",
+      "not_answering": "Did not answer: new versions are not added. Make sure the torrent client is running and its Web UI is on, then press Check.",
       "make_main": "Make main",
       "checks_saved": "Check uses the saved settings.",
       "main_note": "TOW adds new topics to the main client; each topic can use a different client.",

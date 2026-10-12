@@ -352,18 +352,62 @@ def issue_text(issue: Issue) -> str:
     return t(issue.message.key, **params)
 
 
+# The page a Target names -> its address.
+ISSUE_PAGES = {"home": "/", "settings": "/settings", "history": "/history"}
+
+
+def issue_note_id(issue: Issue) -> str:
+    """The id of the issue's own note on its page (a Target without an anchor lands there)."""
+    return "issue-" + re.sub(r"[^A-Za-z0-9_-]+", "-", issue.id)
+
+
+def issue_href(issue: Issue) -> str:
+    """Where the issue's link goes: its page with the page's own filters, what that page opens
+    (``open``), the control that fixes it (``fix``, focused there), and the spot that shows the
+    problem (``#anchor``, highlighted there)."""
+    from urllib.parse import urlencode
+
+    target = issue.target
+    params = [*target.filter]
+    if target.open:
+        params.append(("open", target.open))
+    if issue.fix is not None:
+        params.append(("fix", issue.fix.ref))
+    query = urlencode(params)
+    return f"{ISSUE_PAGES[target.page]}{'?' + query if query else ''}#{target.anchor or issue_note_id(issue)}"
+
+
 def attention_view(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str, Any]:
-    """Home's "Needs attention": one item per issue, worst first; the fingerprint that opens a
-    folded banner again when the problems change; the worst tone (the folded button's colour)."""
+    """Home's "Needs attention": one item per issue, worst first, each a link to the problem;
+    the fingerprint that opens a folded banner again when the problems change; the worst tone
+    (the folded button's colour)."""
     found = issues_now(state, cfg)
     return {
         "entries": [
-            {"id": issue.id, "kind": issue.kind, "severity": issue.severity, "text": issue_text(issue)}
+            {
+                "id": issue.id,
+                "kind": issue.kind,
+                "severity": issue.severity,
+                "text": issue_text(issue),
+                "href": issue_href(issue),
+                "fix": issue.fix.ref if issue.fix else "",
+                "fix_label": t(issue.fix.label) if issue.fix and issue.fix.label else "",
+            }
             for issue in found
         ],
         "fingerprint": fingerprint(found),
         "tone": worst(found),
     }
+
+
+def issue_notes(state: Mapping[str, Any], cfg: Mapping[str, Any], page: str) -> list[dict[str, str]]:
+    """The issues whose link lands on their own note on ``page`` (a Target without an anchor):
+    the note's id and the issue's text, for that page to show."""
+    return [
+        {"id": issue_note_id(issue), "text": issue_text(issue)}
+        for issue in issues_now(state, cfg)
+        if issue.target.page == page and not issue.target.anchor
+    ]
 
 
 def attention(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> list[dict[str, Any]]:
