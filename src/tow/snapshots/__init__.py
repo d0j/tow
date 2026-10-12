@@ -10,6 +10,12 @@ The MANIFEST is signed (HMAC-SHA256 with a key derived from the master key), so 
 whose file list was edited - or planted in the copies folder by someone else - is never
 restored. Only the fixed member names and ``restore-points/<id>.towx`` are accepted, and
 every target is checked to stay where it belongs.
+
+The package re-exports what the rest of TOW uses; inside it:
+
+- ``errors``: ``SnapshotError`` and the reason of a failure;
+
+What is not in a module of its own yet is still here.
 """
 
 from __future__ import annotations
@@ -40,6 +46,7 @@ from tow.i18n import t
 from tow.log import locked_log_path, log_event, log_path, owner_language
 from tow.paths import config_path, data_dir, download_history_path, state_path
 from tow.platform import child_path, is_plain_file, plain_kind
+from tow.snapshots.errors import SnapshotError, reason
 from tow.store import (
     RegularReadError,
     SecretStoreError,
@@ -63,6 +70,34 @@ from tow.yaml_guard import dump as dump_yaml
 from tow.yaml_guard import load as load_yaml
 from tow.yaml_guard import read_text as read_yaml_text
 
+__all__ = [
+    "FORMAT",
+    "MAX_MANIFEST_BYTES",
+    "MAX_MEMBER_SIZE",
+    "MAX_RESTORE_JOURNAL_BYTES",
+    "MAX_RESTORE_MARKER_BYTES",
+    "SAFETY_KEEP",
+    "STATUS_NAME",
+    "UNSIGNED_FORMAT",
+    "SnapshotError",
+    "backup_root",
+    "check_snapshot",
+    "cleanup_status",
+    "create_snapshot",
+    "delete_snapshot",
+    "list_snapshots",
+    "record_failure",
+    "recover_interrupted_restore",
+    "restore_snapshot",
+    "snapshot_delete_view",
+    "snapshot_path",
+    "status",
+    "status_failed",
+    "status_path",
+    "verify_snapshot",
+]
+
+
 FORMAT = "tow-snapshot-v2"  # a signed MANIFEST
 UNSIGNED_FORMAT = "tow-snapshot-v1"  # copies made before 1.17: checked, never restored automatically
 _SIGNATURE_PURPOSE = "night-copies"
@@ -80,12 +115,6 @@ _PREFIX = "tow-"
 _PARTIAL_NAME = re.compile(r"\.tow-[0-9]{8}-[0-9]{6}(?:-[0-9a-f]{6})?\.partial")
 _PARTIAL_PROOF = "PARTIAL.json"
 _PARTIAL_FORMAT = "tow-snapshot-partial-v1"
-
-
-class SnapshotError(RuntimeError):
-    pass
-
-
 STATUS_NAME = "backup-status.json"
 
 
@@ -422,7 +451,7 @@ def create_snapshot(*, how: str = "auto") -> dict[str, Any]:
         record_failure(str(exc))
         raise
     except Exception as exc:  # settings, folder access...: a failed copy too, never a silent one
-        failure = SnapshotError(t("backup.snapshot.cannot_write", owner_language(), reason=_reason(exc)))
+        failure = SnapshotError(t("backup.snapshot.cannot_write", owner_language(), reason=reason(exc)))
         record_failure(str(failure))
         raise failure from exc
     return result
@@ -1101,12 +1130,6 @@ def _restore_plan(contents: dict[str, bytes], points_dir: str) -> list[tuple[str
     return sorted(plan, key=lambda step: step[0] == "config.yaml")
 
 
-def _reason(exc: BaseException) -> str:
-    if isinstance(exc, OSError):
-        return exc.strerror or type(exc).__name__  # never a local path
-    return str(exc) or type(exc).__name__
-
-
 def _begin_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str, points_dir: str) -> Path:
     """The before-restore copy and its journal, then the marker; nothing live is touched yet."""
     stamp = datetime.now(UTC).astimezone().strftime("%Y%m%d-%H%M%S")
@@ -1140,7 +1163,7 @@ def _begin_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str,
         # before an I/O error still needs the copies. Otherwise nothing refers to the folder.
         if created and _marked_safety() is None:
             shutil.rmtree(safety, ignore_errors=True)
-        raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=_reason(exc))) from exc
+        raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=reason(exc))) from exc
     return safety
 
 
@@ -1453,13 +1476,13 @@ def _apply_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str,
         try:
             _roll_back_files(safety)
         except Exception as rollback_failure:  # the marker stays: the next lock holder tries again
-            log_event("backup_restore_failed", error=_reason(failure), rollback="failed", how="manual")
+            log_event("backup_restore_failed", error=reason(failure), rollback="failed", how="manual")
             raise SnapshotError(
                 t("backup.snapshot.rollback_failed", owner_language(), path=str(safety))
             ) from rollback_failure
-        log_event("backup_restore_failed", error=_reason(failure), rollback="done", how="manual")
+        log_event("backup_restore_failed", error=reason(failure), rollback="done", how="manual")
         _cleanup_safety_copies()
-        raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=_reason(failure))) from failure
+        raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=reason(failure))) from failure
     # Cleanup is outside the transaction: its failure must not undo a committed restore.
     return safety, _cleanup_safety_copies()[1]
 
@@ -1475,7 +1498,7 @@ def _roll_back_files(safety: Path) -> None:
         _journal_bytes(_read_journal(safety), "rolled_back")  # legacy final metadata fits before any live write
         plan = _rollback_plan(safety)
     except (OSError, ValueError, TypeError, RecursionError, yaml.YAMLError) as exc:
-        raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=_reason(exc))) from exc
+        raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=reason(exc))) from exc
     # A restore of 1.23.11 or earlier also replaced the event log: no append while it goes back.
     legacy_log = any(name == "tow.jsonl" for name, _target, _content in plan)
     with locked_log_path() if legacy_log else contextlib.nullcontext():
@@ -1517,7 +1540,7 @@ def _refuse_writes(exc: BaseException, marker: Path) -> SnapshotError:
         with contextlib.suppress(Exception):
             log_event("backup_restore_recovery_failed", error=type(exc).__name__, how="auto")
     return SnapshotError(
-        t("backup.snapshot.recovery_blocked", owner_language(), reason=_reason(exc), marker=str(marker))
+        t("backup.snapshot.recovery_blocked", owner_language(), reason=reason(exc), marker=str(marker))
     )
 
 
