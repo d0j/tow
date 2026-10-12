@@ -466,7 +466,7 @@ def test_import_log_failure_keeps_committed_result_and_readable_state(tmp_path, 
     def fail_log(*args, **kwargs):
         raise OSError("log unavailable")
 
-    monkeypatch.setattr("tow.bundle.log_event", fail_log)
+    monkeypatch.setattr("tow.bundle.importer.log_event", fail_log)
     result = import_bundle(bundle, "bundle-passphrase", apply=True)
 
     assert result["committed"] is True
@@ -731,7 +731,7 @@ def test_import_write_failure_automatically_restores_checkpoint(tmp_path, monkey
 
         raise SecretStoreError("fixture write failure")
 
-    monkeypatch.setattr("tow.bundle.save_secrets", fail_save)
+    monkeypatch.setattr("tow.bundle.importer.save_secrets", fail_save)
     with pytest.raises(ExportImportError, match="destination was restored") as caught:
         import_bundle(bundle, "bundle-passphrase", apply=True)
     assert caught.value.owner_text.code == "cli.bundle.restored"  # `tow import` says the data is back

@@ -6,6 +6,7 @@ import pytest
 
 from tow import bundle, restore_points
 from tow.bundle import ExportImportError
+from tow.bundle import export as bundle_export
 from tow.store import save_secrets, save_state
 
 
@@ -120,14 +121,14 @@ def test_web_reports_saved_copy_with_cleanup_warning(monkeypatch):
 def test_export_never_overwrites_a_file_created_during_preparation(monkeypatch, tmp_path):
     _seed()
     target = tmp_path / "collision.towx"
-    original = bundle._build_export_members
+    original = bundle_export._build_export_members
 
     def concurrent_writer(**kwargs):
         result = original(**kwargs)
         target.write_bytes(b"another writer owns this file")
         return result
 
-    monkeypatch.setattr(bundle, "_build_export_members", concurrent_writer)
+    monkeypatch.setattr(bundle_export, "_build_export_members", concurrent_writer)
     with pytest.raises(ExportImportError):
         bundle.export_bundle(target, "synthetic-passphrase")
     assert target.read_bytes() == b"another writer owns this file"
@@ -142,7 +143,7 @@ def test_read_back_failure_never_deletes_a_replacement(monkeypatch, tmp_path):
         path.write_bytes(b"replacement belongs to someone else")
         raise ExportImportError("read back failed")
 
-    monkeypatch.setattr(bundle, "read_bundle", replaced)
+    monkeypatch.setattr(bundle_export, "read_bundle", replaced)
     with pytest.raises(ExportImportError):
         bundle.export_bundle(target, "synthetic-passphrase")
     assert target.read_bytes() == b"replacement belongs to someone else"
