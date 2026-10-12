@@ -2547,7 +2547,7 @@ def test_attention_banner_lists_what_needs_the_owner(monkeypatch):
     assert "Требует внимания" in page
     assert "Плановые проверки не выполнялись с" in page
     assert "Торрент-клиент недоступен" in page
-    assert "Нужен вход на сайт NNM-Club (раздач: 2)" in page  # the title, as the Sites page names it
+    assert "Войти на NNM-Club (раздач: 2)" in page  # the title, as the Sites page names it
 
 
 def test_a_row_whose_site_asks_for_a_sign_in_offers_the_sign_in():

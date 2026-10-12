@@ -419,7 +419,7 @@ def test_a_corrupt_download_history_does_not_block_the_check(monkeypatch):
     assert health["history_rebuilt_at"] == health["at_ts"]
     from tow.config import load_config
 
-    assert any("download_history.json.corrupt" in item for item in attention(load_state(), load_config()))
+    assert any("download_history.json.corrupt" in item["text"] for item in attention(load_state(), load_config()))
 
     check.run_check(apply=True, notify=False)  # the next run reads the new file; the notice stays a while
     assert load_state()["health"]["history_rebuilt_at"] == health["history_rebuilt_at"]

@@ -84,6 +84,8 @@ PURE: dict[str, set[str]] = {
     # Save folders: the one a form names and the recent ones kept in the state (a dict).
     "tow.folders": {"paths_equal", "recent_save_roots", "remember_save_root", "resolve_save_path"},
     "tow.guess": {"GuessError", "canon_watch_url", "guess_from_url"},
+    # What needs the owner, as data: the snapshot handed to services.collect_issues and the issue.
+    "tow.issues": {"Issue", "Snapshot"},
     "tow.i18n": {
         "AUTO",
         "available",

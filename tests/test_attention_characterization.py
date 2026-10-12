@@ -5,6 +5,12 @@ checks late, a blocked or failed check, the torrent client down, the download hi
 over, and sites that ask for a sign-in (per site, counted over topics that are not paused). The
 same data must give the same items afterwards; only the wording that sent the reader elsewhere
 may change, and only where this file says so.
+
+Since the move (tow.issues): the worst first (red, then amber), each kind in its order; a sign-in
+reads as the action its link takes ("Войти на NNM-Club (раздач: 2)"); a blocked check no longer
+sends the reader to Settings in words, and a check that failed for another reason no longer
+blames the passwords and tokens; the lost folder's text no longer names where the backups are
+(its link goes there).
 """
 
 from __future__ import annotations
@@ -18,10 +24,7 @@ from tow.store import load_state, save_state
 from tow.web import services, views
 
 NNM = "https://nnmclub.to/forum/viewtopic.php?t="
-BLOCKED = (
-    "Последняя плановая проверка заблокирована: сохранённые пароли и токены не открываются. Что делать, "
-    "показано в Настройках."
-)
+BLOCKED = "Последняя плановая проверка заблокирована: сохранённые пароли и токены не открываются."
 HISTORY_REBUILT = (
     "Файл истории загрузок был повреждён: TOW начал историю заново и продолжает проверки (повреждённый файл "
     "сохранён рядом как download_history.json.corrupt-…). Загрузки не затронуты; прежние события не "
@@ -53,36 +56,34 @@ def _everything_but_the_lost_folder() -> dict:
     }
 
 
-def _items(state: dict) -> list[str]:
+def _listed(state: dict) -> list[dict]:
     save_state(state)
     return views.attention(load_state(), load_config())
 
 
-def test_every_item_of_today_in_its_order():
-    items = _items(_everything_but_the_lost_folder())
+def _items(state: dict) -> list[str]:
+    return [item["text"] for item in _listed(state)]
 
-    assert [item.split(" ")[0] for item in items] == [
-        "Плановые",
-        "Последняя",
-        "Торрент-клиент",
-        "Файл",
-        "Нужен",
-        "Нужен",
-    ]
-    assert items[0].startswith("Плановые проверки не выполнялись с ")
-    assert items[1:] == [
+
+def test_every_item_of_today_worst_first():
+    listed = _listed(_everything_but_the_lost_folder())
+    items = [item["text"] for item in listed]
+
+    assert [item["severity"] for item in listed] == ["bad", "bad", "bad", "bad", "warn", "warn"]
+    assert items[:4] == [
         BLOCKED,
         "Торрент-клиент недоступен: новые версии не добавляются.",
-        HISTORY_REBUILT,
-        "Нужен вход на сайт NNM-Club (раздач: 2): откройте строку раздачи.",
-        "Нужен вход на сайт сайт (раздач: 1): откройте строку раздачи.",  # the unknown site, as today
+        "Войти на NNM-Club (раздач: 2)",
+        "Войти на сайт (раздач: 1)",  # the unknown site
     ]
+    assert items[4].startswith("Плановые проверки не выполнялись с ")
+    assert items[5] == HISTORY_REBUILT
 
 
-def test_a_check_that_failed_for_another_reason_is_listed_the_same_way():
+def test_a_check_that_failed_for_another_reason_is_listed_as_failed():
     state = {"topics": [], "mirrors": {}, "health": {"auto_at_ts": int(time.time()), "check_ok": False}}
 
-    assert _items(state) == [BLOCKED]
+    assert _items(state) == ["Последняя плановая проверка не завершилась."]
 
 
 def test_the_lost_data_folder_is_listed_only_while_no_topic_is_watched(monkeypatch):
@@ -91,6 +92,7 @@ def test_the_lost_data_folder_is_listed_only_while_no_topic_is_watched(monkeypat
 
     assert len(lost) == 1
     assert lost[0].startswith("Папка данных TOW (D:\\TOW\\data)")
+    assert lost[0].endswith("Восстановите ночную копию: копии хранятся вне папки данных.")
     watched = {"topics": [_topic("a", NNM + "1")], "mirrors": {}, "health": {"auto_at_ts": int(time.time())}}
     assert _items(watched) == []
 
