@@ -8,6 +8,7 @@ import pytest
 
 from tow import snapshots, store
 from tow.paths import data_dir, download_history_path, state_path
+from tow.snapshots import restore as night_restore
 
 
 @pytest.mark.parametrize("number", [float("nan"), float("inf"), -float("inf")])
@@ -41,27 +42,27 @@ def test_night_rollback_checks_all_backups_before_changing_any_store():
     store.save_download_history({"topics": {"fixture": {"items": {}}}})
     paths = [state_path(), download_history_path()]
     with store.persistence_lock():
-        safety = snapshots._begin_restore([(p.name, p, b"new") for p in paths], snapshot="fixture", points_dir="")
+        safety = night_restore._begin_restore([(p.name, p, b"new") for p in paths], snapshot="fixture", points_dir="")
         for target in paths:
             target.write_bytes(b'{"fixture":"current"}')
         (safety / paths[-1].name).write_bytes(b"damaged backup")
         before = [target.read_bytes() for target in paths]
 
         with pytest.raises(snapshots.SnapshotError):
-            snapshots._roll_back(safety)
+            night_restore._roll_back(safety)
 
         assert [target.read_bytes() for target in paths] == before
-        assert (data_dir() / snapshots._MARKER).is_file()
+        assert (data_dir() / night_restore._MARKER).is_file()
 
 
 @pytest.mark.parametrize("status", [[], {}, None, 1])
 def test_malformed_night_status_has_a_typed_error_and_keeps_marker(status):
     safety = data_dir() / "before-restore-20261001-000000"
     safety.mkdir()
-    (safety / snapshots._JOURNAL).write_text(
-        json.dumps({"format": snapshots._JOURNAL_FORMAT, "status": status, "entries": []}), encoding="utf-8"
+    (safety / night_restore._JOURNAL).write_text(
+        json.dumps({"format": night_restore._JOURNAL_FORMAT, "status": status, "entries": []}), encoding="utf-8"
     )
-    marker = data_dir() / snapshots._MARKER
+    marker = data_dir() / night_restore._MARKER
     marker.write_text(json.dumps({"safety": safety.name}), encoding="utf-8")
     with pytest.raises(snapshots.SnapshotError), store.persistence_lock():
         pass
@@ -71,11 +72,11 @@ def test_malformed_night_status_has_a_typed_error_and_keeps_marker(status):
 def test_unreadable_old_safety_copy_is_not_pruned():
     safety = data_dir() / "before-restore-20261001-000000"
     safety.mkdir()
-    journal = safety / snapshots._JOURNAL
+    journal = safety / night_restore._JOURNAL
     journal.write_bytes(b"{broken")
     foreign = safety / "keep.txt"
     foreign.write_bytes(b"do not erase")
-    assert snapshots._cleanup_safety_copies(keep=0)[0] == []
+    assert night_restore._cleanup_safety_copies(keep=0)[0] == []
     assert foreign.read_bytes() == b"do not erase"
 
 
@@ -116,9 +117,9 @@ def test_too_deep_secret_write_preserves_previous_bytes():
 def test_finished_safety_copy_with_foreign_file_is_not_pruned():
     safety = data_dir() / "before-restore-20261001-000000"
     safety.mkdir()
-    snapshots._write_journal(safety, {"format": snapshots._JOURNAL_FORMAT, "entries": []}, "committed")
+    night_restore._write_journal(safety, {"format": night_restore._JOURNAL_FORMAT, "entries": []}, "committed")
     (safety / "keep.txt").write_bytes(b"not owned")
-    assert snapshots._cleanup_safety_copies(keep=0)[0] == []
+    assert night_restore._cleanup_safety_copies(keep=0)[0] == []
     assert (safety / "keep.txt").read_bytes() == b"not owned"
 
 
@@ -137,7 +138,7 @@ def test_night_restore_reservation_failure_never_removes_another_writers_files(m
 
     monkeypatch.setattr(Path, "mkdir", reserve)
     with pytest.raises(snapshots.SnapshotError):
-        snapshots._begin_restore([], snapshot="fixture", points_dir="")
+        night_restore._begin_restore([], snapshot="fixture", points_dir="")
     assert (reserved[0] / "keep.txt").read_bytes() == b"another writer"
 
 
@@ -145,7 +146,7 @@ def test_night_restore_verifies_copies_before_publishing_marker(monkeypatch):
     store.save_state({"topics": [{"id": "before"}]})
     target = state_path()
     before = target.read_bytes()
-    write = snapshots.atomic_write_bytes
+    write = night_restore.atomic_write_bytes
 
     def corrupt(path, content):
         write(
@@ -153,11 +154,11 @@ def test_night_restore_verifies_copies_before_publishing_marker(monkeypatch):
             b"damaged" if path.name == "state.json" and path.parent.name.startswith("before-restore-") else content,
         )
 
-    monkeypatch.setattr(snapshots, "atomic_write_bytes", corrupt)
+    monkeypatch.setattr(night_restore, "atomic_write_bytes", corrupt)
     with store.persistence_lock(), pytest.raises(snapshots.SnapshotError):
-        snapshots._begin_restore([("state.json", target, b"new")], snapshot="fixture", points_dir="")
+        night_restore._begin_restore([("state.json", target, b"new")], snapshot="fixture", points_dir="")
     assert target.read_bytes() == before
-    assert not (data_dir() / snapshots._MARKER).exists()
+    assert not (data_dir() / night_restore._MARKER).exists()
 
 
 def test_night_rollback_uses_verified_bytes_if_a_later_backup_changes(monkeypatch):
@@ -166,20 +167,20 @@ def test_night_rollback_uses_verified_bytes_if_a_later_backup_changes(monkeypatc
     paths = [state_path(), download_history_path()]
     saved = [p.read_bytes() for p in paths]
     with store.persistence_lock():
-        safety = snapshots._begin_restore([(p.name, p, b"new") for p in paths], snapshot="fixture", points_dir="")
+        safety = night_restore._begin_restore([(p.name, p, b"new") for p in paths], snapshot="fixture", points_dir="")
         for path in paths:
             path.write_bytes(b'{"fixture":"current"}')
-        write = snapshots.atomic_write_bytes
+        write = night_restore.atomic_write_bytes
 
         def change_later(path, content):
             if path == paths[0]:
                 (safety / paths[1].name).write_bytes(b"changed after verification")
             write(path, content)
 
-        monkeypatch.setattr(snapshots, "atomic_write_bytes", change_later)
-        snapshots._roll_back(safety)
+        monkeypatch.setattr(night_restore, "atomic_write_bytes", change_later)
+        night_restore._roll_back(safety)
         assert [p.read_bytes() for p in paths] == saved
-        assert not (data_dir() / snapshots._MARKER).exists()
+        assert not (data_dir() / night_restore._MARKER).exists()
 
 
 def test_export_cannot_replace_quarantined_history_with_an_empty_backup(tmp_path):
@@ -268,13 +269,13 @@ def test_night_rollback_checks_later_target_before_touching_first_file():
     store.save_download_history({"topics": {}})
     paths = [state_path(), download_history_path()]
     with store.persistence_lock():
-        safety = snapshots._begin_restore([(p.name, p, b"new") for p in paths], snapshot="fixture", points_dir="")
+        safety = night_restore._begin_restore([(p.name, p, b"new") for p in paths], snapshot="fixture", points_dir="")
         paths[0].write_bytes(b'{"fixture":"current"}')
         paths[1].unlink()
         paths[1].mkdir()
         before = paths[0].read_bytes()
         with pytest.raises(snapshots.SnapshotError):
-            snapshots._roll_back(safety)
+            night_restore._roll_back(safety)
         assert paths[0].read_bytes() == before
         assert paths[1].is_dir()
 
@@ -291,7 +292,7 @@ def test_night_rollback_resolves_points_from_saved_config_without_writing_it(tmp
     point = old_root / "20261001T000000Z-deadbeef.towx"
     point.write_bytes(b"old point")
     with store.persistence_lock():
-        safety = snapshots._begin_restore(
+        safety = night_restore._begin_restore(
             [("config.yaml", config_path(), b"new"), (f"restore-points/{point.name}", point, b"new")],
             snapshot="fixture",
             points_dir=str(old_root),
@@ -301,8 +302,8 @@ def test_night_rollback_resolves_points_from_saved_config_without_writing_it(tmp
         cfg["restore_points_dir"] = str(tmp_path / "other-points")
         config_path().write_text(yaml.safe_dump(cfg), encoding="utf-8")
         point.write_bytes(b"current point")
-        plan = snapshots._rollback_plan(safety)
+        plan = night_restore._rollback_plan(safety)
         assert plan[1][1] == point
         assert b"other-points" in config_path().read_bytes()  # preflight is read-only
-        snapshots._roll_back(safety)
+        night_restore._roll_back(safety)
         assert point.read_bytes() == b"old point"

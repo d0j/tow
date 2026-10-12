@@ -16,6 +16,7 @@ from tow.i18n import t
 from tow.paths import config_path, data_dir, download_history_path, state_path
 from tow.snapshots import create as night_create
 from tow.snapshots import manifest as night_manifest
+from tow.snapshots import restore as night_restore
 from tow.snapshots import verify as night_verify
 
 
@@ -101,7 +102,7 @@ def test_hash_correct_but_unreadable_store_is_refused_before_any_live_write(poin
     assert str(failed.value) == t("backup.snapshot.file_unusable", "ru", name=name)
     assert _read_live() == before
     assert (point / name).read_bytes() == content
-    assert not (data_dir() / snapshots._MARKER).exists()
+    assert not (data_dir() / night_restore._MARKER).exists()
     assert not list(data_dir().glob("before-restore-*"))
     assert not list(data_dir().glob("*.corrupt-*"))
     assert "synthetic-private" not in str(failed.value)
@@ -189,7 +190,7 @@ def test_encrypted_content_is_fully_checked_not_merely_decrypted(point, name, ca
     assert str(failed.value) == t("backup.snapshot.secrets_unusable", "ru", name=name)
     assert _read_live() == before
     assert (point / name).read_bytes() == content
-    assert not (data_dir() / snapshots._MARKER).exists()
+    assert not (data_dir() / night_restore._MARKER).exists()
     assert not list(data_dir().glob("before-restore-*"))
     assert "synthetic-private" not in str(failed.value)
 
@@ -393,7 +394,7 @@ def test_preview_checks_again_before_parsing_a_changed_semantic_store(point, mon
 
 
 def test_applied_restore_writes_the_original_verified_bytes_not_a_changed_source(point, monkeypatch):
-    original = snapshots._restore_plan
+    original = night_restore._restore_plan
     state = (point / "state.json").read_bytes()
 
     def watched(contents, *args):
@@ -401,7 +402,7 @@ def test_applied_restore_writes_the_original_verified_bytes_not_a_changed_source
         assert contents["state.json"] == state
         return original(contents, *args)
 
-    monkeypatch.setattr(snapshots, "_restore_plan", watched)
+    monkeypatch.setattr(night_restore, "_restore_plan", watched)
     assert snapshots.restore_snapshot(point, apply=True)["applied"]
     assert state_path().read_bytes() == state
 

@@ -17,6 +17,7 @@ from tow import snapshots, store
 from tow.i18n import t
 from tow.paths import data_dir, state_path
 from tow.snapshots import create as night_create
+from tow.snapshots import restore as night_restore
 
 MARKER_LIMIT = 64 * 1024
 JOURNAL_LIMIT = 4 * snapshots.MAX_MANIFEST_BYTES
@@ -33,28 +34,28 @@ def recovery():
     safety.mkdir()
     content = state_path().read_bytes()
     (safety / "state.json").write_bytes(content)
-    journal = safety / snapshots._JOURNAL
+    journal = safety / night_restore._JOURNAL
     journal.write_text(
         json.dumps(
             {
-                "format": snapshots._JOURNAL_FORMAT,
+                "format": night_restore._JOURNAL_FORMAT,
                 "status": "prepared",
                 "entries": [{"name": "state.json", "existed": True, "sha256": hashlib.sha256(content).hexdigest()}],
             }
         ),
         encoding="utf-8",
     )
-    marker = data_dir() / snapshots._MARKER
+    marker = data_dir() / night_restore._MARKER
     marker.write_text(json.dumps({"safety": safety.name}), encoding="utf-8")
     return safety, marker, journal, content
 
 
 def _inspect(surface, safety):
     if surface == "cleanup":
-        return snapshots._marked_safety()
+        return night_restore._marked_safety()
     if surface == "marker":
-        return snapshots._marked_journal(data_dir() / snapshots._MARKER)
-    return snapshots._read_journal(safety)
+        return night_restore._marked_journal(data_dir() / night_restore._MARKER)
+    return night_restore._read_journal(safety)
 
 
 @pytest.mark.parametrize("surface", ["cleanup", "marker", "journal"])
@@ -87,7 +88,9 @@ def test_oversized_record_is_refused_before_read_or_parser(recovery, monkeypatch
         return Watched(handle) if path == target and args == ("rb",) else handle
 
     monkeypatch.setattr(Path, "open", watched_open)
-    monkeypatch.setattr(snapshots, "decode_json_bytes", lambda *_a: pytest.fail("oversized metadata reached parser"))
+    monkeypatch.setattr(
+        night_restore, "decode_json_bytes", lambda *_a: pytest.fail("oversized metadata reached parser")
+    )
     if surface == "cleanup":
         assert _inspect(surface, safety) == ""
     else:
@@ -160,7 +163,7 @@ def test_changed_open_record_is_refused_before_parsing(recovery, monkeypatch, su
         return Changed(handle) if path == target and args == ("rb",) else handle
 
     monkeypatch.setattr(Path, "open", watched_open)
-    monkeypatch.setattr(snapshots, "decode_json_bytes", lambda *_a: pytest.fail("changed metadata reached parser"))
+    monkeypatch.setattr(night_restore, "decode_json_bytes", lambda *_a: pytest.fail("changed metadata reached parser"))
     if surface == "cleanup":
         assert _inspect(surface, safety) == ""
     else:
@@ -200,31 +203,31 @@ def test_oversized_recovery_record_keeps_all_data_and_blocks_the_next_writer(rec
     assert target.stat().st_size == limit + 2
     assert marker.is_file()
     # A named in-progress safety copy is excluded from pruning without reading its journal.
-    assert snapshots._prune_safety_copies(0) == ([], which == "marker")
+    assert night_restore._prune_safety_copies(0) == ([], which == "marker")
 
 
 def test_existing_journal_and_marker_are_read_without_rewriting_them(recovery):
     safety, marker, journal, _ = recovery
     before = {path: path.read_bytes() for path in (marker, journal)}
-    assert snapshots._marked_safety() == safety.name
-    assert snapshots._marked_journal(marker) == (safety, "prepared")
-    assert snapshots._read_journal(safety)["entries"][0]["name"] == "state.json"
+    assert night_restore._marked_safety() == safety.name
+    assert night_restore._marked_journal(marker) == (safety, "prepared")
+    assert night_restore._read_journal(safety)["entries"][0]["name"] == "state.json"
     assert {path: path.read_bytes() for path in before} == before
 
 
 def test_missing_marker_does_not_block_a_fresh_install():
-    assert snapshots._marked_safety() is None
+    assert night_restore._marked_safety() is None
     with store.persistence_lock():
         pass
-    assert not (data_dir() / snapshots._MARKER).exists()
+    assert not (data_dir() / night_restore._MARKER).exists()
 
 
 def test_oversized_journal_producer_preserves_previous_record(recovery):
     safety, _, journal, _ = recovery
     before = journal.read_bytes()
-    value = {"format": snapshots._JOURNAL_FORMAT, "entries": [], "note": "x" * (JOURNAL_LIMIT + 1)}
+    value = {"format": night_restore._JOURNAL_FORMAT, "entries": [], "note": "x" * (JOURNAL_LIMIT + 1)}
     with pytest.raises(ValueError, match=_error("size")):
-        snapshots._write_journal(safety, value, "committed")
+        night_restore._write_journal(safety, value, "committed")
     assert journal.read_bytes() == before
 
 
@@ -232,18 +235,18 @@ def test_oversized_preparation_never_publishes_marker_or_changes_live_files():
     store.save_state({"topics": [{"id": "before"}]})
     before = state_path().read_bytes()
     with pytest.raises(snapshots.SnapshotError):
-        snapshots._begin_restore(
+        night_restore._begin_restore(
             [("state.json", state_path(), b"new")], snapshot="x" * (JOURNAL_LIMIT + 1), points_dir=""
         )
     assert state_path().read_bytes() == before
-    assert not (data_dir() / snapshots._MARKER).exists()
+    assert not (data_dir() / night_restore._MARKER).exists()
 
 
 def test_oversized_unmarked_journal_keeps_the_copy_and_reports_unknown_cleanup(recovery):
     safety, marker, journal, before = recovery
     marker.unlink()  # synthetic finished-copy inventory, not a real recovery marker
     journal.write_bytes(b"{}" + b" " * JOURNAL_LIMIT)
-    assert snapshots._prune_safety_copies(0) == ([], True)
+    assert night_restore._prune_safety_copies(0) == ([], True)
     assert (safety / "state.json").read_bytes() == before
     assert journal.stat().st_size == JOURNAL_LIMIT + 2
 
@@ -296,11 +299,11 @@ def test_journal_budget_covers_a_whole_maximum_supported_manifest(status):
     assert len(encode(manifest)) <= snapshots.MAX_MANIFEST_BYTES
     assert len(encode({**empty, "files": {**files, name(count): metadata}})) > snapshots.MAX_MANIFEST_BYTES
     journal = {
-        "format": snapshots._JOURNAL_FORMAT,
+        "format": night_restore._JOURNAL_FORMAT,
         "snapshot": "fixture",
         "entries": [{"name": member, "existed": True, "sha256": checksum} for member in files],
     }
-    raw = snapshots._journal_bytes(journal, status)
+    raw = night_restore._journal_bytes(journal, status)
     assert snapshots.MAX_MANIFEST_BYTES < len(raw) <= JOURNAL_LIMIT
     assert json.loads(raw)["status"] == status
 
@@ -310,16 +313,16 @@ def test_final_phase_budget_is_checked_before_marker_publication(monkeypatch):
     target = state_path()
     before = target.read_bytes()
     journal = {
-        "format": snapshots._JOURNAL_FORMAT,
+        "format": night_restore._JOURNAL_FORMAT,
         "snapshot": "fixture",
         "entries": [{"name": "state.json", "existed": True, "sha256": hashlib.sha256(before).hexdigest()}],
     }
-    limit = len(snapshots._journal_bytes(journal, "prepared"))
-    monkeypatch.setattr(snapshots, "MAX_RESTORE_JOURNAL_BYTES", limit)
+    limit = len(night_restore._journal_bytes(journal, "prepared"))
+    monkeypatch.setattr(night_restore, "MAX_RESTORE_JOURNAL_BYTES", limit)
     with pytest.raises(snapshots.SnapshotError):
-        snapshots._begin_restore([("state.json", target, b"new")], snapshot="fixture", points_dir="")
+        night_restore._begin_restore([("state.json", target, b"new")], snapshot="fixture", points_dir="")
     assert target.read_bytes() == before
-    assert not (data_dir() / snapshots._MARKER).exists()
+    assert not (data_dir() / night_restore._MARKER).exists()
 
 
 def test_legacy_final_phase_budget_is_checked_before_rollback_writes(recovery, monkeypatch):
@@ -327,9 +330,9 @@ def test_legacy_final_phase_budget_is_checked_before_rollback_writes(recovery, m
     before = b'{"topics":[{"id":"current"}]}'
     state_path().write_bytes(before)
     limit = journal.stat().st_size
-    monkeypatch.setattr(snapshots, "MAX_RESTORE_JOURNAL_BYTES", limit)
+    monkeypatch.setattr(night_restore, "MAX_RESTORE_JOURNAL_BYTES", limit)
     with pytest.raises(snapshots.SnapshotError):
-        snapshots._roll_back(safety)
+        night_restore._roll_back(safety)
     assert state_path().read_bytes() == before
     assert marker.is_file()
 
@@ -388,8 +391,8 @@ def test_invalid_journal_producer_preserves_existing_record(recovery, value):
         for _ in range(129):
             value = [value]
     with pytest.raises((ValueError, RecursionError), match=r"Out of range|nesting|recursion"):
-        snapshots._write_journal(
-            safety, {"format": snapshots._JOURNAL_FORMAT, "entries": [], "note": value}, "committed"
+        night_restore._write_journal(
+            safety, {"format": night_restore._JOURNAL_FORMAT, "entries": [], "note": value}, "committed"
         )
     assert journal.read_bytes() == before
 
@@ -406,10 +409,10 @@ def test_permission_error_during_marker_discovery_never_allows_a_writer(recovery
         return real_lstat(path, *args, **kwargs)
 
     monkeypatch.setattr(Path, "lstat", held)
-    monkeypatch.setattr(snapshots.time, "sleep", lambda _delay: None)
+    monkeypatch.setattr(night_restore.time, "sleep", lambda _delay: None)
     with pytest.raises(snapshots.SnapshotError, match="synthetic held marker"), store.persistence_lock():
         pytest.fail("unreadable recovery marker allowed a writer")
-    assert len(calls) >= snapshots._RECOVERY_ATTEMPTS + 1
+    assert len(calls) >= night_restore._RECOVERY_ATTEMPTS + 1
     assert state_path().read_bytes() == before
     assert real_lstat(marker)
 

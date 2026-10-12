@@ -6,6 +6,7 @@ import yaml
 from tow import bundle, cli, config, i18n, snapshots
 from tow.paths import config_path
 from tow.snapshots import members as night_members
+from tow.snapshots import restore as night_restore
 
 CYCLE = b"extra: &loop [*loop]\n"
 
@@ -57,7 +58,7 @@ def test_export_refuses_cyclic_yaml_before_looking_for_plaintext_secrets(tmp_pat
 
 def test_night_restore_config_is_refused_before_serialization():
     with pytest.raises(snapshots.SnapshotError):
-        snapshots._keep_local_access(CYCLE)
+        night_restore._keep_local_access(CYCLE)
 
 
 def test_night_rollback_config_is_guarded_before_resolving_restore_point_targets(monkeypatch):
@@ -65,7 +66,7 @@ def test_night_rollback_config_is_guarded_before_resolving_restore_point_targets
 
     monkeypatch.setattr(locations, "resolve_checked", lambda *args: pytest.fail("unsafe graph reached path resolver"))
     with pytest.raises(yaml.YAMLError):
-        snapshots._rollback_target("restore-points/20260101T010101Z-aaaaaaaa.towx", CYCLE, None)
+        night_restore._rollback_target("restore-points/20260101T010101Z-aaaaaaaa.towx", CYCLE, None)
 
 
 @pytest.mark.parametrize("source", [b"false", b"0", b"''", b"[]"])
@@ -114,7 +115,7 @@ def test_error_rendering_with_a_broken_config_cannot_recursively_render_itself(m
 
 def test_healthy_restore_merge_can_repair_a_cyclic_live_config_without_mutating_it():
     config_path().write_bytes(CYCLE)
-    restored = yaml.safe_load(snapshots._keep_local_access(b"interval_sec: 600\nbind: 0.0.0.0\nallow_lan: true\n"))
+    restored = yaml.safe_load(night_restore._keep_local_access(b"interval_sec: 600\nbind: 0.0.0.0\nallow_lan: true\n"))
     assert restored["interval_sec"] == 600
     assert restored["bind"] == "127.0.0.1"
     assert restored["allow_lan"] is False
@@ -166,7 +167,7 @@ def test_restoration_cannot_expand_scalar_aliases_into_an_unreadable_config(tmp_
     source = ("a: &a " + "я" * 20 + "\nb: [*a, *a, *a, *a]\n").encode()
     assert len(source) < 128
     with pytest.raises(snapshots.SnapshotError):
-        snapshots._keep_local_access(source)
+        night_restore._keep_local_access(source)
     assert target.read_bytes() == b"{}\n"
 
 
