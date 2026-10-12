@@ -19,6 +19,7 @@ A value may itself be an error or a ``Msg`` (rendered in the same language), a n
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator, Mapping
 from typing import Any
 
@@ -122,23 +123,61 @@ def _stored(value: Any) -> Any:
     return str(value)
 
 
-def _shown(value: Any, lang: str, depth: int = 0) -> str:
-    """A value as the text shows it in ``lang`` (``depth``: stored messages around it)."""
+def _shown(value: Any, lang: str, depth: int = 0) -> tuple[str, bool]:
+    """A value as the text shows it in ``lang`` (``depth``: stored messages around it), and
+    whether a message in it had every value its text names."""
     if isinstance(value, (TowError, Msg)):
-        return value.text(lang)
+        return _compose(value.code, value.params, lang, depth)
     if isinstance(value, Mapping) and isinstance(value.get(_MSG), Mapping):
-        return _render(value[_MSG], lang, "", depth + 1)
+        return _rendered(value[_MSG], lang, "", depth + 1)
     if isinstance(value, float) and not isinstance(value, bool):
-        return i18n.format_decimal(value, 1, lang)
-    return "" if value is None else str(value)
+        return i18n.format_decimal(value, 1, lang), True
+    return ("" if value is None else str(value)), True
 
 
-def _text(code: str, params: Mapping[str, Any], lang: str | None, depth: int = 0) -> str:
+# A value the text names but the message lacks (a record written by an older TOW or another
+# producer): it is marked while the text is filled, then taken out with what only framed it.
+_UNFILLED = re.compile(r"\x00[a-z0-9_]+\x00")
+_TIDY = (
+    (re.compile(r"\s*\([^()\x00]*\x00[a-z0-9_]+\x00[^()]*\)"), ""),  # "(error {status})" goes whole
+    (_UNFILLED, ""),
+    (re.compile(r"«\s*»|“\s*”|\"\s*\"|\(\s*\)|\[\s*\]"), ""),  # quotes or brackets left empty
+    (re.compile(r"\s+([.,;:!?)\]»”])"), r"\1"),  # no space before a mark
+    (re.compile(r"\s*[:;,—–]+\s*(?=[.!?]?\s*$)"), ""),  # nothing after "text:" any more
+    (re.compile(r"^[\s:;,.—–-]+"), ""),  # "{site}: all mirrors…" without the site
+    (re.compile(r"\s{2,}"), " "),
+)
+
+
+def without_unfilled(text: str) -> str:
+    """``text`` with its unfilled values (a name between two NUL characters, as ``_compose``
+    marks them) and what only framed them taken out: the brackets around one, quotes left
+    empty, a separator with nothing on one side."""
+    for pattern, replacement in _TIDY:
+        text = pattern.sub(replacement, text)
+    return text.strip()
+
+
+def _compose(code: str, params: Mapping[str, Any], lang: str | None, depth: int = 0) -> tuple[str, bool]:
+    """The text of ``code`` with ``params``, and whether every value it names was there. A
+    missing one never shows as ``{name}``: it is left out with what only framed it."""
     language = lang or i18n.current()
-    values = {name: _shown(value, language, depth) for name, value in params.items() if name != _PREFIX}
-    text = i18n.translate(code, language, **values)
+    values: dict[str, str] = {}
+    complete = True
+    for name, value in params.items():
+        if name != _PREFIX:
+            values[name], whole = _shown(value, language, depth)
+            complete = complete and whole
+    missing = i18n.placeholders(code, language) - values.keys()
+    text = i18n.translate(code, language, **values, **{name: f"\x00{name}\x00" for name in missing})
+    if missing:
+        text, complete = without_unfilled(text), False
     prefix = params.get(_PREFIX)
-    return f"{prefix}: {text}" if prefix else text
+    return (f"{prefix}: {text}" if prefix else text), complete
+
+
+def _text(code: str, params: Mapping[str, Any], lang: str | None) -> str:
+    return _compose(code, params, lang)[0]
 
 
 class Msg:
@@ -221,29 +260,41 @@ def record_of(error: BaseException | None) -> dict[str, Any] | None:
     return None
 
 
-def render(record: Mapping[str, Any] | None, lang: str | None = None, fallback: str = "") -> str:
+def render(
+    record: Mapping[str, Any] | None, lang: str | None = None, fallback: str = "", *, incomplete: str | None = None
+) -> str:
     """A stored ``{"code", "params"}`` in ``lang``; ``fallback`` (the text stored with it) when
-    the record is missing or its code is unknown to this TOW (an older or newer one wrote it)."""
-    return _render(record, lang, fallback, 0)
+    the record is missing or its code is unknown to this TOW (an older or newer one wrote it).
+
+    A record that lacks a value its text names (here or in a message among its values: an older
+    TOW or another producer wrote it) is shown as ``incomplete`` (default: ``fallback``), the text
+    stored with it. Without one, that value is left out with what only framed it (``without_unfilled``):
+    a ``{name}`` is never shown."""
+    text, complete = _rendered(record, lang, fallback, 0)
+    stored = fallback if incomplete is None else incomplete
+    return text if complete or not stored else stored
 
 
-def _render(record: Mapping[str, Any] | None, lang: str | None, fallback: str, depth: int) -> str:
+def _rendered(record: Mapping[str, Any] | None, lang: str | None, fallback: str, depth: int) -> tuple[str, bool]:
     if not isinstance(record, Mapping):
-        return fallback
+        return fallback, True
     code = record.get("code")
     if not isinstance(code, str) or not i18n.has(code):
-        return fallback
+        return fallback, True
     if depth > _MAX_NESTED_MESSAGES:
-        return code
+        return code, True
     params = record.get("params")
-    return _text(code, params if isinstance(params, Mapping) else {}, lang, depth)
+    return _compose(code, params if isinstance(params, Mapping) else {}, lang, depth)
 
 
-def render_stored(code: Any, params: Any, fallback: str, lang: str | None = None) -> str:
+def render_stored(
+    code: Any, params: Any, fallback: str, lang: str | None = None, *, incomplete: str | None = None
+) -> str:
     """``render`` for a code and its values kept in two fields (``last_error_code`` / ``_params``)."""
     if not code:
         return fallback
-    return render({"code": code, "params": params if isinstance(params, Mapping) else {}}, lang, fallback)
+    record = {"code": code, "params": params if isinstance(params, Mapping) else {}}
+    return render(record, lang, fallback, incomplete=incomplete)
 
 
 def as_value(record: Mapping[str, Any] | None, fallback: str = "") -> Any:
