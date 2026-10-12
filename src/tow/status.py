@@ -15,6 +15,13 @@ SITE_WARNING_CLASSES = TRACKER_WARNING_CLASSES | {"quota"} | _SIGN_IN_CLASSES
 # Problems on the site's side about the topic (removed, not a torrent page, no site): red site icon.
 SITE_ERROR_CLASSES = frozenset({"gone", "no_tracker", "not_torrent"})
 
+
+def error_tone(error_cls: str) -> str:
+    """The status tone of an error of class ``error_cls``: amber for transport trouble that
+    passes by itself, red for every other error (AGENTS.md, the status-colour contract)."""
+    return "warn" if error_cls in TRACKER_WARNING_CLASSES else "bad"
+
+
 # Catalog keys of the labels (tow/locales): translated when a status is projected (the page's
 # language, or the owner's outside a request).
 _TORRENT_LABELS = {
@@ -95,12 +102,12 @@ def project_home_status(topic: dict[str, Any], history_record: dict[str, Any] | 
     history_record = history_record if isinstance(history_record, dict) else {}
     error = str(topic.get("last_error") or "")
     error_cls = str(topic.get("last_error_class") or error_class(error))
-    error_tone = "warn" if error_cls in TRACKER_WARNING_CLASSES else "bad" if error else None
+    tone = error_tone(error_cls) if error else None
     event = _last_event(history_record)
     action = str(event.get("kind") or "") or None
 
-    if error_tone:
-        torrent_tone = error_tone
+    if tone:
+        torrent_tone = tone
     elif topic.get("last_changed"):
         torrent_tone = "new"
         action = action or "tracker_changed"

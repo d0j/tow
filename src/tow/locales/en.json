@@ -886,6 +886,16 @@
     "note": "Shows up to 300 latest events from the log (5 files of 5 MB).",
     "no_events": "No downloads, errors, changes or notifications yet. Routine events — site checks, starts — are in the Log."
   },
+  "issues": {
+    "data_lost": "TOW's data folder ({folder}) was deleted or replaced while TOW was running: the topics, history and settings kept there are gone from TOW, which goes on empty. Restore a nightly backup: the copies are kept outside the data folder.",
+    "check_stale": "Scheduled checks have not run since {at}.",
+    "check_blocked_secrets": "The last scheduled check is blocked: saved passwords and tokens cannot be opened.",
+    "check_failed": "The last scheduled check did not complete.",
+    "client_down": "The torrent client is unavailable: new versions are not added.",
+    "history_rebuilt": "The download history file was damaged: TOW started it over and keeps checking (the damaged file is kept next to it as download_history.json.corrupt-…). Downloads are not affected; events from before are not shown.",
+    "site_needs_login": "Sign in to {site} (topics: {count})",
+    "site_needs_login_unknown": "Sign in to the site (topics: {count})"
+  },
   "home": {
     "title": "Topics",
     "attention": "Needs attention",
@@ -1624,6 +1634,7 @@
       "help_link": "Guide",
       "help_q": "guide how it works help",
       "secret_store": "Saved passwords and tokens cannot be opened: the master key is missing or does not match. Put keys/master.key back from your copy, or run <code>{launcher} keys status</code> to see why. More in the <a href=\"{help}\">guide</a>.",
+      "copy_command": "Copy the command",
       "help_note": "How TOW works: statuses, messages, backups and updates",
       "doctor_link": "Diagnostics",
       "doctor_note": "Connection to the torrent client and the sites, autostart",

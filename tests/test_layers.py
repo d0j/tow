@@ -68,6 +68,7 @@ ORCHESTRATION = (
 FAMILIES: dict[str, set[str]] = {
     "tow.autostart": set(),
     "tow.clients": set(CLIENT_HELPERS),
+    "tow.issues.kinds": set(),
     "tow.notifiers": set(MESSENGER_HELPERS),
     "tow.platform": {"locks"},
     "tow.trackers.presets": set(),
@@ -128,6 +129,10 @@ def _job_table_is_data(importer: str, imported: str) -> bool:
     return importer == "tow.supervisor.jobs"
 
 
+def _issues_below_the_screens(importer: str, imported: str) -> bool:
+    return _within(importer, "tow.issues") and _within(imported, "tow.web", "tow.cli")
+
+
 def _check_through_package(importer: str, imported: str) -> bool:
     return imported.startswith("tow.check.") and not _within(importer, "tow.check")
 
@@ -142,6 +147,7 @@ RULES: dict[str, Callable[[str, str], bool]] = {
     "supervisor.schedule imports only config, topic_timers and the job table": _schedule_pure,
     "supervisor.jobs imports nothing from TOW": _job_table_is_data,
     "outside tow.check only the package tow.check is imported": _check_through_package,
+    "tow.issues imports neither the web nor the CLI": _issues_below_the_screens,
 }
 
 # (importer, imported) per rule: what existed when the rule came - may only shrink.
@@ -165,6 +171,7 @@ ALLOWED: dict[str, set[tuple[str, str]]] = {
         ("tow.web.services", "tow.check.notices"),
         ("tow.web.services", "tow.check.space"),
     },
+    "tow.issues imports neither the web nor the CLI": set(),
 }
 
 
@@ -254,6 +261,7 @@ def test_the_groups_name_real_modules():
     assert "tow.check_transaction" in STORAGE
     assert {"tow.clients.deluge", "tow.notifiers.telegram", "tow.trackers.presets.rutracker"} <= PLUGINS
     assert {"tow.autostart.windows", "tow.platform.posix"} <= PLUGINS
+    assert {"tow.issues.kinds.client_down", "tow.issues.kinds.site_needs_login"} <= PLUGINS
 
 
 def test_the_scan_sees_every_form_of_import(tmp_path):
@@ -327,3 +335,7 @@ def test_a_rule_catches_its_crossing():
     assert _job_table_is_data("tow.supervisor.jobs", "tow.config")
     assert _check_through_package("tow.cli", "tow.check.run")
     assert not _check_through_package("tow.check.run", "tow.check.topic")
+    assert _issues_below_the_screens("tow.issues.kinds.client_down", "tow.web.services")
+    assert _issues_below_the_screens("tow.issues.collect", "tow.cli.render")
+    assert not _issues_below_the_screens("tow.issues.kinds.client_down", "tow.clients.factory")
+    assert not _issues_below_the_screens("tow.web.views", "tow.issues")
