@@ -67,7 +67,8 @@ FAMILIES: dict[str, set[str]] = {
     "tow.platform": {"locks"},
     "tow.trackers.presets": set(),
 }
-SCHEDULE_MAY_IMPORT = {"tow.config", "tow.topic_timers"}
+# The job table is data the schedule reads; it imports nothing from TOW itself.
+SCHEDULE_MAY_IMPORT = {"tow.config", "tow.supervisor.jobs", "tow.topic_timers"}
 
 
 def _within(module: str, *names: str) -> bool:
@@ -116,6 +117,10 @@ def _schedule_pure(importer: str, imported: str) -> bool:
     return importer == "tow.supervisor.schedule" and imported not in SCHEDULE_MAY_IMPORT
 
 
+def _job_table_is_data(importer: str, imported: str) -> bool:
+    return importer == "tow.supervisor.jobs"
+
+
 def _check_through_package(importer: str, imported: str) -> bool:
     return imported.startswith("tow.check.") and not _within(importer, "tow.check")
 
@@ -127,7 +132,8 @@ RULES: dict[str, Callable[[str, str], bool]] = {
     "plugins do not import each other": _plugins_apart,
     "foundation imports only foundation and tow.i18n": _foundation_below,
     "storage imports only storage, foundation and tow.i18n": _storage_below,
-    "supervisor.schedule imports only config and topic_timers": _schedule_pure,
+    "supervisor.schedule imports only config, topic_timers and the job table": _schedule_pure,
+    "supervisor.jobs imports nothing from TOW": _job_table_is_data,
     "outside tow.check only the package tow.check is imported": _check_through_package,
 }
 
@@ -146,7 +152,8 @@ ALLOWED: dict[str, set[tuple[str, str]]] = {
         ("tow.store", "tow.topic_timers"),
         ("tow.store_transaction", "tow.config"),
     },
-    "supervisor.schedule imports only config and topic_timers": set(),
+    "supervisor.schedule imports only config, topic_timers and the job table": set(),
+    "supervisor.jobs imports nothing from TOW": set(),
     # The web's services expose the disk-space wait and the notices of a check.
     "outside tow.check only the package tow.check is imported": {
         ("tow.web.services", "tow.check.notices"),
@@ -307,5 +314,7 @@ def test_a_rule_catches_its_crossing():
     assert _storage_below("tow.journal", "tow.check")
     assert not _storage_below("tow.check_transaction", "tow.journal")
     assert _schedule_pure("tow.supervisor.schedule", "tow.clock")
+    assert not _schedule_pure("tow.supervisor.schedule", "tow.supervisor.jobs")
+    assert _job_table_is_data("tow.supervisor.jobs", "tow.config")
     assert _check_through_package("tow.cli", "tow.check.run")
     assert not _check_through_package("tow.check.run", "tow.check.topic")

@@ -14,6 +14,9 @@ in microseconds):
   at once, a failed copy is tried again six hours later (or at the next slot, if sooner);
 - ``watchdog`` every 10 minutes (lateness, night copies, change alerts, heartbeat, messages).
 
+The cadences and the order (the priority when several jobs are due) come from the job table,
+``tow.supervisor.jobs``; when a job is due beyond its cadence is the code here.
+
 Times are epoch seconds (no DST in them); only the daily slot is a local wall time, built
 for each calendar day in the owner's zone (PEP 495: a time skipped by the spring switch maps an
 hour later, a time the autumn switch repeats is its first occurrence), so a DST switch neither
@@ -30,16 +33,11 @@ from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import Any
 
 from tow.config import DEFAULT_BACKUP_TIME, parse_backup_time
+from tow.supervisor.jobs import BY_NAME, JOBS, JobSpec
 from tow.topic_timers import reserved_at
 
 __all__ = ["DEFAULT_BACKUP_TIME", "Schedule", "WakeDetector", "local_day", "local_slot", "parse_backup_time"]
 
-CHECK_FIRST_DELAY_SEC = 120
-PROGRESS_EVERY_SEC = 30 * 60
-PROGRESS_FIRST_DELAY_SEC = 5 * 60
-SPACE_EVERY_SEC = 5 * 60
-WATCHDOG_EVERY_SEC = 10 * 60
-WATCHDOG_FIRST_DELAY_SEC = 60
 # A failed night copy is tried again after this long (not at every start or tick).
 BACKUP_RETRY_SEC = 6 * 3600
 
@@ -93,7 +91,7 @@ class Schedule:
             self._clamp(self.last.get("check", 0.0), now, source="check:own"),
         )
         if not last:
-            return self._clamp(self.started_at, now, source="startup") + CHECK_FIRST_DELAY_SEC
+            return self._clamp(self.started_at, now, source="startup") + _first_delay(BY_NAME["check"])
         return last + self.interval_sec
 
     def timer_due(self, now: float) -> dict[str, float]:
@@ -110,9 +108,11 @@ class Schedule:
             result[tid] = anchor + item["minutes"] * 60
         return result
 
-    def _every_due_at(self, name: str, every: float, first_delay: float, now: float) -> float:
-        last = self._clamp(self.last.get(name, 0.0), now, source=f"{name}:own")
-        return last + every if last else self._clamp(self.started_at, now, source="startup") + first_delay
+    def _every_due_at(self, job: JobSpec, now: float) -> float:
+        last = self._clamp(self.last.get(job.name, 0.0), now, source=f"{job.name}:own")
+        if last:
+            return last + _every(job)
+        return self._clamp(self.started_at, now, source="startup") + _first_delay(job)
 
     def _slot(self, day: date) -> float:
         return local_slot(day, self.backup_at, self.zone)
@@ -145,33 +145,50 @@ class Schedule:
         # next slot when that comes first. status.json shows this very time.
         return min(tried + BACKUP_RETRY_SEC, self.next_slot(now))
 
+    def _due_at(
+        self, now: float, *, last_scheduled_check: float, last_backup_ok: float, last_backup_attempt: float
+    ) -> dict[str, float]:
+        """When each job is due, in the order of ``JOBS`` (the priority of ``due``, the key order
+        of ``next_due``). Every time is computed, in that order, even for a job that is then left
+        out (night copies turned off): a clock correction is pinned at its first observation."""
+        result: dict[str, float] = {}
+        for job in JOBS:
+            match job.name:
+                case "check":
+                    result["check"] = self.check_due_at(now, last_scheduled_check)
+                case "backup":
+                    at = self.backup_due_at(now, last_backup_ok, last_backup_attempt)
+                    if self.backup_enabled:
+                        result["backup"] = at
+                case "timer":
+                    timers = self.timer_due(now)
+                    if timers:
+                        result["timer"] = min(timers.values())
+                case "space":
+                    if self.space_waiting:
+                        result["space"] = self._every_due_at(job, now)
+                case _:
+                    result[job.name] = self._every_due_at(job, now)
+        return result
+
     def due(
         self, now: float, *, last_scheduled_check: float, last_backup_ok: float, last_backup_attempt: float
     ) -> list[tuple[str, float]]:
         """The due jobs, most important first, each with how late it is (seconds)."""
-        due_at = {
-            "check": self.check_due_at(now, last_scheduled_check),
-            "backup": self.backup_due_at(now, last_backup_ok, last_backup_attempt),
-            "progress": self._every_due_at("progress", PROGRESS_EVERY_SEC, PROGRESS_FIRST_DELAY_SEC, now),
-            "watchdog": self._every_due_at("watchdog", WATCHDOG_EVERY_SEC, WATCHDOG_FIRST_DELAY_SEC, now),
-        }
-        if not self.backup_enabled:
-            due_at.pop("backup")
-        timers = self.timer_due(now)
-        if timers:
-            due_at["timer"] = min(timers.values())
-        if self.space_waiting:
-            due_at["space"] = self._every_due_at("space", SPACE_EVERY_SEC, SPACE_EVERY_SEC, now)
+        due_at = self._due_at(
+            now,
+            last_scheduled_check=last_scheduled_check,
+            last_backup_ok=last_backup_ok,
+            last_backup_attempt=last_backup_attempt,
+        )
         return [(name, now - at) for name, at in due_at.items() if at <= now]
 
     def _period(self, name: str) -> float:
         """How often a job of fixed cadence is due (0: a daily slot or a timer, no cadence)."""
-        return {
-            "check": float(self.interval_sec),
-            "progress": PROGRESS_EVERY_SEC,
-            "space": SPACE_EVERY_SEC,
-            "watchdog": WATCHDOG_EVERY_SEC,
-        }.get(name, 0.0)
+        if name == "check":
+            return float(self.interval_sec)
+        job = BY_NAME.get(name)
+        return float(job.every_sec or 0) if job is not None else 0.0
 
     def started(self, name: str, now: float, late: float = 0.0) -> None:
         """The job started at ``now``, ``late`` seconds after it was due. A job of fixed cadence
@@ -188,20 +205,24 @@ class Schedule:
 
     def next_due(self, now: float, **facts: float) -> dict[str, float]:
         """When each job is due next (for status.json and Settings)."""
-        result = {
-            "check": self.check_due_at(now, facts.get("last_scheduled_check", 0.0)),
-            "backup": self.backup_due_at(now, facts.get("last_backup_ok", 0.0), facts.get("last_backup_attempt", 0.0)),
-            "progress": self._every_due_at("progress", PROGRESS_EVERY_SEC, PROGRESS_FIRST_DELAY_SEC, now),
-            "watchdog": self._every_due_at("watchdog", WATCHDOG_EVERY_SEC, WATCHDOG_FIRST_DELAY_SEC, now),
-        }
-        if not self.backup_enabled:
-            result.pop("backup")
-        timers = self.timer_due(now)
-        if timers:
-            result["timer"] = min(timers.values())
-        if self.space_waiting:
-            result["space"] = self._every_due_at("space", SPACE_EVERY_SEC, SPACE_EVERY_SEC, now)
-        return result
+        return self._due_at(
+            now,
+            last_scheduled_check=facts.get("last_scheduled_check", 0.0),
+            last_backup_ok=facts.get("last_backup_ok", 0.0),
+            last_backup_attempt=facts.get("last_backup_attempt", 0.0),
+        )
+
+
+def _every(job: JobSpec) -> int:
+    if job.every_sec is None:
+        raise ValueError(f"{job.name} has no fixed cadence")
+    return job.every_sec
+
+
+def _first_delay(job: JobSpec) -> int:
+    if job.first_delay_sec is None:
+        raise ValueError(f"{job.name} has no first delay")
+    return job.first_delay_sec
 
 
 @dataclass
