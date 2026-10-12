@@ -27,14 +27,13 @@ from tow import i18n
 from tow.config import as_bool, interval_sec_of, load_config, port_of
 from tow.diagnostic_json import check_epochs, check_types, encode_object, epoch, read_object
 from tow.i18n import t
+from tow.issues.kinds.check_stale import late as checks_late
 from tow.log import log_event
 from tow.paths import data_dir
 from tow.pulse import Machine, Probes, clock, duration, last_crash_line, outage_cause
 from tow.store import atomic_write_text
 
 STATE_NAME = "watchdog.json"
-# Checks are late when the last scheduled one is older than two intervals plus this slack.
-STALE_SLACK_SEC = 10 * 60
 # The watchdog runs every 10 minutes; a longer silence means TOW (or the PC) was not running.
 OUTAGE_GAP_SEC = 40 * 60
 DEPLOY_GRACE_SEC = 30 * 60
@@ -297,7 +296,8 @@ def _checks(p: _Pass, interval: int, state: dict[str, Any], *, wake_ts: float | 
     since = max(last_check or watch_since, wake_ts or 0)
     if wake_ts is not None:
         report["wake_ts"] = int(wake_ts)
-    late = not since or p.now() - since > 2 * interval + STALE_SLACK_SEC
+    # Late by the rule Home's "Needs attention" uses too (tow.issues.kinds.check_stale).
+    late = not since or checks_late(since, p.now(), interval)
     failures = _scheduled_failures(state)
     if failures >= CHECK_FAILURES_ALERT:
         report["checks_failing"] = failures  # they start, but every one of them fails (M6)

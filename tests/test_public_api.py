@@ -27,6 +27,7 @@ SNAPSHOT = Path(__file__).resolve().parent / "golden" / "public_api.json"
 MODULES = (
     "tow.bundle",
     "tow.cli",
+    "tow.issues",
     "tow.clients.spec",
     "tow.notifiers",
     "tow.progress",

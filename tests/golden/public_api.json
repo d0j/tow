@@ -60,6 +60,20 @@
   "text": "def(value: 'str', lang: 'str | None' = None) -> 'str'",
   "ui_language": "def() -> 'str'"
  },
+ "tow.issues": {
+  "Fix": "class(action: 'str', subject: 'str' = '', label: 'str' = '') -> None",
+  "Issue": "class(kind: 'str', id: 'str', severity: 'str', message: 'Message', target: 'Target', fix: 'Fix | None' = None, count: 'int' = 1, subjects: 'tuple[str, ...]' = (), target_many: 'Target | None' = None) -> None",
+  "Kind": "class(name: 'str', order: 'int', collect: 'Callable[[Snapshot], list[Issue]]') -> None",
+  "Message": "class(key: 'str', params: 'Mapping[str, Any]' = <factory>) -> None",
+  "SEVERITIES": "value tuple",
+  "SKIPPED": "value list",
+  "Snapshot": "class(state: 'Mapping[str, Any]', config: 'Mapping[str, Any]', now: 'float', next_check_at: 'float | None' = None, data_lost: 'Mapping[str, Any] | None' = None) -> None",
+  "Target": "class(page: 'str', open: 'str' = '', filter: 'tuple[tuple[str, str], ...]' = (), anchor: 'str' = '') -> None",
+  "collect": "def(snapshot: 'Snapshot', *, only: 'tuple[Kind, ...] | None' = None) -> 'list[Issue]'",
+  "fingerprint": "def(issues: 'Iterable[Issue]') -> 'str'",
+  "known_kinds": "def() -> 'tuple[Kind, ...]'",
+  "worst": "def(issues: 'Iterable[Issue]') -> 'str'"
+ },
  "tow.notifiers": {
   "DeliveryError": "class(reason: 'str | Msg', *, transient: 'bool', drop: 'bool' = False) -> 'None'",
   "Field": "class(name: 'str', label: 'str', kind: 'str' = 'text', placeholder: 'str' = '', pattern: 'str' = '', error: 'str' = '', required: 'bool' = True, default: 'str' = '') -> None",
