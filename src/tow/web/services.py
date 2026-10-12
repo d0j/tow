@@ -331,9 +331,9 @@ def client_answers(client_id: str | None, timeout: float = 3.0) -> bool:
     import socket
     from urllib.parse import urlparse
 
+    from tow.clients.address import base_url
     from tow.clients.factory import client_configuration, client_secret_block
     from tow.clients.spec import get as client_spec
-    from tow.clients.transmission import base_url
 
     cfg = load_config()
     block = client_secret_block(cfg, load_secrets(), client_id)

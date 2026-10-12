@@ -146,8 +146,7 @@ ALLOWED: dict[str, set[tuple[str, str]]] = {
     "nothing outside tow.web imports tow.web": set(),
     "only tow.__main__ imports tow.cli": set(),
     "clients and messengers never import what drives them": set(),
-    # Deluge's Web UI address is built as Transmission's.
-    "plugins do not import each other": {("tow.clients.deluge", "tow.clients.transmission")},
+    "plugins do not import each other": set(),
     # The POSIX backend asks the autostart which service manager this system has.
     "foundation imports only foundation and tow.i18n": {("tow.platform.posix", "tow.autostart")},
     # The store validates a topic's selection and timer; the store transaction writes config.yaml.
