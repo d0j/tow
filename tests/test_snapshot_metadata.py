@@ -15,6 +15,7 @@ from tow import snapshots
 from tow.config import load_config, save_config
 from tow.i18n import t
 from tow.paths import config_path, data_dir
+from tow.snapshots import manifest as night_manifest
 from tow.web.text import format_bytes
 
 
@@ -118,7 +119,7 @@ def test_malformed_or_deep_descriptions_are_snapshot_errors_and_skip_inventory(n
 
 def test_manifest_read_is_bounded_before_parsing_or_signature_check(night, monkeypatch):
     folder = _plant(night, "{}")
-    monkeypatch.setattr(snapshots, "MAX_MANIFEST_BYTES", 32)
+    monkeypatch.setattr(night_manifest, "MAX_MANIFEST_BYTES", 32)
     reads = []
     real_open = Path.open
 
@@ -134,7 +135,7 @@ def test_manifest_read_is_bounded_before_parsing_or_signature_check(night, monke
 
     monkeypatch.setattr(Path, "open", opened)
     monkeypatch.setattr(
-        snapshots, "_signature_matches", lambda *_a: pytest.fail("oversized manifest reached signature check")
+        snapshots, "signature_matches", lambda *_a: pytest.fail("oversized manifest reached signature check")
     )
     with pytest.raises(snapshots.SnapshotError, match=re.escape(t("backup.snapshot.manifest_too_large"))):
         snapshots.verify_snapshot(folder)
@@ -147,11 +148,11 @@ def test_manifest_read_accepts_the_exact_byte_limit(night, monkeypatch):
     manifest = _manifest(0)
     content = json.dumps(manifest).encode("utf-8")
     folder = _plant(night, content.decode("utf-8"))
-    monkeypatch.setattr(snapshots, "MAX_MANIFEST_BYTES", len(content))
-    assert snapshots._read_manifest(folder) == manifest
-    monkeypatch.setattr(snapshots, "MAX_MANIFEST_BYTES", len(content) - 1)
+    monkeypatch.setattr(night_manifest, "MAX_MANIFEST_BYTES", len(content))
+    assert night_manifest.read_manifest(folder) == manifest
+    monkeypatch.setattr(night_manifest, "MAX_MANIFEST_BYTES", len(content) - 1)
     with pytest.raises(snapshots.SnapshotError, match=re.escape(t("backup.snapshot.manifest_too_large"))):
-        snapshots._read_manifest(folder)
+        night_manifest.read_manifest(folder)
 
 
 def test_extreme_declared_member_size_is_refused_before_reading(night, monkeypatch):
@@ -194,17 +195,17 @@ def test_manifest_output_matches_the_existing_json_format_and_exact_byte_boundar
     manifest = _manifest(size)
     manifest["version"] = "проба"
     expected = json.dumps(manifest, indent=2).encode("utf-8")
-    monkeypatch.setattr(snapshots, "MAX_MANIFEST_BYTES", len(expected))
-    assert snapshots._manifest_bytes(manifest) == expected
-    monkeypatch.setattr(snapshots, "MAX_MANIFEST_BYTES", len(expected) - 1)
+    monkeypatch.setattr(night_manifest, "MAX_MANIFEST_BYTES", len(expected))
+    assert night_manifest.manifest_bytes(manifest) == expected
+    monkeypatch.setattr(night_manifest, "MAX_MANIFEST_BYTES", len(expected) - 1)
     with pytest.raises(snapshots.SnapshotError, match=re.escape(t("backup.snapshot.manifest_too_large"))):
-        snapshots._manifest_bytes(manifest)
+        night_manifest.manifest_bytes(manifest)
 
 
 def test_oversized_new_description_is_never_published_or_used_to_prune_older_copies(night, monkeypatch):
     old = Path(snapshots.create_snapshot()["snapshot"])
     prior = {p.relative_to(old): p.read_bytes() for p in old.rglob("*") if p.is_file()}
-    monkeypatch.setattr(snapshots, "MAX_MANIFEST_BYTES", 8)
+    monkeypatch.setattr(night_manifest, "MAX_MANIFEST_BYTES", 8)
     with pytest.raises(snapshots.SnapshotError, match=re.escape(t("backup.snapshot.manifest_too_large"))):
         snapshots.create_snapshot()
     assert list(night.iterdir()) == [old]

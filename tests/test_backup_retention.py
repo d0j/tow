@@ -16,6 +16,7 @@ from tow import snapshots
 from tow.backup_retention import MIB, MIN_OLDER_COPIES, retained_copies, retention_settings
 from tow.config import ConfigError, load_config, save_config
 from tow.paths import config_path
+from tow.snapshots import manifest as night_manifest
 from tow.store import save_state
 from tow.supervisor.schedule import Schedule
 from tow.watchdog import run_watchdog
@@ -169,7 +170,7 @@ def test_real_age_cleanup_removes_only_owned_expired_copy_after_verified_replace
     proof = old / "MANIFEST.json"
     manifest = json.loads(proof.read_bytes())
     manifest["created_at"] = "2020-01-01T00:00:00+00:00"
-    manifest["signature"] = snapshots._signature(manifest, snapshots._signing_key())
+    manifest["signature"] = night_manifest.signature_of(manifest, night_manifest.signing_key())
     proof.write_text(json.dumps(manifest), encoding="utf-8")
     assert snapshots.verify_snapshot(old)["signed"] is True
     for _ in range(MIN_OLDER_COPIES):  # newer earlier copies, so the expired one is not among the kept ones

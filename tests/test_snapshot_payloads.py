@@ -14,6 +14,7 @@ from tow import snapshots, store
 from tow.config import load_config, save_config
 from tow.i18n import t
 from tow.paths import config_path, data_dir, download_history_path, state_path
+from tow.snapshots import manifest as night_manifest
 
 
 @pytest.fixture
@@ -35,7 +36,7 @@ def _replace(point, name, content, *, signed=True):
     manifest = json.loads(path.read_bytes())
     manifest["files"][name] = {"size": len(content), "sha256": hashlib.sha256(content).hexdigest()}
     if signed:
-        manifest["signature"] = snapshots._signature(manifest, snapshots._signing_key())
+        manifest["signature"] = night_manifest.signature_of(manifest, night_manifest.signing_key())
     else:
         manifest["format"] = snapshots.UNSIGNED_FORMAT
         manifest.pop("signature", None)
