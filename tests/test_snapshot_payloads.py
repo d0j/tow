@@ -489,7 +489,7 @@ def _count_store_checks(monkeypatch):
         ("validate_state_bytes", "state.json"),
         ("validate_download_history_bytes", "download_history.json"),
         ("decrypt_secrets_bytes", "secrets.enc"),
-        ("_snapshot_config", "config.yaml"),
+        ("parse_copy_config", "config.yaml"),
     ):
         monkeypatch.setattr(snapshots, attribute, watching(name, getattr(snapshots, attribute)))
     return calls
