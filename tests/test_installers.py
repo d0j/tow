@@ -421,7 +421,13 @@ def test_installers_run_the_release_smokes_before_a_tag():
     for path in ("scripts/**", "install/**", "src/tow/update*", "src/tow/web_update.py"):
         assert path in paths
     # What the updater relies on in the code it installs (before: a change there ran no update test).
-    for path in ("src/tow/store.py", "src/tow/supervisor/layout.py", "src/tow/cli/**", "src/tow/locales/**"):
+    for path in (
+        "src/tow/store.py",
+        "src/tow/storage/**",
+        "src/tow/supervisor/layout.py",
+        "src/tow/cli/**",
+        "src/tow/locales/**",
+    ):
         assert path in paths
     assert triggers["schedule"]
     assert "workflow_dispatch" in triggers
