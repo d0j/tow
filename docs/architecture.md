@@ -117,10 +117,20 @@ flowchart TD
 | `tow.bundle` | The `.towx` file: export, import, the import checkpoint and its rollback. Inside: `errors` (`ExportImportError`), `io` (the format name, the size limit, JSON bytes, checksums, bounded reads, atomic writes), `secret_scan` (no credential-named field outside the encrypted secrets), `schema` (what each member may contain: the bundle's own checks, kept apart from the store's), `crypto` (the passphrase key and the Fernet envelope), `archive` (the zip, its manifest, reading a bundle back), `path_maps` (`--path-map OLD=NEW` for the imported folders), `checkpoint` (the import checkpoint: its transaction marker, the recovery of an interrupted import, rollback, pruning), `export` and `importer` (the two operations). The package itself only re-exports the public names (`__all__`); a test replaces a name in the module that reads it. |
 | `tow.releases`, `tow.web_update`, `tow.update_worker` | Cached read-only release discovery; serialized web launch with a verified archive; an isolated standard-library worker outside `app/`, an exiting-parent handoff (local Windows broker for inherited outer jobs), independence checks before stopping TOW, durable progress and the existing updater's rollback. |
 | `tow.watchdog`, `tow.pulse` | Is TOW up and on schedule; why it was silent (from facts the OS keeps). |
+| `tow.issues` | What needs the owner now, from saved state: one module per kind in `issues.kinds` (found by `tow.plugins.scan`), each with `KIND`, `ORDER` and `collect(snapshot)`; `collect` orders the issues worst first and merges one problem seen twice (a site's sign-ins, with their count). An `Issue` has a severity (a `tow.status` tone), a catalog message, a `Target` (the page and the element that show it) and a `Fix` (the control that resolves it). Pure: the caller passes the `Snapshot` (state, config, the next scheduled check, the lost-data note); it imports neither the web nor the CLI (`tests/test_layers.py`). Home's "Needs attention" (`tow.web.views.attention_view` turns targets into links) and `tow status` show the same list. |
 | `tow.autostart` | Task Scheduler, systemd user unit, LaunchAgent — each change read back. |
 | `tow.platform` | Every OS difference (boot time, sleep, processes, browsers, protected folders). |
 | `tow.paths` | Every location, derived from one install root. |
 | `tow.i18n`, `tow.errors` | Language catalogs; typed errors (`TowError(key, **params)`) rendered in the reader's language. |
+
+Three places speak about problems, each for its own moment:
+
+- `tow.doctor` probes on request (the Diagnostics page, `tow doctor`): it asks the client and the sites now.
+- `tow.watchdog` runs in `tow run` every 10 minutes and alerts the messengers when something changes (TOW down,
+  checks late, a failed night copy, a lost data folder).
+- `tow.issues` says what needs the owner now, from saved state only, asking nothing and sending nothing: Home's
+  "Needs attention" and `tow status`. Where a rule is shared, it lives once: the lateness of scheduled checks is
+  `tow.issues.kinds.check_stale.late`, which the watchdog uses too.
 
 Torrent metadata rejects real file/directory conflicts after portable path normalization,
 as well as duplicate file paths. Padding entries remain virtual. Sorting normalized
