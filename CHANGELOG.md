@@ -17,6 +17,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Settings: when the saved passwords and tokens cannot be opened, the command that says why can be copied with a
   button.
 - History has the "Check all topics now" button, as Home does.
+- `tow status` adds a line "Needs attention: N" when something does, by the same rules as Home (`attention` in
+  `--json`).
 
 ### Changed
 

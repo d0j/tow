@@ -488,6 +488,7 @@
       "failed": "(failed)",
       "next": "next: {at}",
       "autostart": "autostart: {value}",
+      "attention": "Needs attention: {count}",
       "yes": "on",
       "no": "off"
     },

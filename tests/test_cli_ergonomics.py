@@ -247,3 +247,33 @@ def test_the_update_help_gives_an_example_every_install_accepts(language):
     assert found
     assert tuple(int(part) for part in found.groups()) >= (1, 22, 0)
     assert "latest" in t("cli.help.update_ref", language)
+
+
+@pytest.mark.parametrize("language", ["en", "ru"])
+def test_status_counts_what_needs_attention_on_a_line_of_its_own(monkeypatch, capsys, language):
+    """tow status says what Home's "Needs attention" says, by the same rules (tow.issues), only
+    when there is something: the torrent client down and a site asking for a sign-in are two."""
+    from tow import i18n
+    from tow.config import load_config, save_config
+    from tow.store import save_state
+
+    cfg = load_config()
+    cfg["language"] = language
+    save_config(cfg)
+    monkeypatch.setattr("tow.autostart.backend", lambda: type("B", (), {"status": lambda self: {"on": True}})())
+    topic = {"id": "t1", "title": "Show", "url": "https://nnmclub.to/forum/viewtopic.php?t=1"}
+    save_state({"topics": [topic], "health": {"qbit_ok": True}})
+    assert cli.main(["status"]) == 0
+    assert capsys.readouterr().out.strip().count("\n") == 0  # nothing needs attention: one line
+    assert cli.main(["status", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["attention"] == 0
+
+    save_state(
+        {"topics": [{**topic, "last_error_class": "tracker_auth", "last_error": "x"}], "health": {"qbit_ok": False}}
+    )
+    assert cli.main(["status"]) == 0
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert lines[1] == i18n.translate("cli.status.attention", language, count=2)
+    assert lines[1] == {"en": "Needs attention: 2", "ru": "Требует внимания: 2"}[language]
+    assert cli.main(["status", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["attention"] == 2
