@@ -14,6 +14,7 @@ from tow import snapshots, store
 from tow.config import load_config, save_config
 from tow.i18n import t
 from tow.paths import config_path, data_dir, download_history_path, state_path
+from tow.snapshots import create as night_create
 from tow.snapshots import manifest as night_manifest
 from tow.snapshots import verify as night_verify
 
@@ -513,9 +514,9 @@ def test_a_night_copy_parses_no_store_while_it_holds_the_data_lock(point, monkey
 
 
 def test_a_store_changed_after_its_check_is_checked_again_from_the_copy(point, monkeypatch):
-    proven = snapshots._proven_sources
+    proven = night_create._proven_sources
     monkeypatch.setattr(
-        snapshots,
+        night_create,
         "_proven_sources",
         lambda: proven() | {"state.json": "0" * 64},  # as if the state was saved in between
     )

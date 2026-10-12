@@ -15,6 +15,7 @@ import pytest
 from tow import snapshots, store
 from tow.config import load_config, save_config
 from tow.paths import data_dir, state_path
+from tow.snapshots import create as night_create
 from tow.snapshots import verify as night_verify
 
 
@@ -82,7 +83,7 @@ def test_copy_hashes_exact_written_blocks_with_bounded_reads(tmp_path, monkeypat
         return Reader(handle) if path == source and args == ("rb",) else handle
 
     monkeypatch.setattr(Path, "open", opened)
-    assert snapshots._copy_snapshot_member(source, destination, "tow.jsonl") == {
+    assert night_create._copy_snapshot_member(source, destination, "tow.jsonl") == {
         "size": size,
         "sha256": hashlib.sha256(content).hexdigest(),
     }
@@ -92,7 +93,7 @@ def test_copy_hashes_exact_written_blocks_with_bounded_reads(tmp_path, monkeypat
 
 def test_absent_source_creates_no_destination(tmp_path):
     destination = tmp_path / "not-created" / "copy"
-    assert snapshots._copy_snapshot_member(tmp_path / "absent", destination, "tow.jsonl") is None
+    assert night_create._copy_snapshot_member(tmp_path / "absent", destination, "tow.jsonl") is None
     assert not destination.parent.exists()
 
 
@@ -101,7 +102,7 @@ def test_exclusive_destination_never_overwrites_an_existing_file(tmp_path):
     source.write_bytes(b"synthetic source")
     destination.write_bytes(b"keep existing")
     with pytest.raises(FileExistsError):
-        snapshots._copy_snapshot_member(source, destination, "tow.jsonl")
+        night_create._copy_snapshot_member(source, destination, "tow.jsonl")
     assert destination.read_bytes() == b"keep existing"
 
 
@@ -124,7 +125,7 @@ def test_special_or_linked_source_is_rejected_before_open(tmp_path, monkeypatch,
 
     monkeypatch.setattr(Path, "open", no_source_open)
     with pytest.raises(snapshots.SnapshotError):
-        snapshots._copy_snapshot_member(source, destination, "tow.jsonl")
+        night_create._copy_snapshot_member(source, destination, "tow.jsonl")
     assert not destination.exists()
 
 
@@ -135,9 +136,9 @@ def test_special_or_linked_source_is_rejected_before_open(tmp_path, monkeypatch,
 def test_opened_descriptor_is_checked_before_read_or_destination(tmp_path, monkeypatch, mode, size):
     source, destination = tmp_path / "source", tmp_path / "prepared" / "copy"
     source.write_bytes(b"synthetic")
-    monkeypatch.setattr(snapshots.os, "fstat", lambda fd: SimpleNamespace(st_mode=mode, st_size=size))
+    monkeypatch.setattr(night_create.os, "fstat", lambda fd: SimpleNamespace(st_mode=mode, st_size=size))
     with pytest.raises(snapshots.SnapshotError):
-        snapshots._copy_snapshot_member(source, destination, "tow.jsonl")
+        night_create._copy_snapshot_member(source, destination, "tow.jsonl")
     assert not destination.parent.exists()
 
 
@@ -173,7 +174,7 @@ def test_changed_or_failed_source_preserves_the_older_copy(night, monkeypatch, c
                 raise OSError(5, "synthetic read error")
             if case == "mtime":
                 info = source.stat()
-                snapshots.os.utime(source, ns=(info.st_atime_ns, info.st_mtime_ns + 2_000_000))
+                night_create.os.utime(source, ns=(info.st_atime_ns, info.st_mtime_ns + 2_000_000))
             return self.data.read(length)
 
     def opened(path, *args, **kwargs):
@@ -196,7 +197,7 @@ def test_changed_or_failed_source_preserves_the_older_copy(night, monkeypatch, c
 )
 def test_destination_failure_never_publishes_or_prunes(night, monkeypatch, name, case):
     root, _old = night
-    real_open, real_sync = Path.open, snapshots.os.fsync
+    real_open, real_sync = Path.open, night_create.os.fsync
     active = set()
 
     class Writer:
@@ -244,14 +245,14 @@ def test_destination_failure_never_publishes_or_prunes(night, monkeypatch, name,
         real_sync(fd)
 
     monkeypatch.setattr(Path, "open", opened)
-    monkeypatch.setattr(snapshots.os, "fsync", sync)
+    monkeypatch.setattr(night_create.os, "fsync", sync)
     with pytest.raises(snapshots.SnapshotError):
         snapshots.create_snapshot()
     _old_kept(night)
 
 
 def test_copy_and_manifest_are_synced_before_publication(night, monkeypatch):
-    real_open, real_sync, real_rename = Path.open, snapshots.os.fsync, snapshots._rename_with_retry
+    real_open, real_sync, real_rename = Path.open, night_create.os.fsync, night_create._rename_with_retry
     paths, synced = {}, set()
 
     def opened(path, *args, **kwargs):
@@ -272,8 +273,8 @@ def test_copy_and_manifest_are_synced_before_publication(night, monkeypatch):
         return real_rename(source, target)
 
     monkeypatch.setattr(Path, "open", opened)
-    monkeypatch.setattr(snapshots.os, "fsync", sync)
-    monkeypatch.setattr(snapshots, "_rename_with_retry", publish)
+    monkeypatch.setattr(night_create.os, "fsync", sync)
+    monkeypatch.setattr(night_create, "_rename_with_retry", publish)
     assert snapshots.create_snapshot()["ok"]
 
 
@@ -285,7 +286,7 @@ def test_log_append_and_rotation_wait_until_snapshot_read_finishes(night, monkey
     if rotate:
         monkeypatch.setattr(tow.log, "MAX_BYTES", 1)
     entered, attempted, finished = threading.Event(), threading.Event(), threading.Event()
-    real_copy = snapshots._copy_snapshot_member
+    real_copy = night_create._copy_snapshot_member
     failures = []
 
     def append():
@@ -305,7 +306,7 @@ def test_log_append_and_rotation_wait_until_snapshot_read_finishes(night, monkey
             assert not finished.wait(0.05)
         return real_copy(source, destination, name)
 
-    monkeypatch.setattr(snapshots, "_copy_snapshot_member", copied)
+    monkeypatch.setattr(night_create, "_copy_snapshot_member", copied)
     worker = threading.Thread(target=append)
     worker.start()
     try:
@@ -327,10 +328,10 @@ def test_large_opaque_copy_has_no_whole_file_python_allocation(tmp_path):
     with source.open("wb") as handle:
         for _ in range(16):
             handle.write(block)
-    snapshots.owner_language()  # language/config initialization is not this copy's file buffer
+    night_create.owner_language()  # language/config initialization is not this copy's file buffer
     tracemalloc.start()
     try:
-        result = snapshots._copy_snapshot_member(source, destination, "tow.jsonl")
+        result = night_create._copy_snapshot_member(source, destination, "tow.jsonl")
         _current, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()
@@ -341,9 +342,9 @@ def test_large_opaque_copy_has_no_whole_file_python_allocation(tmp_path):
 def test_oversized_config_is_rejected_before_destination_creation(tmp_path, monkeypatch):
     source, destination = tmp_path / "source", tmp_path / "prepared" / "copy"
     source.write_bytes(b"synthetic oversized config")
-    monkeypatch.setattr(snapshots, "MAX_INPUT_BYTES", 8)
+    monkeypatch.setattr(night_create, "MAX_INPUT_BYTES", 8)
     with pytest.raises(snapshots.SnapshotError):
-        snapshots._copy_snapshot_member(source, destination, "config.yaml")
+        night_create._copy_snapshot_member(source, destination, "config.yaml")
     assert not destination.parent.exists()
 
 

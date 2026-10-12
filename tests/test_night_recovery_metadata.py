@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import re
 import stat
 from pathlib import Path
@@ -15,6 +16,7 @@ import pytest
 from tow import snapshots, store
 from tow.i18n import t
 from tow.paths import data_dir, state_path
+from tow.snapshots import create as night_create
 
 MARKER_LIMIT = 64 * 1024
 JOURNAL_LIMIT = 4 * snapshots.MAX_MANIFEST_BYTES
@@ -265,7 +267,7 @@ def test_valid_record_at_its_exact_limit_remains_readable(recovery, surface):
 @pytest.mark.parametrize("surface", ["cleanup", "marker", "journal"])
 def test_opened_nonregular_record_is_refused_before_reading(recovery, monkeypatch, surface):
     safety, _, _, before = recovery
-    monkeypatch.setattr(snapshots.os, "fstat", lambda _fd: SimpleNamespace(st_mode=stat.S_IFIFO, st_size=0))
+    monkeypatch.setattr(os, "fstat", lambda _fd: SimpleNamespace(st_mode=stat.S_IFIFO, st_size=0))
     if surface == "cleanup":
         assert _inspect(surface, safety) == ""
     else:
@@ -356,7 +358,7 @@ def test_cleanup_proof_read_is_bounded_before_deleting_any_member(tmp_path, mark
     proof.write_bytes(b"{}" + b" " * limit)
     member = folder / "state.json"
     member.write_bytes(b"synthetic keep")
-    assert snapshots._remove_copy(folder, tmp_path, marker_kind, {marker_kind, member.name}) is False
+    assert night_create.remove_copy(folder, tmp_path, marker_kind, {marker_kind, member.name}) is False
     assert member.read_bytes() == b"synthetic keep"
     assert proof.stat().st_size == limit + 2
 
