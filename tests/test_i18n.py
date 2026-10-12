@@ -273,6 +273,37 @@ def test_lookup_falls_back_to_english_then_to_the_key(monkeypatch, tmp_path):
         i18n.reload()
 
 
+def test_a_plugin_text_is_a_key_or_a_plain_text(monkeypatch, tmp_path):
+    from tow.clients import spec
+    from tow.notifiers import base
+
+    (tmp_path / "en.json").write_text(
+        json.dumps({"_meta": {"name": "English"}, "p": {"label": "Address", "hello": "Hello {name}"}}),
+        encoding="utf-8",
+    )
+    (tmp_path / "ru.json").write_text(
+        json.dumps({"_meta": {"name": "Russian", "plural": "east_slavic"}, "p": {"label": "Адрес"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(i18n, "LOCALES_DIR", tmp_path)
+    i18n.reload()
+    token = i18n._CURRENT.set("ru")  # as a request in Russian
+    try:
+        assert i18n.text_or_key("p.label") == "Адрес"  # the current language by default
+        assert i18n.text_or_key("p.label", "en") == "Address"
+        assert i18n.text_or_key("p.hello", "ru", name="TOW") == "Hello TOW"  # English fills the gap
+        assert i18n.text_or_key("Plain words") == "Plain words"  # not a key: as it is
+        assert i18n.text_or_key("no.such.key", "ru") == "no.such.key"
+        assert i18n.text_or_key("") == ""
+        # The clients and the messengers say it the same way.
+        assert spec.text("p.label") == base.text("p.label") == "Адрес"
+        assert spec.ui_language() == base.ui_language() == "ru"
+    finally:
+        i18n._CURRENT.reset(token)
+        monkeypatch.undo()
+        i18n.reload()
+
+
 def test_a_new_language_is_one_file(monkeypatch, tmp_path):
     for path in (SRC / "locales").glob("*.json"):
         (tmp_path / path.name).write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
