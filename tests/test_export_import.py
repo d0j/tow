@@ -370,6 +370,43 @@ def test_import_preview_is_no_write_and_apply_reencrypts_for_destination(tmp_pat
     assert (dest / "data" / "secrets.enc").read_bytes() != (source / "data" / "secrets.enc").read_bytes()
 
 
+def test_an_export_imported_into_an_empty_install_gives_back_every_store(tmp_path, monkeypatch):
+    # The whole way through the package by its public names: export (sealed and read back), verify,
+    # preview, apply and read back. The empty destination ends with the source's data, unchanged.
+    from tow.bundle import recover_import_transactions, verify_bundle
+    from tow.store import load_download_history
+
+    source_config, _, source_history, source_secrets = _seed_source(monkeypatch, tmp_path / "source")
+    source_state = load_state()
+    archive = tmp_path / "round-trip.towx"
+    exported = export_bundle(archive, "bundle-passphrase", include_log=True)
+    verify_bundle(archive, "bundle-passphrase")
+
+    dest = tmp_path / "destination"
+    monkeypatch.setenv("TOW_HOME", str(dest / "data"))
+    monkeypatch.setenv("TOW_CONFIG", str(dest / "config.yaml"))
+    monkeypatch.setenv("TOW_MASTER_KEY", _key(b"destination-key-material-32bytes"))
+    preview = import_bundle(archive, "bundle-passphrase")
+    assert preview["members"] == exported["members"]
+    assert "events.json" in preview["members"]
+    assert not (dest / "config.yaml").exists()
+    assert not state_path().exists()
+
+    applied = import_bundle(archive, "bundle-passphrase", apply=True)
+
+    assert applied["committed"] is True
+    assert applied["read_back"] is True
+    assert applied["path_warnings"] == ["unmapped topic path: C:/old/media/Example"]  # kept as it was
+    assert yaml.safe_load((dest / "config.yaml").read_bytes()) == yaml.safe_load(source_config.read_bytes())
+    assert load_state() == source_state
+    assert load_download_history() == source_history
+    assert load_secrets() == source_secrets
+    assert load_secret_undo("settings-v1") == {"telegram": {"token": "undo-token"}}
+    transaction = json.loads((Path(applied["checkpoint"]) / "TRANSACTION.json").read_text(encoding="utf-8"))
+    assert transaction["status"] == "committed"
+    assert recover_import_transactions() == []  # nothing left to roll back
+
+
 def test_wrong_passphrase_and_tampered_bundle_do_not_write_destination(tmp_path, monkeypatch):
     _seed_source(monkeypatch, tmp_path / "source")
     bundle = tmp_path / "tow.towx"
