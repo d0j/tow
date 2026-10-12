@@ -186,9 +186,11 @@ the global check (`--global-only`), the personal timers (`--timer-only`), the pr
 watchdog is a pass every 10 minutes inside the process. New background work goes there too, never into a task of
 the OS:
 
-- a new periodic job is an entry in `JOB_ARGS` (`tow/supervisor/core.py`) and its timing in
-  `tow/supervisor/schedule.py`, tested with a fake clock in `tests/test_supervisor.py`; a short pass can run in a
-  thread like the watchdog's. Its "last run" is kept by the supervisor (`data/run/schedule.json`), never derived
+- a new periodic job is a row in `JOBS` (`tow/supervisor/jobs.py`: its child's arguments, its time limit, the
+  key of `data/run/schedule.json` that keeps its last start; `JOB_ARGS` and `JOB_TIMEOUT_SEC` in
+  `tow/supervisor/core.py` are derived from it) and its timing in `tow/supervisor/schedule.py`, tested with a fake
+  clock in `tests/test_supervisor.py`; a short pass can run in a thread like the watchdog's (a row without
+  arguments). Its "last run" is kept by the supervisor (`data/run/schedule.json`), never derived
   from a timestamp other code also moves (`health.at_ts` moves with every manual check);
 - a daily slot is a local wall time built per calendar day with PEP 495 rules, and is due when the newest good
   result is older than the latest slot — not "every 24 hours", which repeats a night on the 25-hour DST day;

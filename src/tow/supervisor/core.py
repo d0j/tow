@@ -33,6 +33,7 @@ from typing import Any, Protocol
 from tow import __version__
 from tow.config import as_bool, interval_sec_of, port_of
 from tow.supervisor import layout
+from tow.supervisor.jobs import BY_NAME, JOBS
 from tow.supervisor.schedule import Schedule, WakeDetector, parse_backup_time
 
 LOG = logging.getLogger("tow.supervisor")
@@ -56,14 +57,10 @@ STOP_JOB_WAIT_SEC = 10 * 60
 STOP_RETRY_SEC = 10.0
 FACTS_EVERY_SEC = 60.0
 
-JOB_TIMEOUT_SEC = {"check": 3600.0, "timer": 3600.0, "progress": 600.0, "space": 600.0, "backup": 1800.0}
-JOB_ARGS = {
-    "check": ["check", "--apply", "--notify", "--global-only", "--json"],
-    "timer": ["check", "--apply", "--notify", "--timer-only", "--json"],
-    "progress": ["check", "--apply", "--notify", "--progress-only", "--json"],
-    "space": ["check", "--apply", "--notify", "--space-only", "--json"],
-    "backup": ["backup", "--json"],
-}
+# The child jobs of the table (tow.supervisor.jobs), the in-process watchdog left out. Plain
+# dicts on purpose: tests change one entry for a run (monkeypatch.setitem).
+JOB_TIMEOUT_SEC = {job.name: job.timeout_sec for job in JOBS if job.argv is not None and job.timeout_sec is not None}
+JOB_ARGS = {job.name: list(job.argv) for job in JOBS if job.argv is not None}
 
 
 class Child(Protocol):
@@ -474,10 +471,12 @@ class Supervisor:
 
     # --- scheduled jobs ----------------------------------------------------------------------
 
-    def _persisted_ts(self, key: str) -> float:
+    def _persisted_ts(self, name: str) -> float:
+        """The job's last scheduled start kept in schedule.json (0.0: none, or a job without one)."""
         from tow.diagnostic_json import epoch
 
-        return epoch(self._persisted.get(key)) or 0.0
+        key = BY_NAME[name].persisted_key
+        return (epoch(self._persisted.get(key)) or 0.0) if key else 0.0
 
     def _facts_now(self) -> dict[str, float]:
         from tow.diagnostic_json import epoch
@@ -486,11 +485,11 @@ class Supervisor:
         # state's auto_at_ts only stands in when there is none yet (an install updated from
         # 1.20 or earlier). Never at_ts: manual checks and progress passes move it every half
         # hour, and the scheduled checks stopped for good behind it.
-        check = self._persisted_ts("check_started_at") or (epoch(self._facts.get("last_scheduled_check")) or 0.0)
+        check = self._persisted_ts("check") or (epoch(self._facts.get("last_scheduled_check")) or 0.0)
         return {
             "last_scheduled_check": check,
             "last_backup_ok": epoch(self._facts.get("last_backup_ok")) or 0.0,
-            "last_backup_attempt": self._persisted_ts("backup_attempt_at"),
+            "last_backup_attempt": self._persisted_ts("backup"),
         }
 
     def _jobs_tick(self, wall: float, mono: float) -> None:
@@ -518,9 +517,9 @@ class Supervisor:
             if not self.schedule.backup_enabled:
                 return
         self.schedule.started(name, wall, late)
-        persisted_key = {"check": "check_started_at", "backup": "backup_attempt_at"}.get(name)
+        persisted_key = BY_NAME[name].persisted_key
         if persisted_key:
-            # The check's cadence survives a restart: when it was due, as the schedule counts it.
+            # Its cadence survives a restart: when it was due, as the schedule counts it.
             self._persisted[persisted_key] = self.schedule.last[name]
             with contextlib.suppress(OSError):
                 layout.write_json(self._schedule_file, self._persisted)
