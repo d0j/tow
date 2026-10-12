@@ -166,6 +166,7 @@
   "protect_install_folders": "def(*, quiet: 'bool' = False) -> 'list[Path]'",
   "remove_stale_temporaries": "def(*, now: 'float | None' = None) -> 'None'",
   "replace_with_retry": "def(source: 'Path', target: 'Path', *, attempts: 'int' = 10) -> 'None'",
+  "restrict_file": "def(path: 'Path') -> 'None'",
   "save_download_history": "def(data: 'Mapping[str, Any]') -> 'None'",
   "save_json": "def(path: 'Path', data: 'Any', *, compact: 'bool' = False) -> 'None'",
   "save_secret_undo": "def(data: 'dict[str, Any]') -> 'str'",

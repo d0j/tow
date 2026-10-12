@@ -592,12 +592,13 @@ def _json_bytes(data: Any) -> bytes:
 def _write_bytes_atomic(path: Path, content: bytes) -> None:
     try:
         atomic_write_bytes(path, content)
-        _restrict_file(path)
+        restrict_file(path)
     except OSError as exc:
         raise SecretStoreError(Msg("store.secrets_write_failed")) from exc
 
 
-def _restrict_file(path: Path) -> None:
+def restrict_file(path: Path) -> None:
+    """Owner read and write only (0600), where the OS supports it; a failure is ignored."""
     with suppress(OSError):
         path.chmod(0o600)
 
@@ -820,7 +821,7 @@ def _write_new_key_file(path: Path, key: bytes) -> None:
         with suppress(OSError):
             path.unlink()  # a half-written key must not look like a different one next time
         raise SecretStoreError(Msg("cli.keys.error.write_failed")) from exc
-    _restrict_file(path)
+    restrict_file(path)
 
 
 # Why a master key could not be created or adopted (catalog keys cli.keys.error.<kind>).
