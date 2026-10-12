@@ -38,6 +38,8 @@ from tow.bundle import (
 )
 from tow.bundle import checkpoint as bundle_checkpoint
 from tow.bundle import crypto as bundle_crypto
+from tow.bundle import export as bundle_export
+from tow.bundle import importer as bundle_importer
 from tow.bundle import io as bundle_io
 from tow.bundle import schema as bundle_schema
 from tow.paths import config_path, data_dir, download_history_path, state_path
@@ -369,7 +371,7 @@ def test_import_readback_failure_restores_original_bytes_after_normalization(tmp
         assert config_path().read_bytes() == b"bind: 127.0.0.1\nport: 8787\n"
         raise ExportImportError("synthetic read-back failure")
 
-    monkeypatch.setattr(tow_bundle, "_destination_readback", fail_readback)
+    monkeypatch.setattr(bundle_importer, "_destination_readback", fail_readback)
     with pytest.raises(ExportImportError, match="synthetic read-back failure"):
         import_bundle(archive, PASS, apply=True)
     assert _targets() == before
@@ -804,7 +806,7 @@ def test_export_read_back_failure_leaves_the_output_as_it_was(tmp_path, monkeypa
     output = tmp_path / "tow.towx"
     if previous is not None:
         output.write_bytes(previous)
-    monkeypatch.setattr(tow_bundle, "read_bundle", lambda _path, _passphrase: {"members": {}})
+    monkeypatch.setattr(bundle_export, "read_bundle", lambda _path, _passphrase: {"members": {}})
 
     with pytest.raises(ExportImportError, match="read-back member mismatch"):
         export_bundle(output, PASS, overwrite=True)
@@ -912,7 +914,7 @@ def test_export_wraps_unexpected_failures(tmp_path, monkeypatch):
     def broken_state():
         raise ValueError("unexpected")
 
-    monkeypatch.setattr(tow_bundle, "load_state", broken_state)
+    monkeypatch.setattr(bundle_export, "load_state", broken_state)
     with pytest.raises(ExportImportError, match="cannot create export bundle safely"):
         export_bundle(tmp_path / "tow.towx", PASS)
 
@@ -1098,7 +1100,7 @@ def test_destination_read_back_mismatch_restores_previous_bytes(tmp_path, monkey
         secrets_undo_json={"secrets": {"telegram": {"token": "bundle-undo"}}},
     )
     bundle = _bundle(tmp_path / "in" / "tow.towx", members)
-    monkeypatch.setattr(tow_bundle, name, replacement)
+    monkeypatch.setattr(bundle_importer, name, replacement)
 
     with pytest.raises(ExportImportError, match=match):
         import_bundle(bundle, PASS, apply=True)
@@ -1114,7 +1116,7 @@ def test_unreadable_destination_secrets_after_write_restore_previous_bytes(tmp_p
     def unreadable():
         raise SecretStoreError("fixture: cannot decrypt")
 
-    monkeypatch.setattr(tow_bundle, "load_secrets", unreadable)
+    monkeypatch.setattr(bundle_importer, "load_secrets", unreadable)
     with pytest.raises(ExportImportError, match="encrypted destination secret read-back failed"):
         import_bundle(_bundle(tmp_path / "in" / "tow.towx"), PASS, apply=True)
     assert _targets() == before
@@ -1138,7 +1140,7 @@ def test_failed_import_with_failed_rollback_stays_pending_and_is_recovered_later
         raise ExportImportError("fixture: checkpoint unavailable")
 
     with monkeypatch.context() as patch:
-        patch.setattr(tow_bundle, "save_secrets", fail_save)
+        patch.setattr(bundle_importer, "save_secrets", fail_save)
         patch.setattr(bundle_checkpoint, "_read_checkpoint", fail_checkpoint)
         with pytest.raises(ExportImportError, match="import failed and destination rollback also failed"):
             import_bundle(bundle, PASS, apply=True)
@@ -1155,14 +1157,14 @@ def test_failed_import_with_failed_rollback_stays_pending_and_is_recovered_later
 
 def test_unrecorded_transaction_log_does_not_undo_a_committed_import(tmp_path, monkeypatch):
     _seed_destination()
-    original = tow_bundle.write_import_transaction
+    original = bundle_importer.write_import_transaction
 
     def flaky_marker(checkpoint, *, status, **fields):
         if "log_recorded" in fields:
             raise ExportImportError("fixture: marker write failed")
         return original(checkpoint, status=status, **fields)
 
-    monkeypatch.setattr(tow_bundle, "write_import_transaction", flaky_marker)
+    monkeypatch.setattr(bundle_importer, "write_import_transaction", flaky_marker)
     result = import_bundle(_bundle(tmp_path / "in" / "tow.towx"), PASS, apply=True)
 
     assert result["committed"] is True
@@ -1175,7 +1177,7 @@ def test_import_wraps_unexpected_failures(tmp_path, monkeypatch):
     def broken(*_args):
         raise KeyError("unexpected")
 
-    monkeypatch.setattr(tow_bundle, "apply_path_maps", broken)
+    monkeypatch.setattr(bundle_importer, "apply_path_maps", broken)
     _rejects(tmp_path, _bundle(tmp_path / "in" / "tow.towx"), "cannot import TOW bundle safely")
 
 
@@ -1293,7 +1295,7 @@ def test_interrupted_import_recovers_after_the_install_moved(tmp_path, monkeypat
         raise KeyboardInterrupt  # stands in for a crash between the checkpoint and the commit
 
     with monkeypatch.context() as patch:
-        patch.setattr(tow_bundle, "save_secrets", power_loss)
+        patch.setattr(bundle_importer, "save_secrets", power_loss)
         with pytest.raises(KeyboardInterrupt):
             import_bundle(bundle, PASS, apply=True)
     checkpoint = next(_checkpoints_root().iterdir())
