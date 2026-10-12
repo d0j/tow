@@ -54,19 +54,28 @@ def _crossings(path: Path) -> list[tuple[str, str, int]]:
                     found.append((rel, full, node.lineno))
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.startswith("tow") and alias.asname:
-                    aliases[alias.asname] = alias.name
-    found.extend(
-        (rel, f"{aliases[node.value.id]}.{node.attr}", node.lineno)
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Attribute)
-        and isinstance(node.value, ast.Name)
-        and node.value.id in aliases
-        and _private(node.attr)
-        and aliases[node.value.id] != module
-        and not _is_module(f"{aliases[node.value.id]}.{node.attr}")
-    )
+                if alias.name.split(".")[0] == "tow":
+                    # `import tow.a.b` binds `tow`, and `tow.a.b` is then read through it.
+                    aliases[alias.asname or "tow"] = alias.name if alias.asname else "tow"
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Attribute) and _private(node.attr)):
+            continue
+        owner = _module_named(node.value, aliases)
+        if owner and owner != module and not _is_module(f"{owner}.{node.attr}"):
+            found.append((rel, f"{owner}.{node.attr}", node.lineno))
     return found
+
+
+def _module_named(expr: ast.expr, aliases: dict[str, str]) -> str | None:
+    """The TOW module ``expr`` stands for (``a``, ``tow.a.b``, ``alias.sub``), or None."""
+    parts: list[str] = []
+    while isinstance(expr, ast.Attribute):
+        parts.insert(0, expr.attr)
+        expr = expr.value
+    if not isinstance(expr, ast.Name) or expr.id not in aliases:
+        return None
+    dotted = ".".join([aliases[expr.id], *parts])
+    return dotted if _is_module(dotted) else None
 
 
 def test_no_module_uses_another_modules_private_names():
@@ -80,6 +89,26 @@ def test_the_scan_sees_a_crossing(tmp_path, monkeypatch):
     package.mkdir()
     (package / "__init__.py").write_text("", encoding="utf-8")
     (package / "a.py").write_text("def _helper():\n    pass\n", encoding="utf-8")
-    (package / "b.py").write_text("from tow.a import _helper\nfrom tow import a\n\na._helper()\n", encoding="utf-8")
+    (package / "sub").mkdir()
+    (package / "sub" / "__init__.py").write_text("", encoding="utf-8")
+    (package / "sub" / "c.py").write_text("_MARK = 1\n", encoding="utf-8")
+    (package / "b.py").write_text(
+        "from tow.a import _helper\n"
+        "from tow import a\n"
+        "import tow.sub.c\n"
+        "import tow.sub as s\n"
+        "a._helper()\n"  # 5
+        "tow.sub.c._MARK\n"  # 6: through the dotted import
+        "s.c._MARK\n"  # 7: through an alias of the package
+        "_own = 1\n"
+        "def f(x):\n"
+        "    return x._not_a_module\n",  # an object's attribute: not a module's name
+        encoding="utf-8",
+    )
     monkeypatch.setattr(f"{__name__}.SRC", tmp_path)
-    assert _crossings(package / "b.py") == [("tow/b.py", "tow.a._helper", 1), ("tow/b.py", "tow.a._helper", 4)]
+    assert sorted(_crossings(package / "b.py"), key=lambda item: item[2]) == [
+        ("tow/b.py", "tow.a._helper", 1),
+        ("tow/b.py", "tow.a._helper", 5),
+        ("tow/b.py", "tow.sub.c._MARK", 6),
+        ("tow/b.py", "tow.sub.c._MARK", 7),
+    ]
