@@ -5,7 +5,8 @@ import pytest
 from helpers import raises_code
 
 from tow.episodes import item_identity, summarize_completion
-from tow.progress import _file_progress, _latest_item_label, _preferred_season, reconcile_topic, safe_relative_path
+from tow.progress import _file_progress, _preferred_season, reconcile_topic, safe_relative_path
+from tow.progress.labels import latest_item_label
 
 
 def test_completed_auxiliary_file_does_not_replace_latest_episode_label():
@@ -15,7 +16,7 @@ def test_completed_auxiliary_file_does_not_replace_latest_episode_label():
             "sample": {"kind": "file", "label": "S01E99.sample.mkv", "status": "completed"},
         }
     }
-    assert str(_latest_item_label(record)) == "S01E01"
+    assert str(latest_item_label(record)) == "S01E01"
 
 
 def test_client_absolute_paths_cannot_be_interpreted_as_relative_files(tmp_path: Path):
@@ -219,18 +220,18 @@ def test_legacy_special_completion_event_is_repaired_without_reannouncing(tmp_pa
     ],
 )
 def test_episode_event_is_not_reclassified_without_matching_file_evidence(event_at, overrides):
-    from tow.progress import _repair_last_event_semantics
+    from tow.progress.labels import repair_last_event_semantics
 
     event = {"kind": "episode_completed", "at": event_at, "label": "S01E01"}
     item = {"kind": "file", "status": "completed", "completed_observed_at": event_at, "label": "bonus.mkv"}
     item.update(overrides)
     record = {"last_event": dict(event), "items": {"bonus": item}}
-    _repair_last_event_semantics(record)
+    repair_last_event_semantics(record)
     assert record["last_event"] == event
 
 
 def test_episode_event_with_multiple_reclassified_files_has_a_file_aggregate_label():
-    from tow.progress import _repair_last_event_semantics
+    from tow.progress.labels import repair_last_event_semantics
 
     event = {"kind": "episode_completed", "at": "old", "label": "S01E01"}
     record = {
@@ -240,12 +241,12 @@ def test_episode_event_with_multiple_reclassified_files_has_a_file_aggregate_lab
             for label in ["bonus.mkv", "extra.mkv"]
         },
     }
-    _repair_last_event_semantics(record)
+    repair_last_event_semantics(record)
     assert event["kind"] == "file_completed"
     assert event["label_code"] == "progress.files"
     assert event["at"] == "old"
     before = dict(event)
-    _repair_last_event_semantics(record)
+    repair_last_event_semantics(record)
     assert event == before
 
 
@@ -1988,7 +1989,7 @@ def test_a_file_confirmed_today_is_not_looked_at_again(tmp_path: Path, monkeypat
 def test_the_new_episode_is_the_latest_event_of_a_new_revision():
     # A new revision carries E01-E02 over (revision_updated) and brings E03 (new_file), all
     # at the pass's time: Home showed E01 as the latest event.
-    from tow.progress import _set_latest_event
+    from tow.progress.labels import set_latest_event
 
     at = "2026-10-08T20:16:47+03:00"
     record: dict = {}
@@ -1999,10 +2000,10 @@ def test_the_new_episode_is_the_latest_event_of_a_new_revision():
         ("new_file", "S01E04"),
         ("revision_updated", "S01E02"),
     ):
-        _set_latest_event(record, {"kind": kind, "label": label, "at": at})
+        set_latest_event(record, {"kind": kind, "label": label, "at": at})
     assert (record["last_event"]["kind"], record["last_event"]["label"]) == ("new_file", "S01E04")
 
-    _set_latest_event(record, {"kind": "episode_completed", "label": "S01E01", "at": at})
+    set_latest_event(record, {"kind": "episode_completed", "label": "S01E01", "at": at})
     assert record["last_event"]["kind"] == "episode_completed"  # a completion still outranks
-    _set_latest_event(record, {"kind": "revision_updated", "label": "S01E09", "at": "2026-10-08T20:20:00+03:00"})
+    set_latest_event(record, {"kind": "revision_updated", "label": "S01E09", "at": "2026-10-08T20:20:00+03:00"})
     assert record["last_event"]["label"] == "S01E09"  # a later time always wins

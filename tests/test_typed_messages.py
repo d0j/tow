@@ -162,14 +162,14 @@ def test_a_tow_worded_event_label_starts_with_a_capital():
 
 
 def test_episode_labels_carry_their_code():
-    from tow.progress import _episode_keys_label_msg, _label_fields
+    from tow.progress.labels import episode_keys_label_msg, label_fields
 
-    label = _episode_keys_label_msg({"episode:e5"})
+    label = episode_keys_label_msg({"episode:e5"})
     assert isinstance(label, Msg)
-    fields = _label_fields(label)
+    fields = label_fields(label)
     assert fields["label_code"] == "progress.episode"
     assert errors.render_stored(fields["label_code"], fields["label_params"], "", "en") == "Episode 05"
-    assert _label_fields("S01E05") == {"label": "S01E05"}
+    assert label_fields("S01E05") == {"label": "S01E05"}
 
 
 def test_a_messenger_status_is_shown_in_the_readers_language():
