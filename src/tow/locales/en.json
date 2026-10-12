@@ -1925,6 +1925,7 @@
   "supervisor": {
     "port_busy": "TOW is not started: port {port} is already in use by another program. Stop that program or set another port in config.yaml.",
     "port_busy_tow": "TOW is not started: port {port} is already in use by another TOW (another TOW folder, or a copy of this one). Stop that TOW or set another port in config.yaml.",
+    "port_busy_own": "TOW is not started: port {port} is already in use by a web server of this TOW that tow run did not start (tow serve started by hand). Stop that web server, then start TOW again.",
     "already_running": "TOW is already running (process {pid})."
   },
   "tracker": {

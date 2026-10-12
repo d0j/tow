@@ -319,6 +319,18 @@ def test_another_tow_on_the_port_is_named_as_such(tmp_path):
     assert sup.preflight() == t("supervisor.port_busy_tow", port=sup.port)
 
 
+def test_this_installs_own_unrecorded_server_is_not_another_tow(tmp_path):
+    """QA 12.10.2026: a `tow serve` of this very install on the port was called "another TOW (another
+    TOW folder, or a copy of this one)". It is not taken over (no supervisor recorded it), only named."""
+    from tow.i18n import t
+
+    _world, sup = make(tmp_path, port_busy=True)
+    sup.deps.tow_server = lambda _port: True
+    sup.deps.own_server = lambda _port: True
+    sup.deps.stop_pid = lambda pid: pytest.fail(f"stopped {pid}")
+    assert sup.preflight() == t("supervisor.port_busy_own", port=sup.port)
+
+
 def test_a_web_server_left_by_a_killed_supervisor_is_taken_over(tmp_path):
     world, sup = make(tmp_path, port_busy=True)
     stopped = _orphan(tmp_path, world, sup)
