@@ -118,6 +118,38 @@ def test_only_this_installs_page_counts_as_started(monkeypatch):
     assert (result["ok"], result["state"]) == (False, "exited")
 
 
+def test_a_page_of_this_install_without_tow_run_is_not_a_start():
+    # QA 12.10.2026: a `tow serve` of this install held the port; `tow start` said "TOW is
+    # running" (exit 0) although its new `tow run` ended at once with "port in use".
+    machine = Machine(answers_after=0.0, dies_after=1.0)
+    deps = machine.deps()
+    deps.running = lambda: None
+    deps.now = lambda: 1000.0
+    result = starter.start(18990, wait=120, deps=deps)
+    assert (result["ok"], result["state"]) == (False, "exited")
+    assert machine.spawned == [4242]
+    assert machine.opened == []
+    assert machine.t < 5
+
+
+def test_a_tow_run_that_took_over_this_installs_page_is_started():
+    # The new `tow run` stopped a server its killed predecessor left and runs: started. While it
+    # still decides (it holds its lock, the pid file is the old one's) it is not yet started.
+    machine = Machine(answers_after=0.0)
+    deps = machine.deps()
+    deps.now = lambda: 1000.0
+    deps.running = lambda: (
+        None
+        if machine.t == 0
+        else {"pid": 3, "started_at": 900.0}
+        if machine.t < 2
+        else {"pid": 9, "started_at": 1000.5}
+    )
+    result = starter.start(18990, wait=120, deps=deps)
+    assert (result["ok"], result["state"], result["pid"]) == (True, "started", 4242)
+    assert machine.t >= 2
+
+
 def test_a_page_that_never_answers_times_out():
     machine = Machine(answers_after=None)
     result = starter.start(18990, wait=10, deps=machine.deps())
