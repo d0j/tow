@@ -16,7 +16,7 @@ import time
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO, Literal
 
 from tow.errors import Msg, TowError
 
@@ -74,6 +74,16 @@ class StoreWriteError(OSError):
 class StateVersionError(TowError, StoreCorruptionError):
     """state.json has a data version this TOW does not know (``store.*``): it is neither read
     nor written, so a newer TOW's data is never corrupted by an older one."""
+
+
+class RegularReadError(ValueError):
+    """``read_regular_bytes`` refused the file. ``kind`` says why, whatever the caller makes of
+    it: ``"type"`` (not a regular file), ``"size"`` (over the limit) or ``"changed"`` (another file
+    or another size by the time it was read)."""
+
+    def __init__(self, kind: Literal["type", "size", "changed"]) -> None:
+        super().__init__(f"regular file refused: {kind}")
+        self.kind = kind
 
 
 # The data version of state.json this TOW writes. A TOW that finds a newer one refuses to
@@ -134,6 +144,33 @@ def decode_json_bytes(raw: bytes) -> Any:
     value = json.loads(raw.decode("utf-8"), parse_float=_finite_json_float, parse_constant=_finite_json_float)
     _check_json_depth(value)
     return value
+
+
+def read_regular_bytes(path: Path, limit: int, *, same_as: os.stat_result | None = None) -> bytes:
+    """The bytes of a regular file of at most ``limit`` bytes, through one open handle.
+
+    The opened file (``fstat``) must be a regular file (else ``RegularReadError("type")``) of 0 to
+    ``limit`` bytes ("size"); with ``same_as`` (the caller's earlier ``lstat``) it must also be that
+    file, of that size ("changed"). Its size plus one byte is read - never ``limit`` bytes for a
+    small file - so a file that grew or shrank meanwhile is "changed". An OSError from opening or
+    reading is the caller's.
+    """
+    with path.open("rb") as handle:
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise RegularReadError("type")
+        if same_as is not None and (
+            (info.st_dev, info.st_ino) != (same_as.st_dev, same_as.st_ino) or info.st_size != same_as.st_size
+        ):
+            raise RegularReadError("changed")
+        if not 0 <= info.st_size <= limit:
+            raise RegularReadError("size")
+        raw = handle.read(info.st_size + 1)
+    if len(raw) > limit:
+        raise RegularReadError("size")
+    if len(raw) != info.st_size:
+        raise RegularReadError("changed")
+    return raw
 
 
 def _validated_json(raw: bytes, validate: Callable[[Any], None] | None) -> Any:

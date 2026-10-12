@@ -41,6 +41,7 @@ from tow.log import locked_log_path, log_event, log_path, owner_language
 from tow.paths import config_path, data_dir, download_history_path, state_path
 from tow.platform import child_path, is_plain_file, plain_kind
 from tow.store import (
+    RegularReadError,
     SecretStoreError,
     StateVersionError,
     atomic_write_bytes,
@@ -52,6 +53,7 @@ from tow.store import (
     encrypted_secrets_path,
     load_secrets,
     persistence_lock,
+    read_regular_bytes,
     secret_undo_path,
     validate_download_history_bytes,
     validate_state_bytes,
@@ -1148,18 +1150,17 @@ def _read_metadata_bytes(path: Path, *, limit: int) -> bytes:
         _ordinary_file(path)
     except ValueError as exc:
         raise ValueError(t("backup.snapshot.record_type", owner_language())) from exc
-    with path.open("rb") as handle:
-        info = os.fstat(handle.fileno())
-        if not stat.S_ISREG(info.st_mode):
-            raise ValueError(t("backup.snapshot.record_type", owner_language()))
-        if not 0 <= info.st_size <= limit:
-            raise ValueError(t("backup.snapshot.record_size", owner_language()))
-        raw = handle.read(info.st_size + 1)
-    if len(raw) > limit:
-        raise ValueError(t("backup.snapshot.record_size", owner_language()))
-    if len(raw) != info.st_size:
-        raise ValueError(t("backup.snapshot.record_changed", owner_language()))
-    return raw
+    try:
+        return read_regular_bytes(path, limit)
+    except RegularReadError as exc:
+        raise ValueError(t(_RECORD_REFUSED[exc.kind], owner_language())) from None
+
+
+_RECORD_REFUSED = {
+    "type": "backup.snapshot.record_type",
+    "size": "backup.snapshot.record_size",
+    "changed": "backup.snapshot.record_changed",
+}
 
 
 def _read_restore_record(path: Path, *, limit: int) -> dict[str, Any]:

@@ -19,11 +19,13 @@ from tow.guess import canon_watch_url
 from tow.paths import data_dir, state_path
 from tow.store import (
     FileStamp,
+    RegularReadError,
     atomic_write_bytes,
     file_stamp,
     load_state,
     master_fernet,
     persistence_lock,
+    read_regular_bytes,
     save_state,
 )
 from tow.torrent import MAX_TORRENT_BYTES, parse_magnet_hashes, parse_torrent_metadata
@@ -98,13 +100,10 @@ def _read_record(url: str) -> bytes | None:
             return None
         if not stat.S_ISREG(info.st_mode) or path.is_junction() or info.st_size > MAX_RECORD_BYTES:
             raise TowError("content.unavailable")
-        with path.open("rb") as stream:
-            opened = os.fstat(stream.fileno())
-            if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino):
-                raise TowError("content.unavailable")
-            encrypted = stream.read(info.st_size + 1)  # one byte more shows a file that grew
-        if len(encrypted) != info.st_size:
-            raise TowError("content.unavailable")
+        try:
+            encrypted = read_regular_bytes(path, MAX_RECORD_BYTES, same_as=info)
+        except RegularReadError:
+            raise TowError("content.unavailable") from None
         try:
             record = json.loads(master_fernet().decrypt(encrypted))
             if not isinstance(record, dict) or record.get("url") != url:
