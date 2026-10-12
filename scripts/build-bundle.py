@@ -295,7 +295,7 @@ REQUIRED = (
     "app/scripts/tow-start.cmd",
     "app/scripts/update.py",
     "app/scripts/root_files.py",
-    "app/src/tow/cli.py",
+    "app/src/tow/cli/__init__.py",
     "runtime/bin/uv.exe",
 )
 
