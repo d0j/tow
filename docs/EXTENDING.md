@@ -29,6 +29,9 @@ A client module declares:
 - `STEPS` — how to turn on the Web UI in the client; `NOTE` — its quirks (language-file keys `client.<kind>.*`);
 - `from_secrets(secrets)` → an object satisfying `TorrentClientAdapter`.
 
+The settings card is not the module's: `clients/view.py` builds every client's card from these constants and
+the saved settings (`cards(cfg, secrets, topics)`, as `notifiers/view.py` does for messengers).
+
 Discovery falls back to a default for a constant that is missing or wrong; `test_plugin_contracts.py` does not:
 `client_module_problems(module)` (`clients/spec.py`) names a `TITLE`, `SECRETS_KEY`, `DEFAULT_PORT` or `ORDER`
 that is missing or of the wrong kind, and `FIELDS` that are not a tuple of `ClientField` with `host` and `port`.

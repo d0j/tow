@@ -12,7 +12,7 @@ from tow import i18n, plugins
 # literal: config sits below the clients and does not import them (tests/test_client_registry.py).
 DEFAULT_KIND = "qbittorrent"
 # The modules of tow.clients that are not clients (tests/test_layers.py reads it too).
-HELPERS = frozenset({"address", "spec", "factory", "managed", "files"})
+HELPERS = frozenset({"address", "spec", "factory", "managed", "files", "view"})
 _LOG = logging.getLogger("tow.clients")
 # Client modules that failed to load: (module name, reason). The others work without them.
 SKIPPED: list[tuple[str, str]] = []
