@@ -381,6 +381,21 @@ def format_decimal(value: float, digits: int = 1, lang: str | None = None) -> st
     return f"{value:.{digits}f}".replace(".", point)
 
 
+_SIZE_UNITS = (("web.bytes.tb", 4), ("web.bytes.gb", 3), ("web.bytes.mb", 2), ("web.bytes.kb", 1))
+
+
+def format_size(size: int, lang: str) -> str:
+    """``size`` bytes as ``lang`` writes it: "512 B", "1.5 MB", "1,5 МБ" (1024-based, one decimal).
+
+    A negative size reads as 0; one too large for a float raises ``OverflowError``.
+    """
+    size = max(0, size)
+    if size < 1024:
+        return translate("web.bytes.b", lang, size=size)
+    key, power = next((key, power) for key, power in _SIZE_UNITS if size >= 1024**power)
+    return translate(key, lang, size=format_decimal(size / 1024**power, 1, lang))
+
+
 # --- which language ---------------------------------------------------------------------------
 
 

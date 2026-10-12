@@ -47,21 +47,10 @@ def tm(key: str, /, **params: Any) -> Markup:
 def format_bytes(value: Any) -> str:
     """A size in the page's language and its decimal point: "1.5 GB", "1,5 ГБ"; "—" for no size."""
     try:
-        size = max(0, int(value))
+        size = int(value)
     except TypeError, ValueError, OverflowError:
         return "—"
-    if size < 1024:
-        return t("web.bytes.b", size=size)
-    lang = owner_language()
-    key, power = next(
-        (
-            (key, power)
-            for key, power in (("web.bytes.tb", 4), ("web.bytes.gb", 3), ("web.bytes.mb", 2))
-            if size >= 1024**power
-        ),
-        ("web.bytes.kb", 1),
-    )
     try:
-        return t(key, size=i18n.format_decimal(size / 1024**power, 1, lang))
+        return i18n.format_size(size, owner_language())
     except OverflowError:
         return "—"

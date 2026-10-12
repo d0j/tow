@@ -627,6 +627,39 @@ def test_dates_and_decimals_follow_the_language():
     assert _format_bytes(1536 * 1024**2) == i18n.translate("web.bytes.gb", "ru", size="1,5")  # the tests' language
 
 
+# One size formatter (i18n.format_size) behind the web's format_bytes and the CLI's _size.
+SIZES = {
+    "en": {0: "0 B", 1023: "1023 B", 1024: "1.0 KB", 1536 * 1024: "1.5 MB", 2**40: "1.0 TB", None: "—"},
+    "ru": {0: "0 Б", 1023: "1023 Б", 1024: "1,0 КБ", 1536 * 1024: "1,5 МБ", 2**40: "1,0 ТБ", None: "—"},
+}
+
+
+@pytest.mark.parametrize("lang", list(SIZES))
+@pytest.mark.parametrize("size", list(SIZES["en"]))
+def test_sizes_read_the_same_on_the_page_and_in_the_terminal(lang, size):
+    from tow import cli
+    from tow.web.text import format_bytes as _format_bytes
+
+    expected = SIZES[lang][size]
+    token = i18n._CURRENT.set(lang)
+    try:
+        assert _format_bytes(size) == expected
+        assert cli._size(size) == (SIZES[lang][0] if size is None else expected)  # the CLI reads no size as 0
+    finally:
+        i18n._CURRENT.reset(token)
+    if size is not None:
+        assert i18n.format_size(size, lang) == expected
+
+
+def test_a_size_too_large_or_negative():
+    from tow.web.text import format_bytes as _format_bytes
+
+    assert i18n.format_size(-5, "en") == "0 B"
+    assert _format_bytes(10**400) == "—"
+    with pytest.raises(OverflowError):
+        i18n.format_size(10**400, "en")
+
+
 def test_short_times_follow_the_language():
     """Status lines ("last night copy: …") wrote dd.mm HH:MM in every language."""
     from datetime import UTC, datetime
