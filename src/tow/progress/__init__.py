@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from tow.clients.spec import TorrentClientAdapter
-from tow.clock import iso_from_epoch, parse_timestamp
-from tow.episodes import expected_for_topic, item_identity, parse_episode_label, summarize_completion
+from tow.clock import iso_from_epoch
+from tow.episodes import expected_for_topic, item_identity
 from tow.errors import Msg, TowError
 from tow.folders import paths_equal
 from tow.i18n import t
@@ -28,6 +27,7 @@ from tow.progress.labels import (
     set_latest_event,
 )
 from tow.progress.presence import mark_superseded, track_client_presence
+from tow.progress.summary import completed_episode_keys, progress_summary, summary_record
 from tow.records import DownloadHistory, HistoryItem, HistoryRecord, Topic
 
 __all__ = [
@@ -43,20 +43,6 @@ def _get(value: Any, key: str, default: Any = None) -> Any:
     if isinstance(value, dict):
         return value.get(key, default)
     return getattr(value, key, default)
-
-
-def _completion_key(item: HistoryItem) -> tuple[float, int, int, str]:
-    try:
-        timestamp = parse_timestamp(str(item.get("completed_observed_at"))).timestamp()
-    except TypeError, ValueError, OverflowError, OSError:
-        timestamp = 0.0
-    label = parse_episode_label(str(item.get("label") or item.get("identity") or ""))
-    return (
-        timestamp,
-        label.season if label and label.season is not None else -1,
-        label.episode if label else -1,
-        str(item.get("label") or item.get("identity") or ""),
-    )
 
 
 def _client_event(info: Any, client_adapter: TorrentClientAdapter) -> dict[str, Any] | None:
@@ -93,35 +79,6 @@ def _repair_synthetic_baseline_completion(record: HistoryRecord) -> None:
     last = record.get("last_completed")
     if isinstance(last, dict) and last.get("identity") in repaired:
         record.pop("last_completed", None)
-
-
-def _summary_record(topic_record: HistoryRecord, expected: dict[str, Any] | None) -> dict[str, Any]:
-    summary = summarize_completion(topic_record.get("items") or {}, expected)
-    topic_record["summary"] = summary
-    completed = [
-        item
-        for item in (topic_record.get("items") or {}).values()
-        if not item.get("superseded") and item.get("status") == "completed" and item.get("completed_observed_at")
-    ]
-    if completed:
-        topic_record["last_completed"] = max(completed, key=_completion_key)
-    else:
-        topic_record.pop("last_completed", None)
-    return summary
-
-
-def _completed_episode_keys(items: dict[str, HistoryItem]) -> set[str]:
-    groups: dict[str, list[bool]] = {}
-    for item in items.values():
-        if item.get("superseded"):
-            continue
-        keys = item.get("episode_keys") or ([str(item.get("episode_key"))] if item.get("episode_key") else [])
-        if not keys and item.get("kind") != "file":
-            label = parse_episode_label(str(item.get("label") or item.get("identity") or ""))
-            keys = [label.key] if label else []
-        for key in keys:
-            groups.setdefault(str(key), []).append(item.get("status") == "completed")
-    return {key for key, statuses in groups.items() if statuses and all(statuses)}
 
 
 def _check_save_path(topic: Topic, info: Any) -> str:
@@ -409,7 +366,7 @@ def _note_completion(work: _ReconcilePass, item: HistoryItem, rel: str, coverage
 
 def _note_completed_episodes(work: _ReconcilePass) -> str:
     """The episodes completed in this run, as one event; returns their label ("" for none)."""
-    newly_completed = work.observed_completed_episode_keys.intersection(_completed_episode_keys(work.items))
+    newly_completed = work.observed_completed_episode_keys.intersection(completed_episode_keys(work.items))
     if not newly_completed or work.initial_baseline:
         return ""
     work.events.append("episode_completed")
@@ -430,14 +387,14 @@ def reconcile_topic(
     events: list[str] = []
     if (client_adapter.capabilities or {}).get("inspect") is False:
         record["last_scan_at"] = now
-        return {"summary": _summary_record(record, expected), "events": events}
+        return {"summary": summary_record(record, expected), "events": events}
 
     # An observation, not a read-back: a client that can answers it from one listing per run.
     observe = getattr(client_adapter, "observe_torrent", None) or client_adapter.inspect_torrent
     info = observe(str(topic.get("hash") or ""))
     record["last_scan_at"] = now
     if not track_client_presence(record, info, client_adapter, now, events):
-        return {"summary": _summary_record(record, expected), "events": events}
+        return {"summary": summary_record(record, expected), "events": events}
     client_event = _client_event(info, client_adapter)
 
     files = _get(info, "files", []) or []
@@ -488,7 +445,7 @@ def reconcile_topic(
         set_label(client_event, latest_item_label(record, prefer_completed=client_event.get("kind") != "client_added"))
         set_latest_event(record, client_event)
     repair_last_event_semantics(record)
-    summary = _summary_record(record, expected)
+    summary = summary_record(record, expected)
     labels = work.completed_file_labels
     return {
         "summary": summary,
@@ -498,8 +455,3 @@ def reconcile_topic(
         if labels
         else "",
     }
-
-
-def progress_summary(topic_id: str, history: Mapping[str, Any]) -> dict[str, Any]:
-    record = (history.get("topics") or {}).get(str(topic_id)) or {}
-    return summarize_completion(record.get("items") or {}, record.get("expected"))
