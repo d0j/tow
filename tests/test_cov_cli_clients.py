@@ -24,7 +24,7 @@ from helpers import multi_file_torrent, raises_code
 
 from tow import cli, restore_points
 from tow.bundle import ExportImportError
-from tow.cli import render
+from tow.cli import commands, render
 from tow.clients import qbittorrent
 from tow.config import load_config, save_config
 from tow.i18n import t
@@ -1044,9 +1044,12 @@ def test_interrupt_is_exit_130(monkeypatch):
 
 
 def test_unregistered_command_is_exit_1(monkeypatch):
-    monkeypatch.delitem(cli._COMMANDS, "version")
+    # The parser is built from the table: a command it does not hold is a usage error.
+    monkeypatch.setattr(commands, "COMMANDS", tuple(c for c in commands.COMMANDS if c.name != "version"))
 
-    assert cli.main(["version"]) == 1
+    with pytest.raises(SystemExit) as exited:
+        cli.main(["version"])
+    assert exited.value.code == cli.EXIT_USAGE == 1
 
 
 def test_module_entry_point_exits_with_the_command_code(monkeypatch, capsys):

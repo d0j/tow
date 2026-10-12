@@ -97,7 +97,9 @@ def _web_leaf(importer: str, imported: str) -> bool:
 
 
 def _cli_entry(importer: str, imported: str) -> bool:
-    return imported == "tow.cli" and importer != "tow.__main__"
+    if _within(importer, "tow.cli"):
+        return imported == "tow.cli"  # its modules import each other, never the package itself
+    return _within(imported, "tow.cli") and importer != "tow.__main__"
 
 
 def _plugins_below_orchestration(importer: str, imported: str) -> bool:
@@ -308,6 +310,9 @@ def test_a_rule_catches_its_crossing():
     assert not _web_leaf("tow.web.views", "tow.web.services")
     assert _cli_entry("tow.web.services", "tow.cli")
     assert not _cli_entry("tow.__main__", "tow.cli")
+    assert _cli_entry("tow.web.services", "tow.cli.render")
+    assert _cli_entry("tow.cli.commands.service", "tow.cli")
+    assert not _cli_entry("tow.cli.commands.service", "tow.cli.render")
     assert _plugins_below_orchestration("tow.clients.managed", "tow.check")
     assert not _plugins_below_orchestration("tow.clients.managed", "tow.check_steps")
     assert _plugins_apart("tow.notifiers.telegram", "tow.notifiers.discord")

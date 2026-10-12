@@ -332,6 +332,7 @@ def test_open_folders_are_said_once_and_only_by_what_starts_tow(install, capsys,
     """Round-3 audit: the warnings came before every command (`tow status` too) and twice at
     the first start (setup's `keys ensure`, then `start`; `tow serve` said them twice)."""
     from tow import cli
+    from tow.cli import commands
     from tow.i18n import t
     from tow.store import protect_install_folders
 
@@ -343,7 +344,7 @@ def test_open_folders_are_said_once_and_only_by_what_starts_tow(install, capsys,
         assert protect_install_folders() == [install]
         assert protect_install_folders() == [install]
     assert capsys.readouterr().err.count(t("cli.root_shared", path=str(install))) == 1
-    assert sorted(cli._WARN_OPEN_FOLDERS) == ["run", "serve", "start"]
+    assert sorted(c.name for c in commands.COMMANDS if c.warn_open_folders) == ["run", "serve", "start"]
 
 
 def test_doctor_reports_an_install_root_others_can_change(install):

@@ -110,9 +110,9 @@ def test_the_app_is_compared_without_its_environment_and_bytecode(smoke, tmp_pat
 
 
 def test_the_updater_command_is_read_from_tow_update(smoke, capsys):
-    from tow import cli
+    from tow.cli.commands import service
 
-    cli._cmd_update(argparse.Namespace(ref="v1.2.3"))
+    service.UPDATE.run(argparse.Namespace(ref="v1.2.3"))
     match = smoke.COMMAND_RE.search(capsys.readouterr().out)
     assert match is not None
     assert Path(match.group(2)).name == "update.py"

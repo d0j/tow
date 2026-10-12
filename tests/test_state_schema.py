@@ -8,6 +8,7 @@ import json
 import pytest
 
 from tow import cli, store
+from tow.cli.commands import service
 from tow.paths import state_path
 from tow.store import STATE_SCHEMA_VERSION, StateVersionError, check_state_version, load_state, save_state
 
@@ -78,7 +79,7 @@ def test_tow_refuses_to_start_on_a_newer_state(monkeypatch, capsys):
     started = []
     monkeypatch.setattr("tow.supervisor.run_supervisor", lambda *a, **k: started.append(True) or 0)
     with pytest.raises(StateVersionError):
-        cli._cmd_run(argparse.Namespace())
+        service.RUN.run(argparse.Namespace())
     assert started == []
     assert cli.main(["check"]) == 3
     error = capsys.readouterr().err
