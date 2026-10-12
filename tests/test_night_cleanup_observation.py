@@ -13,6 +13,7 @@ from tow import snapshots, watchdog
 from tow.config import load_config, save_config
 from tow.i18n import t
 from tow.pulse import Probes
+from tow.snapshots import create as night_create
 from tow.snapshots import record as night_record
 from tow.store import persistence_lock, save_secrets, save_state
 from tow.web import app
@@ -113,7 +114,7 @@ def test_inventory_change_invalidates_record_without_mutating_copies(night, pend
     _check(sent)
     raw = snapshots.status_path().read_bytes()
     with persistence_lock():  # a copy committed without its monitoring write
-        copy = Path(snapshots._create_snapshot(how="auto")["snapshot"])
+        copy = Path(night_create._create_snapshot(how="auto")["snapshot"])
     manifest = (copy / "MANIFEST.json").read_bytes()
     report = _check(sent)
     assert report["backup_cleanup_pending"] is None
@@ -284,7 +285,7 @@ def test_inventory_failure_does_not_fail_a_verified_copy_or_reuse_old_binding(ni
     def denied(_folder):
         raise PermissionError("synthetic inventory refusal")
 
-    monkeypatch.setattr(snapshots, "cleanup_inventory", denied)
+    monkeypatch.setattr(night_create, "cleanup_inventory", denied)
     made = snapshots.create_snapshot()
     assert made["ok"] is True
     assert snapshots.verify_snapshot(Path(made["snapshot"]))["signed"] is True
@@ -296,7 +297,7 @@ def test_snapshot_record_is_written_before_creation_lock_is_released(night, monk
     import contextlib
 
     active = []
-    original_lock = snapshots.persistence_lock
+    original_lock = night_create.persistence_lock
     original_record = night_record.record_status
 
     @contextlib.contextmanager
@@ -312,8 +313,8 @@ def test_snapshot_record_is_written_before_creation_lock_is_released(night, monk
         assert active
         original_record(**fields)
 
-    monkeypatch.setattr(snapshots, "persistence_lock", lock)
-    monkeypatch.setattr(snapshots, "record_status", record)
+    monkeypatch.setattr(night_create, "persistence_lock", lock)
+    monkeypatch.setattr(night_create, "record_status", record)
     snapshots.create_snapshot()
 
 

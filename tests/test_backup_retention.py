@@ -16,6 +16,7 @@ from tow import snapshots
 from tow.backup_retention import MIB, MIN_OLDER_COPIES, retained_copies, retention_settings
 from tow.config import ConfigError, load_config, save_config
 from tow.paths import config_path
+from tow.snapshots import create as night_create
 from tow.snapshots import manifest as night_manifest
 from tow.store import save_state
 from tow.supervisor.schedule import Schedule
@@ -154,7 +155,7 @@ def test_no_space_keeps_old_copy_and_does_not_create_partial(tmp_path, monkeypat
     old = Path(snapshots.create_snapshot()["snapshot"])
     before = {p: p.read_bytes() for p in old.rglob("*") if p.is_file()}
     usage = shutil.disk_usage(old)
-    monkeypatch.setattr(snapshots.shutil, "disk_usage", lambda _p: type(usage)(usage.total, usage.total, 0))
+    monkeypatch.setattr(night_create.shutil, "disk_usage", lambda _p: type(usage)(usage.total, usage.total, 0))
     with pytest.raises(snapshots.SnapshotError, match="не хватает места"):
         snapshots.create_snapshot()
     assert all(p.read_bytes() == content for p, content in before.items())

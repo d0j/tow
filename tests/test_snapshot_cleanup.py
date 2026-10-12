@@ -15,6 +15,7 @@ from tow.config import load_config, save_config
 from tow.i18n import t
 from tow.log import history_events, read_events
 from tow.paths import data_dir
+from tow.snapshots import create as night_create
 from tow.snapshots import location as night_location
 
 backup = fixtures.backup
@@ -236,9 +237,9 @@ def test_removal_boundary_confirms_absence_and_never_replaces_foreign_proof(tmp_
                 (points / "fixture.towx").unlink()
                 raise PermissionError("synthetic partial tree removal")
 
-        monkeypatch.setattr(snapshots.shutil, "rmtree", blocked_rmtree)
+        monkeypatch.setattr(night_create.shutil, "rmtree", blocked_rmtree)
     parent = tmp_path / "other" if mode == "wrong_parent" else tmp_path
-    assert snapshots._remove_copy(folder, parent, marker, expected) is (mode == "ok")
+    assert night_create.remove_copy(folder, parent, marker, expected) is (mode == "ok")
     if mode in {"ok", "unknown_absence"}:
         assert not folder.exists()
     else:
@@ -253,7 +254,7 @@ def test_removal_boundary_rejects_an_unexpected_marker_before_any_change(tmp_pat
     folder.mkdir()
     member = folder / "keep.txt"
     member.write_bytes(b"keep")
-    assert snapshots._remove_copy(folder, tmp_path, marker, {"MANIFEST.json", "keep.txt"}) is False
+    assert night_create.remove_copy(folder, tmp_path, marker, {"MANIFEST.json", "keep.txt"}) is False
     assert member.read_bytes() == b"keep"
 
 
@@ -269,7 +270,7 @@ def test_cleanup_listing_error_does_not_abort_the_new_verified_night_copy(backup
             raise PermissionError("synthetic unavailable listing")
         return real_scan(root)
 
-    monkeypatch.setattr(snapshots, "snapshot_folders", scan)
+    monkeypatch.setattr(night_create, "snapshot_folders", scan)
     result = fixtures.create_keeping_one()
     assert result["ok"] is True
     assert result["pruned"] == []
