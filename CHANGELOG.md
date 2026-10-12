@@ -18,6 +18,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   of "Saved; saved: …".
 - Settings: Undo after saving a messenger, a torrent client's connection or the checks opens that card again instead of
   Settings with every card closed.
+- Home → add or edit a topic: file sizes, the chosen total and the free space under the folder are rounded like the
+  sizes elsewhere in TOW instead of cut (a 1.4 GB file showed 1.3 GB, 1.1 TB free showed 1 TB).
 
 ## [1.28.3] — 2026-10-09
 

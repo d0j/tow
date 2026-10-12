@@ -49,7 +49,7 @@ function setup(saved = null, existing = [], before = () => {}) {
   });
   const document = {
     activeElement: null, documentElement: root, body: root,
-    getElementById: () => ({ textContent: "{}" }),
+    getElementById: () => ({ textContent: globalThis.pickerMessages || "{}" }),
     createElement: (tag) => new Element(tag), createDocumentFragment: () => new Element("fragment"),
     createTextNode: (text) => ({ textContent: text }),
   };
@@ -294,4 +294,16 @@ assert.equal(offered.fields.selection_mode.options[1].text, "Choose files");
 const kept = setup(null, [files[0]], select(["all", "exact", "episodes", "files"]));
 assert.equal(kept.fields.selection_mode.options.filter((option) => option.value === "exact").length, 1, "an existing option is not repeated");
 
-console.log(JSON.stringify({ exactNeedsScript: true, plainTextRefusals: true, localFileFollowsLink: true, cancelRestoresHidden: true, safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true, ruleContext: true, cacheLabel: true, explicitFresh: true, quotaConsent: true }));
+// Sizes are rounded as the server rounds them: eight files of 1.4 GB are 11.2 GB, not 11.1 GB.
+globalThis.pickerMessages = JSON.stringify({ "web.bytes.gb": "{size} GB", "content.js.count": "{count} · {size}" });
+const sized = setup();
+sized.controls.load.fire("click");
+const gib = 1024n ** 3n;
+await reply(sized.requests[0], { token: "c".repeat(32), files: Array.from({ length: 8 }, (_, n) => ({ id: n, path: `E${n}.mkv`, size: String(gib * 14n / 10n) })) });
+sized.controls.all.fire("click");
+// The decimal sign is the locale's ("11,2" in Russian).
+assert.match(sized.controls.status.textContent, /^8 · 11[.,]2 GB$/, "the total is rounded, not cut");
+assert.match(sized.controls.tree.querySelectorAll("*").find((n) => n.tagName === "small").textContent, /^1[.,]4 GB$/);
+globalThis.pickerMessages = "";
+
+console.log(JSON.stringify({ roundedSizes: true, exactNeedsScript: true, plainTextRefusals: true, localFileFollowsLink: true, cancelRestoresHidden: true, safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true, ruleContext: true, cacheLabel: true, explicitFresh: true, quotaConsent: true }));

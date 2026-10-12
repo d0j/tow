@@ -52,7 +52,8 @@
       const units = ["web.bytes.b", "web.bytes.kb", "web.bytes.mb", "web.bytes.gb", "web.bytes.tb"];
       let scale = 1n, unit = 0;
       while (unit < units.length - 1 && size >= scale * 1024n) { scale *= 1024n; unit++; }
-      const number = Number(size * 10n / scale) / 10;
+      // Rounded to the nearest tenth, as the server's sizes are (a 1.4 GB file read 1.3 GB here).
+      const number = Number((size * 10n + scale / 2n) / scale) / 10;
       return t(units[unit], { size: number.toLocaleString(locale, { maximumFractionDigits: 1 }) });
     };
     const buildTree = () => {
