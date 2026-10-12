@@ -57,6 +57,13 @@ the `installers` workflow on 24.04). The legacy
   `.github/workflows/real.yml` sets on a CI runner: never run them on your machine.
 - Use fake clients, fake HTTP and injected platform backends (`tow.platform.use`); never a live client, site or
   messenger.
+- Guard tests keep the structure while code moves: `test_layers.py` (which module may import which),
+  `test_web_boundary.py` (the web reaches the rest through `tow.web.services`), `test_module_boundaries.py`
+  (private names), `test_stdlib_only.py` (the updater and its worker), `test_updater_contract.py`,
+  `test_public_api.py` (public names and signatures), `test_patch_targets.py` (a patched name is one the code
+  reads when it runs) and the golden texts in `tests/golden/` (`tow --help` in both languages, the schedule on a
+  fake clock). Their exception lists (`ALLOWED`, `HELPER_ALLOWED`…) may only shrink. After an intended change,
+  regenerate a golden file with `uv run --frozen python tests/<its test>.py` and review the diff.
 - **Test data is synthetic**: made-up titles (`Show A`, `Сериал А`), topic ids (`1234567`), private-range or
   documentation IP addresses, paths like `D:\TV` or `/srv/media`. No real topic links, user names or addresses.
 
