@@ -851,7 +851,7 @@ Built so far (this workstream):
   1.21.0); the dependency audit runs on one of them (uv.lock is the same everywhere), and
   `install.sh` is smoke-tested on Ubuntu and macOS.
 - Installers (`.github/workflows/installers.yml`): on pull requests that touch `scripts/`,
-  `install/`, the updater, what it relies on (`store.py`, `supervisor/layout.py`, `cli.py`, the
+  `install/`, the updater, what it relies on (`store.py`, `supervisor/layout.py`, `cli/`, the
   texts) or the dependencies, weekly and by hand, the Windows bundle is built from
   the commit and tested as on a tag (below), and `scripts/update-smoke.py` updates the latest
   published release (the bundle on Windows, install.sh on Ubuntu and macOS) to the commit's source

@@ -298,7 +298,7 @@ def test_all_production_yaml_construction_goes_through_the_guard():
     calls = []
     for source in root.rglob("*.py"):
         calls.extend(
-            (source.name, node.func.attr)
+            (source.relative_to(root).as_posix(), node.func.attr)
             for node in ast.walk(ast.parse(source.read_text(encoding="utf-8")))
             if isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
@@ -307,7 +307,11 @@ def test_all_production_yaml_construction_goes_through_the_guard():
             and node.func.attr in {"load", "safe_load", "full_load", "unsafe_load", "dump", "safe_dump"}
         )
     # CLI renders to stdout; it does not persist a live configuration.
-    assert sorted(calls) == [("cli.py", "safe_dump"), ("yaml_guard.py", "load"), ("yaml_guard.py", "safe_dump")]
+    assert sorted(calls) == [
+        ("cli/__init__.py", "safe_dump"),
+        ("yaml_guard.py", "load"),
+        ("yaml_guard.py", "safe_dump"),
+    ]
 
 
 @pytest.mark.parametrize(
