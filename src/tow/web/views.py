@@ -604,15 +604,14 @@ def _epoch_time(value: float) -> str:
 def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
     """Night copies: folder, last result, the newest copies; folders of both kinds of copies."""
     from tow.backup_retention import retention_settings
-    from tow.config import as_bool
-    from tow.locations import LOCATIONS, free_bytes, is_default, resolve
-    from tow.snapshots import list_snapshots, status, status_failed
+    from tow.locations import LOCATIONS, is_default, resolve
+    from tow.snapshots import status_failed
 
     folders = {}
     for kind, location in LOCATIONS.items():
         raw = str(cfg.get(location.key) or "")
         path = resolve(raw, location)
-        free = free_bytes(path)
+        free = services.free_bytes(path)
         folders[kind] = {
             "kind": kind,
             "title": location.title,
@@ -622,8 +621,8 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
             "is_default": is_default(raw, location),
             "free": format_bytes(free) if free is not None else "",
         }
-    st = status()
-    copies = list_snapshots(limit=None)
+    st = services.snapshot_status()
+    copies = services.list_snapshots(limit=None)
     snapshots = [
         {"name": row["name"], "at": format_ui_timestamp(str(row["created_at"])), "size": format_bytes(row["bytes"])}
         for row in copies

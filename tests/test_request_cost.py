@@ -232,7 +232,7 @@ def test_a_site_renamed_during_the_request_is_no_server_error(monkeypatch):
     cfg = {"value": _sites(("old", pattern))}
     monkeypatch.setattr("tow.web.services.load_config", lambda: cfg["value"])
     generation = {"value": 0}
-    monkeypatch.setattr(_context, "write_generation", lambda: generation["value"])
+    monkeypatch.setattr("tow.web.services.write_generation", lambda: generation["value"])
     link = "https://example.org/topic?t=1"
     original = _context.site_name
 
