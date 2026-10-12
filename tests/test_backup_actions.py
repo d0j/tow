@@ -15,6 +15,7 @@ from tow import restore_points, snapshots
 from tow.config import load_config, save_config
 from tow.log import read_events
 from tow.paths import config_path, data_dir
+from tow.snapshots import record as night_record
 from tow.store import save_secrets, save_state
 from tow.web import app
 
@@ -238,10 +239,10 @@ def test_unconfirmed_deletion_does_not_report_success(copies, category, failure,
 def test_delete_preserves_previous_cleanup_warning(copies, category):
     path = _path(copies, category)
     if category == "night":
-        snapshots._record(
+        night_record.record_status(
             last_cleanup_pending=True,
             location=str(path.parent.resolve()),
-            **snapshots._cleanup_inventory(path.parent),
+            **night_record.cleanup_inventory(path.parent),
         )
     else:
         restore_points._record_cleanup(True, path.parent)

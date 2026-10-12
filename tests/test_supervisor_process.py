@@ -399,7 +399,7 @@ def test_children_get_the_runtime_layout(tmp_path, monkeypatch):
 
 
 def test_facts_come_from_the_state_and_the_night_copies():
-    from tow.snapshots import _record
+    from tow.snapshots.record import record_status
     from tow.store import save_state
     from tow.supervisor import _facts
 
@@ -411,7 +411,7 @@ def test_facts_come_from_the_state_and_the_night_copies():
         "timer_policies": {},
         "space_waiting": False,
     }
-    _record(last_ok_at=99.5)
+    record_status(last_ok_at=99.5)
     assert _facts()["last_backup_ok"] == 99.5
 
 
