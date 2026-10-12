@@ -15,6 +15,7 @@ from tow.config import load_config, save_config
 from tow.i18n import t
 from tow.log import history_events, read_events
 from tow.paths import data_dir
+from tow.snapshots import location as night_location
 
 backup = fixtures.backup
 
@@ -259,7 +260,7 @@ def test_removal_boundary_rejects_an_unexpected_marker_before_any_change(tmp_pat
 def test_cleanup_listing_error_does_not_abort_the_new_verified_night_copy(backup, monkeypatch):
     fixtures._clock(monkeypatch, ["20261001-000000", "20261001-000001"])
     old = Path(snapshots.create_snapshot()["snapshot"])
-    real_scan = snapshots._snapshots
+    real_scan = night_location.snapshot_folders
     calls = []
 
     def scan(root):
@@ -268,7 +269,7 @@ def test_cleanup_listing_error_does_not_abort_the_new_verified_night_copy(backup
             raise PermissionError("synthetic unavailable listing")
         return real_scan(root)
 
-    monkeypatch.setattr(snapshots, "_snapshots", scan)
+    monkeypatch.setattr(snapshots, "snapshot_folders", scan)
     result = fixtures.create_keeping_one()
     assert result["ok"] is True
     assert result["pruned"] == []

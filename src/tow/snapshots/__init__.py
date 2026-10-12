@@ -16,6 +16,7 @@ The package re-exports what the rest of TOW uses; inside it:
 - ``errors``: ``SnapshotError`` and the reason of a failure;
 - ``members``: what a copy holds, where each member goes, plain files and folders;
 - ``manifest``: the MANIFEST, its limits and its signature;
+- ``location``: the copies folder, its copies and one copy by name;
 
 What is not in a module of its own yet is still here.
 """
@@ -46,8 +47,9 @@ from tow.diagnostic_json import check_epochs, check_types, encode_object, read_o
 from tow.i18n import t
 from tow.log import locked_log_path, log_event, owner_language
 from tow.paths import config_path, data_dir
-from tow.platform import child_path, is_plain_file
+from tow.platform import is_plain_file
 from tow.snapshots.errors import SnapshotError, reason
+from tow.snapshots.location import PREFIX, backup_root, list_snapshots, snapshot_folders, snapshot_path
 from tow.snapshots.manifest import (
     FORMAT,
     MAX_MANIFEST_BYTES,
@@ -127,7 +129,6 @@ __all__ = [
 _READ_CHUNK_BYTES = 1024 * 1024
 # Exists only while a settings change can still be undone: its absence is normal.
 _OPTIONAL_MEMBERS = frozenset({"secrets-undo.enc"})
-_PREFIX = "tow-"
 # A copy being written: ``.tow-<stamp>.partial`` with a signed proof that this install made it.
 _PARTIAL_NAME = re.compile(r"\.tow-[0-9]{8}-[0-9]{6}(?:-[0-9a-f]{6})?\.partial")
 _PARTIAL_PROOF = "PARTIAL.json"
@@ -171,13 +172,13 @@ def status() -> dict[str, Any]:
 
 def _cleanup_inventory(location: Path) -> dict[str, Any]:
     """The record fields binding cleanup to committed copy names (partial copies begin with a dot)."""
-    names = cleanup_names(location, lambda name: name.startswith(_PREFIX))
+    names = cleanup_names(location, lambda name: name.startswith(PREFIX))
     return {"cleanup_inventory": inventory_digest(names), "cleanup_names": names}
 
 
 def _new_copy_of_ours(location: Path, state: dict[str, Any]) -> bool:
     """A copy of ours committed after the observation; one removed by hand or a foreign folder is not."""
-    names = cleanup_names(location, lambda name: name.startswith(_PREFIX))
+    names = cleanup_names(location, lambda name: name.startswith(PREFIX))
     added = added_names(state.get("cleanup_names"), state["cleanup_inventory"], names)
     if not added:
         return False
@@ -264,41 +265,10 @@ def record_failure(error: str) -> None:
     log_event("backup_failed", error=error[:300], how="auto")
 
 
-def backup_root(cfg: dict[str, Any] | None = None) -> Path:
-    """The night copies folder: ``backup_dir`` from config.yaml, by default ``backup/night``
-    next to config.yaml (moves with the install); a network share (\\\\server\\share) works too.
-    A path of another system (a Windows config on Linux) is refused, never created."""
-    from tow.locations import NIGHT, LocationError, resolve_checked
-
-    value = str((cfg if cfg is not None else load_config()).get("backup_dir") or "").strip()
-    try:
-        root = resolve_checked(value, NIGHT)
-    except LocationError as exc:
-        raise SnapshotError(str(exc)) from exc
-    data = data_dir().resolve()
-    if root.resolve() == data or data in root.resolve().parents:
-        raise SnapshotError(t("backup.snapshot.inside_data", owner_language()))
-    return root
-
-
-def _snapshots(root: Path) -> list[Path]:
-    if not root.is_dir():
-        return []
-    return sorted(
-        p
-        for p in root.iterdir()
-        if p.is_dir()
-        and not p.is_symlink()
-        and not p.is_junction()
-        and p.name.startswith(_PREFIX)
-        and (p / "MANIFEST.json").is_file()
-    )
-
-
 def _previous_members(root: Path, key: bytes) -> set[str]:
     """Stores a signed earlier copy proves existed; their later disappearance is not normal."""
     present: set[str] = set()
-    for folder in _snapshots(root):
+    for folder in snapshot_folders(root):
         if manifest := owned_manifest(folder, key):
             present.update(
                 name for name in manifest["files"] if name in {"state.json", "download_history.json", "secrets.enc"}
@@ -335,50 +305,6 @@ def create_snapshot(*, how: str = "auto") -> dict[str, Any]:
         record_failure(str(failure))
         raise failure from exc
     return result
-
-
-def list_snapshots(limit: int | None = 10) -> list[dict[str, Any]]:
-    """Newest night copies first: name, time, size (no verification)."""
-    try:
-        root = backup_root()
-        folders = _snapshots(root)
-    except SnapshotError, OSError:
-        return []
-    rows = []
-    for folder in reversed(folders if limit is None else folders[-limit:]):
-        try:
-            manifest = read_manifest(folder)
-            created = datetime.fromisoformat(str(manifest.get("created_at")))
-            created_ts = created.timestamp()
-            size = sum(member_size(name, meta) for name, meta in manifest["files"].items())
-        except SnapshotError, OSError, ValueError, TypeError, AttributeError, OverflowError:
-            continue
-        rows.append(
-            {
-                "name": folder.name,
-                "created_ts": created_ts,
-                "created_at": created.isoformat(),
-                "bytes": size,
-                "version": manifest.get("version"),
-            }
-        )
-    return rows
-
-
-def snapshot_path(name: str) -> Path:
-    """A night copy by name, refusing anything that is not one (no paths, no ..)."""
-    if not name.startswith(_PREFIX) or not all(ch.isalnum() or ch in "-_" for ch in name):
-        raise SnapshotError(t("backup.snapshot.unknown", owner_language()))
-    root = backup_root()
-    try:
-        path = child_path(root, name)
-    except ValueError:
-        raise SnapshotError(t("backup.snapshot.unknown", owner_language())) from None
-    if path.is_symlink() or path.is_junction() or path.resolve().parent != root.resolve():
-        raise SnapshotError(t("backup.snapshot.unknown", owner_language()))
-    if not (path / "MANIFEST.json").is_file():
-        raise SnapshotError(t("backup.snapshot.unknown", owner_language()))
-    return path
 
 
 def check_snapshot(name: str) -> dict[str, Any]:
@@ -480,12 +406,12 @@ def _create_snapshot(*, how: str, proven: dict[str, str] | None = None) -> dict[
     root = backup_root(cfg)
     policy = retention_settings(cfg)
     stamp = datetime.now(UTC).astimezone().strftime("%Y%m%d-%H%M%S")
-    target = root / f"{_PREFIX}{stamp}"
-    partial = root / f".{_PREFIX}{stamp}.partial"
+    target = root / f"{PREFIX}{stamp}"
+    partial = root / f".{PREFIX}{stamp}.partial"
     while target.exists() or partial.exists():
         suffix = uuid.uuid4().hex[:6]
-        target = root / f"{_PREFIX}{stamp}-{suffix}"
-        partial = root / f".{_PREFIX}{stamp}-{suffix}.partial"
+        target = root / f"{PREFIX}{stamp}-{suffix}"
+        partial = root / f".{PREFIX}{stamp}-{suffix}.partial"
     files: dict[str, dict[str, Any]] = {}
     missing: list[str] = []
     key = signing_key()  # no key, no copy: an unsigned copy could never be restored
@@ -678,7 +604,7 @@ def _prune_night_copies(root: Path, target: Path, key: bytes, policy: dict[str, 
         others = []
         entries = []
         fixed = {name for name, _path in fixed_members()}
-        for folder in _snapshots(root):
+        for folder in snapshot_folders(root):
             try:
                 manifest = owned_manifest(folder, key)
                 if manifest is None or any(
