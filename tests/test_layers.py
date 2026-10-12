@@ -40,6 +40,7 @@ FOUNDATION = (
 STORAGE = (
     "tow.journal",
     "tow.site_journal",
+    "tow.storage",  # the package and its modules
     "tow.store",
     *(f"tow.{p.stem}" for p in (SRC / "tow").glob("*_transaction.py")),
 )

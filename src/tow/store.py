@@ -5,18 +5,16 @@ import hashlib
 import hmac
 import importlib
 import json
-import math
 import os
 import pickle
 import re
 import stat
-import tempfile
 import threading
 import time
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO, Literal
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 from tow.errors import Msg, TowError
 
@@ -32,8 +30,83 @@ from tow.paths import (
     secrets_path,
 )
 from tow.paths import state_path as state_path  # noqa: PLC0414 - re-exported: the web package imports it from here
-from tow.platform import current as current_platform
 from tow.platform import locks
+from tow.storage.atomic import (
+    RegularReadError,
+    atomic_create_bytes,
+    atomic_write_bytes,
+    atomic_write_text,
+    read_regular_bytes,
+    replace_with_retry,
+    restrict_file,
+    write_generation,
+)
+from tow.storage.errors import StoreCorruptionError
+from tow.storage.jsonio import JSON_MAX_DEPTH, decode_json_bytes, encode_json
+
+# The public names of the stores: what is defined here, and what tow.storage defines and the
+# rest of TOW imports from here.
+__all__ = [
+    "JSON_MAX_DEPTH",
+    "MASTER_KEY_KINDS",
+    "RECOVERY_STEPS",
+    "STALE_TEMPORARY_AGE_SEC",
+    "STATE_SCHEMA_VERSION",
+    "CheckBusyError",
+    "FileStamp",
+    "InvalidMasterKeyPathError",
+    "MasterKeyError",
+    "MissingMasterKeyError",
+    "RegularReadError",
+    "SecretStoreError",
+    "StateVersionError",
+    "StoreCorruptionError",
+    "StoreReadError",
+    "StoreWriteError",
+    "adopt_master_key",
+    "atomic_create_bytes",
+    "atomic_write_bytes",
+    "atomic_write_text",
+    "check_run_lock",
+    "check_state_version",
+    "decode_json_bytes",
+    "decrypt_secret_undo_bytes",
+    "decrypt_secrets_bytes",
+    "delete_secret_undo",
+    "derive_local_secret",
+    "encrypt_secrets_bytes",
+    "encrypted_secrets_path",
+    "file_stamp",
+    "generate_master_key",
+    "init_lock_file",
+    "install_folders",
+    "is_temporary_of",
+    "load_download_history",
+    "load_json",
+    "load_secret_undo",
+    "load_secrets",
+    "load_state",
+    "master_fernet",
+    "master_key_file",
+    "migrate_legacy_secrets",
+    "persistence_lock",
+    "protect_install_folders",
+    "read_regular_bytes",
+    "remove_stale_temporaries",
+    "replace_with_retry",
+    "restrict_file",
+    "save_download_history",
+    "save_json",
+    "save_secret_undo",
+    "save_secrets",
+    "save_state",
+    "secret_store_status",
+    "secret_undo_path",
+    "state_schema_version",
+    "validate_download_history_bytes",
+    "validate_state_bytes",
+    "write_generation",
+]
 
 
 class SecretStoreError(RuntimeError):
@@ -46,10 +119,6 @@ class MissingMasterKeyError(TowError, SecretStoreError):
 
 class InvalidMasterKeyPathError(TowError, SecretStoreError):
     """A relative master-key path must not leave the data folder."""
-
-
-class StoreCorruptionError(RuntimeError):
-    """Raised when a persisted JSON store is corrupt and was quarantined."""
 
 
 _SECRETS_FORMAT = "tow-secrets/v1"
@@ -76,16 +145,6 @@ class StateVersionError(TowError, StoreCorruptionError):
     nor written, so a newer TOW's data is never corrupted by an older one."""
 
 
-class RegularReadError(ValueError):
-    """``read_regular_bytes`` refused the file. ``kind`` says why, whatever the caller makes of
-    it: ``"type"`` (not a regular file), ``"size"`` (over the limit) or ``"changed"`` (another file
-    or another size by the time it was read)."""
-
-    def __init__(self, kind: Literal["type", "size", "changed"]) -> None:
-        super().__init__(f"regular file refused: {kind}")
-        self.kind = kind
-
-
 # The data version of state.json this TOW writes. A TOW that finds a newer one refuses to
 # start; an older one (or none: TOW 1.18 and before) is brought up to date in _migrate_state.
 STATE_SCHEMA_VERSION = 2
@@ -107,70 +166,6 @@ def _has_quarantined_copy(path: Path) -> bool:
         return any(entry.name.startswith(prefix) for entry in path.parent.iterdir())
     except OSError:
         return False
-
-
-def _finite_json_float(value: str) -> float:
-    number = float(value)
-    if not math.isfinite(number):
-        raise ValueError("non-finite JSON number")
-    return number
-
-
-JSON_MAX_DEPTH = 128
-
-
-def _check_json_depth(value: Any) -> None:
-    # Native parser/encoder stack limits differ by OS. Keep the store contract
-    # explicit, and walk level by level so this check has no recursion limit.
-    # Only containers are visited: a value inside a non-empty container at the
-    # limit is one level too deep, whatever it is.
-    level = [value] if isinstance(value, (dict, list, tuple)) else []
-    depth = 0
-    while level:
-        deeper: list[Any] = []
-        for item in level:
-            children = item.values() if isinstance(item, dict) else item
-            if not children:
-                continue
-            if depth >= JSON_MAX_DEPTH:
-                raise ValueError("JSON nesting exceeds the store limit")
-            deeper.extend([child for child in children if isinstance(child, (dict, list, tuple))])
-        level = deeper
-        depth += 1
-
-
-def decode_json_bytes(raw: bytes) -> Any:
-    """Decode a store or recovery journal with finite numbers and bounded nesting."""
-    value = json.loads(raw.decode("utf-8"), parse_float=_finite_json_float, parse_constant=_finite_json_float)
-    _check_json_depth(value)
-    return value
-
-
-def read_regular_bytes(path: Path, limit: int, *, same_as: os.stat_result | None = None) -> bytes:
-    """The bytes of a regular file of at most ``limit`` bytes, through one open handle.
-
-    The opened file (``fstat``) must be a regular file (else ``RegularReadError("type")``) of 0 to
-    ``limit`` bytes ("size"); with ``same_as`` (the caller's earlier ``lstat``) it must also be that
-    file, of that size ("changed"). Its size plus one byte is read - never ``limit`` bytes for a
-    small file - so a file that grew or shrank meanwhile is "changed". An OSError from opening or
-    reading is the caller's.
-    """
-    with path.open("rb") as handle:
-        info = os.fstat(handle.fileno())
-        if not stat.S_ISREG(info.st_mode):
-            raise RegularReadError("type")
-        if same_as is not None and (
-            (info.st_dev, info.st_ino) != (same_as.st_dev, same_as.st_ino) or info.st_size != same_as.st_size
-        ):
-            raise RegularReadError("changed")
-        if not 0 <= info.st_size <= limit:
-            raise RegularReadError("size")
-        raw = handle.read(info.st_size + 1)
-    if len(raw) > limit:
-        raise RegularReadError("size")
-    if len(raw) != info.st_size:
-        raise RegularReadError("changed")
-    return raw
 
 
 def _validated_json(raw: bytes, validate: Callable[[Any], None] | None) -> Any:
@@ -406,103 +401,12 @@ def persistence_lock() -> Iterator[None]:
             handle.close()
 
 
-@contextmanager
-def _writer_lock(path: Path) -> Iterator[None]:
-    del path
-    with persistence_lock():
-        yield
-
-
-def replace_with_retry(source: Path, target: Path, *, attempts: int = 10) -> None:
-    """os.replace, retrying briefly while a reader has the target open (Windows sharing violation)."""
-    for attempt in range(attempts):
-        try:
-            os.replace(source, target)
-            return
-        except PermissionError:
-            if attempt == attempts - 1:
-                raise
-            time.sleep(min(0.02 * 2**attempt, 1.0))  # 20 ms ... 1 s, ~4.3 s in total
-
-
-_write_generation = 0
-
-
-def write_generation() -> int:
-    """Counts the files this process has written: a per-request cache (tow.web) that saw another
-    number reads again, so a page rendered after a save in the same request shows the save."""
-    return _write_generation
-
-
-def atomic_write_bytes(path: Path, content: bytes) -> None:
-    _atomic_write_bytes(path, content, overwrite=True)
-
-
-def atomic_create_bytes(path: Path, content: bytes) -> None:
-    """Publish complete bytes only if the name is free, never clobber another writer."""
-    _atomic_write_bytes(path, content, overwrite=False)
-
-
-def _atomic_write_bytes(path: Path, content: bytes, *, overwrite: bool) -> None:
-    global _write_generation
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_name = None
-    with _writer_lock(path):
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="wb",
-                prefix=f".{path.name}.",
-                suffix=".tmp",
-                dir=path.parent,
-                delete=False,
-            ) as handle:
-                temporary_name = Path(handle.name)
-                handle.write(content)
-                handle.flush()
-                os.fsync(handle.fileno())
-            if overwrite:
-                replace_with_retry(temporary_name, path)
-            else:
-                current_platform().publish_exclusive(temporary_name, path)
-            _write_generation += 1  # after the replace, under the writer lock (one writer at a time)
-            try:
-                directory_fd = os.open(path.parent, os.O_RDONLY)
-            except OSError:
-                directory_fd = None
-            if directory_fd is not None:
-                try:
-                    os.fsync(directory_fd)
-                finally:
-                    os.close(directory_fd)
-        finally:
-            if temporary_name is not None:
-                try:
-                    temporary_name.unlink()
-                except FileNotFoundError:
-                    pass
-                except OSError:
-                    pass
-
-
 def save_json(path: Path, data: Any, *, compact: bool = False) -> None:
     try:
-        _check_json_depth(data)
-        if compact:
-            content = (json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False) + "\n").encode(
-                "utf-8"
-            )
-        else:
-            content = (json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8")
+        content = encode_json(data, compact=compact) + b"\n"
     except (TypeError, ValueError, UnicodeError, RecursionError) as exc:
         raise StoreCorruptionError(f"JSON payload is not serializable: {path.name}") from exc
     atomic_write_bytes(path, content)
-
-
-def atomic_write_text(path: Path, text: str) -> None:
-    try:
-        atomic_write_bytes(path, text.encode("utf-8"))
-    except UnicodeError as exc:
-        raise StoreCorruptionError(f"text payload is not UTF-8: {path.name}") from exc
 
 
 def encrypted_secrets_path() -> Path:
@@ -617,8 +521,7 @@ def master_fernet() -> Fernet:
 
 def _json_bytes(data: Any) -> bytes:
     try:
-        _check_json_depth(data)
-        encoded = json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        encoded = encode_json(data, compact=True)
         if decode_json_bytes(encoded) != data:
             raise ValueError("secret JSON would change the payload")
         return encoded
@@ -632,12 +535,6 @@ def _write_bytes_atomic(path: Path, content: bytes) -> None:
         restrict_file(path)
     except OSError as exc:
         raise SecretStoreError(Msg("store.secrets_write_failed")) from exc
-
-
-def restrict_file(path: Path) -> None:
-    """Owner read and write only (0600), where the OS supports it; a failure is ignored."""
-    with suppress(OSError):
-        path.chmod(0o600)
 
 
 def _encrypted_payload(path: Path, expected_format: str) -> dict[str, Any]:
