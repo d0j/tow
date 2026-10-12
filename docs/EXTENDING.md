@@ -191,9 +191,10 @@ the OS:
   priority when several jobs are due, and the key order of `next` in `status.json`. `JOB_ARGS` and
   `JOB_TIMEOUT_SEC` in `tow/supervisor/core.py` and the cadences of `tow/supervisor/schedule.py` are read from it;
   a condition for being due at all (like the disk-space pass only while a topic waits) is code in
-  `Schedule._due_at`, a special start (like the timers' reservation) code in `Supervisor._start_job`. Its timing
-  is tested with a fake clock in `tests/test_supervisor.py` and `tests/test_golden_schedule.py`; a short pass can
-  run in a thread like the watchdog's (a row without arguments). Its "last run" is kept by the supervisor
+  `Schedule._due_at`, a special start (like the timers' reservation) code in `Supervisor._start_job`. Its
+  arguments must parse as a `tow` command with the scope flag it means (`tests/test_supervisor_jobs.py`), its
+  timing is tested with a fake clock in `tests/test_supervisor.py` and `tests/test_golden_schedule.py`; a short
+  pass can run in a thread like the watchdog's (a row without arguments). Its "last run" is kept by the supervisor
   (`data/run/schedule.json`), never derived from a timestamp other code also moves (`health.at_ts` moves with
   every manual check);
 - a daily slot is a local wall time built per calendar day with PEP 495 rules, and is due when the newest good
