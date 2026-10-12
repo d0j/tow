@@ -14,10 +14,12 @@ import errno
 import hashlib
 import json
 import os
+import stat
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from cryptography.fernet import Fernet
@@ -1324,3 +1326,50 @@ def test_failed_rollback_raises_a_chained_error_and_keeps_the_journal():
     assert isinstance(cause, CheckTransactionError)
     assert "cannot restore check store: state.json" in str(cause)
     assert (_tx_root() / "TRANSACTION.json").exists()
+
+
+# --- read_regular_bytes: one bounded read of a regular file ------------------------------------
+
+
+def test_a_regular_file_is_read_to_its_own_size(tmp_path):
+    path = tmp_path / "record.bin"
+    path.write_bytes(b"12345")
+    assert store.read_regular_bytes(path, 5) == b"12345"
+    assert store.read_regular_bytes(path, 5, same_as=path.lstat()) == b"12345"
+    path.write_bytes(b"")
+    assert store.read_regular_bytes(path, 0) == b""
+
+
+def _stat_fields(info):
+    return {name: getattr(info, name) for name in ("st_mode", "st_dev", "st_ino", "st_size")}
+
+
+def _refusal(path, limit, **kwargs):
+    with pytest.raises(store.RegularReadError) as refused:
+        store.read_regular_bytes(path, limit, **kwargs)
+    assert isinstance(refused.value, ValueError)
+    return refused.value.kind
+
+
+def test_an_irregular_large_or_changing_file_is_refused_by_kind(tmp_path, monkeypatch):
+    path = tmp_path / "record.bin"
+    path.write_bytes(b"12345")
+    seen = path.lstat()
+    assert _refusal(path, 4) == "size"
+    path.write_bytes(b"123456")  # grew after the caller's lstat
+    assert _refusal(path, 10, same_as=seen) == "changed"
+
+    real_fstat = os.fstat
+    fake: dict[str, object] = {}
+    monkeypatch.setattr(os, "fstat", lambda fd: SimpleNamespace(**{**_stat_fields(real_fstat(fd)), **fake}))
+    fake.update(st_mode=stat.S_IFIFO | 0o644)
+    assert _refusal(path, 10) == "type"
+    fake.clear()
+    fake.update(st_ino=seen.st_ino + 1, st_size=6)  # another file under the name
+    assert _refusal(path, 10, same_as=seen) == "changed"
+    fake.clear()
+    fake.update(st_size=5)  # it says 5 bytes, yet 6 are there: it grew while read
+    assert _refusal(path, 10) == "changed"
+    assert _refusal(path, 5) == "size"  # the extra byte goes past the limit
+    fake.update(st_size=-1)
+    assert _refusal(path, 10) == "size"

@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import os
 import re
 import stat
 import threading
@@ -21,7 +20,7 @@ from tow.errors import TowError
 from tow.paths import tmp_dir
 from tow.platform import child_path
 from tow.selection import normalize_policy
-from tow.store import atomic_create_bytes, master_fernet, persistence_lock
+from tow.store import RegularReadError, atomic_create_bytes, master_fernet, persistence_lock, read_regular_bytes
 from tow.torrent import MAX_TORRENT_BYTES, TorrentMetadata, parse_torrent_metadata
 
 TTL = 15 * 60
@@ -152,15 +151,12 @@ def _read_record(token: str, url: str, client_id: str) -> tuple[bytes, bool, flo
         info = path.lstat()
         if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_RECORD_BYTES:
             raise TowError("content.unavailable")
-        with path.open("rb") as stream:
-            opened = os.fstat(stream.fileno())
-            if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino):
-                raise TowError("content.unavailable")
-            # Its own size plus one byte (a file that grew is refused below): a read of the limit
-            # would allocate 60 MiB for every record, the size of a small torrent's record.
-            encrypted = stream.read(info.st_size + 1)
-        if len(encrypted) != info.st_size:
-            raise TowError("content.unavailable")
+        # The file lstat saw, read to its own size: a read of the limit would allocate 60 MiB
+        # for every record, the size of a small torrent's record.
+        try:
+            encrypted = read_regular_bytes(path, MAX_RECORD_BYTES, same_as=info)
+        except RegularReadError:
+            raise TowError("content.unavailable") from None
         record = json.loads(master_fernet().decrypt(encrypted, ttl=TTL))
         if not isinstance(record, dict):
             raise TowError("content.unavailable")
