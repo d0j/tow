@@ -69,6 +69,28 @@ def test_every_messenger_is_found_in_display_order():
         assert module.FIELDS
 
 
+def test_the_storage_scope_is_where_the_settings_are_stored():
+    for kind in notifiers.kinds():
+        secrets: dict = {}
+        notifiers.store(secrets, kind, {"x": "1"})
+        node = secrets
+        for name in notifiers.storage_scope(kind):
+            node = node[name]
+        assert node == {"x": "1"}, kind
+    assert notifiers.storage_scope("telegram") == ["telegram"]  # its own STORAGE block
+    assert notifiers.storage_scope("ntfy") == ["notifiers", "ntfy"]
+
+
+def test_the_settings_form_reads_a_damaged_block_as_no_settings():
+    from tow.web.routes_notifiers import _raw_notifier
+
+    assert _raw_notifier({"notifiers": ["not", "a", "mapping"]}, "ntfy") is None
+    assert _raw_notifier({"notifiers": {"ntfy": "text"}}, "ntfy") is None
+    assert _raw_notifier({"telegram": 5}, "telegram") is None
+    assert _raw_notifier({"notifiers": {"ntfy": {"topic": "tow-1"}}}, "ntfy") == {"topic": "tow-1"}
+    assert _raw_notifier({"telegram": {"token": "x"}}, "telegram") == {"token": "x"}
+
+
 def _is_key(value: str) -> bool:
     import re
 

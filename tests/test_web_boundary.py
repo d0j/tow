@@ -106,7 +106,8 @@ PURE: dict[str, set[str]] = {
     "tow.jsonish": {"as_dict"},
     "tow.mirrors": {"origin_key"},
     # The messengers' settings in the secrets (a dict) and their cards; a test message is in services.
-    "tow.notifiers": {"cards", "health", "kinds", "remove", "store", "title", "validate"},
+    # storage_scope: where a messenger's settings sit in the secrets (from its module), no I/O.
+    "tow.notifiers": {"cards", "health", "kinds", "remove", "storage_scope", "store", "title", "validate"},
     # TOW's own temporary folder (AGENTS.md: every path from tow.paths).
     "tow.paths": {"tmp_dir"},
     "tow.pulse": {"clock"},
