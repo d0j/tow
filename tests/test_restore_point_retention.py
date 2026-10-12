@@ -142,7 +142,7 @@ def test_read_back_failure_never_deletes_a_replacement(monkeypatch, tmp_path):
         path.write_bytes(b"replacement belongs to someone else")
         raise ExportImportError("read back failed")
 
-    monkeypatch.setattr(bundle, "_read_bundle", replaced)
+    monkeypatch.setattr(bundle, "read_bundle", replaced)
     with pytest.raises(ExportImportError):
         bundle.export_bundle(target, "synthetic-passphrase")
     assert target.read_bytes() == b"replacement belongs to someone else"

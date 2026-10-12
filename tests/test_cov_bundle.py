@@ -36,6 +36,9 @@ from tow.bundle import (
     recover_import_transactions,
     rollback_import,
 )
+from tow.bundle import crypto as bundle_crypto
+from tow.bundle import io as bundle_io
+from tow.bundle import schema as bundle_schema
 from tow.paths import config_path, data_dir, download_history_path, state_path
 from tow.store import (
     SecretStoreError,
@@ -69,7 +72,7 @@ def _destination(monkeypatch):
     # conftest already isolates TOW_HOME/TOW_CONFIG into tmp_path; the destination also needs a key.
     monkeypatch.setenv("TOW_MASTER_KEY", _key())
     monkeypatch.delenv("TOW_MASTER_KEY_FILE", raising=False)
-    monkeypatch.setattr(tow_bundle, "KDF_ITERATIONS", ITERATIONS)
+    monkeypatch.setattr(bundle_crypto, "KDF_ITERATIONS", ITERATIONS)
 
 
 # --------------------------------------------------------------------------- bundle builders
@@ -346,7 +349,7 @@ def test_checksum_is_checked_before_normalizing_archive_config(tmp_path, monkeyp
     manifest = _manifest(members)
     manifest["sha256"]["config.yaml"] = "0" * 64
     archive = _bundle(tmp_path / "in" / "tampered.towx", members, manifest=manifest)
-    monkeypatch.setattr(tow_bundle, "normalize_utf8", lambda *a: pytest.fail("unauthenticated content decoded"))
+    monkeypatch.setattr(bundle_schema, "normalize_utf8", lambda *a: pytest.fail("unauthenticated content decoded"))
     with pytest.raises(ExportImportError, match=r"bundle checksum mismatch: config\.yaml"):
         import_bundle(archive, PASS, apply=True)
     _assert_untouched(before)
@@ -438,7 +441,7 @@ def test_bundle_that_is_not_a_json_envelope_is_rejected(tmp_path, raw):
 
 def test_oversized_bundle_file_is_rejected_before_parsing(tmp_path, monkeypatch):
     bundle = _bundle(tmp_path / "in" / "tow.towx")
-    monkeypatch.setattr(tow_bundle, "MAX_BUNDLE_BYTES", bundle.stat().st_size - 1)
+    monkeypatch.setattr(bundle_io, "MAX_BUNDLE_BYTES", bundle.stat().st_size - 1)
     _rejects(tmp_path, bundle, "export bundle is too large")
 
 
@@ -611,7 +614,7 @@ def test_a_damaged_archive_is_refused_as_a_bundle_error(tmp_path, damage):
 
 def test_members_whose_total_size_exceeds_the_bundle_limit_are_rejected(tmp_path, monkeypatch):
     # Highly compressible members: the sealed file stays small, the unpacked total does not.
-    monkeypatch.setattr(tow_bundle, "MAX_BUNDLE_BYTES", 6000)
+    monkeypatch.setattr(bundle_io, "MAX_BUNDLE_BYTES", 6000)
     padding = b"#" + b" " * 3500 + b"\n"
     bundle = _bundle(
         tmp_path / "in" / "tow.towx",
@@ -800,7 +803,7 @@ def test_export_read_back_failure_leaves_the_output_as_it_was(tmp_path, monkeypa
     output = tmp_path / "tow.towx"
     if previous is not None:
         output.write_bytes(previous)
-    monkeypatch.setattr(tow_bundle, "_read_bundle", lambda _path, _passphrase: {"members": {}})
+    monkeypatch.setattr(tow_bundle, "read_bundle", lambda _path, _passphrase: {"members": {}})
 
     with pytest.raises(ExportImportError, match="read-back member mismatch"):
         export_bundle(output, PASS, overwrite=True)
@@ -862,7 +865,7 @@ def test_export_refuses_missing_or_oversized_config(tmp_path, monkeypatch):
     _seed_source()
     output = tmp_path / "tow.towx"
     with monkeypatch.context() as patch:
-        patch.setattr(tow_bundle, "MAX_BUNDLE_BYTES", 4)
+        patch.setattr(bundle_io, "MAX_BUNDLE_BYTES", 4)
         with pytest.raises(ExportImportError, match=r"config\.yaml is too large"):
             export_bundle(output, PASS)
     config_path().unlink()
@@ -883,10 +886,10 @@ def test_read_limited_rechecks_size_during_read(tmp_path, monkeypatch):
         return result
 
     with monkeypatch.context() as patch:
-        patch.setattr(tow_bundle, "MAX_BUNDLE_BYTES", 4)
+        patch.setattr(bundle_io, "MAX_BUNDLE_BYTES", 4)
         patch.setattr(Path, "stat", stale_stat)
         with pytest.raises(ExportImportError, match=r"growing\.towx is too large"):
-            tow_bundle._read_limited(path, label=path.name)
+            bundle_io.read_limited(path, label=path.name)
 
 
 def test_export_settings_undo_must_point_at_a_readable_encrypted_snapshot(tmp_path):
@@ -1322,7 +1325,7 @@ def test_rollback_refuses_a_target_replaced_by_a_directory(applied):
 
 
 def test_rollback_that_cannot_compensate_stays_pending_and_completes_on_next_lock(applied, monkeypatch):
-    original = tow_bundle._atomic_write
+    original = tow_bundle.atomic_write
 
     def disk_full_after_marker(path, content):
         if path.name == "TRANSACTION.json":
@@ -1330,7 +1333,7 @@ def test_rollback_that_cannot_compensate_stays_pending_and_completes_on_next_loc
         raise ExportImportError(f"cannot write imported {path.name}")
 
     with monkeypatch.context() as patch:
-        patch.setattr(tow_bundle, "_atomic_write", disk_full_after_marker)
+        patch.setattr(tow_bundle, "atomic_write", disk_full_after_marker)
         with pytest.raises(ExportImportError, match="rollback failed; recovery remains pending"):
             rollback_import(applied["checkpoint"], apply=True)
 
@@ -1341,7 +1344,7 @@ def test_rollback_that_cannot_compensate_stays_pending_and_completes_on_next_loc
 
 
 def test_rollback_failure_whose_marker_cannot_be_updated_still_preserves_destination(applied, monkeypatch):
-    original = tow_bundle._atomic_write
+    original = tow_bundle.atomic_write
     failed_target = False
 
     def fail_first_target_then_markers(path, content):
@@ -1355,7 +1358,7 @@ def test_rollback_failure_whose_marker_cannot_be_updated_still_preserves_destina
             raise OSError("fixture: target disk failure")
         return original(path, content)
 
-    monkeypatch.setattr(tow_bundle, "_atomic_write", fail_first_target_then_markers)
+    monkeypatch.setattr(tow_bundle, "atomic_write", fail_first_target_then_markers)
     with pytest.raises(ExportImportError, match="destination preserved but marker update failed"):
         rollback_import(applied["checkpoint"], apply=True)
 
@@ -1363,14 +1366,14 @@ def test_rollback_failure_whose_marker_cannot_be_updated_still_preserves_destina
 
 
 def test_rollback_reports_a_marker_failure_after_restoring_files(applied, monkeypatch):
-    original = tow_bundle._atomic_write
+    original = tow_bundle.atomic_write
 
     def fail_final_marker(path, content):
         if path.name == "TRANSACTION.json" and json.loads(content)["status"] == "rolled_back":
             raise OSError("fixture: journal disk failure")
         return original(path, content)
 
-    monkeypatch.setattr(tow_bundle, "_atomic_write", fail_final_marker)
+    monkeypatch.setattr(tow_bundle, "atomic_write", fail_final_marker)
     with pytest.raises(ExportImportError, match="rollback applied but transaction marker update failed"):
         rollback_import(applied["checkpoint"], apply=True)
 

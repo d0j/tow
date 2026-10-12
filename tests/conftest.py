@@ -282,9 +282,9 @@ def _fast_export_kdf(monkeypatch):
 
     The production cost is guarded by test_export_import's source check.
     """
-    import tow.bundle
+    import tow.bundle.crypto
 
-    monkeypatch.setattr(tow.bundle, "KDF_ITERATIONS", 100_000)
+    monkeypatch.setattr(tow.bundle.crypto, "KDF_ITERATIONS", 100_000)
 
 
 @pytest.fixture(autouse=True)

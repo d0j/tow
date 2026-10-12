@@ -701,10 +701,10 @@ def test_a_folder_that_cannot_be_written_is_said_in_the_systems_words(monkeypatc
 
 @pytest.mark.parametrize("language", LANGUAGES)
 def test_data_too_large_for_a_restore_point_is_said_in_the_owner_language(monkeypatch, tmp_path, language):
-    from tow import bundle
+    from tow.bundle import io as bundle_io
 
     _seed(monkeypatch, tmp_path, language)
-    monkeypatch.setattr(bundle, "MAX_BUNDLE_BYTES", 400)  # the config fits, the unpacked whole does not
+    monkeypatch.setattr(bundle_io, "MAX_BUNDLE_BYTES", 400)  # the config fits, the unpacked whole does not
 
     with pytest.raises(RestorePointError) as caught:
         create_restore_point()

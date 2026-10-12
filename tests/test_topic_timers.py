@@ -10,7 +10,8 @@ from fastapi.testclient import TestClient
 from test_supervisor import T0, make
 
 from tow import check, cli, topic_timers
-from tow.bundle import ExportImportError, _validate_state_topic
+from tow.bundle import ExportImportError
+from tow.bundle.schema import _validate_state_topic
 from tow.check import reconcile as check_reconcile
 from tow.check import run as check_run
 from tow.check_steps import merge_check_results, owner_fields

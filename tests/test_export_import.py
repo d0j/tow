@@ -12,23 +12,19 @@ import pytest
 import yaml
 from helpers import reaped
 
-from tow.bundle import (
-    ExportImportError,
-    _atomic_write,
-    _json_bytes,
-    _parse_mapping,
-    _read_bundle,
-    _secret_key_path,
-    _validate_config_schema,
-    _validate_history_schema,
-    _validate_state_schema,
-    _validate_tree,
-    _validated_payload,
-    _zip_payload,
-    export_bundle,
-    import_bundle,
-    rollback_import,
+from tow.bundle import ExportImportError, export_bundle, import_bundle, rollback_import
+from tow.bundle import crypto as bundle_crypto
+from tow.bundle.archive import _validated_payload, read_bundle, unzip_payload, zip_payload
+from tow.bundle.crypto import _encrypt_outer, decrypt_outer
+from tow.bundle.io import atomic_write, json_bytes, sha256
+from tow.bundle.schema import (
+    parse_mapping,
+    validate_config_schema,
+    validate_history_schema,
+    validate_state_schema,
+    validate_tree,
 )
+from tow.bundle.secret_scan import _secret_key_path, refuse_plaintext_secrets
 from tow.log import log_event
 from tow.paths import config_path, state_path
 from tow.store import (
@@ -67,29 +63,29 @@ def test_cookie_name_metadata_is_not_treated_as_plaintext_secret():
 @pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
 def test_import_rejects_non_finite_json_history_values(constant):
     raw = ('{"schema_version":1,"topics":{"topic-1":{"items":{"file":{"progress":' + constant + "}}}}}").encode()
-    history = _parse_mapping(raw, label="download_history.json")
+    history = parse_mapping(raw, label="download_history.json")
     with pytest.raises(ExportImportError, match="non-finite"):
-        _validate_history_schema(history)
+        validate_history_schema(history)
 
 
 @pytest.mark.parametrize("constant", [".nan", ".inf", "-.inf"])
 def test_import_rejects_non_finite_yaml_config_values(constant):
-    config = _parse_mapping(f"extra: {constant}".encode(), label="config.yaml")
+    config = parse_mapping(f"extra: {constant}".encode(), label="config.yaml")
     with pytest.raises(ExportImportError, match="non-finite"):
-        _validate_config_schema(config)
+        validate_config_schema(config)
 
 
 @pytest.mark.parametrize(("label", "prefix"), [("state.json", b'{"nested":'), ("config.yaml", b"nested: ")])
 def test_import_rejects_extreme_nesting_without_recursion_escape(label, prefix):
     raw = prefix + b"[" * 1500 + b"0" + b"]" * 1500 + (b"}" if label == "state.json" else b"")
     with pytest.raises(ExportImportError, match=r"invalid|nested too deeply"):
-        _validate_tree(_parse_mapping(raw, label=label), label=label)
+        validate_tree(parse_mapping(raw, label=label), label=label)
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
 def test_export_rejects_non_finite_numbers(value):
     with pytest.raises(ExportImportError, match="not JSON serializable"):
-        _json_bytes({"nested": [value]})
+        json_bytes({"nested": [value]})
 
 
 def test_import_rejects_deep_envelope_and_manifest(tmp_path):
@@ -97,14 +93,14 @@ def test_import_rejects_deep_envelope_and_manifest(tmp_path):
     bundle = tmp_path / "malformed.towx"
     bundle.write_bytes(b'{"nested":' + deep + b"}")
     with pytest.raises(ExportImportError, match="export bundle envelope"):
-        _read_bundle(bundle, "passphrase")
+        read_bundle(bundle, "passphrase")
     with pytest.raises(ExportImportError, match=r"manifest\.json|invalid bundle manifest"):
-        _validated_payload(_zip_payload({"manifest.json": b'{"nested":' + deep + b"}"}))
+        _validated_payload(zip_payload({"manifest.json": b'{"nested":' + deep + b"}"}))
 
 
 def test_import_rejects_non_finite_optional_events():
     from tow import __version__
-    from tow.bundle import FORMAT, _sha256
+    from tow.bundle import FORMAT
 
     members = {
         "config.yaml": b"{}",
@@ -119,11 +115,11 @@ def test_import_rejects_non_finite_optional_events():
             "schema_version": 1,
             "source_version": __version__,
             "members": sorted(members),
-            "sha256": {name: _sha256(data) for name, data in members.items()},
+            "sha256": {name: sha256(data) for name, data in members.items()},
         }
     ).encode()
     with pytest.raises(ExportImportError, match=r"events\.json contains a non-finite number"):
-        _validated_payload(_zip_payload(members))
+        _validated_payload(zip_payload(members))
 
 
 @pytest.mark.parametrize(
@@ -178,11 +174,9 @@ def test_a_restore_point_is_made_while_a_messenger_delivery_holds_its_lease(tmp_
     ],
 )
 def test_a_secret_shaped_field_outside_a_lease_claim_is_still_refused(label, data):
-    from tow.bundle import _refuse_plaintext_secrets
-
     files = {"config.yaml": {}, "state.json": {}, "download_history.json": {}, label: data}
     with pytest.raises(ExportImportError, match="plaintext secret-shaped field"):
-        _refuse_plaintext_secrets(files["config.yaml"], files["state.json"], files["download_history.json"])
+        refuse_plaintext_secrets(files["config.yaml"], files["state.json"], files["download_history.json"])
 
 
 @pytest.mark.parametrize(
@@ -197,7 +191,7 @@ def test_a_secret_shaped_field_outside_a_lease_claim_is_still_refused(label, dat
 )
 def test_import_rejects_malformed_mirror_bucket(bucket):
     with pytest.raises(ExportImportError, match=r"mirror|non-finite"):
-        _validate_state_schema({"topics": [], "mirrors": {"site": bucket}})
+        validate_state_schema({"topics": [], "mirrors": {"site": bucket}})
 
 
 def test_atomic_import_write_does_not_overwrite_predictable_temp_collision(tmp_path):
@@ -205,7 +199,7 @@ def test_atomic_import_write_does_not_overwrite_predictable_temp_collision(tmp_p
     predictable = tmp_path / "state.json.tow-import.tmp"
     predictable.write_bytes(b"unrelated sentinel")
 
-    _atomic_write(target, b"new content")
+    atomic_write(target, b"new content")
 
     assert target.read_bytes() == b"new content"
     assert predictable.read_bytes() == b"unrelated sentinel"
@@ -300,7 +294,7 @@ def test_every_export_preserves_schema_and_old_reader_refuses_before_writes(tmp_
     save_state(state)
     archive = tmp_path / "guarded.towx"
     export_bundle(archive, "bundle-passphrase")
-    parsed = _read_bundle(archive, "bundle-passphrase")
+    parsed = read_bundle(archive, "bundle-passphrase")
     assert parsed["state"]["schema_version"] == store.STATE_SCHEMA_VERSION == 2
     targets = [config_path(), state_path(), store.download_history_path(), store.encrypted_secrets_path()]
     before = {path: path.read_bytes() for path in targets}
@@ -322,7 +316,7 @@ def test_unmarked_exact_selection_is_refused_even_inside_undo(schema, kind):
     else:
         state["undo"] = {"kind": "topic", "item": _exact_topic()}
     with pytest.raises(ExportImportError, match="require schema 2"):
-        _validate_state_schema(state)
+        validate_state_schema(state)
 
 
 def test_exact_selection_export_apply_and_readback_keep_format_guard(tmp_path, monkeypatch):
@@ -405,17 +399,16 @@ def test_traversal_member_is_rejected_without_write(tmp_path, monkeypatch):
     bundle = tmp_path / "tow.towx"
     export_bundle(bundle, "bundle-passphrase")
     outer = json.loads(bundle.read_text(encoding="utf-8"))
-    from tow import bundle as tow_bundle
 
-    payload = tow_bundle._decrypt_outer(outer, "bundle-passphrase")
+    payload = decrypt_outer(outer, "bundle-passphrase")
     with zipfile.ZipFile(io.BytesIO(payload), "r") as source_zip:
         members = {name: source_zip.read(name) for name in source_zip.namelist()}
     members["../state.json"] = members["state.json"]
     manifest = json.loads(members["manifest.json"])
     manifest["members"].append("../state.json")
     members["manifest.json"] = json.dumps(manifest, separators=(",", ":")).encode()
-    malicious_payload = tow_bundle._zip_payload(members)
-    outer["payload"] = tow_bundle._encrypt_outer(
+    malicious_payload = zip_payload(members)
+    outer["payload"] = _encrypt_outer(
         malicious_payload, "bundle-passphrase", base64.urlsafe_b64decode(outer["kdf"]["salt"])
     )
     bundle.write_text(json.dumps(outer), encoding="utf-8")
@@ -534,14 +527,14 @@ def test_a_checkpoint_that_cannot_be_written_leaves_no_half_copy(tmp_path, monke
 
     dest = tmp_path / "destination"
     _seed_source(monkeypatch, dest)
-    real = tow_bundle._atomic_write
+    real = tow_bundle.atomic_write
 
     def full(path, content):
         if Path(path).name == member:
             raise OSError(28, "No space left on device")
         return real(path, content)
 
-    monkeypatch.setattr(tow_bundle, "_atomic_write", full)
+    monkeypatch.setattr(tow_bundle, "atomic_write", full)
     with pytest.raises(OSError, match="No space left"):
         tow_bundle._create_import_checkpoint()
     root = dest / "data" / "import-checkpoints"
@@ -603,22 +596,21 @@ def test_import_rollback_preview_rejects_missing_backup(tmp_path, monkeypatch):
 
 
 def test_import_rejects_malformed_nested_state_before_path_mapping(tmp_path, monkeypatch):
-    from tow import bundle as tow_bundle
 
     _seed_source(monkeypatch, tmp_path / "source")
     bundle = tmp_path / "tow.towx"
     export_bundle(bundle, "bundle-passphrase")
     outer = json.loads(bundle.read_text(encoding="utf-8"))
-    members = tow_bundle._unzip_payload(tow_bundle._decrypt_outer(outer, "bundle-passphrase"))
+    members = unzip_payload(decrypt_outer(outer, "bundle-passphrase"))
     state_data = json.loads(members["state.json"])
     state_data["topics"] = [1]
-    members["state.json"] = tow_bundle._json_bytes(state_data)
+    members["state.json"] = json_bytes(state_data)
     manifest = json.loads(members["manifest.json"])
-    manifest["sha256"]["state.json"] = tow_bundle._sha256(members["state.json"])
-    members["manifest.json"] = tow_bundle._json_bytes(manifest)
-    payload = tow_bundle._zip_payload(members)
+    manifest["sha256"]["state.json"] = sha256(members["state.json"])
+    members["manifest.json"] = json_bytes(manifest)
+    payload = zip_payload(members)
     salt = base64.urlsafe_b64decode(outer["kdf"]["salt"])
-    outer["payload"] = tow_bundle._encrypt_outer(payload, "bundle-passphrase", salt)
+    outer["payload"] = _encrypt_outer(payload, "bundle-passphrase", salt)
     bundle.write_text(json.dumps(outer), encoding="utf-8")
 
     with pytest.raises(ExportImportError, match=r"state|topic|schema"):
@@ -633,10 +625,9 @@ def test_optional_log_member_is_redacted_inside_encrypted_bundle(tmp_path, monke
     result = export_bundle(bundle, "bundle-passphrase", include_log=True)
 
     assert "events.json" in result["members"]
-    from tow import bundle as tow_bundle
 
     outer = json.loads(bundle.read_text(encoding="utf-8"))
-    members = tow_bundle._unzip_payload(tow_bundle._decrypt_outer(outer, "bundle-passphrase"))
+    members = unzip_payload(decrypt_outer(outer, "bundle-passphrase"))
     events = json.loads(members["events.json"])
     assert all("token" not in event for event in events["events"])
     assert all("detail" not in event for event in events["events"])
@@ -773,7 +764,7 @@ def test_import_rollback_compensates_after_late_restore_failure(tmp_path, monkey
         "secrets": dest / "data" / "secrets.enc",
     }
     after_import = {name: path.read_bytes() for name, path in targets.items()}
-    original_atomic = tow_bundle._atomic_write
+    original_atomic = tow_bundle.atomic_write
     calls = 0
 
     def fail_once(path, content):
@@ -783,7 +774,7 @@ def test_import_rollback_compensates_after_late_restore_failure(tmp_path, monkey
             raise OSError("simulated late rollback failure")
         return original_atomic(path, content)
 
-    monkeypatch.setattr(tow_bundle, "_atomic_write", fail_once)
+    monkeypatch.setattr(tow_bundle, "atomic_write", fail_once)
     with pytest.raises(ExportImportError, match="rollback failed; destination preserved"):
         tow_bundle.rollback_import(Path(applied["checkpoint"]), apply=True)
 
@@ -794,12 +785,6 @@ def test_import_rollback_compensates_after_late_restore_failure(tmp_path, monkey
 
 
 def test_login_form_is_valid_non_secret_config_metadata():
-    from tow.bundle import (
-        ExportImportError,
-        _secret_key_path,
-        _validate_config_schema,
-    )
-
     config = {
         "trackers": {
             "rutracker": {
@@ -807,19 +792,17 @@ def test_login_form_is_valid_non_secret_config_metadata():
             }
         }
     }
-    _validate_config_schema(config)
+    validate_config_schema(config)
     assert _secret_key_path(config) is None
     with pytest.raises(ExportImportError, match="login_form"):
-        _validate_config_schema({"trackers": {"x": {"login_form": {"password": "leak"}}}})
+        validate_config_schema({"trackers": {"x": {"login_form": {"password": "leak"}}}})
 
 
 def test_production_export_kdf_cost_is_not_lowered():
     # Tests run with 100k iterations (conftest); the shipped value must stay at 600k.
     import re
 
-    from tow import bundle as tow_bundle
-
-    source = Path(tow_bundle.__file__).read_text(encoding="utf-8")
+    source = Path(bundle_crypto.__file__).read_text(encoding="utf-8")
     assert re.search(r"^KDF_ITERATIONS = 600_000$", source, flags=re.MULTILINE)
 
 
@@ -843,7 +826,7 @@ def test_a_failed_second_rollback_does_not_undo_later_edits(tmp_path, monkeypatc
     rollback_import(checkpoint, apply=True)
     save_state({"topics": [{"id": "edited-after-rollback"}], "mirrors": {}})
 
-    real_write = tow_bundle._atomic_write
+    real_write = tow_bundle.atomic_write
     calls = []
 
     def second_write_fails(path, content):
@@ -852,10 +835,10 @@ def test_a_failed_second_rollback_does_not_undo_later_edits(tmp_path, monkeypatc
             raise OSError("disk hiccup")
         return real_write(path, content)
 
-    monkeypatch.setattr(tow_bundle, "_atomic_write", second_write_fails)
+    monkeypatch.setattr(tow_bundle, "atomic_write", second_write_fails)
     with pytest.raises(ExportImportError, match="destination preserved"):
         rollback_import(checkpoint, apply=True)
-    monkeypatch.setattr(tow_bundle, "_atomic_write", real_write)
+    monkeypatch.setattr(tow_bundle, "atomic_write", real_write)
 
     with persistence_lock():  # the recovery hook runs here
         pass

@@ -218,14 +218,14 @@ def test_every_patched_module_name_is_read_at_run_time():
 def test_the_scan_finds_many_patches():
     targets = patch_targets(TESTS, SRC)
     assert len(targets) > 1000
-    assert ("tests/conftest.py", "tow.bundle", "KDF_ITERATIONS") in {(rel, m, n) for rel, _line, m, n in targets}
+    assert ("tests/conftest.py", "tow.bundle.crypto", "KDF_ITERATIONS") in {(rel, m, n) for rel, _line, m, n in targets}
 
 
 def test_the_export_cost_patch_of_the_test_guard_is_live():
-    """tests/conftest.py lowers tow.bundle.KDF_ITERATIONS: the export functions read it when they run."""
+    """tests/conftest.py lowers tow.bundle.crypto.KDF_ITERATIONS: sealing a bundle reads it when it runs."""
     own, _attributes = runtime_reads(SRC)
-    assert "KDF_ITERATIONS" in own["tow.bundle"]
-    assert ("tests/conftest.py", "tow.bundle.KDF_ITERATIONS") not in vacuous(TESTS, SRC)
+    assert "KDF_ITERATIONS" in own["tow.bundle.crypto"]
+    assert ("tests/conftest.py", "tow.bundle.crypto.KDF_ITERATIONS") not in vacuous(TESTS, SRC)
 
 
 def test_the_scan_tells_live_from_vacuous(tmp_path):
