@@ -79,7 +79,8 @@ def is_temporary_of(name: str, stores: Iterable[str]) -> bool:
 
 
 def _store_paths() -> list[Path]:
-    from tow.store import encrypted_secrets_path, secret_undo_path  # the secrets still live in tow.store
+    # Imported when it runs: the secrets are written through this module's lock.
+    from tow.storage.secrets import encrypted_secrets_path, secret_undo_path
 
     paths = [state_path(), download_history_path(), encrypted_secrets_path(), secret_undo_path()]
     with suppress(OSError, RuntimeError):  # no config file yet: nothing of it to clean

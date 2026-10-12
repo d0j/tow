@@ -56,7 +56,8 @@ def test_existing_secrets_without_their_key_are_never_given_a_new_one(no_key, mo
 
 
 def test_a_missing_key_names_the_command_that_fixes_it(no_key):
-    from tow.store import MissingMasterKeyError, SecretStoreError, _master_key
+    from tow.storage.keys import _master_key
+    from tow.store import MissingMasterKeyError, SecretStoreError
 
     with pytest.raises(SecretStoreError) as caught:
         _master_key()

@@ -42,7 +42,7 @@ from tow.bundle import export as bundle_export
 from tow.bundle import importer as bundle_importer
 from tow.bundle import io as bundle_io
 from tow.bundle import schema as bundle_schema
-from tow.paths import config_path, data_dir, download_history_path, state_path
+from tow.paths import config_path, data_dir, download_history_path, secrets_path, state_path
 from tow.store import (
     SecretStoreError,
     encrypted_secrets_path,
@@ -53,7 +53,6 @@ from tow.store import (
     save_secrets,
     save_state,
     secret_undo_path,
-    secrets_path,
 )
 
 PASS = "bundle-passphrase"

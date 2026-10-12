@@ -1,30 +1,17 @@
 from __future__ import annotations
 
-import base64
 import hashlib
-import hmac
 import json
 import os
 import pickle
 import threading
 import time
 from collections.abc import Callable, Mapping
-from contextlib import suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from tow.errors import Msg, TowError
-
-if TYPE_CHECKING:
-    from cryptography.fernet import Fernet
-from tow.paths import (
-    data_dir,
-    download_history_path,
-    explicit_key_file,
-    key_file,
-    legacy_key_file,
-    secrets_path,
-)
+from tow.errors import TowError
+from tow.paths import data_dir, download_history_path, key_file
 from tow.paths import state_path as state_path  # noqa: PLC0414 - re-exported: the web package imports it from here
 from tow.storage.atomic import (
     RegularReadError,
@@ -36,8 +23,17 @@ from tow.storage.atomic import (
     restrict_file,
     write_generation,
 )
-from tow.storage.errors import StoreCorruptionError
+from tow.storage.errors import SecretStoreError, StoreCorruptionError
 from tow.storage.jsonio import JSON_MAX_DEPTH, decode_json_bytes, encode_json
+from tow.storage.keys import (
+    MASTER_KEY_KINDS,
+    InvalidMasterKeyPathError,
+    MasterKeyError,
+    MissingMasterKeyError,
+    derive_local_secret,
+    master_fernet,
+    master_key_file,
+)
 from tow.storage.locks import (
     RECOVERY_STEPS,
     STALE_TEMPORARY_AGE_SEC,
@@ -47,6 +43,22 @@ from tow.storage.locks import (
     is_temporary_of,
     persistence_lock,
     remove_stale_temporaries,
+)
+from tow.storage.secrets import (
+    adopt_master_key,
+    decrypt_secret_undo_bytes,
+    decrypt_secrets_bytes,
+    delete_secret_undo,
+    encrypt_secrets_bytes,
+    encrypted_secrets_path,
+    generate_master_key,
+    load_secret_undo,
+    load_secrets,
+    migrate_legacy_secrets,
+    save_secret_undo,
+    save_secrets,
+    secret_store_status,
+    secret_undo_path,
 )
 
 # The public names of the stores: what is defined here, and what tow.storage defines and the
@@ -112,23 +124,6 @@ __all__ = [
     "validate_state_bytes",
     "write_generation",
 ]
-
-
-class SecretStoreError(RuntimeError):
-    """Raised when TOW cannot safely read or write encrypted secrets."""
-
-
-class MissingMasterKeyError(TowError, SecretStoreError):
-    """No master key at all: said in the owner's words, with the command that fixes it."""
-
-
-class InvalidMasterKeyPathError(TowError, SecretStoreError):
-    """A relative master-key path must not leave the data folder."""
-
-
-_SECRETS_FORMAT = "tow-secrets/v1"
-_UNDO_FORMAT = "tow-secrets-undo/v1"
-_SETTINGS_UNDO_REF = "settings-v1"
 
 
 class StoreReadError(StoreCorruptionError):
@@ -220,273 +215,6 @@ def save_json(path: Path, data: Any, *, compact: bool = False) -> None:
     atomic_write_bytes(path, content)
 
 
-def encrypted_secrets_path() -> Path:
-    return secrets_path().with_name("secrets.enc")
-
-
-def secret_undo_path() -> Path:
-    return secrets_path().with_name("secrets-undo.enc")
-
-
-def _explicit_key_file() -> Path | None:
-    """TOW_MASTER_KEY_FILE (a relative path is inside the data folder), or None."""
-    try:
-        return explicit_key_file()
-    except ValueError as exc:
-        raise InvalidMasterKeyPathError("store.key_path_outside_data") from exc
-
-
-def _install_key_file() -> Path | None:
-    """``<root>/keys/master.key`` when it exists."""
-    try:
-        path = key_file()
-    except RuntimeError:  # no install root known (an installed package without TOW_ROOT)
-        return None
-    return path if path.is_file() else None
-
-
-def _legacy_key_file() -> Path | None:
-    """``<data>/master.key`` of an install from before 1.18, when it exists.
-
-    It counts only after TOW_MASTER_KEY_FILE and keys/master.key - what the Windows launcher
-    did alone before 1.21; now every start (scripts/tow, autostart, a scheduled task, a bare
-    ``python -m tow``) finds the same key.
-    """
-    try:
-        path = legacy_key_file()
-    except RuntimeError:
-        return None
-    return path if path.is_file() else None
-
-
-def _key_file_in_use() -> Path | None:
-    return _explicit_key_file() or _install_key_file() or _legacy_key_file()
-
-
-def master_key_file() -> Path | None:
-    """The key file in use: TOW_MASTER_KEY_FILE, else the install's keys/master.key, else a
-    legacy data/master.key; None when the key comes from TOW_MASTER_KEY (tests, CI) or there is
-    none."""
-    if os.environ.get("TOW_MASTER_KEY", "").strip():
-        return None
-    return _key_file_in_use()
-
-
-def _key_source() -> str:
-    if os.environ.get("TOW_MASTER_KEY", "").strip():
-        return "env"
-    if _explicit_key_file() is not None:
-        return "file"
-    if _install_key_file() is not None:
-        return "install"
-    if _legacy_key_file() is not None:
-        return "legacy"
-    return "missing"
-
-
-def _read_key_file(path: Path) -> bytes:
-    try:
-        key = path.read_bytes().strip()
-    except (OSError, UnicodeError) as exc:
-        raise SecretStoreError(Msg("store.key_unreadable")) from exc
-    if not key:
-        raise SecretStoreError(Msg("store.key_empty"))
-    return key
-
-
-def _master_key() -> bytes:
-    """TOW_MASTER_KEY > TOW_MASTER_KEY_FILE > <root>/keys/master.key > <data>/master.key (legacy)."""
-    value = os.environ.get("TOW_MASTER_KEY", "").strip()
-    if value:
-        return value.encode("ascii", errors="strict")
-    path = _key_file_in_use()
-    if path is None:
-        raise MissingMasterKeyError("store.no_master_key")
-    return _read_key_file(path)
-
-
-def derive_local_secret(purpose: str) -> str:
-    """Derive a domain-separated server-local secret without exposing the master key."""
-    if not isinstance(purpose, str) or not purpose or len(purpose) > 128 or not purpose.isascii():
-        raise SecretStoreError("invalid local secret purpose")
-    # Validate the configured value as a Fernet key before using it as key material.
-    master_fernet()
-    digest = hmac.new(
-        _master_key(),
-        f"tow/local-secret/v1/{purpose}".encode("ascii"),
-        hashlib.sha256,
-    ).digest()
-    return base64.urlsafe_b64encode(digest).decode("ascii")
-
-
-def master_fernet() -> Fernet:
-    try:
-        from cryptography.fernet import Fernet
-    except ImportError as exc:
-        raise SecretStoreError(Msg("store.no_cryptography")) from exc
-    try:
-        return Fernet(_master_key())
-    except (TypeError, ValueError, UnicodeError) as exc:
-        raise SecretStoreError(Msg("store.key_invalid")) from exc
-
-
-def _json_bytes(data: Any) -> bytes:
-    try:
-        encoded = encode_json(data, compact=True)
-        if decode_json_bytes(encoded) != data:
-            raise ValueError("secret JSON would change the payload")
-        return encoded
-    except (TypeError, ValueError, UnicodeError, RecursionError) as exc:
-        raise SecretStoreError("TOW secret payload is not serializable") from exc
-
-
-def _write_bytes_atomic(path: Path, content: bytes) -> None:
-    try:
-        atomic_write_bytes(path, content)
-        restrict_file(path)
-    except OSError as exc:
-        raise SecretStoreError(Msg("store.secrets_write_failed")) from exc
-
-
-def _encrypted_payload(path: Path, expected_format: str) -> dict[str, Any]:
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as exc:
-        raise SecretStoreError(Msg("store.secrets_damaged")) from exc
-    return _decrypted_envelope(text, expected_format)
-
-
-def decrypt_secrets_bytes(content: bytes) -> dict[str, Any]:
-    """The secrets of a secrets.enc file's bytes (a night copy's, before it is written back)."""
-    return _decrypt_envelope_bytes(content, _SECRETS_FORMAT)
-
-
-def decrypt_secret_undo_bytes(content: bytes) -> dict[str, Any]:
-    """Validate encrypted settings undo without writing or quarantining any file."""
-    return _secret_undo_data(_decrypt_envelope_bytes(content, _UNDO_FORMAT))
-
-
-def _decrypt_envelope_bytes(content: bytes, expected_format: str) -> dict[str, Any]:
-    try:
-        text = content.decode("utf-8")
-    except UnicodeError as exc:
-        raise SecretStoreError(Msg("store.secrets_damaged")) from exc
-    return _decrypted_envelope(text, expected_format)
-
-
-def encrypt_secrets_bytes(data: dict[str, Any]) -> bytes:
-    """secrets.enc bytes for ``data``, exactly as ``save_secrets`` writes them."""
-    if not isinstance(data, dict):
-        raise SecretStoreError("TOW secrets must be an object")
-    token = master_fernet().encrypt(_json_bytes(data)).decode("ascii")
-    return _json_bytes({"format": _SECRETS_FORMAT, "cipher": "fernet", "token": token}) + b"\n"
-
-
-def _decrypted_envelope(text: str, expected_format: str, fernet: Any = None) -> dict[str, Any]:
-    try:
-        envelope = decode_json_bytes(text.encode("utf-8"))
-    except (UnicodeError, ValueError, RecursionError) as exc:
-        raise SecretStoreError(Msg("store.secrets_damaged")) from exc
-    if not isinstance(envelope, dict) or envelope.get("format") != expected_format:
-        raise SecretStoreError(Msg("store.secrets_unsupported"))
-    if envelope.get("cipher") != "fernet":
-        raise SecretStoreError(Msg("store.secrets_unsupported"))
-    token = envelope.get("token")
-    if not isinstance(token, str) or not token:
-        raise SecretStoreError(Msg("store.secrets_damaged"))
-    try:
-        from cryptography.fernet import InvalidToken
-    except ImportError as exc:
-        raise SecretStoreError(Msg("store.no_cryptography")) from exc
-    try:
-        decoded = (fernet or master_fernet()).decrypt(token.encode("ascii"))
-        payload = decode_json_bytes(decoded)
-    except (InvalidToken, UnicodeError, ValueError, TypeError, RecursionError) as exc:
-        raise SecretStoreError(Msg("store.secrets_wrong_key")) from exc
-    if not isinstance(payload, dict):
-        raise SecretStoreError(Msg("store.secrets_damaged"))
-    return payload
-
-
-def _write_encrypted(path: Path, data: dict[str, Any], envelope_format: str) -> None:
-    token = master_fernet().encrypt(_json_bytes(data)).decode("ascii")
-    envelope = {"format": envelope_format, "cipher": "fernet", "token": token}
-    _write_bytes_atomic(path, _json_bytes(envelope) + b"\n")
-
-
-def _read_legacy() -> dict[str, Any]:
-    try:
-        data = decode_json_bytes(secrets_path().read_bytes())
-    except (OSError, UnicodeError, ValueError, RecursionError) as exc:
-        raise SecretStoreError(
-            Msg("store.legacy_unreadable", file="data/secrets.json", command="tow secrets migrate")
-        ) from exc
-    if not isinstance(data, dict):
-        raise SecretStoreError(Msg("store.legacy_unreadable", file="data/secrets.json", command="tow secrets migrate"))
-    return data
-
-
-def secret_store_status() -> dict[str, str]:
-    encrypted = encrypted_secrets_path().is_file()
-    legacy = secrets_path().is_file()
-    if encrypted and legacy:
-        storage = "blocked_legacy_plaintext"
-    elif encrypted:
-        storage = "encrypted"
-    elif legacy:
-        storage = "legacy_plaintext_migration_required"
-    else:
-        storage = "uninitialized"
-    return {"storage": storage, "key_source": _key_source()}
-
-
-def load_secrets() -> dict[str, Any]:
-    encrypted = encrypted_secrets_path()
-    legacy = secrets_path()
-    if encrypted.is_file():
-        if legacy.is_file():
-            raise SecretStoreError(Msg("store.legacy_left", file="data/secrets.json", encrypted="secrets.enc"))
-        return _encrypted_payload(encrypted, _SECRETS_FORMAT)
-    if legacy.is_file():
-        raise SecretStoreError(Msg("store.migrate_needed", file="data/secrets.json", command="tow secrets migrate"))
-    return {}
-
-
-def save_secrets(data: dict[str, Any]) -> None:
-    if not isinstance(data, dict):
-        raise SecretStoreError("TOW secrets must be an object")
-    encrypted = encrypted_secrets_path()
-    _write_encrypted(encrypted, data, _SECRETS_FORMAT)
-    if _encrypted_payload(encrypted, _SECRETS_FORMAT) != data:
-        raise SecretStoreError(Msg("store.readback_mismatch"))
-    legacy = secrets_path()
-    if legacy.is_file():
-        try:
-            legacy.unlink()
-        except OSError as exc:
-            raise SecretStoreError(
-                Msg("store.legacy_remains", file="data/secrets.json", encrypted="secrets.enc")
-            ) from exc
-
-
-def migrate_legacy_secrets() -> bool:
-    legacy = secrets_path()
-    encrypted = encrypted_secrets_path()
-    if not legacy.is_file():
-        return False
-    if encrypted.is_file():
-        raise SecretStoreError(Msg("store.legacy_left", file="data/secrets.json", encrypted="secrets.enc"))
-    data = _read_legacy()
-    _write_encrypted(encrypted, data, _SECRETS_FORMAT)
-    if _encrypted_payload(encrypted, _SECRETS_FORMAT) != data:
-        raise SecretStoreError(Msg("store.readback_mismatch"))
-    try:
-        legacy.unlink()
-    except OSError as exc:
-        raise SecretStoreError(Msg("store.legacy_remains", file="data/secrets.json", encrypted="secrets.enc")) from exc
-    return True
-
-
 def install_folders() -> list[Path]:
     """keys/ and data/: folders only this account (and on Windows SYSTEM and Administrators)
     may open - the master key opens every saved password, data/ holds the encrypted ones."""
@@ -527,173 +255,6 @@ def protect_install_folders(*, quiet: bool = False) -> list[Path]:
 
 # The open folders this process has named on stderr already (protect_install_folders).
 _OPEN_FOLDERS_SAID: list[Path] = []
-
-
-def _key_folder(path: Path) -> None:
-    """Create the folder of a key file; a folder TOW creates is readable by this user only
-    (POSIX 0700; Windows: this account, SYSTEM and Administrators, nothing inherited). An
-    existing folder - $HOME for `--key-file ~/tow.key` - keeps its permissions."""
-    if path.parent.is_dir():
-        return
-    from tow.platform import private_folders
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    private_folders([path.parent], created=True)
-
-
-_NEW_KEY_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
-
-
-def _write_new_key_file(path: Path, key: bytes) -> None:
-    """Create ``path`` holding ``key``; never replaces an existing file.
-
-    The file is created readable by this user only (0600 on POSIX) in the same call that
-    creates it: never a moment with the umask's permissions before a chmod.
-    """
-    _key_folder(path)
-    try:
-        handle = os.fdopen(os.open(path, _NEW_KEY_FLAGS, 0o600), "wb")
-    except FileExistsError as exc:
-        raise SecretStoreError(Msg("cli.keys.error.exists")) from exc
-    except OSError as exc:
-        raise SecretStoreError(Msg("cli.keys.error.write_failed")) from exc
-    try:
-        with handle:
-            handle.write(key + b"\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-    except OSError as exc:
-        with suppress(OSError):
-            path.unlink()  # a half-written key must not look like a different one next time
-        raise SecretStoreError(Msg("cli.keys.error.write_failed")) from exc
-    restrict_file(path)
-
-
-# Why a master key could not be created or adopted (catalog keys cli.keys.error.<kind>).
-MASTER_KEY_KINDS: tuple[str, ...] = ("secrets_exist", "exists", "invalid", "wrong_key", "no_source", "unreadable")
-MASTER_KEY_KINDS += ("different", "write_failed")
-
-
-class MasterKeyError(SecretStoreError):
-    """A master key could not be created or adopted; ``kind`` (one of MASTER_KEY_KINDS) says why."""
-
-    def __init__(self, message: str, *, kind: str) -> None:
-        super().__init__(message)
-        self.kind = kind
-
-
-def generate_master_key(path: Path | None = None) -> Path:
-    """A new master key in ``path`` (by default the install's keys/master.key); returns the path.
-
-    The default place is refused while encrypted secrets exist: they belong to the key in use,
-    and a new key there would take over once TOW_MASTER_KEY_FILE is gone (``tow keys adopt``
-    moves that key in instead).
-    """
-    try:
-        from cryptography.fernet import Fernet
-    except ImportError as exc:
-        raise SecretStoreError(Msg("store.no_cryptography")) from exc
-    if path is None:
-        if encrypted_secrets_path().is_file():
-            raise MasterKeyError("encrypted secrets exist: adopt their key instead", kind="secrets_exist")
-        path = key_file()
-    path = Path(path)
-    if path.exists():
-        raise MasterKeyError("TOW master key file already exists", kind="exists")
-    _write_new_key_file(path, Fernet.generate_key())
-    return path
-
-
-def _proven_secret_files(key: bytes) -> int:
-    """How many encrypted stores ``key`` opens; MasterKeyError when it is not their key."""
-    try:
-        from cryptography.fernet import Fernet
-
-        fernet = Fernet(key)
-    except ImportError as exc:
-        raise SecretStoreError(Msg("store.no_cryptography")) from exc
-    except (TypeError, ValueError) as exc:
-        raise MasterKeyError("not a TOW master key", kind="invalid") from exc
-    checked = 0
-    for path, envelope_format in ((encrypted_secrets_path(), _SECRETS_FORMAT), (secret_undo_path(), _UNDO_FORMAT)):
-        if not path.is_file():
-            continue
-        try:
-            _decrypted_envelope(path.read_text(encoding="utf-8"), envelope_format, fernet)
-        except (OSError, UnicodeError, SecretStoreError) as exc:
-            raise MasterKeyError("the key does not open the current secrets", kind="wrong_key") from exc
-        checked += 1
-    return checked
-
-
-def adopt_master_key(source: Path | None = None) -> dict[str, Any]:
-    """Copy an existing key file into the install (keys/master.key) once it is proven to open the
-    current secrets. ``source`` defaults to TOW_MASTER_KEY_FILE. The key itself is never returned,
-    printed or logged; a different key already in keys/ is never replaced.
-    """
-    source = Path(source) if source is not None else (_explicit_key_file() or _legacy_key_file())
-    if source is None:
-        raise MasterKeyError("no key file to adopt", kind="no_source")
-    target = key_file()
-    try:
-        key = _read_key_file(source)
-    except SecretStoreError as exc:
-        raise MasterKeyError("the key file cannot be read", kind="unreadable") from exc
-    with persistence_lock():  # nobody re-encrypts the secrets meanwhile
-        checked = _proven_secret_files(key)
-        if target.is_file():
-            try:
-                same = _read_key_file(target) == key
-            except SecretStoreError:
-                same = False
-            if not same:
-                raise MasterKeyError("keys/master.key holds a different key", kind="different")
-            return {"ok": True, "key_file": str(target), "secrets_checked": checked, "already": True}
-        try:
-            _write_new_key_file(target, key)
-            written = _read_key_file(target)
-        except SecretStoreError as exc:
-            raise MasterKeyError("the key could not be written", kind="write_failed") from exc
-        if written != key:
-            with suppress(OSError):
-                target.unlink()
-            raise MasterKeyError("the key read back differs", kind="write_failed")
-    return {"ok": True, "key_file": str(target), "secrets_checked": checked, "already": False}
-
-
-def save_secret_undo(data: dict[str, Any]) -> str:
-    if not isinstance(data, dict):
-        raise SecretStoreError("TOW secret undo payload must be an object")
-    snapshot = {"secrets": data}
-    path = secret_undo_path()
-    _write_encrypted(path, snapshot, _UNDO_FORMAT)
-    if _encrypted_payload(path, _UNDO_FORMAT) != snapshot:
-        raise SecretStoreError("encrypted TOW undo read-back mismatch")
-    return _SETTINGS_UNDO_REF
-
-
-def load_secret_undo(reference: str) -> dict[str, Any]:
-    if reference != _SETTINGS_UNDO_REF:
-        raise SecretStoreError("unknown TOW secret undo reference")
-    return _secret_undo_data(_encrypted_payload(secret_undo_path(), _UNDO_FORMAT))
-
-
-def _secret_undo_data(payload: dict[str, Any]) -> dict[str, Any]:
-    data = payload.get("secrets")
-    if not isinstance(data, dict):
-        raise SecretStoreError("encrypted TOW undo payload is malformed")
-    return data
-
-
-def delete_secret_undo(reference: str) -> None:
-    if reference != _SETTINGS_UNDO_REF:
-        raise SecretStoreError("unknown TOW secret undo reference")
-    try:
-        secret_undo_path().unlink()
-    except FileNotFoundError:
-        pass
-    except OSError as exc:
-        raise SecretStoreError("cannot remove TOW secret undo snapshot") from exc
 
 
 type FileStamp = tuple[str, int, int, int]
