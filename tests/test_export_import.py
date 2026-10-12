@@ -710,11 +710,12 @@ def test_concurrent_import_waits_for_shared_persistence_lock(tmp_path, monkeypat
     with reaped(process):
         with persistence_lock():
             process.start()
-            assert started.wait(10)
+            # A spawned interpreter imports TOW first: on a busy machine that takes more than 10 s.
+            assert started.wait(60)
             process.join(0.5)
             assert process.is_alive()
 
-        process.join(20)
+        process.join(60)
         assert process.exitcode == 0
         assert result.get(timeout=5) == (True, True)
     assert destination_config.is_file()
