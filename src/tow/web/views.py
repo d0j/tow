@@ -24,7 +24,7 @@ from tow.clock import format_ui_timestamp
 from tow.config import as_bool, flash_ttl, interval_sec_of
 from tow.episodes import expected_for_topic
 from tow.errors import Msg, TowError, render_stored
-from tow.issues import Issue, Snapshot
+from tow.issues import Issue, Snapshot, fingerprint, worst
 from tow.log import error_class, owner_language
 from tow.net_errors import humanize
 from tow.progress import progress_summary
@@ -352,12 +352,24 @@ def issue_text(issue: Issue) -> str:
     return t(issue.message.key, **params)
 
 
+def attention_view(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str, Any]:
+    """Home's "Needs attention": one item per issue, worst first; the fingerprint that opens a
+    folded banner again when the problems change; the worst tone (the folded button's colour)."""
+    found = issues_now(state, cfg)
+    return {
+        "entries": [
+            {"id": issue.id, "kind": issue.kind, "severity": issue.severity, "text": issue_text(issue)}
+            for issue in found
+        ],
+        "fingerprint": fingerprint(found),
+        "tone": worst(found),
+    }
+
+
 def attention(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Home's "Needs attention": one item per issue, worst first, as the banner shows it."""
-    return [
-        {"id": issue.id, "kind": issue.kind, "severity": issue.severity, "text": issue_text(issue)}
-        for issue in issues_now(state, cfg)
-    ]
+    """The entries of ``attention_view``."""
+    items: list[dict[str, Any]] = attention_view(state, cfg)["entries"]
+    return items
 
 
 def _search_href(tracker: GenericHttpTracker | None, state: Mapping[str, Any], query: str) -> str:

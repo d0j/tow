@@ -137,3 +137,13 @@ def test_a_closed_sign_in_prompt_leaves_the_address_and_gives_the_focus_back():
     result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=30, check=True)
     verdict = json.loads(result.stdout.strip().splitlines()[-1])
     assert verdict == {"modal": True, "reopeningIgnored": True, "address": "/?s=name", "rowFocused": True}, verdict
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_the_folded_banner_opens_again_for_a_new_set_of_problems():
+    script = Path(__file__).parent / "js" / "attention_fold.mjs"
+    result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=30, check=True)
+    verdict = json.loads(result.stdout.strip())
+    assert verdict == dict.fromkeys(verdict, True), verdict
+    assert len(verdict) == 10

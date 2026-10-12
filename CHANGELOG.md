@@ -5,6 +5,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Added
+
+- Home → Needs attention folds into a warning icon with the number of problems, and opens from it again. The
+  browser remembers the choice; a new problem opens the list by itself.
+
 ### Changed
 
 - Home → Needs attention lists the most serious problems first (red before amber).

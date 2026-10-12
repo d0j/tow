@@ -34,7 +34,7 @@ STATIC_DIR = PACKAGE_DIR / "static"
 
 def _static_asset_version() -> str:
     digest = hashlib.sha256()
-    for name in ("app.css", "app.js", "updates.css", "updates.js", "content.css", "content.js"):
+    for name in ("app.css", "app.js", "attention.js", "updates.css", "updates.js", "content.css", "content.js"):
         path = STATIC_DIR / name
         if path.is_file():
             digest.update(path.read_bytes())
