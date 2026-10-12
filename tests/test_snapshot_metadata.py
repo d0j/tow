@@ -15,6 +15,7 @@ from tow import snapshots
 from tow.config import load_config, save_config
 from tow.i18n import t
 from tow.paths import config_path, data_dir
+from tow.snapshots import location as night_location
 from tow.snapshots import manifest as night_manifest
 from tow.web.text import format_bytes
 
@@ -100,7 +101,7 @@ def test_timestamp_conversion_failure_does_not_escape_inventory(night, monkeypat
         raise OverflowError("unrepresentable platform timestamp")
 
     monkeypatch.setattr(
-        snapshots, "datetime", SimpleNamespace(fromisoformat=lambda _v: SimpleNamespace(timestamp=unavailable))
+        night_location, "datetime", SimpleNamespace(fromisoformat=lambda _v: SimpleNamespace(timestamp=unavailable))
     )
     assert snapshots.list_snapshots() == []
 
