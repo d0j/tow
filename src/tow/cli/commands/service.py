@@ -270,7 +270,7 @@ def _says_port_busy(line: str, port: int) -> bool:
 
     return any(
         i18n.translate(key, lang, port=port) in line
-        for key in ("supervisor.port_busy", "supervisor.port_busy_tow")
+        for key in ("supervisor.port_busy", "supervisor.port_busy_tow", "supervisor.port_busy_own")
         for lang in i18n.codes()
     )
 

@@ -264,7 +264,7 @@ def test_the_start_log_is_capped_and_a_new_start_still_says_why(monkeypatch, cap
     assert "an earlier start" not in log.read_text(encoding="utf-8")
 
 
-@pytest.mark.parametrize("key", ["supervisor.port_busy", "supervisor.port_busy_tow"])
+@pytest.mark.parametrize("key", ["supervisor.port_busy", "supervisor.port_busy_tow", "supervisor.port_busy_own"])
 @pytest.mark.parametrize("lang", ["en", "ru"])
 def test_a_taken_port_is_said_once(monkeypatch, capsys, key, lang):
     """Round-3 audit: the refusal was followed by "TOW stopped right after it started. The

@@ -209,8 +209,14 @@ class Supervisor:
         from tow.i18n import t
 
         # Another TOW folder (a copy, an older install) is named as such: "another program"
-        # sent the owner looking for one that is not there.
-        key = "supervisor.port_busy_tow" if self.deps.tow_server(self.port) else "supervisor.port_busy"
+        # sent the owner looking for one that is not there. This install's own page that no
+        # supervisor recorded (a `tow serve` by hand) is not "another TOW" either.
+        if self.deps.own_server(self.port):
+            key = "supervisor.port_busy_own"
+        elif self.deps.tow_server(self.port):
+            key = "supervisor.port_busy_tow"
+        else:
+            key = "supervisor.port_busy"
         return t(key, port=self.port)
 
     def _own_server_command(self, command: str) -> bool:
