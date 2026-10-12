@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f6fa">
+  <meta name="theme-color" content="#0b0d12">
+  <title>TOW — Settings</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css?v=<static>">
+  <link rel="stylesheet" href="/static/updates.css?v=<static>">
+  <link rel="stylesheet" href="/static/content.css?v=<static>">
+</head>
+<body>
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/> <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/> <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/> <path d="M2 12h20"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/> <circle cx="11" cy="11" r="8"/></symbol>
+  <symbol id="i-log" viewBox="0 0 24 24"><path d="M15 12h-5"/> <path d="M15 8h-5"/> <path d="M19 17V5a2 2 0 0 0-2-2H4"/> <path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/> <path d="M12 5v14"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/> <path d="M21 3v5h-5"/> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/> <path d="M8 16H3v5"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M10.268 21a2 2 0 0 0 3.464 0"/> <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/> <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/> <circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/> <path d="M12 6v6l4 2"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="3" width="5" height="18" rx="1"/> <rect x="5" y="3" width="5" height="18" rx="1"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/> <line x1="8" x2="16" y1="21" y2="21"/> <line x1="12" x2="12" y1="17" y2="21"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/> <path d="M12 2v2"/> <path d="M12 20v2"/> <path d="m4.93 4.93 1.41 1.41"/> <path d="m17.66 17.66 1.41 1.41"/> <path d="M2 12h2"/> <path d="M20 12h2"/> <path d="m6.34 17.66-1.41 1.41"/> <path d="m19.07 4.93-1.41 1.41"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18"/> <path d="m6 6 12 12"/></symbol>
+  <symbol id="i-sort-added" viewBox="0 0 24 24"><path d="m14 17 4 4 4-4"/> <path d="M16 2v3"/> <path d="M18 13v8"/> <path d="M21 10.354V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h7.343"/> <path d="M3 9h18"/> <path d="M8 2v3"/></symbol>
+  <symbol id="i-sort-name" viewBox="0 0 24 24"><path d="m3 16 4 4 4-4"/> <path d="M7 20V4"/> <path d="M20 8h-5"/> <path d="M15 10V6.5a2.5 2.5 0 0 1 5 0V10"/> <path d="M15 14h5l-5 6h5"/></symbol>
+  <symbol id="i-sort-event" viewBox="0 0 24 24"><path d="M12 6v6l2 1"/> <path d="M12.337 21.994a10 10 0 1 1 9.588-8.767"/> <path d="m14 18 4 4 4-4"/> <path d="M18 14v8"/></symbol>
+  <symbol id="i-sort-status" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/> <path d="M12 9v4"/> <path d="M12 17h.01"/></symbol>
+</svg>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="app">
+  <nav aria-label="Sections">
+    <a href="/" class="ico"  title="Home" aria-label="Home"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-home"/></svg></a>
+    <a href="/sites" class="ico"  title="Sites" aria-label="Sites"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-globe"/></svg></a>
+    <details class="hdr-search">
+      <summary title="Search" aria-label="Search"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-search"/></svg></summary>
+      <label class="sr-only" for="q">Search</label>
+      <input id="q" type="search" placeholder="search…" autocomplete="off">
+      <span id="search-status" class="sr-only" aria-live="polite"></span>
+    </details>
+    <button type="button" class="ico" id="log-open" title="Log" aria-label="Log" aria-haspopup="dialog"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-log"/></svg></button>
+
+  </nav>
+  <div class="hdr-sites" role="group" aria-label="Sites" tabindex="0">
+
+  </div>
+  <div class="hdr-right">
+    <div class="hdr-svc" role="group" aria-label="Services">
+
+      <span class="trk mut" title="Living room: Living room ?">Living room<span class="sr-only">: not checked yet</span></span>
+
+      <a class="trk trk-ico ok" href="/settings?open=bots" title="Notifications: Telegram ✓" aria-label="Notifications: Telegram ✓"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-bell"/></svg></a>
+    </div>
+    <span class="hdr-clock" id="next-check" data-last="0" data-interval="3600" data-check-ok="1" data-error="" title="Global check timer"><span class="sr-only" data-clock-words>Global check timer </span><span class="clock-v" data-clock-value>—</span></span>
+    <div class="hdr-controls">
+
+
+    <a href="/settings" class="ico on" aria-current="page" title="Settings" aria-label="Settings"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-settings"/></svg></a>
+    </div>
+  </div>
+</header>
+<main id="main" aria-labelledby="page-title">
+
+
+
+<div class="settings-page settings-page-compact">
+  <header class="settings-title">
+    <h1 id="page-title">Settings</h1>
+  </header>
+
+
+
+  <div class="settings-content" id="settings-acc">
+    <details class="settings-section settings-accordion acc" id="acc-language" data-q="language язык en english ru russian русский">
+      <summary>
+        <span class="settings-summary-title">Language</span>
+        <span class="pill mut">English</span>
+      </summary>
+      <div class="settings-panel">
+        <form method="post" action="/settings/language" class="settings-form compact-form" data-return-target="acc-language">
+          <div class="field">
+            <label for="language-choice">Language</label>
+            <select id="language-choice" name="language" aria-describedby="language-auto-hint">
+              <option value="auto">Automatic — the browser&#39;s language (now: English)</option>
+              <option value="en" selected>English</option><option value="ru">Русский — Russian</option>
+            </select>
+            <p id="language-auto-hint" class="action-hint">Automatic: TOW shows the language your browser prefers, English if TOW does not have it yet.</p>
+          </div>
+          <p class="action-hint">Messages to messengers use the same language.</p>
+          <div class="settings-actions"><button type="submit">Save</button></div>
+        </form>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-theme" data-q="theme appearance colours dark light night mode">
+      <summary>
+        <span class="settings-summary-title">Theme</span>
+
+        <span class="pill mut">As the system</span>
+      </summary>
+      <div class="settings-panel">
+        <form method="post" action="/settings/theme" class="compact-form" data-return-target="acc-theme" data-theme-form>
+          <fieldset class="theme-choice" aria-describedby="theme-hint">
+            <legend class="sr-only">Theme</legend>
+
+            <label class="theme-option">
+              <input type="radio" name="theme" value="auto" checked>
+              <svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-monitor"/></svg><span>As the system</span>
+            </label>
+
+            <label class="theme-option">
+              <input type="radio" name="theme" value="light">
+              <svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-sun"/></svg><span>Light</span>
+            </label>
+
+            <label class="theme-option">
+              <input type="radio" name="theme" value="dark">
+              <svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-moon"/></svg><span>Dark</span>
+            </label>
+
+          </fieldset>
+          <p id="theme-hint" class="action-hint">The colours of TOW&#39;s pages on every device. “As the system” follows the light or dark mode of the computer or phone that opens them.</p><span class="sr-only" data-theme-status role="status"></span>
+          <noscript><div class="settings-actions"><button type="submit">Save</button></div></noscript>
+        </form>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-clients" data-q="clients torrent connections qbittorrent qbit transmission transm. deluge">
+      <summary>
+        <span id="settings-clients-title" class="settings-summary-title">Torrent clients</span>
+
+        <span class="pill mut">2 clients</span>
+      </summary>
+      <div class="settings-panel">
+        <div class="integration-list">
+
+          <article class="integration-card" id="client-main">
+            <div class="integration-head">
+              <h2>Living room</h2>
+              <span class="integration-pills">
+                <span class="pill ok">Main</span>
+                <span class="pill mut">Set up</span>
+              </span>
+            </div>
+
+            <details class="technical-details notifier-steps" >
+              <summary>How to connect</summary>
+              <ol>
+                <li>In qBittorrent: Tools → Options → Web UI.</li><li>Turn on “Web User Interface (Remote control)”, set a user name and password; the port is usually 8080.</li><li>If qBittorrent runs on this computer, the address is 127.0.0.1.</li><li>Fill in the fields below, press “Save”, then “Check”.</li>
+              </ol>
+              <p class="action-hint">TOW marks its torrents with the tag tow and never touches others.</p>
+            </details>
+
+            <form id="client-form-client-0" method="post" action="/settings/client" class="settings-form" data-return-target="acc-clients">
+              <input type="hidden" name="client_id" value="main">
+              <input type="hidden" name="kind" value="qbittorrent">
+              <fieldset>
+                <legend class="sr-only">Living room connection</legend>
+                <div class="field">
+                  <label for="q_host-client-0">Address</label>
+                  <input id="q_host-client-0" name="host" value="192.0.2.10" autocomplete="off" placeholder="127.0.0.1">
+                </div>
+                <div class="field-grid">
+                  <div class="field">
+                    <label for="q_port-client-0">Port</label>
+                    <input id="q_port-client-0" name="port" value="8080" type="number" min="1" max="65535" inputmode="numeric">
+                  </div>
+
+                  <div class="field">
+                    <label for="q_user-client-0">User name</label>
+                    <input id="q_user-client-0" name="username" value="admin" autocomplete="off">
+                  </div>
+
+                </div>
+                <div class="field">
+                  <label for="q_pass-client-0">Password <span class="pill ok">Saved</span></label>
+                  <input id="q_pass-client-0" name="password" type="password" placeholder="Empty — keep as is" autocomplete="new-password">
+                </div>
+              </fieldset>
+              <div class="settings-actions">
+                <button type="submit">Save</button>
+                <button class="ghost" type="submit" form="ping-client-0" data-keep data-check-saved data-busy-label="Checking…">Check</button>
+
+              </div>
+              <p class="action-hint">Check uses the saved settings. TOW adds new topics to the main client; each topic can use a different client.</p>
+              <p class="action-hint">Chosen for topics: 2.</p>
+              <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
+            </form>
+            <form id="ping-client-0" method="post" action="/settings/client/ping" data-return-target="acc-clients">
+              <input type="hidden" name="client_id" value="main">
+            </form>
+
+            <details class="technical-details">
+              <summary>Technical details</summary>
+              <dl>
+                <div><dt>Type</dt><dd><code>qbittorrent</code></dd></div>
+                <div><dt>ID</dt><dd><code>main</code></dd></div>
+              </dl>
+            </details>
+          </article>
+
+          <article class="integration-card" id="client-nas">
+            <div class="integration-head">
+              <h2>Transmission</h2>
+              <span class="integration-pills">
+
+                <span class="pill mut">Set up</span>
+              </span>
+            </div>
+
+            <details class="technical-details notifier-steps" >
+              <summary>How to connect</summary>
+              <ol>
+                <li>In Transmission: Edit → Preferences → Remote.</li><li>Turn on “Allow remote access”; the port is usually 9091. User name and password are optional.</li><li>If Transmission runs on another computer, add this computer&#39;s address to the allowed list.</li><li>Fill in the fields below, press “Save”, then “Check”.</li>
+              </ol>
+              <p class="action-hint">Transmission 3.0 or newer is needed: TOW marks its torrents with the label tow. Magnet links are not supported with Transmission — it starts downloading before TOW can choose the files.</p>
+            </details>
+
+            <form id="client-form-client-1" method="post" action="/settings/client" class="settings-form" data-return-target="acc-clients">
+              <input type="hidden" name="client_id" value="nas">
+              <input type="hidden" name="kind" value="transmission">
+              <fieldset>
+                <legend class="sr-only">Transmission connection</legend>
+                <div class="field">
+                  <label for="q_host-client-1">Address</label>
+                  <input id="q_host-client-1" name="host" value="http://nas.example:9091/transmission" autocomplete="off" placeholder="127.0.0.1">
+                </div>
+                <div class="field-grid">
+                  <div class="field">
+                    <label for="q_port-client-1">Port</label>
+                    <input id="q_port-client-1" name="port" value="9091" type="number" min="1" max="65535" inputmode="numeric">
+                  </div>
+
+                  <div class="field">
+                    <label for="q_user-client-1">User name</label>
+                    <input id="q_user-client-1" name="username" value="" autocomplete="off">
+                  </div>
+
+                </div>
+                <div class="field">
+                  <label for="q_pass-client-1">Password </label>
+                  <input id="q_pass-client-1" name="password" type="password" placeholder="Empty — keep as is" autocomplete="new-password">
+                </div>
+              </fieldset>
+              <div class="settings-actions">
+                <button type="submit">Save</button>
+                <button class="ghost" type="submit" form="ping-client-1" data-keep data-check-saved data-busy-label="Checking…">Check</button>
+
+                <button class="ghost" type="submit" form="default-client-1">Make main</button>
+                <button class="ghost danger" type="submit" form="remove-client-1">Remove</button>
+
+              </div>
+              <p class="action-hint">Check uses the saved settings.</p>
+              <p class="action-hint">Chosen for topics: 1.</p>
+              <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
+            </form>
+            <form id="ping-client-1" method="post" action="/settings/client/ping" data-return-target="acc-clients">
+              <input type="hidden" name="client_id" value="nas">
+            </form>
+
+            <form id="default-client-1" method="post" action="/settings/client/default" data-return-target="acc-clients">
+              <input type="hidden" name="client_id" value="nas">
+            </form>
+            <form id="remove-client-1" method="post" action="/settings/client/remove" data-return-target="acc-clients" data-confirm="Remove the client “Transmission” from TOW? The client itself and its torrents stay as they are (you can bring it back with “Undo”).">
+              <input type="hidden" name="client_id" value="nas">
+            </form>
+
+            <details class="technical-details">
+              <summary>Technical details</summary>
+              <dl>
+                <div><dt>Type</dt><dd><code>transmission</code></dd></div>
+                <div><dt>ID</dt><dd><code>nas</code></dd></div>
+              </dl>
+            </details>
+          </article>
+
+        </div>
+        <form method="post" action="/settings/client/add" class="settings-form client-add" data-return-target="acc-clients">
+          <div class="field">
+            <label for="client-add-kind">Add a torrent client</label>
+            <div class="client-add-row">
+              <select id="client-add-kind" name="kind">
+                <option value="qbittorrent">qBittorrent</option><option value="transmission">Transmission</option><option value="deluge">Deluge</option>
+              </select>
+              <button type="submit">Add</button>
+            </div>
+          </div>
+          <p class="support-note">Supported: qBittorrent, Transmission, Deluge. You can connect several clients at once.</p>
+        </form>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-bots" data-q="bots tg notifications channels messengers telegram discord whatsapp ntfy (phone notifications)">
+      <summary>
+        <span id="settings-bots-title" class="settings-summary-title">Notifications</span>
+        <span class="pill ok">Connected</span>
+      </summary>
+      <div class="settings-panel">
+        <p class="support-note">Connect one or more messengers — every message goes to all of them. If a messenger is unavailable, the message waits in a queue and goes out later by itself.</p>
+        <div class="integration-list">
+
+          <details class="integration-card notifier-card" id="notifier-telegram" open>
+            <summary class="integration-head">
+              <h2>Telegram</h2>
+
+              <span class="pill warn">Not checked</span>
+
+            </summary>
+
+
+
+            <details class="technical-details notifier-steps" >
+              <summary>How to connect</summary>
+              <ol>
+                <li>Send @BotFather the command /newbot and choose a name — it will send you the bot token.</li><li>Open your bot and press “Start” (or send it anything).</li><li>Find out your ID: message @userinfobot — it replies with a number.</li><li>Paste the token and ID below, press “Save”, then “Check”.</li>
+              </ol>
+              <p class="action-hint">Several recipients are fine: IDs separated by commas (for a group, its ID with a minus sign).</p>
+            </details>
+            <form id="notifier-form-telegram" method="post" action="/settings/notifier/telegram" class="settings-form" data-return-target="acc-bots">
+              <fieldset>
+                <legend class="sr-only">Telegram connection</legend>
+
+                <div class="field">
+                  <label for="nf-telegram-token">Bot token <span class="pill ok">Saved</span></label>
+
+                  <input id="nf-telegram-token" name="token" type="password" value="" placeholder="Empty — keep as is" autocomplete="new-password" spellcheck="false">
+
+                </div>
+
+                <div class="field">
+                  <label for="nf-telegram-chat_ids">Recipient IDs, separated by commas </label>
+
+                  <input id="nf-telegram-chat_ids" name="chat_ids" value="1001" placeholder="123456789" autocomplete="off" spellcheck="false">
+
+                </div>
+
+              </fieldset>
+              <div class="settings-actions">
+                <button type="submit">Save</button>
+
+                <button class="ghost" type="submit" form="notifier-test-telegram" data-keep data-check-saved data-busy-label="Checking…">Check</button>
+                <button class="ghost danger" type="submit" form="notifier-remove-telegram">Disconnect</button>
+
+              </div>
+              <p class="action-hint">“Check” sends a test message using the saved settings.</p>
+              <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
+            </form>
+
+            <form id="notifier-test-telegram" method="post" action="/settings/notifier/telegram/test" data-return-target="acc-bots"></form>
+            <form id="notifier-remove-telegram" method="post" action="/settings/notifier/telegram/remove" data-return-target="acc-bots" data-confirm="Disconnect Telegram? Its settings will be removed (you can bring them back with “Undo”)."></form>
+
+          </details>
+
+          <details class="integration-card notifier-card" id="notifier-discord">
+            <summary class="integration-head">
+              <h2>Discord</h2>
+
+              <span class="pill mut">Not connected</span>
+
+            </summary>
+
+
+
+            <details class="technical-details notifier-steps" open>
+              <summary>How to connect</summary>
+              <ol>
+                <li>In Discord, open the channel → ⚙ “Edit Channel” → “Integrations” → “Webhooks”.</li><li>Press “New Webhook”; you may name it TOW.</li><li>Press “Copy Webhook URL”.</li><li>Paste the address below, press “Save”, then “Check”.</li>
+              </ol>
+              <p class="action-hint">The webhook address is a key to the channel: TOW keeps it encrypted and never shows it to anyone.</p>
+            </details>
+            <form id="notifier-form-discord" method="post" action="/settings/notifier/discord" class="settings-form" data-return-target="acc-bots">
+              <fieldset>
+                <legend class="sr-only">Discord connection</legend>
+
+                <div class="field">
+                  <label for="nf-discord-webhook_url">Webhook URL </label>
+
+                  <input id="nf-discord-webhook_url" name="webhook_url" type="password" value="" placeholder="https://discord.com/api/webhooks/…" autocomplete="new-password" spellcheck="false">
+
+                </div>
+
+              </fieldset>
+              <div class="settings-actions">
+                <button type="submit">Save</button>
+
+              </div>
+              <p class="action-hint">After “Save” a “Check” button appears — it sends a test message.</p>
+              <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
+            </form>
+
+          </details>
+
+          <details class="integration-card notifier-card" id="notifier-whatsapp">
+            <summary class="integration-head">
+              <h2>WhatsApp</h2>
+
+              <span class="pill mut">Not connected</span>
+
+            </summary>
+
+
+
+            <details class="technical-details notifier-steps" open>
+              <summary>How to connect</summary>
+              <ol>
+                <li>Open callmebot.com → the WhatsApp section and add the number shown there to your phone&#39;s contacts.</li><li>Send it this phrase in WhatsApp: I allow callmebot to send me messages</li><li>It replies with an apikey — a number.</li><li>Enter your WhatsApp number and this apikey below, press “Save”, then “Check”.</li>
+              </ol>
+              <p class="action-hint">Messages go through the free CallMeBot service, not the official WhatsApp API: it needs no business account, but it dislikes frequent messages — TOW groups them anyway.</p>
+            </details>
+            <form id="notifier-form-whatsapp" method="post" action="/settings/notifier/whatsapp" class="settings-form" data-return-target="acc-bots">
+              <fieldset>
+                <legend class="sr-only">WhatsApp connection</legend>
+
+                <div class="field">
+                  <label for="nf-whatsapp-phone">Your WhatsApp number </label>
+
+                  <input id="nf-whatsapp-phone" name="phone" value="" placeholder="+15551234567" autocomplete="off" spellcheck="false">
+
+                </div>
+
+                <div class="field">
+                  <label for="nf-whatsapp-apikey">apikey from CallMeBot </label>
+
+                  <input id="nf-whatsapp-apikey" name="apikey" type="password" value="" placeholder="123456" autocomplete="new-password" spellcheck="false">
+
+                </div>
+
+              </fieldset>
+              <div class="settings-actions">
+                <button type="submit">Save</button>
+
+              </div>
+              <p class="action-hint">After “Save” a “Check” button appears — it sends a test message.</p>
+              <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
+            </form>
+
+          </details>
+
+          <details class="integration-card notifier-card" id="notifier-ntfy">
+            <summary class="integration-head">
+              <h2>ntfy (phone notifications)</h2>
+
+              <span class="pill mut">Not connected</span>
+
+            </summary>
+
+
+
+            <details class="technical-details notifier-steps" open>
+              <summary>How to connect</summary>
+              <ol>
+                <li>Install the ntfy app on your phone (Google Play, App Store or F-Droid).</li><li>Take the ntfy topic name below (already made up, long and hard to guess) or choose your own.</li><li>In the app, press “+” and subscribe to this ntfy topic.</li><li>Press “Save”, then “Check” — a notification will arrive on your phone.</li>
+              </ol>
+              <p class="action-hint">Anyone who knows the ntfy topic name can read its messages: do not make the name short and do not publish it.</p>
+            </details>
+            <form id="notifier-form-ntfy" method="post" action="/settings/notifier/ntfy" class="settings-form" data-return-target="acc-bots">
+              <fieldset>
+                <legend class="sr-only">ntfy (phone notifications) connection</legend>
+
+                <div class="field">
+                  <label for="nf-ntfy-topic">ntfy topic name </label>
+
+                  <input id="nf-ntfy-topic" name="topic" value="tow-<random>" placeholder="tow-…" autocomplete="off" spellcheck="false">
+
+                </div>
+
+                <div class="field">
+                  <label for="nf-ntfy-server">Server (optional) </label>
+
+                  <input id="nf-ntfy-server" name="server" value="https://ntfy.sh" placeholder="https://ntfy.sh" autocomplete="off" spellcheck="false">
+
+                </div>
+
+              </fieldset>
+              <div class="settings-actions">
+                <button type="submit">Save</button>
+
+              </div>
+              <p class="action-hint">After “Save” a “Check” button appears — it sends a test message.</p>
+              <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
+            </form>
+
+          </details>
+
+        </div>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-intervals" data-q="intervals check minutes undo message">
+      <summary>
+        <span id="settings-intervals-title" class="settings-summary-title">Checks</span>
+        <span class="pill mut">1 h</span>
+      </summary>
+      <div class="settings-panel">
+        <form method="post" action="/settings/interval" class="settings-form compact-form" data-return-target="acc-intervals"><div class="field">
+            <label for="interval_min">Global timer</label>
+            <div class="input-unit field-short"><input id="interval_min" name="interval_min" value="60" type="number" min="1" step="1" inputmode="numeric" aria-describedby="interval-hint"><span>min</span></div>
+            <p class="field-hint" id="interval-hint">Active topics without a personal timer are checked every 1 h. A new interval applies within a minute and counts from the last check. Set a personal timer when adding or editing a topic.</p>
+          </div>
+          <div class="field">
+            <label for="flash_ttl_min">Show “Undo” for</label>
+            <div class="input-unit field-short"><input id="flash_ttl_min" name="flash_ttl_min" value="1" type="number" min="1" step="1" inputmode="numeric" aria-describedby="undo-hint"><span>min</span></div>
+            <p class="field-hint" id="undo-hint">How long the Undo button stays after a change.</p>
+          </div>
+          <div class="settings-actions"><button type="submit">Save</button></div>
+          <p class="unsaved-state" role="status" hidden>There are unsaved changes.</p>
+        </form>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-access" data-q="access lan local network password authentication">
+      <summary>
+        <span id="settings-access-title" class="settings-summary-title">Network access</span>
+        <span class="pill mut">This computer only</span>
+      </summary>
+      <div class="settings-panel">
+        <p class="action-hint">On this computer TOW opens without a password. From other devices — a phone, a laptop, through Tailscale — only with a password; a device stays signed in for 90 days, even after TOW restarts. After a password change the other devices have to sign in again.</p>
+
+        <div class="integration-list">
+
+          <article class="integration-card access-card" id="password-card">
+            <div class="integration-head">
+              <h2>Password</h2>
+              <span class="integration-pills"><span class="pill mut">Not set</span></span>
+            </div>
+            <form method="post" action="/settings/password" class="settings-form compact-form" data-return-target="acc-access">
+              <fieldset>
+                <legend class="sr-only">Password</legend>
+
+                <div class="field">
+                  <label for="lan-password">Password</label>
+                  <input id="lan-password" name="lan_password" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" aria-describedby="lan-password-hint">
+                  <p class="field-hint" id="lan-password-hint">At least 8 characters. Easy to remember: three or four words joined with hyphens.</p>
+                </div>
+                <div class="field">
+                  <label for="lan-password2">Repeat the password</label>
+                  <input id="lan-password2" name="lan_password2" type="password" autocomplete="new-password" minlength="8">
+                </div>
+                <div class="field">
+                  <label for="lan-hint">Reminder (optional)</label>
+                  <input id="lan-hint" name="hint" type="text" maxlength="120" value="" autocomplete="off" aria-describedby="lan-hint-help">
+                  <p class="field-hint" id="lan-hint-help">Shown on the sign-in page under “Forgot your password?”. Anyone on your network who opens that page can read it — never write the password itself.</p>
+                </div>
+              </fieldset>
+              <p class="action-hint">Forgot the password? On this computer a new one is set without the old one. Other devices then sign in again.</p>
+              <div class="settings-actions"><button type="submit">Save password</button></div>
+              <p class="unsaved-state" role="status" hidden>There are unsaved changes.</p>
+            </form>
+
+          </article>
+
+          <article class="integration-card access-card" id="network-card">
+            <div class="integration-head">
+              <h2>Access from other devices</h2>
+              <span class="integration-pills"><span class="pill mut">This computer only</span></span>
+            </div>
+
+            <form method="post" action="/settings/access" class="settings-form compact-form" data-return-target="acc-access">
+              <fieldset>
+                <legend class="sr-only">Access from other devices</legend>
+
+
+                <div class="check-field">
+                  <input id="allow-lan" name="allow_lan" value="1" type="checkbox" disabled aria-describedby="allow-lan-hint allow-lan-locked">
+                  <label for="allow-lan">Open TOW from other devices (with a password)</label>
+                  <p id="allow-lan-hint">Turning it on takes effect after TOW restarts; turning it off works at once.</p>
+                  <p id="allow-lan-locked" class="locked-hint">Set a password above first: without it no other device can sign in.</p>
+                </div>
+              </fieldset>
+              <div class="settings-actions"><button type="submit" disabled>Save</button></div>
+              <p class="unsaved-state" role="status" hidden>There are unsaved changes.</p>
+            </form>
+
+          </article>
+        </div>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-updates" data-q="version update release rollback log automatic">
+      <summary>
+        <span class="settings-summary-title">Version and updates</span>
+        <span class="pill mut"><version></span>
+      </summary>
+      <div class="settings-panel">
+        <section id="updates" class="release-panel" aria-labelledby="release-title">
+          <p id="release-title">Installed: TOW <version></p>
+          <form method="post" action="/settings/updates" class="compact-form immediate-form" data-return-target="acc-updates" data-auto-submit>
+            <input type="hidden" name="enabled" value="0">
+            <div class="check-field">
+              <input id="check-updates" name="enabled" value="1" type="checkbox" checked aria-describedby="check-updates-hint" data-auto-submit-control>
+              <label for="check-updates">Check for updates automatically</label>
+              <p id="check-updates-hint" data-auto-submit-status>At most once every 12 hours, while a TOW page is open. When it is off, TOW checks only when you press the button.</p>
+            </div>
+            <noscript><button type="submit">Apply</button></noscript>
+          </form>
+          <p class="action-hint" data-release-status role="status">Update status has not been checked yet.</p>
+          <div class="settings-actions">
+            <button type="button" class="ghost" data-release-check>Check for updates</button>
+            <a href="https://github.com/d0j/tow/releases" class="btn ghost" data-release-notes target="_blank" rel="noopener noreferrer">Release notes</a>
+            <button type="button" data-release-install hidden disabled>Update</button>
+          </div>
+          <p class="action-hint" data-update-progress role="status" hidden></p>
+          <p class="action-hint" data-update-unavailable role="status" hidden></p>
+          <div class="settings-actions"><button type="button" class="ghost" data-update-reload hidden>Reload page</button></div>
+          <details class="technical-details" data-update-details>
+            <summary>More: history, rollback and log</summary>
+            <p class="action-hint" data-update-history hidden></p>
+            <p class="action-hint" data-update-support></p>
+          <details class="technical-details" data-update-rollback hidden>
+            <summary>Install another version or roll back</summary>
+            <p class="action-hint">Web updates support published stable versions from 1.22.21. Data is kept; an incompatible data schema refuses the change. Older releases require the terminal and may not understand current data.</p>
+            <div class="field">
+              <label for="rollback-version">Release version</label>
+              <input id="rollback-version" data-update-version inputmode="text" placeholder="1.22.21" maxlength="32" autocomplete="off">
+            </div>
+            <div class="settings-actions"><button type="button" class="ghost" data-update-apply>Install version</button><button type="button" class="ghost" data-update-previous hidden></button></div>
+          </details>
+          <p class="action-hint">Stable releases only. Nothing is installed without you.</p>
+          <details class="technical-details">
+            <summary>How to update</summary>
+            <p>The “Update” button above installs a newer release, or “Update TOW” in the TOW folder on the computer running TOW (“Update TOW.cmd” on Windows, “Update TOW.command” on macOS, update-tow on Linux). For a chosen version, open a terminal in the TOW folder (the one with config.yaml) and run the command below with that version: it shows how. The update makes an update snapshot first.</p>
+            <code data-release-command>scripts/tow update --ref v<version></code>
+          </details>
+          <details class="technical-details" data-update-log>
+            <summary>Update log</summary>
+            <pre data-update-log-text>Open this section to read the latest update log.</pre>
+          </details>
+          </details>
+          <noscript><p class="action-hint">Without JavaScript, use Release notes to check the latest version.</p></noscript>
+        </section>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-service" data-q="service autostart restart windows">
+      <summary>
+        <span id="settings-service-title" class="settings-summary-title">TOW service</span>
+        <span class="pill ok">Starts automatically</span>
+      </summary>
+      <div class="settings-panel">
+        <p class="action-hint">TOW runs as one service: the web page, scheduled checks, nightly backups and the watchdog.</p>
+        <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
+          <input type="hidden" name="enabled" value="0">
+          <input type="hidden" name="without_login" value="0">
+          <div class="check-field">
+            <input id="service-autostart" name="enabled" value="1" type="checkbox" checked aria-describedby="service-autostart-hint" data-auto-submit-control>
+            <label for="service-autostart">Start automatically</label>
+            <p id="service-autostart-hint" data-auto-submit-status>Start TOW when you sign in to this computer. The change takes effect at once.</p>
+          </div>
+          <noscript><button type="submit">Apply</button></noscript>
+        </form>
+
+
+
+        <div class="service-restart">
+          <form method="post" action="/settings/service/restart" data-return-target="acc-service" data-confirm="Restart TOW? The page may be unavailable for a few seconds.">
+            <button type="submit">Restart</button>
+          </form>
+          <p>The page will be unavailable for a few seconds.</p>
+        </div>
+        <div class="watchdog-note">
+          <p class="action-hint">The watchdog checks the schedule and reports downtime and its cause to connected messengers. When the web server fails, the TOW service restarts it; the watchdog itself does not restart TOW.</p>
+
+        </div>
+
+        <p class="restart-result">Web page running since: <b><time></b>.</p>
+
+
+        <p class="restart-result" role="status">Last requested restart: <b><time></b> · from settings · being checked.</p>
+
+        <details class="technical-details">
+          <summary>Technical details</summary>
+          <dl>
+            <div><dt>PID</dt><dd><code>4321</code></dd></div>
+            <div><dt>Autostart</dt><dd><code>—</code></dd></div>
+            <div><dt>Web server</dt><dd><code>—</code></dd></div>
+            <div><dt>Operation ID</dt><dd><code>restart-test</code></dd></div>
+          </dl>
+        </details>
+      </div>
+    </details>
+
+
+
+    <details class="settings-section settings-accordion acc" id="acc-transfer" data-q="backups transfer export / import towx">
+      <summary>
+        <span id="settings-transfer-title" class="settings-summary-title">Backups</span>
+        <span class="pill mut">No nightly backups</span>
+      </summary>
+      <div class="settings-panel">
+
+
+        <div class="integration-list backup-list">
+          <article class="integration-card backup-card" id="backup-night" aria-labelledby="backup-night-title">
+            <div class="integration-head">
+              <div><h2 id="backup-night-title">Nightly backups</h2><p>Settings, history and encrypted passwords. Automatic copies follow the night schedule and catch up after the computer turns on. Retention is set below.</p></div>
+
+            </div>
+
+
+
+            <form method="post" action="/settings/backup/now" data-return-target="acc-transfer" class="settings-actions backup-make">
+              <button type="submit" data-busy-label="Making a copy…">Back up now</button>
+            </form>
+            <form method="post" action="/settings/backup/automatic" class="compact-form immediate-form" data-return-target="acc-transfer" data-auto-submit>
+              <label class="check-field" for="backup-automatic">
+                <input id="backup-automatic" type="checkbox" name="enabled" value="1" checked aria-describedby="backup-automatic-hint" data-auto-submit-control>
+                <span>Automatic nightly backups</span>
+                <p id="backup-automatic-hint" data-auto-submit-status>Applies without restarting TOW. Turning this off keeps existing copies and manual actions; an already running copy finishes normally.</p>
+              </label>
+              <noscript><button type="submit">Save</button></noscript>
+            </form>
+            <form method="post" action="/settings/backup/retention" data-return-target="acc-transfer" class="settings-form compact-form backup-retention-form">
+              <div>
+                <label for="backup-days">Keep nightly backups, days</label>
+                <input id="backup-days" type="number" name="days" value="7" min="1" max="3650" required aria-describedby="backup-days-hint">
+              </div>
+              <button type="submit">Save</button>
+              <p class="field-hint" id="backup-days-hint">Older nightly backups are removed only after a new copy passes verification. The new copy, the three newest earlier copies (whatever their age) and copies with future dates are kept. Default: 7 days. Free space for a complete copy and a reserve is checked before writing.</p>
+            </form>
+
+            <details class="backup-location">
+              <summary>Folder for nightly backups</summary>
+
+        <form method="post" action="/settings/backup/location" class="settings-form compact-form backup-folder" data-return-target="acc-transfer">
+          <input type="hidden" name="kind" value="night">
+          <div class="field">
+            <label for="backup-path-night">Folder for nightly backups <span class="pill mut">Default</span></label>
+            <input id="backup-path-night" name="path" value="" placeholder="<root>/backup/night" autocomplete="off" spellcheck="false">
+
+            <p class="field-hint"><size> free · You can choose another drive or a network folder (\\server\folder — then it is reachable at night too). “Check” tries to write a file.</p>
+          </div>
+          <div class="settings-actions">
+            <button type="submit" name="action" value="save">Save</button>
+            <button class="ghost" type="submit" name="action" value="check" data-busy-label="Checking…">Check</button>
+
+          </div>
+        </form>
+
+            </details>
+          </article>
+
+          <article class="integration-card backup-card" id="backup-manual" aria-labelledby="backup-manual-title">
+            <div class="integration-head">
+              <div><h2 id="backup-manual-title">Backups made by hand</h2><p>Before restoring, TOW checks the backup and saves its current state. The network settings stay as they are now. The last 10 backups are kept.</p></div>
+              <span class="pill ok">Saved: 1</span>
+            </div>
+
+
+            <form method="post" action="/settings/restore-points" data-return-target="acc-transfer" class="settings-actions backup-make">
+              <button type="submit" data-busy-label="Making a copy…">Create a backup</button>
+            </form>
+
+            <details class="backup-inventory">
+            <summary>Saved: 1 · 2.0 KB</summary>
+            <div class="restore-point-list" aria-label="Saved backups">
+
+              <div class="restore-point-row">
+                <div><b><time></b><span>2.0 KB</span></div>
+                <div class="settings-actions backup-copy-actions">
+                  <form method="post" action="/settings/restore-points/rp-1/check" data-return-target="acc-transfer">
+                    <button class="ghost" type="submit" data-busy-label="Checking…">Check</button>
+                  </form>
+                  <form method="post" action="/settings/restore-points/rp-1/restore" data-return-target="acc-transfer" data-confirm="Restore the settings and history from this backup? TOW saves its current state automatically before replacing it.">
+                    <button class="danger" type="submit" data-busy-label="Restoring…">Restore</button>
+                  </form>
+                  <a class="btn ghost danger" href="/settings/restore-points/rp-1/delete">Delete</a>
+                </div>
+              </div>
+
+            </div>
+            </details>
+
+            <details class="backup-location">
+              <summary>Folder for backups made with “Create a backup”</summary>
+
+        <form method="post" action="/settings/backup/location" class="settings-form compact-form backup-folder" data-return-target="acc-transfer">
+          <input type="hidden" name="kind" value="manual">
+          <div class="field">
+            <label for="backup-path-manual">Folder for backups made with “Create a backup” <span class="pill mut">Default</span></label>
+            <input id="backup-path-manual" name="path" value="" placeholder="<root>/restore-points" autocomplete="off" spellcheck="false">
+
+            <p class="field-hint"><size> free</p>
+          </div>
+          <div class="settings-actions">
+            <button type="submit" name="action" value="save">Save</button>
+            <button class="ghost" type="submit" name="action" value="check" data-busy-label="Checking…">Check</button>
+
+          </div>
+        </form>
+
+            </details>
+          </article>
+
+          <article class="integration-card backup-card portable-transfer" id="backup-file" aria-labelledby="backup-file-title">
+            <div class="integration-head">
+              <div><h2 id="backup-file-title">TOW file</h2><p>A full encrypted copy to keep or to move together with the original master key.</p></div>
+            </div>
+            <form method="post" action="/settings/portable/export" data-native-submit class="settings-actions backup-make">
+              <button type="submit">Save file</button>
+            </form>
+            <form method="post" action="/settings/portable/import" enctype="multipart/form-data" data-return-target="acc-transfer" class="portable-import-form">
+              <label for="portable-backup-file">Choose a file: <code>.towx</code></label>
+              <input id="portable-backup-file" name="backup_file" type="file" accept=".towx,application/octet-stream" required>
+              <div class="settings-actions">
+                <button class="ghost" type="submit" name="operation" value="check" data-busy-label="Checking…">Check</button>
+                <button class="danger" type="submit" name="operation" value="restore" data-confirm="Restore TOW from this file? The current state is saved automatically before it is replaced." data-busy-label="Restoring…">Restore</button>
+              </div>
+            </form>
+            <p class="section-note">Restoring needs the original <code>keys/master.key</code> — it is not in the file, so keep it separately. Before replacing data, TOW checks the file and saves the current state. <a href="/settings/help#export-import">More</a>.</p>
+          </article>
+        </div>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc settings-log" id="acc-log" data-q="log journal events failure diagnostics">
+      <summary>
+        <span id="settings-log-title" class="settings-summary-title">Log</span>
+        <span class="pill mut">2</span>
+      </summary>
+      <div class="settings-panel settings-log-body">
+        <div class="log-box" id="log-settings-body" role="region" aria-labelledby="settings-log-title" tabindex="0">
+
+          <div class="log-line"><span class="mut"><time></span> · <b>Torrent client added</b> · manual</div>
+
+          <div class="log-line"><span class="mut"><time></span> · <b>Check</b> · checked: 3, without errors: 3</div>
+
+        </div>
+      </div>
+    </details><a class="settings-link" href="/doctor" data-q="diagnostics doctor connection check sites client service">
+      <span class="settings-summary-title">Diagnostics</span>
+      <span class="settings-link-note">Connection to the torrent client and the sites, autostart</span>
+      <svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-next"/></svg>
+    </a>
+    <a class="settings-link" href="/settings/help" data-q="guide how it works help">
+      <span class="settings-summary-title">Guide</span>
+      <span class="settings-link-note">How TOW works: statuses, messages, backups and updates</span>
+      <svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-next"/></svg>
+    </a>
+
+  </div>
+</div>
+<div class="sr-only" id="announce" role="status"></div>
+  <div class="sr-only" id="announce-alert" role="alert"></div>
+</main><footer class="app-version" data-page-version="<version>">
+    <a href="/settings?open=updates#acc-updates" title="Installed: TOW <version>">TOW <version></a>
+    <a href="/settings?open=updates#acc-updates" class="release-badge" data-release-badge hidden></a>
+  </footer>
+<dialog id="log-pop" class="log-pop" aria-labelledby="log-title">
+  <div class="log-pop-head">
+    <span id="log-title">Log (updates every 2 s)</span>
+    <a href="/history" class="log-history-link">History of downloads and changes</a>
+    <button type="button" class="flash-x" id="log-close" aria-label="Close"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
+  </div><div class="log-box" id="log-body" role="region" aria-labelledby="log-title" tabindex="0"><div class="mut">…</div></div>
+</dialog>
+<script type="application/json" id="tow-i18n">{"_datetime": "%Y-%m-%d %H:%M:%S", "js.browser_auth.start": "Sign in", "js.browser_auth.starting": "Starting\u2026", "js.clock.last_attempt": "Last attempt: {error}", "js.clock.last_attempt_failed": "The last attempt failed", "js.clock.never_checked": "No check has run yet", "js.clock.overdue_title": "The last check is overdue", "js.clock.secrets_migration_required": "passwords and tokens cannot be opened", "js.clock.until_next": "Until the next check", "js.downloads.file": "file", "js.downloads.history": "History", "js.downloads.last_event": "Latest event: {event}", "js.downloads.load_failed": "could not load", "js.downloads.loading": "Loading\u2026", "js.downloads.more": "Show more", "js.downloads.no_events": "No events yet.", "js.downloads.open_failed": "could not open the history", "js.edit.load_failed": "The edit form did not open: {error}", "js.guess.can_save_login": "you can save the sign-in", "js.guess.exists": "already added: {name}", "js.guess.failed": "could not fill it in automatically", "js.guess.filled": "filled in: {name}", "js.guess.kept_typed": "Fields you had filled in yourself were kept.", "js.guess.need_login": "a sign-in is needed", "js.guess.not_understood": "could not read this link", "js.log.details": "Details", "js.log.empty": "Empty.", "js.log.failed": "could not open", "js.releases.available": "TOW {version} is available", "js.releases.backup": "Saving and verifying the update snapshot\u2026", "js.releases.backup_cleanup_pending": "The restore point is verified; cleanup of old restore points is incomplete.", "js.releases.badge": "New {version}", "js.releases.checked": "Checked: {when}", "js.releases.checking": "Checking for updates\u2026", "js.releases.confirm": "Install TOW {version}? TOW first saves and verifies a restore point, then restarts. If the new version fails its health check, the updater tries to restore the previous version and data.", "js.releases.confirm_older": "Go back to the older TOW {version} (installed: {current})? First TOW saves and checks a restore point, then restarts. The older version may not know settings made since; if it does not pass the health check, the updater tries to return the current version and its data.", "js.releases.confirming": "The response was lost. Checking whether this installation started; it will not be sent again automatically. Reload the page to check the current state before retrying.", "js.releases.current": "You have the latest version", "js.releases.disabled": "Automatic update checks are off", "js.releases.failed": "The update or its rollback did not complete. Read the Update log below; do not repeat the installation blindly.", "js.releases.finished": "Finished: {when}", "js.releases.installing": "Installing the selected version\u2026", "js.releases.interrupted": "The updater was interrupted. Update from the terminal: see How to update below.", "js.releases.invalid_version": "Enter a stable release version, for example 1.22.21.", "js.releases.log_empty": "No log entries for this operation.", "js.releases.log_pending": "Waiting for the new operation\u0027s log\u2026", "js.releases.log_unavailable": "Could not read the update log.", "js.releases.ok": "TOW {version} installed and verified. Reload the page to open the new interface.", "js.releases.ok_current": "TOW {version} installed and verified.", "js.releases.operation_changed": "Showing a newer installation started in another tab or window.", "js.releases.phase_checking": "Starting TOW and checking its version and data\u2026", "js.releases.preparing": "Checking and preparing the selected release\u2026", "js.releases.previous": "Back to {version}", "js.releases.queued": "Restore point saved; starting the updater\u2026", "js.releases.reconnecting": "TOW is restarting. Waiting for the update result\u2026", "js.releases.recovered": "A later terminal update recovered TOW and checked its startup. Web updates are available again.", "js.releases.refused": "The updater refused the change before installation. The reason is in the Update log below.", "js.releases.reload": "Reload page", "js.releases.rolled_back": "The update failed; the previous version and data were restored and verified.", "js.releases.rolling_back": "The update failed; restoring the previous version and data\u2026", "js.releases.stale": "could not refresh; showing the last successful check", "js.releases.started": "Started: {when}", "js.releases.status_unavailable": "Could not read the installation status. Retrying; installation controls are temporarily disabled.", "js.releases.stopping": "Waiting for checks to finish and stopping TOW\u2026", "js.releases.superseded": "A previous update installed {version}; the installed version has changed since then.", "js.releases.supported": "Before installation: a verified restore point and an update snapshot. Nothing installs without confirmation.", "js.releases.unavailable": "Could not check for updates. TOW keeps working; try again later", "js.releases.unknown_build": "A stable release was found, but this build\u0027s version cannot be compared", "js.releases.unsupported": "Web installation is not available in this installation. Update from the terminal: see How to update below.", "js.search.nothing": "Nothing found", "js.search.shown": "Showing {shown}", "js.search.shown_of": "Showing {shown} of {total}", "js.settings.applying": "Applying\u2026", "js.settings.copied": "Command copied.", "js.settings.copy_failed": "Could not copy \u2014 select the command by hand.", "js.settings.save_address_first": "Enter the address and press Save first", "js.settings.save_first": "Save the changes first", "js.settings.theme_saved": "Theme saved: {theme}", "js.submit.failed": "Could not do this: {error}", "js.submit.no_next_page": "the server did not say which page comes next", "js.submit.unknown_error": "unknown error", "js.timer.done": "One-time topic done", "js.timer.paused": "Timer paused", "js.timer.queued": "Waiting for a check; another job or a site limit may delay it", "js.timer.running": "Personal-timer check in progress", "js.timer.scheduled": "Next automatic check", "js.timer.stopped": "The TOW service is not running, or its state is unavailable", "js.timer.title": "Personal timer: every {minutes} min", "js.timer.waiting": "Waiting for the updated schedule"}</script>
+<script type="application/json" id="tow-content-i18n">{"content.cache_failed": "Contents loaded, but the copy could not be saved for reuse. Check access to TOW\u0027s data folder.", "content.cached_hint": "Contents of the last obtained torrent. No download limit was used. Normal checks refresh this copy when the torrent changes.", "content.js.choose": "Get the contents and choose at least one file before saving.", "content.js.count": "Files selected: {count} \u00b7 {size}", "content.js.empty": "No files match the search.", "content.js.expand": "Expand or collapse {name}", "content.js.failed": "Could not get the contents. Try again or choose a .torrent file.", "content.js.folder": "Select all files in {name}", "content.js.loading": "Getting the file list; nothing is downloaded\u2026", "content.js.magnet_loading": "Getting the file list through the torrent client; nothing is downloaded\u2026", "content.js.page": "Page {page} of {pages}", "content.js.rule": "Files matched: {count} \u00b7 {size}", "content.js.rule_loading": "Checking the rule\u2026", "content.js.session": "Your sign-in has expired. Reload the page to sign in again.", "content.js.space_fits": "Chosen {size}, free {free}: it fits", "content.js.space_free": "Free on this disk: {free}", "content.js.space_short": "Not enough room: chosen {size}, free {free}. TOW adds the topic stopped and starts it by itself when there is room.", "content.js.stale": "The link or client changed. Get the contents again.", "content.js.too_large": "The .torrent file is larger than TOW accepts.", "content.limited_confirm": "Request a .torrent from the site? This uses its download limit. Showing saved contents does not use the limit.", "web.bytes.b": "{size} B", "web.bytes.gb": "{size} GB", "web.bytes.kb": "{size} KB", "web.bytes.mb": "{size} MB", "web.bytes.tb": "{size} TB"}</script>
+<script src="/static/app.js?v=<static>" defer></script>
+<script src="/static/content.js?v=<static>" defer></script>
+<script src="/static/updates.js?v=<static>" defer></script>
+</body>
+</html>
