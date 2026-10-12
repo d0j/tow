@@ -842,12 +842,9 @@ def test_fixed_settings_release_a_held_queue(http):
 
 
 def test_a_message_is_saved_before_it_is_sent(http, monkeypatch):
-    from tow.notifiers import outbox
-
     def crash(*_a, **_k):
         raise SystemExit("TOW stopped")
 
-    monkeypatch.setattr(outbox, "flush", crash)
     monkeypatch.setattr(notifiers, "flush", crash)
     with pytest.raises(SystemExit):
         notifiers.send_all(DISCORD, "серия 1")

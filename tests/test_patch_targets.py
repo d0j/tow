@@ -20,14 +20,7 @@ SRC = ROOT / "src"
 TESTS = ROOT / "tests"
 
 # (test file, "module.name"): what replaced nothing when this came - may only shrink.
-ALLOWED: dict[tuple[str, str], str] = {
-    # A tripwire: fails if a backup-folder check ever probes with a write. Nothing in
-    # tow.locations calls check_writable (only tow.web.services, under another name).
-    ("tests/test_windows_device_paths.py", "tow.locations.check_writable"): "tripwire, never called in tow.locations",
-    # tow.notifiers imports flush from the outbox at the top; the same test also patches
-    # tow.notifiers.flush, which is the one send_all reads.
-    ("tests/test_notifiers.py", "tow.notifiers.outbox.flush"): "redundant with tow.notifiers.flush",
-}
+ALLOWED: dict[tuple[str, str], str] = {}
 
 
 def _is_module(dotted: str, src: Path) -> bool:

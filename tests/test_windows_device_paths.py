@@ -122,12 +122,25 @@ def test_ordinary_client_paths_remain_accepted(path):
 def test_backup_folder_refuses_windows_devices_streams_and_admin_shares(raw, kind, location, monkeypatch):
     from tow import platform
     from tow.platform.windows import WindowsBackend
+    from tow.web import app
 
-    monkeypatch.setattr(locations, "check_writable", lambda *_a: pytest.fail("write probe of a device"))
+    # A tripwire where the write probe is read: the settings page probes a folder through it.
+    monkeypatch.setattr("tow.web.services.folder_write_problem", lambda *_a: pytest.fail("write probe of a device"))
+    form = next(name for name, known in locations.LOCATIONS.items() if known is location)
+    before = config_path().read_bytes()
     with platform.use(WindowsBackend()):
         assert locations.problem(raw, location) == t(f"locations.windows_{kind}")
         with pytest.raises(locations.LocationError):
             locations.resolve_checked(raw, location)
+        for action in ("check", "save"):
+            response = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
+                "/settings/backup/location",
+                data={"kind": form, "path": raw, "action": action},
+                follow_redirects=False,
+            )
+            assert response.status_code == 303
+            assert t(f"locations.windows_{kind}") in flash_of(response.headers["location"])
+    assert config_path().read_bytes() == before
 
 
 @pytest.mark.parametrize(
