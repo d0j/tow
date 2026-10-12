@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from tow.backup_actions import added_names, cleanup_names, copy_revision, inventory_digest
+from tow.backup_actions import KEPT_SETTINGS, added_names, cleanup_names, copy_revision, inventory_digest
 from tow.bundle import (
     MAX_BUNDLE_BYTES,
     ExportImportError,
@@ -27,9 +27,6 @@ from tow.store import SecretStoreError, atomic_write_text, derive_local_secret, 
 
 RESTORE_POINT_LIMIT = 10
 _ID_RE = re.compile(r"^(?P<stamp>\d{8}T\d{6}Z)-(?P<nonce>[a-f0-9]{8})$")
-# This install's own settings, never the restored copy's: its network access and its backup
-# folders (the safety point just made stays listed; a copy from another system keeps night copies working).
-_KEPT_KEYS = ("bind", "port", "allow_lan", "backup_dir", "restore_points_dir")
 
 
 # What failed, whatever the language of the message: callers choose their reaction (the web
@@ -395,7 +392,7 @@ def _restore_bundle(
     protected: set[str],
 ) -> dict[str, Any]:
     live = load_config()
-    access_before = {key: live.get(key) for key in _KEPT_KEYS}
+    access_before = {key: live.get(key) for key in KEPT_SETTINGS}
     try:
         preview = import_bundle(
             path,
