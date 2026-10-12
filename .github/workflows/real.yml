@@ -14,6 +14,8 @@ on:
   pull_request:
     paths:
       - "src/tow/clients/**"
+      # The scan that finds the client modules (tow.clients.spec discovers them through it).
+      - "src/tow/plugins.py"
       - "src/tow/autostart/**"
       - "src/tow/check/**"
       - "src/tow/supervisor/**"

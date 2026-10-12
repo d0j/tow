@@ -456,6 +456,7 @@ def test_real_systems_run_on_their_code_weekly_and_by_hand_never_unbounded():
     assert "workflow_dispatch" in triggers
     assert set(triggers["pull_request"]["paths"]) == {
         "src/tow/clients/**",
+        "src/tow/plugins.py",
         "src/tow/autostart/**",
         "src/tow/check/**",
         "src/tow/supervisor/**",
@@ -482,6 +483,17 @@ def test_real_systems_run_on_their_code_weekly_and_by_hand_never_unbounded():
     for other in ("ci", "installers", "release"):
         assert "TOW_REAL_" not in _workflow(other)[0], other
     assert "8787" not in text
+
+
+def test_real_clients_run_when_the_client_discovery_changes():
+    """The real torrent clients are loaded through the shared plugin scan (tow.plugins), which
+    lives outside src/tow/clients: a change to it runs real.yml too."""
+    from tow import plugins
+    from tow.clients import spec
+
+    assert spec.plugins is plugins  # the discovery of the client modules
+    paths = _workflow("real")[1][True]["pull_request"]["paths"]
+    assert Path(plugins.__file__).resolve().relative_to(ROOT).as_posix() in paths
 
 
 def test_ci_keeps_the_required_check_names_and_audits_once():
