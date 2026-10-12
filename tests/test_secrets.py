@@ -219,9 +219,11 @@ def _legacy_file(data: dict) -> Path:
 
 
 def _reads_back_other(monkeypatch) -> None:
-    from tow import store
+    from tow.storage import secrets as secret_store
 
-    monkeypatch.setattr(store, "_encrypted_payload", lambda _path, _format: {"telegram": {"token": "something else"}})
+    monkeypatch.setattr(
+        secret_store, "_encrypted_payload", lambda _path, _format: {"telegram": {"token": "something else"}}
+    )
 
 
 def test_a_secrets_save_that_reads_back_different_fails_and_keeps_the_old_file(monkeypatch):
@@ -259,7 +261,7 @@ def test_undecodable_secrets_bytes_are_a_damaged_store_not_a_crash(monkeypatch):
 def test_a_half_written_key_file_is_removed(tmp_path, monkeypatch):
     import os
 
-    from tow import store
+    from tow.storage import keys
 
     def full_disk(_fd):
         raise OSError(28, "No space left on device")
@@ -267,6 +269,6 @@ def test_a_half_written_key_file_is_removed(tmp_path, monkeypatch):
     monkeypatch.setattr(os, "fsync", full_disk)
     path = tmp_path / "keys" / "master.key"
     with pytest.raises(SecretStoreError) as error:
-        store._write_new_key_file(path, b"k" * 44)
+        keys.write_new_key_file(path, b"k" * 44)
     assert str(error.value) == i18n.translate("cli.keys.error.write_failed", i18n.current())
     assert not path.exists()  # never a half key that looks like another one next time
