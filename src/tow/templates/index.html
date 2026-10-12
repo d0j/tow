@@ -1,12 +1,23 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{#- Runs before the page is drawn (not deferred: the CSP forbids an inline script), so a folded
+    banner never flashes open. On a Home without problems it forgets a folded banner. -#}
+{% block head %}<script src="/static/attention.js?v={{ static_version }}" data-fingerprint="{{ attention.fingerprint }}"></script>{% endblock %}
 {% block body %}
 <h1 id="page-title" class="sr-only">{{ t('home.title') }}</h1>
-{% if attention %}
-<section class="attention card" role="status" aria-label="{{ t('home.attention') }}">
-  <strong>{{ t('home.attention') }}</strong>
-  <ul>{% for item in attention %}<li>{{ item.text }}</li>{% endfor %}</ul>
+{% if attention.entries %}
+{#- The banner folds into a warning button with the number of problems, in the colour of the
+    worst one, and opens from it again (attention.js, per browser). Another set of problems opens
+    it by itself (the fingerprint). Without the script both buttons stay hidden, the banner open. -#}
+{% set attention_count = attention.entries|length %}
+<section class="attention card" id="attention" role="status" aria-labelledby="attention-title">
+  <div class="attention-head">
+    <strong id="attention-title">{{ t('home.attention') }}</strong>
+    <button type="button" class="ico attention-fold" data-attention-fold aria-expanded="true" aria-controls="attention" aria-label="{{ t('home.attention_fold') }}" title="{{ t('home.attention_fold') }}">{{ icon('chevron', 'sm') }}</button>
+  </div>
+  <ul>{% for item in attention.entries %}<li>{{ item.text }}</li>{% endfor %}</ul>
 </section>
+<button type="button" class="attention-unfold {{ attention.tone }}" data-attention-unfold aria-expanded="false" aria-controls="attention" aria-label="{{ t('home.attention_show', count=attention_count) }}" title="{{ t('home.attention_show', count=attention_count) }}">{{ icon('alert', 'sm') }}<span class="attention-count" aria-hidden="true">{{ attention_count }}</span></button>
 {% endif %}
 {# The draft comes only from the server's own record of a refused add (?add=<token>), never
    from values in the link. #}

@@ -3,6 +3,7 @@
 <html lang="{{ lang() }}"{% if theme() %} data-theme="{{ theme() }}"{% endif %}>
 <head>
 {% include "_head.html" %}
+{%- block head %}{% endblock %}
 </head>
 <body>
 {{ sprite() }}

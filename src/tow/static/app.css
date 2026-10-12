@@ -1001,10 +1001,31 @@ svg.i.xs { width: .75rem; height: .75rem; stroke-width: 2.4; }
 .tracker-menu { left: 0; right: auto; max-width: min(19rem, 100%); max-height: min(20rem, 45dvh); overflow-y: auto; overscroll-behavior: contain; }
 mark { background: rgba(240,180,41,.35); color: inherit; border-radius: 2px; }
 
-/* G3: needs-attention banner */
+/* G3: needs-attention banner. It folds into a warning button with the number of problems
+   (attention.js marks <html> before the page is drawn: nothing jumps); without the script both
+   buttons stay hidden and the banner open. */
 .attention { border-color: var(--warn); margin-bottom: .8rem; padding: .6rem .9rem; }
 .attention strong { color: var(--warn); }
 .attention ul { margin: .3rem 0 0; padding-left: 1.2rem; }
+.attention-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-height: var(--btn-h); }
+.attention-fold.ico, .attention-unfold { display: none; }
+.attention-js .attention-fold.ico {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  width: var(--btn-h); height: var(--btn-h); margin: -.2rem -.35rem -.2rem 0; padding: 0;
+  color: var(--mut); background: transparent; border: 0; border-radius: 6px;
+}
+.attention-fold.ico svg { transform: rotate(180deg); }
+.attention-fold.ico:hover, .attention-fold.ico:focus-visible { color: var(--fg); background: var(--panel2); }
+.attention-folded .attention { display: none; }
+.attention-js.attention-folded .attention-unfold {
+  display: inline-flex; align-items: center; gap: .4rem; width: fit-content; margin: 0 0 .8rem;
+  --tone: var(--warn); color: var(--tone); background: var(--pill-warn-bg); border-color: var(--tone); font-weight: 650;
+}
+.attention-js.attention-folded .attention-unfold.bad { --tone: var(--bad); background: var(--pill-bad-bg); }
+.attention-count {
+  min-width: 1.25rem; padding: 0 .35rem; border-radius: 999px; line-height: 1.25rem; text-align: center;
+  color: var(--panel); background: var(--tone); font-variant-numeric: tabular-nums;
+}
 
 /* G7: history page */
 .history-filter { display: flex; flex-wrap: wrap; gap: .5rem .8rem; align-items: center; margin: .4rem 0 .7rem; }

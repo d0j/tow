@@ -903,6 +903,8 @@
   "home": {
     "title": "Раздачи",
     "attention": "Требует внимания",
+    "attention_fold": "Свернуть «Требует внимания»",
+    "attention_show": "Требует внимания: {count}. Показать",
     "cancel": "Отмена",
     "add": {
       "not_added": "Не добавлено: {error}",
