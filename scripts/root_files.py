@@ -13,6 +13,7 @@ Python. The files are ASCII with CRLF line ends and have no labels and no blocks
 
 from __future__ import annotations
 
+import contextlib
 import os
 from pathlib import Path
 
@@ -188,10 +189,8 @@ def _write(path: Path, data: bytes) -> None:
             os.fsync(handle.fileno())
         os.replace(temporary, path)
     except BaseException:
-        try:
+        with contextlib.suppress(OSError):  # not made, or held too: the next update writes it again
             temporary.unlink()
-        except OSError:
-            pass  # not made, or held too: the next update writes it again
         raise
 
 
