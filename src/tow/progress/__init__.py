@@ -39,6 +39,7 @@ from tow.progress.labels import (
     set_label,
     set_latest_event,
 )
+from tow.progress.presence import mark_superseded, track_client_presence
 from tow.records import DownloadHistory, HistoryItem, HistoryRecord, Topic
 from tow.selection import (
     SelectionError,
@@ -142,44 +143,6 @@ def _completed_episode_keys(items: dict[str, HistoryItem]) -> set[str]:
         for key in keys:
             groups.setdefault(str(key), []).append(item.get("status") == "completed")
     return {key for key, statuses in groups.items() if statuses and all(statuses)}
-
-
-def _track_client_presence(
-    record: HistoryRecord, info: Any, client_adapter: TorrentClientAdapter, now: str, events: list[str]
-) -> bool:
-    """Record client_removed/client_restored transitions; False when the torrent is gone."""
-    client_fields = {
-        "at": now,
-        "source": "tow",
-        "client_id": client_adapter.client_id,
-        "client_kind": client_adapter.client_kind,
-    }
-    if not info:
-        if record.get("client_present") is True:
-            record["client_present"] = False
-            events.append("client_removed")
-            set_latest_event(
-                record, {"kind": "client_removed", **label_fields(latest_item_label(record)), **client_fields}
-            )
-        return False
-    if record.get("client_present") is False:
-        events.append("client_restored")
-        set_latest_event(
-            record,
-            {"kind": "client_restored", **label_fields(Msg("progress.back_in_client")), **client_fields},
-        )
-    record["client_present"] = True
-    return True
-
-
-def _mark_superseded(items: dict[str, HistoryItem], current_source_hash: str, *, has_files: bool) -> None:
-    """Items of other revisions are superseded; the current revision's are live again."""
-    for historical_item in items.values():
-        historical_hash = str(historical_item.get("source_hash") or "").casefold()
-        if not historical_hash or historical_hash != current_source_hash:
-            historical_item["superseded"] = True
-        elif has_files:
-            historical_item["superseded"] = False
 
 
 def _check_save_path(topic: Topic, info: Any) -> str:
@@ -964,7 +927,7 @@ def reconcile_topic(
     observe = getattr(client_adapter, "observe_torrent", None) or client_adapter.inspect_torrent
     info = observe(str(topic.get("hash") or ""))
     record["last_scan_at"] = now
-    if not _track_client_presence(record, info, client_adapter, now, events):
+    if not track_client_presence(record, info, client_adapter, now, events):
         return {"summary": _summary_record(record, expected), "events": events}
     client_event = _client_event(info, client_adapter)
 
@@ -973,7 +936,7 @@ def reconcile_topic(
         record["baseline_at"] = now
     items = record["items"]
     current_source_hash = str(topic.get("hash") or "").casefold()
-    _mark_superseded(items, current_source_hash, has_files=bool(files))
+    mark_superseded(items, current_source_hash, has_files=bool(files))
     evidence_save_path = _check_save_path(topic, info)
     selected_episode_keys = [str(value) for value in topic.get("selected_episode_keys") or []]
     preferred_season = _preferred_season(topic, selected_episode_keys)
