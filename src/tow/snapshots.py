@@ -32,7 +32,7 @@ from typing import Any
 import yaml
 
 from tow import __version__
-from tow.backup_actions import added_names, cleanup_names, copy_revision, inventory_digest
+from tow.backup_actions import KEPT_SETTINGS, added_names, cleanup_names, copy_revision, inventory_digest
 from tow.backup_retention import MIB, copy_time, retained_copies, retention_settings
 from tow.config import interval_sec_of, load_config
 from tow.diagnostic_json import check_epochs, check_types, encode_object, read_object
@@ -78,8 +78,6 @@ _PREFIX = "tow-"
 _PARTIAL_NAME = re.compile(r"\.tow-[0-9]{8}-[0-9]{6}(?:-[0-9a-f]{6})?\.partial")
 _PARTIAL_PROOF = "PARTIAL.json"
 _PARTIAL_FORMAT = "tow-snapshot-partial-v1"
-# Access settings and backup folders belong to this machine, not to the copy (as for restore points).
-_KEPT_KEYS = ("bind", "port", "allow_lan", "backup_dir", "restore_points_dir")
 
 
 class SnapshotError(RuntimeError):
@@ -1612,7 +1610,7 @@ def _keep_local_access(snapshot_config: bytes) -> bytes:
     except OSError, UnicodeError, yaml.YAMLError:
         current = None
     if isinstance(current, dict):
-        for key in _KEPT_KEYS:
+        for key in KEPT_SETTINGS:
             if key in current:
                 restored[key] = current[key]
             else:

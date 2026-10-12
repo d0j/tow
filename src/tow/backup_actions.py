@@ -10,6 +10,11 @@ from typing import Any
 
 from tow.platform import is_plain_dir, is_plain_file
 
+# This install's own settings, never the restored copy's (a nightly backup or a restore point):
+# its network access and its backup folders (the safety point just made stays listed; a copy
+# from another system keeps night copies working). A restore keeps the live values.
+KEPT_SETTINGS = ("bind", "port", "allow_lan", "backup_dir", "restore_points_dir")
+
 
 def cleanup_names(location: Path, candidate: Callable[[str], bool]) -> list[str]:
     """Candidate copy names in a cleanup folder, sorted; no contents read, no link followed.
