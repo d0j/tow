@@ -6,7 +6,7 @@ import pytest
 
 from tow import bundle
 from tow.check_steps import merge_check_results, store_revision
-from tow.progress import _file_rule_evidence, _selection_fingerprint
+from tow.progress.expected import _file_rule_evidence, selection_fingerprint
 from tow.selection import SelectionError, normalize_file_aliases, normalize_policy, resolve_selection
 from tow.torrent import MAX_FILES, TorrentFile, windows_path_key
 
@@ -180,9 +180,9 @@ def test_import_refuses_malformed_alias_metadata(value):
 def test_alias_context_is_in_the_expected_target_fingerprint(mode):
     topic = topic_for("*.mkv", [{"path": "Show?.S01E01.mkv", "size": 1}])
     topic["selection"] = normalize_policy(mode, "*.mkv")
-    before = _selection_fingerprint(topic)
+    before = selection_fingerprint(topic)
     topic["file_aliases"]["files"][0]["size"] = 2
-    assert _selection_fingerprint(topic) != before
+    assert selection_fingerprint(topic) != before
 
 
 @pytest.mark.parametrize("mode", ["all", "files"])
@@ -190,9 +190,9 @@ def test_alias_order_and_hash_case_do_not_change_the_same_metadata_context(mode)
     files = [{"path": "Show?.S01E01.mkv", "size": 1}, {"path": "Show?.S01E02.mkv", "size": 1}]
     topic = topic_for("*.mkv", files)
     topic["selection"] = normalize_policy(mode, "*.mkv")
-    before = _selection_fingerprint(topic)
+    before = selection_fingerprint(topic)
     topic["file_aliases"] = {"hash": HASH.upper(), "files": list(reversed(files))}
-    assert _selection_fingerprint(topic) == before
+    assert selection_fingerprint(topic) == before
 
 
 def test_a_complete_verified_legacy_path_list_can_supply_original_names_read_only():

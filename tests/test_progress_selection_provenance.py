@@ -5,7 +5,8 @@ from typing import ClassVar
 import pytest
 
 from tow.episodes import expected_for_topic, summarize_completion
-from tow.progress import _expected_from_observed, reconcile_topic
+from tow.progress import reconcile_topic
+from tow.progress.expected import _expected_from_observed
 from tow.selection import SelectionError, normalize_policy
 
 HASH = "a" * 40

@@ -5,7 +5,8 @@ from typing import ClassVar
 
 import pytest
 
-from tow.progress import _file_rule_evidence, reconcile_topic
+from tow.progress import reconcile_topic
+from tow.progress.expected import _file_rule_evidence
 from tow.selection import SelectionError, normalize_policy
 
 HASH = "a" * 40
