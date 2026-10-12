@@ -325,6 +325,14 @@ def translate(key: str, lang: str | None = None, /, **params: Any) -> str:
 t = translate
 
 
+def text_or_key(value: str, lang: str | None = None, **params: Any) -> str:
+    """``value`` in ``lang`` (default: the current language) when it is a catalog key, else as it
+    is: a plugin (a client, a messenger) may give a key or a plain text for a label or a step."""
+    if not value or not has(value):
+        return value
+    return translate(value, lang or current(), **params)
+
+
 def has(key: str, lang: str = DEFAULT) -> bool:
     return key in _load(lang)[0]
 

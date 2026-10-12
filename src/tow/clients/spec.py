@@ -90,17 +90,13 @@ class TorrentClientAdapter(Protocol):
     def set_location(self, infohash: str, save_path: str) -> str: ...
 
 
-def ui_language() -> str:
-    """The language of what the owner sees: the request's (or the CLI's); without one (a
-    background thread, a direct call) the language of TOW's messages."""
-    return i18n.current()
+# The language of what the owner sees (i18n.current), and a catalog key in it or a plain text as
+# it is (i18n.text_or_key): kept here for the client modules and the settings page.
+ui_language = i18n.current
 
 
 def text(value: str, lang: str | None = None) -> str:
-    """A catalog key in ``lang`` (default: the owner's language), or a plain text as it is."""
-    if not value or not i18n.has(value):
-        return value
-    return i18n.translate(value, lang or ui_language())
+    return i18n.text_or_key(value, lang)
 
 
 @dataclass(frozen=True)
