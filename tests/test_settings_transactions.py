@@ -27,7 +27,7 @@ from tow.store import (
     secret_undo_path,
     state_path,
 )
-from tow.web import routes_password, routes_settings, routes_sites
+from tow.web import routes_clients, routes_password, routes_settings, routes_sites
 
 PASSWORD = "correct-horse-battery"
 LOCAL = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"), url=SimpleNamespace(scheme="http"))
@@ -58,14 +58,14 @@ def _older_settings_undo() -> None:
 def _client_add():
     save_secrets(QBIT)
     _older_settings_undo()
-    from tow.web.routes_settings import settings_client_add
+    from tow.web.routes_clients import settings_client_add
 
     return lambda: settings_client_add(kind="transmission")
 
 
 def _client_login():
     save_secrets(QBIT)
-    return lambda: routes_settings.settings_client(
+    return lambda: routes_clients.settings_client(
         client_id="", kind="qbittorrent", host="nas", port="8081", username="admin", password="new-pw"
     )
 

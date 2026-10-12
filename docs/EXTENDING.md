@@ -30,7 +30,8 @@ A client module declares:
 - `from_secrets(secrets)` → an object satisfying `TorrentClientAdapter`.
 
 The settings card is not the module's: `clients/view.py` builds every client's card from these constants and
-the saved settings (`cards(cfg, secrets, topics)`, as `notifiers/view.py` does for messengers).
+the saved settings (`cards(cfg, secrets, topics)`, as `notifiers/view.py` does for messengers), and
+`web/routes_clients.py` saves, checks, adds, removes and chooses the main client for every kind alike.
 
 Discovery falls back to a default for a constant that is missing or wrong; `test_plugin_contracts.py` does not:
 `client_module_problems(module)` (`clients/spec.py`) names a `TITLE`, `SECRETS_KEY`, `DEFAULT_PORT` or `ORDER`
@@ -156,8 +157,10 @@ The web package (`src/tow/web/`):
   the routers in `ROUTERS` order. `tow.web.app` is the built app (`tow serve`, `tow run`, tests).
 - `routes_<topic>.py` — one `router = APIRouter()` per topic: `routes_home`, `routes_topics`, `routes_content`
   (a topic's contents: the file list from the site, a `.torrent` or a magnet), `routes_topic_login`, `routes_check`,
-  `routes_undo`, `routes_sites`, `routes_settings`, `routes_notifiers`, `routes_backup`, `routes_service`,
-  `routes_password`, `routes_auth`, `routes_health`, `routes_history`.
+  `routes_undo`, `routes_sites`, `routes_settings`, `routes_clients`, `routes_notifiers`, `routes_backup`,
+  `routes_service`, `routes_password`, `routes_auth`, `routes_health`, `routes_history`. A section of Settings
+  with cards of its own has its own module (`routes_clients`, `routes_notifiers`); the cards themselves come
+  from the family's `view.cards` (`tow.clients.view`, `tow.notifiers.view`).
   Importing a module registers nothing.
 - `services.py` — the only way out of the package: config, state, secrets and history, checks, the service,
   restore points, diagnostics, browser sign-in, the log; also `login_throttle` and `locked_state_mutation`.
