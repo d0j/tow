@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from tow import access, i18n, store_transaction, undo
 from tow.auth import MAX_HINT_LENGTH, password_hint
 from tow.bind import network_bind
+from tow.clients.spec import DEFAULT_KIND
 from tow.clock import format_ui_timestamp
 from tow.config import (
     INTERVAL_MAX_MINUTES,
@@ -364,7 +365,7 @@ def settings_help(request: Request) -> Response:
 @services.locked_state_mutation
 def settings_client(
     client_id: str = Form(""),
-    kind: str = Form("qbittorrent"),
+    kind: str = Form(DEFAULT_KIND),
     host: str = Form(""),
     port: str = Form(""),  # empty: the client's own default port (Transmission 9091, not 8080)
     username: str = Form(""),

@@ -39,6 +39,7 @@
   "ClientSpec.note": "property",
   "ClientSpec.steps": "property",
   "DEFAULT_FIELDS": "value tuple",
+  "DEFAULT_KIND": "value str",
   "HELPERS": "value frozenset",
   "SKIPPED": "value list",
   "TorrentClientAdapter": "class(*args, **kwargs)",
