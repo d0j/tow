@@ -3,6 +3,14 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [Unreleased]
+
+### Fixed
+
+- `tow start` and the start files no longer say "TOW is running" when the page that answers is a web server of this
+  TOW started by hand (`tow serve`) and the new `tow run` could not take the port: the start now says why it ended
+  instead of leaving the checks, the nightly backups and the watchdog without their service.
+
 ## [1.28.3] — 2026-10-09
 
 ### Fixed

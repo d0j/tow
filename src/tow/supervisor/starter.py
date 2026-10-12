@@ -35,6 +35,13 @@ class Deps:
     open_url: Callable[[str], bool]
     sleep: Callable[[float], None] = time.sleep
     monotonic: Callable[[], float] = time.monotonic
+    now: Callable[[], float] = time.time
+
+
+def _started_since(running: dict[str, Any] | None, at: float) -> bool:
+    """A `tow run` runs that started at ``at`` or later (its pid file says when)."""
+    started = (running or {}).get("started_at")
+    return isinstance(started, (int, float)) and not isinstance(started, bool) and started >= at
 
 
 def stderr_log() -> Path:
@@ -113,10 +120,18 @@ def start(
     """
     deps = deps or default_deps()
     url = f"http://127.0.0.1:{port}/"
-    pid = None if deps.running() is not None else deps.spawn()
+    pid = None
+    # This install's page answering while no `tow run` runs (a `tow serve` started by hand, a
+    # server left without its record): that page is not the new `tow run`'s, which may refuse the
+    # port. Started then means: the new one runs (its pid file is written once the port is its).
+    stray, spawned_at = False, 0.0
+    if deps.running() is None:
+        stray = deps.healthy(port)
+        spawned_at = deps.now()
+        pid = deps.spawn()
     deadline = deps.monotonic() + max(0.0, wait)
     while True:
-        if deps.healthy(port):
+        if deps.healthy(port) and (not stray or _started_since(deps.running(), spawned_at)):
             opened = bool(browser and deps.open_url(url))
             state = "running" if pid is None else "started"
             return {"ok": True, "state": state, "url": url, "pid": pid, "browser": opened}
