@@ -3,7 +3,12 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
-## [Unreleased]
+## [1.28.4] — 2026-10-12
+
+### Changed
+
+- TOW's code is reorganised into smaller modules, with one way to add a torrent client, a messenger or a periodic
+  job, and with tests that keep the layers apart. Nothing changes in what TOW does; the dependencies are updated too.
 
 ### Fixed
 
