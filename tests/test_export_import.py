@@ -13,6 +13,7 @@ import yaml
 from helpers import reaped
 
 from tow.bundle import ExportImportError, export_bundle, import_bundle, rollback_import
+from tow.bundle import checkpoint as bundle_checkpoint
 from tow.bundle import crypto as bundle_crypto
 from tow.bundle.archive import _validated_payload, read_bundle, unzip_payload, zip_payload
 from tow.bundle.crypto import _encrypt_outer, decrypt_outer
@@ -499,7 +500,7 @@ def test_incomplete_import_transaction_is_recovered_before_next_import(tmp_path,
 
     dest = tmp_path / "destination"
     config_file, _, _, _ = _seed_source(monkeypatch, dest)
-    checkpoint = tow_bundle._create_import_checkpoint()
+    checkpoint = bundle_checkpoint.create_import_checkpoint()
     original_config = config_file.read_bytes()
     original_state = json.loads(state_path().read_text(encoding="utf-8"))
     original_history = json.loads((dest / "data" / "download_history.json").read_text(encoding="utf-8"))
@@ -523,31 +524,29 @@ def test_incomplete_import_transaction_is_recovered_before_next_import(tmp_path,
 @pytest.mark.parametrize("member", ["state.json", "TRANSACTION.json"])
 def test_a_checkpoint_that_cannot_be_written_leaves_no_half_copy(tmp_path, monkeypatch, member):
     # A full disk: each restore attempt left one more half copy of every store that nothing removed.
-    from tow import bundle as tow_bundle
 
     dest = tmp_path / "destination"
     _seed_source(monkeypatch, dest)
-    real = tow_bundle.atomic_write
+    real = bundle_checkpoint.atomic_write
 
     def full(path, content):
         if Path(path).name == member:
             raise OSError(28, "No space left on device")
         return real(path, content)
 
-    monkeypatch.setattr(tow_bundle, "atomic_write", full)
+    monkeypatch.setattr(bundle_checkpoint, "atomic_write", full)
     with pytest.raises(OSError, match="No space left"):
-        tow_bundle._create_import_checkpoint()
+        bundle_checkpoint.create_import_checkpoint()
     root = dest / "data" / "import-checkpoints"
     assert not root.exists() or list(root.iterdir()) == []
 
 
 def test_crashed_import_is_rolled_back_before_any_other_writer(tmp_path, monkeypatch):
     # N3: not only the next import - the next writer of any kind (check, web edit) recovers first.
-    from tow import bundle as tow_bundle
 
     dest = tmp_path / "destination"
     config_file, _, _, _ = _seed_source(monkeypatch, dest)
-    tow_bundle._create_import_checkpoint()
+    bundle_checkpoint.create_import_checkpoint()
     original_config = config_file.read_bytes()
     original_state = json.loads(state_path().read_text(encoding="utf-8"))
     config_file.write_text("bind: 0.0.0.0\nport: 1\n", encoding="utf-8")
@@ -563,7 +562,7 @@ def test_unreadable_import_journal_refuses_other_writes_until_repaired(tmp_path,
 
     dest = tmp_path / "destination"
     _seed_source(monkeypatch, dest)
-    checkpoint = tow_bundle._create_import_checkpoint()
+    checkpoint = bundle_checkpoint.create_import_checkpoint()
     transaction = checkpoint / "TRANSACTION.json"
     original = transaction.read_bytes()
     transaction.write_text("{broken", encoding="utf-8")
@@ -583,12 +582,11 @@ def test_unreadable_import_journal_refuses_other_writes_until_repaired(tmp_path,
 
 
 def test_import_rollback_preview_rejects_missing_backup(tmp_path, monkeypatch):
-    from tow import bundle as tow_bundle
 
     _seed_source(monkeypatch, tmp_path / "destination")
-    checkpoint = tow_bundle._create_import_checkpoint()
+    checkpoint = bundle_checkpoint.create_import_checkpoint()
     # A finished import: a still-"prepared" one would be recovered (and fail closed) on lock.
-    tow_bundle._write_import_transaction(checkpoint, status="committed")
+    bundle_checkpoint.write_import_transaction(checkpoint, status="committed")
     (checkpoint / "files" / "config.yaml").unlink()
 
     with pytest.raises(ExportImportError, match=r"backup|checkpoint"):
@@ -764,7 +762,7 @@ def test_import_rollback_compensates_after_late_restore_failure(tmp_path, monkey
         "secrets": dest / "data" / "secrets.enc",
     }
     after_import = {name: path.read_bytes() for name, path in targets.items()}
-    original_atomic = tow_bundle.atomic_write
+    original_atomic = bundle_checkpoint.atomic_write
     calls = 0
 
     def fail_once(path, content):
@@ -774,7 +772,7 @@ def test_import_rollback_compensates_after_late_restore_failure(tmp_path, monkey
             raise OSError("simulated late rollback failure")
         return original_atomic(path, content)
 
-    monkeypatch.setattr(tow_bundle, "atomic_write", fail_once)
+    monkeypatch.setattr(bundle_checkpoint, "atomic_write", fail_once)
     with pytest.raises(ExportImportError, match="rollback failed; destination preserved"):
         tow_bundle.rollback_import(Path(applied["checkpoint"]), apply=True)
 
@@ -810,7 +808,6 @@ def test_a_failed_second_rollback_does_not_undo_later_edits(tmp_path, monkeypatc
     # Found while raising coverage: the compensation wrote "prepared" over a
     # "rolled_back" marker, so the recovery hook rolled back again at the next lock
     # and silently threw away every edit made after the first rollback.
-    from tow import bundle as tow_bundle
 
     _seed_source(monkeypatch, tmp_path / "source")
     bundle = tmp_path / "tow.towx"
@@ -826,7 +823,7 @@ def test_a_failed_second_rollback_does_not_undo_later_edits(tmp_path, monkeypatc
     rollback_import(checkpoint, apply=True)
     save_state({"topics": [{"id": "edited-after-rollback"}], "mirrors": {}})
 
-    real_write = tow_bundle.atomic_write
+    real_write = bundle_checkpoint.atomic_write
     calls = []
 
     def second_write_fails(path, content):
@@ -835,10 +832,10 @@ def test_a_failed_second_rollback_does_not_undo_later_edits(tmp_path, monkeypatc
             raise OSError("disk hiccup")
         return real_write(path, content)
 
-    monkeypatch.setattr(tow_bundle, "atomic_write", second_write_fails)
+    monkeypatch.setattr(bundle_checkpoint, "atomic_write", second_write_fails)
     with pytest.raises(ExportImportError, match="destination preserved"):
         rollback_import(checkpoint, apply=True)
-    monkeypatch.setattr(tow_bundle, "atomic_write", real_write)
+    monkeypatch.setattr(bundle_checkpoint, "atomic_write", real_write)
 
     with persistence_lock():  # the recovery hook runs here
         pass

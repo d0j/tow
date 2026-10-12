@@ -133,6 +133,7 @@ def test_plain_kind_of_a_missing_or_unreadable_entry(monkeypatch, tmp_path):
 def test_links_and_junctions_keep_each_callers_own_error(monkeypatch, tmp_path, system, mode, attributes, kind):
     from tow import bundle
     from tow.snapshots import members as night_members
+    from tow.bundle import checkpoint as bundle_checkpoint
 
     entry = tmp_path / "entry"
     _fake_lstat(monkeypatch, entry, mode, attributes)
@@ -142,14 +143,15 @@ def test_links_and_junctions_keep_each_callers_own_error(monkeypatch, tmp_path, 
         with pytest.raises(ValueError, match=r"^night-copy restore directory is unsafe$"):
             night_members.ordinary_directory(entry)
         with pytest.raises(bundle.ExportImportError, match=r"^import checkpoint file is unsafe$"):
-            bundle._checkpoint_file(entry)
+            bundle_checkpoint.checkpoint_file(entry)
         with pytest.raises(bundle.ExportImportError, match=r"^import checkpoint directory is unsafe$"):
-            bundle._checkpoint_directory(entry, missing=True)
+            bundle_checkpoint._checkpoint_directory(entry, missing=True)
 
 
 def test_a_missing_entry_keeps_each_callers_own_answer(monkeypatch, tmp_path):
     from tow import bundle
     from tow.snapshots import members as night_members
+    from tow.bundle import checkpoint as bundle_checkpoint
 
     gone = tmp_path / "gone"
     assert night_members.ordinary_file(gone, missing=True) is False
@@ -160,14 +162,16 @@ def test_a_missing_entry_keeps_each_callers_own_answer(monkeypatch, tmp_path):
         night_members.ordinary_directory(gone)
     assert bundle._checkpoint_file(gone, missing=True) is False
     assert bundle._checkpoint_directory(gone, missing=True) is False
+    from tow.bundle import checkpoint as bundle_checkpoint
+
     with pytest.raises(bundle.ExportImportError, match=r"^import checkpoint file is missing$") as missing:
-        bundle._checkpoint_file(gone)
+        bundle_checkpoint.checkpoint_file(gone)
     assert missing.value.__suppress_context__
     with pytest.raises(bundle.ExportImportError, match=r"^import checkpoint directory is missing$"):
-        bundle._checkpoint_directory(gone)
+        bundle_checkpoint._checkpoint_directory(gone)
     monkeypatch.setattr(platform.Path, "lstat", lambda _path: (_ for _ in ()).throw(PermissionError("denied")))
     with pytest.raises(bundle.ExportImportError, match=r"^import checkpoint directory cannot be inspected$") as denied:
-        bundle._checkpoint_directory(gone)
+        bundle_checkpoint._checkpoint_directory(gone)
     assert isinstance(denied.value.__cause__, PermissionError)
     with pytest.raises(PermissionError):
         night_members.ordinary_file(gone)
