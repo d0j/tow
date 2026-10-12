@@ -511,6 +511,7 @@ details.help[open] > summary { color: var(--acc); border-color: var(--acc2); }
   box-shadow: var(--shadow); font-size: 13px; line-height: 1.45;
   max-height: min(70vh, 28rem); overflow: auto;
 }
+.help-pop:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
 .help-pop p { margin: .28rem 0; color: var(--fg); }
 .help-pop ul { margin: .2rem 0 .45rem; padding-left: 1.15rem; color: var(--mut); }
 .help-pop li { margin: .18rem 0; }

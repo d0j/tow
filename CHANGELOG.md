@@ -12,6 +12,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   instead of leaving the checks, the nightly backups and the watchdog without their service.
 - That case is named as what it is: a web server of this TOW that `tow run` did not start, instead of "another TOW
   (another TOW folder, or a copy of this one)".
+- Sites → How to fill: on a phone the help scrolls inside its box, and the keyboard can now reach and scroll it.
 
 ## [1.28.3] — 2026-10-09
 
