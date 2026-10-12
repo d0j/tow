@@ -60,10 +60,11 @@
     <form method="post" action="/doctor/run" class="ico-form">
       <button class="ico" type="submit" title="{{ t('base.doctor') }}" aria-label="{{ t('base.doctor') }}">{{ icon('refresh') }}</button>
     </form>
-    {% elif path == '/' %}
+    {#- History too: a failed check is read there, and checked again from there. -#}
+    {% elif path in ('/', '/history') %}
     <form method="post" action="/check" class="ico-form">
       <input type="hidden" name="mode" value="apply">
-      <button class="ico" type="submit" title="{{ t('base.check_all.title') }}" aria-label="{{ t('base.check_all.title') }}" data-confirm="{{ t('base.check_all.confirm') }}">{{ icon('refresh') }}</button>
+      <button class="ico" type="submit" title="{{ t('base.check_all.title') }}" aria-label="{{ t('base.check_all.title') }}" data-confirm="{{ t('base.check_all.confirm') }}"{{ fix_attrs('check_all') }}>{{ icon('refresh') }}</button>
     </form>
     {% endif %}
     {#- Diagnostics, the Guide and signing out live at the end of Settings: the header keeps the

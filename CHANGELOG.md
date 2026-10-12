@@ -9,6 +9,14 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - Home → Needs attention folds into a warning icon with the number of problems, and opens from it again. The
   browser remembers the choice; a new problem opens the list by itself.
+- Home → Needs attention: each item is a link to the problem itself. It opens the topic, the Settings card or the
+  History line that shows the problem in full and puts the focus on the button that fixes it (Sign in to the site,
+  Check, Restart, Restore); the spot lights up for a moment. A sign-in reads as the action: "Sign in to Kinozal
+  (topics: 2)".
+- Settings → Torrent clients: a client that did not answer says so in its card.
+- Settings: when the saved passwords and tokens cannot be opened, the command that says why can be copied with a
+  button.
+- History has the "Check all topics now" button, as Home does.
 
 ### Changed
 

@@ -1007,6 +1007,18 @@ mark { background: rgba(240,180,41,.35); color: inherit; border-radius: 2px; }
 .attention { border-color: var(--warn); margin-bottom: .8rem; padding: .6rem .9rem; }
 .attention strong { color: var(--warn); }
 .attention ul { margin: .3rem 0 0; padding-left: 1.2rem; }
+/* Each item is a link to the problem: the whole line is the target (at least 32 px high), with
+   a chevron saying it goes somewhere. */
+.attention ul.attention-list { margin: .25rem -.4rem 0; padding: 0; list-style: none; }
+.attention-link {
+  display: flex; align-items: center; gap: .5rem; min-height: 2rem; padding: .3rem .4rem; border-radius: 6px;
+  color: var(--acc); text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset: .18em;
+}
+.attention-link > span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.attention-link > svg { flex: 0 0 auto; }
+.attention-link:hover, .attention-link:focus-visible { background: var(--panel2); text-decoration-color: currentColor; }
+@media (max-width: 640px) { .attention-link { min-height: 2.75rem; } }
 .attention-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-height: var(--btn-h); }
 .attention-fold.ico, .attention-unfold { display: none; }
 .attention-js .attention-fold.ico {
@@ -1086,3 +1098,20 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
   header.app { padding-inline: .35rem; }
   header.app nav { gap: 0; }
 }
+
+/* Where a "Needs attention" link lands (#anchor): the spot lights up for a moment, below the
+   sticky header; under reduced motion a still outline instead. */
+.row-wrap:target, .integration-card:target, .settings-accordion:target, .flash:target, .log-line:target,
+.issue-note:target {
+  scroll-margin-top: 5.5rem; border-radius: 8px; animation: landing 2.6s ease-out 1;
+}
+@keyframes landing {
+  0%, 35% { box-shadow: 0 0 0 2px var(--acc), 0 0 0 7px color-mix(in srgb, var(--acc) 30%, transparent); }
+  100% { box-shadow: 0 0 0 2px transparent, 0 0 0 7px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-wrap:target, .integration-card:target, .settings-accordion:target, .flash:target, .log-line:target,
+  .issue-note:target { animation: none; outline: 2px solid var(--acc); outline-offset: 2px; }
+}
+.issue-note { margin: 0 0 .8rem; color: var(--fg); background: var(--pill-warn-bg); border: 1px solid var(--warn); }
+.secret-store-copy { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-left: .4rem; }

@@ -82,8 +82,6 @@
     <h1 id="page-title">Settings</h1>
   </header>
 
-
-
   <div class="settings-content" id="settings-acc">
     <details class="settings-section settings-accordion acc" id="acc-language" data-q="language язык en english ru russian русский">
       <summary>
@@ -157,6 +155,7 @@
               </span>
             </div>
 
+
             <details class="technical-details notifier-steps" >
               <summary>How to connect</summary>
               <ol>
@@ -193,7 +192,7 @@
               </fieldset>
               <div class="settings-actions">
                 <button type="submit">Save</button>
-                <button class="ghost" type="submit" form="ping-client-0" data-keep data-check-saved data-busy-label="Checking…">Check</button>
+                <button class="ghost" type="submit" form="ping-client-0" data-keep data-check-saved data-busy-label="Checking…" data-fix="check_client:main">Check</button>
 
               </div>
               <p class="action-hint">Check uses the saved settings. TOW adds new topics to the main client; each topic can use a different client.</p>
@@ -221,6 +220,7 @@
                 <span class="pill mut">Set up</span>
               </span>
             </div>
+
 
             <details class="technical-details notifier-steps" >
               <summary>How to connect</summary>
@@ -258,7 +258,7 @@
               </fieldset>
               <div class="settings-actions">
                 <button type="submit">Save</button>
-                <button class="ghost" type="submit" form="ping-client-1" data-keep data-check-saved data-busy-label="Checking…">Check</button>
+                <button class="ghost" type="submit" form="ping-client-1" data-keep data-check-saved data-busy-label="Checking…" data-fix="check_client:nas">Check</button>
 
                 <button class="ghost" type="submit" form="default-client-1">Make main</button>
                 <button class="ghost danger" type="submit" form="remove-client-1">Remove</button>
@@ -667,7 +667,7 @@
 
         <div class="service-restart">
           <form method="post" action="/settings/service/restart" data-return-target="acc-service" data-confirm="Restart TOW? The page may be unavailable for a few seconds.">
-            <button type="submit">Restart</button>
+            <button type="submit" data-fix="restart_service">Restart</button>
           </form>
           <p>The page will be unavailable for a few seconds.</p>
         </div>

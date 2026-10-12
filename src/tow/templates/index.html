@@ -15,7 +15,9 @@
     <strong id="attention-title">{{ t('home.attention') }}</strong>
     <button type="button" class="ico attention-fold" data-attention-fold aria-expanded="true" aria-controls="attention" aria-label="{{ t('home.attention_fold') }}" title="{{ t('home.attention_fold') }}">{{ icon('chevron', 'sm') }}</button>
   </div>
-  <ul>{% for item in attention.entries %}<li>{{ item.text }}</li>{% endfor %}</ul>
+  {#- Each item is a link to the problem itself: its page opens it, shows it in full and focuses
+      the control that fixes it (tow.issues: Target and Fix; app.js and fix_attrs). -#}
+  <ul class="attention-list">{% for item in attention.entries %}<li><a class="attention-link {{ item.severity }}" href="{{ item.href }}"><span>{{ item.text }}</span>{{ icon('next', 'sm') }}</a></li>{% endfor %}</ul>
 </section>
 <button type="button" class="attention-unfold {{ attention.tone }}" data-attention-unfold aria-expanded="false" aria-controls="attention" aria-label="{{ t('home.attention_show', count=attention_count) }}" title="{{ t('home.attention_show', count=attention_count) }}">{{ icon('alert', 'sm') }}<span class="attention-count" aria-hidden="true">{{ attention_count }}</span></button>
 {% endif %}
@@ -185,7 +187,10 @@
   {%- set ds = topic.download_summary or {} %}
   {%- set pause_label = t('home.topic.resume') if topic.paused else t('home.topic.pause') %}
   <div class="row-wrap{% if topic.paused %} is-paused{% endif %}" id="row-{{ topic.id }}" data-tracker="{{ topic.tracker }}" data-name="{{ topic.series|lower }}" data-event="{{ topic.last_event_iso or '' }}" data-q="{{ [topic.title, topic.tracker_title, topic.tracker, topic.url, topic.save_path] | select | map('lower') | unique | join(' ') }}">
-  <details class="row-edit{% if topic.last_changed %} is-new{% endif %}{% if topic.paused %} is-paused{% endif %}">
+  {#- A "Needs attention" link opens its topic (?open=<id>): the row comes open with its panel
+      drawn here (no script needed), the full error shown and the fix focused (fix_attrs). -#}
+  {%- set landing = landing_topic and topic.id|string == landing_topic %}
+  <details class="row-edit{% if topic.last_changed %} is-new{% endif %}{% if topic.paused %} is-paused{% endif %}"{% if landing %} open{% endif %}>
     <summary>
       <span class="dot lg {{ torrent_tone }}" title="{{ torrent_label }}"></span><span class="sr-only">{{ torrent_label }}</span>
       <span class="topic-name"><span class="clip" title="{{ topic.name }}" data-hl>{{ topic.series }}</span>{% if topic.timer %}<span class="topic-timer" data-topic-timer="{{ topic.id }}" data-timer-at="{{ topic.timer.next_at }}" data-timer-now="{{ topic.timer.now }}" data-timer-state="{{ topic.timer.state }}" data-timer-minutes="{{ topic.timer.minutes }}" title="{{ t('timer.title', minutes=topic.timer.minutes) }}"><span class="sr-only" data-timer-words>{{ t('timer.title', minutes=topic.timer.minutes) }} </span>{{ icon('clock', 'xs') }}<span data-timer-value>—</span><noscript>{{ t('timer.every', minutes=topic.timer.minutes) }}</noscript></span>{% endif %}</span>
@@ -205,7 +210,7 @@
       </span>
       <span class="row-ops-slot" aria-hidden="true"></span>
     </summary>
-    <div class="edit-panel" data-edit-src="/topics/{{ topic.id|urlencode }}/edit-panel"><p class="sub"><a href="/topics/{{ topic.id|urlencode }}/edit">{{ t('home.edit.open') }}</a></p></div>
+    {% if landing %}{% include "_topic_edit.html" %}{% else %}<div class="edit-panel" data-edit-src="/topics/{{ topic.id|urlencode }}/edit-panel"><p class="sub"><a href="/topics/{{ topic.id|urlencode }}/edit">{{ t('home.edit.open') }}</a></p></div>{% endif %}
   </details>
   {%- if progress_text %}
   <span class="row-progress" data-label="{{ t('home.row.progress') }}"><span class="sr-only">{{ t('home.row.progress') }} </span><a class="download-details progress-link{% if ds.is_complete %} complete{% endif %}" href="/topics/{{ topic.id|urlencode }}/downloads.json" data-topic-id="{{ topic.id }}" title="{{ progress_title }}">{{ progress_text }}</a></span>

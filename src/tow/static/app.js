@@ -831,8 +831,9 @@ if (settingsPage) {
 
   const openName = new URLSearchParams(location.search).get("open");
   const targetId = location.hash.slice(1) || (openName ? `acc-${openName}` : "");
-  const target = targetId ? document.getElementById(targetId) : null;
-  if (target?.matches("details.settings-accordion")) {
+  // The address names a section, or a card inside one (#client-<id>): that section is the open one.
+  const target = (targetId ? document.getElementById(targetId) : null)?.closest("details.settings-accordion") || null;
+  if (target) {
     accordions.forEach((accordion) => {
       accordion.open = accordion === target;
     });
@@ -1482,6 +1483,27 @@ if (accLog && accBody) {
     }
   });
 }
+
+// A "Needs attention" link lands on the problem: ?fix=<ref> names the control that fixes it
+// (data-fix, fix_attrs) and #<anchor> the spot that shows it (the server opened what holds them;
+// the CSS lights the spot up). What still folds the control away opens, the spot comes into view
+// below the sticky header, and the focus goes to the control; without one (nothing to do), to the
+// spot itself. Runs after the rows have their order, so the spot stays where it is shown.
+const landOnProblem = () => {
+  const fix = new URL(location.href).searchParams.get("fix") || "";
+  let anchor = String(location.hash || "").slice(1);
+  try { anchor = decodeURIComponent(anchor); } catch { /* a malformed address: as written */ }
+  if (!fix && !anchor.startsWith("issue-")) return;
+  const spot = anchor ? document.getElementById(anchor) : null;
+  const control = fix ? [...document.querySelectorAll("[data-fix]")].find((el) => el.dataset.fix === fix) : null;
+  const target = control || spot;
+  if (!target || target.closest("[hidden]")) return;
+  for (let fold = target.closest("details"); fold; fold = fold.parentElement?.closest("details")) fold.open = true;
+  if (!control && !spot.hasAttribute("tabindex")) spot.setAttribute("tabindex", "-1");
+  (spot && !spot.closest("[hidden]") ? spot : target).scrollIntoView({ block: "center" });
+  target.focus({ preventScroll: true });
+};
+landOnProblem();
 
 // Last: the rows are in their order (sort, filter) before the focus comes back to one (A5).
 restoreFocus();
