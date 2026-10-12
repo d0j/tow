@@ -196,7 +196,7 @@ def test_a_new_link_before_the_add_hands_nothing_to_the_client(monkeypatch):
 
 
 def test_a_check_ends_a_move_only_when_it_sees_the_client_at_the_new_folder():
-    from tow.progress import _check_save_path
+    from tow.progress.reconcile import _check_save_path
 
     move = {"from": r"M:\old", "to": r"N:\new"}
     topic = {"save_path": r"M:\old", "move_pending": dict(move)}  # an undo put the old folder back

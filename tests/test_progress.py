@@ -5,9 +5,10 @@ import pytest
 from helpers import raises_code
 
 from tow.episodes import item_identity, summarize_completion
-from tow.progress import _file_progress, reconcile_topic, safe_relative_path
+from tow.progress import reconcile_topic, safe_relative_path
 from tow.progress.expected import preferred_season_for
 from tow.progress.labels import latest_item_label
+from tow.progress.reconcile import _file_progress
 
 
 def test_completed_auxiliary_file_does_not_replace_latest_episode_label():
@@ -372,8 +373,8 @@ def test_temporary_verification_failure_does_not_repeat_completion(tmp_path: Pat
     topic = {"id": "offline", "title": "Show [1 из 1]", "hash": "ABC", "save_path": str(tmp_path)}
     history = {"topics": {"offline": {"baseline_at": "2026-09-12T20:00:00+03:00", "items": {}}}}
     evidence = iter((True, None, True))
-    monkeypatch.setattr("tow.progress.filesystem_confirmation", lambda *_args, **_kw: next(evidence))
-    monkeypatch.setattr("tow.progress.CONFIRMATION_REUSE_SEC", 0)  # every pass looks at the disk here
+    monkeypatch.setattr("tow.progress.reconcile.filesystem_confirmation", lambda *_args, **_kw: next(evidence))
+    monkeypatch.setattr("tow.progress.reconcile.CONFIRMATION_REUSE_SEC", 0)  # every pass looks at the disk here
     first = reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
     assert "episode_completed" in first["events"]
     second = reconcile_topic(topic, client, history, "2026-09-12T21:01:00+03:00")
@@ -392,8 +393,8 @@ def test_baseline_completion_survives_offline_storage_without_new_event(
     topic = {"id": "baseline-offline", "title": "Show [1 из 1]", "hash": "ABC", "save_path": str(tmp_path)}
     history: dict = {"topics": {}}
     evidence = iter((True, None, True))
-    monkeypatch.setattr("tow.progress.filesystem_confirmation", lambda *_args, **_kw: next(evidence))
-    monkeypatch.setattr("tow.progress.CONFIRMATION_REUSE_SEC", 0)  # every pass looks at the disk here
+    monkeypatch.setattr("tow.progress.reconcile.filesystem_confirmation", lambda *_args, **_kw: next(evidence))
+    monkeypatch.setattr("tow.progress.reconcile.CONFIRMATION_REUSE_SEC", 0)  # every pass looks at the disk here
     reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
     reconcile_topic(topic, client, history, "2026-09-12T21:01:00+03:00")
     result = reconcile_topic(topic, client, history, "2026-09-12T21:02:00+03:00")
@@ -1976,7 +1977,7 @@ def test_a_file_confirmed_today_is_not_looked_at_again(tmp_path: Path, monkeypat
     topic = {"id": "quiet", "title": "Show [1 из 1]", "hash": "ABC", "save_path": str(tmp_path)}
     history: dict = {"topics": {"quiet": {"baseline_at": "2026-09-12T20:00:00+03:00", "items": {}}}}
     looks = []
-    monkeypatch.setattr("tow.progress.filesystem_confirmation", lambda *_a, **_k: looks.append(1) or True)
+    monkeypatch.setattr("tow.progress.reconcile.filesystem_confirmation", lambda *_a, **_k: looks.append(1) or True)
     reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
     reconcile_topic(topic, client, history, "2026-09-12T21:30:00+03:00")
     reconcile_topic(topic, client, history, "2026-09-12T22:00:00+03:00")
