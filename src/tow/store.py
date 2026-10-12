@@ -1,3 +1,10 @@
+"""The state and the download history: load, save, validation, the parsed cache.
+
+``STATE_SCHEMA_VERSION`` stays a literal in this file: ``scripts/update.py`` reads it from the
+text of the version it installs. What the stores are built on lives in ``tow.storage``; the rest
+of TOW imports it from here (``__all__``).
+"""
+
 from __future__ import annotations
 
 import hashlib
@@ -11,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from tow.errors import TowError
-from tow.paths import data_dir, download_history_path, key_file
+from tow.paths import download_history_path
 from tow.paths import state_path as state_path  # noqa: PLC0414 - re-exported: the web package imports it from here
 from tow.storage.atomic import (
     RegularReadError,
@@ -24,6 +31,7 @@ from tow.storage.atomic import (
     write_generation,
 )
 from tow.storage.errors import SecretStoreError, StoreCorruptionError
+from tow.storage.folders import install_folders, protect_install_folders
 from tow.storage.jsonio import JSON_MAX_DEPTH, decode_json_bytes, encode_json
 from tow.storage.keys import (
     MASTER_KEY_KINDS,
@@ -213,48 +221,6 @@ def save_json(path: Path, data: Any, *, compact: bool = False) -> None:
     except (TypeError, ValueError, UnicodeError, RecursionError) as exc:
         raise StoreCorruptionError(f"JSON payload is not serializable: {path.name}") from exc
     atomic_write_bytes(path, content)
-
-
-def install_folders() -> list[Path]:
-    """keys/ and data/: folders only this account (and on Windows SYSTEM and Administrators)
-    may open - the master key opens every saved password, data/ holds the encrypted ones."""
-    return [key_file().parent, data_dir(create=False)]
-
-
-def protect_install_folders(*, quiet: bool = False) -> list[Path]:
-    """At start: the install root, keys/ and data/ of this account become private when other
-    accounts can get in (an older install, an install in a drive root on Windows).
-
-    The root first (``tow.platform.private_root``): through it other accounts could change the
-    code TOW runs and so read the master key. keys/ and data/ are closed on their own too, so
-    they stay private when the root cannot be changed (another account owns it) or they live
-    elsewhere. A folder that stays open (another account's, or the change failed) is named on
-    stderr (not when ``quiet``: `tow permissions` says it itself) and returned; the start goes
-    on. `tow doctor` reports it too, and `tow permissions fix` repairs another account's."""
-    import sys
-
-    from tow.i18n import t
-    from tow.paths import root
-    from tow.platform import private_folders, private_root
-
-    try:
-        install, folders = root(), install_folders()
-    except OSError, RuntimeError:  # no install located: the command reports that itself
-        return []
-    root_open = private_root(install)
-    still_open = private_folders(folders)
-    warned = [install, *still_open] if root_open else still_open
-    if not quiet and not _OPEN_FOLDERS_SAID:  # once per process: `tow serve` repairs twice
-        if root_open:
-            print(t("cli.root_shared", path=str(install)), file=sys.stderr)
-        for folder in still_open:
-            print(t("cli.folder_shared", path=str(folder)), file=sys.stderr)
-        _OPEN_FOLDERS_SAID.extend(warned)
-    return warned
-
-
-# The open folders this process has named on stderr already (protect_install_folders).
-_OPEN_FOLDERS_SAID: list[Path] = []
 
 
 type FileStamp = tuple[str, int, int, int]

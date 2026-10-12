@@ -8,7 +8,8 @@
 - ``keys``: the master key: where it comes from, its Fernet, the secrets derived from it, a new
   key file;
 - ``secrets``: the encrypted secrets and the settings undo snapshot, and the key operations that
-  must look at them first (``generate_master_key``, ``adopt_master_key``).
+  must look at them first (``generate_master_key``, ``adopt_master_key``);
+- ``folders``: the install root, keys/ and data/ private to this account.
 
 The rest of TOW imports these names from ``tow.store``. A test that replaces a name does it in
 the module that reads it when it runs.
