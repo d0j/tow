@@ -67,6 +67,8 @@ def _status_view() -> dict[str, Any]:
     running = layout.running()
     return {
         "version": __version__,
+        # What needs the owner now: the issues of Home's "Needs attention", from the same rules.
+        "attention": len(_issues(state, cfg, next_at)),
         "running": running is not None,
         "pid": (running or {}).get("pid"),
         "client": client_title,
@@ -88,6 +90,17 @@ def _status_view() -> dict[str, Any]:
         "autostart_where": stale,
         "update_interrupted": running is None and layout.interrupted_update(),
     }
+
+
+def _issues(state: dict[str, Any], cfg: dict[str, Any], next_at: float | None) -> list[Any]:
+    import time
+
+    from tow.issues import Snapshot, collect
+    from tow.supervisor import data_lost
+
+    # The note of a lost data folder matters only while no topic is watched (as on Home).
+    lost = None if state.get("topics") else data_lost()
+    return collect(Snapshot(state=state, config=cfg, now=time.time(), next_check_at=next_at, data_lost=lost))
 
 
 def _status(args: argparse.Namespace) -> int:
@@ -119,6 +132,8 @@ def _status(args: argparse.Namespace) -> int:
         t("cli.status.autostart", value=yes_no[view["autostart"]]),
     ]
     print(" · ".join(parts))
+    if view["attention"]:  # the count of Home's "Needs attention", only when there is something
+        print(t("cli.status.attention", count=view["attention"]))
     if view["autostart_stale"]:  # the OS keeps starting a TOW folder that was moved or deleted
         print(t("doctor_report.autostart_stale", where=view["autostart_where"]))
     return EXIT_OK
@@ -210,16 +225,17 @@ def _add_watchdog(sub: Subcommands) -> None:
 
 def _watchdog(args: argparse.Namespace) -> int:
     from tow.i18n import t
+    from tow.issues.kinds.data_lost import folder_lost
     from tow.store import load_state
     from tow.supervisor import data_lost
     from tow.watchdog import run_watchdog
 
     report = run_watchdog()
     # Only `tow run` notices a deleted data folder (it knows the one it started with); by hand
-    # its note says it, as Home does, until topics are watched again.
-    if (lost := data_lost()) is not None and not load_state().get("topics"):
+    # its note says it, by the rule Home's "Needs attention" uses, until topics are watched again.
+    if (folder := folder_lost(data_lost(), load_state().get("topics") or [])) is not None:
         report["data_lost"] = True
-        report["alerts"].append(t("watchdog.alert.data_lost", folder=lost["folder"]))
+        report["alerts"].append(t("watchdog.alert.data_lost", folder=folder))
     render.show(report, args.json, render.watchdog_text)
     return 0 if report["service_ok"] and report["checks_ok"] and not report.get("data_lost") else 2
 
