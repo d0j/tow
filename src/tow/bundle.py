@@ -44,6 +44,7 @@ from tow.store import (
     load_state,
     master_fernet,
     persistence_lock,
+    restrict_file,
     save_secret_undo,
     save_secrets,
     secret_undo_path,
@@ -154,11 +155,6 @@ def _read_limited(path: Path, *, label: str) -> bytes:
         raise
     except OSError as exc:
         raise ExportImportError(f"cannot read {label}") from exc
-
-
-def _restrict_file(path: Path) -> None:
-    with contextlib.suppress(OSError):
-        path.chmod(0o600)
 
 
 def _atomic_write(path: Path, content: bytes) -> None:
@@ -769,7 +765,7 @@ def _export_bundle(
         _atomic_write(output, content)
     else:
         atomic_create_bytes(output, content)
-    _restrict_file(output)
+    restrict_file(output)
     try:
         verified = _read_bundle(output, passphrase)
         if set(verified["members"]) != set(members):
