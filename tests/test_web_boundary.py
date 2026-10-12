@@ -43,6 +43,8 @@ PURE: dict[str, set[str]] = {
         "password_hint",
         "with_hint",
     },
+    # The retention a configuration sets (a dict in, a dict out).
+    "tow.backup_retention": {"retention_settings"},
     # network_bind: the address network access listens on, from the configured one; no I/O.
     "tow.bind": {"network_bind"},
     "tow.bundle": {"MAX_BUNDLE_BYTES"},
@@ -95,7 +97,7 @@ PURE: dict[str, set[str]] = {
         "use",
     },
     # A backup folder's place and the reason it is refused, by its name only.
-    "tow.locations": {"LOCATIONS", "is_network_share", "problem", "resolve"},
+    "tow.locations": {"LOCATIONS", "is_default", "is_network_share", "problem", "resolve"},
     "tow.log": {
         "BACKUPS",
         "HISTORY_GROUPS",
@@ -118,7 +120,8 @@ PURE: dict[str, set[str]] = {
     "tow.records": {"CheckRow", "shown_title"},
     "tow.restore_points": {"CREATE_FAILED", "INVALID_FILE", "ROLLBACK_FAILED", "RestorePointError", "invalid_file"},
     "tow.selection": {"SelectionPendingError", "normalize_policy", "resolve_selection"},
-    "tow.snapshots": {"SnapshotError"},
+    # status_failed: whether a night copy's status record (a dict) says the last one failed.
+    "tow.snapshots": {"SnapshotError", "status_failed"},
     "tow.store": {"CheckBusyError", "SecretStoreError", "StoreCorruptionError"},
     "tow.store_transaction": {"RollbackError", "StoreTransaction", "TransactionError"},
     "tow.title": {"title_is_placeholder"},
@@ -146,7 +149,6 @@ PURE: dict[str, set[str]] = {
 # through services: what they used when the rule came. May only shrink; a new need goes through
 # tow.web.services (or, for a pure helper, into PURE with why).
 HELPER_ALLOWED: dict[str, set[str]] = {
-    "_context": {"tow.store.write_generation"},
     "middleware": {
         "tow.access.credential",
         "tow.access.session_is_valid",
@@ -177,21 +179,15 @@ HELPER_ALLOWED: dict[str, set[str]] = {
     "text": {"tow.i18n.fill", "tow.i18n.format_size"},
     "views": {
         "tow.adopt.unmarked_hash",
-        "tow.backup_retention.retention_settings",
         "tow.check.PREVIOUS_REVISION_ACTIVE",
         "tow.episodes.expected_for_topic",
         "tow.errors.Msg",
         "tow.errors.render_stored",
         "tow.i18n.datetime_pattern",
         "tow.i18n.has",
-        "tow.locations.free_bytes",
-        "tow.locations.is_default",
         "tow.log.CLS_RU",
         "tow.net_errors.humanize",
         "tow.progress.progress_summary",
-        "tow.snapshots.list_snapshots",
-        "tow.snapshots.status",
-        "tow.snapshots.status_failed",
         "tow.status.TRACKER_WARNING_CLASSES",
         "tow.status.project_home_status",
         "tow.trackers.presets.search_path",

@@ -5,7 +5,7 @@ the templates see the same one). Readers that only look - the header, the undo b
 settings page - take their data from it; a route that changes data still reads (under its lock)
 on its own and never gets these shared objects, which callers must not modify.
 
-A file written by this process during the request (``store.write_generation``) drops everything
+A file written by this process during the request (``services.write_generation``) drops everything
 read so far, so a page rendered after a save shows the save. Outside a request (a test calling a
 helper, a background thread) every call reads afresh.
 """
@@ -17,7 +17,7 @@ from collections.abc import Callable, Mapping
 from contextvars import ContextVar
 from typing import Any
 
-from tow.store import SecretStoreError, write_generation
+from tow.store import SecretStoreError
 from tow.trackers import GenericHttpTracker, load_trackers, match_tracker
 from tow.web import services
 
@@ -28,11 +28,11 @@ class RequestContext:
     __slots__ = ("_generation", "_values")
 
     def __init__(self) -> None:
-        self._generation = write_generation()
+        self._generation = services.write_generation()
         self._values: dict[str, tuple[bool, Any]] = {}
 
     def get(self, name: str, load: Callable[[], Any], *, keep_errors: tuple[type[BaseException], ...] = ()) -> Any:
-        generation = write_generation()
+        generation = services.write_generation()
         if generation != self._generation:
             self._values.clear()
             self._generation = generation

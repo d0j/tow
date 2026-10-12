@@ -163,7 +163,9 @@ The web package (`src/tow/web/`):
   from the family's `view.cards` (`tow.clients.view`, `tow.notifiers.view`).
   Importing a module registers nothing.
 - `services.py` — the only way out of the package: config, state, secrets and history, checks, the service,
-  restore points, diagnostics, browser sign-in, the log; also `login_throttle` and `locked_state_mutation`.
+  restore points and night copies, diagnostics, browser sign-in, the log; also `login_throttle`,
+  `locked_state_mutation` and `write_generation` (what `_context.py` drops its reads by). The helper modules use
+  it too: `tests/test_web_boundary.py` holds what each still reads directly (`HELPER_ALLOWED`, which only shrinks).
 - Helpers: `_context.py` (what a request reads once), `views.py` (flash messages, Home rows, whether the
   first-start page is due, the service and backup cards of Settings), `text.py`,
   `templating.py`, `site_form.py` (what the site forms accept, and the site's configuration from them),
