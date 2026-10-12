@@ -37,6 +37,21 @@ def test_a_wrapped_item_becomes_one_line_so_github_does_not_break_it():
     )
 
 
+def test_every_changelog_item_starts_on_its_own_line():
+    # Two items joined on one line ("…still stopped.- `history_keep_days`…") became one item on
+    # the release page: a sentence's end directly followed by "- " and a word starts no new item.
+    import re
+
+    root = SCRIPT.parents[1]
+    for name in ("CHANGELOG.md", "CHANGELOG.ru.md"):
+        joined = [
+            f"{name}:{number}"
+            for number, line in enumerate((root / name).read_text(encoding="utf-8").splitlines(), 1)
+            if re.search(r"[.!?)»]- [`*\w]", line)
+        ]
+        assert joined == [], "start each item on a line of its own"
+
+
 def test_the_notes_carry_the_changelog_items_unwrapped():
     text = _module().notes("v1.25.0", "d0j/tow")
     assert (
