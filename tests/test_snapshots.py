@@ -392,10 +392,11 @@ def test_signed_and_hashed_unsafe_yaml_is_not_reported_as_restorable(backup, sou
 
 
 def test_signed_oversized_config_is_refused_before_allocating_member_bytes(backup, monkeypatch):
-    from tow import snapshots, yaml_guard
+    from tow import yaml_guard
+    from tow.snapshots import verify as night_verify
 
     snapshot = Path(create_snapshot()["snapshot"])
-    monkeypatch.setattr(snapshots, "MAX_INPUT_BYTES", 8)
+    monkeypatch.setattr(night_verify, "MAX_INPUT_BYTES", 8)
     reads = []
     real_open = Path.open
 

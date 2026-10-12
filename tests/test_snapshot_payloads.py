@@ -15,6 +15,7 @@ from tow.config import load_config, save_config
 from tow.i18n import t
 from tow.paths import config_path, data_dir, download_history_path, state_path
 from tow.snapshots import manifest as night_manifest
+from tow.snapshots import verify as night_verify
 
 
 @pytest.fixture
@@ -259,7 +260,7 @@ def test_bad_signature_is_rejected_before_any_payload_parser(point, monkeypatch)
     def unexpected(_content):
         pytest.fail("untrusted contents reached the payload parser")
 
-    monkeypatch.setattr(snapshots, "_check_payloads", unexpected)
+    monkeypatch.setattr(night_verify, "_check_payloads", unexpected)
     with pytest.raises(snapshots.SnapshotError) as failed:
         snapshots.verify_snapshot(point)
     assert str(failed.value) == t("backup.snapshot.bad_signature", "ru")
@@ -272,7 +273,7 @@ def test_bad_hash_is_rejected_before_semantic_validation(point, name, monkeypatc
     def unexpected(_content):
         pytest.fail("unchecked bytes reached the payload parser")
 
-    monkeypatch.setattr(snapshots, "_check_payloads", unexpected)
+    monkeypatch.setattr(night_verify, "_check_payloads", unexpected)
     with pytest.raises(snapshots.SnapshotError) as failed:
         snapshots.verify_snapshot(point)
     assert str(failed.value) == t("backup.snapshot.file_damaged", "ru", name=name)
@@ -280,7 +281,7 @@ def test_bad_hash_is_rejected_before_semantic_validation(point, name, monkeypatc
 
 @pytest.mark.parametrize("surface", ["verify", "preview"])
 def test_opaque_snapshot_members_are_hashed_in_bounded_blocks(point, surface, monkeypatch):
-    content = b"x" * (3 * snapshots._READ_CHUNK_BYTES + 37)
+    content = b"x" * (3 * night_verify.READ_CHUNK_BYTES + 37)
     _replace(point, "tow.jsonl", content)
     member = point / "tow.jsonl"
     real_open = Path.open
@@ -300,7 +301,7 @@ def test_opaque_snapshot_members_are_hashed_in_bounded_blocks(point, surface, mo
             return self.handle.fileno()
 
         def read(self, size=-1):
-            assert 0 < size <= snapshots._READ_CHUNK_BYTES
+            assert 0 < size <= night_verify.READ_CHUNK_BYTES
             reads.append(size)
             return self.handle.read(size)
 
@@ -317,14 +318,14 @@ def test_opaque_snapshot_members_are_hashed_in_bounded_blocks(point, surface, mo
 
 def test_verification_releases_members_and_validates_one_store_at_a_time(point, monkeypatch):
     calls = []
-    original = snapshots._check_payloads
+    original = night_verify._check_payloads
 
     def watched(contents):
         calls.append(tuple(contents))
         return original(contents)
 
-    monkeypatch.setattr(snapshots, "_check_payloads", watched)
-    manifest, contents, signed = snapshots._read_verified(point, retain=False)
+    monkeypatch.setattr(night_verify, "_check_payloads", watched)
+    manifest, contents, signed = night_verify.read_verified(point, retain=False)
     assert signed
     assert manifest["files"]
     assert contents == {}
@@ -370,7 +371,7 @@ def test_snapshot_special_files_and_links_are_refused_before_open_or_write(
 
 def test_preview_checks_again_before_parsing_a_changed_semantic_store(point, monkeypatch):
     name = "download_history.json"
-    original = snapshots._verified_member
+    original = night_verify.verified_member
     calls = 0
 
     def watched(source, member, meta, *, collect):
@@ -381,7 +382,7 @@ def test_preview_checks_again_before_parsing_a_changed_semantic_store(point, mon
                 source.write_bytes(b"{broken")
         return original(source, member, meta, collect=collect)
 
-    monkeypatch.setattr(snapshots, "_verified_member", watched)
+    monkeypatch.setattr(night_verify, "verified_member", watched)
     before = _read_live()
     with pytest.raises(snapshots.SnapshotError) as failed:
         snapshots.restore_snapshot(point)
@@ -411,7 +412,7 @@ def test_unsigned_apply_is_refused_before_allocating_or_parsing_any_member(point
         pytest.fail("an unsigned apply read a member")
 
     before = _read_live()
-    monkeypatch.setattr(snapshots, "_verified_member", unexpected)
+    monkeypatch.setattr(night_verify, "verified_member", unexpected)
     with pytest.raises(snapshots.SnapshotError) as failed:
         snapshots.restore_snapshot(point, apply=True)
     assert str(failed.value) == t("backup.snapshot.unsigned", "ru")
@@ -492,7 +493,7 @@ def _count_store_checks(monkeypatch):
         ("decrypt_secrets_bytes", "secrets.enc"),
         ("parse_copy_config", "config.yaml"),
     ):
-        monkeypatch.setattr(snapshots, attribute, watching(name, getattr(snapshots, attribute)))
+        monkeypatch.setattr(night_verify, attribute, watching(name, getattr(night_verify, attribute)))
     return calls
 
 

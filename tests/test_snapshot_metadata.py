@@ -17,6 +17,7 @@ from tow.i18n import t
 from tow.paths import config_path, data_dir
 from tow.snapshots import location as night_location
 from tow.snapshots import manifest as night_manifest
+from tow.snapshots import verify as night_verify
 from tow.web.text import format_bytes
 
 
@@ -136,7 +137,7 @@ def test_manifest_read_is_bounded_before_parsing_or_signature_check(night, monke
 
     monkeypatch.setattr(Path, "open", opened)
     monkeypatch.setattr(
-        snapshots, "signature_matches", lambda *_a: pytest.fail("oversized manifest reached signature check")
+        night_verify, "signature_matches", lambda *_a: pytest.fail("oversized manifest reached signature check")
     )
     with pytest.raises(snapshots.SnapshotError, match=re.escape(t("backup.snapshot.manifest_too_large"))):
         snapshots.verify_snapshot(folder)
