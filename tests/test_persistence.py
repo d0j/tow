@@ -223,11 +223,11 @@ def test_persistence_lock_is_exclusive_across_processes(tmp_path, monkeypatch):
     with reaped(process):
         with persistence_lock():
             process.start()
-            assert started.wait(10)
+            assert started.wait(120)  # generous: spawning is slow under a parallel suite
             assert not acquired.wait(0.5)
 
-        assert acquired.wait(10)
-        process.join(10)
+        assert acquired.wait(60)
+        process.join(60)
         assert process.exitcode == 0
 
 
