@@ -41,9 +41,9 @@ dependencies = [
     "pyyaml>=6.0.3",
     "qbittorrent-api>=2024.1",
     "regex>=2026.9.29",
-    "tzdata>=2026.3",
+    "tzdata>=2026.5",
     "uvicorn[standard]>=0.52.4",
-    "websockets>=15.0",
+    "websockets>=17.2",
 ]
 
 [project.urls]
@@ -56,17 +56,17 @@ Changelog = "https://github.com/d0j/tow/blob/main/CHANGELOG.md"
 tow = "tow.cli:main"
 
 [build-system]
-requires = ["uv_build>=0.12.1,<0.13.0"]
+requires = ["uv_build>=0.12.23,<0.13.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
     "httpx2>=2.12.0",
-    "mypy>=1.18",
+    "mypy>=2.4.0",
     "pytest>=9.1.1",
     "pytest-timeout>=2.4",
     "pytest-xdist>=3.8",
-    "ruff>=0.16.6",
+    "ruff>=0.16.10",
     "types-regex>=2026.6.28",
 ]
 
