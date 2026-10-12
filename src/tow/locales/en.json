@@ -2339,7 +2339,7 @@
       "ping_silent": "the client does not answer",
       "clamped_interval": "interval {minutes} min (allowed {low}–{high})",
       "clamped_messages": "“Undo” shown for {minutes} min (allowed 1–30)",
-      "clamp_note": "; saved: {items}",
+      "clamp_note": "; changed to fit the allowed range: {items}",
       "bad_minutes": "Minutes: enter a whole number, for example 60 — nothing was saved",
       "clamp_kept": "; outside the allowed range, so kept: {items}",
       "not_saved": "not saved",

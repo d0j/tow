@@ -14,6 +14,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   (another TOW folder, or a copy of this one)".
 - Sites → How to fill: on a phone the help scrolls inside its box, and the keyboard can now reach and scroll it.
 - The page shown while `config.yaml` cannot be read follows a dark theme and is read correctly by screen readers.
+- Settings → Checks: a number outside the allowed range now says "Saved; changed to fit the allowed range: …" instead
+  of "Saved; saved: …".
 
 ## [1.28.3] — 2026-10-09
 
