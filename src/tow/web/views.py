@@ -24,6 +24,7 @@ from tow.clock import format_ui_timestamp
 from tow.config import as_bool, flash_ttl, interval_sec_of
 from tow.episodes import expected_for_topic
 from tow.errors import Msg, TowError, render_stored
+from tow.issues import Issue, Snapshot
 from tow.log import error_class, owner_language
 from tow.net_errors import humanize
 from tow.progress import progress_summary
@@ -328,43 +329,35 @@ def event_output(event: Mapping[str, Any]) -> dict[str, Any]:
     return row
 
 
-# A scheduled check is late after two intervals plus this slack (as the watchdog says).
-_STALE_SLACK_SEC = 10 * 60
-
-
-def attention(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> list[str]:
-    """G3: what needs the owner now - shown above the list, empty when all is well."""
-    import time
-    from datetime import UTC
-
-    items: list[str] = []
-    if not state.get("topics") and (lost := services.data_lost()) is not None:
-        items.append(t("watchdog.alert.data_lost", folder=lost["folder"]))
+def issues_now(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> list[Issue]:
+    """G3: what needs the owner now (tow.issues), from this request's state and config."""
     raw_health = state.get("health")
     health: dict[str, Any] = raw_health if isinstance(raw_health, dict) else {}
-    interval = interval_sec_of(cfg)
-    # Late against the real next scheduled check (never a manual check or a progress pass).
-    next_at = services.next_check_at(interval, health)
-    if next_at and time.time() - next_at > interval + _STALE_SLACK_SEC:
-        last = next_at - interval
-        items.append(t("web.attention.stale", at=ui_time(datetime.fromtimestamp(last, UTC).isoformat())))
-    if health.get("check_error") == "secrets_migration_required" or health.get("check_ok") is False:
-        items.append(t("web.attention.blocked"))
-    if health.get("qbit_ok") is False:
-        items.append(t("web.attention.client_down"))
-    if isinstance(health.get("history_rebuilt_at"), int):  # kept a week by the check
-        items.append(t("web.attention.history_rebuilt"))
-    need_login: dict[str, int] = {}
-    trackers = load_trackers(cfg)
-    for topic in state.get("topics") or []:
-        if topic.get("paused") or topic.get("last_error_class") != "tracker_auth":
-            continue
-        tracker = match_tracker(trackers, str(topic.get("url") or ""))
-        name = _site_title(cfg, tracker.name) if tracker else t("web.site_unknown")
-        need_login[name] = need_login.get(name, 0) + 1
-    for name, count in sorted(need_login.items()):
-        items.append(t("web.attention.need_login", site=name, count=count))
-    return items
+    snapshot = Snapshot(
+        state=state,
+        config=cfg,
+        now=time.time(),
+        next_check_at=services.next_check_at(interval_sec_of(cfg), health),
+        # The note of a lost data folder matters only while no topic is watched: not read then.
+        data_lost=None if state.get("topics") else services.data_lost(),
+    )
+    return services.collect_issues(snapshot)
+
+
+def issue_text(issue: Issue) -> str:
+    """The issue's message in the page's language; a time in the page's way of writing times."""
+    params = dict(issue.message.params)
+    if isinstance(params.get("at"), (int, float)):
+        params["at"] = ui_time(datetime.fromtimestamp(params["at"], UTC).isoformat())
+    return t(issue.message.key, **params)
+
+
+def attention(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Home's "Needs attention": one item per issue, worst first, as the banner shows it."""
+    return [
+        {"id": issue.id, "kind": issue.kind, "severity": issue.severity, "text": issue_text(issue)}
+        for issue in issues_now(state, cfg)
+    ]
 
 
 def _search_href(tracker: GenericHttpTracker | None, state: Mapping[str, Any], query: str) -> str:

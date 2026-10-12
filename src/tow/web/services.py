@@ -36,6 +36,7 @@ from tow.content import read as read_content
 from tow.doctor import doctor_report, stale_autostart
 from tow.doctor import reason_text as doctor_reason
 from tow.guess import guess_site
+from tow.issues import collect as collect_issues
 from tow.lifecycle import request_restart, service_status, set_autostart
 from tow.locations import check_writable as folder_write_problem
 from tow.locations import free_bytes
@@ -103,6 +104,7 @@ __all__ = [
     "client_answers",
     "client_from_secrets",
     "client_owned_by_tow",
+    "collect_issues",
     "commit_stores",
     "content_context_title",
     "content_metadata",

@@ -5,7 +5,7 @@
 {% if attention %}
 <section class="attention card" role="status" aria-label="{{ t('home.attention') }}">
   <strong>{{ t('home.attention') }}</strong>
-  <ul>{% for item in attention %}<li>{{ item }}</li>{% endfor %}</ul>
+  <ul>{% for item in attention %}<li>{{ item.text }}</li>{% endfor %}</ul>
 </section>
 {% endif %}
 {# The draft comes only from the server's own record of a refused add (?add=<token>), never

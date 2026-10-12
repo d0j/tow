@@ -2192,13 +2192,6 @@
       "file": "file"
     },
     "site_unknown": "site",
-    "attention": {
-      "stale": "Scheduled checks have not run since {at}.",
-      "blocked": "The last scheduled check is blocked: saved passwords and tokens cannot be opened. Open Settings to see what to do.",
-      "client_down": "The torrent client is unavailable: new versions are not added.",
-      "need_login": "Sign in to {site} (topics: {count}): open the topic's row.",
-      "history_rebuilt": "The download history file was damaged: TOW started it over and keeps checking (the damaged file is kept next to it as download_history.json.corrupt-…). Downloads are not affected; events from before are not shown."
-    },
     "error_line": {
       "error": "error"
     },

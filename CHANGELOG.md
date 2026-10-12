@@ -3,6 +3,17 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [Unreleased]
+
+### Changed
+
+- Home → Needs attention lists the most serious problems first (red before amber).
+
+### Fixed
+
+- Home → Needs attention: a scheduled check that failed for another reason no longer says that the saved passwords
+  and tokens cannot be opened.
+
 ## [1.28.4] — 2026-10-12
 
 ### Changed
