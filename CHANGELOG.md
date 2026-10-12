@@ -13,6 +13,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - That case is named as what it is: a web server of this TOW that `tow run` did not start, instead of "another TOW
   (another TOW folder, or a copy of this one)".
 - Sites → How to fill: on a phone the help scrolls inside its box, and the keyboard can now reach and scroll it.
+- The page shown while `config.yaml` cannot be read follows a dark theme and is read correctly by screen readers.
 
 ## [1.28.3] — 2026-10-09
 

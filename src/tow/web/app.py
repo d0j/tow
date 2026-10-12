@@ -171,12 +171,15 @@ def _config_unreadable(request: Request, exc: ConfigError | YamlLimitError) -> R
     if not middleware.is_browser_navigation(request):
         return JSONResponse({"ok": False, "error": title, "detail": lines}, status_code=503, headers=headers)
     paragraphs = "".join(f"<p>{escape(line)}</p>" for line in lines)
+    # In the reader's colours (a dark theme got a white page) and inside <main>, so a screen
+    # reader finds the text (axe: landmark-one-main, region).
     body = (
         f'<!doctype html><html lang="{escape(i18n.current())}"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        '<meta name="color-scheme" content="light dark">'
         f"<title>{escape(title)}</title><style>body{{font-family:system-ui,sans-serif;max-width:42rem;"
         "margin:2rem auto;padding:0 1rem;line-height:1.5}</style></head>"
-        f"<body><h1>{escape(title)}</h1>{paragraphs}</body></html>"
+        f"<body><main><h1>{escape(title)}</h1>{paragraphs}</main></body></html>"
     )
     return HTMLResponse(body, status_code=503, headers=headers)
 
