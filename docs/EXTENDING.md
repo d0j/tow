@@ -70,7 +70,8 @@ guarantees):
 A messenger module declares `KIND`, `TITLE`, `ORDER`, `MAX_LEN`, `STEPS`, `NOTE`, `FIELDS` (each a `Field`: `text`,
 `secret` or `list`, with a placeholder and an error key) and `send(settings, text)`, which raises `DeliveryError`
 with a reason that holds no tokens or addresses. Optional: `STORAGE`, `targets(settings)`, `MAX_BYTES`,
-`MAX_UTF16`, `CHUNK_PAUSE`, `suggestion(field)` — see the `Notifier` docstring.
+`MAX_UTF16`, `CHUNK_PAUSE`, `suggestion(field)`, `SERVER_FIELDS` (the fields that name a server TOW posts to, such
+as ntfy's own server: the settings page refuses one in the home network) — see the `Notifier` docstring.
 
 Everything else is shared: the settings card, encrypted storage, **Check** and **Disconnect** with undo, the bell
 in the header, and delivery (`notifiers/outbox.py`): retries on a refused connection, 429 (honouring `Retry-After`)

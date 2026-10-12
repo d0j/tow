@@ -50,16 +50,20 @@ def _raw_notifier(secrets: dict[str, Any], kind: str) -> dict[str, Any] | None:
     return raw if isinstance(raw, dict) else None
 
 
-# Servers TOW posts messages to by itself. An address inside the home network or on this PC
-# would let the form make TOW post to it (a blind request into the LAN), as for tracker hosts.
-# A self-hosted server at home is allowed with allow_private_notifier_hosts: true in config.yaml.
-_SERVER_FIELDS = {"ntfy": ("server",)}
+def _server_fields(kind: str) -> tuple[str, ...]:
+    """The fields that name a server TOW posts messages to by itself (a messenger's
+    ``SERVER_FIELDS``). An address inside the home network or on this PC would let the form make
+    TOW post to it (a blind request into the LAN), as for tracker hosts. A self-hosted server at
+    home is allowed with allow_private_notifier_hosts: true in config.yaml."""
+    from tow import notifiers
+
+    return tuple(getattr(notifiers.kinds()[kind], "SERVER_FIELDS", ()))
 
 
 def _private_server_problem(kind: str, values: dict[str, Any] | None) -> str | None:
     if not values or as_bool(services.load_config().get("allow_private_notifier_hosts")):
         return None
-    for field in _SERVER_FIELDS.get(kind, ()):
+    for field in _server_fields(kind):
         value = str(values.get(field) or "")
         if not value:
             continue
@@ -97,7 +101,7 @@ def _save_notifier(kind: str, form: dict[str, str]) -> RedirectResponse:
     if refused := save_secrets_with_undo(_notifier_target(kind), undo_secrets, s, old_sec, _notifier_scope(kind)):
         return refused
     services.log_event("settings_notifier", integration_id=kind, how="manual")
-    servers = [str(values.get(field) or "") for field in _SERVER_FIELDS.get(kind, ())]
+    servers = [str(values.get(field) or "") for field in _server_fields(kind)]
     if note := unresolved_note([server for server in servers if server]):
         return _notifier_redirect(f"{t('web.settings.notifier_saved', title=title)}. {note}", kind, "warn")
     return _notifier_redirect(t("web.settings.notifier_saved", title=title), kind)
