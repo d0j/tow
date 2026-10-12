@@ -225,7 +225,7 @@ def test_every_start_closes_keys_and_data_and_warns_about_what_stays_open(tmp_pa
     from tow.paths import data_dir, keys_dir
     from tow.store import protect_install_folders
 
-    monkeypatch.setattr("tow.store._OPEN_FOLDERS_SAID", [])
+    monkeypatch.setattr("tow.storage.folders._OPEN_FOLDERS_SAID", [])
     keys_dir().mkdir()
     keys, data = keys_dir(), data_dir()
     backend = FolderBackend(shared={keys, data}, fixable={keys})
@@ -317,7 +317,7 @@ def test_a_root_of_another_account_stays_and_keys_and_data_are_still_closed(inst
     from tow.i18n import t
     from tow.store import protect_install_folders
 
-    monkeypatch.setattr("tow.store._OPEN_FOLDERS_SAID", [])  # this process has said nothing yet
+    monkeypatch.setattr("tow.storage.folders._OPEN_FOLDERS_SAID", [])  # this process has said nothing yet
     keys, data = install / "keys", install / "data"
     backend = InstallBackend(shared={install, keys, data}, fixable={keys, data})
     with platform.use(backend):  # type: ignore[arg-type]
@@ -336,7 +336,7 @@ def test_open_folders_are_said_once_and_only_by_what_starts_tow(install, capsys,
     from tow.i18n import t
     from tow.store import protect_install_folders
 
-    monkeypatch.setattr("tow.store._OPEN_FOLDERS_SAID", [])
+    monkeypatch.setattr("tow.storage.folders._OPEN_FOLDERS_SAID", [])
     backend = InstallBackend(shared={install}, fixable=set())
     with platform.use(backend):  # type: ignore[arg-type]
         assert cli.main(["version"]) == 0
