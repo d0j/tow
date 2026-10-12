@@ -172,6 +172,9 @@ def test_every_messenger_module_satisfies_the_contract(name, module):
     assert isinstance(module.NOTE, str)
     assert module.FIELDS
     assert all(isinstance(field, Field) for field in module.FIELDS)
+    servers = getattr(module, "SERVER_FIELDS", ())
+    assert isinstance(servers, tuple), name
+    assert set(servers) <= {field.name for field in module.FIELDS}, name
 
 
 def test_a_broken_messenger_module_is_skipped_with_its_reason(monkeypatch):

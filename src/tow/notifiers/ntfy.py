@@ -43,6 +43,9 @@ FIELDS = (
         default="https://ntfy.sh",
     ),
 )
+# The fields that name a server TOW posts to by itself: one in the home network is refused
+# unless allow_private_notifier_hosts is on (web/routes_notifiers.py).
+SERVER_FIELDS = ("server",)
 
 
 def __getattr__(name: str) -> Any:

@@ -96,7 +96,9 @@ class Notifier(Protocol):
     secrets block it keeps its settings in, default ``notifiers.<kind>``), ``targets(settings)``
     (one recipient per chat), ``MAX_BYTES`` (a limit in UTF-8 bytes), ``MAX_UTF16`` (a limit in
     UTF-16 code units, as Telegram counts: an emoji is two), ``CHUNK_PAUSE`` (seconds between
-    parts) and ``suggestion(field)`` (a ready value for a form field).
+    parts), ``suggestion(field)`` (a ready value for a form field) and ``SERVER_FIELDS`` (the
+    fields that name a server TOW posts to: one in the home network is refused unless
+    ``allow_private_notifier_hosts`` is on).
     ``tests/test_plugin_contracts.py`` checks every messenger module against it.
     """
 
