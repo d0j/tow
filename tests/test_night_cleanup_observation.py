@@ -13,6 +13,7 @@ from tow import snapshots, watchdog
 from tow.config import load_config, save_config
 from tow.i18n import t
 from tow.pulse import Probes
+from tow.snapshots import record as night_record
 from tow.store import persistence_lock, save_secrets, save_state
 from tow.web import app
 
@@ -44,12 +45,12 @@ def _check(sent):
 
 
 def _record(night, pending):
-    snapshots._record(
+    night_record.record_status(
         last_ok_at=NOW,
         last_error="",
         location=str(night.resolve()),
         last_cleanup_pending=pending,
-        **snapshots._cleanup_inventory(night),
+        **night_record.cleanup_inventory(night),
     )
 
 
@@ -57,7 +58,9 @@ def _record(night, pending):
 @pytest.mark.parametrize("pending", [True, False])
 def test_lost_record_preserves_last_confirmed_cleanup_and_does_not_resolve(night, pending, mode):
     # Seed the old format so that this reproduces the pre-inventory implementation too.
-    snapshots._record(last_ok_at=NOW, last_error="", location=str(night.resolve()), last_cleanup_pending=pending)
+    night_record.record_status(
+        last_ok_at=NOW, last_error="", location=str(night.resolve()), last_cleanup_pending=pending
+    )
     sent = []
     _check(sent)
     # Unbound success must remain unknown; a legacy warning remains useful.
@@ -156,7 +159,9 @@ def test_unknown_cleanup_is_visible_without_hiding_existing_copy(night, lang):
 
 @pytest.mark.parametrize("pending", [True, False])
 def test_legacy_migration_is_quiet_and_never_resolves_cleanup(night, pending):
-    snapshots._record(last_ok_at=NOW, last_error="", location=str(night.resolve()), last_cleanup_pending=pending)
+    night_record.record_status(
+        last_ok_at=NOW, last_error="", location=str(night.resolve()), last_cleanup_pending=pending
+    )
     watchdog._save_state({"backup_cleanup": not pending})
     sent = []
     for _ in range(3):
@@ -170,7 +175,7 @@ def test_new_copy_binds_its_cleanup_result_to_current_inventory(night):
     snapshots.create_snapshot()
     observed = snapshots.cleanup_status()
     assert observed == {"pending": False, "read_error": False, "legacy": False, "location": str(night.resolve())}
-    assert snapshots.status()["cleanup_inventory"] == snapshots._cleanup_inventory(night)["cleanup_inventory"]
+    assert snapshots.status()["cleanup_inventory"] == night_record.cleanup_inventory(night)["cleanup_inventory"]
 
 
 def test_fresh_install_missing_record_is_unknown_not_a_failure(night):
@@ -279,7 +284,7 @@ def test_inventory_failure_does_not_fail_a_verified_copy_or_reuse_old_binding(ni
     def denied(_folder):
         raise PermissionError("synthetic inventory refusal")
 
-    monkeypatch.setattr(snapshots, "_cleanup_inventory", denied)
+    monkeypatch.setattr(snapshots, "cleanup_inventory", denied)
     made = snapshots.create_snapshot()
     assert made["ok"] is True
     assert snapshots.verify_snapshot(Path(made["snapshot"]))["signed"] is True
@@ -292,7 +297,7 @@ def test_snapshot_record_is_written_before_creation_lock_is_released(night, monk
 
     active = []
     original_lock = snapshots.persistence_lock
-    original_record = snapshots._record
+    original_record = night_record.record_status
 
     @contextlib.contextmanager
     def lock():
@@ -308,7 +313,7 @@ def test_snapshot_record_is_written_before_creation_lock_is_released(night, monk
         original_record(**fields)
 
     monkeypatch.setattr(snapshots, "persistence_lock", lock)
-    monkeypatch.setattr(snapshots, "_record", record)
+    monkeypatch.setattr(snapshots, "record_status", record)
     snapshots.create_snapshot()
 
 
@@ -319,7 +324,7 @@ def test_nonregular_record_is_refused_before_open(night, monkeypatch):
     def refuse_open(*_args, **_kwargs):
         pytest.fail("nonregular diagnostic record was opened")
 
-    monkeypatch.setattr(snapshots, "read_object", refuse_open)
+    monkeypatch.setattr(night_record, "read_object", refuse_open)
     assert snapshots.status()["read_error"] is True
     assert snapshots.cleanup_status()["read_error"] is True
 
@@ -334,7 +339,7 @@ def test_partials_and_unrelated_names_do_not_change_committed_inventory(night):
 
 @pytest.mark.parametrize("mode", ["permission", "not-directory"])
 def test_legacy_record_does_not_hide_real_folder_access_failure(night, monkeypatch, mode):
-    snapshots._record(last_ok_at=NOW, last_error="", location=str(night.resolve()), last_cleanup_pending=False)
+    night_record.record_status(last_ok_at=NOW, last_error="", location=str(night.resolve()), last_cleanup_pending=False)
     if mode == "not-directory":
         night.write_bytes(b"not a folder")
     else:
@@ -367,7 +372,7 @@ def test_pre_cleanup_copy_metadata_migrates_quietly_without_confirming_completio
     cfg = load_config()
     cfg["language"] = lang
     save_config(cfg)
-    snapshots._record(**_pre_cleanup_record(night))
+    night_record.record_status(**_pre_cleanup_record(night))
     # Older watchdogs recorded True when the cleanup field did not exist.
     watchdog._save_state({"backup_cleanup": True, "backup_cleanup_monitoring": not prior_alarm})
     sent = []
@@ -390,7 +395,7 @@ def test_incomplete_or_bound_metadata_is_not_pre_cleanup_migration(night, tmp_pa
     elif mode == "missing-location":
         del record["location"]
     else:
-        record.update(snapshots._cleanup_inventory(night))
+        record.update(night_record.cleanup_inventory(night))
     (tmp_path / snapshots.STATUS_NAME).write_text(json.dumps(record), encoding="utf-8")
     watchdog._save_state({"backup_cleanup": False})
     sent = []
@@ -416,7 +421,7 @@ def test_losing_both_bound_fields_cannot_masquerade_as_a_legacy_migration(night,
 
 @pytest.mark.parametrize("mode", ["permission", "not-directory"])
 def test_pre_cleanup_metadata_cannot_hide_a_folder_access_error(night, monkeypatch, mode):
-    snapshots._record(**_pre_cleanup_record(night))
+    night_record.record_status(**_pre_cleanup_record(night))
     if mode == "not-directory":
         night.write_bytes(b"synthetic non-directory")
     else:

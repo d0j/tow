@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from tow import diagnostic_json, lifecycle, snapshots, watchdog
 from tow.pulse import Probes
+from tow.snapshots import record as night_record
 from tow.store import save_state
 from tow.supervisor import layout
 
@@ -235,7 +236,7 @@ def test_unreadable_backup_notifies_once_and_recovers_after_real_record():
     assert "последний результат неизвестен" in first["alerts"][0]
     assert second["alerts"] == []
     assert path.read_bytes() == raw
-    snapshots._record(last_ok_at=1800000000, last_error="")
+    night_record.record_status(last_ok_at=1800000000, last_error="")
     assert "read_error" not in snapshots.status()
     assert _watchdog()["alerts"] == ["TOW: ночные копии снова делаются"]
     assert _watchdog()["alerts"] == []

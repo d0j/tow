@@ -17,6 +17,7 @@ The package re-exports what the rest of TOW uses; inside it:
 - ``members``: what a copy holds, where each member goes, plain files and folders;
 - ``manifest``: the MANIFEST, its limits and its signature;
 - ``location``: the copies folder, its copies and one copy by name;
+- ``record``: the record of the last copy and the cleanup it observed;
 
 What is not in a module of its own yet is still here.
 """
@@ -40,14 +41,12 @@ from typing import Any
 import yaml
 
 from tow import __version__
-from tow.backup_actions import KEPT_SETTINGS, added_names, cleanup_names, copy_revision, inventory_digest
+from tow.backup_actions import KEPT_SETTINGS, copy_revision
 from tow.backup_retention import MIB, copy_time, retained_copies, retention_settings
 from tow.config import interval_sec_of, load_config
-from tow.diagnostic_json import check_epochs, check_types, encode_object, read_object
 from tow.i18n import t
 from tow.log import locked_log_path, log_event, owner_language
 from tow.paths import config_path, data_dir
-from tow.platform import is_plain_file
 from tow.snapshots.errors import SnapshotError, reason
 from tow.snapshots.location import PREFIX, backup_root, list_snapshots, snapshot_folders, snapshot_path
 from tow.snapshots.manifest import (
@@ -78,6 +77,17 @@ from tow.snapshots.members import (
     parse_copy_config,
     points_dir_setting,
     read_metadata_bytes,
+)
+from tow.snapshots.record import (
+    STATUS_NAME,
+    cleanup_inventory,
+    cleanup_status,
+    cleanup_status_in_lock,
+    record_failure,
+    record_status,
+    status,
+    status_failed,
+    status_path,
 )
 from tow.store import (
     SecretStoreError,
@@ -133,136 +143,6 @@ _OPTIONAL_MEMBERS = frozenset({"secrets-undo.enc"})
 _PARTIAL_NAME = re.compile(r"\.tow-[0-9]{8}-[0-9]{6}(?:-[0-9a-f]{6})?\.partial")
 _PARTIAL_PROOF = "PARTIAL.json"
 _PARTIAL_FORMAT = "tow-snapshot-partial-v1"
-STATUS_NAME = "backup-status.json"
-
-
-def status_path() -> Path:
-    return data_dir() / STATUS_NAME
-
-
-def status() -> dict[str, Any]:
-    """Last success and last failure of a night copy (for the watchdog and Settings)."""
-    try:
-        info = status_path().lstat()
-        if not is_plain_file(info):
-            raise ValueError("backup record is not a regular file")
-        value = read_object(status_path())
-        check_epochs(value, ("last_ok_at", "last_error_at"))
-        check_types(
-            value,
-            {
-                "last_error": str,
-                "last_snapshot": str,
-                "location": str,
-                "last_cleanup_pending": bool,
-                "last_bytes": int,
-                "last_missing": list,
-            },
-        )
-        if value.get("last_bytes", 0) is not None and value.get("last_bytes", 0) < 0:
-            raise ValueError("invalid service size")
-        if any(not isinstance(item, str) for item in (value.get("last_missing") or [])):
-            raise ValueError("invalid missing members")
-    except FileNotFoundError:
-        return {}
-    except OSError, UnicodeError, ValueError, TypeError, RecursionError:
-        return {"read_error": True, "last_error": t("watchdog.backup.status_unreadable")}
-    return value
-
-
-def _cleanup_inventory(location: Path) -> dict[str, Any]:
-    """The record fields binding cleanup to committed copy names (partial copies begin with a dot)."""
-    names = cleanup_names(location, lambda name: name.startswith(PREFIX))
-    return {"cleanup_inventory": inventory_digest(names), "cleanup_names": names}
-
-
-def _new_copy_of_ours(location: Path, state: dict[str, Any]) -> bool:
-    """A copy of ours committed after the observation; one removed by hand or a foreign folder is not."""
-    names = cleanup_names(location, lambda name: name.startswith(PREFIX))
-    added = added_names(state.get("cleanup_names"), state["cleanup_inventory"], names)
-    if not added:
-        return False
-    key = signing_key()
-    return any(owned_manifest(location / name, key) is not None for name in added)
-
-
-def cleanup_status(*, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Cleanup in the current folder: pending, complete or unknown, never inferred from absence."""
-    with persistence_lock():  # inventory and record must describe the same completed copy
-        return _cleanup_status(cfg=cfg)
-
-
-def _cleanup_status(*, cfg: dict[str, Any] | None) -> dict[str, Any]:
-    result: dict[str, Any] = {"pending": None, "read_error": False, "location": "", "legacy": False}
-    try:
-        location = backup_root(cfg)
-        result["location"] = str(location.resolve())
-        state = status()
-        if state.get("read_error"):
-            raise ValueError("unreadable backup record")
-        if "last_cleanup_pending" not in state:
-            # Copies made before cleanup monitoring have a full copy result but no flag.
-            # This is migration, not lost observation; a prior bound watchdog still detects
-            # loss of both new fields through its persistent bound marker.
-            if (
-                "cleanup_inventory" not in state
-                and isinstance(state.get("last_ok_at"), (int, float))
-                and isinstance(state.get("last_snapshot"), str)
-                and re.fullmatch(r"tow-\d{8}-\d{6}(?:-[a-f0-9]{6})?", state["last_snapshot"])
-                and state.get("location") == result["location"]
-            ):
-                cleanup_names(location, bool)  # old metadata cannot hide a folder-access failure
-                result["legacy"] = True
-            return result  # a new install or a copy failure alone has no cleanup observation
-        if type(state["last_cleanup_pending"]) is not bool or not isinstance(state.get("location"), str):
-            raise ValueError("invalid cleanup observation")
-        if not state["location"]:
-            raise ValueError("missing cleanup location")
-        inventory = state.get("cleanup_inventory")
-        if "cleanup_inventory" in state and (
-            not isinstance(inventory, str) or re.fullmatch(r"[a-f0-9]{64}", inventory) is None
-        ):
-            raise ValueError("invalid cleanup inventory")
-        if state["location"] == result["location"]:
-            if "cleanup_inventory" not in state:
-                cleanup_names(location, bool)  # old metadata cannot hide a folder-access failure
-                result["legacy"] = True
-                if state["last_cleanup_pending"]:
-                    result["pending"] = True
-            elif _new_copy_of_ours(location, state):
-                raise ValueError("cleanup observation belongs to an earlier inventory")
-            else:
-                result["pending"] = state["last_cleanup_pending"]
-    except OSError, ValueError, TypeError, UnicodeError, RecursionError, SnapshotError:
-        result["read_error"] = True
-    return result
-
-
-def status_failed(value: dict[str, Any]) -> bool:
-    """The latest attempt's error wins, even with equal dates or a clock correction."""
-    if value.get("read_error"):
-        return True
-    if "last_error" in value:
-        return bool(value["last_error"])
-    failed = value.get("last_error_at")
-    return bool(failed is not None and (not value.get("last_ok_at") or failed >= value["last_ok_at"]))
-
-
-def _record(**fields: Any) -> None:
-    from tow.store import atomic_write_text
-
-    current = status()
-    if current.get("read_error"):
-        current = {}
-    current.update(fields)
-    # The status is informative; the copy itself already succeeded or failed.
-    with contextlib.suppress(OSError, ValueError, UnicodeError, RecursionError):
-        atomic_write_text(status_path(), encode_object(current))
-
-
-def record_failure(error: str) -> None:
-    _record(last_error=error[:300], last_error_at=round(time.time(), 3))
-    log_event("backup_failed", error=error[:300], how="auto")
 
 
 def _previous_members(root: Path, key: bytes) -> set[str]:
@@ -287,8 +167,8 @@ def create_snapshot(*, how: str = "auto") -> dict[str, Any]:
             # remains unknown, rather than binding an earlier result to a later copy.
             with contextlib.suppress(OSError, ValueError, UnicodeError):
                 fields["location"] = str(location.resolve())
-                fields.update(_cleanup_inventory(location))
-            _record(
+                fields.update(cleanup_inventory(location))
+            record_status(
                 last_ok_at=round(time.time(), 3),
                 last_snapshot=Path(result["snapshot"]).name,
                 last_bytes=result["bytes"],
@@ -338,15 +218,15 @@ def delete_snapshot(name: str, revision: str) -> dict[str, Any]:
         manifest = owned_manifest(path, signing_key())
         if manifest is None:
             raise SnapshotError(t("web.backup.delete_failed", owner_language()))
-        before = _cleanup_status(cfg=None)
+        before = cleanup_status_in_lock(cfg=None)
         removed = _remove_copy(path, path.parent, "MANIFEST.json", {"MANIFEST.json", *manifest["files"]})
         # Rebind a known observation; explicit deletion never clears an earlier warning.
         if not removed or type(before["pending"]) is bool:
             with contextlib.suppress(OSError, ValueError, UnicodeError):
-                _record(
+                record_status(
                     last_cleanup_pending=not removed or before["pending"],
                     location=str(path.parent.resolve()),
-                    **_cleanup_inventory(path.parent),
+                    **cleanup_inventory(path.parent),
                 )
         if not removed:
             raise SnapshotError(t("web.backup.delete_failed", owner_language()))
