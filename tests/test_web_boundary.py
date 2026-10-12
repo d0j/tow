@@ -208,20 +208,31 @@ def _is_module(dotted: str) -> bool:
     return base.with_suffix(".py").is_file() or (base / "__init__.py").is_file()
 
 
+def _from_module(node: ast.ImportFrom, path: Path) -> str:
+    """The absolute module a ``from ... import`` reads: ``from ..store import x`` in
+    ``tow/web/routes_x.py`` is ``tow.store``, ``from .. import store`` is ``tow``."""
+    if not node.level:
+        return node.module or ""
+    package = list(path.relative_to(SRC).with_suffix("").parts)[:-1]  # a module's or an __init__'s
+    anchor = package[: len(package) - (node.level - 1)]
+    return ".".join([*anchor, *([node.module] if node.module else [])])
+
+
 def _outside_names(path: Path) -> list[tuple[str, str, int]]:
     """(module, name, line) for each name from outside ``tow.web`` the file uses: imported from
-    its module, or used as an attribute of an imported module (``access.is_local``)."""
+    its module (also relatively: ``from ..store import x``), or used as an attribute of an
+    imported module (``access.is_local``)."""
     tree = ast.parse(path.read_text(encoding="utf-8"))
     found: list[tuple[str, str, int]] = []
     modules: dict[str, str] = {}  # local name -> outside module it stands for
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and not node.level and node.module and _outside(node.module):
+        if isinstance(node, ast.ImportFrom) and _outside(base := _from_module(node, path)):
             for alias in node.names:
-                full = f"{node.module}.{alias.name}"
+                full = f"{base}.{alias.name}"
                 if _is_module(full):
                     modules[alias.asname or alias.name] = full
                 else:
-                    found.append((node.module, alias.name, node.lineno))
+                    found.append((base, alias.name, node.lineno))
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 if _outside(alias.name):
@@ -305,7 +316,12 @@ def test_the_scan_sees_every_way_out(tmp_path, monkeypatch):
         "\n"
         "def page():\n"
         "    from tow.web_update import WebUpdateError\n"
-        "    return store.load_state(), services.load_state()\n",
+        "    return store.load_state(), services.load_state()\n"
+        "def relative():\n"
+        "    from ..store import save_state\n"  # 10: tow.store, relatively
+        "    from .. import config as settings\n"  # 11: the module tow.config
+        "    from . import services\n"  # 12: inside the web
+        "    return settings.port_of({})\n",  # 13
         encoding="utf-8",
     )
     monkeypatch.setattr(f"{__name__}.SRC", tmp_path)
@@ -313,7 +329,9 @@ def test_the_scan_sees_every_way_out(tmp_path, monkeypatch):
         ("tow.config", "*", 4),
         ("tow.config", "as_bool", 2),
         ("tow.config", "load_config", 2),
+        ("tow.config", "port_of", 13),
         ("tow.store", "load_state", 8),
+        ("tow.store", "save_state", 10),
         ("tow.web_update", "WebUpdateError", 7),
     ]
 
