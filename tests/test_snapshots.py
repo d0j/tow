@@ -357,12 +357,12 @@ def test_backup_dir_defaults_next_to_config_and_must_be_outside_the_data(tmp_pat
 
 def _plant(snapshot: Path, name: str, content: bytes = b"planted", *, sign: bool = True) -> None:
     """Add a member to a copy; ``sign`` re-signs the MANIFEST as only the key holder could."""
-    from tow.snapshots import _signature, _signing_key
+    from tow.snapshots.manifest import signature_of, signing_key
 
     manifest = json.loads((snapshot / "MANIFEST.json").read_text(encoding="utf-8"))
     manifest["files"][name] = {"sha256": hashlib.sha256(content).hexdigest(), "size": len(content)}
     if sign:
-        manifest["signature"] = _signature(manifest, _signing_key())
+        manifest["signature"] = signature_of(manifest, signing_key())
     (snapshot / "MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
 
 
@@ -616,13 +616,13 @@ def test_a_failed_partial_reservation_never_removes_another_writers_files(backup
 
 @pytest.mark.parametrize("size", [-1, True, "100", None, 1])
 def test_a_signed_manifest_with_an_invalid_file_size_is_refused(backup, size):
-    from tow.snapshots import _signature, _signing_key
+    from tow.snapshots.manifest import signature_of, signing_key
 
     snapshot = Path(create_snapshot()["snapshot"])
     manifest_path = snapshot / "MANIFEST.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["files"]["state.json"]["size"] = size
-    manifest["signature"] = _signature(manifest, _signing_key())
+    manifest["signature"] = signature_of(manifest, signing_key())
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     with pytest.raises(SnapshotError, match=_says("backup.snapshot.file_damaged", name="state.json")):
         verify_snapshot(snapshot)

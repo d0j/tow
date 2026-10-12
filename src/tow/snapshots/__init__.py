@@ -15,6 +15,7 @@ The package re-exports what the rest of TOW uses; inside it:
 
 - ``errors``: ``SnapshotError`` and the reason of a failure;
 - ``members``: what a copy holds, where each member goes, plain files and folders;
+- ``manifest``: the MANIFEST, its limits and its signature;
 
 What is not in a module of its own yet is still here.
 """
@@ -23,7 +24,6 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
-import hmac
 import io
 import json
 import os
@@ -48,6 +48,20 @@ from tow.log import locked_log_path, log_event, owner_language
 from tow.paths import config_path, data_dir
 from tow.platform import child_path, is_plain_file
 from tow.snapshots.errors import SnapshotError, reason
+from tow.snapshots.manifest import (
+    FORMAT,
+    MAX_MANIFEST_BYTES,
+    MAX_MEMBER_SIZE,
+    MAX_RESTORE_JOURNAL_BYTES,
+    UNSIGNED_FORMAT,
+    manifest_bytes,
+    member_size,
+    owned_manifest,
+    read_manifest,
+    signature_matches,
+    signature_of,
+    signing_key,
+)
 from tow.snapshots.members import (
     NOT_RESTORED,
     POINT_MEMBER,
@@ -70,7 +84,6 @@ from tow.store import (
     decode_json_bytes,
     decrypt_secret_undo_bytes,
     decrypt_secrets_bytes,
-    derive_local_secret,
     encrypt_secrets_bytes,
     encrypted_secrets_path,
     load_secrets,
@@ -111,11 +124,6 @@ __all__ = [
 ]
 
 
-FORMAT = "tow-snapshot-v2"  # a signed MANIFEST
-UNSIGNED_FORMAT = "tow-snapshot-v1"  # copies made before 1.17: checked, never restored automatically
-_SIGNATURE_PURPOSE = "night-copies"
-MAX_MANIFEST_BYTES = 1024 * 1024
-MAX_MEMBER_SIZE = 2**63 - 1
 _READ_CHUNK_BYTES = 1024 * 1024
 # Exists only while a settings change can still be undone: its absence is normal.
 _OPTIONAL_MEMBERS = frozenset({"secrets-undo.enc"})
@@ -173,8 +181,8 @@ def _new_copy_of_ours(location: Path, state: dict[str, Any]) -> bool:
     added = added_names(state.get("cleanup_names"), state["cleanup_inventory"], names)
     if not added:
         return False
-    key = _signing_key()
-    return any(_owned_manifest(location / name, key) is not None for name in added)
+    key = signing_key()
+    return any(owned_manifest(location / name, key) is not None for name in added)
 
 
 def cleanup_status(*, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -256,74 +264,6 @@ def record_failure(error: str) -> None:
     log_event("backup_failed", error=error[:300], how="auto")
 
 
-def _signing_key() -> bytes:
-    try:
-        return derive_local_secret(_SIGNATURE_PURPOSE).encode("ascii")
-    except SecretStoreError as exc:
-        raise SnapshotError(t("backup.snapshot.no_key", owner_language())) from exc
-
-
-def _signature(manifest: dict[str, Any], key: bytes) -> str:
-    body = {name: value for name, value in manifest.items() if name != "signature"}
-    canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
-    return hmac.new(key, canonical, hashlib.sha256).hexdigest()
-
-
-def _signature_matches(manifest: dict[str, Any], key: bytes) -> bool:
-    signature = manifest.get("signature")
-    return (
-        isinstance(signature, str) and signature.isascii() and hmac.compare_digest(signature, _signature(manifest, key))
-    )
-
-
-def _read_manifest(path: Path) -> dict[str, Any]:
-    lang = owner_language()
-    try:
-        ordinary_directory(path)
-        ordinary_file(path / "MANIFEST.json")
-        with (path / "MANIFEST.json").open("rb") as handle:
-            content = handle.read(MAX_MANIFEST_BYTES + 1)
-        if len(content) > MAX_MANIFEST_BYTES:
-            raise SnapshotError(t("backup.snapshot.manifest_too_large", lang))
-        manifest = json.loads(content.decode("utf-8"))
-    except (OSError, UnicodeError, ValueError, RecursionError) as exc:
-        raise SnapshotError(t("backup.snapshot.manifest_unreadable", lang)) from exc
-    if (
-        not isinstance(manifest, dict)
-        or manifest.get("format") not in (FORMAT, UNSIGNED_FORMAT)
-        or not isinstance(manifest.get("files"), dict)
-    ):
-        raise SnapshotError(t("backup.snapshot.not_tow", lang))
-    return manifest
-
-
-def _member_size(name: str, meta: Any) -> int:
-    """A file size, not a coerced float/string or an unrepresentable filesystem integer."""
-    size = meta.get("size") if isinstance(meta, dict) else None
-    if type(size) is not int or not 0 <= size <= MAX_MEMBER_SIZE:
-        raise SnapshotError(t("backup.snapshot.file_damaged", owner_language(), name=name))
-    return size
-
-
-def _manifest_bytes(manifest: dict[str, Any]) -> bytes:
-    with io.BytesIO() as output:
-        for chunk in json.JSONEncoder(indent=2).iterencode(manifest):
-            content = chunk.encode("utf-8")
-            if output.tell() + len(content) > MAX_MANIFEST_BYTES:
-                raise SnapshotError(t("backup.snapshot.manifest_too_large", owner_language()))
-            output.write(content)
-        return output.getvalue()
-
-
-def _owned_manifest(path: Path, key: bytes) -> dict[str, Any] | None:
-    """Only a signed copy proves that TOW owns this folder and may prune it."""
-    try:
-        manifest = _read_manifest(path)
-    except SnapshotError:
-        return None
-    return manifest if manifest["format"] == FORMAT and _signature_matches(manifest, key) else None
-
-
 def backup_root(cfg: dict[str, Any] | None = None) -> Path:
     """The night copies folder: ``backup_dir`` from config.yaml, by default ``backup/night``
     next to config.yaml (moves with the install); a network share (\\\\server\\share) works too.
@@ -359,7 +299,7 @@ def _previous_members(root: Path, key: bytes) -> set[str]:
     """Stores a signed earlier copy proves existed; their later disappearance is not normal."""
     present: set[str] = set()
     for folder in _snapshots(root):
-        if manifest := _owned_manifest(folder, key):
+        if manifest := owned_manifest(folder, key):
             present.update(
                 name for name in manifest["files"] if name in {"state.json", "download_history.json", "secrets.enc"}
             )
@@ -407,10 +347,10 @@ def list_snapshots(limit: int | None = 10) -> list[dict[str, Any]]:
     rows = []
     for folder in reversed(folders if limit is None else folders[-limit:]):
         try:
-            manifest = _read_manifest(folder)
+            manifest = read_manifest(folder)
             created = datetime.fromisoformat(str(manifest.get("created_at")))
             created_ts = created.timestamp()
-            size = sum(_member_size(name, meta) for name, meta in manifest["files"].items())
+            size = sum(member_size(name, meta) for name, meta in manifest["files"].items())
         except SnapshotError, OSError, ValueError, TypeError, AttributeError, OverflowError:
             continue
         rows.append(
@@ -450,7 +390,7 @@ def snapshot_delete_view(name: str) -> dict[str, Any]:
     with persistence_lock():
         try:
             path = snapshot_path(name)
-            manifest = _owned_manifest(path, _signing_key())
+            manifest = owned_manifest(path, signing_key())
             fixed = {member for member, _target in fixed_members()}
             if manifest is None or any(
                 member not in fixed and POINT_MEMBER.fullmatch(member) is None for member in manifest["files"]
@@ -469,7 +409,7 @@ def delete_snapshot(name: str, revision: str) -> dict[str, Any]:
         if not revision or view["revision"] != revision:
             raise SnapshotError(t("web.backup.delete_stale", owner_language()))
         path = snapshot_path(name)
-        manifest = _owned_manifest(path, _signing_key())
+        manifest = owned_manifest(path, signing_key())
         if manifest is None:
             raise SnapshotError(t("web.backup.delete_failed", owner_language()))
         before = _cleanup_status(cfg=None)
@@ -522,7 +462,7 @@ def _copy_snapshot_member(source: Path, destination: Path, name: str) -> dict[st
 
 
 def _write_snapshot_manifest(path: Path, manifest: dict[str, Any]) -> None:
-    content = _manifest_bytes(manifest)
+    content = manifest_bytes(manifest)
     with path.open("xb") as writer:
         if writer.write(content) != len(content):
             raise SnapshotError(t("backup.snapshot.write_incomplete", owner_language(), name="MANIFEST.json"))
@@ -548,7 +488,7 @@ def _create_snapshot(*, how: str, proven: dict[str, str] | None = None) -> dict[
         partial = root / f".{_PREFIX}{stamp}-{suffix}.partial"
     files: dict[str, dict[str, Any]] = {}
     missing: list[str] = []
-    key = _signing_key()  # no key, no copy: an unsigned copy could never be restored
+    key = signing_key()  # no key, no copy: an unsigned copy could never be restored
     stale_pending = _remove_stale_partials(root, key)
     previous_members = _previous_members(root, key)
     partial_created = False
@@ -582,7 +522,7 @@ def _create_snapshot(*, how: str, proven: dict[str, str] | None = None) -> dict[
             "files": files,
             "missing": missing,
         }
-        manifest["signature"] = _signature(manifest, key)
+        manifest["signature"] = signature_of(manifest, key)
         _write_snapshot_manifest(partial / "MANIFEST.json", manifest)
         (partial / _PARTIAL_PROOF).unlink()  # from here the signed MANIFEST proves the folder is ours
         _rename_with_retry(partial, target)
@@ -655,7 +595,7 @@ def _withdraw_unverified(target: Path, partial: Path, root: Path, key: bytes, ex
 
 def _partial_proof(folder: str, key: bytes) -> dict[str, Any]:
     proof: dict[str, Any] = {"format": _PARTIAL_FORMAT, "folder": folder}
-    proof["signature"] = _signature(proof, key)
+    proof["signature"] = signature_of(proof, key)
     return proof
 
 
@@ -670,11 +610,11 @@ def _partial_owner_proof(folder: Path, key: bytes) -> str | None:
             isinstance(proof, dict)
             and proof.get("format") == _PARTIAL_FORMAT
             and proof.get("folder") == folder.name
-            and _signature_matches(proof, key)
+            and signature_matches(proof, key)
         ):
             return _PARTIAL_PROOF
         return None
-    return "MANIFEST.json" if _owned_manifest(folder, key) is not None else None
+    return "MANIFEST.json" if owned_manifest(folder, key) is not None else None
 
 
 def _remove_stale_partials(root: Path, key: bytes) -> bool:
@@ -740,7 +680,7 @@ def _prune_night_copies(root: Path, target: Path, key: bytes, policy: dict[str, 
         fixed = {name for name, _path in fixed_members()}
         for folder in _snapshots(root):
             try:
-                manifest = _owned_manifest(folder, key)
+                manifest = owned_manifest(folder, key)
                 if manifest is None or any(
                     name not in fixed and POINT_MEMBER.fullmatch(name) is None for name in manifest["files"]
                 ):
@@ -834,7 +774,7 @@ def _rename_with_retry(source: Path, target: Path, *, attempts: int = 6) -> None
 
 def _verified_member(source: Path, name: str, meta: Any, *, collect: bool) -> bytes | None:
     """Hash one regular file in bounded blocks, optionally retaining exactly those bytes."""
-    size = _member_size(name, meta)
+    size = member_size(name, meta)
     lang = owner_language()
     if name == "config.yaml" and size > MAX_INPUT_BYTES:
         raise SnapshotError(str(YamlLimitError("yaml_limits.size")))
@@ -879,9 +819,9 @@ def _read_verified(
     """
     path = Path(path)
     lang = owner_language()
-    manifest = _read_manifest(path)
+    manifest = read_manifest(path)
     signed = manifest["format"] == FORMAT
-    if signed and not _signature_matches(manifest, _signing_key()):
+    if signed and not signature_matches(manifest, signing_key()):
         raise SnapshotError(t("backup.snapshot.bad_signature", lang))
     if require_signed and not signed:
         raise SnapshotError(t("backup.snapshot.unsigned", lang))
@@ -1019,9 +959,6 @@ _MARKER = ".tow-night-restore.json"
 _JOURNAL = "RESTORE.json"
 _JOURNAL_FORMAT = "tow-night-restore/v1"
 MAX_RESTORE_MARKER_BYTES = 64 * 1024
-# A journal carries names/checksums, not payloads. Allow ample encoding overhead
-# above the entire supported manifest; these limits never cap state or history.
-MAX_RESTORE_JOURNAL_BYTES = 4 * MAX_MANIFEST_BYTES
 _SAFETY_NAME = re.compile(r"before-restore-[0-9]{8}-[0-9]{6}(?:-[0-9a-f]{6})?")
 SAFETY_KEEP = 3
 _RECOVERY_ATTEMPTS = 5
