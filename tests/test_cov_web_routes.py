@@ -1017,7 +1017,7 @@ def test_a_new_folder_is_saved_for_a_torrent_gone_from_its_client(monkeypatch, c
 
 
 def test_reconcile_accepts_the_old_folder_while_a_move_is_unconfirmed():
-    from tow.progress import _check_save_path
+    from tow.progress.reconcile import _check_save_path
 
     topic = {"save_path": r"P:\new", "move_pending": {"from": r"M:\anime", "to": r"P:\new", "unconfirmed": True}}
     assert _check_save_path(topic, {"save_path": r"M:\anime", "state": "uploading"}) == r"M:\anime"
