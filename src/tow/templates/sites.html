@@ -14,7 +14,8 @@
       <h2 id="add-site-title" class="add-title">{{ t('sites.add_title') }}</h2>
       <details class="help">
         <summary title="{{ t('sites.how_to_fill') }}" aria-label="{{ t('sites.how_to_fill') }}">?</summary>
-        <div class="help-pop">
+        {#- On a phone the text scrolls inside the box: the keyboard reaches it (axe, A4). -#}
+        <div class="help-pop" role="region" aria-label="{{ t('sites.how_to_fill') }}" tabindex="0">
           <p>{{ tm('sites.help.p1') }}</p>
           <p>{{ t('sites.help.p6') }}</p>
           <p>{{ tm('sites.help.p2', field=t('sites.name')) }}</p>

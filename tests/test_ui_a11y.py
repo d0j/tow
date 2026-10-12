@@ -366,6 +366,19 @@ def test_scrolling_log_boxes_are_named_regions_the_keyboard_reaches(client):
     assert "outline" in _desktop_rules()[".log-box:focus-visible"]
 
 
+def test_the_sites_help_box_that_scrolls_on_a_phone_is_reached_by_the_keyboard(client):
+    """QA9: "How to fill" on Sites scrolls inside its box on a 390 px screen; with only text in it
+    the keyboard could not scroll it (axe scrollable-region-focusable, serious)."""
+    from bs4 import BeautifulSoup
+
+    box = BeautifulSoup(client.get("/sites").text, "html.parser").select_one(".help-pop")
+    assert "overflow: auto" in _desktop_rules()[".help-pop"]
+    assert box is not None
+    assert (box.get("role"), box.get("tabindex")) == ("region", "0")
+    assert box.get("aria-label")
+    assert "outline" in _desktop_rules()[".help-pop:focus-visible"]
+
+
 def test_personal_timers_have_hidden_words_and_are_drawn_only_when_seen_and_changed(client):
     """A10/P3: each timer had an aria-label on a span without a role, and app.js rewrote the text,
     tooltip and label of all 500 timers every second (~20 ms/s on a 2000-topic Home)."""
