@@ -15,6 +15,7 @@ import pytest
 from tow import snapshots, store
 from tow.config import load_config, save_config
 from tow.paths import data_dir, state_path
+from tow.snapshots import verify as night_verify
 
 
 @pytest.fixture
@@ -32,7 +33,7 @@ def night(tmp_path, monkeypatch):
 def test_creation_never_reads_a_source_as_whole_bytes(night, monkeypatch):
     root, old = night
     source = data_dir() / "tow.jsonl"
-    size = 3 * snapshots._READ_CHUNK_BYTES + 37
+    size = 3 * night_verify.READ_CHUNK_BYTES + 37
     source.write_bytes(b"x" * size)
     real_read = Path.read_bytes
 
@@ -72,7 +73,7 @@ def test_copy_hashes_exact_written_blocks_with_bounded_reads(tmp_path, monkeypat
             return self.handle.fileno()
 
         def read(self, length):
-            assert 0 < length <= snapshots._READ_CHUNK_BYTES
+            assert 0 < length <= night_verify.READ_CHUNK_BYTES
             reads.append(length)
             return self.handle.read(length)
 
@@ -86,7 +87,7 @@ def test_copy_hashes_exact_written_blocks_with_bounded_reads(tmp_path, monkeypat
         "sha256": hashlib.sha256(content).hexdigest(),
     }
     assert destination.read_bytes() == content
-    assert len(reads) == (size + snapshots._READ_CHUNK_BYTES - 1) // snapshots._READ_CHUNK_BYTES + 1
+    assert len(reads) == (size + night_verify.READ_CHUNK_BYTES - 1) // night_verify.READ_CHUNK_BYTES + 1
 
 
 def test_absent_source_creates_no_destination(tmp_path):
@@ -322,7 +323,7 @@ def test_log_append_and_rotation_wait_until_snapshot_read_finishes(night, monkey
 
 def test_large_opaque_copy_has_no_whole_file_python_allocation(tmp_path):
     source, destination = tmp_path / "source", tmp_path / "prepared" / "copy"
-    block = b"x" * snapshots._READ_CHUNK_BYTES
+    block = b"x" * night_verify.READ_CHUNK_BYTES
     with source.open("wb") as handle:
         for _ in range(16):
             handle.write(block)
@@ -333,8 +334,8 @@ def test_large_opaque_copy_has_no_whole_file_python_allocation(tmp_path):
         _current, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()
-    assert result["size"] == 16 * snapshots._READ_CHUNK_BYTES
-    assert peak < 4 * snapshots._READ_CHUNK_BYTES
+    assert result["size"] == 16 * night_verify.READ_CHUNK_BYTES
+    assert peak < 4 * night_verify.READ_CHUNK_BYTES
 
 
 def test_oversized_config_is_rejected_before_destination_creation(tmp_path, monkeypatch):
