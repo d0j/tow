@@ -85,6 +85,19 @@ def test_a_page_names_the_file_the_place_and_the_way_back(broken_config):
     assert "ночной копии" in russian.text
 
 
+def test_the_page_has_its_main_landmark_and_follows_a_dark_theme(broken_config):
+    """QA9: the page had no <main> (axe landmark-one-main, region) and stayed white in a dark theme."""
+    from bs4 import BeautifulSoup
+
+    for client in (_local(), TestClient(app, client=("192.168.1.7", 50000))):
+        page = BeautifulSoup(client.get("/", headers=HTML).text, "html.parser")
+        main = page.select_one("body > main")
+        assert main is not None
+        assert main.select_one("h1") is not None
+        assert [child.name for child in page.body.find_all(recursive=False)] == ["main"]
+        assert page.select_one('meta[name="color-scheme"]')["content"] == "light dark"
+
+
 def test_health_json_says_it_in_json_and_healthz_still_answers(broken_config):
     from tow.supervisor.layout import install_id
 
