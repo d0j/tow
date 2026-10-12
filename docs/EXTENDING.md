@@ -29,6 +29,10 @@ A client module declares:
 - `STEPS` — how to turn on the Web UI in the client; `NOTE` — its quirks (language-file keys `client.<kind>.*`);
 - `from_secrets(secrets)` → an object satisfying `TorrentClientAdapter`.
 
+Discovery falls back to a default for a constant that is missing or wrong; `test_plugin_contracts.py` does not:
+`client_module_problems(module)` (`clients/spec.py`) names a `TITLE`, `SECRETS_KEY`, `DEFAULT_PORT` or `ORDER`
+that is missing or of the wrong kind, and `FIELDS` that are not a tuple of `ClientField` with `host` and `port`.
+
 Every client follows the same read-back contract, the shared flow in `clients/managed.py`; a new client uses
 `ManagedClient` rather than duplicate it (qBittorrent overrides single steps, such as its add, never the
 guarantees):

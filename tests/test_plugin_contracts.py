@@ -17,7 +17,7 @@ import pytest
 import tow.clients
 import tow.notifiers
 from tow.clients import spec
-from tow.clients.spec import CAPABILITIES, TorrentClientAdapter
+from tow.clients.spec import CAPABILITIES, ClientField, TorrentClientAdapter, client_module_problems
 from tow.notifiers import registry
 from tow.notifiers.base import Field, notifier_problems
 
@@ -79,6 +79,55 @@ def test_client_capabilities_are_explicit_flags(name, cls):
 @pytest.mark.parametrize(("name", "hint"), [(name, hint) for name, _cls, hint in CLIENTS])
 def test_client_module_promises_the_contract(name, hint):
     assert hint in {"TorrentClientAdapter", TorrentClientAdapter}, name
+
+
+def _client_modules():
+    """Every client module (ready or not): the modules of the package with a KIND."""
+    for info in pkgutil.iter_modules(tow.clients.__path__):
+        if info.name in spec.HELPERS or info.name.startswith("_"):
+            continue
+        module = importlib.import_module(f"tow.clients.{info.name}")
+        if getattr(module, "KIND", None):
+            yield info.name, module
+
+
+CLIENT_MODULES = list(_client_modules())
+
+
+@pytest.mark.parametrize(("name", "module"), CLIENT_MODULES)
+def test_every_client_module_declares_its_constants(name, module):
+    assert client_module_problems(module) == [], name
+    assert name == module.KIND
+
+
+def test_a_client_module_with_wrong_constants_is_named():
+    import types
+
+    module = types.ModuleType("tow.clients.zz_draft")
+    module.KIND = "zz_draft"
+    assert client_module_problems(module) == [
+        "DEFAULT_PORT (not a port number)",
+        "ORDER (not a whole number)",
+        "SECRETS_KEY (not a text)",
+        "TITLE (not a text)",
+    ]
+    module.TITLE, module.SECRETS_KEY, module.DEFAULT_PORT, module.ORDER = "Draft", "zz_draft", 8080, 90
+    assert client_module_problems(module) == []  # FIELDS may be left out
+    for wrong in (70000, True, "8080"):
+        module.DEFAULT_PORT = wrong
+        assert client_module_problems(module) == ["DEFAULT_PORT (not a port number)"], wrong
+    module.DEFAULT_PORT, module.ORDER = 8080, "10"
+    assert client_module_problems(module) == ["ORDER (not a whole number)"]
+    module.ORDER = 90
+    module.FIELDS = [ClientField("host", "x"), ClientField("port", "y")]  # a list
+    assert client_module_problems(module) == ["FIELDS (not a tuple of ClientField)"]
+    for fields in (
+        (ClientField("host", "x"),),  # no port
+        (ClientField("host", "x"), ClientField("port", "y"), ClientField("token", "z")),
+        (ClientField("host", "x"), ClientField("port", "y"), ClientField("port", "z")),
+    ):
+        module.FIELDS = fields
+        assert [problem.split(" ")[0] for problem in client_module_problems(module)] == ["FIELDS"], fields
 
 
 def test_a_module_without_the_contract_is_named():

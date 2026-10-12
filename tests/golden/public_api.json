@@ -52,6 +52,7 @@
   "TorrentClientAdapter.set_location": "def(self, infohash: 'str', save_path: 'str') -> 'str'",
   "TorrentClientAdapter.start_owned_torrent": "def(self, infohash: 'str') -> 'dict[str, Any]'",
   "TorrentClientAdapter.stop_owned_torrent": "def(self, infohash: 'str') -> 'dict[str, Any]'",
+  "client_module_problems": "def(module: 'object') -> 'list[str]'",
   "discover": "def() -> 'dict[str, ClientSpec]'",
   "get": "def(kind: 'str') -> 'ClientSpec | None'",
   "ready": "def() -> 'list[ClientSpec]'",
