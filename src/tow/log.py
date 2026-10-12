@@ -752,7 +752,8 @@ def format_event(rec: Mapping[str, Any], *, title_index: Mapping[str, str] | Non
     raw = ""
     if rec.get("error") or rec.get("error_code"):
         err = scrub_text(str(rec.get("error") or "")).strip()
-        shown = errors.render_stored(rec.get("error_code"), rec.get("error_params"), "", lang)
+        # A record lacking a value its text names: the text the log kept with it.
+        shown = errors.render_stored(rec.get("error_code"), rec.get("error_params"), "", lang, incomplete=err)
         text = scrub_text(shown) if shown else ERR_RU.label(err, lang, err)
         # A socket or HTTP-library error in words; its raw text goes under "Details".
         human = humanize(text, lang)

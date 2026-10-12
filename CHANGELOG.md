@@ -26,6 +26,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- An error saved by an older TOW without one of its values no longer shows a raw placeholder such as `{status}` on
+  Home, in a topic's panel, in History, in messages or in the terminal: TOW shows the text saved with it, or leaves the
+  missing value out.
 - Home → Needs attention: a scheduled check that failed for another reason no longer says that the saved passwords
   and tokens cannot be opened.
 

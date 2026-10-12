@@ -307,6 +307,18 @@ def fill(text: str, params: dict[str, Any]) -> str:
     return _PLACEHOLDER.sub(value, text)
 
 
+def placeholders(key: str, lang: str | None = None) -> frozenset[str]:
+    """The ``{name}`` values the text of ``key`` names in ``lang`` (English as fallback; every
+    plural form), empty for an unknown key."""
+    for code in dict.fromkeys((lang or current(), DEFAULT)):
+        value = _load(code)[0].get(key)
+        if value is None:
+            continue
+        forms = value.values() if isinstance(value, dict) else [value]
+        return frozenset(name for form in forms for name in _PLACEHOLDER.findall(str(form)))
+    return frozenset()
+
+
 def translate(key: str, lang: str | None = None, /, **params: Any) -> str:
     """The text of ``key`` in ``lang`` (default: the current language), English as fallback.
 
