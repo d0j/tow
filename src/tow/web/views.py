@@ -219,6 +219,21 @@ def row_class(row: CheckRow) -> str:
     return str(row.get("error_class") or error_class(str(row.get("error") or "")))
 
 
+def _row_error(row: CheckRow) -> str:
+    """A check row's error as Home's row says it: from its code, in the page's language, with the
+    site by its title ("Fake Site B: no mirror answered", not "fakebee: ..."); the stored text
+    for an error without a code."""
+    text = str(row.get("error") or t("web.check.not_confirmed")).strip()
+    record = row.get("error_record")
+    if not isinstance(record, Mapping) or not record.get("code"):
+        return text
+    params = record.get("params")
+    params = dict(params) if isinstance(params, Mapping) else {}
+    if isinstance(params.get("tracker"), str) and params["tracker"]:
+        params["tracker"] = site_title_of(params["tracker"])
+    return render_stored(record["code"], params, text).strip() or text
+
+
 def manual_check_flash(
     row: CheckRow | None, *, topic_id: str, tracker_name: str = "", new_topic: bool = False
 ) -> RedirectResponse | None:
@@ -226,7 +241,7 @@ def manual_check_flash(
     topic just added (``new_topic``); a check of a topic TOW already had says the check failed."""
     if not row or row.get("ok"):
         return None
-    error = humanize(str(row.get("error") or t("web.check.not_confirmed")).strip())
+    error = humanize(_row_error(row))
     if row.get("status") == "waiting_space":
         # Not a failed check: the torrent is in the client, stopped, and TOW starts it once its
         # files fit (the error says so). Just added now, or still waiting from an earlier check.

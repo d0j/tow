@@ -20,6 +20,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   Settings with every card closed.
 - Home → add or edit a topic: file sizes, the chosen total and the free space under the folder are rounded like the
   sizes elsewhere in TOW instead of cut (a 1.4 GB file showed 1.3 GB, 1.1 TB free showed 1 TB).
+- Home: the message after a failed check or add names the site by its title, as the topic's row does, and is in the
+  page's language (it said "rutor: no mirror answered" in the language of TOW's messages).
 
 ## [1.28.3] — 2026-10-09
 
