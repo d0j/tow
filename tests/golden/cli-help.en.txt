@@ -1,0 +1,403 @@
+$ tow --help
+usage: tow [-h] <command> ...
+
+TOW watches topics on torrent sites and hands new versions to your torrent client.
+
+positional arguments:
+  <command>
+    version           show the TOW version
+    status            one line on TOW: running or not, torrent client, sites, topics, last and
+                      next check, autostart
+    doctor            ask the torrent client and the sites now and report what answers
+    permissions       who can get into TOW's folders; fix closes them
+    adopt             adopt topics whose torrent is in the client without the label tow: TOW marks
+                      it (nothing else changes) and manages it from then on
+    check             check the topics now (a preview that changes nothing unless --apply)
+    access            network access from other devices: on, off or status
+    secrets           the encrypted store of passwords and tokens
+    keys              the master key inside the install (keys/master.key)
+    export            save the settings, topics, history, passwords and tokens into one file
+                      protected by a passphrase (for another install, even with another master
+                      key)
+    import            restore from a `tow export` file (a preview unless --apply)
+    import-rollback   put back what an import replaced, from its checkpoint
+    backup            make a nightly backup now (into backup_dir)
+    restore-snapshot  restore the data from a nightly backup
+    watchdog          one watchdog pass now, as tow run makes every 10 minutes: is TOW up and are
+                      the checks running? Its alerts go to the messengers too; it restarts nothing
+    password          set a new TOW password and reminder (the old one is not needed)
+    run               run TOW as one supervised service: web page, schedule, nightly backups and
+                      watchdog
+    start             start TOW in the background (unless it runs) and open its page in the
+                      browser
+    stop              stop the running `tow run` (it lets a running check finish)
+    restart           restart the web server of the running `tow run`
+    setup             rebuild the environment: a command of the launcher, not of this environment
+    autostart         start TOW with the computer (Task Scheduler, systemd, launchd)
+    update            how to update this install to a release
+
+options:
+  -h, --help          show this help message and exit
+
+exit codes (every command):
+  0    done
+  1    a wrong command or option
+  2    done in part: a topic, a mirror or a step failed
+  3    cannot run: config, passwords and tokens, the lock or a file is missing or broken
+  130  interrupted (Ctrl+C)
+
+“setup” is a command of the launcher (scripts\tow.cmd setup): it rebuilds the environment after a
+move or an update, with TOW stopped.
+Every command explains itself: tow COMMAND --help
+
+$ tow version --help
+usage: tow version [-h] [--json]
+
+show the TOW version
+
+options:
+  -h, --help  show this help message and exit
+  --json      machine-readable output (JSON), also when the command fails
+
+$ tow status --help
+usage: tow status [-h] [--json]
+
+one line on TOW: running or not, torrent client, sites, topics, last and next check, autostart
+
+options:
+  -h, --help  show this help message and exit
+  --json      machine-readable output (JSON), also when the command fails
+
+$ tow doctor --help
+usage: tow doctor [-h] [--json] [--notify]
+
+ask the torrent client and the sites now and report what answers
+
+options:
+  -h, --help  show this help message and exit
+  --json      machine-readable output (JSON), also when the command fails
+  --notify    also send the report to the connected messengers
+
+$ tow permissions --help
+usage: tow permissions [-h] [--owner ACCOUNT] [--json] [{status,fix}]
+
+Shows whether other accounts of this computer can get into the TOW folder, the key folder and the
+data folder, and who owns them. “fix” closes them; a folder another account owns (one created from
+an administrator terminal) is given to its owner when run in a terminal opened with “Run as
+administrator” (Linux, macOS: with sudo): the account named with --owner, else the one that
+already owns the TOW folder, else the one TOW's autostart runs as, else the one that opened the
+terminal. Nothing outside the TOW folder changes.
+
+positional arguments:
+  {status,fix}     status (default) or fix
+
+options:
+  -h, --help       show this help message and exit
+  --owner ACCOUNT  with fix: the account to give the folders to (COMPUTER\name or name), when TOW
+                   cannot tell whose install it is
+  --json           machine-readable output (JSON), also when the command fails
+
+$ tow adopt --help
+usage: tow adopt [-h] [--all-unmarked] [--yes] [--replace-label] [--json] [TOPIC_ID ...]
+
+adopt topics whose torrent is in the client without the label tow: TOW marks it (nothing else
+changes) and manages it from then on
+
+positional arguments:
+  TOPIC_ID         topic ids
+
+options:
+  -h, --help       show this help message and exit
+  --all-unmarked   every topic whose torrent is in its client without the label tow (listed first)
+  --yes            do not ask for confirmation
+  --replace-label  Deluge keeps one label per torrent: replace the owner's own label with tow
+                   (without it such a torrent is not adopted)
+  --json           machine-readable output (JSON), also when the command fails
+
+$ tow check --help
+usage: tow check [-h] [--json] [--apply] [--dry-run] [--notify]
+
+check the topics now (a preview that changes nothing unless --apply)
+
+options:
+  -h, --help  show this help message and exit
+  --json      machine-readable output (JSON), also when the command fails
+  --apply     hand what is found to the torrent client and save the result
+  --dry-run   a preview only, even with --apply
+  --notify    send messages about what is found to the messengers
+
+$ tow serve --help
+usage: tow serve [-h] [--host HOST] [--port PORT] [--log-file LOG_FILE]
+
+serve the web page alone (tow run does it together with the schedule)
+
+options:
+  -h, --help           show this help message and exit
+  --host HOST          the address to listen on (default: bind in config.yaml)
+  --port PORT          the port (default: port in config.yaml, 8787)
+  --log-file LOG_FILE  write the web server's log to this file (at most 3 files of 5 MB; the
+                       oldest is deleted)
+
+$ tow access --help
+usage: tow access [-h] [--password] [--json] {on,off,status}
+
+Network access from a phone or a laptop, for a computer without a screen. “on” needs a password:
+it is asked here when none is set (or with --password). The change takes effect after `tow
+restart`.
+
+positional arguments:
+  {on,off,status}  on: open TOW to the home network (with the password); off: this computer only;
+                   status: what is set
+
+options:
+  -h, --help       show this help message and exit
+  --password       set a new password before turning access on
+  --json           machine-readable output (JSON), also when the command fails
+
+$ tow secrets --help
+usage: tow secrets [-h] <action> ...
+
+The encrypted store of passwords, tokens and cookies (data/secrets.enc). status: where it is and
+which key opens it; migrate: encrypt the plain-text file an old version left; generate-key: create
+a master key (keys/master.key only while no passwords or tokens are saved; a file of your choice
+with --key-file).
+
+positional arguments:
+  <action>
+    status        where the passwords and tokens are and which key opens them
+    migrate       encrypt an old plain-text file of passwords and tokens
+    generate-key  create a new master key (keys/master.key only while no passwords or tokens are
+                  saved)
+
+options:
+  -h, --help      show this help message and exit
+
+$ tow secrets status --help
+usage: tow secrets status [-h] [--json]
+
+where the passwords and tokens are and which key opens them
+
+options:
+  -h, --help  show this help message and exit
+  --json      machine-readable output (JSON), also when the command fails
+
+$ tow secrets migrate --help
+usage: tow secrets migrate [-h] [--json]
+
+encrypt an old plain-text file of passwords and tokens
+
+options:
+  -h, --help  show this help message and exit
+  --json      machine-readable output (JSON), also when the command fails
+
+$ tow secrets generate-key --help
+usage: tow secrets generate-key [-h] [--key-file KEY_FILE] [--json]
+
+create a new master key (keys/master.key only while no passwords or tokens are saved)
+
+options:
+  -h, --help           show this help message and exit
+  --key-file KEY_FILE  write the key to this new file instead (also while passwords and tokens are
+                       saved; TOW uses it only once TOW_MASTER_KEY_FILE names it)
+  --json               machine-readable output (JSON), also when the command fails
+
+$ tow keys --help
+usage: tow keys [-h] <action> ...
+
+The master key (keys/master.key) opens the saved passwords and tokens and is in no backup: keep a
+copy away from this computer. status: which key file is in use (never the key itself); adopt: copy
+a key kept elsewhere (--from, or TOW_MASTER_KEY_FILE) into keys/ once it opens the saved passwords
+and tokens; ensure: create the key on a new install.
+
+positional arguments:
+  <action>
+    status    which master key is in use
+    adopt     copy the key in use into keys/ once it opens the saved passwords and tokens
+    ensure    create the master key on a new install (nothing happens when one is in use)
+
+options:
+  -h, --help  show this help message and exit
+
+$ tow keys status --help
+usage: tow keys status [-h] [--json]
+
+which master key is in use
+
+options:
+  -h, --help  show this help message and exit
+  --json      machine-readable output (JSON), also when the command fails
+
+$ tow keys adopt --help
+usage: tow keys adopt [-h] [--from SOURCE] [--json]
+
+copy the key in use into keys/ once it opens the saved passwords and tokens
+
+options:
+  -h, --help     show this help message and exit
+  --from SOURCE  the key file to copy (default: TOW_MASTER_KEY_FILE)
+  --json         machine-readable output (JSON), also when the command fails
+
+$ tow keys ensure --help
+usage: tow keys ensure [-h] [--json]
+
+create the master key on a new install (nothing happens when one is in use)
+
+options:
+  -h, --help  show this help message and exit
+  --json      machine-readable output (JSON), also when the command fails
+
+$ tow export --help
+usage: tow export [-h] --output OUTPUT [--include-log] [--force] [--json]
+
+save the settings, topics, history, passwords and tokens into one file protected by a passphrase
+(for another install, even with another master key)
+
+options:
+  -h, --help       show this help message and exit
+  --output OUTPUT  the file to write
+  --include-log    add the log to the file
+  --force          replace the file if it exists
+  --json           machine-readable output (JSON), also when the command fails
+
+$ tow import --help
+usage: tow import [-h] --input INPUT [--path-map PATH_MAP] [--apply] [--json]
+
+restore from a `tow export` file (a preview unless --apply)
+
+options:
+  -h, --help           show this help message and exit
+  --input INPUT        the file `tow export` wrote
+  --path-map PATH_MAP  OLD=NEW: change the start of the topics' folders (can be given several
+                       times)
+  --apply              restore (without it: a preview only)
+  --json               machine-readable output (JSON), also when the command fails
+
+$ tow import-rollback --help
+usage: tow import-rollback [-h] --checkpoint CHECKPOINT [--apply] [--json]
+
+Puts back what `tow import --apply` replaced, from the checkpoint folder the import named. Without
+--apply it only shows what would be put back.
+
+options:
+  -h, --help            show this help message and exit
+  --checkpoint CHECKPOINT
+                        the checkpoint folder the import left
+  --apply               roll back (without it: a preview only)
+  --json                machine-readable output (JSON), also when the command fails
+
+$ tow backup --help
+usage: tow backup [-h] [--json]
+
+Makes a nightly backup now, as “Back up now” in Settings → Backups does: a signed copy of the
+settings, topics, history and encrypted passwords and tokens in backup_dir (default backup/night).
+The master key is never in it. Older copies are removed by the retention setting only after the
+new copy is checked.
+
+options:
+  -h, --help  show this help message and exit
+  --json      machine-readable output (JSON), also when the command fails
+
+$ tow restore-snapshot --help
+usage: tow restore-snapshot [-h] --path PATH [--apply] [--json]
+
+Restores the data from a nightly backup (its folder in backup_dir), also while TOW runs. Without
+--apply it only checks the copy (that needs this install's master key) and shows what would
+change. With --apply it first keeps the current data in data/before-restore-* and puts it back by
+itself if anything fails. Network access stays as it is, and History keeps what happened after the
+copy.
+
+options:
+  -h, --help   show this help message and exit
+  --path PATH  the nightly backup's folder
+  --apply      restore (without it: check and preview only)
+  --json       machine-readable output (JSON), also when the command fails
+
+$ tow watchdog --help
+usage: tow watchdog [-h] [--json]
+
+one watchdog pass now, as tow run makes every 10 minutes: is TOW up and are the checks running?
+Its alerts go to the messengers too; it restarts nothing
+
+options:
+  -h, --help  show this help message and exit
+  --json      machine-readable output (JSON), also when the command fails
+
+$ tow password --help
+usage: tow password [-h]
+
+Sets a new password for signing in from other devices, and its reminder, on the computer running
+TOW: the old password is not needed. The password has at least 8 characters; the reminder may not
+share four letters or digits in a row with it. Every device signed in over the network signs in
+again.
+
+options:
+  -h, --help  show this help message and exit
+
+$ tow run --help
+usage: tow run [-h]
+
+run TOW as one supervised service: web page, schedule, nightly backups and watchdog
+
+options:
+  -h, --help  show this help message and exit
+
+$ tow start --help
+usage: tow start [-h] [--no-browser] [--wait WAIT]
+
+start TOW in the background (unless it runs) and open its page in the browser
+
+options:
+  -h, --help    show this help message and exit
+  --no-browser  do not open the browser (also TOW_NO_BROWSER=1)
+  --wait WAIT   seconds to wait for the page to answer
+
+$ tow stop --help
+usage: tow stop [-h] [--wait WAIT]
+
+stop the running `tow run` (it lets a running check finish)
+
+options:
+  -h, --help   show this help message and exit
+  --wait WAIT  seconds to wait for it to stop (0: do not wait)
+
+$ tow restart --help
+usage: tow restart [-h]
+
+restart the web server of the running `tow run`
+
+options:
+  -h, --help  show this help message and exit
+
+$ tow setup --help
+usage: tow setup [-h]
+
+rebuild the environment: a command of the launcher, not of this environment
+
+options:
+  -h, --help  show this help message and exit
+
+$ tow autostart --help
+usage: tow autostart [-h] [--without-login] [--json] {on,off,status}
+
+start TOW with the computer (Task Scheduler, systemd, launchd)
+
+positional arguments:
+  {on,off,status}  on, off or status (“migrate” of 1.18–1.20 only points to the documentation)
+
+options:
+  -h, --help       show this help message and exit
+  --without-login  on: start at boot, before anyone signs in
+  --json           machine-readable output (JSON), also when the command fails
+
+$ tow update --help
+usage: tow update [-h] --ref REF
+
+An update replaces this very environment, so it does not run from here: this command prints what
+runs it (the install's base Python with app/scripts/update.py, deploy.ps1 in a git clone on
+Windows, or the update file in the TOW folder for an install without git). The update stops TOW,
+keeps a snapshot of data/ and config.yaml, installs the release, starts TOW and goes back by
+itself if anything fails.
+
+options:
+  -h, --help  show this help message and exit
+  --ref REF   the release tag, for example v1.22.0; an install without git also takes latest

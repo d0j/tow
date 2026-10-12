@@ -1,0 +1,104 @@
+# dst-spring: the night of 27 March 2026: 02:00 jumps to 03:00; the 02:30 slot maps to 03:30
+03-26 23:50:00+0200  due: -  |  next: check=03-26 23:52:00+0200 backup=03-27 03:30:00+0300 progress=03-26 23:55:00+0200 watchdog=03-26 23:51:00+0200
+03-27 00:10:00+0200  due: check+1080s progress+900s watchdog+1140s  |  next: check=03-26 23:52:00+0200 backup=03-27 03:30:00+0300 progress=03-26 23:55:00+0200 watchdog=03-26 23:51:00+0200
+03-27 00:30:00+0200  due: progress+300s watchdog+600s  |  next: check=03-27 00:52:00+0200 backup=03-27 03:30:00+0300 progress=03-27 00:25:00+0200 watchdog=03-27 00:20:00+0200
+03-27 00:50:00+0200  due: watchdog+600s  |  next: check=03-27 00:52:00+0200 backup=03-27 03:30:00+0300 progress=03-27 00:55:00+0200 watchdog=03-27 00:40:00+0200
+03-27 01:10:00+0200  due: check+1080s progress+900s watchdog+600s  |  next: check=03-27 00:52:00+0200 backup=03-27 03:30:00+0300 progress=03-27 00:55:00+0200 watchdog=03-27 01:00:00+0200
+03-27 01:30:00+0200  due: progress+300s watchdog+600s  |  next: check=03-27 01:52:00+0200 backup=03-27 03:30:00+0300 progress=03-27 01:25:00+0200 watchdog=03-27 01:20:00+0200
+03-27 01:50:00+0200  due: watchdog+600s  |  next: check=03-27 01:52:00+0200 backup=03-27 03:30:00+0300 progress=03-27 01:55:00+0200 watchdog=03-27 01:40:00+0200
+03-27 03:10:00+0300  due: check+1080s progress+900s watchdog+600s  |  next: check=03-27 01:52:00+0200 backup=03-27 03:30:00+0300 progress=03-27 01:55:00+0200 watchdog=03-27 03:00:00+0300
+03-27 03:30:00+0300  due: backup+0s progress+300s watchdog+600s  |  next: check=03-27 03:52:00+0300 backup=03-27 03:30:00+0300 progress=03-27 03:25:00+0300 watchdog=03-27 03:20:00+0300
+03-27 03:50:00+0300  due: watchdog+600s  |  next: check=03-27 03:52:00+0300 backup=03-28 02:30:00+0300 progress=03-27 03:55:00+0300 watchdog=03-27 03:40:00+0300
+03-27 04:10:00+0300  due: check+1080s progress+900s watchdog+600s  |  next: check=03-27 03:52:00+0300 backup=03-28 02:30:00+0300 progress=03-27 03:55:00+0300 watchdog=03-27 04:00:00+0300
+03-27 04:30:00+0300  due: progress+300s watchdog+600s  |  next: check=03-27 04:52:00+0300 backup=03-28 02:30:00+0300 progress=03-27 04:25:00+0300 watchdog=03-27 04:20:00+0300
+03-27 04:50:00+0300  due: watchdog+600s  |  next: check=03-27 04:52:00+0300 backup=03-28 02:30:00+0300 progress=03-27 04:55:00+0300 watchdog=03-27 04:40:00+0300
+
+# dst-autumn: the night of 25 October 2026: 02:00 goes back to 01:00; the 01:30 slot is the first one
+10-24 23:50:00+0300  due: -  |  next: check=10-24 23:52:00+0300 backup=10-25 01:30:00+0300 progress=10-24 23:55:00+0300 watchdog=10-24 23:51:00+0300
+10-25 00:10:00+0300  due: check+1080s progress+900s watchdog+1140s  |  next: check=10-24 23:52:00+0300 backup=10-25 01:30:00+0300 progress=10-24 23:55:00+0300 watchdog=10-24 23:51:00+0300
+10-25 00:30:00+0300  due: progress+300s watchdog+600s  |  next: check=10-25 00:52:00+0300 backup=10-25 01:30:00+0300 progress=10-25 00:25:00+0300 watchdog=10-25 00:20:00+0300
+10-25 00:50:00+0300  due: watchdog+600s  |  next: check=10-25 00:52:00+0300 backup=10-25 01:30:00+0300 progress=10-25 00:55:00+0300 watchdog=10-25 00:40:00+0300
+10-25 01:10:00+0300  due: check+1080s progress+900s watchdog+600s  |  next: check=10-25 00:52:00+0300 backup=10-25 01:30:00+0300 progress=10-25 00:55:00+0300 watchdog=10-25 01:00:00+0300
+10-25 01:30:00+0300  due: backup+0s progress+300s watchdog+600s  |  next: check=10-25 01:52:00+0300 backup=10-25 01:30:00+0300 progress=10-25 01:25:00+0300 watchdog=10-25 01:20:00+0300
+10-25 01:50:00+0300  due: watchdog+600s  |  next: check=10-25 01:52:00+0300 backup=10-26 01:30:00+0200 progress=10-25 01:55:00+0300 watchdog=10-25 01:40:00+0300
+10-25 01:10:00+0200  due: check+1080s progress+900s watchdog+600s  |  next: check=10-25 01:52:00+0300 backup=10-26 01:30:00+0200 progress=10-25 01:55:00+0300 watchdog=10-25 01:00:00+0200
+10-25 01:30:00+0200  due: progress+300s watchdog+600s  |  next: check=10-25 01:52:00+0200 backup=10-26 01:30:00+0200 progress=10-25 01:25:00+0200 watchdog=10-25 01:20:00+0200
+10-25 01:50:00+0200  due: watchdog+600s  |  next: check=10-25 01:52:00+0200 backup=10-26 01:30:00+0200 progress=10-25 01:55:00+0200 watchdog=10-25 01:40:00+0200
+10-25 02:10:00+0200  due: check+1080s progress+900s watchdog+600s  |  next: check=10-25 01:52:00+0200 backup=10-26 01:30:00+0200 progress=10-25 01:55:00+0200 watchdog=10-25 02:00:00+0200
+10-25 02:30:00+0200  due: progress+300s watchdog+600s  |  next: check=10-25 02:52:00+0200 backup=10-26 01:30:00+0200 progress=10-25 02:25:00+0200 watchdog=10-25 02:20:00+0200
+10-25 02:50:00+0200  due: watchdog+600s  |  next: check=10-25 02:52:00+0200 backup=10-26 01:30:00+0200 progress=10-25 02:55:00+0200 watchdog=10-25 02:40:00+0200
+10-25 03:10:00+0200  due: check+1080s progress+900s watchdog+600s  |  next: check=10-25 02:52:00+0200 backup=10-26 01:30:00+0200 progress=10-25 02:55:00+0200 watchdog=10-25 03:00:00+0200
+10-25 03:30:00+0200  due: progress+300s watchdog+600s  |  next: check=10-25 03:52:00+0200 backup=10-26 01:30:00+0200 progress=10-25 03:25:00+0200 watchdog=10-25 03:20:00+0200
+10-25 03:50:00+0200  due: watchdog+600s  |  next: check=10-25 03:52:00+0200 backup=10-26 01:30:00+0200 progress=10-25 03:55:00+0200 watchdog=10-25 03:40:00+0200
+
+# asleep-over-the-slot: asleep from 23:15 to 06:10: the missed copy and the overdue jobs run at the wake; then a day
+06-10 22:00:00+0300  due: -  |  next: check=06-10 22:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 22:05:00+0300 watchdog=06-10 22:01:00+0300
+06-10 22:15:00+0300  due: check+780s progress+600s watchdog+840s  |  next: check=06-10 22:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 22:05:00+0300 watchdog=06-10 22:01:00+0300
+06-10 22:30:00+0300  due: watchdog+300s  |  next: check=06-10 23:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 22:35:00+0300 watchdog=06-10 22:25:00+0300
+06-10 22:45:00+0300  due: progress+600s watchdog+600s  |  next: check=06-10 23:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 22:35:00+0300 watchdog=06-10 22:35:00+0300
+06-10 23:00:00+0300  due: watchdog+300s  |  next: check=06-10 23:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 23:05:00+0300 watchdog=06-10 22:55:00+0300
+06-10 23:15:00+0300  due: check+780s progress+600s watchdog+600s  |  next: check=06-10 23:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 23:05:00+0300 watchdog=06-10 23:05:00+0300
+06-11 06:10:00+0300  due: check+22080s backup+9600s progress+23700s watchdog+24300s  |  next: check=06-11 00:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 23:35:00+0300 watchdog=06-10 23:25:00+0300
+06-11 06:25:00+0300  due: watchdog+300s  |  next: check=06-11 07:10:00+0300 backup=06-12 03:30:00+0300 progress=06-11 06:40:00+0300 watchdog=06-11 06:20:00+0300
+06-11 06:40:00+0300  due: progress+0s watchdog+600s  |  next: check=06-11 07:10:00+0300 backup=06-12 03:30:00+0300 progress=06-11 06:40:00+0300 watchdog=06-11 06:30:00+0300
+06-11 06:55:00+0300  due: watchdog+300s  |  next: check=06-11 07:10:00+0300 backup=06-12 03:30:00+0300 progress=06-11 07:10:00+0300 watchdog=06-11 06:50:00+0300
+06-11 07:10:00+0300  due: check+0s progress+0s watchdog+600s  |  next: check=06-11 07:10:00+0300 backup=06-12 03:30:00+0300 progress=06-11 07:10:00+0300 watchdog=06-11 07:00:00+0300
+
+# failed-copy-retry: the 03:30 copy fails: tried again six hours later, at 09:30
+06-11 03:00:00+0300  due: -  |  next: check=06-11 03:02:00+0300 backup=06-11 03:30:00+0300 progress=06-11 03:05:00+0300 watchdog=06-11 03:01:00+0300
+06-11 03:30:00+0300  due: check+1680s backup+0s progress+1500s watchdog+1740s  |  next: check=06-11 03:02:00+0300 backup=06-11 03:30:00+0300 progress=06-11 03:05:00+0300 watchdog=06-11 03:01:00+0300
+06-11 04:00:00+0300  due: progress+1500s watchdog+1200s  |  next: check=06-11 07:02:00+0300 backup=06-11 09:30:00+0300 progress=06-11 03:35:00+0300 watchdog=06-11 03:40:00+0300
+06-11 04:30:00+0300  due: progress+1500s watchdog+1200s  |  next: check=06-11 07:02:00+0300 backup=06-11 09:30:00+0300 progress=06-11 04:05:00+0300 watchdog=06-11 04:10:00+0300
+06-11 05:00:00+0300  due: progress+1500s watchdog+1200s  |  next: check=06-11 07:02:00+0300 backup=06-11 09:30:00+0300 progress=06-11 04:35:00+0300 watchdog=06-11 04:40:00+0300
+06-11 05:30:00+0300  due: progress+1500s watchdog+1200s  |  next: check=06-11 07:02:00+0300 backup=06-11 09:30:00+0300 progress=06-11 05:05:00+0300 watchdog=06-11 05:10:00+0300
+06-11 06:00:00+0300  due: progress+1500s watchdog+1200s  |  next: check=06-11 07:02:00+0300 backup=06-11 09:30:00+0300 progress=06-11 05:35:00+0300 watchdog=06-11 05:40:00+0300
+06-11 06:30:00+0300  due: progress+1500s watchdog+1200s  |  next: check=06-11 07:02:00+0300 backup=06-11 09:30:00+0300 progress=06-11 06:05:00+0300 watchdog=06-11 06:10:00+0300
+06-11 07:00:00+0300  due: progress+1500s watchdog+1200s  |  next: check=06-11 07:02:00+0300 backup=06-11 09:30:00+0300 progress=06-11 06:35:00+0300 watchdog=06-11 06:40:00+0300
+06-11 07:30:00+0300  due: check+1680s progress+1500s watchdog+1200s  |  next: check=06-11 07:02:00+0300 backup=06-11 09:30:00+0300 progress=06-11 07:05:00+0300 watchdog=06-11 07:10:00+0300
+06-11 08:00:00+0300  due: progress+1500s watchdog+1200s  |  next: check=06-11 11:02:00+0300 backup=06-11 09:30:00+0300 progress=06-11 07:35:00+0300 watchdog=06-11 07:40:00+0300
+06-11 08:30:00+0300  due: progress+1500s watchdog+1200s  |  next: check=06-11 11:02:00+0300 backup=06-11 09:30:00+0300 progress=06-11 08:05:00+0300 watchdog=06-11 08:10:00+0300
+06-11 09:00:00+0300  due: progress+1500s watchdog+1200s  |  next: check=06-11 11:02:00+0300 backup=06-11 09:30:00+0300 progress=06-11 08:35:00+0300 watchdog=06-11 08:40:00+0300
+06-11 09:30:00+0300  due: backup+0s progress+1500s watchdog+1200s  |  next: check=06-11 11:02:00+0300 backup=06-11 09:30:00+0300 progress=06-11 09:05:00+0300 watchdog=06-11 09:10:00+0300
+06-11 10:00:00+0300  due: progress+1500s watchdog+1200s  |  next: check=06-11 11:02:00+0300 backup=06-12 03:30:00+0300 progress=06-11 09:35:00+0300 watchdog=06-11 09:40:00+0300
+
+# personal-timers: two personal timers (20 and 45 minutes) beside the hourly check
+06-10 12:00:00+0300  due: -  |  next: check=06-10 12:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 12:05:00+0300 watchdog=06-10 12:01:00+0300 timer=06-10 12:10:00+0300
+06-10 12:05:00+0300  due: check+180s progress+0s watchdog+240s  |  next: check=06-10 12:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 12:05:00+0300 watchdog=06-10 12:01:00+0300 timer=06-10 12:10:00+0300
+06-10 12:10:00+0300  due: timer+0s  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 12:35:00+0300 watchdog=06-10 12:11:00+0300 timer=06-10 12:10:00+0300
+06-10 12:15:00+0300  due: watchdog+240s  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 12:35:00+0300 watchdog=06-10 12:11:00+0300 timer=06-10 12:30:00+0300
+06-10 12:20:00+0300  due: -  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 12:35:00+0300 watchdog=06-10 12:21:00+0300 timer=06-10 12:30:00+0300
+06-10 12:25:00+0300  due: watchdog+240s  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 12:35:00+0300 watchdog=06-10 12:21:00+0300 timer=06-10 12:30:00+0300
+06-10 12:30:00+0300  due: timer+0s  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 12:35:00+0300 watchdog=06-10 12:31:00+0300 timer=06-10 12:30:00+0300
+06-10 12:35:00+0300  due: progress+0s watchdog+240s  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 12:35:00+0300 watchdog=06-10 12:31:00+0300 timer=06-10 12:45:00+0300
+06-10 12:40:00+0300  due: -  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 13:05:00+0300 watchdog=06-10 12:41:00+0300 timer=06-10 12:45:00+0300
+06-10 12:45:00+0300  due: watchdog+240s timer+0s  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 13:05:00+0300 watchdog=06-10 12:41:00+0300 timer=06-10 12:45:00+0300
+06-10 12:50:00+0300  due: timer+0s  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 13:05:00+0300 watchdog=06-10 12:51:00+0300 timer=06-10 12:50:00+0300
+06-10 12:55:00+0300  due: watchdog+240s  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 13:05:00+0300 watchdog=06-10 12:51:00+0300 timer=06-10 13:10:00+0300
+06-10 13:00:00+0300  due: -  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 13:05:00+0300 watchdog=06-10 13:01:00+0300 timer=06-10 13:10:00+0300
+06-10 13:05:00+0300  due: check+180s progress+0s watchdog+240s  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 13:05:00+0300 watchdog=06-10 13:01:00+0300 timer=06-10 13:10:00+0300
+06-10 13:10:00+0300  due: timer+0s  |  next: check=06-10 14:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 13:35:00+0300 watchdog=06-10 13:11:00+0300 timer=06-10 13:10:00+0300
+06-10 13:15:00+0300  due: watchdog+240s  |  next: check=06-10 14:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 13:35:00+0300 watchdog=06-10 13:11:00+0300 timer=06-10 13:30:00+0300
+06-10 13:20:00+0300  due: -  |  next: check=06-10 14:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 13:35:00+0300 watchdog=06-10 13:21:00+0300 timer=06-10 13:30:00+0300
+06-10 13:25:00+0300  due: watchdog+240s  |  next: check=06-10 14:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 13:35:00+0300 watchdog=06-10 13:21:00+0300 timer=06-10 13:30:00+0300
+06-10 13:30:00+0300  due: timer+0s  |  next: check=06-10 14:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 13:35:00+0300 watchdog=06-10 13:31:00+0300 timer=06-10 13:30:00+0300
+06-10 13:35:00+0300  due: progress+0s watchdog+240s  |  next: check=06-10 14:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 13:35:00+0300 watchdog=06-10 13:31:00+0300 timer=06-10 13:50:00+0300
+06-10 13:40:00+0300  due: -  |  next: check=06-10 14:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 14:05:00+0300 watchdog=06-10 13:41:00+0300 timer=06-10 13:50:00+0300
+
+# space-waiting: a topic waits for disk space until 12:30: the space pass every 5 minutes, then none
+06-10 12:00:00+0300  due: -  |  next: check=06-10 12:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 12:05:00+0300 watchdog=06-10 12:01:00+0300 space=06-10 12:05:00+0300
+06-10 12:05:00+0300  due: check+180s progress+0s watchdog+240s space+0s  |  next: check=06-10 12:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 12:05:00+0300 watchdog=06-10 12:01:00+0300 space=06-10 12:05:00+0300
+06-10 12:10:00+0300  due: space+0s  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 12:35:00+0300 watchdog=06-10 12:11:00+0300 space=06-10 12:10:00+0300
+06-10 12:15:00+0300  due: watchdog+240s space+0s  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 12:35:00+0300 watchdog=06-10 12:11:00+0300 space=06-10 12:15:00+0300
+06-10 12:20:00+0300  due: space+0s  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 12:35:00+0300 watchdog=06-10 12:21:00+0300 space=06-10 12:20:00+0300
+06-10 12:25:00+0300  due: watchdog+240s space+0s  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 12:35:00+0300 watchdog=06-10 12:21:00+0300 space=06-10 12:25:00+0300
+06-10 12:30:00+0300  due: -  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 12:35:00+0300 watchdog=06-10 12:31:00+0300
+06-10 12:35:00+0300  due: progress+0s watchdog+240s  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 12:35:00+0300 watchdog=06-10 12:31:00+0300
+06-10 12:40:00+0300  due: -  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 13:05:00+0300 watchdog=06-10 12:41:00+0300
+06-10 12:45:00+0300  due: watchdog+240s  |  next: check=06-10 13:02:00+0300 backup=06-11 03:30:00+0300 progress=06-10 13:05:00+0300 watchdog=06-10 12:41:00+0300
+
+# backup-off: night copies turned off: no backup key, nothing due at 03:30
+06-11 02:50:00+0300  due: -  |  next: check=06-11 02:52:00+0300 progress=06-11 02:55:00+0300 watchdog=06-11 02:51:00+0300
+06-11 03:10:00+0300  due: check+1080s progress+900s watchdog+1140s  |  next: check=06-11 02:52:00+0300 progress=06-11 02:55:00+0300 watchdog=06-11 02:51:00+0300
+06-11 03:30:00+0300  due: progress+300s watchdog+600s  |  next: check=06-11 03:52:00+0300 progress=06-11 03:25:00+0300 watchdog=06-11 03:20:00+0300
+06-11 03:50:00+0300  due: watchdog+600s  |  next: check=06-11 03:52:00+0300 progress=06-11 03:55:00+0300 watchdog=06-11 03:40:00+0300
+06-11 04:10:00+0300  due: check+1080s progress+900s watchdog+600s  |  next: check=06-11 03:52:00+0300 progress=06-11 03:55:00+0300 watchdog=06-11 04:00:00+0300
