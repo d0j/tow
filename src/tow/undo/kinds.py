@@ -184,9 +184,30 @@ def _site(ctx: Context) -> Restore:
 # --------------------------------------------------------------------------- settings
 
 
+def _settings_page(record: SettingsChanged) -> str:
+    """The Settings card the change was made on, opened again after its undo: the page used to
+    open with every card closed. The card follows from the part of the secrets the change
+    touched (``secret_scope``); a record written before scopes opens Settings as before."""
+    from urllib.parse import quote
+
+    from tow import notifiers
+
+    scope = record.get("secret_scope")
+    if scope is None:
+        return "/settings"
+    if not scope:  # the check interval and the Undo time keep no secrets
+        return "/settings?open=intervals"
+    kinds = notifiers.kinds()
+    card = next((kind for kind in kinds if notifiers.storage_scope(kind) == list(scope)), None)
+    if card is not None:
+        return f"/settings?open=bots&card={quote(card)}"
+    return "/settings?open=clients"  # ["clients", id], or the one client of an older config
+
+
 def _settings(ctx: Context) -> Restore:
     assert ctx.snapshot is not None  # a settings record always has one (``valid``)
     record = cast(SettingsChanged, ctx.record)
+    page = _settings_page(record)
     secrets = snapshots.restore_scoped(load_secrets(), ctx.snapshot, record.get("secret_scope"))
     config = load_config()
     old_sec = interval_sec_of(config)
@@ -196,11 +217,11 @@ def _settings(ctx: Context) -> Restore:
     target_ttl = int(ttl) if ttl is not None else old_ttl
     # A changed check interval needs nothing outside the config: `tow run` reads it from there.
     return Restore(
-        Outcome("web.undo.settings_done", "ok", "/settings"),
+        Outcome("web.undo.settings_done", "ok", page),
         secrets=secrets,
         interval_sec=target_sec if target_sec != old_sec else None,
         flash_ttl_sec=target_ttl if target_ttl != old_ttl else None,
-        failed=Outcome("web.undo.apply_failed", "err", "/settings?open=clients"),
+        failed=Outcome("web.undo.apply_failed", "err", page),
     )
 
 
