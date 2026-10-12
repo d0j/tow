@@ -11,10 +11,9 @@ from tow import access
 from tow.folders import recent_save_roots
 from tow.web import _context
 from tow.web.middleware import is_browser_navigation
-from tow.web.routes_password import first_run
 from tow.web.templating import TEMPLATES, header_health
 from tow.web.text import t
-from tow.web.views import add_draft, attention, credential_prompt, request_flash, topic_rows
+from tow.web.views import add_draft, attention, credential_prompt, first_run, request_flash, topic_rows
 
 router = APIRouter()
 

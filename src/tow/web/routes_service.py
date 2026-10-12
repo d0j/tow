@@ -2,82 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse, Response
 
-from tow.clock import format_ui_timestamp
 from tow.config import as_bool
 from tow.web import services
 from tow.web.text import t
 from tow.web.views import flash_redirect
 
 router = APIRouter()
-
-
-def service_view() -> dict[str, Any]:
-    service = services.service_status()
-    from tow.diagnostic_json import epoch
-    from tow.pulse import clock
-
-    problem = services.watchdog_problem()
-    problem_at = epoch(problem.get("at")) if problem else None
-    service["watchdog_problem"] = (
-        {"at": clock(problem_at) if problem_at else "—", "lines": str(problem["text"]).splitlines()}
-        if problem
-        else None
-    )
-    # The same finding as Diagnostics: this account's autostart starts another TOW folder, so
-    # the unchecked box here is not "nothing is set up".
-    detail = service.get("autostart_detail")
-    service["autostart_foreign"] = (
-        isinstance(detail, dict)
-        and detail.get("ours") is False
-        and not detail.get("stale")
-        and detail.get("state", "present") == "present"
-    )
-    # Its program is gone (that folder was moved or deleted): the OS keeps trying in vain, and
-    # turning autostart on here takes it over.
-    service["autostart_stale"] = services.stale_autostart(detail)
-    supervisor = service.get("supervisor")
-    server = supervisor.get("server") if isinstance(supervisor, dict) else None
-    up_since = server.get("up_since") if isinstance(server, dict) else None
-    try:
-        service["running_since"] = format_ui_timestamp(str(up_since)) if up_since else None
-    except TypeError, ValueError:
-        service["running_since"] = None
-    restart = service.get("restart")
-    if not isinstance(restart, dict):
-        service["restart_view"] = None
-        return service
-    status = str(restart.get("status") or "unknown")
-    reason = {
-        "settings": t("web.service.reason.settings"),
-        "restore": t("web.service.reason.restore"),
-        "manual": t("web.service.reason.manual"),
-    }.get(str(restart.get("reason") or "settings"), t("web.service.reason.unknown"))
-    state = {
-        "ready": t("web.service.state.ready"),
-        "queued": t("web.service.state.queued"),
-        "stopping": t("web.service.state.stopping"),
-        "starting": t("web.service.state.starting"),
-        "started": t("web.service.state.started"),
-        "failed": t("web.service.state.failed"),
-    }.get(status, t("web.service.state.unknown"))
-    created_at = restart.get("created_at")
-    try:
-        at = format_ui_timestamp(str(created_at)) if created_at else t("web.service.date_unknown")
-    except TypeError, ValueError:
-        at = t("web.service.date_unknown")
-    service["restart_view"] = {
-        "at": at,
-        "reason": reason,
-        "state": state,
-        "failed": status == "failed",
-    }
-    return service
 
 
 @router.get("/settings/service/status.json")
