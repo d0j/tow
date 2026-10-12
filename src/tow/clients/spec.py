@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import functools
-import importlib
 import logging
-import pkgutil
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, ClassVar, Protocol, runtime_checkable
 
-from tow import i18n
+from tow import i18n, plugins
 
-SKIP = frozenset({"spec", "factory", "managed", "files"})
+# The modules of tow.clients that are not clients (tests/test_layers.py reads it too).
+HELPERS = frozenset({"spec", "factory", "managed", "files"})
 _LOG = logging.getLogger("tow.clients")
 # Client modules that failed to load: (module name, reason). The others work without them.
 SKIPPED: list[tuple[str, str]] = []
@@ -163,22 +162,12 @@ class ClientSpec:
 
 @functools.cache
 def _discover() -> tuple[tuple[str, ClientSpec], ...]:
+    """The client modules by ORDER, then kind (``cache_clear()`` scans again)."""
     import tow.clients as pkg
 
-    out: dict[str, ClientSpec] = {}
-    SKIPPED.clear()
-    for info in pkgutil.iter_modules(pkg.__path__):
-        if info.name.startswith("_") or info.name in SKIP:
-            continue
-        # One broken client module (a missing dependency, a typo) must not take the others down.
-        try:
-            spec = _spec_of(importlib.import_module(f"tow.clients.{info.name}"))
-        except Exception as exc:  # noqa: BLE001 - a broken plugin is skipped and named, never fatal
-            SKIPPED.append((info.name, f"{type(exc).__name__}: {exc}"))
-            _LOG.warning("torrent client module %s skipped: %s: %s", info.name, type(exc).__name__, exc)
-            continue
-        if spec is not None:
-            out[spec.kind] = spec
+    found, skipped = plugins.scan(pkg, helpers=HELPERS, load=_spec_of, label="torrent client", logger=_LOG)
+    SKIPPED[:] = skipped
+    out = {spec.kind: spec for spec in found}
     return tuple(sorted(out.items(), key=lambda item: (item[1].order, item[0])))
 
 

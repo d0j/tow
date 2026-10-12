@@ -15,6 +15,9 @@ from pathlib import Path
 
 import pytest
 
+from tow.clients.spec import HELPERS as CLIENT_HELPERS
+from tow.notifiers.registry import HELPERS as MESSENGER_HELPERS
+
 SRC = Path(__file__).resolve().parents[1] / "src"
 
 # Leaf modules: no TOW logic above them. They import only each other and tow.i18n.
@@ -27,6 +30,7 @@ FOUNDATION = (
     "tow.net_guard",
     "tow.paths",
     "tow.platform",  # the package and its backends
+    "tow.plugins",  # the scan the client and messenger registries share
     "tow.ratelimit",
     "tow.records",
     "tow.torrent",
@@ -58,12 +62,12 @@ ORCHESTRATION = (
     "tow.web",
     "tow.web_update",
 )
-# Plugin families: every module of the package is a plugin except these helpers (the client
-# and messenger registries skip the same ones: tow.clients.spec.SKIP, tow.notifiers.registry).
+# Plugin families: every module of the package is a plugin except these helpers (for clients and
+# messengers, the very list their registries skip).
 FAMILIES: dict[str, set[str]] = {
     "tow.autostart": set(),
-    "tow.clients": {"factory", "files", "managed", "spec"},
-    "tow.notifiers": {"base", "outbox", "registry", "view"},
+    "tow.clients": set(CLIENT_HELPERS),
+    "tow.notifiers": set(MESSENGER_HELPERS),
     "tow.platform": {"locks"},
     "tow.trackers.presets": set(),
 }
