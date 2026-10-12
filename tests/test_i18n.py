@@ -637,14 +637,14 @@ SIZES = {
 @pytest.mark.parametrize("lang", list(SIZES))
 @pytest.mark.parametrize("size", list(SIZES["en"]))
 def test_sizes_read_the_same_on_the_page_and_in_the_terminal(lang, size):
-    from tow import cli
+    from tow.cli import render
     from tow.web.text import format_bytes as _format_bytes
 
     expected = SIZES[lang][size]
     token = i18n._CURRENT.set(lang)
     try:
         assert _format_bytes(size) == expected
-        assert cli._size(size) == (SIZES[lang][0] if size is None else expected)  # the CLI reads no size as 0
+        assert render.size(size) == (SIZES[lang][0] if size is None else expected)  # the CLI reads no size as 0
     finally:
         i18n._CURRENT.reset(token)
     if size is not None:

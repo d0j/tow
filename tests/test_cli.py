@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from tow import cli
-from tow.cli import main
+from tow.cli import main, render
 from tow.i18n import t
 
 
@@ -320,23 +320,23 @@ def test_a_command_tells_a_person_its_result_in_sentences(monkeypatch, capsys, t
 
 
 def test_a_refusal_says_the_reason_alone(capsys, tmp_path):
-    cli._print({"ok": False, "error": "The reason.", "detail": "a technical cause"}, False)
+    render.show({"ok": False, "error": "The reason.", "detail": "a technical cause"}, False)
     assert capsys.readouterr().out == "The reason.\n"
-    cli._print({"ok": True, "message": "Done."}, False, lambda data: "never this")
+    render.show({"ok": True, "message": "Done."}, False, lambda data: "never this")
     assert capsys.readouterr().out == "never this\n"
-    cli._print({"ok": True, "message": "Done."}, False)
+    render.show({"ok": True, "message": "Done."}, False)
     assert capsys.readouterr().out == "Done.\n"
 
 
 def test_a_check_without_a_client_answer_shows_no_empty_client(capsys):
-    cli._print({"qbit": "", "results": [], "preview": True}, False)
+    render.show({"qbit": "", "results": [], "preview": True}, False)
     out = capsys.readouterr().out
     assert t("cli.check.client", value="") not in out
     assert out.splitlines()[0] == t("cli.check.preview")
 
 
 def test_text_output_is_readable_not_a_dict_repr(capsys):
-    cli._print({"ok": True, "tasks": [{"name": "TOW-check", "rc": 0}]}, False)
+    render.show({"ok": True, "tasks": [{"name": "TOW-check", "rc": 0}]}, False)
 
     out = capsys.readouterr().out
     assert "{'ok'" not in out
