@@ -7,6 +7,7 @@ import pytest
 from test_check_contract import FakeClient, _wire_fake_check
 
 from tow import bundle, check
+from tow.bundle import crypto as bundle_crypto
 from tow.check import reconcile as check_reconcile
 from tow.check import topic as topic_step
 from tow.progress import reconcile_topic
@@ -115,7 +116,7 @@ def test_aliases_survive_portable_export_preview_and_restore_on_synthetic_stores
     }
     save_state({"topics": [topic]})
     archive = tmp_path / "transfer.towx"
-    monkeypatch.setattr(bundle, "KDF_ITERATIONS", 100_000)
+    monkeypatch.setattr(bundle_crypto, "KDF_ITERATIONS", 100_000)
     bundle.export_bundle(archive, "synthetic-passphrase")
     before = deepcopy(load_state())
     bundle.import_bundle(archive, "synthetic-passphrase")

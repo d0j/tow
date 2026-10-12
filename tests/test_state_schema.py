@@ -90,9 +90,10 @@ def test_tow_refuses_to_start_on_a_newer_state(monkeypatch, capsys):
 
 
 def test_an_export_of_a_newer_tow_is_not_imported():
-    from tow.bundle import ExportImportError, _validate_state_schema
+    from tow.bundle import ExportImportError
+    from tow.bundle.schema import validate_state_schema
 
-    _validate_state_schema({"schema_version": STATE_SCHEMA_VERSION, "topics": [], "mirrors": {}})
-    _validate_state_schema({"topics": [], "mirrors": {}})  # an older export
+    validate_state_schema({"schema_version": STATE_SCHEMA_VERSION, "topics": [], "mirrors": {}})
+    validate_state_schema({"topics": [], "mirrors": {}})  # an older export
     with pytest.raises(ExportImportError):
-        _validate_state_schema({"schema_version": STATE_SCHEMA_VERSION + 1, "topics": [], "mirrors": {}})
+        validate_state_schema({"schema_version": STATE_SCHEMA_VERSION + 1, "topics": [], "mirrors": {}})

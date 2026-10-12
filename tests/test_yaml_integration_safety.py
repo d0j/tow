@@ -4,6 +4,8 @@ import pytest
 import yaml
 
 from tow import bundle, cli, config, i18n, snapshots
+from tow.bundle import schema as bundle_schema
+from tow.bundle import secret_scan
 from tow.paths import config_path
 from tow.snapshots import members as night_members
 from tow.snapshots import restore as night_restore
@@ -43,13 +45,15 @@ def test_an_in_place_edit_cannot_compare_or_save_a_cyclic_config():
 
 def test_bundle_yaml_is_guarded_before_recursive_secret_or_schema_checks():
     with pytest.raises(bundle.ExportImportError):
-        bundle._parse_mapping(CYCLE, label="config.yaml")
+        bundle_schema.parse_mapping(CYCLE, label="config.yaml")
 
 
 def test_export_refuses_cyclic_yaml_before_looking_for_plaintext_secrets(tmp_path, monkeypatch):
     config_path().write_bytes(CYCLE)
     output = tmp_path / "unsafe.towx"
-    monkeypatch.setattr(bundle, "_secret_key_path", lambda *args: pytest.fail("unsafe graph reached recursive scan"))
+    monkeypatch.setattr(
+        secret_scan, "_secret_key_path", lambda *args: pytest.fail("unsafe graph reached recursive scan")
+    )
     with pytest.raises(bundle.ExportImportError):
         bundle.export_bundle(output, "synthetic-passphrase")
     assert not output.exists()
@@ -124,26 +128,29 @@ def test_healthy_restore_merge_can_repair_a_cyclic_live_config_without_mutating_
 
 def test_secret_scan_preserves_first_match_and_path_prefix():
     shared = {"ordinary": [{"password": "synthetic"}]}
-    assert bundle._secret_key_path({"first": shared, "second": shared}, "config") == "config.first.ordinary[0].password"
-    assert bundle._secret_key_path({"token": False, "api_key": "synthetic"}) == "api_key"
+    assert (
+        secret_scan._secret_key_path({"first": shared, "second": shared}, "config")
+        == "config.first.ordinary[0].password"
+    )
+    assert secret_scan._secret_key_path({"token": False, "api_key": "synthetic"}) == "api_key"
 
 
 def test_secret_scan_is_iterative_and_handles_shared_cycles():
     value = {"token": "synthetic"}
     for _ in range(2000):
         value = {"child": value}
-    found = bundle._secret_key_path(value)
+    found = secret_scan._secret_key_path(value)
     assert found == "child." * 2000 + "token"
     cycle = []
     cycle.append(cycle)
-    assert bundle._secret_key_path(cycle) is None
+    assert secret_scan._secret_key_path(cycle) is None
 
 
 def test_secret_scan_does_not_apply_yaml_node_limits_to_large_json_history(monkeypatch):
     from tow import yaml_guard
 
     monkeypatch.setattr(yaml_guard, "MAX_EXPANDED_NODES", 5)
-    assert bundle._secret_key_path({"history": [{"episode": number} for number in range(50)]}) is None
+    assert secret_scan._secret_key_path({"history": [{"episode": number} for number in range(50)]}) is None
 
 
 def test_saving_multibyte_text_cannot_create_a_config_above_its_read_limit(tmp_path, monkeypatch):

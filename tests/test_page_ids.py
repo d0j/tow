@@ -7,7 +7,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from tow.bundle import ExportImportError, _validate_config_schema, _validate_state_schema
+from tow.bundle import ExportImportError
+from tow.bundle.schema import validate_config_schema, validate_state_schema
 from tow.config import ConfigError, validated
 
 
@@ -18,7 +19,7 @@ def test_config_and_import_refuse_a_site_name_that_moves_a_page_address(name):
         validated(raw)
     assert caught.value.code == "config_error.site_name"
     with pytest.raises(ExportImportError, match="site name"):
-        _validate_config_schema(raw)
+        validate_config_schema(raw)
 
 
 @pytest.mark.parametrize("name", ["site name", "", "x" * 65, "сайт", "kinozal.tv", 123, None])
@@ -27,7 +28,7 @@ def test_an_older_odd_site_name_loads_and_passes_its_own_backup(name):
     # with it the web update and tow export) refused the same file.
     raw = {"trackers": {name: {"fetch_hosts": ["https://tracker.example"]}}}
     assert name in validated(raw)["trackers"]  # legacy config.yaml keeps working
-    _validate_config_schema(raw)
+    validate_config_schema(raw)
 
 
 def test_a_restore_point_of_a_config_with_a_legacy_site_name_is_made_and_checked(monkeypatch, tmp_path):
@@ -53,15 +54,15 @@ def test_a_restore_point_of_a_config_with_a_legacy_site_name_is_made_and_checked
 def test_plain_site_names_stay_accepted(name):
     raw = {"trackers": {name: {"fetch_hosts": ["https://tracker.example"]}}}
     assert name in validated(raw)["trackers"]
-    _validate_config_schema(raw)
+    validate_config_schema(raw)
 
 
 @pytest.mark.parametrize("topic_id", ["../sites/nnmclub", "a/b", "1 2", "", "x" * 65])
 def test_import_refuses_a_topic_id_that_is_not_a_plain_id(topic_id):
     state = {"topics": [{"id": topic_id, "url": "https://tracker.example/t/1"}], "mirrors": {}}
     with pytest.raises(ExportImportError, match=r"topic\[0\]\.id"):
-        _validate_state_schema(state)
-    _validate_state_schema({"topics": [{"id": "a1b2c3d4e5f6"}], "mirrors": {}})
+        validate_state_schema(state)
+    validate_state_schema({"topics": [{"id": "a1b2c3d4e5f6"}], "mirrors": {}})
 
 
 def test_page_addresses_encode_the_topic_id():

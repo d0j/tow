@@ -5,6 +5,7 @@ from copy import deepcopy
 import pytest
 
 from tow import bundle
+from tow.bundle import schema as bundle_schema
 from tow.check_steps import merge_check_results, store_revision
 from tow.progress.expected import _file_rule_evidence, selection_fingerprint
 from tow.selection import SelectionError, normalize_file_aliases, normalize_policy, resolve_selection
@@ -173,7 +174,7 @@ def test_merge_clears_old_alias_snapshot_and_keeps_a_concurrent_owner_rule():
 )
 def test_import_refuses_malformed_alias_metadata(value):
     with pytest.raises(bundle.ExportImportError):
-        bundle._validate_state_topic(0, {"file_aliases": value})
+        bundle_schema._validate_state_topic(0, {"file_aliases": value})
 
 
 @pytest.mark.parametrize("mode", ["all", "files"])

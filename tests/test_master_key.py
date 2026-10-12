@@ -270,7 +270,8 @@ def test_keys_status_names_the_files_not_the_key(legacy_key, capsys):
 
 
 def test_copies_of_the_data_never_carry_the_install_key(no_env_key, monkeypatch, tmp_path):
-    from tow.bundle import _read_bundle, export_bundle
+    from tow.bundle import export_bundle
+    from tow.bundle.archive import read_bundle
     from tow.restore_points import _passphrase, create_restore_point, restore_points_dir
     from tow.snapshots import create_snapshot
 
@@ -289,7 +290,7 @@ def test_copies_of_the_data_never_carry_the_install_key(no_env_key, monkeypatch,
     export_bundle(tmp_path / "out.towx", passphrase)
     point = create_restore_point()
     for bundle, secret in ((tmp_path / "out.towx", passphrase), (restore_points_dir() / f"{point['id']}.towx", None)):
-        members = _read_bundle(bundle, secret or _passphrase())["members"]
+        members = read_bundle(bundle, secret or _passphrase())["members"]
         assert not any("key" in name for name in members)
         assert all(key not in content for content in members.values())
 

@@ -1,41 +1,54 @@
+"""The portable TOW file (``.towx``): export, import, the import checkpoint and its rollback.
+
+- ``errors``: ``ExportImportError``;
+- ``io``: the format name, the size limit, JSON bytes, checksums, bounded reads, atomic writes;
+- ``secret_scan``: no credential-named field outside the encrypted secrets;
+- ``schema``: what each member may contain;
+- ``crypto``: the passphrase key (PBKDF2) and the Fernet envelope;
+- ``archive``: the zip, its manifest, reading a bundle back.
+
+The rest of TOW imports only the names below. A test that replaces a name does it in the module
+that reads it when it runs. What has no module of its own yet is below.
+"""
+
 from __future__ import annotations
 
-import base64
-import binascii
 import contextlib
 import copy
-import hashlib
-import io
-import json
 import logging
-import lzma
-import math
-import os
 import re
 import shutil
 import uuid
-import zipfile
-import zlib
 from collections.abc import Iterable
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
 import yaml
 
 from tow import __version__
+from tow.bundle.archive import (
+    ALLOWED_MEMBERS,
+    OPTIONAL_MEMBERS,
+    REQUIRED_MEMBERS,
+    read_bundle,
+    verify_bundle,
+    zip_payload,
+)
+from tow.bundle.crypto import KDF_ITERATIONS, KDF_NAME, KDF_SALT_BYTES, seal_outer
+from tow.bundle.errors import ExportImportError
+from tow.bundle.io import FORMAT, MAX_BUNDLE_BYTES, atomic_write, json_bytes, read_limited, sha256
+from tow.bundle.schema import parse_mapping, utf8_config, validate_config_schema, validate_field
+from tow.bundle.secret_scan import refuse_plaintext_secrets
 from tow.clock import iso_now
-from tow.config import SAFE_ID, ConfigError, validated, web_address
-from tow.errors import Msg, TowError
-from tow.log import EXPORT_EVENT_KEYS, export_event_projection, log_event, read_events
+from tow.errors import Msg
+from tow.log import export_event_projection, log_event, read_events
 from tow.paths import config_path, data_dir, download_history_path, secrets_path, state_path
 from tow.platform import plain_kind
 from tow.store import (
     STATE_SCHEMA_VERSION,
     SecretStoreError,
-    StateVersionError,
     StoreCorruptionError,
     atomic_create_bytes,
-    atomic_write_bytes,
     decode_json_bytes,
     encrypted_secrets_path,
     load_json,
@@ -48,629 +61,36 @@ from tow.store import (
     save_secret_undo,
     save_secrets,
     secret_undo_path,
-    state_schema_version,
 )
-from tow.yaml_guard import YamlLimitError, normalize_utf8, validate_graph
+from tow.yaml_guard import YamlLimitError
 from tow.yaml_guard import dump as dump_yaml
-from tow.yaml_guard import load as load_yaml
 
-FORMAT = "tow-export-v1"
 CHECKPOINT_FORMAT = "tow-import-checkpoint-v1"
 TRANSACTION_FORMAT = "tow-import-transaction-v1"
-KDF_NAME = "pbkdf2-hmac-sha256"
-KDF_ITERATIONS = 600_000
-KDF_SALT_BYTES = 16
-# The bound of a bundle file, and of everything unpacked from it together: what a restore point
-# of the live data may hold. There is no smaller limit per member (the history is the big one).
-MAX_BUNDLE_BYTES = 64 * 1024 * 1024
-REQUIRED_MEMBERS = ("config.yaml", "state.json", "download_history.json", "secrets.json")
-OPTIONAL_MEMBERS = ("secrets_undo.json", "events.json")
-ALLOWED_MEMBERS = {"manifest.json", *REQUIRED_MEMBERS, *OPTIONAL_MEMBERS}
+
 # The backup folders of the install a bundle is restored into (a restore point keeps them).
 _FOLDER_OVERRIDES = ("backup_dir", "restore_points_dir")
-# Field names that hold credentials. Matched exactly (plus the suffixes below) - a substring
-# match also refused TOW's own metadata (secret_scope, secret_undo_ref, secrets_ref, ...)
-# and blocked every export and restore point after a settings save.
-_SECRET_FIELD_NAMES = frozenset(
-    {
-        "password",
-        "passwd",
-        "pass",
-        "token",
-        "secret",
-        "api_key",
-        "cookie",
-        "cookies",
-        "cookies_by_origin",
-        "uid",
-        "master_key",
-    }
-)
-_SECRET_FIELD_SUFFIXES = ("_password", "_passwd", "_token", "_cookies", "_api_key")
+
 _DRIVE_PATH = re.compile(r"^[A-Za-z]:[\\/]")
-
-# The one field of that shape TOW itself writes that is not a credential: a messenger delivery's
-# claim in state.json (``notify_lease.<recipient>.token``, "<pid>:<thread>:<12 hex>"), as TOW
-# 1.28 and older named it (now ``owner``). Exempt only there and only in that exact form: a
-# lease left by an older version blocked every restore point, and so the web update, while a
-# messenger could not be reached.
-_LEGACY_LEASE_OWNER = re.compile(r"[0-9]{1,10}:[0-9]{1,20}:[0-9a-f]{12}")
-
-
-def _legacy_lease_owner(path: list[str | int], key: str, item: Any) -> bool:
-    return (
-        len(path) == 2
-        and path[0] == "notify_lease"
-        and key == "token"
-        and isinstance(item, str)
-        and _LEGACY_LEASE_OWNER.fullmatch(item) is not None
-    )
-
-
-class ExportImportError(RuntimeError):
-    """Raised when a portable TOW export/import cannot be handled safely.
-
-    ``reason`` is what the owner is told about a file that does not pass: ``not_tow`` (not a TOW
-    backup at all), ``other_key`` (cannot be decrypted: another master key, or damaged),
-    ``too_large``, or ``damaged`` (anything else); the message stays technical, for the log.
-    ``owner_text`` is what the owner is told instead, when the refusal says more than the reason
-    (a file that exists, a --path-map typed wrong, data put back after a failed import)."""
-
-    def __init__(self, message: str = "", *, reason: str = "damaged", owner_text: Msg | TowError | None = None) -> None:
-        super().__init__(message)
-        self.reason = reason
-        self.owner_text = owner_text
-
-
-def _json_bytes(data: Any, *, readable: bool = False) -> bytes:
-    """Compact JSON, as the live store writes the download history: written indented and
-    sorted, a history of some 20,000 file records outgrew what a bundle could hold, and every
-    restore point (the web update's too) failed. ``readable``: indented, as the store writes
-    state.json and as the small records a person may open are kept."""
-    try:
-        if readable:
-            text = json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False)
-        else:
-            text = json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-        return (text + "\n").encode("utf-8")
-    except (TypeError, ValueError, UnicodeError, RecursionError) as exc:
-        raise ExportImportError("portable TOW data is not JSON serializable") from exc
-
-
-def _sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def _read_limited(path: Path, *, label: str) -> bytes:
-    try:
-        size = path.stat().st_size
-        if size > MAX_BUNDLE_BYTES:
-            raise ExportImportError(f"{label} is too large", reason="too_large")
-        with path.open("rb") as handle:
-            content = handle.read(MAX_BUNDLE_BYTES + 1)
-        if len(content) > MAX_BUNDLE_BYTES:
-            raise ExportImportError(f"{label} is too large", reason="too_large")
-        return content
-    except ExportImportError:
-        raise
-    except OSError as exc:
-        raise ExportImportError(f"cannot read {label}") from exc
-
-
-def _atomic_write(path: Path, content: bytes) -> None:
-    try:
-        atomic_write_bytes(path, content)
-    except OSError as exc:
-        raise ExportImportError(f"cannot write imported {path.name}") from exc
-
-
-def _secret_key_path(value: Any, path: str = "", *, state: bool = False) -> str | None:
-    """Path of the first credential-named field in ``value``, or None (``state``: state.json,
-    where an old messenger lease's claim is not one)."""
-    segments = _secret_segments(value, set(), state=state)
-    if segments is None:
-        return None
-    for segment in segments:
-        if isinstance(segment, int):
-            path += f"[{segment}]"
-        else:
-            path += ("." if path else "") + segment
-    return path
-
-
-def _secret_segments(value: Any, seen: set[int], *, state: bool = False) -> list[str | int] | None:
-    # Shared containers need one scan. Build a path only for the actual match,
-    # not one long prefix per innocent child of a large-keyed mapping.
-    if not isinstance(value, (dict, list)):
-        return None
-    seen.add(id(value))
-    stack = [(isinstance(value, dict), iter(value.items()) if isinstance(value, dict) else iter(enumerate(value)))]
-    path: list[str | int] = []
-    while stack:
-        mapping, children = stack[-1]
-        try:
-            key, item = next(children)
-        except StopIteration:
-            stack.pop()
-            if path:
-                path.pop()
-            continue
-        segment = str(key) if mapping else key
-        if mapping:
-            lowered = str(key).lower()
-            is_secret_name = lowered in _SECRET_FIELD_NAMES or lowered.endswith(_SECRET_FIELD_SUFFIXES)
-            if (
-                is_secret_name
-                and item not in (None, "", False, True)
-                and not (state and _legacy_lease_owner(path, str(key), item))
-            ):
-                return [*path, segment]
-        if isinstance(item, (dict, list)) and id(item) not in seen:
-            seen.add(id(item))
-            path.append(segment)
-            stack.append(
-                (isinstance(item, dict), iter(item.items()) if isinstance(item, dict) else iter(enumerate(item)))
-            )
-    return None
-
-
-def _refuse_plaintext_secrets(config_data: Any, state_data: Any, history_data: Any) -> None:
-    for label, data in (
-        ("config.yaml", config_data),
-        ("state.json", state_data),
-        ("download_history.json", history_data),
-    ):
-        found = _secret_key_path(data, state=label == "state.json")
-        if found:
-            raise ExportImportError(f"plaintext secret-shaped field outside encrypted payload: {label}:{found}")
-
-
-def _events_are_redacted(value: Any) -> bool:
-    if not isinstance(value, dict) or set(value) != {"events"} or not isinstance(value["events"], list):
-        return False
-    for event in value["events"]:
-        if not isinstance(event, dict) or not set(event).issubset(EXPORT_EVENT_KEYS):
-            return False
-        for item in event.values():
-            if item is not None and not isinstance(item, (str, int, float, bool)):
-                return False
-    return True
-
-
-def _parse_mapping(data: bytes, *, label: str) -> dict[str, Any]:
-    try:
-        value = load_yaml(data) if label == "config.yaml" else json.loads(data.decode("utf-8"))
-    except YamlLimitError as exc:
-        raise ExportImportError(f"invalid {label}: {exc}") from exc
-    except (UnicodeError, ValueError, RecursionError, yaml.YAMLError) as exc:
-        raise ExportImportError(f"invalid {label}") from exc
-    if not isinstance(value, dict):
-        raise ExportImportError(f"{label} must be an object")
-    return value
-
-
-def _utf8_config(data: bytes) -> bytes:
-    try:
-        return normalize_utf8(data)
-    except YamlLimitError as exc:
-        raise ExportImportError(f"invalid config.yaml: {exc}") from exc
-    except UnicodeError as exc:
-        raise ExportImportError("invalid config.yaml") from exc
-
-
-def _validate_tree(value: Any, *, label: str, depth: int = 0) -> None:
-    if depth > 32:
-        raise ExportImportError(f"{label} is nested too deeply")
-    if isinstance(value, float) and not math.isfinite(value):
-        raise ExportImportError(f"{label} contains a non-finite number")
-    if value is None or isinstance(value, (str, int, float, bool)):
-        return
-    if isinstance(value, list):
-        for item in value:
-            _validate_tree(item, label=label, depth=depth + 1)
-        return
-    if isinstance(value, dict):
-        for key, item in value.items():
-            if not isinstance(key, str):
-                raise ExportImportError(f"{label} contains a non-string key")
-            _validate_tree(item, label=label, depth=depth + 1)
-        return
-    raise ExportImportError(f"{label} contains an unsupported value type")
-
-
-def _validate_field(mapping: dict[str, Any], key: str, expected: type | tuple[type, ...], *, label: str) -> None:
-    if key not in mapping or mapping[key] is None:
-        return
-    value = mapping[key]
-    if isinstance(value, bool) and (expected is int or (isinstance(expected, tuple) and int in expected)):
-        raise ExportImportError(f"{label}.{key} has an invalid type")
-    if not isinstance(value, expected):
-        raise ExportImportError(f"{label}.{key} has an invalid type")
-
-
-def _validate_config_schema(data: dict[str, Any]) -> None:
-    """config.yaml of a bundle: exactly the schema ``load_config`` applies (``tow.config.validated``).
-
-    Site names follow the config's own rule too: an older name (a dot, Cyrillic, a YAML number
-    such as 123) loads, so the restore point, export and import of that same config.yaml must
-    not refuse it; a name that could move a page address (/, \\, . or ..) is refused by
-    ``validated`` and every page encodes the others (/sites/<name>/...)."""
-    try:
-        validate_graph(data)
-    except YamlLimitError as exc:
-        raise ExportImportError(f"invalid config.yaml: {exc}") from exc
-    trackers = data.get("trackers")
-    # A site name may be any YAML scalar ``validated`` accepts; the settings under it are
-    # checked as anywhere else.
-    _validate_tree(
-        {**data, "trackers": list(trackers.values())} if isinstance(trackers, dict) else data, label="config.yaml"
-    )
-    try:
-        validated(data)
-    except ConfigError as exc:
-        raise ExportImportError(  # the English text for the log, the owner's language on screen
-            f"invalid {exc.text('en')}", owner_text=Msg("cli.bundle.import_refused", reason=exc)
-        ) from None
-
-
-def _has_exact_policy(value: Any) -> bool:
-    """Include saved undo data, not just the currently visible topics."""
-    if isinstance(value, dict):
-        return value.get("mode") == "exact" or any(_has_exact_policy(item) for item in value.values())
-    return isinstance(value, list) and any(_has_exact_policy(item) for item in value)
-
-
-def _validate_state_schema(data: dict[str, Any]) -> None:
-    _validate_tree(data, label="state.json")
-    topics = data.get("topics")
-    mirrors = data.get("mirrors")
-    if not isinstance(topics, list) or not isinstance(mirrors, dict):
-        raise ExportImportError("state.json has an unsupported schema")
-    try:
-        version = state_schema_version(data)  # a newer TOW's state is never imported into this one
-    except StateVersionError as exc:
-        raise ExportImportError(f"state.json: {exc}") from exc
-    if version < 2 and _has_exact_policy(data):
-        raise ExportImportError("state.json exact selections require schema 2")
-    for index, topic in enumerate(topics):
-        _validate_state_topic(index, topic)
-    for name, mirror in mirrors.items():
-        _validate_state_mirror(name, mirror)
-    for key in ("health", "doctor"):
-        if key in data and data[key] is not None and not isinstance(data[key], dict):
-            raise ExportImportError(f"state.json.{key} has an invalid type")
-    if data.get("undo") is not None and not isinstance(data["undo"], dict):
-        raise ExportImportError("state.json.undo has an invalid type")
-
-
-def _validate_state_topic(index: int, topic: Any) -> None:
-    if not isinstance(topic, dict):
-        raise ExportImportError(f"state.json topic {index} has an invalid type")
-    label = f"state.json.topic[{index}]"
-    from tow.topic_timers import interval_of
-
-    try:
-        interval_of(topic)
-    except (TowError, ValueError) as exc:
-        raise ExportImportError(f"{label}.check_interval_min is invalid") from exc
-    for key in (
-        "id",
-        "title",
-        "url",
-        "save_path",
-        "hash",
-        "client_id",
-        "tracker_title",
-        "tracking_mode",
-        "selection_hash",
-        "content_token",
-        "content_hash",
-    ):
-        _validate_field(topic, key, str, label=label)
-    if topic.get("url") and not web_address(topic["url"]):  # a javascript: link would be one click away
-        raise ExportImportError(f"{label}.url must be an http:// or https:// address")
-    if "id" in topic and not SAFE_ID.fullmatch(str(topic["id"])):  # part of /topics/<id>/… addresses
-        raise ExportImportError(f"{label}.id may have only letters, digits, - and _ (at most 64)")
-    for key in (
-        "paused",
-        "title_set",
-        "once_done",
-        "selection_dirty",
-        "selection_verified",
-        "selected_files_truncated",
-        "error_notified",
-    ):
-        _validate_field(topic, key, bool, label=label)
-    for key in ("selected_file_count", "torrent_file_count"):
-        _validate_field(topic, key, int, label=label)
-    for key in ("previous_hashes", "selected_files", "selected_episode_keys"):
-        if key in topic and (not isinstance(topic[key], list) or not all(isinstance(item, str) for item in topic[key])):
-            raise ExportImportError(f"{label}.{key} has an invalid type")
-    selection = topic.get("selection")
-    if "file_aliases" in topic:
-        from tow.selection import normalize_file_aliases
-
-        try:
-            normalize_file_aliases(topic["file_aliases"])
-        except ValueError as exc:
-            raise ExportImportError(f"{label}.file_aliases has invalid metadata") from exc
-    if selection is not None:
-        if not isinstance(selection, dict):
-            raise ExportImportError(f"{label}.selection has an invalid type")
-        for key in ("mode", "value"):
-            _validate_field(selection, key, str, label=f"{label}.selection")
-        if selection.get("mode") == "exact":
-            from tow.selection import policy_from_topic
-
-            try:
-                policy_from_topic(topic)
-            except ValueError as exc:
-                raise ExportImportError(f"{label}.selection has an invalid exact file selection") from exc
-
-
-def _validate_state_mirror(name: Any, mirror: Any) -> None:
-    if not isinstance(name, str) or not isinstance(mirror, dict):
-        raise ExportImportError("state.json mirror entry has an invalid type")
-    if mirror.get("active") not in (None, "") and not web_address(mirror["active"]):
-        raise ExportImportError(f"state.json mirror {name}.active must be an http:// or https:// address")
-    if "frozen" in mirror and not isinstance(mirror["frozen"], bool):
-        raise ExportImportError(f"state.json mirror {name}.frozen has an invalid type")
-    for field in ("fail", "cool"):
-        values = mirror.get(field, {})
-        if not isinstance(values, dict):
-            raise ExportImportError(f"state.json mirror {name}.{field} has an invalid type")
-        for host, value in values.items():
-            if (
-                not isinstance(host, str)
-                or not isinstance(value, (int, float))
-                or isinstance(value, bool)
-                or not math.isfinite(value)
-                or value < 0
-                or (field == "fail" and (not isinstance(value, int) or value < 0))
-            ):
-                raise ExportImportError(f"state.json mirror {name}.{field} has an invalid value")
-
-
-def _validate_history_schema(data: dict[str, Any]) -> None:
-    _validate_tree(data, label="download_history.json")
-    version = data.get("schema_version")
-    if not isinstance(version, int) or isinstance(version, bool):
-        raise ExportImportError("download_history.json.schema_version has an invalid type")
-    topics = data.get("topics")
-    if not isinstance(topics, dict):
-        raise ExportImportError("download_history.json.topics has an invalid type")
-    for topic_id, record in topics.items():
-        if not isinstance(topic_id, str) or not isinstance(record, dict):
-            raise ExportImportError("download_history.json topic entry has an invalid type")
-        for key in ("expected", "summary", "items", "last_completed", "last_event"):
-            if key in record and record[key] is not None and not isinstance(record[key], dict):
-                raise ExportImportError(f"download_history.json.{key} has an invalid type")
-
-
-def _validate_secrets_schema(data: dict[str, Any], *, label: str) -> None:
-    _validate_tree(data, label=label)
-
-
-def _derive_key(passphrase: str, salt: bytes, iterations: int) -> bytes:
-    if not isinstance(passphrase, str) or not passphrase:
-        raise ExportImportError("export passphrase must not be empty")
-    try:
-        from cryptography.hazmat.primitives import hashes
-        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-
-        return PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=iterations,
-        ).derive(passphrase.encode("utf-8"))
-    except (ImportError, TypeError, ValueError, UnicodeError) as exc:
-        raise ExportImportError("cannot derive export bundle key") from exc
-
-
-def _encrypt_outer(payload: bytes, passphrase: str, salt: bytes | None = None) -> str:
-    if salt is None:
-        salt = os.urandom(KDF_SALT_BYTES)
-    try:
-        from cryptography.fernet import Fernet
-
-        key = base64.urlsafe_b64encode(_derive_key(passphrase, salt, KDF_ITERATIONS))
-        return Fernet(key).encrypt(payload).decode("ascii")
-    except ExportImportError:
-        raise
-    except (ImportError, TypeError, ValueError, UnicodeError) as exc:
-        raise ExportImportError("cannot encrypt export bundle") from exc
-
-
-def _decrypt_outer(outer: dict[str, Any], passphrase: str) -> bytes:
-    if not isinstance(outer, dict) or outer.get("format") != FORMAT:
-        raise ExportImportError("unsupported export bundle format", reason="not_tow")
-    if outer.get("cipher") != "fernet":
-        raise ExportImportError("unsupported export bundle cipher", reason="not_tow")
-    kdf = outer.get("kdf")
-    if not isinstance(kdf, dict) or kdf.get("name") != KDF_NAME:
-        raise ExportImportError("unsupported export bundle KDF", reason="not_tow")
-    try:
-        iterations = int(kdf.get("iterations") or 0)  # 0 is rejected by the range check below
-        salt = base64.urlsafe_b64decode(str(kdf.get("salt") or "").encode("ascii"))
-    except (TypeError, ValueError, UnicodeError, binascii.Error) as exc:
-        raise ExportImportError("malformed export bundle KDF") from exc
-    if not 100_000 <= iterations <= 5_000_000 or not 8 <= len(salt) <= 64:
-        raise ExportImportError("invalid export bundle KDF parameters")
-    token = outer.get("payload")
-    if not isinstance(token, str) or not token:
-        raise ExportImportError("malformed export bundle payload")
-    try:
-        from cryptography.fernet import Fernet, InvalidToken
-
-        key = base64.urlsafe_b64encode(_derive_key(passphrase, salt, iterations))
-        return Fernet(key).decrypt(token.encode("ascii"))
-    except ExportImportError:
-        raise
-    except (InvalidToken, TypeError, ValueError, UnicodeError, binascii.Error) as exc:
-        raise ExportImportError(
-            "cannot decrypt export bundle; wrong passphrase or corrupted bundle", reason="other_key"
-        ) from exc
-
-
-def _zip_payload(members: dict[str, bytes]) -> bytes:
-    output = io.BytesIO()
-    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for name in sorted(members):
-            archive.writestr(name, members[name])
-    return output.getvalue()
-
-
-def _validate_member_name(name: str) -> None:
-    if not isinstance(name, str) or not name or "\\" in name:
-        raise ExportImportError("bundle member must be a strict relative path")
-    path = PurePosixPath(name)
-    if path.is_absolute() or ".." in path.parts or name not in ALLOWED_MEMBERS:
-        raise ExportImportError(f"unsupported or unsafe bundle member: {name}")
-
-
-# What zipfile raises for a damaged archive besides BadZipFile: a negative seek (ValueError), an
-# unknown version or method (NotImplementedError), a broken deflate or LZMA stream, a cut one.
-_ARCHIVE_ERRORS = (
-    OSError,
-    RuntimeError,
-    ValueError,
-    EOFError,
-    zipfile.BadZipFile,
-    zlib.error,
-    lzma.LZMAError,
-)
-
-
-def _unzip_payload(payload: bytes) -> dict[str, bytes]:
-    if len(payload) > MAX_BUNDLE_BYTES:
-        raise ExportImportError("decrypted export bundle is too large", reason="too_large")
-    try:
-        archive = zipfile.ZipFile(io.BytesIO(payload), "r")
-        infos = archive.infolist()
-    except _ARCHIVE_ERRORS as exc:
-        raise ExportImportError("invalid export bundle archive") from exc
-    names = [info.filename for info in infos]
-    if len(names) != len(set(names)):
-        raise ExportImportError("duplicate bundle member")
-    members: dict[str, bytes] = {}
-    total = 0
-    try:
-        for info in infos:
-            _validate_member_name(info.filename)
-            if info.is_dir() or (info.external_attr >> 16) & 0o170000 == 0o120000:
-                raise ExportImportError("bundle directories and links are not allowed")
-            total += info.file_size
-            if total > MAX_BUNDLE_BYTES:
-                raise ExportImportError("bundle contents are too large", reason="too_large")
-            # At most the declared size is unpacked (more data fails the CRC): the total bounds memory.
-            with archive.open(info) as handle:
-                members[info.filename] = handle.read(info.file_size or 1)
-    except ExportImportError:
-        raise
-    except _ARCHIVE_ERRORS as exc:
-        raise ExportImportError("cannot read export bundle archive") from exc
-    finally:
-        archive.close()
-    return members
-
-
-def _validated_payload(payload: bytes) -> dict[str, Any]:
-    members = _unzip_payload(payload)
-    if "manifest.json" not in members:
-        raise ExportImportError("bundle manifest is missing")
-    try:
-        manifest = json.loads(members["manifest.json"].decode("utf-8"))
-    except (UnicodeError, ValueError, RecursionError) as exc:
-        raise ExportImportError("invalid bundle manifest") from exc
-    _validate_tree(manifest, label="manifest.json")
-    if not isinstance(manifest, dict) or manifest.get("format") != FORMAT or manifest.get("schema_version") != 1:
-        raise ExportImportError("unsupported bundle manifest")
-    source_version = manifest.get("source_version")
-    if not isinstance(source_version, str) or not source_version:
-        raise ExportImportError("bundle source version is missing")
-    if source_version.split(".", 1)[0] != __version__.split(".", 1)[0]:
-        raise ExportImportError("bundle source version is incompatible")
-    listed = manifest.get("members")
-    checksums = manifest.get("sha256")
-    if not isinstance(listed, list) or not isinstance(checksums, dict):
-        raise ExportImportError("malformed bundle manifest")
-    expected = {str(name) for name in listed}
-    actual = set(members) - {"manifest.json"}
-    if expected != actual or len(listed) != len(expected):
-        raise ExportImportError("bundle manifest member list mismatch")
-    if not set(REQUIRED_MEMBERS).issubset(actual):
-        raise ExportImportError("bundle required member is missing")
-    if set(checksums) != actual:
-        raise ExportImportError("bundle checksum list mismatch")
-    for name in actual:
-        _validate_member_name(name)
-        if checksums.get(name) != _sha256(members[name]):
-            raise ExportImportError(f"bundle checksum mismatch: {name}")
-
-    # Authenticate the original member above, then prepare readable destination
-    # bytes without altering the source archive or its checksum manifest.
-    config_bytes = _utf8_config(members["config.yaml"])
-    config_data = _parse_mapping(config_bytes, label="config.yaml")
-    state_data = _parse_mapping(members["state.json"], label="state.json")
-    history_data = _parse_mapping(members["download_history.json"], label="download_history.json")
-    secrets_data = _parse_mapping(members["secrets.json"], label="secrets.json")
-    _validate_config_schema(config_data)
-    _validate_state_schema(state_data)
-    _validate_history_schema(history_data)
-    _validate_secrets_schema(secrets_data, label="secrets.json")
-    _refuse_plaintext_secrets(config_data, state_data, history_data)
-    if "secrets" in (state_data.get("undo") or {}):
-        raise ExportImportError("plaintext secret undo is not allowed in bundle state")
-
-    undo_data = None
-    undo = state_data.get("undo")
-    if isinstance(undo, dict) and undo.get("kind") == "settings":
-        if undo.get("secrets_undo_ref") != "settings-v1" or "secrets_undo.json" not in actual:
-            raise ExportImportError("settings undo reference has no encrypted snapshot")
-        undo_data = _parse_mapping(members["secrets_undo.json"], label="secrets_undo.json")
-        if not isinstance(undo_data.get("secrets"), dict):
-            raise ExportImportError("malformed encrypted settings undo payload")
-        _validate_secrets_schema(undo_data["secrets"], label="secrets_undo.json.secrets")
-    elif "secrets_undo.json" in actual:
-        raise ExportImportError("orphan encrypted settings undo member")
-
-    events = None
-    if "events.json" in actual:
-        events = _parse_mapping(members["events.json"], label="events.json")
-        _validate_tree(events, label="events.json")
-        if not isinstance(events.get("events"), list) or not _events_are_redacted(events):
-            raise ExportImportError("events member is not redacted")
-    return {
-        "manifest": manifest,
-        "members": members,
-        "config_bytes": config_bytes,
-        "config": config_data,
-        "state": state_data,
-        "history": history_data,
-        "secrets": secrets_data,
-        "undo": undo_data,
-        "events": events,
-    }
 
 
 def _build_export_members(*, include_log: bool) -> dict[str, bytes]:
     config_file = config_path()
-    config_bytes = _utf8_config(_read_limited(config_file, label="config.yaml"))
-    config_data = _parse_mapping(config_bytes, label="config.yaml")
+    config_bytes = utf8_config(read_limited(config_file, label="config.yaml"))
+    config_data = parse_mapping(config_bytes, label="config.yaml")
     # load_state intentionally hides the format header from callers. An archive must
     # restore it, or an old reader could accept newer fields after importing it.
     state_data = {"schema_version": STATE_SCHEMA_VERSION, **load_state()}
     history_data = load_json_for_export(download_history_path(), {"schema_version": 1, "topics": {}})
     secrets_data = load_secrets()
-    _refuse_plaintext_secrets(config_data, state_data, history_data)
-    state_bytes = _json_bytes(state_data)
-    history_bytes = _json_bytes(history_data)
+    refuse_plaintext_secrets(config_data, state_data, history_data)
+    state_bytes = json_bytes(state_data)
+    history_bytes = json_bytes(history_data)
     members = {
         "config.yaml": config_bytes,
         "state.json": state_bytes,
         "download_history.json": history_bytes,
-        "secrets.json": _json_bytes(secrets_data),
+        "secrets.json": json_bytes(secrets_data),
     }
     undo = state_data.get("undo")
     if isinstance(undo, dict) and undo.get("kind") == "settings":
@@ -680,9 +100,9 @@ def _build_export_members(*, include_log: bool) -> dict[str, bytes]:
             undo_secrets = load_secret_undo("settings-v1")
         except SecretStoreError as exc:
             raise ExportImportError("cannot read encrypted settings undo snapshot") from exc
-        members["secrets_undo.json"] = _json_bytes({"secrets": undo_secrets})
+        members["secrets_undo.json"] = json_bytes({"secrets": undo_secrets})
     if include_log:
-        members["events.json"] = _json_bytes(
+        members["events.json"] = json_bytes(
             {"events": [export_event_projection(event) for event in read_events(limit=200)]}
         )
     manifest = {
@@ -690,7 +110,7 @@ def _build_export_members(*, include_log: bool) -> dict[str, bytes]:
         "schema_version": 1,
         "source_version": __version__,
         "members": sorted(members),
-        "sha256": {name: _sha256(data) for name, data in sorted(members.items())},
+        "sha256": {name: sha256(data) for name, data in sorted(members.items())},
         "excluded": [
             "media_bytes",
             "torrent_files",
@@ -701,7 +121,7 @@ def _build_export_members(*, include_log: bool) -> dict[str, bytes]:
             "source_master_key",
         ],
     }
-    return {"manifest.json": _json_bytes(manifest), **members}
+    return {"manifest.json": json_bytes(manifest), **members}
 
 
 def load_json_for_export(path: Path, default: dict[str, Any]) -> dict[str, Any]:
@@ -711,18 +131,13 @@ def load_json_for_export(path: Path, default: dict[str, Any]) -> dict[str, Any]:
             # apparently healthy backup that silently omits the original data.
             data = load_json(path, default, quarantine=False)
         else:
-            raw = _read_limited(path, label=path.name)
+            raw = read_limited(path, label=path.name)
             data = decode_json_bytes(raw)
     except (UnicodeError, ValueError, RecursionError, StoreCorruptionError) as exc:
         raise ExportImportError(f"invalid {path.name}") from exc
     if not isinstance(data, dict):
         raise ExportImportError(f"{path.name} must be an object")
     return data
-
-
-def verify_bundle(path: Path, passphrase: str) -> None:
-    """Decrypt and validate an archive without recovering or changing any live store."""
-    _read_bundle(path, passphrase)
 
 
 def export_bundle(
@@ -748,26 +163,16 @@ def _export_bundle(
         )
     previous = output.read_bytes() if overwrite and output.is_file() else None
     members = _build_export_members(include_log=include_log)
-    payload = _zip_payload(members)
-    salt = os.urandom(KDF_SALT_BYTES)
-    outer = {
-        "format": FORMAT,
-        "cipher": "fernet",
-        "kdf": {
-            "name": KDF_NAME,
-            "iterations": KDF_ITERATIONS,
-            "salt": base64.urlsafe_b64encode(salt).decode("ascii"),
-        },
-        "payload": _encrypt_outer(payload, passphrase, salt),
-    }
-    content = _json_bytes(outer)
+    payload = zip_payload(members)
+    outer = seal_outer(payload, passphrase)
+    content = json_bytes(outer)
     if overwrite:
-        _atomic_write(output, content)
+        atomic_write(output, content)
     else:
         atomic_create_bytes(output, content)
     restrict_file(output)
     try:
-        verified = _read_bundle(output, passphrase)
+        verified = read_bundle(output, passphrase)
         if set(verified["members"]) != set(members):
             raise ExportImportError("export bundle read-back member mismatch")
     except ExportImportError:
@@ -776,7 +181,7 @@ def _export_bundle(
                 if not output.is_symlink() and output.read_bytes() == content:
                     output.unlink()  # never remove a replacement supplied by another writer
         else:
-            _atomic_write(output, previous)
+            atomic_write(output, previous)
         raise
     return {
         "ok": True,
@@ -880,11 +285,11 @@ def _fill_import_checkpoint(checkpoint: Path, files_dir: Path) -> Path:
         exists = _checkpoint_file(target, missing=True)
         entry = {"member": member, "target": str(target), "exists": exists}
         if exists:
-            content = _read_limited(target, label=member)
+            content = read_limited(target, label=member)
             backup = files_dir / member
             backup.parent.mkdir(parents=True, exist_ok=True)
-            _atomic_write(backup, content)
-            entry["sha256"] = _sha256(content)
+            atomic_write(backup, content)
+            entry["sha256"] = sha256(content)
         else:
             entry["sha256"] = None
         entries.append(entry)
@@ -895,7 +300,7 @@ def _fill_import_checkpoint(checkpoint: Path, files_dir: Path) -> Path:
         "targets": entries,
         "excluded": ["plaintext secrets", "TOW_MASTER_KEY", "TOW_MASTER_KEY_FILE", "media bytes", "qBittorrent data"],
     }
-    _atomic_write(checkpoint / "MANIFEST.json", _json_bytes(manifest, readable=True))
+    atomic_write(checkpoint / "MANIFEST.json", json_bytes(manifest, readable=True))
     _read_checkpoint(checkpoint)  # every copy is intact before the operation can start
     _write_import_transaction(checkpoint, status="prepared")
     return checkpoint
@@ -911,7 +316,7 @@ def _write_import_transaction(checkpoint: Path, *, status: str, **fields: Any) -
         "updated_at": iso_now(),
         **fields,
     }
-    _atomic_write(Path(checkpoint) / "TRANSACTION.json", _json_bytes(transaction, readable=True))
+    atomic_write(Path(checkpoint) / "TRANSACTION.json", json_bytes(transaction, readable=True))
 
 
 def _read_import_transaction(checkpoint: Path, *, bound: bool = True) -> dict[str, Any]:
@@ -919,7 +324,7 @@ def _read_import_transaction(checkpoint: Path, *, bound: bool = True) -> dict[st
     try:
         _checkpoint_directory(Path(checkpoint))
         _checkpoint_file(path)
-        value = decode_json_bytes(_read_limited(path, label="import transaction"))
+        value = decode_json_bytes(read_limited(path, label="import transaction"))
     except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         raise ExportImportError("import transaction is unreadable") from exc
     if not isinstance(value, dict) or value.get("format") != TRANSACTION_FORMAT:
@@ -1011,7 +416,7 @@ def _read_checkpoint(checkpoint: Path) -> dict[str, Any]:
     try:
         _checkpoint_directory(checkpoint)
         _checkpoint_file(checkpoint / "MANIFEST.json")
-        data = decode_json_bytes(_read_limited(checkpoint / "MANIFEST.json", label="import checkpoint manifest"))
+        data = decode_json_bytes(read_limited(checkpoint / "MANIFEST.json", label="import checkpoint manifest"))
     except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         raise ExportImportError("import checkpoint manifest is unreadable") from exc
     if (
@@ -1045,11 +450,11 @@ def _read_checkpoint(checkpoint: Path) -> dict[str, Any]:
         if exists:
             if not _checkpoint_file(backup, missing=True):
                 raise ExportImportError(f"import checkpoint backup is missing: {member}")
-            content = _read_limited(backup, label=f"checkpoint {member}")
+            content = read_limited(backup, label=f"checkpoint {member}")
             if (
                 not isinstance(checksum, str)
                 or not re.fullmatch(r"[0-9a-f]{64}", checksum)
-                or checksum != _sha256(content)
+                or checksum != sha256(content)
             ):
                 raise ExportImportError(f"import checkpoint checksum mismatch: {member}")
         elif checksum is not None or backup.exists():
@@ -1097,7 +502,7 @@ def _restore_runtime_targets(snapshot: dict[str, bytes | None], expected_targets
             if target.exists() or target.is_symlink():
                 raise ExportImportError(f"rollback compensation could not remove {member}")
             continue
-        _atomic_write(target, content)
+        atomic_write(target, content)
         try:
             if target.read_bytes() != content:
                 raise ExportImportError(f"rollback compensation read-back mismatch: {member}")
@@ -1128,8 +533,8 @@ def _rollback_import(checkpoint: Path, *, apply: bool = False) -> dict[str, Any]
         target = expected_targets[member]
         backup = checkpoint / "files" / member
         if entry.get("exists"):
-            content = _read_limited(backup, label=f"checkpoint {member}")
-            if entry.get("sha256") != _sha256(content):
+            content = read_limited(backup, label=f"checkpoint {member}")
+            if entry.get("sha256") != sha256(content):
                 raise ExportImportError(f"import checkpoint checksum mismatch: {member}")
         else:
             content = None
@@ -1140,7 +545,7 @@ def _rollback_import(checkpoint: Path, *, apply: bool = False) -> dict[str, Any]
     try:
         for member, target, content in restore_plan:
             if content is not None:
-                _atomic_write(target, content)
+                atomic_write(target, content)
                 if target.read_bytes() != content:
                     raise ExportImportError(f"import rollback read-back mismatch: {member}")
             else:
@@ -1181,18 +586,6 @@ def _rollback_import(checkpoint: Path, *, apply: bool = False) -> dict[str, Any]
     except Exception as exc:
         raise ExportImportError("rollback applied but transaction marker update failed") from exc
     return {"ok": True, "checkpoint": str(checkpoint), "restored": restored}
-
-
-def _read_bundle(path: Path, passphrase: str) -> dict[str, Any]:
-    try:
-        raw = _read_limited(Path(path), label="export bundle")
-        outer = json.loads(raw.decode("utf-8"))
-        _validate_tree(outer, label="export bundle envelope")
-    except (UnicodeError, ValueError, RecursionError) as exc:
-        raise ExportImportError("invalid export bundle envelope", reason="not_tow") from exc
-    except ExportImportError as exc:
-        raise ExportImportError(str(exc), reason="too_large" if exc.reason == "too_large" else "not_tow") from exc
-    return _validated_payload(_decrypt_outer(outer, passphrase))
 
 
 def _destination_readback(parsed: dict[str, Any], state_bytes: bytes, history_bytes: bytes) -> None:
@@ -1265,18 +658,18 @@ def _apply_config_overrides(parsed: dict[str, Any], overrides: dict[str, Any]) -
     if not set(overrides).issubset({"bind", "port", "allow_lan", *_FOLDER_OVERRIDES}):
         raise ExportImportError("unsupported config override")
     # Typed values from the CLI or the web form: no "yes" or "80" written for them.
-    _validate_field(overrides, "bind", str, label="config.yaml")
-    _validate_field(overrides, "port", int, label="config.yaml")
-    _validate_field(overrides, "allow_lan", bool, label="config.yaml")
+    validate_field(overrides, "bind", str, label="config.yaml")
+    validate_field(overrides, "port", int, label="config.yaml")
+    validate_field(overrides, "allow_lan", bool, label="config.yaml")
     for key in _FOLDER_OVERRIDES:
-        _validate_field(overrides, key, str, label="config.yaml")
+        validate_field(overrides, key, str, label="config.yaml")
     effective_config = copy.deepcopy(parsed["config"])
     for key, value in overrides.items():
         if key in _FOLDER_OVERRIDES and value is None:
             effective_config.pop(key, None)  # this install has none: the default folder, not the bundle's
         else:
             effective_config[key] = copy.deepcopy(value)
-    _validate_config_schema(effective_config)
+    validate_config_schema(effective_config)
     parsed["config_bytes"] = _config_override_bytes(effective_config)
     parsed["config"] = effective_config
 
@@ -1291,7 +684,7 @@ def _import_bundle(
     preserve_secret_keys: Iterable[str] | None = None,
 ) -> dict[str, Any]:
     recover_import_transactions()
-    parsed = _read_bundle(Path(input_path), passphrase)
+    parsed = read_bundle(Path(input_path), passphrase)
     overrides = dict(config_overrides or {})
     if overrides:
         _apply_config_overrides(parsed, overrides)
@@ -1312,8 +705,8 @@ def _import_bundle(
         parsed["secrets"] = effective_secrets
     mappings = parse_path_maps(path_maps)
     mapped_state, warnings = _apply_path_maps(parsed["state"], mappings)
-    state_bytes = _json_bytes(mapped_state, readable=True)  # as tow.store writes each file
-    history_bytes = _json_bytes(parsed["history"])
+    state_bytes = json_bytes(mapped_state, readable=True)  # as tow.store writes each file
+    history_bytes = json_bytes(parsed["history"])
     members = sorted(name for name in parsed["members"] if name != "manifest.json")
     result = {
         "ok": True,
@@ -1346,9 +739,9 @@ def _import_bundle(
 
     checkpoint = _create_import_checkpoint()
     try:
-        _atomic_write(config_path(), parsed["config_bytes"])
-        _atomic_write(state_path(), state_bytes)
-        _atomic_write(download_history_path(), history_bytes)
+        atomic_write(config_path(), parsed["config_bytes"])
+        atomic_write(state_path(), state_bytes)
+        atomic_write(download_history_path(), history_bytes)
         save_secrets(parsed["secrets"])
         if parsed["undo"] is not None:
             save_secret_undo(parsed["undo"]["secrets"])
@@ -1431,3 +824,28 @@ def prune_import_checkpoints(*, keep: int = IMPORT_CHECKPOINTS_KEPT) -> int:
         except ExportImportError, OSError:
             continue
     return removed
+
+
+__all__ = [
+    "ALLOWED_MEMBERS",
+    "CHECKPOINT_FORMAT",
+    "FORMAT",
+    "IMPORT_CHECKPOINTS_KEPT",
+    "KDF_ITERATIONS",
+    "KDF_NAME",
+    "KDF_SALT_BYTES",
+    "MAX_BUNDLE_BYTES",
+    "OPTIONAL_MEMBERS",
+    "REQUIRED_MEMBERS",
+    "TRANSACTION_FORMAT",
+    "ExportImportError",
+    "export_bundle",
+    "import_bundle",
+    "load_json_for_export",
+    "parse_path_maps",
+    "prune_import_checkpoints",
+    "recover_import_transactions",
+    "recover_interrupted_import",
+    "rollback_import",
+    "verify_bundle",
+]

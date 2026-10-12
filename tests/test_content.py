@@ -157,14 +157,15 @@ def test_full_cache_refuses_without_destroying_current_record(monkeypatch):
 
 
 def test_manual_selection_import_is_semantically_checked():
-    from tow.bundle import ExportImportError, _validate_state_schema
+    from tow.bundle import ExportImportError
+    from tow.bundle.schema import validate_state_schema
 
     data = {"schema_version": 2, "topics": [{"selection": stored_policy(exact())}], "mirrors": {}}
-    _validate_state_schema(data)
+    validate_state_schema(data)
     wrong = copy.deepcopy(data)
     wrong["topics"][0]["selection"]["files"][0]["size"] = True
     with pytest.raises(ExportImportError):
-        _validate_state_schema(wrong)
+        validate_state_schema(wrong)
 
 
 def test_web_metadata_preparation_is_explicit_and_upload_is_bounded(monkeypatch):

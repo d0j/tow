@@ -241,12 +241,12 @@ def test_import_checks_new_backup_before_publishing_transaction(monkeypatch):
 
     store.save_state({"topics": [{"id": "before"}]})
     before = state_path().read_bytes()
-    write = bundle._atomic_write
+    write = bundle.atomic_write
 
     def corrupt(path, content):
         write(path, b"damaged" if path.name == "state.json" and path.parent.name == "files" else content)
 
-    monkeypatch.setattr(bundle, "_atomic_write", corrupt)
+    monkeypatch.setattr(bundle, "atomic_write", corrupt)
     with store.persistence_lock(), pytest.raises(bundle.ExportImportError):
         bundle._create_import_checkpoint()
     assert state_path().read_bytes() == before

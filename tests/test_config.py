@@ -214,15 +214,16 @@ def test_every_known_site_and_the_example_config_still_load():
 
 def test_the_bundle_check_and_the_loader_share_one_schema():
     # An imported bundle used to check a state key (save_roots) and never allowed_save_roots.
-    from tow.bundle import ExportImportError, _validate_config_schema
+    from tow.bundle import ExportImportError
+    from tow.bundle.schema import validate_config_schema
     from tow.config import validated
 
     good = {"allowed_save_roots": ["D:/media"], "allow_unc_save_paths": "yes"}
     assert validated(good)["allowed_save_roots"] == ["D:/media"]
     assert "interval_sec" not in good  # the caller's mapping is not filled in
-    _validate_config_schema(good)
+    validate_config_schema(good)
     with pytest.raises(ExportImportError, match="allowed_save_roots must be a list of folders") as caught:
-        _validate_config_schema({"allowed_save_roots": "D:/media"})
+        validate_config_schema({"allowed_save_roots": "D:/media"})
     # The log keeps the English text; `tow import` names the same setting in the owner's language.
     from tow.i18n import t
 
@@ -417,7 +418,8 @@ def test_the_checked_config_is_kept_for_the_same_file_and_equals_a_fresh_check(m
 @pytest.mark.parametrize("value", ['"²"', '"' + "9" * 5000 + '"', '"١٢"'], ids=["superscript", "5000-digits", "arabic"])
 def test_a_number_that_is_not_plain_ascii_digits_is_named_not_a_crash(value):
     # "²" passes str.isdigit() but not int(); 5000 digits exceed int()'s 4300-digit limit.
-    from tow.bundle import ExportImportError, _validate_config_schema
+    from tow.bundle import ExportImportError
+    from tow.bundle.schema import validate_config_schema
     from tow.config import ConfigError, validated
 
     _write(f"interval_sec: {value}\n")
@@ -426,7 +428,7 @@ def test_a_number_that_is_not_plain_ascii_digits_is_named_not_a_crash(value):
     assert caught.value.code == "config_error.whole_number"
     assert caught.value.params["key"] == "interval_sec"
     with pytest.raises(ExportImportError, match="interval_sec must be a whole number"):
-        _validate_config_schema(yaml.safe_load(f"interval_sec: {value}\n"))
+        validate_config_schema(yaml.safe_load(f"interval_sec: {value}\n"))
     assert validated({"interval_sec": " 1800 "})["interval_sec"] == 1800  # a quoted number still loads
 
 
