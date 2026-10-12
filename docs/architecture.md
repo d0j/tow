@@ -96,7 +96,7 @@ flowchart TD
 | Package / module | Role |
 |---|---|
 | `tow.cli` | Every command (`run`, `serve`, `check`, `autostart`, `update`, `keys`, `export`…). `setup` lives in the launchers (`scripts/tow.cmd`, `scripts/tow`). |
-| `tow.supervisor` | `tow run`: the loop (`core`), timing with a fake-clock-testable schedule (`schedule`), its files (`layout`). |
+| `tow.supervisor` | `tow run`: the loop (`core`), the table of its jobs (`jobs`), timing with a fake-clock-testable schedule (`schedule`), its files (`layout`). |
 | `tow.web` | FastAPI app built by `create_app()`: one `APIRouter` per `routes_*.py`, the request middleware, templates. Everything outside the package is called through `tow.web.services`. |
 | `tow.check`, `check_steps`, `check_transaction` | A check run: fetch, decide, hand to the client, record — with a journal for the commit. The package exports `run_check` and the checks the web pages share; inside it `run` is the run, its commit and health record, `topic` one topic's check, `apply` what that check does in the client, `client_ops` hash identity, ownership, read-back and relocation, `reconcile` progress and the history commit, `space` the wait for disk space, `notices` the messages, `rows` a topic's result row. |
 | `tow.trackers` | `generic.GenericHttpTracker` reads any configured site; `presets/<site>.py` adds what TOW knows about a particular site. `tow.mirrors` picks mirrors, cooldowns, redirects. |
