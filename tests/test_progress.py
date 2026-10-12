@@ -5,7 +5,8 @@ import pytest
 from helpers import raises_code
 
 from tow.episodes import item_identity, summarize_completion
-from tow.progress import _file_progress, _preferred_season, reconcile_topic, safe_relative_path
+from tow.progress import _file_progress, reconcile_topic, safe_relative_path
+from tow.progress.expected import preferred_season_for
 from tow.progress.labels import latest_item_label
 
 
@@ -646,7 +647,7 @@ def test_unknown_tracker_total_keeps_original_season_and_repairs_old_event(tmp_p
 )
 def test_tracker_season_takes_priority_but_ambiguity_does_not_fall_back(tracker_title, season):
     topic = {"title": "Show 3: Example [12 из 14]", "tracker_title": tracker_title}
-    assert _preferred_season(topic, ["episode:e14"]) == season
+    assert preferred_season_for(topic, ["episode:e14"]) == season
 
 
 def test_season_number_in_files_resolves_title_window_without_title_season(tmp_path: Path):
