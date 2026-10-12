@@ -7,6 +7,7 @@ import json
 import pytest
 
 from tow import snapshots, store
+from tow.bundle import checkpoint as bundle_checkpoint
 from tow.paths import data_dir, download_history_path, state_path
 from tow.snapshots import restore as night_restore
 
@@ -206,7 +207,7 @@ def test_damaged_import_transaction_does_not_allow_a_later_write(field, value):
 
     store.save_state({"topics": [{"id": "before"}]})
     with store.persistence_lock():
-        checkpoint = bundle._create_import_checkpoint()
+        checkpoint = bundle_checkpoint.create_import_checkpoint()
         marker = checkpoint / "TRANSACTION.json"
         raw = json.loads(marker.read_bytes())
         if field == "nested":
@@ -227,13 +228,13 @@ def test_bad_import_checkpoint_member_is_rejected_without_hash_type_escape(value
 
     store.save_state({"topics": [{"id": "before"}]})
     with store.persistence_lock():
-        checkpoint = bundle._create_import_checkpoint()
+        checkpoint = bundle_checkpoint.create_import_checkpoint()
         manifest = checkpoint / "MANIFEST.json"
         raw = json.loads(manifest.read_bytes())
         raw["targets"][0]["member"] = value
         manifest.write_text(json.dumps(raw), encoding="utf-8")
         with pytest.raises(bundle.ExportImportError):
-            bundle._read_checkpoint(checkpoint)
+            bundle_checkpoint._read_checkpoint(checkpoint)
 
 
 def test_import_checks_new_backup_before_publishing_transaction(monkeypatch):
@@ -241,14 +242,14 @@ def test_import_checks_new_backup_before_publishing_transaction(monkeypatch):
 
     store.save_state({"topics": [{"id": "before"}]})
     before = state_path().read_bytes()
-    write = bundle.atomic_write
+    write = bundle_checkpoint.atomic_write
 
     def corrupt(path, content):
         write(path, b"damaged" if path.name == "state.json" and path.parent.name == "files" else content)
 
-    monkeypatch.setattr(bundle, "atomic_write", corrupt)
+    monkeypatch.setattr(bundle_checkpoint, "atomic_write", corrupt)
     with store.persistence_lock(), pytest.raises(bundle.ExportImportError):
-        bundle._create_import_checkpoint()
+        bundle_checkpoint.create_import_checkpoint()
     assert state_path().read_bytes() == before
     assert not list(data_dir().glob("import-checkpoints/*/TRANSACTION.json"))
 
@@ -257,8 +258,8 @@ def test_finished_import_checkpoint_with_foreign_file_is_not_pruned():
     from tow import bundle
 
     with store.persistence_lock():
-        checkpoint = bundle._create_import_checkpoint()
-        bundle._write_import_transaction(checkpoint, status="committed")
+        checkpoint = bundle_checkpoint.create_import_checkpoint()
+        bundle_checkpoint.write_import_transaction(checkpoint, status="committed")
     (checkpoint / "keep.txt").write_bytes(b"not owned")
     assert bundle.prune_import_checkpoints(keep=0) == 0
     assert (checkpoint / "keep.txt").read_bytes() == b"not owned"

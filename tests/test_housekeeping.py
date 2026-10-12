@@ -3,6 +3,7 @@
 import json
 
 from tow import bundle as tow_bundle
+from tow.bundle import checkpoint as bundle_checkpoint
 from tow.paths import data_dir, download_history_path
 from tow.store import load_download_history, save_download_history
 
@@ -15,12 +16,12 @@ def _checkpoint(name: str, status: str | None) -> None:
         "format": tow_bundle.CHECKPOINT_FORMAT,
         "targets": [
             {"member": member, "target": str(target), "exists": False, "sha256": None}
-            for member, target in tow_bundle._checkpoint_targets()
+            for member, target in bundle_checkpoint._checkpoint_targets()
         ],
     }
     (path / "MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
     if status is not None:
-        tow_bundle._write_import_transaction(path, status=status)
+        bundle_checkpoint.write_import_transaction(path, status=status)
 
 
 def test_prune_keeps_newest_and_never_touches_unfinished_checkpoints():

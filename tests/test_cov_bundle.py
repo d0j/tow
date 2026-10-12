@@ -36,6 +36,7 @@ from tow.bundle import (
     recover_import_transactions,
     rollback_import,
 )
+from tow.bundle import checkpoint as bundle_checkpoint
 from tow.bundle import crypto as bundle_crypto
 from tow.bundle import io as bundle_io
 from tow.bundle import schema as bundle_schema
@@ -1126,7 +1127,7 @@ def test_failed_import_with_failed_rollback_stays_pending_and_is_recovered_later
     def fail_save(_data):
         raise SecretStoreError("fixture write failure")
 
-    read_checkpoint = tow_bundle._read_checkpoint
+    read_checkpoint = bundle_checkpoint._read_checkpoint
     reads = 0
 
     def fail_checkpoint(checkpoint):
@@ -1138,7 +1139,7 @@ def test_failed_import_with_failed_rollback_stays_pending_and_is_recovered_later
 
     with monkeypatch.context() as patch:
         patch.setattr(tow_bundle, "save_secrets", fail_save)
-        patch.setattr(tow_bundle, "_read_checkpoint", fail_checkpoint)
+        patch.setattr(bundle_checkpoint, "_read_checkpoint", fail_checkpoint)
         with pytest.raises(ExportImportError, match="import failed and destination rollback also failed"):
             import_bundle(bundle, PASS, apply=True)
 
@@ -1154,14 +1155,14 @@ def test_failed_import_with_failed_rollback_stays_pending_and_is_recovered_later
 
 def test_unrecorded_transaction_log_does_not_undo_a_committed_import(tmp_path, monkeypatch):
     _seed_destination()
-    original = tow_bundle._write_import_transaction
+    original = tow_bundle.write_import_transaction
 
     def flaky_marker(checkpoint, *, status, **fields):
         if "log_recorded" in fields:
             raise ExportImportError("fixture: marker write failed")
         return original(checkpoint, status=status, **fields)
 
-    monkeypatch.setattr(tow_bundle, "_write_import_transaction", flaky_marker)
+    monkeypatch.setattr(tow_bundle, "write_import_transaction", flaky_marker)
     result = import_bundle(_bundle(tmp_path / "in" / "tow.towx"), PASS, apply=True)
 
     assert result["committed"] is True
@@ -1174,7 +1175,7 @@ def test_import_wraps_unexpected_failures(tmp_path, monkeypatch):
     def broken(*_args):
         raise KeyError("unexpected")
 
-    monkeypatch.setattr(tow_bundle, "_apply_path_maps", broken)
+    monkeypatch.setattr(tow_bundle, "apply_path_maps", broken)
     _rejects(tmp_path, _bundle(tmp_path / "in" / "tow.towx"), "cannot import TOW bundle safely")
 
 
@@ -1325,7 +1326,7 @@ def test_rollback_refuses_a_target_replaced_by_a_directory(applied):
 
 
 def test_rollback_that_cannot_compensate_stays_pending_and_completes_on_next_lock(applied, monkeypatch):
-    original = tow_bundle.atomic_write
+    original = bundle_checkpoint.atomic_write
 
     def disk_full_after_marker(path, content):
         if path.name == "TRANSACTION.json":
@@ -1333,7 +1334,7 @@ def test_rollback_that_cannot_compensate_stays_pending_and_completes_on_next_loc
         raise ExportImportError(f"cannot write imported {path.name}")
 
     with monkeypatch.context() as patch:
-        patch.setattr(tow_bundle, "atomic_write", disk_full_after_marker)
+        patch.setattr(bundle_checkpoint, "atomic_write", disk_full_after_marker)
         with pytest.raises(ExportImportError, match="rollback failed; recovery remains pending"):
             rollback_import(applied["checkpoint"], apply=True)
 
@@ -1344,7 +1345,7 @@ def test_rollback_that_cannot_compensate_stays_pending_and_completes_on_next_loc
 
 
 def test_rollback_failure_whose_marker_cannot_be_updated_still_preserves_destination(applied, monkeypatch):
-    original = tow_bundle.atomic_write
+    original = bundle_checkpoint.atomic_write
     failed_target = False
 
     def fail_first_target_then_markers(path, content):
@@ -1358,7 +1359,7 @@ def test_rollback_failure_whose_marker_cannot_be_updated_still_preserves_destina
             raise OSError("fixture: target disk failure")
         return original(path, content)
 
-    monkeypatch.setattr(tow_bundle, "atomic_write", fail_first_target_then_markers)
+    monkeypatch.setattr(bundle_checkpoint, "atomic_write", fail_first_target_then_markers)
     with pytest.raises(ExportImportError, match="destination preserved but marker update failed"):
         rollback_import(applied["checkpoint"], apply=True)
 
@@ -1366,14 +1367,14 @@ def test_rollback_failure_whose_marker_cannot_be_updated_still_preserves_destina
 
 
 def test_rollback_reports_a_marker_failure_after_restoring_files(applied, monkeypatch):
-    original = tow_bundle.atomic_write
+    original = bundle_checkpoint.atomic_write
 
     def fail_final_marker(path, content):
         if path.name == "TRANSACTION.json" and json.loads(content)["status"] == "rolled_back":
             raise OSError("fixture: journal disk failure")
         return original(path, content)
 
-    monkeypatch.setattr(tow_bundle, "atomic_write", fail_final_marker)
+    monkeypatch.setattr(bundle_checkpoint, "atomic_write", fail_final_marker)
     with pytest.raises(ExportImportError, match="rollback applied but transaction marker update failed"):
         rollback_import(applied["checkpoint"], apply=True)
 
@@ -1384,7 +1385,7 @@ def test_rollback_wraps_unexpected_failures(applied, monkeypatch):
     def broken(_checkpoint):
         raise KeyError("unexpected")
 
-    monkeypatch.setattr(tow_bundle, "_read_checkpoint", broken)
+    monkeypatch.setattr(bundle_checkpoint, "_read_checkpoint", broken)
     with pytest.raises(ExportImportError, match="cannot roll back import checkpoint safely"):
         rollback_import(applied["checkpoint"])
 
@@ -1411,7 +1412,7 @@ def _fake_checkpoint(name: str, status: str | None) -> Path:
         "format": tow_bundle.CHECKPOINT_FORMAT,
         "targets": [
             {"member": member, "target": str(target), "exists": False, "sha256": None}
-            for member, target in tow_bundle._checkpoint_targets()
+            for member, target in bundle_checkpoint._checkpoint_targets()
         ],
     }
     (checkpoint / "MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
