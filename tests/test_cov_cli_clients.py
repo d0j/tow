@@ -24,6 +24,7 @@ from helpers import multi_file_torrent, raises_code
 
 from tow import cli, restore_points
 from tow.bundle import ExportImportError
+from tow.cli import render
 from tow.clients import qbittorrent
 from tow.config import load_config, save_config
 from tow.i18n import t
@@ -676,12 +677,12 @@ def test_unowned_magnet_add_never_stops_a_possibly_foreign_torrent(qbit):
 
 
 def test_human_output_of_a_scalar_is_the_text_itself():
-    assert cli._human("plain text") == "plain text"
-    assert cli._human(3) == "3"
+    assert render.human("plain text") == "plain text"
+    assert render.human(3) == "3"
 
 
 def test_human_output_of_a_check_shows_a_row_note():
-    out = cli._human({"qbit": "ok", "results": [{"ok": True, "title": "Show", "note": "ссылка изменилась"}]})
+    out = render.human({"qbit": "ok", "results": [{"ok": True, "title": "Show", "note": "ссылка изменилась"}]})
     assert out.splitlines()[1:3] == ["ok  Show", "    ссылка изменилась"]
 
 

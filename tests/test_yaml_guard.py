@@ -308,7 +308,7 @@ def test_all_production_yaml_construction_goes_through_the_guard():
         )
     # CLI renders to stdout; it does not persist a live configuration.
     assert sorted(calls) == [
-        ("cli/__init__.py", "safe_dump"),
+        ("cli/render.py", "safe_dump"),
         ("yaml_guard.py", "load"),
         ("yaml_guard.py", "safe_dump"),
     ]
