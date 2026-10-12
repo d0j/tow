@@ -224,7 +224,7 @@ def _clock(monkeypatch, stamps):
     # The datetime the whole of tow.snapshots read, in each module that reads it now.
     monkeypatch.setattr("tow.snapshots.create.datetime", FixedNow)
     monkeypatch.setattr("tow.snapshots.location.datetime", FixedNow)
-    monkeypatch.setattr("tow.snapshots.datetime", FixedNow)
+    monkeypatch.setattr("tow.snapshots.restore.datetime", FixedNow)
 
 
 def test_a_copy_that_does_not_read_back_prunes_nothing(backup, monkeypatch):
@@ -753,7 +753,7 @@ def _fail_on(monkeypatch, live: Path, error: BaseException, *, times: int = 1) -
     """
     import tow.snapshots
 
-    real = tow.snapshots.atomic_write_bytes
+    real = tow.snapshots.restore.atomic_write_bytes
     fault = {"on": True, "left": times}
 
     def write(path, content):
@@ -762,7 +762,7 @@ def _fail_on(monkeypatch, live: Path, error: BaseException, *, times: int = 1) -
             raise error
         real(path, content)
 
-    monkeypatch.setattr(tow.snapshots, "atomic_write_bytes", write)
+    monkeypatch.setattr(tow.snapshots.restore, "atomic_write_bytes", write)
     return fault
 
 
@@ -810,7 +810,7 @@ def test_store_imports_the_recovery_of_a_process_that_never_loaded_it():
     import tow.snapshots
     import tow.store
 
-    assert ("tow.snapshots", "recover_interrupted_restore", tow.snapshots._MARKER) in tow.store.RECOVERY_STEPS
+    assert ("tow.snapshots", "recover_interrupted_restore", tow.snapshots.restore._MARKER) in tow.store.RECOVERY_STEPS
 
 
 def test_a_failed_put_back_is_said_and_retried(backup, monkeypatch):
@@ -853,7 +853,7 @@ def _journal_held(monkeypatch, *, times: int | None) -> dict:
     ``held["on"] = False``). Returns the switch, with the number of reads in ``held["calls"]``."""
     import tow.snapshots
 
-    real = tow.snapshots._read_journal
+    real = tow.snapshots.restore._read_journal
     held = {"on": True, "calls": 0}
 
     def read(safety):
@@ -862,8 +862,8 @@ def _journal_held(monkeypatch, *, times: int | None) -> dict:
             raise PermissionError(13, "The process cannot access the file")
         return real(safety)
 
-    monkeypatch.setattr(tow.snapshots, "_read_journal", read)
-    monkeypatch.setattr(tow.snapshots.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(tow.snapshots.restore, "_read_journal", read)
+    monkeypatch.setattr(tow.snapshots.restore.time, "sleep", lambda _s: None)
     return held
 
 
@@ -970,13 +970,13 @@ def test_a_restore_of_an_earlier_version_puts_the_event_log_back(backup, monkeyp
     del journal["points_dir"]  # journals of 1.23.11 and earlier name no restore points folder
     journal_path.write_text(json.dumps(journal), encoding="utf-8")
     log_path().write_bytes(b'{"kind": "synthetic_written_by_the_old_restore"}\n')
-    real_lock, locked = tow.snapshots.locked_log_path, []
+    real_lock, locked = tow.snapshots.restore.locked_log_path, []
 
     def watched_lock():
         locked.append(True)
         return real_lock()
 
-    monkeypatch.setattr(tow.snapshots, "locked_log_path", watched_lock)
+    monkeypatch.setattr(tow.snapshots.restore, "locked_log_path", watched_lock)
 
     with persistence_lock():
         pass
@@ -1016,14 +1016,14 @@ def test_a_restore_that_fails_before_its_marker_leaves_no_before_restore_folder(
     import tow.snapshots
 
     snapshot = _changed_after(create_snapshot())
-    real = tow.snapshots.atomic_write_bytes
+    real = tow.snapshots.restore.atomic_write_bytes
 
     def write(path, content):
         if path.name == failing and (path.parent.name.startswith("before-restore-") or path.parent == data_dir()):
             raise OSError(28, "No space left on device")
         return real(path, content)
 
-    monkeypatch.setattr(tow.snapshots, "atomic_write_bytes", write)
+    monkeypatch.setattr(tow.snapshots.restore, "atomic_write_bytes", write)
     with pytest.raises(SnapshotError, match="No space left on device"):
         restore_snapshot(snapshot, apply=True)
 
@@ -1036,17 +1036,17 @@ def test_a_marker_published_before_an_error_keeps_its_before_restore_folder(back
     from tow.store import persistence_lock
 
     snapshot = _changed_after(create_snapshot())
-    real = tow.snapshots.atomic_write_bytes
+    real = tow.snapshots.restore.atomic_write_bytes
 
     def write(path, content):
         real(path, content)
         if path.name == ".tow-night-restore.json":
             raise OSError(5, "I/O error")  # published, then the folder sync failed
 
-    monkeypatch.setattr(tow.snapshots, "atomic_write_bytes", write)
+    monkeypatch.setattr(tow.snapshots.restore, "atomic_write_bytes", write)
     with pytest.raises(SnapshotError):
         restore_snapshot(snapshot, apply=True)
-    monkeypatch.setattr(tow.snapshots, "atomic_write_bytes", real)
+    monkeypatch.setattr(tow.snapshots.restore, "atomic_write_bytes", real)
 
     assert list(data_dir().glob("before-restore-*"))
     with persistence_lock():  # recovery still finds every saved file
@@ -1325,17 +1325,17 @@ def test_a_restore_that_died_before_its_marker_leaves_no_folder_for_ever(backup,
     class Crash(BaseException):  # the process dies: no except clause runs
         pass
 
-    real = tow.snapshots.atomic_write_bytes
+    real = tow.snapshots.restore.atomic_write_bytes
 
     def dies_at_the_marker(path, content):
-        if Path(path).name == tow.snapshots._MARKER:
+        if Path(path).name == tow.snapshots.restore._MARKER:
             raise Crash()
         real(path, content)
 
-    monkeypatch.setattr(tow.snapshots, "atomic_write_bytes", dies_at_the_marker)
+    monkeypatch.setattr(tow.snapshots.restore, "atomic_write_bytes", dies_at_the_marker)
     with pytest.raises(Crash):
         restore_snapshot(snapshot, apply=True)
-    monkeypatch.setattr(tow.snapshots, "atomic_write_bytes", real)
+    monkeypatch.setattr(tow.snapshots.restore, "atomic_write_bytes", real)
     (prepared,) = data_dir().glob("before-restore-*")
     assert json.loads((prepared / "RESTORE.json").read_text(encoding="utf-8"))["status"] == "prepared"
     unjournaled = data_dir() / "before-restore-20260101-000000"  # died while copying a store

@@ -17,6 +17,7 @@ from tow.log import history_events, read_events
 from tow.paths import data_dir
 from tow.snapshots import create as night_create
 from tow.snapshots import location as night_location
+from tow.snapshots import restore as night_restore
 
 backup = fixtures.backup
 
@@ -74,10 +75,10 @@ def _safety_copies() -> list[Path]:
         folder = data_dir() / f"before-restore-20261001-00000{index}"
         folder.mkdir()
         (folder / "state.json").write_bytes(content)
-        snapshots._write_journal(
+        night_restore._write_journal(
             folder,
             {
-                "format": snapshots._JOURNAL_FORMAT,
+                "format": night_restore._JOURNAL_FORMAT,
                 "entries": [{"name": "state.json", "existed": True, "sha256": hashlib.sha256(content).hexdigest()}],
             },
             "committed",
@@ -90,13 +91,13 @@ def _safety_copies() -> list[Path]:
 def test_safety_cleanup_failure_retains_ownership_proof_for_retry(monkeypatch, mode):
     folders = _safety_copies()
     old = folders[0]
-    proof = (old / snapshots._JOURNAL).read_bytes()
+    proof = (old / night_restore._JOURNAL).read_bytes()
     fault = _block_deletion(monkeypatch, old, mode)
-    assert snapshots._cleanup_safety_copies()[0] == []
-    assert (old / snapshots._JOURNAL).read_bytes() == proof
+    assert night_restore._cleanup_safety_copies()[0] == []
+    assert (old / night_restore._JOURNAL).read_bytes() == proof
     assert any(row["kind"] == "backup_cleanup_pending" for row in history_events(group="errors"))
     fault["value"] = False
-    assert snapshots._cleanup_safety_copies()[0] == [old.name]
+    assert night_restore._cleanup_safety_copies()[0] == [old.name]
     assert not old.exists()
     assert all(folder.exists() for folder in folders[1:])
 
@@ -159,13 +160,13 @@ def test_signed_night_copy_with_unowned_files_is_not_pruned(backup, monkeypatch,
 def test_retained_safety_undo_failure_is_reported_without_pruning_the_kept_copy(monkeypatch, mode):
     folders = _safety_copies()
     newest = folders[-1]
-    undo = newest / snapshots._UNDO_IN_SAFETY
+    undo = newest / night_restore._UNDO_IN_SAFETY
     undo.write_bytes(b"synthetic encrypted undo")
-    journal = snapshots._read_journal(newest)
+    journal = night_restore._read_journal(newest)
     journal["entries"].append(
         {"name": undo.name, "existed": True, "sha256": hashlib.sha256(undo.read_bytes()).hexdigest()}
     )
-    snapshots._write_journal(newest, journal, "committed")
+    night_restore._write_journal(newest, journal, "committed")
     real_unlink = Path.unlink
 
     def blocked(path, *args, **kwargs):
@@ -176,7 +177,7 @@ def test_retained_safety_undo_failure_is_reported_without_pruning_the_kept_copy(
         return real_unlink(path, *args, **kwargs)
 
     monkeypatch.setattr(Path, "unlink", blocked)
-    removed, pending = snapshots._cleanup_safety_copies()
+    removed, pending = night_restore._cleanup_safety_copies()
     assert removed == [folders[0].name]
     assert pending is True
     assert undo.read_bytes() == b"synthetic encrypted undo"
