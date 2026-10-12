@@ -59,6 +59,9 @@ PURE: dict[str, set[str]] = {
         "set_default_client",
     },
     "tow.clients.managed": {"ClientError"},
+    # The client cards of the settings page from the config and secrets it is given (as
+    # tow.notifiers.cards), and how many topics a client serves; no I/O.
+    "tow.clients.view": {"cards", "topics_using"},
     # DEFAULT_KIND: the client kind a form that names none means (a constant).
     "tow.clients.spec": {"DEFAULT_KIND", "get"},
     "tow.clock": {"format_ui_timestamp", "iso_now", "machine_now"},

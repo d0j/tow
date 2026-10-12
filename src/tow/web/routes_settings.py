@@ -18,6 +18,8 @@ from tow import access, i18n, store_transaction, undo
 from tow.auth import MAX_HINT_LENGTH, password_hint
 from tow.bind import network_bind
 from tow.clients.spec import DEFAULT_KIND
+from tow.clients.view import cards as client_cards
+from tow.clients.view import topics_using
 from tow.clock import format_ui_timestamp
 from tow.config import (
     INTERVAL_MAX_MINUTES,
@@ -45,9 +47,7 @@ router = APIRouter()
 
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request) -> Response:
-    from tow.clients.factory import client_configurations, client_secret_block, default_client_id
     from tow.clients.factory import ready as ready_clients
-    from tow.clients.spec import get as client_get
     from tow.log import format_event, index_event_titles
 
     cfg = _context.config()  # read-only snapshots of this request (tow.web._context)
@@ -55,36 +55,9 @@ def settings_page(request: Request) -> Response:
     secret_store_error = secrets is None
     s = secrets or {}
     state = _context.state()
-    clients = []
-    configurations = client_configurations(cfg)
-    default_id = default_client_id(cfg)
     topics = state.get("topics") or []
     title_index = index_event_titles(topics)
-    for index, configuration in enumerate(configurations):
-        spec = client_get(str(configuration.get("kind") or "").lower())
-        if spec is None or not spec.ready:
-            continue
-        q = client_secret_block(cfg, s, str(configuration["id"]))
-        client_id = str(configuration["id"])
-        clients.append(
-            {
-                "id": client_id,
-                "form_id": f"client-{index}",
-                "kind": spec.kind,
-                "title": str(configuration.get("title") or spec.title),
-                "host": q.get("host") or "",
-                "port": q.get("port") or spec.default_port,
-                "user": q.get("username") or "",
-                "pass_set": bool(q.get("password")),
-                "fields": [field.name for field in spec.fields],
-                "labels": {field.name: field.label for field in spec.fields},
-                "steps": list(spec.steps),
-                "note": spec.note,
-                "default": client_id == default_id,
-                "multi": len(configurations) > 1,
-                "used_by": _topics_using(topics, client_id, default_id),
-            }
-        )
+    clients = client_cards(cfg, s, topics)
     restore_points_error = False
     try:
         restore_points = services.list_restore_points()
@@ -206,10 +179,6 @@ def settings_theme(theme: str = Form("")) -> Response:
     return flash_redirect("/settings?open=theme", "settings.theme.saved", "ok")
 
 
-def _topics_using(topics: list[dict[str, Any]], client_id: str, default_id: str) -> int:
-    return sum(1 for topic in topics if str(topic.get("client_id") or default_id) == client_id)
-
-
 def _clients_redirect(message: Any, kind: str = "ok", /, **params: Any) -> RedirectResponse:
     return flash_redirect("/settings?open=clients", message, kind, **params)
 
@@ -266,7 +235,7 @@ def settings_client_remove(client_id: str = Form("")) -> Response:
     from tow.clients.factory import default_client_id, remove_client
 
     cfg = services.load_config()
-    used_by = _topics_using(services.load_state().get("topics") or [], client_id, default_client_id(cfg))
+    used_by = topics_using(services.load_state().get("topics") or [], client_id, default_client_id(cfg))
     return _change_clients(
         lambda cfg, s: remove_client(cfg, s, client_id, used_by),
         t("web.settings.client_removed"),
