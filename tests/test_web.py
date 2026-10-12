@@ -2225,6 +2225,21 @@ def test_clamped_interval_is_reported_not_silent():
     assert "интервал 15 мин (допустимо 15–1440)" in location
 
 
+@pytest.mark.parametrize(("lang", "word"), [("ru", "сохранено"), ("en", "saved")])
+def test_a_clamped_interval_says_saved_once(lang, word):
+    """QA9: the message read "Saved; saved: interval 15 min (allowed 15–1440)"."""
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    client.post("/settings/language", data={"language": lang})
+
+    response = client.post(
+        "/settings/interval", data={"interval_min": "5", "flash_ttl_min": "1"}, follow_redirects=False
+    )
+
+    text = shown(response.headers["location"]).casefold()
+    assert text.count(word) == 1
+    assert "15–1440" in text
+
+
 @pytest.mark.parametrize("value", ["abc", "1.5", "-"])
 def test_an_interval_that_is_not_a_whole_number_is_refused(value):
     from tow.config import interval_sec_of, load_config
