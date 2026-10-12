@@ -15,9 +15,11 @@ import pytest
 from tow.config import load_config
 from tow.supervisor import layout
 from tow.supervisor.core import BACKOFF_MAX_SEC, Deps, Supervisor
-from tow.supervisor.schedule import SPACE_EVERY_SEC, Schedule, WakeDetector, local_slot
+from tow.supervisor.jobs import BY_NAME
+from tow.supervisor.schedule import Schedule, WakeDetector, local_slot
 
 T0 = datetime(2026, 10, 1, 12, 0, tzinfo=UTC).timestamp()
+SPACE_EVERY_SEC = BY_NAME["space"].every_sec or 0
 
 
 class Clock:

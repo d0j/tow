@@ -1,5 +1,8 @@
 """The jobs of ``tow run``, one row each: what runs, for how long, how often, what it keeps.
 
+The order of ``JOBS`` is the schedule's priority: when several jobs are due at once, the
+first one starts (``Schedule.due``), and it is the key order of ``next`` in ``status.json``.
+
 - ``argv``: the arguments of its child process (``python -m tow ...``); None for the watchdog,
   a pass inside the supervisor;
 - ``timeout_sec``: a child still running after this long is stopped;
@@ -9,7 +12,9 @@
 - ``persisted_key``: the key in ``data/run/schedule.json`` that keeps its last scheduled start
   across a restart.
 
-This table holds data only and imports nothing from TOW.
+When a job is due beyond its timing (night copies turned on, a personal timer set, a topic
+waiting for disk space) stays code in ``Schedule``; this table holds data only and imports
+nothing from TOW, so the schedule stays pure.
 """
 
 from __future__ import annotations

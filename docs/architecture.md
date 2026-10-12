@@ -44,7 +44,9 @@ flowchart TD
   the next `tow run`; nothing else on the port is ever touched.
 - The schedule is the supervisor's own: checks every `interval_sec` after its last scheduled start
   (`data/run/schedule.json`), the night copy once per local day (a copy older than the latest slot is due; DST
-  neither skips nor repeats a night). The watchdog duty only reports.
+  neither skips nor repeats a night). The watchdog duty only reports. Every job is one row of a table
+  (`tow.supervisor.jobs`: arguments, time limit, cadence, saved key); its order decides which of several due jobs
+  starts first.
 - A new revision whose selected files do not fit on the target drive (new bytes plus a 512 MiB margin, measured
   only on a drive this computer sees) is added stopped with its selection read back, and the topic keeps
   `waiting_space` (error `check.waiting_space`, class `disk`). While it waits no check downloads its `.torrent`
