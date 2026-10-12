@@ -18,6 +18,7 @@ from typing import Literal
 
 from tow.platform import current as current_platform
 from tow.storage.errors import StoreCorruptionError
+from tow.storage.locks import persistence_lock
 
 
 class RegularReadError(ValueError):
@@ -60,8 +61,6 @@ def read_regular_bytes(path: Path, limit: int, *, same_as: os.stat_result | None
 @contextmanager
 def _writer_lock(path: Path) -> Iterator[None]:
     del path
-    from tow.store import persistence_lock  # the data lock still lives in tow.store
-
     with persistence_lock():
         yield
 

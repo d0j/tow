@@ -18,6 +18,7 @@ from tow.snapshots import create as night_create
 from tow.snapshots import manifest as night_manifest
 from tow.snapshots import restore as night_restore
 from tow.snapshots import verify as night_verify
+from tow.storage import locks as storage_locks
 
 
 @pytest.fixture
@@ -484,7 +485,7 @@ def _count_store_checks(monkeypatch):
 
     def watching(name, original):
         def check(content):
-            calls.append((name, bool(getattr(store._PROCESS_LOCK_STATE, "depth", 0))))
+            calls.append((name, bool(getattr(storage_locks._PROCESS_LOCK_STATE, "depth", 0))))
             return original(content)
 
         return check

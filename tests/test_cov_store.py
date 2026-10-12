@@ -28,6 +28,7 @@ from tow import check_transaction, journal, store
 from tow.check_transaction import CheckTransactionError, check_store_transaction, recover_check_transaction
 from tow.errors import Msg
 from tow.paths import data_dir, download_history_path, secrets_path, state_path
+from tow.storage import locks as storage_locks
 from tow.store import (
     SecretStoreError,
     StoreCorruptionError,
@@ -352,7 +353,7 @@ def test_unexpected_lock_error_propagates_and_leaves_lock_usable(monkeypatch):
         pytest.fail("body must not run without the lock")
 
     assert sleeps == []
-    assert getattr(store._PROCESS_LOCK_STATE, "depth", 0) == 0
+    assert getattr(storage_locks._PROCESS_LOCK_STATE, "depth", 0) == 0
     with persistence_lock():
         save_state({"topics": [{"id": "after"}]})
     assert load_state()["topics"] == [{"id": "after"}]
@@ -366,7 +367,7 @@ def test_lock_state_inherited_from_another_process_is_discarded():
             self.closed = True
 
     inherited = InheritedHandle()
-    lock_state = store._PROCESS_LOCK_STATE
+    lock_state = storage_locks._PROCESS_LOCK_STATE
     lock_state.depth = 1
     lock_state.owner_pid = os.getpid() + 1  # as if copied into a forked child
     lock_state.handle = inherited
@@ -389,9 +390,9 @@ def test_recovery_hooks_run_once_per_outermost_lock_and_never_recursively(monkey
 
     def hook():
         calls.append("hook")
-        store._run_recovery_hooks()  # a hook that re-enters recovery must not recurse
+        storage_locks._run_recovery_hooks()  # a hook that re-enters recovery must not recurse
 
-    monkeypatch.setattr(store, "_recovery_steps", lambda: [hook])
+    monkeypatch.setattr(storage_locks, "_recovery_steps", lambda: [hook])
 
     with persistence_lock(), persistence_lock():
         pass
@@ -475,13 +476,13 @@ def test_failing_recovery_hook_blocks_the_writer_but_releases_the_lock(monkeypat
     def broken():
         raise RuntimeError("journal unrecoverable")
 
-    monkeypatch.setattr(store, "_recovery_steps", lambda: [broken])
+    monkeypatch.setattr(storage_locks, "_recovery_steps", lambda: [broken])
     with pytest.raises(RuntimeError, match="journal unrecoverable"):
         save_state({"topics": [{"id": "must-not-land"}]})
     assert not state_path().exists()
 
     calls: list[int] = []
-    monkeypatch.setattr(store, "_recovery_steps", lambda: [lambda: calls.append(1)])
+    monkeypatch.setattr(storage_locks, "_recovery_steps", lambda: [lambda: calls.append(1)])
     save_state({"topics": [{"id": "later"}]})
     assert calls == [1]
     assert load_state()["topics"] == [{"id": "later"}]
