@@ -98,7 +98,7 @@
           {%- for h in spec.fetch_hosts or [] %}
             {%- set matches = mine | selectattr('host', 'equalto', h) | list %}
             {%- set p = matches[0] if matches else none %}
-            <span class="mirror">{% if p %}<span class="dot {{ 'ok' if p.ok else 'warn' }}" aria-hidden="true"></span><span class="sr-only">{{ t('sites.responds') if p.ok else t('sites.not_responding') }}</span>{% endif %}{{ h.replace('https://','').replace('http://','') }}{% if (active.get(name) or '').rstrip('/') == h.rstrip('/') %} <span class="pill ok">{{ t('sites.main') }}</span>{% endif %}</span>
+            <span class="mirror"{% if p %} title="{{ p.reason }}"{% endif %}>{% if p %}<span class="dot {{ 'ok' if p.ok else 'warn' }}" aria-hidden="true"></span><span class="sr-only">{{ p.reason }}</span>{% endif %}{{ h.replace('https://','').replace('http://','') }}{% if p and not p.ok %} <span class="pill warn">{{ p.short_reason }}</span>{% endif %}{% if (active.get(name) or '').rstrip('/') == h.rstrip('/') %} <span class="pill ok">{{ t('sites.main') }}</span>{% endif %}</span>
           {%- endfor %}
         </span>
         {% if spec.login_path %}{% if logins.get(name) and logins[name].set %}<span class="pill ok">{{ t('sites.login_set') }}</span>{% else %}<span class="pill mut">{{ t('sites.login_not_set') }}</span>{% endif %}{% else %}<span class="pill mut">{{ t('sites.login_not_needed') }}</span>{% endif %}
@@ -115,7 +115,7 @@
           {% set is_main = (active.get(name) or '').rstrip('/') == h.rstrip('/') %}
           <form method="post" action="/sites/{{ name|urlencode }}/prefer" class="mirror-pick">
             <input type="hidden" name="host" value="{{ h }}">
-            <button type="submit" class="ghost sm" title="{{ t('sites.make_main') }}: {{ h }}" aria-pressed="{{ 'true' if is_main else 'false' }}">{% if p %}<span class="dot {{ 'ok' if p.ok else 'warn' }}" aria-hidden="true"></span><span class="sr-only">{{ t('sites.responds') if p.ok else t('sites.not_responding') }}</span>{% endif %}<span class="mirror-label">{{ h.replace('https://','').replace('http://','') }}</span>{% if is_main %} <span class="pill ok">{{ t('sites.main') }}</span>{% endif %}</button>
+            <button type="submit" class="ghost sm" title="{{ t('sites.make_main') }}: {{ h }}{% if p %} — {{ p.reason }}{% endif %}" aria-pressed="{{ 'true' if is_main else 'false' }}">{% if p %}<span class="dot {{ 'ok' if p.ok else 'warn' }}" aria-hidden="true"></span><span class="sr-only">{{ p.reason }}</span>{% endif %}<span class="mirror-label">{{ h.replace('https://','').replace('http://','') }}</span>{% if is_main %} <span class="pill ok">{{ t('sites.main') }}</span>{% endif %}</button>
           </form>
           {% endfor %}
         </div>
@@ -132,6 +132,18 @@
           <div><label for="site-pass-{{ name }}">{{ t('sites.password') }}</label><input id="site-pass-{{ name }}" name="password" type="password" placeholder="{{ t('sites.keep_password') }}" autocomplete="current-password"></div>
           <details class="advanced full-width">
             <summary>{{ t('sites.advanced') }}</summary>
+            <label for="site-protection-{{ name }}">{{ t('sites.protection') }}</label>
+            <select id="site-protection-{{ name }}" name="protection">
+              <option value="auto"{% if spec.protection != 'off' %} selected{% endif %}>{{ t('sites.protection_auto') }}</option>
+              <option value="off"{% if spec.protection == 'off' %} selected{% endif %}>{{ t('sites.protection_off') }}</option>
+            </select>
+            <p class="field-hint">{{ t('sites.protection_hint') }}</p>
+            <label for="site-infohash-{{ name }}">{{ t('sites.infohash_path') }}</label>
+            <input id="site-infohash-{{ name }}" name="infohash_path" value="{{ spec.infohash_path or '' }}" placeholder="/revision?id={id}">
+            <p class="field-hint">{{ t('sites.infohash_hint') }}</p>
+            <input type="hidden" name="browser_auth_present" value="1">
+            <label class="check-label" for="site-browser-{{ name }}"><input id="site-browser-{{ name }}" name="browser_auth" value="1" type="checkbox"{% if spec.browser_auth %} checked{% endif %}> {{ t('sites.browser_auth') }}</label>
+            <p class="field-hint">{{ t('sites.browser_auth_hint') }}</p>
             <label for="site-topic-path-{{ name }}">{{ t('sites.topic_path') }}</label>
             <input id="site-topic-path-{{ name }}" name="topic_path" value="{{ spec.topic_path or '' }}" placeholder="/forum/viewtopic.php?t={id}">
             <label class="check-label" for="site-page-dl-{{ name }}"><input id="site-page-dl-{{ name }}" name="page_download" value="1" type="checkbox"{% if spec.page_download %} checked{% endif %}> {{ t('sites.page_download') }}</label>

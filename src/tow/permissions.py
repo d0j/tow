@@ -77,16 +77,19 @@ def status(account: str | None = None) -> dict[str, Any]:
             }
         )
     inside = [row for row in rows if not row["outside"]]
+    unknown = not inside or any(row["open"] is None for row in inside)
     result: dict[str, Any] = {
-        "ok": not any(row["open"] for row in inside),
+        "ok": bool(inside) and all(row["open"] is False for row in inside),
+        "unknown": unknown,
         "folders": rows,
         "account": backend.account_name(me) if me else "",
         "elevated": backend.elevated(),
     }
     if not result["ok"]:
         # Another account's folder: only an administrator can hand it over.
-        result["needs_admin"] = any(row["open"] and not row["mine"] for row in inside)
-        result["fix_command"] = fix_command(admin=result["needs_admin"])
+        result["needs_admin"] = any(row["open"] is True and not row["mine"] for row in inside)
+        if any(row["open"] is True for row in inside):
+            result["fix_command"] = fix_command(admin=result["needs_admin"])
     return result
 
 
@@ -180,6 +183,8 @@ def fix(owner: str | None = None) -> dict[str, Any]:
         after = status()
         if after["ok"] or after["needs_admin"]:
             return {**after, "changed": was_open and after["ok"]}
+        if after["unknown"]:
+            return {**after, "error": t("permissions.state_unknown")}
         return {**after, "error": t("permissions.still_open")}
     account, source = owner_account(owner)
     if account is None:
@@ -241,6 +246,8 @@ def text(result: dict[str, Any]) -> str:
         foreign = [row["owner"] for row in result.get("folders") or [] if row["open"] and not row["mine"]]
         key = "permissions.needs_admin" if platform.is_windows() else "permissions.needs_sudo"
         lines.append(t(key, owner=", ".join(dict.fromkeys(foreign)) or "?", command=result["fix_command"]))
+    elif result.get("unknown"):
+        lines.append(t("permissions.state_unknown"))
     elif not result.get("ok"):
         lines.append(t("permissions.run_fix", command=result.get("fix_command") or fix_command(admin=False)))
     elif result.get("changed"):

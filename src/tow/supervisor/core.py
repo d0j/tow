@@ -505,9 +505,16 @@ class Supervisor:
             if job.child.poll() is not None or mono - job.started_mono > timeout:
                 self._finish_job(wall, mono, stopped=job.child.poll() is None)
             return
-        for name, late in self.schedule.due(wall, **self._facts_now()):
-            if name in JOB_ARGS:
-                self._start_job(name, wall, mono, late)
+        due = dict(self.schedule.due(wall, **self._facts_now()))
+        names = list(JOB_ARGS)
+        previous = self._persisted.get("last_child_attempt")
+        if previous in names:
+            # Oldest overdue first; equal deadlines retain the table's priority. Unlike an
+            # unconditional round robin, a short progress pass cannot displace an on-time check.
+            names.sort(key=lambda name: due.get(name, -1.0), reverse=True)
+        for name in names:
+            if name in due:
+                self._start_job(name, wall, mono, due[name])
                 return
 
     def _start_job(self, name: str, wall: float, mono: float, late: float = 0.0) -> None:
@@ -523,12 +530,15 @@ class Supervisor:
             if not self.schedule.backup_enabled:
                 return
         self.schedule.started(name, wall, late)
+        # After the first priority dispatch, overdue age prevents a global check longer than
+        # its interval from starving backups or personal timers. A restart retains that fact.
+        self._persisted["last_child_attempt"] = name
         persisted_key = BY_NAME[name].persisted_key
         if persisted_key:
             # Its cadence survives a restart: when it was due, as the schedule counts it.
             self._persisted[persisted_key] = self.schedule.last[name]
-            with contextlib.suppress(OSError):
-                layout.write_json(self._schedule_file, self._persisted)
+        with contextlib.suppress(OSError):
+            layout.write_json(self._schedule_file, self._persisted)
         argv = [self.python, "-m", "tow", *JOB_ARGS[name]]
         try:
             child = self.deps.spawn(argv, self.home / f"{name}-last.log", False)

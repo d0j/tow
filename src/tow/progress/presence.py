@@ -22,20 +22,28 @@ def track_client_presence(
         "client_kind": client_adapter.client_kind,
     }
     if not info:
-        if record.get("client_present") is True:
-            record["client_present"] = False
+        was_present = record.get("client_present") is True
+        # The first inspection can already prove absence, even with rebuilt or empty history.
+        # Only a transition from an observed presence produces a "removed" event.
+        record["client_present"] = False
+        if was_present:
+            record["client_absence_observed"] = True
             events.append("client_removed")
             set_latest_event(
                 record, {"kind": "client_removed", **label_fields(latest_item_label(record)), **client_fields}
             )
         return False
-    if record.get("client_present") is False:
+    last_event = record.get("last_event")
+    was_removed = isinstance(last_event, dict) and last_event.get("kind") == "client_removed"
+    if record.get("client_present") is False and (record.get("client_absence_observed") is True or was_removed):
+        # Establishing the first real baseline after an initial absence is not a restoration.
         events.append("client_restored")
         set_latest_event(
             record,
             {"kind": "client_restored", **label_fields(Msg("progress.back_in_client")), **client_fields},
         )
     record["client_present"] = True
+    record.pop("client_absence_observed", None)
     return True
 
 

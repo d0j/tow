@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+import math
+from datetime import datetime
+from typing import Annotated, Any
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Form, Request
@@ -25,6 +27,7 @@ router = APIRouter()
 def sites(request: Request) -> Response:
     state = _context.state()  # read-only snapshots of this request (tow.web._context)
     trackers = _context.config().get("trackers") or {}
+    trackers = {name: {**services.tracker_site_defaults(name), **spec} for name, spec in trackers.items()}
     probes = [
         row
         for row in (state.get("doctor") or {}).get("probes") or []
@@ -32,6 +35,52 @@ def sites(request: Request) -> Response:
         and row.get("tracker") in trackers
         and row.get("host") in (trackers[row["tracker"]].get("fetch_hosts") or [])
     ]
+    # A real topic/download observation is more specific than a front-page probe.
+    # Keep both sources honest: use the newer known reason, never fetch on rendering.
+    by_host = {(row["tracker"], row["host"]): row for row in probes}
+    for name, mirror in (state.get("mirrors") or {}).items():
+        if not isinstance(mirror, dict) or name not in trackers:
+            continue
+        observations = mirror.get("observed")
+        if not isinstance(observations, dict):
+            continue
+        for host, observation in observations.items():
+            if host not in (trackers[name].get("fetch_hosts") or []) or not isinstance(observation, dict):
+                continue
+            at = observation.get("at")
+            if not isinstance(at, (int, float)) or isinstance(at, bool) or not math.isfinite(at) or at < 0:
+                continue
+            previous = by_host.get((name, host))
+            try:
+                probe_at = datetime.fromisoformat(str((previous or {}).get("at") or "")).timestamp()
+            except ValueError, OverflowError, OSError:
+                probe_at = 0.0
+            if previous and probe_at >= at:
+                continue
+            row = {
+                "tracker": name,
+                "host": host,
+                "ok": observation.get("failure") == "ok",
+                "error": observation.get("failure"),
+            }
+            by_host[name, host] = row
+    probes = list(by_host.values())
+    for row in probes:
+        row["reason"] = (
+            (services.doctor_reason(str(row["error"])) if row.get("error") else t("sites.not_responding"))
+            if not row.get("ok")
+            else t("sites.responds")
+        )
+        labels = {
+            "cloudflare": t("sites.mirror_cloudflare"),
+            "maintenance": t("sites.mirror_maintenance"),
+            "blocked": t("sites.mirror_blocked"),
+            "rate_limited": t("sites.mirror_rate"),
+            "origin_down": t("sites.mirror_origin"),
+            "auth": t("sites.mirror_login"),
+            "quota": t("sites.mirror_quota"),
+        }
+        row["short_reason"] = labels.get(str(row.get("error") or ""), row["reason"])
     frozen = {k: bool(v.get("frozen")) for k, v in (state.get("mirrors") or {}).items() if isinstance(v, dict)}
     active = {
         k: (v or {}).get("active")
@@ -168,6 +217,10 @@ def sites_save(
     new_name: str = Form(""),
     username: str = Form(""),
     password: str = Form(""),
+    protection: Annotated[str, Form()] = "",
+    infohash_path: Annotated[str | None, Form()] = None,
+    browser_auth: Annotated[str, Form()] = "",
+    browser_auth_present: Annotated[str, Form()] = "",
 ) -> Response:
     form = SiteEdit(
         fetch_hosts=fetch_hosts,
@@ -182,6 +235,10 @@ def sites_save(
         new_name=new_name,
         username=username,
         password=password,
+        protection=protection,
+        infohash_path=infohash_path,
+        browser_auth=browser_auth,
+        browser_auth_present=browser_auth_present,
     )
     return edit_site(name, form)
 

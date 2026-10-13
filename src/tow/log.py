@@ -122,7 +122,7 @@ _MAGNET_RE = re.compile(r"magnet:\?[^\s'\"<>]*", re.IGNORECASE)
 _MAGNET_XT_RE = re.compile(r"(?:^|&)xt=([^&]*)", re.IGNORECASE)
 _SECRET_HEADER_RE = re.compile(r"\b(?:authorization|cookie|set-cookie)\s*[:=][^\r\n]*", re.IGNORECASE)
 _SECRET_VALUE_RE = re.compile(
-    r"\b(password|passphrase|passkey|token|secret|api[_-]?key|access[_-]?key|client[_-]?secret|uk|pk)\s*[:=]\s*"
+    r"\b(password|passphrase|passkey|token|secret|cf_clearance|api[_-]?key|access[_-]?key|client[_-]?secret|uk|pk)\s*[:=]\s*"
     r"(?:\"[^\"\r\n]*\"|'[^'\r\n]*'|[^\s,;&]+)",
     re.IGNORECASE,
 )

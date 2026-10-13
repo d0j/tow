@@ -13,7 +13,7 @@ from typing import Any, ClassVar
 import httpx
 
 from tow.clients.address import base_url
-from tow.clients.managed import OWNER, PENDING, ClientError, ManagedClient
+from tow.clients.managed import OWNER, PENDING, AddMarkError, ClientError, ManagedClient
 from tow.clients.spec import ClientField, TorrentClientAdapter
 from tow.torrent import MAX_TORRENT_BYTES, parse_magnet_hashes, parse_torrent_metadata
 
@@ -256,7 +256,12 @@ class DelugeClient(ManagedClient):
         )
         if not torrent_id:
             raise self._fail("client.deluge.add_refused")
-        self._set_labels(str(torrent_id), labels)
+        identity = str(torrent_id)
+        try:
+            self._set_labels(identity, labels)
+        except Exception as error:
+            # Preserve the client's confirmed identity for marking recovery.
+            raise AddMarkError(identity, error) from error
 
     def _set_wanted(self, infohash: str, wanted: set[int], all_ids: list[int]) -> None:
         priorities = [4 if index in wanted else 0 for index in range(max(all_ids, default=-1) + 1)]

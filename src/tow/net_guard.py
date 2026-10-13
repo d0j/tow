@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import socket
+import time
 from collections.abc import Iterable
 from typing import Any
 from urllib.parse import urlsplit
@@ -89,9 +90,13 @@ class PublicOnlyBackend(httpcore.SyncBackend):
         socket_options: Iterable[Any] | None = None,
     ) -> httpcore.NetworkStream:
         last_error: httpcore.ConnectError | httpcore.ConnectTimeout | None = None
+        deadline = None if timeout is None else time.monotonic() + timeout
         for address in public_addresses(host, port):
+            remaining = None if deadline is None else deadline - time.monotonic()
+            if remaining is not None and remaining <= 0:
+                raise httpcore.ConnectTimeout("the checked addresses exceeded the connection time budget")
             try:
-                return super().connect_tcp(address, port, timeout, local_address, socket_options)
+                return super().connect_tcp(address, port, remaining, local_address, socket_options)
             except (httpcore.ConnectError, httpcore.ConnectTimeout) as exc:
                 last_error = exc
         assert last_error is not None

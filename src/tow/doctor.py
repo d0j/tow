@@ -11,11 +11,11 @@ from tow.clients import factory as client_factory
 from tow.clock import iso_now
 from tow.config import as_bool, load_config
 from tow.http import client as http_client
-from tow.http import is_cloudflare
 from tow.i18n import t
 from tow.jsonish import as_dict
 from tow.log import owner_language
-from tow.mirrors import origin_key
+from tow.mirrors import origin_key, response_verdict
+from tow.protection import Verdict
 from tow.store import load_secrets, load_state, persistence_lock, save_state
 
 _PROBE_MAX_BYTES = thttp.MAX_HTML_RESPONSE_BYTES
@@ -155,12 +155,9 @@ def doctor_report(*, probe: bool = True, names: list[str] | None = None) -> dict
                 row = {"tracker": name, "host": host, "ok": False, "at": iso_now()}
                 try:
                     r = _probe_root(c, host)
-                    try:
-                        text = r.text[:800]
-                    except LookupError, ValueError:  # an unknown or wrong charset: read as bytes
-                        text = r.content[:800].decode("latin-1", "replace")
-                    if is_cloudflare(r.status_code, text, r.headers):
-                        row["error"] = "cloudflare"
+                    verdict = response_verdict(r, maintenance_markers=list(spec.get("maintenance_markers") or []))
+                    if verdict not in {Verdict.OK, Verdict.LOGIN_NEEDED}:
+                        row["error"] = verdict.value
                         out["ok"] = False
                     elif r.status_code >= 500 or r.status_code == 429:
                         row["error"] = f"http {r.status_code}"  # the host itself is in trouble
@@ -244,6 +241,8 @@ def reason_text(raw: str, lang: str | None = None) -> str:
     message) in the owner's words; an unknown one as it is."""
     text = str(raw or "").strip()
     low = text.lower()
+    if low in {"interactive", "blocked", "rate_limited", "origin_down", "maintenance", "auth", "quota", "unexpected"}:
+        return t(f"mirrors.{'http_auth' if low == 'auth' else 'daily_limit' if low == 'quota' else low}", lang)
     if low.startswith("http ") and low[5:].strip().isdigit():
         return t("doctor.reason.http", lang, code=low[5:].strip())
     for phrase, key in _REASONS:

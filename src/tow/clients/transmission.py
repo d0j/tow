@@ -13,7 +13,7 @@ from typing import Any, ClassVar, cast
 import httpx
 
 from tow.clients.address import base_url
-from tow.clients.managed import ClientError, ManagedClient
+from tow.clients.managed import AddMarkError, ClientError, ManagedClient
 from tow.clients.spec import TorrentClientAdapter
 
 KIND = "transmission"
@@ -197,7 +197,12 @@ class TransmissionClient(ManagedClient):
         added = result.get("torrent-added") or {}
         if added.get("hashString"):
             # Older Transmission ignores labels on add; set them before anything else.
-            self._set_labels(str(added["hashString"]), labels)
+            identity = str(added["hashString"])
+            try:
+                self._set_labels(identity, labels)
+            except Exception as error:
+                # Preserve the client's confirmed identity for marking recovery.
+                raise AddMarkError(identity, error) from error
 
     def _set_wanted(self, infohash: str, wanted: set[int], all_ids: list[int]) -> None:
         unwanted = [index for index in all_ids if index not in wanted]

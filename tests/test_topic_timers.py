@@ -171,16 +171,17 @@ def test_supervisor_coalesces_sleep_and_persists_batch(tmp_path):
     sup.job.child.code = 0
     sup.tick()
     sup.tick()
-    assert sup.job.name == "progress"
-    sup.job.child.code = 0
-    sup.tick()
-    sup.tick()
+    # After the first priority dispatch, the one-minute timer is older than the progress pass.
     assert sup.job.name == "timer"
     assert "--timer-only" in sup.job.child.argv
     durable = layout.read_json(layout.schedule_path())
     assert set(durable["timer_batch"]) == {"t1", "t2"}
     assert durable["timer_attempts"]["t1"]["started_at"] == world.clock.wall
     assert sup.schedule.timer_due(world.clock.wall)["t1"] == world.clock.wall + 60
+    sup.job.child.code = 0
+    sup.tick()
+    sup.tick()
+    assert sup.job.name == "progress"
     new = type(sup)(world.deps(), python="py", home=tmp_path / "logs")
     new.tick()
     assert new.schedule.timer_due(world.clock.wall)["t1"] == world.clock.wall + 60

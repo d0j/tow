@@ -168,6 +168,11 @@ def _compose(code: str, params: Mapping[str, Any], lang: str | None, depth: int 
         if name != _PREFIX:
             values[name], whole = _shown(value, language, depth)
             complete = complete and whole
+    # New mirror diagnostics are optional; records from before their introduction
+    # still have every required field and must keep translated site-title overrides.
+    # Other missing fields remain incomplete and keep the established fallback policy.
+    if code == "mirrors.all_failed":
+        values.setdefault("details", "")
     missing = i18n.placeholders(code, language) - values.keys()
     text = i18n.translate(code, language, **values, **{name: f"\x00{name}\x00" for name in missing})
     if missing:

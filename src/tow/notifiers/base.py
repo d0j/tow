@@ -204,8 +204,8 @@ def _send_once(client: httpx.Client, method: str, url: str, **kwargs: Any) -> ht
         # The body is decoded already: its encoding and wire length no longer apply to it.
         headers = [
             (name, value)
-            for name, value in response.headers.multi_items()
-            if name.lower() not in {"content-encoding", "content-length", "transfer-encoding"}
+            for name, value in response.headers.raw
+            if name.lower() not in {b"content-encoding", b"content-length", b"transfer-encoding"}
         ]
         return httpx.Response(response.status_code, headers=headers, content=body, request=response.request)
 

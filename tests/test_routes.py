@@ -87,6 +87,8 @@ ROUTES = frozenset(
         ("GET", "/doctor"),
         ("POST", "/doctor/run"),
         ("GET", "/settings"),
+        ("POST", "/settings/protection"),
+        ("POST", "/settings/protection/reset"),
         ("POST", "/settings/language"),
         ("POST", "/settings/theme"),
         ("POST", "/settings/updates"),

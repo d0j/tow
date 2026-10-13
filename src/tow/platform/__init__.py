@@ -227,6 +227,27 @@ def is_plain_dir(info: os.stat_result) -> bool:
     return stat.S_ISDIR(info.st_mode) and not is_link_like(info)
 
 
+def allocated_file_bytes(info: os.stat_result) -> int | None:
+    """Bytes a regular file already reserves on disk, never its unallocated logical holes.
+
+    POSIX reports allocated 512-byte blocks. Windows stat has no allocation count: an
+    ordinary file reserves its size, but sparse or compressed files are unknown here.
+    Those never receive a full-size credit just because their logical length is large.
+    """
+    size = info.st_size
+    if not is_plain_file(info) or type(size) is not int or size < 0:
+        return None
+    if is_windows():
+        attributes = getattr(info, "st_file_attributes", None)
+        if type(attributes) is not int or attributes < 0:
+            return None
+        if attributes & (stat.FILE_ATTRIBUTE_SPARSE_FILE | stat.FILE_ATTRIBUTE_COMPRESSED):
+            return None
+        return size
+    blocks = getattr(info, "st_blocks", None)
+    return min(size, blocks * 512) if type(blocks) is int and blocks >= 0 else None
+
+
 def plain_kind(path: Path, *, missing_ok: bool = True) -> Literal["file", "dir", "other"] | None:
     """What ``path`` itself is, from ``lstat`` (a link is never followed): ``"file"`` for a plain
     file, ``"dir"`` for a plain directory, ``"other"`` for a link, junction, mount point or special

@@ -29,6 +29,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
+from tow import platform
 from tow.check.client_ops import (
     PREVIOUS_REVISION_ACTIVE,
     client_unreachable,
@@ -88,14 +89,16 @@ class Shortfall:
 
 
 def _on_disk(candidates: Iterable[Path], size: int) -> int:
-    """How much of a file of ``size`` bytes already lies at one of ``candidates``."""
+    """How many bytes one candidate already reserves; sparse logical length is no proof."""
+    allocated = 0
     for candidate in candidates:
         try:
-            if candidate.is_file():
-                return min(int(candidate.stat().st_size), size)
+            known = platform.allocated_file_bytes(candidate.lstat())
+            if known is not None:
+                allocated = max(allocated, min(known, size))
         except OSError, ValueError:
             continue
-    return 0
+    return allocated
 
 
 def measure(dest: str, wanted: Iterable[tuple[tuple[Path, ...], int, int]]) -> Shortfall | None:

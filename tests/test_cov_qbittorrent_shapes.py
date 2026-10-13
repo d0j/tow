@@ -299,10 +299,21 @@ def test_missing_files_while_stopping_is_an_unsafe_state(monkeypatch):
         _adapter(monkeypatch, api).stop_owned_torrent(H)
 
 
-@pytest.mark.parametrize("state", ["stalledUP", "uploading", "forcedDL", "queuedDL", "checkingDL", "metaDL"])
+@pytest.mark.parametrize("state", ["stalledUP", "uploading", "forcedDL", "queuedDL", "metaDL"])
 def test_active_states_confirm_a_start(monkeypatch, state):
     api = QbitApi(state=state)
     assert _adapter(monkeypatch, api)._wait_started(H)["state"] == state
+
+
+@pytest.mark.parametrize("state", ["checkingDL", "checkingUP", "checkingResumeData"])
+def test_a_file_check_does_not_confirm_a_start(monkeypatch, state):
+    api = QbitApi(state=state)
+    adapter = _adapter(monkeypatch, api)
+    adapter.START_POLLS = 3
+    with raises_code("client.managed.start_unconfirmed", RuntimeError):
+        adapter._wait_started(H)
+    assert "tow-pending" in api.torrent["tags"]
+    assert not api.calls
 
 
 def test_a_finished_torrent_paused_by_qbittorrent_4_counts_as_started(monkeypatch):

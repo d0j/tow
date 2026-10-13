@@ -59,6 +59,15 @@ class ClientError(TowError, RuntimeError):
     default_class = "qbit"
 
 
+class AddMarkError(Exception):
+    """The client confirmed a newly added identity, then its marking request failed."""
+
+    def __init__(self, infohash: str, error: Exception) -> None:
+        self.infohash = infohash.upper()
+        self.error = error
+        super().__init__(str(error))
+
+
 class ManagedClient:
     title = "client"
     kind = "client"
@@ -82,6 +91,9 @@ class ManagedClient:
     # Read-back polling: how many times and how often (tests set the pause to zero).
     POLLS = 50
     PAUSE = 0.1
+    # A start can wait for a real disk check; ownership and selection keep the shorter budget.
+    START_POLLS = 600
+    START_WAIT_SEC = 60.0
     # How often a start the client dropped is given again before a stopped torrent is judged.
     START_REPEATS = 2
 
@@ -163,16 +175,24 @@ class ManagedClient:
         if state in UNSAFE_STATES:
             raise self._fail("client.managed.error_state", state=state)
 
-    def _wait(self, infohash: str, done: Any, error: str) -> dict[str, Any]:
+    def _wait(
+        self, infohash: str, done: Any, error: str, *, polls: int | None = None, timeout: float | None = None
+    ) -> dict[str, Any]:
         """Poll until ``done(info)``; ``error`` (a catalog key) is the reason when it never comes."""
         last: dict[str, Any] | None = None
-        for attempt in range(self.POLLS):
+        attempts = self.POLLS if polls is None else polls
+        deadline = time.monotonic() + timeout if timeout is not None else None
+        for attempt in range(attempts):
+            if deadline is not None and time.monotonic() >= deadline:
+                break
             last = self.inspect_torrent(infohash)
+            if deadline is not None and time.monotonic() >= deadline:
+                break
             if last is not None:
                 self._check_state(last)
                 if done(last):
                     return last
-            if attempt + 1 < self.POLLS:
+            if attempt + 1 < attempts:
                 self._sleep()
         raise self._fail(error)
 
@@ -210,18 +230,17 @@ class ManagedClient:
         Deluge drops a start given while it checks, and the torrent stays stopped afterwards, so
         a stopped torrent is given the start again (START_REPEATS times). A complete torrent the
         client keeps stopped (a seeding limit already reached) counts once the repeats are spent;
-        a check longer than the polls counts as started, as the client checks on its own."""
-        polls = 0
+        a check still running at the deadline is not a confirmed start: the add keeps its
+        pending mark, and a later attempt can complete it once the check ends."""
         repeats = 0
 
         def started(info: dict[str, Any]) -> bool:
-            nonlocal polls, repeats
-            polls += 1
+            nonlocal repeats
             state = str(info.get("state") or "")
             if not state:
                 return False
             if state.casefold().startswith("checking"):
-                return polls >= self.POLLS
+                return False
             if not self._stopped(info):
                 return True
             if repeats < self.START_REPEATS:
@@ -231,7 +250,13 @@ class ManagedClient:
                 return False
             return completed_progress(info.get("progress"))
 
-        return self._wait(infohash, started, "client.managed.start_unconfirmed")
+        return self._wait(
+            infohash,
+            started,
+            "client.managed.start_unconfirmed",
+            polls=self.START_POLLS,
+            timeout=self.START_WAIT_SEC,
+        )
 
     def _inspect_with_files(self, infohash: str) -> dict[str, Any]:
         return self._wait(
@@ -325,20 +350,44 @@ class ManagedClient:
         """What must be in place before a torrent is added (Deluge: its labels). Default: nothing."""
 
     def _mark_after_failed_add(self, aliases: list[str], labels: list[str], error: Exception) -> None:
-        """The add failed, maybe after the client took the torrent (its marking step failed or
-        did not answer). A torrent there now is TOW's - it was not there a moment ago - and is
-        stopped: it gets TOW's mark again, and the add goes on. One that cannot be marked is
-        reported so (TOW could never manage it); with nothing added, the error stands."""
-        if isinstance(error, ClientError) and error.code == "client.managed.already_there":
-            raise error
+        """An accepted add's marking failed: retry only its confirmed newly added identity.
+
+        An ambiguous request failure without that proof may finish a torrent already carrying
+        both transaction marks, never claim an unmarked task merely because it appeared now.
+        A confirmed add that still cannot be marked is reported; otherwise the original error stands.
+        """
+        accepted = error.infohash if isinstance(error, AddMarkError) else None
+        original = error.error if isinstance(error, AddMarkError) else error
+        if isinstance(original, ClientError) and original.code in {
+            "client.managed.already_there",
+            "client.deluge.add_refused",
+        }:
+            # An explicit refusal proves no add of ours. A torrent that appeared meanwhile
+            # may be the owner's, not a partially marked add: never adopt it implicitly.
+            raise original
         try:
-            present = next((alias for alias in aliases if self._owner_tags(alias) is not None), None)
+            present = next(
+                (
+                    alias
+                    for alias in aliases
+                    if (accepted is None or alias == accepted) and self._owner_tags(alias) is not None
+                ),
+                None,
+            )
         except Exception:  # noqa: BLE001 - the client does not answer: the add's own error says more
             present = None
         if present is None:
-            raise error
+            raise original
         try:
-            if OWNER not in self._tags({"tags": self._owner_tags(present) or []}):
+            tags = self._tags({"tags": self._owner_tags(present) or []})
+        except Exception:  # noqa: BLE001 - an unreadable identity cannot grant ownership
+            raise original from None
+        if accepted is None:
+            if not {OWNER, PENDING}.issubset(tags):
+                raise original  # merely appearing after a timeout does not prove an add of ours
+            return  # both marks prove the accepted add without claiming any unmarked torrent
+        try:
+            if OWNER not in tags:
                 self._set_labels(present, labels)
             marked = OWNER in self._tags({"tags": self._owner_tags(present) or []})
         except Exception:  # noqa: BLE001 - reported below as the torrent TOW cannot mark

@@ -7,6 +7,40 @@
     "decimal": ".",
     "datetime_short": "%Y-%m-%d %H:%M"
   },
+  "protection_ui": {
+    "title": "Site access",
+    "search": "Cloudflare challenge protection FlareSolverr Byparr modules",
+    "off": "Off",
+    "configured": "Enabled · not verified",
+    "hint": "Ordinary mirrors are tried first. Only an identified Cloudflare challenge may use these optional services. Turning this off leaves ordinary checks and browser sign-in available.",
+    "step_install": "Run your chosen external service separately. TOW does not install it or bundle a browser.",
+    "step_address": "Enter its loopback or private-network IP address. Do not expose the service to the internet.",
+    "step_enable": "Enable the connections you need, set their order, then enable recovery and save. Saving does not contact the services.",
+    "trust": "Use only services you trust and sandbox their browser's network access. They receive the public site's home address, not your password, sign-in cookies or topic link. TOW keeps only a verified clearance cookie, encrypted and time-limited. Captchas and download limits still require your action.",
+    "local_only": "Change external recovery services on the computer running TOW, through its loopback address.",
+    "enabled": "Use optional challenge recovery",
+    "provider_enabled": "Use this connection",
+    "add": "Add a connection",
+    "address": "Service address",
+    "order": "Order",
+    "order_hint": "Lower numbers are tried first. A disabled, unavailable or failed connection does not block the next one. Blank disabled connections are not saved.",
+    "remove": "Remove this connection when saving",
+    "unavailable": "This module is unavailable. Other enabled modules can still be used.",
+    "limits": "Attempt limits",
+    "timeout": "Total recovery time, seconds",
+    "interval": "Minimum retry interval, seconds",
+    "attempts": "Maximum services per attempt",
+    "invalid": "Not saved. Check addresses, unique order numbers and attempt limits. Enabled recovery needs at least one enabled connection.",
+    "saved": "Site-access settings saved. No external service was contacted.",
+    "recovery": "Recovery",
+    "reset": "Reset saved access",
+    "reset_hint": "If saved clearance becomes unreadable or unusable, reset its cookies and retry reservations. Service settings stay unchanged. The old encrypted record is retained in TOW's temporary folder until its normal cleanup; a running check blocks reset.",
+    "reset_confirm": "Reset only saved site clearance and retry reservations? Service settings and site sign-ins remain unchanged.",
+    "reset_done": "Saved site clearance was reset. The old encrypted record was retained in TOW's temporary folder.",
+    "reset_empty": "There is no saved site clearance to reset.",
+    "reset_busy": "A check is running. Wait for it to finish before resetting saved access.",
+    "reset_refused": "Reset could not be confirmed: its file or temporary folder could not be verified. Keep the existing records and check the folder on this computer."
+  },
   "timer": {
     "field": "Personal check interval, minutes",
     "global_placeholder": "Global interval",
@@ -1187,6 +1221,9 @@
       "auto": "auto"
     },
     "kind": {
+      "protection_attempt": "Trying an optional site-access service",
+      "protection_failed": "Optional site-access service did not give a usable result",
+      "protection_restored": "Site access restored and checked",
       "downloaded": "sent to the client",
       "check_fail": "check failed",
       "check_site_skipped": "site not asked",
@@ -1371,6 +1408,14 @@
     "open_tow": "Open TOW"
   },
   "mirrors": {
+    "interactive": "the site requires an interactive browser check",
+    "blocked": "Cloudflare blocked access from this IP (1020)",
+    "rate_limited": "the site is limiting requests; TOW will retry later",
+    "origin_down": "the site's origin server is unavailable (HTTP {status})",
+    "maintenance": "the site's server is under maintenance",
+    "unexpected": "the site returned an unexpected page, not a torrent file",
+    "mirror_reason": "mirror {host}: {error}",
+    "reason_pair": "{first}; also {second}",
     "redirect_bad_origin": "a redirect from an invalid address was refused",
     "redirect_cross_origin": "a redirect to another address or port was refused",
     "redirect_outside_allowlist": "the download redirect left the allowed addresses",
@@ -1386,10 +1431,14 @@
     "http_status": "the site answered with error {status}",
     "no_hosts": "{tracker}: no mirrors given",
     "frozen": "{tracker}: the site is paused",
-    "all_failed": "{tracker}: no mirror answered: {error}",
+    "all_failed": "{tracker}: no mirror answered: {error}. {details}",
     "transport": "no connection ({error})",
     "local": "{tracker}: TOW could not read the site's answer ({error})",
     "too_large": "the answer is too large"
+  },
+  "protection": {
+    "invalid_settings": "Optional site-access settings are invalid: check the enabled flag, service addresses, order and time limits",
+    "invalid_site": "A site's optional access mode must be auto or off"
   },
   "notifier": {
     "common": {
@@ -1873,6 +1922,21 @@
     "access_title": "Access from other devices"
   },
   "sites": {
+    "mirror_cloudflare": "Cloudflare check",
+    "mirror_maintenance": "Maintenance",
+    "mirror_blocked": "IP blocked",
+    "mirror_rate": "Request limit",
+    "mirror_origin": "Server unavailable",
+    "mirror_login": "Sign-in needed",
+    "mirror_quota": "Download limit",
+    "browser_auth": "Sign in through a browser window",
+    "browser_auth_hint": "Explicit sign-in on the computer running TOW, in its separate temporary browser profile. Replaces password posts and automatic services for this site; no background browser is started.",
+    "protection": "Optional site-access services",
+    "protection_auto": "Use the services enabled in Settings",
+    "protection_off": "Off for this site",
+    "protection_hint": "Ordinary requests and mirrors work without these services. Browser sign-in keeps its own session and never switches to an automatic service.",
+    "infohash_path": "Current hash page",
+    "infohash_hint": "Optional page with {id} and a labelled 40-character info-hash. A confirmed unchanged hash avoids a torrent download; empty disables this check.",
     "title": "Sites",
     "name": "Name",
     "how_to_fill": "How to fill in",

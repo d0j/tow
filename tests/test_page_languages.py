@@ -59,6 +59,7 @@ RU_ALLOWED = {
     # products and services
     *("TOW", "Torrent", "Watcher", "qBittorrent", "qBit", "Transmission", "Deluge", "WebUI", "Python"),
     *("Telegram", "BotFather", "WhatsApp", "Discord", "ntfy", "Tailscale", "Cloudflare", "Magnet", "magnet"),
+    *("FlareSolverr", "Byparr"),
     *("Google", "Play", "App", "Store", "Droid", "Windows", "Linux", "macOS"),
     "Update",  # the update file in the TOW folder: "Update TOW.cmd", "Update TOW.command"
     # client kinds as TOW names them (the "kind" in the card's technical details)

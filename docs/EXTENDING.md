@@ -12,6 +12,7 @@ the gate: [CONTRIBUTING.md](../CONTRIBUTING.md).
 | [Torrent client](#torrent-client) | `src/tow/clients/<kind>.py` | `TorrentClientAdapter` (`clients/spec.py`) | `test_plugin_contracts.py`, `test_clients_managed.py` |
 | [Messenger](#messenger) | `src/tow/notifiers/<kind>.py` | `Notifier` (`notifiers/base.py`) | `test_plugin_contracts.py`, `test_notifiers.py` |
 | [Site](#site) | `src/tow/trackers/presets/<name>.py` | `SitePreset` (`trackers/presets/__init__.py`) | `test_tracker_presets.py` |
+| [Access provider](#site-access-provider) | `src/tow/protection/solvers/<kind>.py` | `KIND`, `TITLE`, `solve` → `Clearance` | `test_protection_providers.py`, `test_protection.py` |
 | [Language](#language) | `src/tow/locales/<code>.json` | the keys of `en.json` | `test_i18n.py` |
 | [Page or action](#page-or-action) | `src/tow/web/routes_<topic>.py` | `APIRouter`, `tow.web.services` | `test_routes.py` |
 | [Command](#command) | `src/tow/cli/commands/<group>.py` | `Command` (`cli/command.py`), `COMMANDS` | `test_golden_help.py`, `test_cli.py` |
@@ -100,6 +101,8 @@ A preset module declares `PRESET = SitePreset(...)`:
 | `brands` | regex parts that name the site in a host or page title (stripped from topic titles) |
 | `search_path` | a search link with `{q}` — TOW only links to it, never fetches results |
 | `daily_limit` | its accounts have a daily `.torrent` limit (a preview must not spend it) |
+| `infohash_path` | optional page with `{id}` reporting the current revision's labelled info-hash; ambiguous/unavailable answers fall back to the normal procedure |
+| `maintenance_markers` | bounded literal markers for this site's maintenance page; never a reason to submit account credentials |
 | `browser_login`, `browser_login_hint` | sign-in only through a browser window, and the hint key (`site.<name>.*`) |
 | `spec` | the site's settings exactly as `config.example.yaml` ships them (the test compares them) |
 | `guess(parts)` | its own rules for a pasted link → new site settings, or `None` |
@@ -111,6 +114,24 @@ watches every known site until the owner edits the list.
 Adding a site is that one module, its block in `config.example.yaml`, and its `site.<name>.*` texts if it has any.
 `tests/test_tracker_presets.py` checks that it is found and consistent; add a `guess` case to `tests/test_guess.py`
 with a made-up topic id.
+
+## Site access provider
+
+Add one module in `tow/protection/solvers/` with `KIND`, `TITLE` and
+`solve(provider, origin, timeout) -> Clearance`. Reuse the bounded compatible API in
+`protection.providers` where applicable; do not import other adapter modules. `providers.registry()` finds modules
+through `tow.plugins.scan`; duplicate kinds are excluded and an unavailable kind does not consume an attempt.
+The shared settings card and ordered chain require no adapter-name branches.
+
+The contract is intentionally narrow: the caller supplies a validated local/private API endpoint and a public
+origin, never login cookies, credentials or a topic/download path. Return only a validated `cf_clearance`, its exact
+origin, matching User-Agent, finite expiry and provider kind. TOW independently replays the root with its pinned
+transport before trusting the result. A provider's HTML is never tracker metadata. Enforce the absolute request
+budget and bounded response parsing inside the adapter, not only around it.
+
+Test wrong scope, expiry, user-agent, compression/size, redirects, finite time, request-secret isolation and
+fallback after refusal. Settings and dry-run must not contact the service. In-process plugins are trusted code,
+not sandboxed; keep browser implementations in a separately operated service. See [PROTECTION.md](PROTECTION.md).
 
 ## Language
 
@@ -269,8 +290,9 @@ watchdog is a pass every 10 minutes inside the process. New background work goes
 the OS:
 
 - a new periodic job is a row in `JOBS` (`tow/supervisor/jobs.py`): its child's arguments, its time limit, its
-  cadence and first delay, the key of `data/run/schedule.json` that keeps its last start. The rows' order is the
-  priority when several jobs are due, and the key order of `next` in `status.json`. `JOB_ARGS` and
+  cadence and first delay, the key of `data/run/schedule.json` that keeps its last start. Table order initializes
+  a new schedule and breaks ties; afterwards the oldest overdue child takes precedence. It remains the key order
+  of `next` in `status.json`. `JOB_ARGS` and
   `JOB_TIMEOUT_SEC` in `tow/supervisor/core.py` and the cadences of `tow/supervisor/schedule.py` are read from it;
   a condition for being due at all (like the disk-space pass only while a topic waits) is code in
   `Schedule._due_at`, a special start (like the timers' reservation) code in `Supervisor._start_job`. Its

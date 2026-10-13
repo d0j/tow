@@ -83,6 +83,7 @@ def settings_page(request: Request) -> Response:
             "flash_ttl_min": _shown_minutes(flash_ttl_sec()),
             "allow_lan": as_bool(cfg.get("allow_lan")),
             "check_updates": as_bool(cfg.get("check_updates", True)),
+            "protection": services.protection_settings_view(cfg),
             "lan_password_set": access.password_is_set(s),
             "lan_hint": password_hint(s.get("lan_auth")),
             "hint_max": MAX_HINT_LENGTH,

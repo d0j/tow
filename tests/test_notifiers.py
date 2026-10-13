@@ -332,6 +332,17 @@ def test_a_normal_answer_is_read_whole(http):
 # --- a delivered message is never sent again by TOW itself ----------------------------------
 
 
+@pytest.mark.parametrize("code", [200, 204])
+def test_delivered_message_with_a_non_ascii_header_leaves_the_queue(http, code):
+    set_handler, seen, sleeps = http
+    set_handler(lambda _r: httpx.Response(code, headers=[(b"x-service-note", "Сохранено".encode())]))
+    assert notifiers.send_all(DISCORD, "серия 1") == {"discord": (True, "")}
+    notifiers.flush(DISCORD)
+    assert len(seen) == 1
+    assert sleeps == []
+    assert "notify_outbox" not in load_state()
+
+
 def test_delivered_message_with_an_oversized_answer_leaves_the_queue(http):
     set_handler, seen, _ = http
     big = b"{" + b" " * (base.MAX_RESPONSE_BYTES + 10) + b"}"

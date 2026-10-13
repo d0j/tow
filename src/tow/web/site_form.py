@@ -261,6 +261,10 @@ class SiteEdit:
     new_name: str = ""
     username: str = ""
     password: str = ""
+    protection: str = ""  # absent preserves a site's existing optional access policy
+    infohash_path: str | None = None  # absent preserves, empty explicitly disables
+    browser_auth: str = ""
+    browser_auth_present: str = ""
 
     def chosen_login_hosts(self, mirrors: list[str]) -> list[str] | None:
         """The sign-in mirrors as typed (None: the form had no such field); each must be a mirror."""
@@ -301,6 +305,14 @@ class SiteNameTaken(Exception):
 
 def edit_site_paths(spec: dict[str, Any], form: SiteEdit) -> None:
     """The edit's pattern, paths and download settings, applied to ``spec`` (ValueError: refused)."""
+    if form.protection:
+        if form.protection not in {"auto", "off"}:
+            raise ValueError(t("protection.invalid_site"))
+        spec["protection"] = form.protection
+    if form.browser_auth_present == "1":
+        spec["browser_auth"] = form.browser_auth in {"1", "true", "on"}
+    if form.infohash_path is not None:
+        spec["infohash_path"] = valid_tracker_path(form.infohash_path, label=t("sites.infohash_path"), needs_id=True)
     if form.url_regex.strip():
         spec["url_regex"] = form.url_regex.strip()
     new_download_path = (

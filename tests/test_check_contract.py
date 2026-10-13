@@ -398,6 +398,88 @@ def test_existing_hash_uses_matching_page_magnet_when_torrent_link_disappears(mo
     assert [event["fallback_reason"] for event in fallback_events] == (["tracker_auth"] if apply else [])
 
 
+def _matching_magnet_with_missing_client_torrent(monkeypatch):
+    from tow.errors import TowError
+    from tow.progress import reconcile_topic
+
+    saved_hash = "A" * 40
+    save_state(
+        {
+            "topics": [
+                {
+                    "id": "missing-magnet",
+                    "title": "Show",
+                    "url": "https://tracker/1",
+                    "save_path": r"M:\TV",
+                    "hash": saved_hash,
+                }
+            ]
+        }
+    )
+    save_download_history({"schema_version": 1, "topics": {}})
+    client = FakeClient()
+    client.capabilities = {**FakeClient.capabilities, "magnet_metadata": True}
+    tracker = _wire_fake_check(monkeypatch, client)
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", reconcile_topic)
+
+    def refused(*_args, **_kwargs):
+        raise TowError("mirrors.not_torrent_login", cls="tracker_auth")
+
+    monkeypatch.setattr(tracker, "fetch_torrent", refused)
+    monkeypatch.setattr(
+        tracker,
+        "fetch_magnet",
+        lambda *_args, **_kwargs: (f"magnet:?xt=urn:btih:{saved_hash}", saved_hash),
+        raising=False,
+    )
+    materialized = []
+    client.materialize_magnet = lambda *_args: materialized.append(True) or b"torrent"
+    monkeypatch.setattr(
+        topic_step,
+        "parse_torrent_metadata",
+        lambda blob: SimpleNamespace(
+            infohash=saved_hash, client_hash=saved_hash, name="Show", files=(TorrentFile(0, "Show.mkv", 1),)
+        ),
+    )
+    return client, materialized
+
+
+def test_matching_magnet_does_not_green_an_absent_torrent_without_a_history_baseline(monkeypatch):
+    client, materialized = _matching_magnet_with_missing_client_torrent(monkeypatch)
+    row = check.run_check(apply=True, notify=False, how="auto")["results"][0]
+    assert row["ok"] is False
+    assert row["error_record"]["code"] == "check.removed_from_client"
+    assert load_state()["topics"][0]["last_ok"] is False
+    assert client.add_calls == 0
+    assert materialized == []
+
+
+def test_a_manual_row_check_materializes_and_readds_an_absent_matching_magnet(monkeypatch):
+    client, materialized = _matching_magnet_with_missing_client_torrent(monkeypatch)
+    row = check.run_check(apply=True, notify=False, ids=["missing-magnet"], how="manual")["results"][0]
+    assert row["ok"] is True
+    assert row["source"] == "magnet"
+    assert row["added"] is True
+    assert materialized == [True]
+    assert client.add_calls == 1
+    assert client.present
+
+
+@pytest.mark.parametrize("how", ["auto", "manual"])
+def test_a_matching_magnet_cannot_hide_an_unreachable_client(monkeypatch, how):
+    client, materialized = _matching_magnet_with_missing_client_torrent(monkeypatch)
+
+    def unreachable():
+        raise RuntimeError("synthetic client offline")
+
+    monkeypatch.setattr(client, "ping", unreachable)
+    row = check.run_check(apply=True, notify=False, ids=["missing-magnet"], how=how)["results"][0]
+    assert row["ok"] is False
+    assert row["error_record"]["code"] == "check.client_unreachable"
+    assert materialized == []
+    assert client.add_calls == 0
+
+
 def test_different_page_magnet_cannot_hide_missing_torrent_link(monkeypatch):
     saved_hash = "A" * 40
     save_state(

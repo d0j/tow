@@ -356,7 +356,9 @@ def test_first_missing_inspection_does_not_create_a_false_baseline(tmp_path: Pat
     client.present = False
     topic = {"id": "late", "title": "Show [1 из 1]", "hash": "ABC", "save_path": str(tmp_path)}
     history: dict = {"topics": {}}
-    reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
+    absent = reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
+    assert absent["events"] == []
+    assert history["topics"]["late"]["client_present"] is False
     assert "baseline_at" not in history["topics"]["late"]
     (tmp_path / "Show").mkdir()
     (tmp_path / "Show" / "S01E01.mkv").write_bytes(b"0123456789")
@@ -365,6 +367,47 @@ def test_first_missing_inspection_does_not_create_a_false_baseline(tmp_path: Pat
     result = reconcile_topic(topic, client, history, "2026-09-12T21:01:00+03:00")
     assert result["events"] == []
     assert history["topics"]["late"]["baseline_at"] == "2026-09-12T21:01:00+03:00"
+
+
+def test_a_present_torrent_without_metadata_can_be_removed_and_restored(tmp_path: Path):
+    from tow.progress.presence import track_client_presence
+
+    client = FakeClient()
+    record = {"items": {}}
+    events = []
+    assert track_client_presence(record, {"hash": "ABC"}, client, "2026-09-12T21:00:00+03:00", events)
+    assert not track_client_presence(record, None, client, "2026-09-12T21:01:00+03:00", events)
+    assert track_client_presence(record, {"hash": "ABC"}, client, "2026-09-12T21:02:00+03:00", events)
+    assert events == ["client_removed", "client_restored"]
+
+
+def test_an_old_baseline_without_presence_does_not_invent_a_restoration():
+    from tow.progress.presence import track_client_presence
+
+    client = FakeClient()
+    record = {"items": {}, "baseline_at": "2026-09-12T20:00:00+03:00"}
+    events = []
+    assert not track_client_presence(record, None, client, "2026-09-12T21:00:00+03:00", events)
+    assert track_client_presence(record, {"hash": "ABC"}, client, "2026-09-12T21:01:00+03:00", events)
+    assert events == []
+
+
+def test_a_real_removal_is_remembered_when_a_different_event_takes_the_display_slot():
+    from tow.progress.presence import track_client_presence
+    from tow.store import load_download_history, save_download_history
+
+    client = FakeClient()
+    record = {"items": {}, "client_present": True}
+    events = []
+    assert not track_client_presence(record, None, client, "2026-09-12T21:00:00+03:00", events)
+    record["last_event"] = {"kind": "episode_completed", "at": "2026-09-12T21:01:00+03:00"}
+    save_download_history({"schema_version": 1, "topics": {"synthetic": record}})
+    record = load_download_history()["topics"]["synthetic"]
+    assert track_client_presence(record, {"hash": "ABC"}, client, "2026-09-12T21:02:00+03:00", events)
+    assert events == ["client_removed", "client_restored"]
+    assert "client_absence_observed" not in record
+    assert track_client_presence(record, {"hash": "ABC"}, client, "2026-09-12T21:03:00+03:00", events)
+    assert events == ["client_removed", "client_restored"]
 
 
 def test_temporary_verification_failure_does_not_repeat_completion(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
