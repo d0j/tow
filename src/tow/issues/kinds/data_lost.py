@@ -31,8 +31,9 @@ def collect(snapshot: Snapshot) -> list[Issue]:
             id=KIND,
             severity=error_tone("error"),
             message=Message("issues.data_lost", {"folder": folder}),
-            # The copies live outside the data folder: the newest night copy puts it back.
-            target=Target("settings", open="transfer", anchor="backup-night"),
+            # The copies live outside the data folder: the newest night copy puts it back. The card
+            # says what was lost (the note).
+            target=Target("settings", open="transfer", anchor="backup-night", note=True),
             fix=Fix("restore_night", label="settings.common.restore"),
         )
     ]

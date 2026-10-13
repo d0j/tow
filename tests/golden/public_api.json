@@ -68,7 +68,7 @@
   "SEVERITIES": "value tuple",
   "SKIPPED": "value list",
   "Snapshot": "class(state: 'Mapping[str, Any]', config: 'Mapping[str, Any]', now: 'float', next_check_at: 'float | None' = None, data_lost: 'Mapping[str, Any] | None' = None) -> None",
-  "Target": "class(page: 'str', open: 'str' = '', filter: 'tuple[tuple[str, str], ...]' = (), anchor: 'str' = '') -> None",
+  "Target": "class(page: 'str', open: 'str' = '', filter: 'tuple[tuple[str, str], ...]' = (), anchor: 'str' = '', note: 'bool' = False) -> None",
   "collect": "def(snapshot: 'Snapshot', *, only: 'tuple[Kind, ...] | None' = None) -> 'list[Issue]'",
   "fingerprint": "def(issues: 'Iterable[Issue]') -> 'str'",
   "known_kinds": "def() -> 'tuple[Kind, ...]'",

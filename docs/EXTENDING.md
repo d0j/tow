@@ -219,9 +219,11 @@ Each `Issue` (`issues/model.py`) carries:
 - `severity` — a `tow.status` tone, `"bad"` or `"warn"`; from an error class, `tow.status.error_tone(cls)`;
 - `message` — a catalog key (`issues.<kind>`, in every language file) and its values; a value named `at` is a time
   in epoch seconds. Say what is wrong, or the action the link takes ("Sign in to {site}"), never "open X";
-- `target` — `Target(page, open, filter, anchor)`: the page (`home`, `settings`, `history`), what it opens (a
+- `target` — `Target(page, open, filter, anchor, note)`: the page (`home`, `settings`, `history`), what it opens (a
   Settings section, a Home topic), the page's own filters, and the id of the element that shows the problem in full.
-  An empty `anchor` lands on the issue's own note on that page (History shows those);
+  An empty `anchor` lands on the issue's own note on that page (History shows those). `note=True` when that element
+  does not say what is wrong by itself (a Settings card): the page puts the issue's text inside it with
+  `{{ issue_notes_at(notes, '<anchor>') }}` (`_issue_notes.html`, the page's `notes` from `views.issue_notes`);
 - `fix` — `Fix(action, subject, label)`, the control that resolves it, or `None` when there is nothing to do. The
   page marks that control with `{{ fix_attrs('<action>', subject) }}` (and a `<details>` that holds it with
   `{{ fix_open(...) }}`); the link's `?fix=` focuses it, with or without a script.
@@ -231,8 +233,8 @@ Each `Issue` (`issues/model.py`) carries:
 1. Add `src/tow/issues/kinds/<kind>.py` with `KIND`, `ORDER` and `collect`; kinds do not import each other
    (`tests/test_layers.py`).
 2. Add `issues.<kind>` to every language file.
-3. Make sure the target page has the anchor and the fix control (`fix_attrs`); a new page goes into
-   `ISSUE_PAGES` in `tow/web/views.py`.
+3. Make sure the target page has the anchor, the fix control (`fix_attrs`) and, for a `note`, the
+   `issue_notes_at` there; a new page goes into `ISSUE_PAGES` in `tow/web/views.py`.
 4. Test the rule in `tests/test_issues.py` and follow the link in `tests/test_attention_links.py` (`LANDINGS`
    names a test per kind and fails without one).
 

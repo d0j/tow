@@ -54,12 +54,15 @@ class Target:
     """Where the issue is shown in full. ``page`` is a page's name (``home``, ``settings``,
     ``history``); ``open`` what that page opens (a Settings section, a Home topic); ``filter`` the
     page's own filters ((name, value) pairs); ``anchor`` the element that shows the problem.
-    An empty anchor is the issue's own note on that page (``issue-<id>``)."""
+    An empty anchor is the issue's own note on that page (``issue-<id>``). ``note``: the element
+    does not say what is wrong by itself (a card, a settings row): the page shows the issue's
+    text inside it."""
 
     page: str
     open: str = ""
     filter: tuple[tuple[str, str], ...] = ()
     anchor: str = ""
+    note: bool = False
 
 
 @dataclass(frozen=True, slots=True)

@@ -125,6 +125,10 @@ def test_late_checks_open_the_service_card_with_restart(client):
 
     page, _ = _land(client, entry, anchor="acc-service", fix="restart_service", label="Перезапустить")
     assert re.search(r'id="acc-service" open', page)
+    # The card says what is wrong: the service card alone does not.
+    card = page.split('id="acc-service"', 1)[1].split("</details>", 1)[0]
+    assert html.escape(entry["text"], quote=False) in card
+    assert card.count('class="notice issue-note"') == 1
 
 
 def test_a_check_blocked_by_the_master_key_lands_on_its_explanation_with_the_command(client):
@@ -179,6 +183,8 @@ def test_a_lost_data_folder_lands_on_the_night_copies_with_the_newest_restore(cl
     page, _ = _land(client, entry, anchor="backup-night", fix="restore_night", label="Восстановить")
     assert re.search(r'id="acc-transfer" open', page)
     assert '<details class="backup-inventory" open>' in page  # the copies unfolded around the button
+    card = page.split('id="backup-night"', 1)[1].split("</article>", 1)[0]
+    assert html.escape(entry["text"], quote=False) in card  # what was lost, in the card
 
 
 # Kind -> the test above that follows its link: a new kind needs one.
@@ -194,6 +200,11 @@ LANDINGS = {
 
 def test_every_kind_has_a_landing_test():
     assert set(LANDINGS) == {kind.name for kind in issues.known_kinds()}
+
+
+def test_a_card_says_nothing_of_a_problem_that_is_gone(client):
+    _home_state(_topic("z", 9))
+    assert 'class="notice issue-note"' not in client.get("/settings").text
 
 
 def test_the_links_open_nothing_else_without_a_fix(client):

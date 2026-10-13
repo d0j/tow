@@ -32,8 +32,9 @@ def collect(snapshot: Snapshot) -> list[Issue]:
             id=KIND,
             severity="warn",
             message=Message("issues.check_stale", {"at": since}),
-            # tow run plans the checks: its card says how it is, and a restart starts it again.
-            target=Target("settings", open="service", anchor="acc-service"),
+            # tow run plans the checks: its card says they are late (the note) and how it is, and a
+            # restart starts it again.
+            target=Target("settings", open="service", anchor="acc-service", note=True),
             fix=Fix("restart_service", label="settings.service.restart"),
         )
     ]

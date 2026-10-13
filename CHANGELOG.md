@@ -62,6 +62,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   version, as the interface does. The Russian guide quotes the disk-space message as TOW writes it («TOW запустит
   торрент сам») and its wording is corrected in a dozen places (magnet-ссылка, «Подождите», a check missed while the
   computer slept or was off).
+- Home → Needs attention: the Settings card a late check or a lost data folder leads to now says what is wrong (the
+  checks have not run since …, the data folder was deleted or replaced), not only its usual contents.
 
 ## [1.28.4] — 2026-10-12
 
