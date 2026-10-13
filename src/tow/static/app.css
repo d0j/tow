@@ -931,7 +931,12 @@ summary:focus-visible, select:focus-visible { outline: 2px solid var(--acc); out
   display: grid; grid-template-columns: 1.3rem minmax(0,1.6fr) 5.5rem minmax(0,1fr) minmax(9rem,1.3fr) 5rem 6.4rem;
   gap: .35rem .7rem; align-items: center; padding: .32rem .7rem;
 }
-.row-progress > a { grid-column: 6; justify-self: start; min-width: 0; pointer-events: auto; }
+/* At least a 24 px square to tap or click (WCAG 2.5.8; "0/1" was 23.9 x 22.5) that looks as it
+   did: the text stays at the left edge, and the margin takes the padding back. */
+.row-progress > a {
+  grid-column: 6; justify-self: start; min-width: 1.5rem; pointer-events: auto;
+  padding-block: .2rem; margin-block: -.2rem;
+}
 .row-wrap:has(> .row-progress) .topic-progress { visibility: hidden; }
 .row-wrap:has(> details[open]) > .row-progress { display: none; }
 .row-wrap:has(> details[open]) .topic-progress { visibility: visible; }

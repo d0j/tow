@@ -83,6 +83,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   translated before.
 - Settings: the "Copy the command" button in the note about passwords and tokens that cannot be opened no longer
   breaks into two lines; it stays one line beside the text, or under it on a phone.
+- Home: the progress link of a row ("0/1") is easier to hit: at least 24 × 24 px, where it was smaller (23.9 × 22.5,
+  on a phone 20.7 × 19.5). It looks as before.
 
 ## [1.28.4] — 2026-10-12
 

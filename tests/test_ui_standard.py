@@ -98,3 +98,17 @@ def test_the_copy_command_button_stays_one_line_in_the_master_key_note():
     assert "white-space: nowrap" in rules[".secret-store-copy > button"]
     assert "flex-wrap: wrap" in rules[".flash.secret-store"]
     assert "flex: 1 1 24rem" in rules[".flash.secret-store > span:first-child"]
+
+
+def test_the_home_progress_link_is_a_24_px_target_that_looks_the_same():
+    """Qa10: "0/1" was a 23.9 x 22.5 px link (axe target-size; 20.7 x 19.5 on a phone). It is at
+    least 24 px each way, and its padding is taken back by the margin: in a browser the rows are
+    pixel for pixel as before at 1280 and 390 px."""
+    body = dict(_rules(CSS))[".row-progress > a"]
+    assert "min-width: 1.5rem" in body
+    padding = re.search(r"padding-block: \.(\d+)rem", body)
+    margin = re.search(r"margin-block: -\.(\d+)rem", body)
+    assert padding
+    assert margin
+    assert padding.group(1) == margin.group(1)
+    assert 13 * 1.5 + 2 * 16 * float("." + padding.group(1)) >= 24  # the phone's 13 px line
