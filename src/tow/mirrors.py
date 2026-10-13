@@ -300,6 +300,7 @@ def _follow_redirects(
     allowed_redirects: set[str],
     public_only: bool = False,
     deadline: float | None = None,
+    probe_path: str | None = None,
 ) -> Any:
     """Follow at most five redirects: same-origin with the tracker client, allowlisted
     download hosts only in a fresh cookie-free client, anything else refused."""
@@ -310,6 +311,17 @@ def _follow_redirects(
         if not loc:
             raise MirrorFetchError("mirrors.no_location", failure="redirect_loop")
         nxt = urljoin(str(r.url), loc)
+        if probe_path is not None:
+            target = urlparse(nxt)
+            # Root-to-sign-in redirects can establish anonymous reachability. A
+            # path-specific probe may not fall back to an unchallenged home page.
+            allowed_probe_paths = (
+                {"/", "/index.php", "/forum/index.php", "/login", "/login.php", "/forum/login.php"}
+                if probe_path == "/"
+                else {probe_path}
+            )
+            if target.path not in allowed_probe_paths or target.query or target.fragment:
+                raise MirrorFetchError("mirrors.redirect_bad_origin", failure="redirect_policy")
         current_origin = _origin(str(r.url))
         next_origin = _origin(nxt)
         if current_origin is None:
@@ -663,10 +675,8 @@ def pick_and_get(
 
 def _verify_clearance(response: httpx.Response, host: str, markers: list[str] | None) -> None:
     """An account sign-in page is reachable access, even when it carries HTTP 401/403."""
-    if response.status_code in _REDIRECT_STATUSES:
-        destination = urljoin(host + "/", response.headers.get("location") or "")
-        if _origin(destination) != _origin(host):
-            raise MirrorFetchError("mirrors.redirect_cross_origin", failure="redirect_policy")
+    if _origin(str(response.url)) != _origin(host):
+        raise MirrorFetchError("mirrors.redirect_cross_origin", failure="redirect_policy")
     verdict = response_verdict(response, maintenance_markers=markers, wanted=response.status_code in {401, 403})
     if verdict == Verdict.LOGIN_NEEDED:
         return
@@ -705,12 +715,18 @@ def _recover_challenges(
 ) -> tuple[httpx.Response, str] | None:
     """Only after ordinary mirrors fail; never send a login or download to a provider.
 
-    A provider supplies credentials, not an answer. A guarded GET of the origin's
-    root validates them; the requested path is then fetched normally once.
+    A provider supplies credentials, not an answer. A guarded GET of the site's
+    audited public probe validates them; the requested path is fetched normally once.
     """
     if not protection or protection.get("enabled") is not True:
         return None
     from tow.protection import chain
+    from tow.protection.spec import public_probe_path
+
+    try:
+        probe_path = public_probe_path(tracker)
+    except ValueError:
+        return None  # a broken optional preset cannot disable ordinary mirrors
 
     deadline = time.monotonic() + float(protection.get("timeout_sec", 30))
     if not _recovery_supported(public_only, deadline):
@@ -719,7 +735,7 @@ def _recover_challenges(
         if time.monotonic() >= deadline:
             break
         for clearance in chain.candidates(
-            tracker, host, protection, public_only=public_only, budget_sec=deadline - time.monotonic()
+            tracker, host, protection, public_only=public_only, budget_sec=deadline - time.monotonic(), skip_cached=True
         ):
             verified_access = False
             try:
@@ -727,7 +743,17 @@ def _recover_challenges(
                     ua=clearance.user_agent, cookies=clearance.cookies, follow_redirects=False, public_only=public_only
                 ) as probe:
                     verified = _deadline_get(
-                        probe, host + "/", max_bytes=thttp.MAX_HTML_RESPONSE_BYTES, deadline=deadline
+                        probe, host + probe_path, max_bytes=thttp.MAX_HTML_RESPONSE_BYTES, deadline=deadline
+                    )
+                    verified = _follow_redirects(
+                        probe,
+                        verified,
+                        ua=clearance.user_agent,
+                        max_bytes=thttp.MAX_HTML_RESPONSE_BYTES,
+                        allowed_redirects=set(),
+                        public_only=public_only,
+                        deadline=deadline,
+                        probe_path=probe_path,
                     )
                 _verify_clearance(verified, host, maintenance_markers)
                 chain.accept(tracker, host, protection, clearance)
@@ -760,6 +786,16 @@ def _recover_challenges(
                 chain.record_event("protection_restored", tracker, clearance.provider, "succeeded")
                 return r, host
             except MirrorFetchError as exc:
+                if verified_access and exc.failure in {"cloudflare", "interactive"}:
+                    # A path-specific refusal does not revoke independently verified access
+                    # elsewhere. Solving that same public probe again supplies no new evidence.
+                    _observe(bucket, host, exc.failure)
+                    _save_bucket(tracker, bucket, host)
+                    chain.record_event("protection_replay_refused", tracker, clearance.provider, "failed")
+                    raise
+                if not verified_access and exc.failure not in {"cloudflare", "interactive", "redirect_policy"}:
+                    chain.record_event("protection_replay_refused", tracker, clearance.provider, "failed")
+                    return None  # preserve the real resource's mirror reasons, not a probe-page failure
                 if exc.failure not in {"cloudflare", "interactive"} and (
                     verified_access or exc.failure != "redirect_policy"
                 ):
@@ -771,6 +807,9 @@ def _recover_challenges(
                 chain.discard(tracker, host, expected=clearance)
                 chain.record_event("protection_replay_refused", tracker, clearance.provider, "failed")
             except Exception as exc:
+                if not verified_access:
+                    chain.record_event("protection_replay_refused", tracker, clearance.provider, "failed")
+                    return None  # an optional probe's outage/limit is not the resource's error
                 _observe(bucket, host, "transport")
                 _save_bucket(tracker, bucket, host)
                 raise MirrorFetchError("mirrors.transport", failure="transport", error=type(exc).__name__) from exc

@@ -87,7 +87,7 @@ def test_rutor_cdn_download():
 def test_kinozal_details():
     g = guess_from_url("https://kinozal.guru/details.php?id=3456789")
     assert g["name"] == "kinozal"
-    assert g["download_path"] == "/.dl./download.php?id={id}"
+    assert g["download_path"] == "/download.php?id={id}"
     assert g["login_path"] == "/takelogin.php"
     assert _id(g, "https://kinozal.guru/details.php?id=3456789") == "3456789"
 
@@ -95,7 +95,7 @@ def test_kinozal_details():
 def test_kinozal_dl_mirror():
     g = guess_from_url("https://kinozal.jumpingcrab.com/.dl./download.php?id=3456789")
     assert g["name"] == "kinozal"
-    assert g["download_path"] == "/.dl./download.php?id={id}"
+    assert g["download_path"] == "/download.php?id={id}"
     assert _id(g, "https://kinozal.jumpingcrab.com/details.php?id=7") == "7"
     assert _id(g, "https://kinozal.jumpingcrab.com/.dl./download.php?id=7") == "7"
 

@@ -17,7 +17,14 @@ from tow.log import log_event
 from tow.net_guard import public_addresses
 from tow.protection import store
 from tow.protection.providers import adapters, validate_clearance
-from tow.protection.spec import AttemptProof, Clearance, ProviderUnavailableError, target_origin, validate_settings
+from tow.protection.spec import (
+    AttemptProof,
+    Clearance,
+    ProviderUnavailableError,
+    public_probe_path,
+    target_origin,
+    validate_settings,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -64,7 +71,13 @@ def _recovery_budget(configured: float, limit: float | None) -> float | None:
 
 
 def candidates(
-    site: str, origin: str, settings: dict[str, Any], *, public_only: bool = True, budget_sec: float | None = None
+    site: str,
+    origin: str,
+    settings: dict[str, Any],
+    *,
+    public_only: bool = True,
+    budget_sec: float | None = None,
+    skip_cached: bool = False,
 ) -> Iterator[Clearance]:
     """Yield credentials only; the caller must validate with its ordinary tracker request.
 
@@ -85,10 +98,11 @@ def candidates(
         if not enabled:
             return
         origin = target_origin(origin)
+        probe_path = public_probe_path(site)
         parts = urlsplit(origin)
         assert parts.hostname is not None
         public_addresses(parts.hostname, parts.port or (443 if parts.scheme == "https" else 80))
-        cached = store.read(site, origin, settings, now=time.time())
+        cached = None if skip_cached else store.read(site, origin, settings, now=time.time())
         if cached is not None:
             yield cached
         if time.monotonic() >= deadline:
@@ -123,7 +137,7 @@ def candidates(
             if timeout < 1:
                 record_event("protection_failed", site, provider["id"], "failed")
                 return
-            clearance = solve(provider, origin, timeout)
+            clearance = solve({**provider, "_probe_path": probe_path}, origin, timeout)
             if time.monotonic() >= deadline:
                 record_event("protection_failed", site, provider["id"], "failed")
                 return

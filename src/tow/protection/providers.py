@@ -18,7 +18,14 @@ import httpcore
 import httpx
 
 from tow.plugins import scan
-from tow.protection.spec import Clearance, ProviderSpec, ProviderUnavailableError, service_url, target_origin
+from tow.protection.spec import (
+    Clearance,
+    ProviderSpec,
+    ProviderUnavailableError,
+    service_url,
+    target_origin,
+    validate_probe_path,
+)
 from tow.protection.transport import DeadlineBackend
 from tow.storage.jsonio import decode_json_bytes
 
@@ -160,6 +167,7 @@ def cookie_api(
 ) -> Clearance:
     """Bounded cookie-only commands, without login cookies, sessions or proxies."""
     origin = target_origin(origin)
+    probe_path = validate_probe_path(provider.get("_probe_path", "/"))
     endpoint = service_url(provider["url"])
     if media_field not in {None, "disableMedia", "blockMedia"} or command not in {"request.get", "request.get_cookies"}:
         raise ValueError("invalid clearance media option")
@@ -171,7 +179,7 @@ def cookie_api(
     browser_ms = int((timeout - 1 if timeout >= 2 else timeout) * 1000)
     payload = {
         "cmd": command,
-        "url": origin + "/",
+        "url": origin + probe_path,
         "maxTimeout": browser_ms,
         "returnOnlyCookies": True,
     }

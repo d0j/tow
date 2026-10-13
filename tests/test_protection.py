@@ -300,7 +300,8 @@ def test_root_transport_error_keeps_cached_access_and_never_requests_another_sol
     monkeypatch.setattr(chain, "candidates", candidates)
     with pytest.raises(MirrorFetchError) as result:
         pick_and_get("demo", SPEC["fetch_hosts"], "/topic/1", protection=settings())
-    assert result.value.failure == "transport"
+    assert result.value.code == "mirrors.all_failed"
+    assert result.value.failure == "cloudflare"  # the real resource, not an optional probe's timeout
 
 
 @pytest.mark.parametrize("status", [429, 500, 502, 503, 504, 522])

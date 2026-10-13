@@ -315,7 +315,7 @@ class GenericHttpTracker:
         # What TOW knows about a site of this name (its search link, a daily download limit,
         # a browser login) unless the site's own settings say otherwise.
         known = presets.defaults(name)
-        self.spec = {**known, **spec} if known else spec
+        self.spec = presets.normalize_spec(name, {**known, **spec} if known else spec)
         self._pages: dict[str, tuple[float, str]] = {}
         self._login_attempted = False
         self._challenged_logins: dict[str, str | None] = {}
