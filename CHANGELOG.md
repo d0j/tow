@@ -36,6 +36,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Settings → Nightly backups: a network share typed as the folder from another device is refused before TOW looks at
   it. Until now TOW already opened the share, and so signed in to that server with your Windows account, before saying
   that a share is chosen only on this computer.
+- The free-space hint under the folder of the add and edit forms no longer looks at a network share (`\\server\share`)
+  while network paths are off in `config.yaml`, nor at a Windows device path: opening a share signs in to that server
+  with your Windows account, and the add itself refuses such a folder anyway.
 
 ## [1.28.4] — 2026-10-12
 

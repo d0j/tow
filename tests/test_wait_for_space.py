@@ -550,7 +550,7 @@ def test_only_tows_own_forms_get_the_hint(monkeypatch):
     from tow.web import app, services
 
     asked: list[str] = []
-    monkeypatch.setattr(services, "folder_free", lambda path: asked.append(path) or {"free": 1, "margin": 0})
+    monkeypatch.setattr(services, "folder_free", lambda path, **_: asked.append(path) or {"free": 1, "margin": 0})
     client = TestClient(app)
     for headers in ({}, {"X-TOW-Space": "0"}, {"Sec-Fetch-Site": "cross-site", "Accept": "application/json"}):
         answer = client.get("/content/space", params={"path": r"\\203.0.113.7\share"}, headers=headers)
@@ -558,6 +558,33 @@ def test_only_tows_own_forms_get_the_hint(monkeypatch):
     assert asked == []
     assert client.get("/content/space", params={"path": "D:\\TV"}, headers={"X-TOW-Space": "1"}).status_code == 200
     assert asked == ["D:\\TV"]
+
+
+def test_the_hint_never_opens_a_share_or_a_device_an_add_would_refuse(monkeypatch):
+    # Opening \\host\share signs in to that host with this account (NTLM): the hint looks only at
+    # a folder an add would take, a share only when allow_unc_save_paths allows one.
+    from fastapi.testclient import TestClient
+
+    from tow.config import load_config, save_config
+    from tow.web import app
+
+    looked: list[str] = []
+    monkeypatch.setattr("tow.folders.seen_from_here", lambda path: looked.append(path) or False)
+    share = r"\\203.0.113.7\share\tv"
+    for path in (share, "//203.0.113.7/share", r"\\.\PhysicalDrive0", r"\\?\C:\TV", "tv\\relative", "D:\\TV\x00"):
+        assert space.folder_free(path) == {"free": None, "margin": space.FREE_SPACE_MARGIN}
+    assert looked == []
+    client = TestClient(app)
+    headers = {"X-TOW-Space": "1"}
+    assert client.get("/content/space", params={"path": share}, headers=headers).json()["free"] is None
+    assert looked == []
+
+    space.folder_free(share, allow_unc=True)  # as an add would, when config.yaml allows shares
+    cfg = load_config()
+    cfg["allow_unc_save_paths"] = True
+    save_config(cfg)
+    client.get("/content/space", params={"path": share}, headers=headers)
+    assert looked == [share, share]
 
 
 def test_both_forms_show_the_hint_under_the_folder_and_warn_when_it_will_not_fit():
