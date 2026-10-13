@@ -518,6 +518,27 @@ def test_queue_is_bounded(http):
     assert "Очередь переполнилась; удалено старых сообщений: 5" in _client().get("/settings").text
 
 
+def test_a_held_queue_does_not_give_the_messengers_key_away(monkeypatch):
+    """state.json (night copies hold it unencrypted) keeps the fingerprint of a held queue's
+    settings: a plain hash of a short key (a 6-digit WhatsApp apikey) was guessed back in seconds."""
+    import hashlib
+
+    from cryptography.fernet import Fernet
+
+    from tow.notifiers.registry import fingerprint
+
+    settings = {"phone": "+10000000000", "apikey": "123456"}
+    plain = hashlib.sha256(json.dumps(settings, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+    held = fingerprint(settings)
+
+    assert held != plain
+    assert held == fingerprint(dict(settings))  # the same settings: the queue stays held
+    assert held != fingerprint({**settings, "apikey": "123457"})  # changed: retried
+    # Nobody without the master key can try keys against it.
+    monkeypatch.setenv("TOW_MASTER_KEY", Fernet.generate_key().decode("ascii"))
+    assert fingerprint(settings) != held
+
+
 def test_one_broken_channel_does_not_stop_the_others(http, monkeypatch):
     set_handler, _, _ = http
     set_handler(lambda _r: httpx.Response(204))
