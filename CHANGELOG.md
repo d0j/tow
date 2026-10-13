@@ -78,6 +78,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   that never said why. The line now says "Check did not complete", as the banner does, followed by the error in the
   reader's language; for a check recorded by an older TOW, its kind of error, or where the details are when none was
   recorded.
+- The tooltip of the clock in the header names why the last attempt failed in words, in both languages ("Last attempt:
+  torrent client"), instead of the stored code ("Last attempt: error"); only a check blocked by the master key was
+  translated before.
 
 ## [1.28.4] — 2026-10-12
 

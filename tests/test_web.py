@@ -2831,3 +2831,29 @@ def test_history_and_log_window_name_events_recorded_with_only_topic_identity():
 
 def test_log_window_links_to_the_full_history():
     assert 'href="/history"' in TestClient(app).get("/").text
+
+
+@pytest.mark.parametrize(
+    ("lang", "error", "words"),
+    [
+        ("ru", "error", "ошибка"),
+        ("ru", "qbit", "торрент-клиент"),
+        ("en", "tracker", "site unreachable"),
+        ("ru", "secrets_migration_required", "сохранённые пароли и токены не открываются"),
+        ("en", "secrets_migration_required", "saved passwords and tokens cannot be opened"),
+    ],
+)
+def test_the_header_clock_says_why_the_last_attempt_failed_in_words(lang, error, words):
+    """The tooltip read "Последняя попытка: error": the class was shown as stored."""
+    from tow.config import load_config, save_config
+
+    cfg = load_config()
+    cfg["language"] = lang
+    save_config(cfg)
+    save_state({"topics": [], "health": {"check_ok": False, "check_error": error, "at_ts": 1}})
+    client = TestClient(app)
+    clock = re.search(r'<span class="hdr-clock[^"]*" id="next-check"[^>]*>', client.get("/").text).group(0)
+    assert f'data-error="{error}"' in clock
+    assert f'data-error-text="{words}"' in clock
+    health = client.get("/health.json").json()
+    assert (health["check_error"], health["check_error_text"]) == (error, words)

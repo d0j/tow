@@ -46,7 +46,7 @@
     {#- What the countdown counts, and a failed check, in words (hidden text, not an aria-label
         on a span: A3/A10); app.js keeps it equal to the tooltip. -#}
     {% set clock_words = t('timer.global_title') if h.check_ok else t('js.clock.last_attempt_failed') %}
-    <span class="hdr-clock{% if not h.check_ok %} bad{% endif %}" id="next-check" data-last="{{ h.next_from_ts }}" data-interval="{{ h.interval_sec }}" data-check-ok="{{ '1' if h.check_ok else '0' }}" data-error="{{ h.check_error }}" title="{{ clock_words }}"><span class="sr-only" data-clock-words>{{ clock_words }} </span><span class="clock-v" data-clock-value>—</span></span>
+    <span class="hdr-clock{% if not h.check_ok %} bad{% endif %}" id="next-check" data-last="{{ h.next_from_ts }}" data-interval="{{ h.interval_sec }}" data-check-ok="{{ '1' if h.check_ok else '0' }}" data-error="{{ h.check_error }}" data-error-text="{{ h.check_error_text }}" title="{{ clock_words }}"><span class="sr-only" data-clock-words>{{ clock_words }} </span><span class="clock-v" data-clock-value>—</span></span>
     <div class="hdr-controls">
     {#- The undo of the action whose message is shown sits in that message (9); the header
         keeps it only for a later page while it lasts. -#}

@@ -1106,7 +1106,6 @@
       "starting": "Starting…"
     },
     "clock": {
-      "secrets_migration_required": "passwords and tokens cannot be opened",
       "never_checked": "No check has run yet",
       "last_attempt": "Last attempt: {error}",
       "overdue_title": "The last check is overdue",
