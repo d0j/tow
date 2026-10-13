@@ -67,6 +67,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Home → Needs attention: a site without a sign-in page whose topics are refused for want of a sign-in is no longer
   listed as "Sign in to …", which led to a row with nothing to sign in with. It reads "Rutor asks you to sign in
   (topics: N)" and opens the site's row on Sites with the user name focused, where a sign-in can be added.
+- Home → Needs attention: with scripts turned off in the browser, the item's link now puts the focus on the button
+  that fixes the problem too. The link named the spot after a "#", and a browser ignores the page's own focus on such
+  an address.
 
 ## [1.28.4] — 2026-10-12
 

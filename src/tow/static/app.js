@@ -1485,14 +1485,20 @@ if (accLog && accBody) {
 }
 
 // A "Needs attention" link lands on the problem: ?fix=<ref> names the control that fixes it
-// (data-fix, fix_attrs) and #<anchor> the spot that shows it (the server opened what holds them;
-// the CSS lights the spot up). What still folds the control away opens, the spot comes into view
-// below the sticky header, and the focus goes to the control; without one (nothing to do), to the
-// spot itself. Runs after the rows have their order, so the spot stays where it is shown.
+// (data-fix, fix_attrs; the server already focused it with autofocus) and ?spot=<id> the spot
+// that shows it; a link without a fix names the spot as #<id> (the browser scrolls there, the CSS
+// lights it up). The server opened what holds them. What still folds the control away opens, the
+// spot comes into view below the sticky header and lights up (.landed), and the focus goes to the
+// control; without one (nothing to do), to the spot itself. Runs after the rows have their order,
+// so the spot stays where it is shown.
 const landOnProblem = () => {
-  const fix = new URL(location.href).searchParams.get("fix") || "";
-  let anchor = String(location.hash || "").slice(1);
-  try { anchor = decodeURIComponent(anchor); } catch { /* a malformed address: as written */ }
+  const params = new URL(location.href).searchParams;
+  const fix = params.get("fix") || "";
+  const named = params.get("spot") || "";
+  let anchor = named || String(location.hash || "").slice(1);
+  if (!named) {
+    try { anchor = decodeURIComponent(anchor); } catch { /* a malformed address: as written */ }
+  }
   if (!fix && !anchor.startsWith("issue-")) return;
   const spot = anchor ? document.getElementById(anchor) : null;
   const control = fix ? [...document.querySelectorAll("[data-fix]")].find((el) => el.dataset.fix === fix) : null;
@@ -1500,7 +1506,9 @@ const landOnProblem = () => {
   if (!target || target.closest("[hidden]")) return;
   for (let fold = target.closest("details"); fold; fold = fold.parentElement?.closest("details")) fold.open = true;
   if (!control && !spot.hasAttribute("tabindex")) spot.setAttribute("tabindex", "-1");
-  (spot && !spot.closest("[hidden]") ? spot : target).scrollIntoView({ block: "center" });
+  const shown = spot && !spot.closest("[hidden]") ? spot : target;
+  if (spot && named) spot.classList.add("landed");
+  shown.scrollIntoView({ block: "center" });
   target.focus({ preventScroll: true });
 };
 landOnProblem();
