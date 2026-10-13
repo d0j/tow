@@ -31,6 +31,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   missing value out.
 - Home → Needs attention: a scheduled check that failed for another reason no longer says that the saved passwords
   and tokens cannot be opened.
+### Fixed
+
+- Settings → Nightly backups: a network share typed as the folder from another device is refused before TOW looks at
+  it. Until now TOW already opened the share, and so signed in to that server with your Windows account, before saying
+  that a share is chosen only on this computer.
 
 ## [1.28.4] — 2026-10-12
 

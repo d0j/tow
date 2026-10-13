@@ -415,6 +415,44 @@ def test_a_network_share_is_named_only_on_this_computer(monkeypatch):
     assert len(touched) == 1
 
 
+def test_a_share_named_from_the_network_is_never_opened(monkeypatch):
+    """The refusal comes before the folder rules: problem() resolves the folder of night copies
+    (os.path.realpath), and on Windows that already opens the share and signs in to it."""
+    import os
+
+    from tow import platform
+    from tow.auth import issue_session
+    from tow.platform.windows import WindowsBackend
+
+    share = r"\\files\share\tow"
+    opened: list[str] = []
+    real = os.path.realpath
+
+    def realpath(path, *args, **kwargs):
+        if str(path).replace("/", "\\").startswith("\\\\"):
+            opened.append(str(path))
+            return str(path)  # never the real call: it would reach the network
+        return real(path, *args, **kwargs)
+
+    monkeypatch.setattr(os.path, "realpath", realpath)
+    monkeypatch.setenv("TOW_LAN_AUTH_TOKEN", "t" * 32)
+    cfg = load_config()
+    cfg["allow_lan"] = True
+    save_config(cfg)
+    lan = _client(client=("192.168.1.7", 50000), cookies={"tow_session": issue_session("t" * 32)})
+    with platform.use(WindowsBackend()):
+        for action in ("check", "save"):
+            for path in (share, share.replace("\\", "/")):
+                refused = lan.post(
+                    "/settings/backup/location",
+                    data={"kind": "night", "path": path, "action": action},
+                    follow_redirects=False,
+                )
+                assert _flash(refused) == t("web.backup.share_local_only", "ru")
+    assert opened == []
+    assert "backup_dir" not in load_config()
+
+
 def test_only_a_windows_share_counts_as_one():
     from tow import platform
     from tow.locations import is_network_share
