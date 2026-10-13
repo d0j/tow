@@ -110,6 +110,7 @@ PURE: dict[str, set[str]] = {
         "format_event",
         "check_error_label",
         "index_event_titles",
+        "index_site_titles",
         "owner_language",
     },
     "tow.jsonish": {"as_dict"},

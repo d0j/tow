@@ -90,6 +90,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The Log and History name the passes that ask only the torrent client: "Progress check · topics: 11" and "Disk space
   check", instead of an unnamed "Check · checked: 11, without errors: 11" while six topics had errors; such a pass
   asks no site.
+- History and the Log name a site by its title, as Home does ("NNM-Club"), not by its settings key ("nnmclub"), also
+  inside the error of a line.
 
 ## [1.28.4] — 2026-10-12
 

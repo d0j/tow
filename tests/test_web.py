@@ -2857,3 +2857,23 @@ def test_the_header_clock_says_why_the_last_attempt_failed_in_words(lang, error,
     assert f'data-error-text="{words}"' in clock
     health = client.get("/health.json").json()
     assert (health["check_error"], health["check_error_text"]) == (error, words)
+
+
+def test_history_and_the_log_name_a_site_by_its_title():
+    """Qa10: History and the Log named a site by its settings key ("fakeone"); Home says its title."""
+    from tow.config import load_config, save_config
+    from tow.log import log_event
+
+    cfg = load_config()
+    cfg["trackers"] = {"fakeone": {"title": "Site One", "url_regex": r"^https://one\.example/(\d+)"}}
+    save_config(cfg)
+    save_state({"topics": []})
+    log_event("check_site_skipped", tracker="fakeone", topics=2, error="fakeone: all mirrors are paused")
+    client = TestClient(app)
+    history = client.get("/history").text
+    line = history.split('id="latest-check_site_skipped"', 1)[1].split("</div>", 1)[0]
+    log = client.get("/log.json").json()["rows"][0]["detail"]
+    settings = client.get("/settings").text.split('id="log-settings-body"', 1)[1].split("</details>", 1)[0]
+    for text in (line, log, settings):
+        assert "Site One" in text
+        assert "fakeone" not in text
