@@ -102,6 +102,8 @@ A preset module declares `PRESET = SitePreset(...)`:
 | `search_path` | a search link with `{q}` — TOW only links to it, never fetches results |
 | `daily_limit` | its accounts have a daily `.torrent` limit (a preview must not spend it) |
 | `infohash_path` | optional page with `{id}` reporting the current revision's labelled info-hash; ambiguous/unavailable answers fall back to the normal procedure |
+| `public_probe_path` | audited anonymous page for independent access verification, `/` by default; the protection contract validates the allowlist, never a user-supplied topic or download URL |
+| `download_path_aliases` | exact obsolete default routes mapped to their current equivalent; custom routes and stored owner settings stay unchanged |
 | `maintenance_markers` | bounded literal markers for this site's maintenance page; never a reason to submit account credentials |
 | `browser_login`, `browser_login_hint` | sign-in only through a browser window, and the hint key (`site.<name>.*`) |
 | `spec` | the site's settings exactly as `config.example.yaml` ships them (the test compares them) |
@@ -124,9 +126,12 @@ through `tow.plugins.scan`; duplicate kinds are excluded and an unavailable kind
 The shared settings card and ordered chain require no adapter-name branches.
 
 The contract is intentionally narrow: the caller supplies a validated local/private API endpoint and a public
-origin, never login cookies, credentials or a topic/download path. Return only a validated `cf_clearance`, its exact
-origin binding, matching User-Agent, finite expiry and provider connection id. TOW independently replays the root with its pinned
-transport before trusting the result. A provider's HTML is never tracker metadata. Enforce the absolute request
+origin, never login cookies, credentials or a topic/download path. The caller also supplies the internal
+`_probe_path` hint from a trusted site preset; validate it with `validate_probe_path` and use that audited public
+page, not an arbitrary configured path. The compatible API helper already does this without changing the
+three-argument adapter contract. Return only a validated `cf_clearance`, its exact origin binding, matching
+User-Agent, finite expiry and provider connection id. TOW independently replays the audited public page with its
+pinned transport before trusting the result. A provider's HTML is never tracker metadata. Enforce the absolute request
 budget and bounded response parsing inside the adapter, not only around it.
 
 Raise `ProviderUnavailableError` only for an API-level outage, busy response or protocol mismatch. A site's refusal
@@ -134,6 +139,11 @@ or failed challenge must not trip the shared API fuse. The chain stamps an owned
 candidate; adapters must not generate one. Conditional acceptance, discard and late API outcomes compare it with
 the durable reservation, including after reset. Test continuation to later providers when `max_attempts` is smaller
 than the connection count, and the v1 optional-cache read without a write. No browser serialization using pickle.
+
+API availability and verified site access are different observations: an API response is not proof that the
+site accepts its clearance. Once the independent public probe succeeds, a challenge on the requested resource
+must not discard that useful clearance or start another solve. A failed optional probe must preserve the original
+resource error rather than misreport authentication, quota or transport failures as a provider failure.
 
 Test wrong scope, expiry, user-agent, compression/size, redirects, finite time, request-secret isolation and
 fallback after refusal. Settings and dry-run must not contact the service. In-process plugins are trusted code,

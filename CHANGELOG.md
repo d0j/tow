@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.30.0] — 2026-10-13
+
 ### Added
 
 - Optional site-access recovery through independently discovered FlareSolverr and Byparr adapters. All connections
@@ -20,6 +22,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Short recovery budgets no longer divide every provider's share below a usable second. A budget that cannot
+  call even one service leaves the persistent cooldown unchanged, so a later full-budget check remains eligible.
+  Slow preparation preserves the last actually attempted connection and allows later connections within the deadline.
 - Rate-limited mirrors are paused immediately using bounded `Retry-After` or backoff; even manual checks respect
   that pause. Healthy mirrors remain usable and previews do not persist cooldowns.
 - Kinozal uses the current torrent download route, including configurations with the obsolete default; custom

@@ -6,6 +6,7 @@ import hashlib
 import math
 import re
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -267,6 +268,45 @@ def note_attempt(attempt: AttemptProof, provider_id: str) -> bool:
         record["provider_cursor"] = provider_id
         _save(records)
         return True
+
+
+@dataclass(frozen=True, repr=False)
+class PendingAttempt:
+    """A reversible reservation only until the first external call begins."""
+
+    proof: AttemptProof
+    previous: dict[str, Any] | None
+
+
+def prepare_attempt(site: str, origin: str, settings: dict[str, Any], *, now: float) -> PendingAttempt | None:
+    with persistence_lock():
+        previous = _load().get(_key(site, origin))
+        nonce = reserve_attempt(site, origin, settings, now=now)
+        return None if nonce is None else PendingAttempt(AttemptProof(site, origin, nonce), previous)
+
+
+def cancel_unused_attempt(pending: PendingAttempt) -> None:
+    """Undo preparation, never a reset or a newer reservation's state."""
+    with persistence_lock():
+        records = _load()
+        key = _key(pending.proof.site, pending.proof.origin)
+        if records.get(key, {}).get("attempt_id") != pending.proof.nonce:
+            return
+        if pending.previous is None:
+            records.pop(key)
+        else:
+            records[key] = pending.previous
+        _save(records)
+
+
+def finish_attempt(attempt: AttemptProof, provider_id: str) -> None:
+    """Retain the last actually called provider, not one whose preparation timed out."""
+    with persistence_lock():
+        records = _load()
+        record = records.get(_key(attempt.site, attempt.origin))
+        if record and record.get("attempt_id") == attempt.nonce and record.get("provider_cursor") != provider_id:
+            record["provider_cursor"] = provider_id
+            _save(records)
 
 
 def accept(

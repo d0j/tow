@@ -70,6 +70,16 @@ def _recovery_budget(configured: float, limit: float | None) -> float | None:
     return configured if configured >= 1 else None
 
 
+def _finish_reservation(pending: store.PendingAttempt, last_called: str | None) -> None:
+    try:
+        if last_called is None:
+            store.cancel_unused_attempt(pending)
+        else:
+            store.finish_attempt(pending.proof, last_called)
+    except Exception:  # noqa: BLE001 - unreadable storage retains the safe crash lease
+        _LOG.debug("clearance reservation finalization unavailable")
+
+
 def candidates(
     site: str,
     origin: str,
@@ -112,48 +122,58 @@ def candidates(
         enabled = store.eligible_providers(site, origin, settings, enabled, now=time.time())[: settings["max_attempts"]]
         if not enabled:
             return
-        nonce = store.reserve_attempt(site, origin, settings, now=time.time())
-        if nonce is None:
+        if deadline - time.monotonic() - verification_margin < 1:
+            return  # no callable solver budget must not start a persistent cooldown
+        pending = store.prepare_attempt(site, origin, settings, now=time.time())
+        if pending is None:
             return
-        attempt = AttemptProof(site, origin, nonce)
+        attempt = pending.proof
     except Exception:  # noqa: BLE001 - optional recovery fails closed without exposing credentials
         _LOG.debug("clearance recovery unavailable")
         return
-    for index, provider in enumerate(enabled):
-        try:
-            solve = available.get(provider["kind"])
-            if solve is None:
-                continue
-            if deadline - time.monotonic() - verification_margin < 1:
-                return
-            if not store.note_attempt(attempt, provider["id"]):
-                return
-            timeout = (deadline - time.monotonic() - verification_margin) / (len(enabled) - index)
-            if timeout < 1:
-                return
-            provider_deadline = time.monotonic() + timeout
-            record_event("protection_attempt", site, provider["id"], "started")
-            timeout = min(timeout, provider_deadline - time.monotonic())
-            if timeout < 1:
+    last_called = None
+    try:
+        for index, provider in enumerate(enabled):
+            try:
+                solve = available.get(provider["kind"])
+                if solve is None:
+                    continue
+                available_time = deadline - time.monotonic() - verification_margin
+                if available_time < 1:
+                    return
+                slots = min(len(enabled) - index, math.floor(available_time))
+                timeout = available_time / slots
+                provider_deadline = time.monotonic() + timeout
+                if not store.note_attempt(attempt, provider["id"]):
+                    return
+                timeout = min(timeout, provider_deadline - time.monotonic())
+                if timeout < 1:
+                    continue
+                record_event("protection_attempt", site, provider["id"], "started")
+                timeout = min(timeout, provider_deadline - time.monotonic())
+                if timeout < 1:
+                    record_event("protection_failed", site, provider["id"], "failed")
+                    continue
+                last_called = provider["id"]  # a crash or ambiguous response retains the cooldown
+                clearance = solve({**provider, "_probe_path": probe_path}, origin, timeout)
+                if time.monotonic() >= deadline:
+                    record_event("protection_failed", site, provider["id"], "failed")
+                    return
+                if time.monotonic() >= provider_deadline:
+                    record_event("protection_failed", site, provider["id"], "failed")
+                    continue  # even a misbehaving optional adapter cannot consume verification's reserved time
+                if clearance.provider != provider["id"]:
+                    record_event("protection_failed", site, provider["id"], "failed")
+                    continue
+                validated = replace(validate_clearance(clearance, origin, now=time.time()), attempt_id=attempt.nonce)
+                _note_service(provider, "succeeded", attempt)
+                yield validated
+            except Exception as error:  # noqa: BLE001 - one optional provider must never disable the next
+                _failed_service(provider, error, attempt)
                 record_event("protection_failed", site, provider["id"], "failed")
-                return
-            clearance = solve({**provider, "_probe_path": probe_path}, origin, timeout)
-            if time.monotonic() >= deadline:
-                record_event("protection_failed", site, provider["id"], "failed")
-                return
-            if time.monotonic() >= provider_deadline:
-                record_event("protection_failed", site, provider["id"], "failed")
-                continue  # even a misbehaving optional adapter cannot consume verification's reserved time
-            if clearance.provider != provider["id"]:
-                record_event("protection_failed", site, provider["id"], "failed")
-                continue
-            validated = replace(validate_clearance(clearance, origin, now=time.time()), attempt_id=attempt.nonce)
-            _note_service(provider, "succeeded", attempt)
-            yield validated
-        except Exception as error:  # noqa: BLE001 - one optional provider must never disable the next
-            _failed_service(provider, error, attempt)
-            record_event("protection_failed", site, provider["id"], "failed")
-            _LOG.debug("clearance provider refused or unavailable")
+                _LOG.debug("clearance provider refused or unavailable")
+    finally:
+        _finish_reservation(pending, last_called)
 
 
 def accept(site: str, origin: str, settings: dict[str, Any], clearance: Clearance) -> None:
