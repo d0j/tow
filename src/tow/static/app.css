@@ -184,8 +184,6 @@ main.auth-shell {
 .flash-x:hover { color: var(--fg); background: var(--panel2); }
 /* The undo of the action the message is about sits in the message, with the time it has left. */
 .flash > span:first-child { flex: 1 1 auto; min-width: 0; }
-.flash.flash-folded { width: fit-content; max-width: 100%; }
-.flash [data-flash-fold][hidden] { display: none; }
 .flash-undo { margin: 0; flex: 0 0 auto; }
 .undo-left { font-variant-numeric: tabular-nums; color: var(--mut); }
 .grid { display: grid; gap: 1rem; }
@@ -1011,15 +1009,24 @@ svg.i.xs { width: .75rem; height: .75rem; stroke-width: 2.4; }
 .tracker-menu { left: 0; right: auto; max-width: min(19rem, 100%); max-height: min(20rem, 45dvh); overflow-y: auto; overscroll-behavior: contain; }
 mark { background: rgba(240,180,41,.35); color: inherit; border-radius: 2px; }
 
-/* G3: needs-attention banner. It folds into a warning button with the number of problems
-   (attention.js marks <html> before the page is drawn: nothing jumps); without the script both
-   buttons stay hidden and the banner open. */
-.attention { border-color: var(--warn); margin-bottom: .8rem; padding: .6rem .9rem; }
-.attention strong { color: var(--warn); }
-.attention ul { margin: .3rem 0 0; padding-left: 1.2rem; }
+/* Current problems occupy one header icon, never a message strip. Native details works
+   without scripts; polling only changes confirmed current observations. */
+.attention-menu { flex: 0 0 auto; }
+.attention-menu[hidden] { display: none; }
+header.app .attention-menu > summary.ico { position: relative; color: var(--warn); list-style: none; }
+header.app .attention-menu.bad > summary.ico { color: var(--bad); }
+.attention-menu > summary::-webkit-details-marker { display: none; }
+.attention-panel {
+  position: absolute; top: calc(100% + .3rem); left: .7rem; z-index: 12;
+  box-sizing: border-box; width: min(28rem, calc(100% - 1.4rem)); max-height: min(26rem, 60dvh);
+  overflow: auto; overscroll-behavior: contain; padding: .7rem;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel);
+  box-shadow: var(--shadow); font-size: 13px;
+}
+.attention-panel strong { color: var(--warn); }
 /* Each item is a link to the problem: the whole line is the target (at least 32 px high), with
    a chevron saying it goes somewhere. */
-.attention ul.attention-list { margin: .25rem -.4rem 0; padding: 0; list-style: none; }
+.attention-list { margin: .25rem 0 0; padding: 0; list-style: none; }
 .attention-link {
   display: flex; align-items: center; gap: .5rem; min-height: 2rem; padding: .3rem .4rem; border-radius: 6px;
   color: var(--acc); text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
@@ -1029,25 +1036,12 @@ mark { background: rgba(240,180,41,.35); color: inherit; border-radius: 2px; }
 .attention-link > svg { flex: 0 0 auto; }
 .attention-link:hover, .attention-link:focus-visible { background: var(--panel2); text-decoration-color: currentColor; }
 @media (max-width: 640px) { .attention-link { min-height: 2.75rem; } }
-.attention-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-height: var(--btn-h); }
-.attention-fold.ico, .attention-unfold { display: none; }
-.attention-js .attention-fold.ico {
-  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
-  width: var(--btn-h); height: var(--btn-h); margin: 0 -.35rem 0 0; padding: 0;
-  color: var(--mut); background: transparent; border: 0; border-radius: 6px;
-}
-.attention-fold.ico svg { transform: rotate(180deg); }
-.attention-fold.ico:hover, .attention-fold.ico:focus-visible { color: var(--fg); background: var(--panel2); }
-.attention-folded .attention { display: none; }
-.attention-js.attention-folded .attention-unfold {
-  display: inline-flex; align-items: center; gap: .4rem; width: fit-content; margin: 0 0 .8rem;
-  --tone: var(--warn); color: var(--tone); background: var(--pill-warn-bg); border-color: var(--tone); font-weight: 650;
-}
-.attention-js.attention-folded .attention-unfold.bad { --tone: var(--bad); background: var(--pill-bad-bg); }
 .attention-count {
-  min-width: 1.25rem; padding: 0 .35rem; border-radius: 999px; line-height: 1.25rem; text-align: center;
-  color: var(--panel); background: var(--tone); font-variant-numeric: tabular-nums;
+  position: absolute; top: 0; right: 0; min-width: .7rem; padding: 0 .12rem;
+  border-radius: 999px; line-height: .85rem; font-size: 9px; text-align: center;
+  color: var(--panel); background: var(--warn); font-variant-numeric: tabular-nums;
 }
+.attention-menu.bad .attention-count { background: var(--bad); }
 
 /* G7: history page */
 .history-filter { display: flex; flex-wrap: wrap; gap: .5rem .8rem; align-items: center; margin: .4rem 0 .7rem; }

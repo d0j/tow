@@ -118,7 +118,7 @@ def collect(snapshot: Snapshot) -> list[Issue]:
     trackers = load_trackers(snapshot.config)
     found: list[tuple[tuple[bool, str], Issue]] = []
     for topic in snapshot.topics:
-        if topic.get("paused") or topic.get("last_error_class") != CLASS:
+        if topic.get("paused") or topic.get("last_error_class") != CLASS or not topic.get("last_error"):
             continue
         tracker = match_tracker(trackers, str(topic.get("url") or ""))
         order = (tracker is None, _title(snapshot.config, tracker.name).casefold() if tracker else "")

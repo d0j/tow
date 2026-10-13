@@ -288,13 +288,20 @@ def test_a_failed_check_says_its_error_on_the_landing(client):
 
 def test_a_rebuilt_history_lands_on_its_note_with_nothing_to_focus(client):
     _home_state(_topic("z", 9), history_rebuilt_at=int(time.time()))
-    entry = _entries(client)["history_rebuilt"]
-    assert entry["href"] == "/history#issue-history_rebuilt"
-
-    page, _ = _land(client, entry, anchor="issue-history_rebuilt", fix="", label="")
+    assert "history_rebuilt" not in _entries(client)
+    page = client.get("/history#issue-history_rebuilt").text
     note = page.split('id="issue-history_rebuilt"', 1)[1].split("</p>", 1)[0]
     assert "download_history.json.corrupt" in note
     assert " autofocus" not in page
+
+
+def test_a_topic_error_opens_its_row_with_the_current_problem(client):
+    _home_state(_topic("a", 1, last_error="Synthetic connection refused", last_error_class="tracker"))
+    entry = _entries(client)["topic_error"]
+    assert entry["text"] == "Show a — Synthetic connection refused"
+    page, _ = _land(client, entry, anchor="row-a", fix="", label="")
+    assert "Synthetic connection refused" in page
+    assert re.search(r'<details class="row-edit[^\"]*" open>', page.split('id="row-a"', 1)[1])
 
 
 def test_a_lost_data_folder_lands_on_the_night_copies_with_the_newest_restore(client, monkeypatch, tmp_path_factory):
@@ -325,6 +332,7 @@ LANDINGS = {
     "check_blocked": test_a_failed_check_lands_on_its_error_in_the_history_with_check_all,
     "history_rebuilt": test_a_rebuilt_history_lands_on_its_note_with_nothing_to_focus,
     "data_lost": test_a_lost_data_folder_lands_on_the_night_copies_with_the_newest_restore,
+    "topic_error": test_a_topic_error_opens_its_row_with_the_current_problem,
 }
 
 

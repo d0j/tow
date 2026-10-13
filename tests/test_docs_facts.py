@@ -66,13 +66,12 @@ def test_contributing_names_every_golden_file():
 @pytest.mark.parametrize(
     ("guide", "words"),
     [
-        ("docs/guide.md", ("**Needs attention**", "folds", "opens again by itself", "puts the focus on the")),
-        ("docs/ru/guide.md", ("**Требует внимания**", "сворачивает", "раскрывается сам", "ставит фокус на")),
+        ("docs/guide.md", ("**Needs attention**", "closed by default", "disappears", "focuses the fix button")),
+        ("docs/ru/guide.md", ("**Требует внимания**", "закрыт по умолчанию", "исчезает", "ставит фокус на")),
     ],
 )
-def test_the_guides_say_how_the_needs_attention_banner_works(guide, words):
-    """Qa10: the banner is new in this release, and neither guide said it folds, opens again on a
-    new problem, or that its items lead to the fix."""
+def test_the_guides_explain_the_current_problem_triangle_and_recovery(guide, words):
+    """Both guides describe the closed overlay, confirmed recovery and actionable links."""
     text = " ".join((ROOT / guide).read_text(encoding="utf-8").split())
     for word in words:
         assert word in text, word

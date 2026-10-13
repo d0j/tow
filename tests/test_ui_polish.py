@@ -73,10 +73,9 @@ def test_the_guide_covers_updates_adopting_signing_out_and_permissions(client):
     text = page.get_text(" ")
     for word in ("Взять под управление TOW", "Выйти на всех устройствах", "Другая версия или откат"):
         assert word in text, word
-    # Qa10: the Needs attention banner, new in this release: it folds, opens again on a new
-    # problem, and its items lead to the fix.
+    # The header triangle is closed by default and disappears on confirmed recovery.
     attention = page.select_one("#attention").get_text(" ")
-    for word in ("Требует внимания", "сворачивает", "раскрывается сам", "ставит фокус на кнопку"):
+    for word in ("Требует внимания", "Треугольник", "исчезает", "ставит фокус на кнопку"):
         assert word in attention, word
     codes = [code.get_text() for code in page.select("code")]
     assert codes[-2].endswith("tow.cmd permissions") or codes[-2].endswith("tow permissions")
@@ -639,8 +638,8 @@ def test_labels_chips_heads_and_pills_are_in_sentence_case(lang):
             assert node[key][:1].isupper(), (lang, section, key, node[key])
 
 
-def test_warning_fold_control_is_really_hidden_without_scripts():
-    assert "display: none" in _rules(CSS)[".flash [data-flash-fold][hidden]"]
+def test_a_resolved_problem_indicator_is_hidden_without_scripts():
+    assert "display: none" in _rules(CSS)[".attention-menu[hidden]"]
 
 
 def test_a_message_is_shown_as_a_sentence(client):

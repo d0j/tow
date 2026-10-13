@@ -799,6 +799,7 @@ _RU_AS_IN_ENGLISH = frozenset(
         "check.two_errors",
         "mirrors.all_failed",  # punctuation joins already-translated site and cause
         "web.check.topic_result",  # punctuation joins topic name and translated result
+        "issues.topic_error",  # punctuation joins topic name and translated error
     }
 )
 

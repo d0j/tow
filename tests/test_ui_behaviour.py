@@ -18,9 +18,9 @@ def test_an_error_is_an_alert_that_stays():
     assert "Не удалось проверить" in page
 
 
-def test_a_warning_folds_but_is_not_removed_and_a_success_fades():
+def test_an_action_warning_stays_and_a_success_fades():
     warn = _page_with("сохранено, но не проверено", "warn")
-    assert '<div class="flash warn" id="flash" role="status" data-fold-ttl="60">' in warn
+    assert '<div class="flash warn" id="flash" role="status">' in warn
     ok = _page_with("сохранено", "ok")
     assert 'class="flash" id="flash" role="status" data-ttl=' in ok
 

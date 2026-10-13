@@ -121,12 +121,14 @@ def flash_text(message: Any, /, **params: Any) -> str:
     return t(text, **params) if text and i18n.has(text) else text
 
 
-def flash_location(url: str, message: Any, kind: str = "ok", /, **params: Any) -> str:
+def flash_location(url: str, message: Any, kind: str = "ok", /, *, problem_topic: str = "", **params: Any) -> str:
     """``url`` with ``flash=<token>`` of a message kept on the server (see ``flash_redirect``)."""
     text = flash_text(message, **params)
     if not text:
         return url
     record = {"text": text, "kind": kind if kind in FLASH_KINDS else "ok"}
+    if problem_topic:
+        record["problem_topic"] = problem_topic
     # The undo this action made goes with its message: a check right after a save says
     # "Connected" without an "Undo" that would put the save back.
     if stamped := services.undo_stamped_here():
@@ -246,7 +248,11 @@ def manual_check_flash(
     if row.get("status") == "waiting_space":
         # Not a failed check: the torrent is in the client, stopped, and TOW starts it once its
         # files fit (the error says so). Just added now, or still waiting from an earlier check.
-        return home_redirect(t("web.check.added_waiting_space", error=error) if row.get("added") else error, "warn")
+        return home_redirect(
+            t("web.check.added_waiting_space", error=error) if row.get("added") else error,
+            "warn",
+            problem_topic=topic_id,
+        )
     cls = row_class(row)
     record = row.get("error_record")
     code = str(record.get("code") or "") if isinstance(record, Mapping) else ""
@@ -261,7 +267,12 @@ def manual_check_flash(
         flash = t("web.check.topic_result", title=services.short_series_title(title, owner_language()), result=flash)
     # The status-colour contract (AGENTS.md): a site that does not answer is amber, not an error.
     kind = "warn" if cls in TRACKER_WARNING_CLASSES else "err"
-    return home_redirect(flash, kind, credential_topic=topic_id if cls == "tracker_auth" and tracker_name else None)
+    return home_redirect(
+        flash,
+        kind,
+        problem_topic=topic_id,
+        credential_topic=topic_id if cls == "tracker_auth" and tracker_name else None,
+    )
 
 
 def topic_check_row(topic_id: str, out: dict[str, Any]) -> CheckRow | None:
@@ -352,7 +363,10 @@ def issue_text(issue: Issue) -> str:
     params = dict(issue.message.params)
     if isinstance(params.get("at"), (int, float)):
         params["at"] = ui_time(datetime.fromtimestamp(params["at"], UTC).isoformat())
-    return t(issue.message.key, **params)
+    if issue.kind == "topic_error":
+        params["title"] = services.short_series_title(str(params.get("title") or ""), owner_language())
+    rendered = render_stored(issue.message.key, params, t(issue.message.key, **params))
+    return services.scrub_text(humanize(rendered)) if issue.kind == "topic_error" else rendered
 
 
 # The page a Target names -> its address.
@@ -388,16 +402,16 @@ def issue_href(issue: Issue) -> str:
 
 
 def attention_view(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str, Any]:
-    """Home's "Needs attention": one item per issue, worst first, each a link to the problem;
-    the fingerprint that opens a folded banner again when the problems change; the worst tone
-    (the folded button's colour)."""
-    found = issues_now(state, cfg)
+    """Current header problems, worst first, with stable identities and links to their fixes."""
+    # Past history loss remains a note on History, not an active failure counter.
+    found = [issue for issue in issues_now(state, cfg) if issue.kind != "history_rebuilt"]
     return {
         "entries": [
             {
                 "id": issue.id,
                 "kind": issue.kind,
                 "severity": issue.severity,
+                "subjects": list(issue.subjects),
                 "text": issue_text(issue),
                 "href": issue_href(issue),
                 "fix": issue.fix.ref if issue.fix else "",
@@ -407,6 +421,9 @@ def attention_view(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str
         ],
         "fingerprint": fingerprint(found),
         "tone": worst(found),
+        "count": len(found),
+        "subjects": sorted({subject for issue in found for subject in issue.subjects}),
+        "label": t("home.attention_show", count=len(found)),
     }
 
 

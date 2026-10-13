@@ -299,7 +299,7 @@ def _assert_seeded_data_is_shown(pages: dict[str, str]) -> None:
     home = pages["/"]
     assert all(title.split(" / ")[0] in home for title in (TITLES["error"], TITLES["client"], TITLES["new"]))
     assert 'id="undo-form"' in home
-    assert 'class="attention card"' in home  # the stale check and the client down
+    assert 'class="attention-menu bad"' in home  # the stale check and the client down
     assert any('id="flash"' in html for path, html in pages.items() if "flash=" in path)
     assert TITLES["history"] in pages["/history"]
     assert "NAS" in pages["/settings"]
