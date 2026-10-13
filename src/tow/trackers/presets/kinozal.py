@@ -52,7 +52,7 @@ PRESET = SitePreset(
     search_path="/browse.php?s={q}",
     daily_limit=True,
     infohash_path="/get_srv_details.php?id={id}&action=2",
-    public_probe_path="/browse.php",
+    public_probe_path="/login.php",
     download_path_aliases={"/.dl./download.php?id={id}": _DOWNLOAD},
     maintenance_markers=("ведутся технические работы", "technical works in progress"),
     spec={

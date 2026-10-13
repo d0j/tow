@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 STANDALONE = (
     ROOT / "src" / "tow" / "update_worker.py",
     ROOT / "src" / "tow" / "platform" / "locks.py",
+    ROOT / "src" / "tow" / "platform" / "_local_service_worker.py",
     ROOT / "scripts" / "update.py",
     ROOT / "scripts" / "root_files.py",
 )

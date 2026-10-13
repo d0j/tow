@@ -5,6 +5,18 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.30.4] — 2026-10-14
+
+### Fixed
+
+- Kinozal verifies restored browser access through its anonymous sign-in page, not the catalog that redirects
+  guests to a query-bearing sign-in URL. Account access is still checked independently on the actual resource;
+  passwords and account cookies never reach an external service, and probe redirects remain restricted.
+- An explicitly installed Windows FlareSolverr module starts on demand only for an applying challenge-recovery
+  request, without OS autostart. A loopback broker bounds startup and requests, retains owned-process handles,
+  contains its process tree and exits after idle time. Existing manual listeners are reused, never stopped.
+  Settings identify demand-managed modules; ordinary external services and missing modules remain independent.
+
 ## [1.30.3] — 2026-10-13
 
 ### Fixed

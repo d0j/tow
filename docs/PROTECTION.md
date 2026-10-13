@@ -34,15 +34,44 @@ replace that session's User-Agent. It is not an unattended browser solver.
 
 ## What a check does
 
+### Installed Windows module: on demand
+
+An owner-installed FlareSolverr runtime module may supply a private, pinned
+`runtime/services/flaresolverr/manifest.json` (`tow-local-service/v1`). This is not a web-configurable command:
+the manifest binds the loopback API, fixed relative executable, version, SHA-256 and idle interval. TOW does
+not download or install it while checking. Missing modules retain the ordinary external-service path.
+
+Only an actual provider call can launch it: rendering settings, diagnostics, previews, disabled services and
+ordinary successful site requests do not start a process. A small independent broker lazily starts the native
+service, serializes browser calls and shares the caller's deadline with startup. It forwards only bounded,
+anonymous requests. If a cold start exceeds one request, that request ends on time while the owned startup may
+finish within a separate two-minute cap; a later request can reuse it instead of restarting from cold.
+Only cookie requests for audited public paths are accepted. Application tokens and proxy variables are not inherited.
+Its owned Windows process tree is bound to the broker even on a crash. After five idle minutes it stops its own
+service and exits. A listener started manually is reused without ownership or stopping. No OS autostart is needed.
+
+Settings show **On demand** for a matching installed module. Disabling the connection prevents further launches;
+an already issued request may finish, after which the idle timer stops the module. A damaged manifest/binary
+refuses automatic startup. Native demand management currently supports the Windows package; Linux/macOS keep
+the existing independently managed external API. As for every external browser service, browser egress is outside
+TOW's socket sandbox and should be isolated from private destinations.
+
+### Request sequence
+
 1. Ask ordinary mirrors, with any still-valid previously verified access for the exact origin.
 2. Only when ordinary mirrors failed with a detected Cloudflare browser challenge, try enabled providers in order.
-3. Send the provider only an audited public page: the root by default, `/browse.php` for Kinozal. Never send a
+3. Send the provider only an audited public page: the root by default, `/login.php` for Kinozal. Never send a
    password, account cookie, topic, passkey or download. The trusted site module chooses the probe; arbitrary
    configuration URLs and query strings are not accepted.
 4. Validate the bounded response and replay that page from TOW using the returned clearance and matching User-Agent.
    Redirects stay within the deadline and audited anonymous paths; a path-specific probe cannot redirect to
    an open home page and pass. No probe follows a topic, download or query-bearing redirect.
 5. Fetch the requested resource through TOW's existing guarded HTTP, with normal account sign-in if needed.
+
+Kinozal's catalog sends anonymous visitors to `/login.php?m=5`. Its trusted probe uses the sign-in page directly,
+without query parameters or account credentials, so that redirect cannot invalidate restored access. A reachable
+sign-in page proves only that the browser challenge was cleared; the actual resource must still confirm account
+access. A sign-in probe cannot redirect to the catalog, home page, a query-bearing URL or another origin.
 
 Cloudflare's [`cf-mitigated: challenge`](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/)
 header is definitive evidence. Known check-page titles with their challenge status are a fallback; an ordinary
