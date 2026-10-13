@@ -123,8 +123,14 @@ def _facts() -> dict[str, Any]:
         # Not for a file selection changed in TOW meanwhile: the pass leaves it to the next check,
         # and ran every 5 minutes for nothing but a client ping and a line in the log.
         "space_waiting": any(
-            isinstance(topic.get("waiting_space"), dict)
-            and topic.get("waiting_space")
+            (
+                (isinstance(topic.get("waiting_space"), dict) and topic.get("waiting_space"))
+                or (
+                    isinstance(topic.get("verification_pending"), dict)
+                    and topic.get("verification_pending")
+                    and not topic["verification_pending"].get("blocked")
+                )
+            )
             and not topic.get("paused")
             and not topic.get("selection_dirty")
             for topic in topics_of(state)

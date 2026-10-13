@@ -66,6 +66,8 @@ class Topic(TypedDict, total=False):
     # the revision added stopped because its files do not fit yet (tow.check.space): hash,
     # client, needed, free, path, since, selection, kind
     waiting_space: dict[str, Any]
+    # A selected revision whose client is still verifying existing files, not a failed add.
+    verification_pending: dict[str, Any]
     # the latest result (the Home status colour, AGENTS.md)
     last_ok: bool
     last_ok_at: str
@@ -161,6 +163,7 @@ class HistoryRecord(TypedDict, total=False):
     client_present: bool
     client_absence_observed: bool
     season_complete_at: str
+    verifying: bool
 
 
 class DownloadHistory(TypedDict, total=False):

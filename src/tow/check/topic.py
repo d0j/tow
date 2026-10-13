@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 
 from tow import download_history
-from tow.check import space
+from tow.check import space, verification
 from tow.check.apply import apply_revision
 from tow.check.client_ops import (
     PREVIOUS_REVISION_ACTIVE,
@@ -29,6 +29,7 @@ from tow.episodes import parse_season_hint
 from tow.errors import TowError
 from tow.events import new_operation_id
 from tow.i18n import t
+from tow.jsonish import as_dict
 from tow.log import error_class, error_fields, is_daily_limit, log_event, owner_language
 from tow.mirrors import MirrorFetchError
 from tow.records import CheckRow, Topic, mirror_of
@@ -266,6 +267,8 @@ def _confirm_matching_magnet(
 ) -> bool:
     """The .torrent is unavailable (tracker auth), but the tracker's magnet still names
     the revision we already have: record an unchanged, confirmed check and return True."""
+    if as_dict(topic.get("verification_pending")).get("blocked"):
+        return False  # tracker identity is not confirmation of a blocked client handover
     try:
         magnet_url, _reported_hash = tr.fetch_magnet(
             url, run.secrets, run.ua, ignore_cool=run.ignore_cool, persist=run.apply
@@ -376,6 +379,8 @@ def check_topic(topic: Topic, run: CheckRun) -> CheckRow:
         "ok": False,
     }
     old = str(topic.get("hash") or "").upper()
+    if not topic.get("paused") and verification.recheck(topic, run, row):
+        return row
     # Its torrent waits in the client for disk space: the client is asked (``_waits_for_space``)
     # even while its site is not - a paused site or one at its daily limit kept overwriting the
     # wait with its own error, and the wait was said again after every check.
@@ -443,7 +448,7 @@ def _waits_for_space(work: TopicCheck) -> bool:
     if not topic.get("waiting_space") or topic.get("selection_dirty"):
         return False
     outcome = space.recheck(topic, work.run, work.row, work.client, work.client_id, begun=work.started)
-    return outcome in {space.WAITING, space.WITHDRAWN}
+    return outcome in {space.WAITING, space.WITHDRAWN, space.VERIFYING}
 
 
 def _once_done_after_wait(work: TopicCheck) -> bool:
@@ -488,6 +493,10 @@ def _check_revision(work: TopicCheck) -> None:
         return  # waiting for episodes that are not out yet
     _record_found(work, metadata, plan, h=h, migrates=hash_alias_migration)
     needs_selection_update = _needs_selection_update(work, plan, h)
+    pending = as_dict(topic.get("verification_pending"))
+    if h == old and pending.get("blocked") and not run.readd_removed and not topic.get("selection_dirty"):
+        verification.blocked_row(topic, row, h)
+        return  # site answered, but the existing handover still needs the owner; never fake green
     _mark_preview(
         row,
         preview=not run.apply and (h != old or needs_selection_update),
@@ -496,6 +505,7 @@ def _check_revision(work: TopicCheck) -> None:
         updates_selection=needs_selection_update,
     )
     readd = _readds_removed(work, h=h, needs_selection_update=needs_selection_update)
+    row["readd_removed"] = readd
     if run.apply and (h != old or needs_selection_update or readd):
         if _withdrawn_meanwhile(topic, row, old, work.started):
             return
@@ -536,8 +546,12 @@ def _needs_selection_update(work: TopicCheck, plan: Any, h: str) -> bool:
     if h != work.old:
         return False
     topic = work.topic
+    if work.row.get("verification_repair"):
+        return True
     if topic.get("selection_dirty") or (plan.mode != "all" and str(topic.get("selection_hash") or "").upper() != h):
         return True
+    if as_dict(topic.get("verification_pending")).get("blocked") and not work.run.readd_removed:
+        return False
     return bool(
         work.run.apply and work.client is not None and info_is_pending_tow_add(work.client.inspect_torrent(h), h)
     )
@@ -549,7 +563,7 @@ def _readds_removed(work: TopicCheck, *, h: str, needs_selection_update: bool) -
     for disk space). Only the client is asked; a scheduled check leaves it reported."""
     if not (work.run.apply and work.run.readd_removed and work.old and h == work.old):
         return False
-    if needs_selection_update or work.client is None:
+    if (needs_selection_update and not work.row.get("verification_repair")) or work.client is None:
         return False  # the selection update adds it anyway; a client that did not answer is reported
     return work.client.inspect_torrent(h) is None
 
@@ -598,7 +612,12 @@ def _probe_unchanged_revision(work: TopicCheck, policy: dict[str, Any]) -> bool:
     topic, run, tracker, client = work.topic, work.run, work.tracker, work.client
     if not (run.apply and work.old and (getattr(tracker, "spec", {}) or {}).get("infohash_path")):
         return False
-    if topic.get("selection_dirty") or space.waiting_of(topic) or blocked_revision(topic):
+    if (
+        topic.get("selection_dirty")
+        or space.waiting_of(topic)
+        or blocked_revision(topic)
+        or as_dict(topic.get("verification_pending")).get("blocked")
+    ):
         return False
     if policy["mode"] != "all" and not (
         topic.get("selection_verified") is True and str(topic.get("selection_hash") or "").upper() == work.old

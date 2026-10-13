@@ -5,6 +5,19 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.30.5] — 2026-10-14
+
+### Fixed
+
+- A client checking existing files for longer than the start confirmation window is no longer stopped or
+  reconfigured just because that window expires. The verified revision and selection are retained, displayed
+  as file verification, and confirmed by a client-only pass without another torrent download. Once-only
+  tracking and success notifications finish only after confirmation. Ownership, folder and all file identities
+  and priorities are checked again; actionable changes require recovery rather than an endless fast retry.
+- File-check progress cannot produce false download completions or erase a completed-season marker. Long Home
+  progress labels cannot overlap the action buttons. Disk-space recovery and explicit re-adds use the same
+  confirmation lifecycle, including qBittorrent's all-files handling of legacy filename encodings.
+
 ## [1.30.4] — 2026-10-14
 
 ### Fixed

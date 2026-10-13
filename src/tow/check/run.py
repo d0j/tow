@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from tow import check_transaction, download_history
-from tow.check import rows, space
+from tow.check import rows, space, verification
 from tow.check.client_ops import ClientPool, remote_clients
 from tow.check.notices import RunNotifications, flush_notifications
 from tow.check.reconcile import reconcile_and_commit, reconcile_preview
@@ -285,7 +285,9 @@ def _wanted_ids(
     """The topics this run checks (None: all of them)."""
     want = {str(x) for x in ids} if ids is not None else None
     if space_only:
-        waiting = {str(topic.get("id")) for topic in space.waiting_topics(state)}
+        waiting = {
+            str(topic.get("id")) for topic in [*space.waiting_topics(state), *verification.waiting_topics(state)]
+        }
         want = waiting if want is None else want & waiting
     if scheduled_scope:
         from tow.supervisor import layout
@@ -407,10 +409,14 @@ def _run_check(
         # G2: a progress-only pass asks qBittorrent alone - no tracker traffic at all.
         if space_only:
             row = _progress_only_row(topic)
-            space.space_pass_row(topic, run, row)
+            if not verification.recheck(topic, run, row, pass_only=True):
+                space.space_pass_row(topic, run, row)
             results.append(row)
         else:
-            results.append(_progress_only_row(topic) if progress_only else check_topic(topic, run))
+            row = _progress_only_row(topic) if progress_only else check_topic(topic, run)
+            if progress_only:
+                verification.recheck(topic, run, row, pass_only=True)
+            results.append(row)
     secrets = run.secrets  # the per-topic step may have re-read tracker cookies
     log_site_skips(run)
     pool.queue_recovered()

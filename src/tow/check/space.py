@@ -38,7 +38,7 @@ from tow.check.client_ops import (
     live_previous_overlap,
 )
 from tow.check.rows import client_marks, fail_row, set_error, stamp_result, withdrawn_meanwhile
-from tow.clients.managed import completed_progress
+from tow.clients.managed import ClientVerificationPending, completed_progress
 from tow.clients.spec import TorrentClientAdapter
 from tow.clock import iso_now
 from tow.errors import TowError
@@ -62,6 +62,7 @@ _RUNNING = ("downloading", "uploading", "stalled", "queued", "forced", "metadl")
 WAITING, STARTED, WOULD_START = "waiting", "started", "would_start"
 GONE, FOREIGN, OWNER, STALE = "gone", "foreign", "owner", "stale"
 WITHDRAWN = "withdrawn"  # the owner paused, deleted or edited the topic while the run went on
+VERIFYING = "verifying"
 
 
 @dataclass(frozen=True)
@@ -365,9 +366,20 @@ def recheck(
         return WOULD_START
     if withdrawn_meanwhile(topic, row, h, begun):
         return WITHDRAWN  # the next check works with what the owner saved
-    client.start_owned_torrent(h)
+    destination = str(topic.get("save_path") or "")
+    if not info_confirms(info, h, destination, require_tow_ownership=True):
+        raise TowError("check.save_path_unconfirmed")
+    try:
+        client.start_owned_torrent(h)
+    except ClientVerificationPending:
+        from tow.check import verification
+
+        verification.defer_start(
+            topic, run, row, client, h=h, client_id=client_id, destination=destination, before=info, kind=kind
+        )
+        return VERIFYING
     after = client.inspect_torrent(h)  # the start counts only once the client confirms it
-    if not info_confirms(after, h, dest, require_tow_ownership=True) or (
+    if not info_confirms(after, h, destination, require_tow_ownership=True) or (
         is_stopped(after) and not completed_progress((after or {}).get("progress"))
     ):
         raise TowError("check.start_unconfirmed")
@@ -433,7 +445,14 @@ def space_pass_row(topic: Topic, run: CheckRun, row: dict[str, Any]) -> None:
                 topic, kind="error", operation_id=new_operation_id("check-error"), error=error, tracker=""
             )
         return
-    if outcome == WAITING:
+    if outcome == VERIFYING:
+        previous_check = topic.get("last_check")
+        stamp_result(topic, row)
+        if previous_check is None:
+            topic.pop("last_check", None)
+        else:
+            topic["last_check"] = previous_check
+    elif outcome == WAITING:
         _show_error(topic, row)
         row.update({"ok": True, "status": "skipped"})  # still waiting: the pass itself went fine
         _clear_row_error(row)

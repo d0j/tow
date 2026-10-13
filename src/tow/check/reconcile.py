@@ -175,6 +175,9 @@ def _reconcile_one(
     client_id, topic_client = run.get_client_for(topic)
     checked_ok = bool(row.get("ok")) and row.get("status") != "skipped"
     if topic_client is None:
+        topic_history = (history.get("topics") or {}).get(str(topic.get("id")))
+        if topic_history is not None:
+            topic_history.pop("verifying", None)
         if checked_ok:
             # B4: without its client the topic is not "ok" - TOW cannot see its torrent.
             fail_row(topic, row, client_unreachable(run, client_id))
@@ -274,6 +277,8 @@ def _note_season_complete(
     if not isinstance(record, dict):
         return
     summary = reconcile.get("summary") or {}
+    if summary.get("verifying") or topic.get("verification_pending"):
+        return  # verification is not evidence that the completed season became incomplete
     if not (summary.get("is_complete") and summary.get("expected")):
         record.pop("season_complete_at", None)
         return

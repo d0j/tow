@@ -25,6 +25,7 @@ from tow.config import as_bool, flash_ttl, interval_sec_of
 from tow.episodes import expected_for_topic
 from tow.errors import Msg, TowError, render_stored
 from tow.issues import Issue, Snapshot, fingerprint, worst
+from tow.jsonish import as_dict
 from tow.log import error_class, owner_language
 from tow.net_errors import humanize
 from tow.progress import progress_summary
@@ -244,6 +245,8 @@ def manual_check_flash(
     topic just added (``new_topic``); a check of a topic TOW already had says the check failed."""
     if not row or row.get("ok"):
         return None
+    if row.get("status") == "verification_pending":
+        return home_redirect(t("web.check.verifying"), "warn")
     error = humanize(_row_error(row))
     if row.get("status") == "waiting_space":
         # Not a failed check: the torrent is in the client, stopped, and TOW starts it once its
@@ -614,6 +617,11 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 def topic_progress_summary(topic: Mapping[str, Any], history: Mapping[str, Any]) -> dict[str, Any]:
     summary = progress_summary(str(topic.get("id") or ""), history)
+    pending = as_dict(topic.get("verification_pending"))
+    if pending:
+        summary.update(is_complete=False, completion_known=False)
+    if pending and not pending.get("blocked"):
+        summary.update(verifying=not bool(topic.get("last_error")), is_complete=False, completion_known=False)
     if summary.get("expected") is not None:
         return summary
     expected = expected_for_topic(topic)

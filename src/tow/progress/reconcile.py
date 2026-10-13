@@ -15,6 +15,7 @@ from tow.episodes import expected_for_topic, item_identity
 from tow.errors import Msg, TowError
 from tow.folders import paths_equal
 from tow.i18n import t
+from tow.jsonish import as_dict
 from tow.log import owner_language
 from tow.progress.confirmation import CONFIRMATION_REUSE_SEC, filesystem_confirmation, safe_relative_path
 from tow.progress.expected import preferred_season_for, selected_files, selection_fingerprint, selection_is_current
@@ -381,6 +382,7 @@ def reconcile_topic(
     record, initial_baseline, expected = _open_record(topic, history)
     events: list[str] = []
     if (client_adapter.capabilities or {}).get("inspect") is False:
+        record["verifying"] = False
         record["last_scan_at"] = now
         return {"summary": summary_record(record, expected), "events": events}
 
@@ -388,7 +390,20 @@ def reconcile_topic(
     observe = getattr(client_adapter, "observe_torrent", None) or client_adapter.inspect_torrent
     info = observe(str(topic.get("hash") or ""))
     record["last_scan_at"] = now
+    pending = as_dict(topic.get("verification_pending"))
+    record["verifying"] = info is not None and (
+        (bool(pending) and not pending.get("blocked"))
+        or str(_get(info, "state", "") or "").casefold().startswith("checking")
+    )
     if not track_client_presence(record, info, client_adapter, now, events):
+        return {"summary": summary_record(record, expected), "events": events}
+    if record["verifying"]:
+        _check_save_path(topic, info)
+        # During hashing, libtorrent progress is progress of that task, not downloaded data.
+        # Preserve evidence already recorded; do not invent new files or completion events.
+        return {"summary": summary_record(record, expected), "events": events}
+    if pending:
+        _check_save_path(topic, info)
         return {"summary": summary_record(record, expected), "events": events}
     client_event = _client_event(info, client_adapter)
 

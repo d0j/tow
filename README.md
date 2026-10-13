@@ -29,6 +29,7 @@ every new version to your torrent client.
   (`*.mkv`); one check interval for all topics, or a personal one per topic.
 - **Confirmed adds.** The torrent is added stopped, files are selected, the selection is read back, then it starts
   (or waits, stopped, until the disk has room). A failure is reported as a failure.
+  Long verification of existing files continues without a restart; Home shows checking, not false completion.
 - **Mirrors.** Several addresses per site with fallback and cooldown; daily download limits respected; sign-in by
   password or a browser window.
 - **Notifications.** One message per topic per check, quiet hours, a daily digest, a queue that survives restarts.

@@ -30,7 +30,7 @@ def human(data: Any) -> str:
             head.append(t("cli.check.preview"))
         lines = ["  ".join(head)] if head else []
         for row in data["results"]:
-            mark = "ok " if row.get("ok") else "ERR"
+            mark = "…  " if row.get("status") == "verification_pending" else "ok " if row.get("ok") else "ERR"
             state = (
                 row.get("error")
                 or row.get("skipped")
@@ -40,7 +40,7 @@ def human(data: Any) -> str:
             lines.append(f"{mark} {str(row.get('title') or row.get('id'))[:70]}" + (f" — {state}" if state else ""))
             if row.get("note"):
                 lines.append(f"    {row['note']}")
-        failed = sum(1 for row in data["results"] if not row.get("ok"))
+        failed = sum(1 for row in data["results"] if not row.get("ok") and row.get("status") != "verification_pending")
         lines.append(t("cli.check.total", n=len(data["results"]), failed=failed))
         return "\n".join(lines)
     if isinstance(data, dict) and data.get("ok") is False and data.get("error"):
