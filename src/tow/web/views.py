@@ -353,7 +353,7 @@ def issue_text(issue: Issue) -> str:
 
 
 # The page a Target names -> its address.
-ISSUE_PAGES = {"home": "/", "settings": "/settings", "history": "/history"}
+ISSUE_PAGES = {"home": "/", "settings": "/settings", "history": "/history", "sites": "/sites"}
 
 
 def issue_note_id(issue: Issue) -> str:

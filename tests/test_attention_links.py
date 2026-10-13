@@ -107,6 +107,48 @@ def test_several_topics_show_the_sites_problems_with_the_first_open(client):
     assert re.search(r'<details class="row-edit[^"]*">', page.split('id="row-b"', 1)[1])  # the next one closed
 
 
+def test_a_site_without_a_sign_in_opens_its_row_on_sites_at_the_user_name(client):
+    from tow.config import load_config, save_config
+
+    cfg = load_config()
+    cfg["trackers"] = {
+        "fakeone": {
+            "title": "Site One",
+            "url_regex": r"^https://one\.example/t/(\d+)",
+            "fetch_hosts": ["https://one.example"],
+        },
+        "faketwo": {"url_regex": r"^https://two\.example/t/(\d+)", "fetch_hosts": ["https://two.example"]},
+    }
+    save_config(cfg)
+    asks = {"last_error_class": "tracker_auth", "last_error": "The site asks to sign in again."}
+    _home_state(
+        {"id": "a", "url": "https://one.example/t/1", **asks},
+        {"id": "b", "url": "https://one.example/t/2", **asks},
+        {"id": "z", "url": "https://two.example/t/9"},
+    )
+    entry = _entries(client)["site_needs_login"]
+    # Not "Sign in to …": the site has no sign-in TOW could make.
+    assert entry["text"] == "Сайт Site One просит вход (раздач: 2)"
+    assert entry["fix"] == "site_login:fakeone"
+    assert entry["fix_label"] == "Логин"
+    split = urlsplit(entry["href"])
+    assert split.path == "/sites"
+    assert parse_qs(split.query) == {"open": ["fakeone"], "fix": ["site_login:fakeone"]}
+    assert split.fragment == "site-row-fakeone"
+
+    page = client.get(f"{split.path}?{split.query}").text
+    row = page.split('id="site-row-fakeone"', 1)[1].split('id="site-row-faketwo"', 1)[0]
+    assert re.search(r'<details class="row-edit sites" open>', row)  # open without a script
+    assert html.escape(entry["text"], quote=False) in row  # the row says why it is open
+    field = re.search(r'<input id="site-user-fakeone"[^>]*>', row).group(0)
+    assert 'data-fix="site_login:fakeone"' in field
+    assert " autofocus" in field
+    assert page.count(" autofocus") == 1
+    other = page.split('id="site-row-faketwo"', 1)[1]
+    assert re.search(r'<details class="row-edit sites">', other)  # the other site stays closed
+    assert "issue-note" not in other
+
+
 def test_the_client_down_opens_its_card_with_the_status_and_check(client):
     _home_state(_topic("z", 9), qbit_ok=False)
     entry = _entries(client)["client_down"]
@@ -212,3 +254,4 @@ def test_the_links_open_nothing_else_without_a_fix(client):
     _home_state(_auth("a", 1))
     assert " autofocus" not in client.get("/").text
     assert " autofocus" not in client.get("/settings").text
+    assert " autofocus" not in client.get("/sites").text
