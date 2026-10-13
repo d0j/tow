@@ -835,6 +835,10 @@ def format_event(
         # A socket or HTTP-library error in words; its raw text goes under "Details".
         human = humanize(text, lang)
         raw = text[:600] if human != text else ""
+        mirror_details = errors.diagnostic_details(
+            {"code": rec.get("error_code"), "params": rec.get("error_params")}, lang
+        )
+        raw = scrub_text(mirror_details)[:8192] or raw
         if cls and human.casefold().startswith(CLS_RU.label(cls, lang, cls).casefold()):
             bits.remove(CLS_RU.label(cls, lang, cls))  # "torrent client · torrent client: refused" says it twice
         bits.append(human[:220])

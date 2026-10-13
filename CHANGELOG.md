@@ -5,6 +5,16 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.30.1] — 2026-10-13
+
+### Fixed
+
+- Failed mirror checks show one short cause and the topic's name, without repeating every address or claiming
+  no mirror answered when the site refused access. Per-mirror evidence stays under Details in the topic and log;
+  saved errors use the same concise wording, and notifications retain their short topic name.
+- Warning messages can be folded and reopened, and fold after the display interval when not hovered or focused.
+  Folding does not dismiss the topic's failure or clear its history; red errors remain visible.
+
 ## [1.30.0] — 2026-10-13
 
 ### Added

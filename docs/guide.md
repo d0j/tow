@@ -315,14 +315,17 @@ Settings → **Version and updates**; the version in the corner of every page op
 ## Troubleshooting
 
 The left column is the text TOW shows (on Home, in a row, in a message or on a page).
+Warnings above the list can be folded and reopened. They fold automatically after the display interval, but not
+while hovered or focused; a manual choice takes precedence. Red errors stay visible. Folding or closing a message
+does not clear the topic's error or its History record.
 
 | Message | Meaning | What to do |
 |---|---|---|
 | The torrent client is unavailable: new versions are not added. · torrent client unreachable | TOW cannot reach the client's Web UI. | Start the client, check its Web UI is on; Settings → Torrent clients → **Check**. |
 | Sign in to *site* (topics: *n*): open the topic's row. · the page has no torrent link — sign in to the site | The site wants a signed-in user for the `.torrent`. | Open the row → **Sign in**, or enter the user name and password on **Sites**. |
-| *site*: no mirror answered: … · no connection | Every mirror failed. | Usually temporary. If it lasts, open the site in a browser and add a working mirror on **Sites**. |
+| *site*: … · no connection | No mirror provided the requested answer; the short text says why. This does not stop an existing client torrent. | Usually temporary. Per-mirror evidence is under **Details** in the topic and History. Try a working mirror on **Sites**; respect a site's rate-limit pause. |
 | *site*: all mirrors are paused · *site*: the site is paused | Mirrors are resting after failures, or you paused the site. | Wait for the pause to end (an hour; Rutor: 30 minutes), or start a check yourself (the row's ↻ on Home): it tries resting mirrors too. A site you paused: resume it on **Sites**. |
-| the site is behind a Cloudflare check — open it in a browser | The site shows a browser challenge, not a wrong password. | Try another mirror, wait or sign in through the browser. Optional external providers can be configured on this computer in Settings → Site access; they are off by default. See [Site access](PROTECTION.md). |
+| the site requires a Cloudflare check; check access on Sites | The site shows a browser challenge, not a wrong password. | Try another mirror, wait or use the site's supported browser sign-in. Opening a separate browser alone does not verify access for TOW. Optional external providers can be configured on this computer in Settings → Site access; they are off by default. See [Site access](PROTECTION.md). |
 | daily download limit reached | The site's download quota for today is used up. | Nothing; TOW tries again tomorrow. |
 | the previous version of the torrent is still active on the same file: … | A new version overlaps a torrent that is still seeding. | **Stop the previous one and add** in the row, or stop it in the client. |
 | waiting for episodes (…) | The episodes you chose are not in the torrent yet. | Nothing; they are added when they appear. |

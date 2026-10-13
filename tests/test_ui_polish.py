@@ -639,6 +639,10 @@ def test_labels_chips_heads_and_pills_are_in_sentence_case(lang):
             assert node[key][:1].isupper(), (lang, section, key, node[key])
 
 
+def test_warning_fold_control_is_really_hidden_without_scripts():
+    assert "display: none" in _rules(CSS)[".flash [data-flash-fold][hidden]"]
+
+
 def test_a_message_is_shown_as_a_sentence(client):
     from tow.web.views import flash_location
 

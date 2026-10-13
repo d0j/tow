@@ -139,7 +139,7 @@ def flash_location(url: str, message: Any, kind: str = "ok", /, **params: Any) -
 
 def flash_redirect(url: str, message: Any, kind: str = "ok", /, **params: Any) -> RedirectResponse:
     """A 303 to ``url`` that shows ``message`` once, as ``kind``: ``ok`` (done; it fades),
-    ``warn`` (done in part, or wait and retry; it stays) or ``err`` (nothing done; an alert that
+    ``warn`` (done in part, or wait and retry; it folds) or ``err`` (nothing done; an alert that
     stays). The kind comes from the route, never from the words."""
     decoded = unquote(url)
     if (
@@ -236,7 +236,7 @@ def _row_error(row: CheckRow) -> str:
 
 
 def manual_check_flash(
-    row: CheckRow | None, *, topic_id: str, tracker_name: str = "", new_topic: bool = False
+    row: CheckRow | None, *, topic_id: str, tracker_name: str = "", new_topic: bool = False, topic_title: str = ""
 ) -> RedirectResponse | None:
     """A failed check by hand, in words: "added to TOW, ..." only for the first check of a
     topic just added (``new_topic``); a check of a topic TOW already had says the check failed."""
@@ -256,6 +256,9 @@ def manual_check_flash(
         flash = t("web.check.added_client_refused" if new_topic else "web.check.client_refused", error=error)
     else:
         flash = t("web.check.added_check_failed" if new_topic else "web.check.check_failed", error=error)
+    title = topic_title or shown_title(row)
+    if title.strip():
+        flash = t("web.check.topic_result", title=services.short_series_title(title, owner_language()), result=flash)
     # The status-colour contract (AGENTS.md): a site that does not answer is amber, not an error.
     kind = "warn" if cls in TRACKER_WARNING_CLASSES else "err"
     return home_redirect(flash, kind, credential_topic=topic_id if cls == "tracker_auth" and tracker_name else None)
@@ -552,6 +555,9 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "last_check": stored_ui_time(topic.get("last_check")),
                 "last_ok_at": stored_ui_time(topic.get("last_ok_at")),
                 "last_error": last_error,
+                "last_error_details": services.diagnostic_details(
+                    {"code": topic.get("last_error_code"), "params": topic.get("last_error_params")}
+                ),
                 "replaces_revision": blocked_by_previous_revision(topic),
                 "adoptable": bool(unmarked_hash(topic)),
                 "tracker": tr.name if tr else t("web.site_unknown"),

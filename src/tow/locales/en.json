@@ -1088,6 +1088,8 @@
     }
   },
   "js": {
+    "flash_fold": "Fold",
+    "flash_unfold": "Show warning",
     "timer": {
       "title": "Personal timer: every {minutes} min",
       "scheduled": "Next automatic check",
@@ -1437,12 +1439,12 @@
     "tracker_daily_limit": "{tracker}: daily download limit reached",
     "no_location": "the site redirected without saying where",
     "redirect_limit": "too many redirects",
-    "cloudflare": "the site is behind a Cloudflare check — open it in a browser",
+    "cloudflare": "the site requires a Cloudflare check; check access on Sites",
     "http_auth": "the site asks to sign in (error {status})",
     "http_status": "the site answered with error {status}",
     "no_hosts": "{tracker}: no mirrors given",
     "frozen": "{tracker}: the site is paused",
-    "all_failed": "{tracker}: no mirror answered: {error}. {details}",
+    "all_failed": "{tracker}: {error}",
     "transport": "no connection ({error})",
     "local": "{tracker}: TOW could not read the site's answer ({error})",
     "too_large": "the answer is too large"
@@ -2238,6 +2240,7 @@
       "added_check_failed": "added to TOW, the check failed: {error}",
       "client_refused": "the torrent client did not confirm: {error}",
       "check_failed": "the check failed: {error}",
+      "topic_result": "{title} — {result}",
       "blocked": "check blocked: saved passwords and tokens cannot be opened — see Settings",
       "added": "added to the torrent client",
       "selection_updated": "file selection updated",

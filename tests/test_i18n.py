@@ -792,7 +792,15 @@ def test_every_language_has_the_same_keys_as_english():
 
 
 # Russian values that rightly have no Cyrillic or equal the English: names and formats.
-_RU_AS_IN_ENGLISH = frozenset({"log.cls.cloudflare", "notifier.whatsapp.phone_placeholder", "check.two_errors"})
+_RU_AS_IN_ENGLISH = frozenset(
+    {
+        "log.cls.cloudflare",
+        "notifier.whatsapp.phone_placeholder",
+        "check.two_errors",
+        "mirrors.all_failed",  # punctuation joins already-translated site and cause
+        "web.check.topic_result",  # punctuation joins topic name and translated result
+    }
+)
 
 
 def test_every_russian_text_is_translated():

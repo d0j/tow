@@ -25,6 +25,23 @@ def test_send_no_token_silent():
     send({"telegram": {"token": "", "chat_ids": [1]}}, "x")
 
 
+def test_mirror_failure_notification_names_the_topic_and_does_not_repeat_mirrors():
+    from tow.errors import Msg, TowError
+
+    reason = TowError("mirrors.rate_limited")
+    error = TowError(
+        "mirrors.all_failed",
+        tracker="Site A",
+        error=reason,
+        details=Msg("mirrors.mirror_reason", host="a.example", error=reason),
+    )
+    message = event_text(title="Show A / Alternate title", kind="error", error=error)
+    assert "Show A" in message
+    assert "Alternate title" not in message
+    assert "a.example" not in message
+    assert message.count("частоту запросов") == 1
+
+
 def test_ping_no_token():
     assert ping({}) is False
     assert ping({"telegram": {}}) is False
