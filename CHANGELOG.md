@@ -81,6 +81,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The tooltip of the clock in the header names why the last attempt failed in words, in both languages ("Last attempt:
   torrent client"), instead of the stored code ("Last attempt: error"); only a check blocked by the master key was
   translated before.
+- Settings: the "Copy the command" button in the note about passwords and tokens that cannot be opened no longer
+  breaks into two lines; it stays one line beside the text, or under it on a phone.
 
 ## [1.28.4] — 2026-10-12
 
