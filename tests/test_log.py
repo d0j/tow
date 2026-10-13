@@ -83,6 +83,32 @@ def test_the_log_names_a_pass_that_asks_only_the_client(event, label, detail):
     assert (row["label"], row["detail"]) == (label, detail)
 
 
+def test_a_line_names_the_site_by_its_title_as_home_does():
+    """Qa10: History and the Log said "fakeone", the site's settings key, where Home says its title."""
+    from tow.log import index_site_titles
+
+    titles = index_site_titles(
+        {"trackers": {"fakeone": {"title": "Фейк-Трекер"}, "rutor": {}, "bad": "x", "blank": {"title": " "}}}
+    )
+    assert titles == {"fakeone": "Фейк-Трекер"}
+    event = {
+        "kind": "check_fail",
+        "tracker": "fakeone",
+        "error": "fakeone: ни одно зеркало не ответило",
+        "error_code": "mirrors.all_paused",
+        "error_params": {"tracker": "fakeone"},
+        "cls": "frozen",
+    }
+    row = format_event(event, site_titles=titles)
+    assert "fakeone" not in row["detail"]
+    assert "Фейк-Трекер" in row["detail"]
+    old = {"kind": "site_login", "tracker": "fakeone", "error": "fakeone: refused"}  # no code: its text
+    assert format_event(old, site_titles=titles)["detail"] == "Фейк-Трекер: refused · Фейк-Трекер"
+    # A site without a title, or one deleted since, keeps its key; nothing given, nothing changes.
+    assert format_event({"kind": "site_save", "tracker": "rutor"}, site_titles=titles)["detail"] == "rutor"
+    assert format_event(event)["detail"] == format_event(event, site_titles={})["detail"]
+
+
 def test_export_event_projection_rejects_hash_suffix_data():
     projected = export_event_projection({"hash": "a" * 64 + "SECRET"})
     assert "hash" not in projected

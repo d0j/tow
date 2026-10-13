@@ -15,15 +15,16 @@ router = APIRouter()
 
 @router.get("/history", response_class=HTMLResponse)
 def history_page(request: Request, group: str = "", q: str = "") -> Response:
-    from tow.log import HISTORY_GROUPS, format_event, index_event_titles
+    from tow.log import HISTORY_GROUPS, format_event, index_event_titles, index_site_titles
 
     group = group if group in HISTORY_GROUPS else ""
     state = _context.state()
     title_index = index_event_titles(state.get("topics") or [])
+    site_titles = index_site_titles(_context.config())
     rows = []
     seen: set[str] = set()
     for event in services.history_events(group=group, text=q, title_index=title_index):
-        row = format_event(event, title_index=title_index)
+        row = format_event(event, title_index=title_index, site_titles=site_titles)
         # The newest line of each kind has an address ("Needs attention" links to the newest
         # failed check: #latest-check_blocked).
         kind = str(event.get("kind") or "")
@@ -48,9 +49,9 @@ def history_page(request: Request, group: str = "", q: str = "") -> Response:
 
 @router.get("/log.json")
 def log_json() -> Response:
-    from tow.log import format_event, index_event_titles
+    from tow.log import format_event, index_event_titles, index_site_titles
 
     title_index = index_event_titles(_context.state().get("topics") or [])
-    return JSONResponse(
-        {"ok": True, "rows": [format_event(e, title_index=title_index) for e in services.read_events(limit=200)]}
-    )
+    site_titles = index_site_titles(_context.config())
+    rows = [format_event(e, title_index=title_index, site_titles=site_titles) for e in services.read_events(limit=200)]
+    return JSONResponse({"ok": True, "rows": rows})

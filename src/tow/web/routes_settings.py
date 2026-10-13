@@ -42,7 +42,7 @@ router = APIRouter()
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request) -> Response:
     from tow.clients.factory import ready as ready_clients
-    from tow.log import format_event, index_event_titles
+    from tow.log import format_event, index_event_titles, index_site_titles
 
     cfg = _context.config()  # read-only snapshots of this request (tow.web._context)
     secrets = _context.secrets_or_none()
@@ -51,6 +51,7 @@ def settings_page(request: Request) -> Response:
     state = _context.state()
     topics = state.get("topics") or []
     title_index = index_event_titles(topics)
+    site_titles = index_site_titles(cfg)
     clients = client_cards(cfg, s, topics)
     restore_points_error = False
     try:
@@ -93,7 +94,10 @@ def settings_page(request: Request) -> Response:
             "backups": backup_view(cfg, request),
             "language_setting": _language_setting(cfg),
             "theme_setting": cfg.get("theme") if cfg.get("theme") in THEMES else "auto",
-            "log_rows": [format_event(e, title_index=title_index) for e in services.read_events(limit=200)],
+            "log_rows": [
+                format_event(e, title_index=title_index, site_titles=site_titles)
+                for e in services.read_events(limit=200)
+            ],
             # What needs the owner and is said in its card ("Needs attention" lands there).
             "notes": issue_notes(state, cfg, "settings"),
         },

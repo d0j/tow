@@ -715,6 +715,43 @@ def index_event_titles(topics: Iterable[Mapping[str, Any]]) -> dict[str, str]:
     return names
 
 
+def index_site_titles(config: Mapping[str, Any]) -> dict[str, str]:
+    """Each configured site's title by its settings key, for a line of the log to name a site as
+    the pages do ("NNM-Club", not "nnmclub"). A site without a title, or one deleted since, keeps
+    its key."""
+    trackers = config.get("trackers")
+    if not isinstance(trackers, Mapping):
+        return {}
+    return {
+        str(name): str(spec["title"])
+        for name, spec in trackers.items()
+        if isinstance(spec, Mapping) and isinstance(spec.get("title"), str) and spec["title"].strip()
+    }
+
+
+# The values of a stored error that name the site the event is about (its "<site>: " prefix).
+_SITE_PARAMS = frozenset({"tracker", "_prefix"})
+
+
+def _with_site_title(rec: Mapping[str, Any], site_titles: Mapping[str, str] | None) -> Mapping[str, Any]:
+    """The event with its site (``tracker``) named by its title, in the field and in the error's
+    values and text ("fakeone: all mirrors are paused"), as Home names it."""
+    site = str(rec.get("tracker") or "")
+    title = (site_titles or {}).get(site, "")
+    if not site or not title or title == site:
+        return rec
+    out = {**rec, "tracker": title}
+    params = rec.get("error_params")
+    if isinstance(params, Mapping):
+        out["error_params"] = {
+            key: title if key in _SITE_PARAMS and value == site else value for key, value in params.items()
+        }
+    error = str(rec.get("error") or "")
+    if error.startswith(f"{site}: "):
+        out["error"] = f"{title}: {error[len(site) + 2 :]}"
+    return out
+
+
 def event_title(rec: Mapping[str, Any], title_index: Mapping[str, str] | None = None) -> str:
     title = str(rec.get("title") or "").strip()
     if title or not title_index:
@@ -749,7 +786,16 @@ def _shown_kind(rec: Mapping[str, Any], kind: str) -> str:
     return kind
 
 
-def format_event(rec: Mapping[str, Any], *, title_index: Mapping[str, str] | None = None) -> dict[str, str]:
+def format_event(
+    rec: Mapping[str, Any],
+    *,
+    title_index: Mapping[str, str] | None = None,
+    site_titles: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """One line of the log for History and the Log: when, what (``label``) and its details.
+    ``title_index`` names topics (``index_event_titles``), ``site_titles`` sites
+    (``index_site_titles``) as they are named now."""
+    rec = _with_site_title(rec, site_titles)
     ts = str(rec.get("created_at") or rec.get("ts") or "")
     at = ts
     with suppress(TypeError, ValueError):
