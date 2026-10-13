@@ -6,6 +6,8 @@ import re
 import time
 import zlib
 from collections.abc import Iterator
+from datetime import UTC
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
@@ -14,6 +16,22 @@ MAX_HTML_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_TORRENT_RESPONSE_BYTES = 16 * 1024 * 1024
 # Per-read timeouts do not bound a mirror that trickles bytes; this bounds the whole body.
 MAX_RESPONSE_SECONDS = 120.0
+
+
+def retry_after_seconds(value: object, *, now: float) -> float:
+    """Bounded HTTP Retry-After, delta-seconds or HTTP-date; malformed input is no hint."""
+    if not isinstance(value, str) or not value or len(value) > 128 or not math.isfinite(now):
+        return 0
+    value = value.strip()
+    if re.fullmatch(r"[0-9]+", value):
+        return float(min(86400, int(value)))
+    try:
+        when = parsedate_to_datetime(value)
+        when = when.replace(tzinfo=UTC) if when.tzinfo is None else when
+        seconds = when.timestamp() - now
+        return min(86400.0, max(0.0, seconds)) if math.isfinite(seconds) else 0
+    except ValueError, TypeError, OverflowError, OSError:
+        return 0
 
 
 class ResponseTooLargeError(RuntimeError):

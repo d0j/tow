@@ -103,7 +103,7 @@ def _bucket(state: dict[str, Any], tracker: str) -> dict[str, Any]:
     b = mirrors.get(tracker)
     if not isinstance(b, dict):
         b = mirrors[tracker] = {}
-    for key in ("fail", "cool"):
+    for key in ("fail", "cool", "rate_cool"):
         raw = b.get(key)
         if not isinstance(raw, dict):
             b[key] = {}
@@ -135,7 +135,7 @@ def _save_bucket(tracker: str, bucket: dict[str, Any], host: str) -> None:
     with persistence_lock():
         spec = (load_config().get("trackers") or {}).get(tracker)
         if not isinstance(spec, dict) or host.rstrip("/") not in {
-            str(item).rstrip("/") for item in (spec.get("fetch_hosts") or [])
+            str(item).rstrip("/") for item in [*(spec.get("fetch_hosts") or []), *(spec.get("login_hosts") or [])]
         }:
             return
         st = load_state()
@@ -143,6 +143,7 @@ def _save_bucket(tracker: str, bucket: dict[str, Any], host: str) -> None:
         before = (
             current["fail"].get(host),
             current["cool"].get(host),
+            current["rate_cool"].get(host),
             current["active"],
             current.get("observed", {}).get(host),
         )
@@ -154,11 +155,19 @@ def _save_bucket(tracker: str, bucket: dict[str, Any], host: str) -> None:
             current["cool"][host] = bucket["cool"][host]
         else:
             current["cool"].pop(host, None)
+        if host in bucket["rate_cool"]:
+            current["rate_cool"][host] = max(float(current["rate_cool"].get(host) or 0), bucket["rate_cool"][host])
+        elif float(current["rate_cool"].get(host) or 0) <= _now():
+            current["rate_cool"].pop(host, None)
+        if float(current["rate_cool"].get(host) or 0) > _now():
+            current["cool"][host] = max(float(current["cool"].get(host) or 0), current["rate_cool"][host])
         if bucket.get("active") == host:
             current["active"] = host
         observed = bucket.get("observed", {}).get(host)
         if isinstance(observed, dict):
-            configured = {str(item).rstrip("/") for item in (spec.get("fetch_hosts") or [])}
+            configured = {
+                str(item).rstrip("/") for item in [*(spec.get("fetch_hosts") or []), *(spec.get("login_hosts") or [])]
+            }
             current["observed"] = {
                 key: value for key, value in current.get("observed", {}).items() if key in configured
             }
@@ -167,6 +176,7 @@ def _save_bucket(tracker: str, bucket: dict[str, Any], host: str) -> None:
         if (
             current["fail"].get(host),
             current["cool"].get(host),
+            current["rate_cool"].get(host),
             current["active"],
             current.get("observed", {}).get(host),
         ) != before:
@@ -200,7 +210,40 @@ def has_available_host(tracker: str, hosts: list[str], *, ignore_cool: bool = Fa
     bucket = _bucket(load_state(), tracker)
     if bucket["frozen"]:
         return False
-    return any(ignore_cool or float(bucket["cool"].get(host.rstrip("/")) or 0) <= _now() for host in hosts)
+    return any(not _host_paused(bucket, host.rstrip("/"), ignore_cool=ignore_cool) for host in hosts)
+
+
+def _host_paused(bucket: dict[str, Any], host: str, *, ignore_cool: bool) -> bool:
+    if float(bucket["rate_cool"].get(host) or 0) > _now():
+        return True
+    until = float(bucket["cool"].get(host) or 0)
+    observed = bucket.get("observed", {}).get(host)
+    rate_limited = isinstance(observed, dict) and observed.get("failure") == "rate_limited"
+    return until > _now() and (not ignore_cool or rate_limited)
+
+
+def _pause_rate_limited(bucket: dict[str, Any], host: str, retry_after: float) -> None:
+    failures = int(bucket["fail"].get(host) or 1)
+    delay = max(min(1800, 60 * 2 ** min(failures - 1, 5)), retry_after)
+    bucket["cool"][host] = max(float(bucket["cool"].get(host) or 0), _now() + delay)
+    bucket["rate_cool"][host] = max(float(bucket["rate_cool"].get(host) or 0), _now() + delay)
+
+
+def note_rate_limit(tracker: str, host: str, response: httpx.Response, *, persist: bool) -> bool:
+    """Direct password sign-in obeys the same mirror limit as ordinary GET requests."""
+    if response_verdict(response) != Verdict.RATE_LIMITED:
+        return False
+    if persist:
+        with persistence_lock():
+            host = host.rstrip("/")
+            bucket = _bucket(load_state(), tracker)
+            bucket["fail"][host] = int(bucket["fail"].get(host) or 0) + 1
+            _observe(bucket, host, "rate_limited", response.status_code)
+            _pause_rate_limited(
+                bucket, host, thttp.retry_after_seconds(response.headers.get("retry-after"), now=_now())
+            )
+            _save_bucket(tracker, bucket, host)
+    return True
 
 
 def login_recent(tracker: str) -> bool:
@@ -403,7 +446,15 @@ def refuse_verdict(verdict: Verdict, status: int) -> None:
 def _raise_for_status(r: Any) -> None:
     if r.status_code < 400:
         return
-    refuse_verdict(response_verdict(r), r.status_code)
+    verdict = response_verdict(r)
+    if verdict == Verdict.RATE_LIMITED:
+        raise MirrorFetchError(
+            "mirrors.rate_limited",
+            failure="rate_limited",
+            status=r.status_code,
+            retry_after=thttp.retry_after_seconds(r.headers.get("retry-after"), now=_now()),
+        )
+    refuse_verdict(verdict, r.status_code)
     preview = thttp.html_text(r)[:800]
     if r.status_code == 401 or (
         r.status_code == 403
@@ -441,6 +492,7 @@ def _deciding_failure(failures: list[Exception]) -> Exception:
 def _mark_host_ok(tracker: str, bucket: dict[str, Any], host: str, *, persist: bool) -> None:
     bucket["fail"][host] = 0
     bucket["cool"].pop(host, None)
+    bucket["rate_cool"].pop(host, None)
     bucket["active"] = host
     if persist:
         _save_bucket(tracker, bucket, host)
@@ -578,8 +630,7 @@ def pick_and_get(
 
     for host in _ordered(hosts, b.get("active"), b.get("observed")):
         host = host.rstrip("/")
-        until = float(b["cool"].get(host) or 0)
-        if not ignore_cool and until > _now():
+        if _host_paused(b, host, ignore_cool=ignore_cool):
             continue
         url = host + (path if path.startswith("/") else "/" + path)
         host_cookies = _cookies_for_host(cookies, host, hosts)
@@ -626,7 +677,9 @@ def pick_and_get(
             if host_failed:
                 n = int(b["fail"].get(host) or 0) + 1
                 b["fail"][host] = n
-                if n >= fail_threshold:
+                if code == "rate_limited":
+                    _pause_rate_limited(b, host, float(getattr(e, "params", {}).get("retry_after") or 0))
+                elif n >= fail_threshold:
                     b["cool"][host] = _now() + cooldown_sec
             if persist:
                 _save_bucket(tracker, b, host)
@@ -786,10 +839,15 @@ def _recover_challenges(
                 chain.record_event("protection_restored", tracker, clearance.provider, "succeeded")
                 return r, host
             except MirrorFetchError as exc:
+                if exc.failure == "rate_limited":
+                    bucket["fail"][host] = int(bucket["fail"].get(host) or 0) + 1
+                    _observe(bucket, host, exc.failure, exc.params.get("status"))
+                    _pause_rate_limited(bucket, host, float(exc.params.get("retry_after") or 0))
+                    _save_bucket(tracker, bucket, host)
                 if verified_access and exc.failure in {"cloudflare", "interactive"}:
                     # A path-specific refusal does not revoke independently verified access
                     # elsewhere. Solving that same public probe again supplies no new evidence.
-                    _observe(bucket, host, exc.failure)
+                    _observe(bucket, host, exc.failure, exc.params.get("status"))
                     _save_bucket(tracker, bucket, host)
                     chain.record_event("protection_replay_refused", tracker, clearance.provider, "failed")
                     raise
@@ -799,7 +857,7 @@ def _recover_challenges(
                 if exc.failure not in {"cloudflare", "interactive"} and (
                     verified_access or exc.failure != "redirect_policy"
                 ):
-                    _observe(bucket, host, exc.failure)
+                    _observe(bucket, host, exc.failure, exc.params.get("status"))
                     _save_bucket(tracker, bucket, host)
                     if verified_access and _says_gone(exc):
                         raise MirrorFetchError(exc.code, failure=exc.failure, cls="gone", **exc.params) from exc

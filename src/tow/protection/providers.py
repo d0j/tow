@@ -8,8 +8,6 @@ import math
 import re
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime
-from email.utils import parsedate_to_datetime
 from types import ModuleType
 from typing import Any
 from urllib.parse import urlsplit
@@ -17,6 +15,7 @@ from urllib.parse import urlsplit
 import httpcore
 import httpx
 
+from tow.http import retry_after_seconds
 from tow.plugins import scan
 from tow.protection.spec import (
     Clearance,
@@ -134,18 +133,7 @@ def _solution(raw: object, origin: str, ident: str) -> Clearance:
 
 def _retry_after(value: str | None) -> float:
     """A finite service retry interval, never a reason to slow unrelated tracker HTTP."""
-    if not value:
-        return 0
-    try:
-        seconds = float(value)
-    except ValueError:
-        try:
-            when = parsedate_to_datetime(value)
-            when = when.replace(tzinfo=UTC) if when.tzinfo is None else when
-            seconds = (when - datetime.now(UTC)).total_seconds()
-        except ValueError, TypeError, OverflowError:
-            return 0
-    return min(86400.0, max(0.0, seconds)) if math.isfinite(seconds) else 0
+    return retry_after_seconds(value, now=time.time())
 
 
 def _service_status(response: httpx.Response) -> None:
