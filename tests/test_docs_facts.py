@@ -32,3 +32,32 @@ def test_the_guide_quotes_every_message_of_a_busy_port(language, guide, pattern)
     for key in ("supervisor.port_busy", "supervisor.port_busy_tow", "supervisor.port_busy_own"):
         holder = re.search(pattern, i18n.translate(key, language)).group(1)
         assert holder in text, (key, holder)
+
+
+def test_portable_names_what_the_installers_workflow_watches():
+    """The installers workflow also runs when tow.storage changes; PORTABLE.md did not say so."""
+    workflow = (ROOT / ".github" / "workflows" / "installers.yml").read_text(encoding="utf-8")
+    watched = re.findall(r'^\s+- "src/tow/([^"]+)"', workflow, re.MULTILINE)
+    portable = (ROOT / "docs" / "PORTABLE.md").read_text(encoding="utf-8")
+    paragraph = " ".join(
+        portable[portable.index("- Installers (`.github/workflows/installers.yml`)") :].split("\n- ")[0].split()
+    )
+    for path in watched:
+        if path.startswith(("update", "web_update", "locales/")):  # "the updater", "the texts"
+            continue
+        assert f"`{path.removesuffix('**')}`" in paragraph, path
+
+
+def test_contributing_names_every_golden_file():
+    """CONTRIBUTING listed the golden texts without the Settings page."""
+    contributing = " ".join((ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8").split())
+    said = {
+        "cli-help.en.txt": "`tow --help` in both languages",
+        "cli-help.ru.txt": "`tow --help` in both languages",
+        "schedule-grid.txt": "the schedule on a fake clock",
+        "settings-page.html": "the Settings page",
+        "public_api.json": "`test_public_api.py` (public names and signatures)",
+    }
+    assert sorted(path.name for path in (ROOT / "tests" / "golden").iterdir()) == sorted(said)
+    for name, words in said.items():
+        assert words in contributing, name

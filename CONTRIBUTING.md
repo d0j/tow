@@ -62,8 +62,8 @@ the `installers` workflow on 24.04). The legacy
   (private names), `test_stdlib_only.py` (the updater and its worker), `test_updater_contract.py`,
   `test_public_api.py` (public names and signatures), `test_patch_targets.py` (a patched name is one the code
   reads when it runs) and the golden texts in `tests/golden/` (`tow --help` in both languages, the schedule on a
-  fake clock). Their exception lists (`ALLOWED`, `HELPER_ALLOWED`…) may only shrink. After an intended change,
-  regenerate a golden file with `uv run --frozen python tests/<its test>.py` and review the diff.
+  fake clock, the Settings page). Their exception lists (`ALLOWED`, `HELPER_ALLOWED`…) may only shrink. After an
+  intended change, regenerate a golden file with `uv run --frozen python tests/<its test>.py` and review the diff.
 - **Test data is synthetic**: made-up titles (`Show A`, `Сериал А`), topic ids (`1234567`), private-range or
   documentation IP addresses, paths like `D:\TV` or `/srv/media`. No real topic links, user names or addresses.
 

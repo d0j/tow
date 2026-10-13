@@ -1,5 +1,5 @@
 """The import checkpoint: a copy of every store taken before an import writes, its transaction
-marker, the recovery of an interrupted import (a step of ``tow.store.RECOVERY_STEPS``), the
+marker, the recovery of an interrupted import (a step of ``tow.storage.locks.RECOVERY_STEPS``), the
 rollback and the pruning of finished checkpoints."""
 
 from __future__ import annotations
@@ -138,7 +138,7 @@ def _recover_import_transactions_locked() -> list[str]:
 
 
 def recover_interrupted_import() -> None:
-    """A recovery step (``tow.store.RECOVERY_STEPS``), the data lock held.
+    """A recovery step (``tow.storage.locks.RECOVERY_STEPS``), the data lock held.
 
     An import runs entirely under the persistence lock, so a "prepared" journal seen when
     a process takes the lock was left by a crash: roll it back before anyone writes.
