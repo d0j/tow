@@ -20,6 +20,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Rate-limited mirrors are paused immediately using bounded `Retry-After` or backoff; even manual checks respect
+  that pause. Healthy mirrors remain usable and previews do not persist cooldowns.
 - Kinozal uses the current torrent download route, including configurations with the obsolete default; custom
   routes are preserved. Its public catalog, not an unchallenged home page, verifies path-specific access. A probe
   redirect is followed and checked independently, rather than accepted as proof by itself.

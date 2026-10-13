@@ -23,6 +23,7 @@ from tow.mirrors import (
     has_available_host,
     login_recent,
     note_login,
+    note_rate_limit,
     origin_key,
     pick_and_get,
     response_verdict,
@@ -437,6 +438,8 @@ class GenericHttpTracker:
                     response = thttp.request_limited(
                         c, "POST", host.rstrip("/") + path, max_bytes=thttp.MAX_HTML_RESPONSE_BYTES, data=form
                     )
+                    if note_rate_limit(self.name, host, response, persist=persist):
+                        continue
                     if response_verdict(response) == Verdict.CHALLENGE:
                         self._challenged_logins[host] = old_clearance
                     if response.status_code >= 400 or login_form_came_back(response, pw_field):

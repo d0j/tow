@@ -105,6 +105,7 @@ class MirrorState(TypedDict, total=False):
     active: str | None
     fail: dict[str, int]  # host -> failures in a row
     cool: dict[str, float]  # host -> until when it rests (epoch seconds)
+    rate_cool: dict[str, float]  # server-rate deadline; manual checks cannot override it
     frozen: bool
 
 

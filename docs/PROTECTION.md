@@ -51,6 +51,12 @@ quota and account sign-in are separate reasons, not instructions to call a solve
 invoke one. Cross-origin download redirects use a fresh cookie-free client; parent-domain metadata cannot grant
 cross-origin credential reuse.
 
+A mirror's rate limit immediately pauses requests to that mirror, including password sign-in and manual checks.
+`Retry-After` accepts seconds or HTTP-date, bounded to 24 hours; without a usable hint, backoff starts at 60 seconds
+and caps at 30 minutes. Other mirrors remain eligible. A preview records nothing and no worker sleeps on the pause.
+The server-rate deadline is separate from the last observed response: an unrelated successful page or a late
+earlier answer cannot erase or shorten it. Dedicated sign-in origins have independent deadlines.
+
 An encrypted `data/protection.enc` stores verified clearance, matching User-Agent, expiry and durable cooldown leases.
 Defaults: 30 seconds for the recovery chain, at most 2 available providers, 1,800 seconds before another attempt.
 The lease is written before calling the service, so a crash does not cause an attempt on every tick. A configuration
