@@ -2314,6 +2314,13 @@ def test_progress_only_pass_never_asks_the_tracker(monkeypatch):
     assert reconciled == ["t1"]
     assert row["skipped"] == "только прогресс в клиенте"
     assert load_state()["topics"][0]["last_check"] == "earlier"
+    # The Log names the pass, and counts no site check "without errors".
+    from tow.log import format_event, read_events
+
+    [event] = [event for event in read_events() if event["kind"] == "check"]
+    assert event["scope"] == "progress"
+    assert format_event(event)["label"] == "Проверка прогресса"
+    assert "без ошибок" not in format_event(event)["detail"]
 
 
 def test_a_progress_pass_keeps_a_failed_scheduled_check_failed(monkeypatch):

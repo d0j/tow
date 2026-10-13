@@ -87,6 +87,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   on a phone 20.7 × 19.5). It looks as before.
 - Settings on a phone: a long section pill, such as Backups' "Nightly backup 2026-10-13 09:28:19 UTC+03:00", wraps
   onto a second line instead of being cut off with no way to read the rest.
+- The Log and History name the passes that ask only the torrent client: "Progress check · topics: 11" and "Disk space
+  check", instead of an unnamed "Check · checked: 11, without errors: 11" while six topics had errors; such a pass
+  asks no site.
 
 ## [1.28.4] — 2026-10-12
 
