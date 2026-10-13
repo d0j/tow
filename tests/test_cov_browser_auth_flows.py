@@ -175,6 +175,31 @@ def test_a_session_signs_in_confirms_and_cleans_up(monkeypatch, launched):
     assert any(e["kind"] == "browser_auth_succeeded" for e in read_events(limit=5))
 
 
+@pytest.mark.parametrize("backend", [WindowsBackend(), PosixBackend("linux")], ids=["windows", "linux"])
+def test_the_sign_in_browser_never_gets_tows_own_keys(monkeypatch, launched, backend):
+    """It shows a tracker's page and starts children of its own: TOW's master key and network
+    access key (a launcher or a CI run may set them) stay out of its environment."""
+    envs: list[dict[str, str]] = []
+
+    def popen(args, **kwargs):
+        envs.append(dict(kwargs["env"] or {"inherited": "everything"}))
+        return launched.process
+
+    monkeypatch.setattr(ba.subprocess, "Popen", popen)
+    monkeypatch.setenv("TOW_LAN_AUTH_TOKEN", "k" * 32)
+    monkeypatch.setenv("TOW_MASTER_KEY", "m" * 44)
+    monkeypatch.setenv("TOW_TEST_ORDINARY", "kept")
+    _wait_returns(monkeypatch, ({"sid": "1"}, "UA"))
+
+    with platform.use(backend):
+        _start(ba.BrowserAuthManager(), lambda *_: None)
+
+    (env,) = envs
+    assert env.get("TOW_TEST_ORDINARY") == "kept"  # the rest of the environment is the browser's
+    # Compared by name only: a failure never prints the environment.
+    assert sorted({"TOW_LAN_AUTH_TOKEN", "TOW_MASTER_KEY"} & set(env)) == []
+
+
 def test_a_session_without_a_message_says_it_was_checked(monkeypatch, launched):
     _wait_returns(monkeypatch, ({"sid": "1"}, "UA"))
     manager = ba.BrowserAuthManager()

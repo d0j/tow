@@ -40,6 +40,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A messenger whose messages are held after a permanent error (a wrong token, a deleted webhook) no longer leaves a
   plain hash of its settings in the data, which night copies keep unencrypted: a short key, such as a WhatsApp
   apikey, could be guessed back from it. A held queue is tried once more after the update.
+- The browser TOW opens to sign in to a site no longer receives TOW's master key or network access key when they are
+  set in the environment.
 - Home: a topic link that is not a web address (possible with a loosely written site pattern) is no longer made into
   a link to open.
 

@@ -209,7 +209,7 @@ class BrowserAuthManager:
             process = subprocess.Popen(
                 args,
                 cwd=str(data_dir()),
-                env=launch.get("env"),
+                env=_browser_env(launch.get("env")),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -276,6 +276,20 @@ def find_browser_executable() -> str:
     if found:
         return found[0]
     raise BrowserAuthError(t("browser_auth.no_browser"))
+
+
+# TOW's own keys, which a launcher or a CI run may put in the environment: a browser showing a
+# tracker's page (and every program it starts) never needs them.
+_SECRET_ENV = ("TOW_MASTER_KEY", "TOW_LAN_AUTH_TOKEN")
+
+
+def _browser_env(env: dict[str, str] | None) -> dict[str, str]:
+    """The sign-in browser's environment: the system's own (``None``) or the one
+    ``browser_launch`` made, without TOW's keys."""
+    clean = dict(os.environ if env is None else env)
+    for name in _SECRET_ENV:
+        clean.pop(name, None)
+    return clean
 
 
 def _show_browser_window(process_id: int) -> None:
