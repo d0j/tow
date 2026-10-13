@@ -1076,7 +1076,7 @@ def test_a_failed_check_of_a_topic_tow_had_is_not_called_an_add(monkeypatch, cli
 
     response = client.post("/topics/t1/check", follow_redirects=False)
 
-    assert _flash(response) == flash
+    assert _flash(response) == "Show — " + flash
 
 
 WAITING = "ждёт места на диске: не хватает 40,5 ГБ; TOW запустит раздачу сам, когда место появится"

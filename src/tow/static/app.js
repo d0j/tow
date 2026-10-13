@@ -286,6 +286,27 @@ if (flash) {
   flash.querySelector(".flash-x")?.addEventListener("click", hideFlash);
   const ttl = Number(flash.dataset.ttl);
   if (ttl > 0) window.setTimeout(whenUnused(flash, hideFlash), ttl * 1000);
+  const foldButton = flash.querySelector("[data-flash-fold]");
+  const message = flash.querySelector(":scope > span");
+  if (foldButton && message) {
+    message.id = "flash-message";
+    foldButton.hidden = false;
+    let autoFold = true;
+    const setFolded = (folded) => {
+      message.hidden = folded;
+      flash.classList.toggle("flash-folded", folded);
+      foldButton.setAttribute("aria-expanded", String(!folded));
+      foldButton.textContent = t(folded ? "js.flash_unfold" : "js.flash_fold");
+    };
+    foldButton.addEventListener("click", () => {
+      autoFold = false; // A manual choice is not undone by a pending hover/focus timer.
+      setFolded(!message.hidden);
+    });
+    const foldTtl = Number(flash.dataset.foldTtl);
+    if (foldTtl > 0) window.setTimeout(whenUnused(flash, () => {
+      if (autoFold) setFolded(true);
+    }), foldTtl * 1000);
+  }
   // A8: a status present when the page opens is not announced by a screen reader. Its words go
   // to an empty live region of the page a moment later (an error to the alert one); the message
   // itself stays as it was drawn, without its own role, so it is said once.

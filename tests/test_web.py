@@ -2246,7 +2246,7 @@ def test_a_failed_check_names_the_site_by_its_title(monkeypatch):
 
     text = shown(client.post("/topics/t1/check", follow_redirects=False).headers["location"])
 
-    assert "Fake Site: ни одно зеркало не ответило" in text
+    assert "Fake Site: сайт ответил ошибкой 503" in text
     assert "fakesite" not in text
 
 
@@ -2395,6 +2395,86 @@ def test_rows_and_the_edit_panel_show_the_error_in_words():
     assert 'class="row-error bad"' in page
     assert '>Торрент-клиент: остановите прежнюю раздачу в клиенте<span class="sr-only">' in page
     assert "Последняя ошибка (01.10.2026 11:56): previous torrent revision" in page
+
+
+def test_saved_mirror_failure_has_a_compact_cause_and_closed_escaped_details():
+    from tow.errors import Msg, TowError
+
+    error = TowError(
+        "mirrors.all_failed",
+        tracker="nnmclub",
+        cls="tracker",
+        error=TowError("mirrors.rate_limited"),
+        details=Msg(
+            "mirrors.mirror_reason", host="a.example", error="<script>not executable</script> password=hunter2"
+        ),
+    )
+    record = error.record()
+    _topic_state(
+        last_ok=False,
+        last_error="old verbose raw error",
+        last_error_class="tracker",
+        last_error_code=record["code"],
+        last_error_params=record["params"],
+    )
+    page = TestClient(app).get("/topics/t1/edit-panel").text
+    assert "частоту запросов" in page
+    assert '<details class="technical-details raw-error"><summary>Подробности</summary>' in page
+    assert "a.example" in page
+    assert "&lt;script&gt;not executable&lt;/script&gt;" in page
+    assert "<script>not executable</script>" not in page
+    assert "hunter2" not in page
+    assert "old verbose raw error" not in page
+    assert load_state()["topics"][0]["last_error"] == "old verbose raw error"
+
+
+def test_failed_manual_check_names_the_topic_without_claiming_download_failure():
+    from tow.errors import TowError
+    from tow.web.views import manual_check_flash
+
+    error = TowError("mirrors.all_failed", cls="tracker", tracker="Site A", error=TowError("mirrors.rate_limited"))
+    row = {
+        "id": "t1",
+        "title": "Show A / Alternative name",
+        "ok": False,
+        "error": str(error),
+        "error_class": "tracker",
+        "error_record": error.record(),
+    }
+    text = flash_of(manual_check_flash(row, topic_id="t1").headers["location"])
+    assert text.startswith("Show A — проверка не прошла:")
+    assert "Alternative name" not in text
+    assert "не запущено" not in text
+    assert "частоту запросов" in text
+
+
+def test_manual_failure_uses_the_displayed_owner_name_and_shared_shortening():
+    from tow.web.views import manual_check_flash
+
+    row = {
+        "title": "Old title",
+        "tracker_title": "Site title",
+        "ok": False,
+        "error": "timeout",
+        "error_class": "tracker",
+    }
+    response = manual_check_flash(row, topic_id="t1", topic_title="Owner name (2026) [S01E01 of 10]")
+    assert flash_of(response.headers["location"]).startswith("Owner name — ")
+    assert flash_of(manual_check_flash(row, topic_id="t1").headers["location"]).startswith("Site title — ")
+
+
+@pytest.mark.parametrize("kind", ["ok", "warn", "err"])
+def test_only_warning_messages_receive_a_reopenable_fold_control(kind):
+    from tow.web.views import flash_location
+
+    page = TestClient(app).get(flash_location("/", "synthetic message", kind)).text
+    flash = re.search(r'<div class="flash[^>]*id="flash"[^>]*>.*?</div>', page, flags=re.DOTALL).group(0)
+    assert ('data-fold-ttl="60"' in flash) is (kind == "warn")
+    assert ("data-flash-fold" in flash) is (kind == "warn")
+    assert ('aria-controls="flash-message"' in flash) is (kind == "warn")
+    assert (' data-ttl="60"' in flash) is (kind == "ok")
+    if kind == "warn":
+        assert "hidden>Свернуть</button>" in flash  # no scripts: warning remains readable
 
 
 def test_error_line_is_short_and_falls_back_to_the_message():

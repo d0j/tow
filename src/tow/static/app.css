@@ -184,6 +184,8 @@ main.auth-shell {
 .flash-x:hover { color: var(--fg); background: var(--panel2); }
 /* The undo of the action the message is about sits in the message, with the time it has left. */
 .flash > span:first-child { flex: 1 1 auto; min-width: 0; }
+.flash.flash-folded { width: fit-content; max-width: 100%; }
+.flash [data-flash-fold][hidden] { display: none; }
 .flash-undo { margin: 0; flex: 0 0 auto; }
 .undo-left { font-variant-numeric: tabular-nums; color: var(--mut); }
 .grid { display: grid; gap: 1rem; }

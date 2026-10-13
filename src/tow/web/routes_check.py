@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse, Response
 from tow import i18n
 from tow.check import blocked_by_previous_revision
 from tow.log import owner_language
+from tow.records import shown_title
 from tow.store import CheckBusyError, SecretStoreError
 from tow.trackers import load_trackers, match_tracker
 from tow.web import services
@@ -99,7 +100,9 @@ def _check_topic(tid: str, *, adopted: bool = False) -> Response:
         topic = next((item for item in state.get("topics") or [] if str(item.get("id")) == str(tid)), None)
         tracker = match_tracker(load_trackers(services.load_config()), str((topic or {}).get("url") or ""))
         tracker_name = tracker.name if tracker and tracker.spec.get("login_path") else ""
-        redirect = manual_check_flash(row, topic_id=tid, tracker_name=tracker_name)
+        redirect = manual_check_flash(
+            row, topic_id=tid, tracker_name=tracker_name, topic_title=shown_title(topic or {})
+        )
         if redirect is not None:
             return redirect
     if row and row.get("added"):

@@ -400,8 +400,13 @@ def test_mixed_mirror_failures_keep_each_real_reason_and_not_auth(monkeypatch):
     with pytest.raises(MirrorFetchError) as result:
         pick_and_get("demo", ["https://site.example", "https://free.example"], "/download/1", ok=lambda r: False)
     assert result.value.failure == "maintenance"
-    assert "site.example" in str(result.value)
-    assert "free.example" in str(result.value)
+    from tow.errors import diagnostic_details
+
+    evidence = diagnostic_details(result.value.record())
+    assert "site.example" in evidence
+    assert "free.example" in evidence
+    assert "site.example" not in str(result.value)
+    assert "free.example" not in str(result.value)
     observed = load_state()["mirrors"]["demo"]["observed"]
     assert observed["https://site.example"]["failure"] == "cloudflare"
     assert observed["https://free.example"]["failure"] == "maintenance"

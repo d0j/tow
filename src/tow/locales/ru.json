@@ -1094,6 +1094,8 @@
     }
   },
   "js": {
+    "flash_fold": "Свернуть",
+    "flash_unfold": "Показать предупреждение",
     "timer": {
       "title": "Личный таймер: раз в {minutes} мин",
       "scheduled": "Следующая автоматическая проверка",
@@ -1443,12 +1445,12 @@
     "tracker_daily_limit": "{tracker}: дневной лимит скачиваний исчерпан",
     "no_location": "сайт перенаправил, не указав куда",
     "redirect_limit": "слишком много перенаправлений",
-    "cloudflare": "сайт закрыт проверкой Cloudflare — откройте его в браузере",
+    "cloudflare": "сайт требует проверки Cloudflare; проверьте доступ в разделе «Сайты»",
     "http_auth": "сайт просит войти (ошибка {status})",
     "http_status": "сайт ответил ошибкой {status}",
     "no_hosts": "{tracker}: не указаны зеркала",
     "frozen": "{tracker}: сайт на паузе",
-    "all_failed": "{tracker}: ни одно зеркало не ответило: {error}. {details}",
+    "all_failed": "{tracker}: {error}",
     "transport": "нет связи ({error})",
     "local": "{tracker}: TOW не смог прочитать ответ сайта ({error})",
     "too_large": "слишком большой ответ"
@@ -2258,6 +2260,7 @@
       "added_check_failed": "добавлено в TOW, проверка не прошла: {error}",
       "client_refused": "торрент-клиент не подтвердил: {error}",
       "check_failed": "проверка не прошла: {error}",
+      "topic_result": "{title} — {result}",
       "blocked": "проверка заблокирована: сохранённые пароли и токены не открываются — см. Настройки",
       "added": "добавлено в торрент-клиент",
       "selection_updated": "выбор файлов обновлён",

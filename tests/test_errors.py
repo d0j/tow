@@ -62,6 +62,46 @@ def test_fractions_follow_the_readers_decimal_sign():
     assert record["params"]["needed"] == 1.5  # kept as a number, formatted when shown
 
 
+@pytest.mark.parametrize("language", ["en", "ru"])
+def test_mirror_failure_summary_keeps_diagnostics_separate_and_state_unchanged(language):
+    reason = TowError("mirrors.rate_limited")
+    details = Msg(
+        "mirrors.reason_pair",
+        first=Msg("mirrors.mirror_reason", host="a.example", error=reason),
+        second=Msg("mirrors.mirror_reason", host="b.example", error=TowError("mirrors.cloudflare")),
+    )
+    error = TowError("mirrors.all_failed", cls="tracker", tracker="Site A", error=reason, details=details)
+    record = error.record()
+    before = json.dumps(record)
+    summary = errors.render(record, language, "old verbose fallback")
+    assert summary == f"Site A: {reason.text(language)}"
+    assert "a.example" not in summary
+    assert "b.example" not in summary
+    expanded = errors.diagnostic_details(record, language)
+    assert "a.example" in expanded
+    assert "b.example" in expanded
+    assert reason.text(language) in expanded
+    assert TowError("mirrors.cloudflare").text(language) in expanded
+    assert errors.text_of(error, language) == summary
+    assert json.dumps(record) == before
+    assert record["cls"] == "tracker"
+
+
+@pytest.mark.parametrize(
+    "record", [None, {}, {"code": "check.no_connection"}, {"code": "mirrors.all_failed", "params": None}]
+)
+def test_missing_mirror_diagnostics_do_not_invent_details(record):
+    assert errors.diagnostic_details(record) == ""
+
+
+def test_incomplete_hidden_diagnostics_cannot_restore_the_verbose_fallback():
+    record = TowError("mirrors.all_failed", tracker="Site A", error=TowError("mirrors.rate_limited")).record()
+    record["params"]["details"] = errors.as_value({"code": "mirrors.mirror_reason", "params": {"host": "a.example"}})
+    assert errors.render(record, "ru", "old repeated raw text") == "Site A: " + TowError("mirrors.rate_limited").text(
+        "ru"
+    )
+
+
 def test_a_prefix_names_who_reports_it():
     error = TowError("client.managed.missing", prefix="Transmission")
     assert error.text("en") == "Transmission: the torrent is not in the client"

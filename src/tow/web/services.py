@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from functools import wraps
 from threading import BoundedSemaphore
 from typing import Any
@@ -37,15 +37,17 @@ from tow.content import metadata as content_metadata
 from tow.content import read as read_content
 from tow.doctor import doctor_report, stale_autostart
 from tow.doctor import reason_text as doctor_reason
+from tow.errors import diagnostic_details as _diagnostic_details
 from tow.guess import guess_site
 from tow.issues import collect as collect_issues
 from tow.lifecycle import request_restart, service_status, set_autostart
 from tow.locations import check_writable as folder_write_problem
 from tow.locations import free_bytes
-from tow.log import history_events, log_event, read_events
+from tow.log import history_events, log_event, read_events, scrub_text
 from tow.mirrors import note_signed_in as _note_signed_in
 from tow.mirrors import prefer_host as _prefer_host
 from tow.notifiers import test as test_notifier
+from tow.notify import short_series_title
 from tow.protection.providers import adapters as protection_adapters
 from tow.protection.providers import registry as protection_registry
 from tow.protection.spec import validate_settings as validate_protection_settings
@@ -123,6 +125,7 @@ __all__ = [
     "data_lost",
     "delete_restore_point",
     "delete_snapshot",
+    "diagnostic_details",
     "doctor_reason",
     "doctor_report",
     "export_portable_bundle",
@@ -171,6 +174,7 @@ __all__ = [
     "service_status",
     "set_autostart",
     "set_session_cookie",
+    "short_series_title",
     "sign_out",
     "sign_out_everywhere",
     "snapshot_delete_view",
@@ -189,6 +193,11 @@ __all__ = [
     "web_update_status",
     "write_generation",
 ]
+
+
+def diagnostic_details(record: Mapping[str, Any] | None, lang: str | None = None) -> str:
+    """Bounded, credential-redacted per-mirror evidence for the web's Details."""
+    return scrub_text(_diagnostic_details(record, lang))[:8192]
 
 
 def protection_settings_view(cfg: dict[str, Any]) -> dict[str, Any]:

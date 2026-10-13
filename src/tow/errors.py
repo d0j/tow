@@ -165,14 +165,9 @@ def _compose(code: str, params: Mapping[str, Any], lang: str | None, depth: int 
     values: dict[str, str] = {}
     complete = True
     for name, value in params.items():
-        if name != _PREFIX:
+        if name != _PREFIX and not (code == "mirrors.all_failed" and name == "details"):
             values[name], whole = _shown(value, language, depth)
             complete = complete and whole
-    # New mirror diagnostics are optional; records from before their introduction
-    # still have every required field and must keep translated site-title overrides.
-    # Other missing fields remain incomplete and keep the established fallback policy.
-    if code == "mirrors.all_failed":
-        values.setdefault("details", "")
     missing = i18n.placeholders(code, language) - values.keys()
     text = i18n.translate(code, language, **values, **{name: f"\x00{name}\x00" for name in missing})
     if missing:
@@ -300,6 +295,20 @@ def render_stored(
         return fallback
     record = {"code": code, "params": params if isinstance(params, Mapping) else {}}
     return render(record, lang, fallback, incomplete=incomplete)
+
+
+def diagnostic_details(record: Mapping[str, Any] | None, lang: str | None = None) -> str:
+    """Optional per-mirror evidence, separate from the short cause shown in messages.
+
+    Old records without evidence remain valid. Rendering never changes their stored
+    parameters or status class; even incomplete details cannot spoil the main cause.
+    """
+    if not isinstance(record, Mapping) or record.get("code") != "mirrors.all_failed":
+        return ""
+    params = record.get("params")
+    if not isinstance(params, Mapping):
+        return ""
+    return _shown(params.get("details"), lang or i18n.current())[0].strip()
 
 
 def as_value(record: Mapping[str, Any] | None, fallback: str = "") -> Any:

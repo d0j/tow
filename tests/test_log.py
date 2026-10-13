@@ -200,6 +200,43 @@ def test_format_error_human():
     assert "зеркало на паузе" in fmt["detail"]
 
 
+def test_mirror_evidence_is_expanded_only_under_log_details_and_scrubbed():
+    from tow.errors import Msg, TowError
+
+    error = TowError(
+        "mirrors.all_failed",
+        tracker="Site A",
+        error=TowError("mirrors.rate_limited"),
+        details=Msg("mirrors.mirror_reason", host="a.example", error="HTTP 429 password=hunter2"),
+    )
+    record = error.record()
+    fmt = format_event(
+        {
+            "kind": "check_fail",
+            "title": "Show A",
+            "error": str(error),
+            "error_code": record["code"],
+            "error_params": record["params"],
+        }
+    )
+    assert "Show A" in fmt["detail"]
+    assert "a.example" not in fmt["detail"]
+    assert "a.example" in fmt["raw"]
+    assert "hunter2" not in fmt["raw"]
+
+
+def test_mirror_log_details_have_a_finite_display_budget():
+    from tow.errors import TowError
+
+    error = TowError(
+        "mirrors.all_failed", tracker="Site A", error=TowError("mirrors.rate_limited"), details="x" * 20000
+    )
+    record = error.record()
+    fmt = format_event({"kind": "check_fail", "error_code": record["code"], "error_params": record["params"]})
+    assert len(fmt["raw"]) == 8192
+    assert len(record["params"]["details"]) == 20000
+
+
 def test_format_debug_fields():
     fmt = format_event(
         {
