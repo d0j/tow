@@ -832,6 +832,43 @@ def test_russian_texts_speak_plain_formal_russian():
     assert found == [], "\n".join(found)
 
 
+# Words of the term table (CONTRIBUTING.md) that Russian says one way only.
+_RU_OFF_TERM = {
+    r"логин (?:не )?сохранён": "a saved sign-in is «вход», as in every other sign-in message",
+    r"запуск раздачи": "what starts in the torrent client is the torrent («торрент»), not the topic",
+    r"приостановлен|возобновлен": "a pause is «поставить на паузу» / «снять с паузы», as the buttons say",
+    r"«Настройк[а-я]*»|«Настройки →": "Settings is named without quotes, as everywhere else",
+}
+
+
+def test_russian_says_one_thing_one_way():
+    found = [
+        f"{key}: {why}: {text}"
+        for key, value in sorted(i18n._load("ru")[0].items())
+        for text in [json.dumps(value, ensure_ascii=False)]
+        for pattern, why in _RU_OFF_TERM.items()
+        if re.search(pattern, text, re.IGNORECASE)
+    ]
+    assert found == [], "\n".join(found)
+
+
+def test_the_history_says_a_client_event_of_the_torrent():
+    """A client event is about the torrent, so every label agrees with «торрент» as "добавлен в
+    клиент" does (they mixed «запущена», «остановлено» and «добавлен»)."""
+    from tow.log import format_event
+
+    def label(kind: str) -> str:
+        return str(format_event({"kind": kind})["label"])
+
+    i18n.use("ru")
+    client = [label(kind) for kind in ("client_added", "client_started", "client_stopped", "client_adopted")]
+    assert client == ["Добавлен в клиент", "Запущен в клиенте", "Остановлен в клиенте", "Взят под управление TOW"]
+    assert [label("client_stop_failed"), label("client_adopt_failed")] == [
+        "Не остановлен в клиенте",
+        "Не взят под управление TOW",
+    ]
+
+
 def test_no_russian_verb_is_said_both_formally_and_informally():
     """Every imperative the catalog uses formally ("отрежьте", "пишите") must never appear in its
     informal form ("отрежь", "пиши") in any Russian value."""
