@@ -169,6 +169,38 @@ def test_browser_file_export_check_and_restore_round_trip(monkeypatch, tmp_path)
     assert list(tmp_dir().glob("tow-browser-import-*")) == []
 
 
+def test_the_file_import_never_waits_for_the_event_log_on_the_event_loop(monkeypatch, tmp_path):
+    """The event log's lock is held while a night copy copies the log (to a network share too):
+    a wait for it on the event loop froze every page of TOW meanwhile."""
+    from tow.web import services
+
+    _seed(monkeypatch, tmp_path)
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    exported = client.post("/settings/portable/export").content
+    on_loop: list[str] = []
+    log_event = services.log_event
+
+    def logged(kind, **fields):
+        try:
+            asyncio.get_running_loop()
+            on_loop.append(kind)
+        except RuntimeError:
+            pass  # a worker thread: no event loop there
+        return log_event(kind, **fields)
+
+    monkeypatch.setattr(services, "log_event", logged)
+    for operation, content in (("check", exported), ("restore", exported), ("check", b"not a TOW file")):
+        answer = client.post(
+            "/settings/portable/import",
+            data={"operation": operation},
+            files={"backup_file": ("backup.towx", content, "application/octet-stream")},
+            follow_redirects=False,
+        )
+        assert answer.status_code == 303
+
+    assert on_loop == []
+
+
 @pytest.mark.parametrize("origin", [None, "null", "https://evil.example"])
 def test_browser_export_rejects_missing_or_foreign_origin(monkeypatch, tmp_path, origin):
     _seed(monkeypatch, tmp_path)

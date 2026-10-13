@@ -350,13 +350,16 @@ async def settings_portable_import(
                 handle.write(chunk)
         if total <= 0:
             raise invalid_file("backup.restore_point.portable_invalid", "empty")
+        # Everything that may wait on a lock runs in a worker, never on the event loop: the event
+        # log's lock is held while a night copy copies the log, to a network share too.
         if action == "check":
             await run_in_threadpool(services.check_portable_bundle, upload_path)
-            services.log_event("settings_portable_check", status="valid", how="manual")
+            await run_in_threadpool(services.log_event, "settings_portable_check", status="valid", how="manual")
             flash, kind = t("web.settings.file_ok"), "ok"
         else:
             result = await run_in_threadpool(services.restore_portable_bundle, upload_path)
-            services.log_event(
+            await run_in_threadpool(
+                services.log_event,
                 "settings_portable_restore",
                 safety_point=result["safety_point"],
                 status="restored",
@@ -364,7 +367,8 @@ async def settings_portable_import(
             )
             flash, kind = _restore_outcome("web.settings.restored_file", result)
     except (OSError, RestorePointError) as exc:
-        services.log_event(
+        await run_in_threadpool(
+            services.log_event,
             "settings_portable_import_fail",
             operation=action,
             error=error_class(exc),
