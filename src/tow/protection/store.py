@@ -14,7 +14,7 @@ from tow.paths import data_dir, tmp_dir
 from tow.platform import current as current_platform
 from tow.platform import is_plain_dir, is_plain_file
 from tow.protection.providers import validate_clearance
-from tow.protection.spec import AttemptProof, Clearance
+from tow.protection.spec import AttemptProof, Clearance, target_origin
 from tow.storage.jsonio import decode_json_bytes, encode_json
 from tow.storage.locks import check_run_lock
 from tow.store import atomic_write_bytes, master_fernet, persistence_lock, read_regular_bytes
@@ -41,6 +41,13 @@ def _validate_record(record: object) -> None:
     fields = _COMMON_FIELDS | (_SERVICE_FIELDS if service else {"clearance", "attempt_id", "provider_cursor"})
     if set(record) - fields or not set(record) >= _COMMON_FIELDS:
         raise ValueError("invalid clearance record")
+    raw = record.get("clearance")
+    if (
+        isinstance(raw, dict)
+        and "attempt_id" in raw
+        and (not isinstance(raw["attempt_id"], str) or not re.fullmatch(r"[0-9a-f]{32}", raw["attempt_id"]))
+    ):
+        raise ValueError("invalid clearance identity")
     timestamp, lease = record["attempt_at"], record["lease_until"]
     if not _finite_time(timestamp) or not _finite_time(lease) or lease < timestamp:
         raise ValueError("invalid clearance reservation")
@@ -153,7 +160,7 @@ def eligible_providers(
     records = _load()
     previous = records.get(_key(site, origin), {})
     ordered = [p for p in settings["providers"] if p["enabled"]]
-    if previous.get("settings") == signature(settings) and not previous.get("clearance"):
+    if previous.get("settings") == signature(settings):
         ids = [p["id"] for p in ordered]
         cursor = previous.get("provider_cursor")
         if cursor in ids:
@@ -207,16 +214,18 @@ def note_service(
         _save(records)
 
 
-def read(site: str, origin: str, settings: dict[str, Any], *, now: float) -> Clearance | None:
-    # One atomically published file: no data lock (which may recover/write journals)
-    # is needed for a read-only preview or an already verified credential lookup.
-    record = _load().get(_key(site, origin), {})
+def _read_clearance(record: dict[str, Any], origin: str, settings: dict[str, Any], now: float) -> Clearance | None:
     if record.get("settings") != signature(settings):
         return None
     raw = record.get("clearance")
-    if not isinstance(raw, dict) or set(raw) != {"cookies", "user_agent", "expires_at", "provider"}:
+    fields = {"cookies", "user_agent", "expires_at", "provider"}
+    if not isinstance(raw, dict) or set(raw) not in (fields, fields | {"attempt_id"}):
         return None
-    value = Clearance(**raw, attempt_id=record.get("attempt_id"))
+    # Legacy records tied clearance to the active reservation. Never use that fallback
+    # for the new nested identity: a later reservation cannot relabel an older cookie.
+    value = Clearance(
+        **{**raw, "attempt_id": raw.get("attempt_id") if "attempt_id" in raw else record.get("attempt_id")}
+    )
     try:
         value = validate_clearance(value, origin, now=now)
     except ValueError, TypeError:
@@ -224,6 +233,24 @@ def read(site: str, origin: str, settings: dict[str, Any], *, now: float) -> Cle
     if value.provider not in {p["id"] for p in settings["providers"] if p["enabled"]}:
         return None
     return value
+
+
+def read(site: str, origin: str, settings: dict[str, Any], *, now: float) -> Clearance | None:
+    # One atomic file: read-only previews do not take a lock which can recover journals.
+    return _read_clearance(_load().get(_key(site, origin), {}), origin, settings, now)
+
+
+def recovery_origins(site: str, origins: list[str]) -> list[str]:
+    """Oldest attempts first: a shared call cap cannot permanently starve later mirrors."""
+    records = _load()
+
+    def last_attempt(origin: str) -> float:
+        try:
+            return float(records.get(_key(site, target_origin(origin)), {}).get("attempt_at", -1))
+        except ValueError:
+            return -1
+
+    return sorted(origins, key=last_attempt)
 
 
 def reserve(site: str, origin: str, settings: dict[str, Any], *, now: float) -> bool:
@@ -254,6 +281,10 @@ def reserve_attempt(site: str, origin: str, settings: dict[str, Any], *, now: fl
         }
         if previous and previous.get("settings") == signature(settings) and previous.get("provider_cursor"):
             records[key]["provider_cursor"] = previous["provider_cursor"]
+        if previous:
+            retained = _read_clearance(previous, origin, settings, now)
+            if retained is not None and retained.attempt_id is not None:
+                records[key]["clearance"] = _encode_clearance(retained)
         _save(records)
         return nonce
 
@@ -304,9 +335,26 @@ def finish_attempt(attempt: AttemptProof, provider_id: str) -> None:
     with persistence_lock():
         records = _load()
         record = records.get(_key(attempt.site, attempt.origin))
-        if record and record.get("attempt_id") == attempt.nonce and record.get("provider_cursor") != provider_id:
+        if (
+            record
+            and record.get("attempt_id") == attempt.nonce
+            and (record.get("clearance") or {}).get("attempt_id") != attempt.nonce
+            and record.get("provider_cursor") != provider_id
+        ):
             record["provider_cursor"] = provider_id
             _save(records)
+
+
+def _encode_clearance(value: Clearance) -> dict[str, Any]:
+    result = {
+        "cookies": value.cookies,
+        "user_agent": value.user_agent,
+        "expires_at": value.expires_at,
+        "provider": value.provider,
+    }
+    if value.attempt_id is not None:
+        result["attempt_id"] = value.attempt_id
+    return result
 
 
 def accept(
@@ -325,17 +373,22 @@ def accept(
         record = records.get(key)
         if record is None or record["settings"] != signature(settings):
             return
-        encoded = {
-            "cookies": clearance.cookies,
-            "user_agent": clearance.user_agent,
-            "expires_at": clearance.expires_at,
-            "provider": clearance.provider,
-        }
-        if record.get("clearance") == encoded:
-            return
         if require_attempt and (clearance.attempt_id is None or record.get("attempt_id") != clearance.attempt_id):
             return
+        # Compatibility callers without a proof use the existing reservation identity.
+        encoded = _encode_clearance(
+            Clearance(
+                clearance.cookies,
+                clearance.user_agent,
+                clearance.expires_at,
+                clearance.provider,
+                clearance.attempt_id or record.get("attempt_id"),
+            )
+        )
+        if record.get("clearance") == encoded and "provider_cursor" not in record:
+            return
         record["clearance"] = encoded
+        record.pop("provider_cursor", None)
         _save(records)
 
 
@@ -344,13 +397,14 @@ def discard(site: str, origin: str, *, expected: Clearance | None = None) -> Non
         records = _load()
         record = records.get(_key(site, origin))
         if record and "clearance" in record:
-            if expected is not None and record.get("attempt_id") != expected.attempt_id:
+            raw = record["clearance"]
+            identity = (
+                raw.get("attempt_id") if isinstance(raw, dict) and "attempt_id" in raw else record.get("attempt_id")
+            )
+            if expected is not None and identity != expected.attempt_id:
                 return
-            if expected is not None and record["clearance"] != {
-                "cookies": expected.cookies,
-                "user_agent": expected.user_agent,
-                "expires_at": expected.expires_at,
-                "provider": expected.provider,
+            if expected is not None and {key: value for key, value in raw.items() if key != "attempt_id"} != {
+                key: value for key, value in _encode_clearance(expected).items() if key != "attempt_id"
             }:
                 return  # an old refused replay does not revoke a newer verified credential
             del record["clearance"]

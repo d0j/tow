@@ -319,6 +319,25 @@ def test_a_zoned_public_address_is_judged_without_its_zone():
     assert is_public("2606:4700::1111%eth0") is True
 
 
+@pytest.mark.parametrize("address", ["fec0::1", "fec0::1%eth0", "feff:ffff::1"])
+def test_deprecated_site_local_ipv6_is_not_public(monkeypatch, address):
+    from tow.net_guard import tracker_address
+    from tow.web.site_form import internal_host
+
+    assert is_public(address) is False
+    assert internal_host(f"[{address}]") is True
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers(address))
+    with pytest.raises(httpcore.ConnectError):
+        public_addresses("tracker.example", 443)
+    assert tracker_address("https://tracker.example/announce") is False
+
+
+def test_site_local_ipv6_in_a_mixed_dns_answer_refuses_every_connection(monkeypatch):
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers("2606:4700::1111", "fec0::1"))
+    with pytest.raises(httpcore.ConnectError):
+        public_addresses("tracker.example", 443)
+
+
 @pytest.mark.parametrize("address", ["64:ff9b::c0a8:0101", "64:ff9b::1", "::ffff:0:0.0.0.1", "64:ff9b::7f00:1"])
 def test_nat64_forms_are_judged_by_every_bit_of_their_ipv4_part(address):
     # 64:ff9b::1 is 0.0.0.1 behind a NAT64 gateway: the last bit decides it is not 64:ff9b::0.

@@ -38,7 +38,7 @@
     "limits": "Attempt limits",
     "timeout": "Total recovery time, seconds",
     "interval": "Minimum retry interval, seconds",
-    "attempts": "Maximum services per attempt",
+    "attempts": "Maximum service calls per recovery",
     "invalid": "Not saved. Check addresses, unique order numbers and attempt limits. Enabled recovery needs at least one enabled connection.",
     "saved": "Site-access settings saved. No external service was contacted.",
     "recovery": "Recovery",

@@ -46,6 +46,19 @@ class ProviderSpec:
     solve: Callable[[dict[str, Any], str, float], Clearance]
 
 
+@dataclass
+class RecoveryBudget:
+    """One call limit shared by all origins in a recovery phase, not per mirror."""
+
+    remaining: int
+
+    def consume(self) -> bool:
+        if self.remaining <= 0:
+            return False
+        self.remaining -= 1
+        return True
+
+
 def service_url(value: object) -> str:
     """Only explicitly configured local/LAN service literals; never public DNS."""
     if not isinstance(value, str) or any(c in value for c in "\\ %?#") or any(ord(c) < 32 for c in value):
