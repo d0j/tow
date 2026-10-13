@@ -65,7 +65,7 @@ folders, and a leftover file is simply ignored — delete it).
 `runtime_dir` are not (whoever writes there creates them). A layout from before
 1.18 (`<TOW>\app`, `<TOW>\data`, `<TOW>\config.yaml`) resolves to the same paths as before.
 
-Master key resolution (built, `tow.store`): `TOW_MASTER_KEY` (env, tests/CI) >
+Master key resolution (built, `tow.storage.keys`): `TOW_MASTER_KEY` (env, tests/CI) >
 `TOW_MASTER_KEY_FILE` (explicit, legacy; a relative path is inside data/) >
 `<root>/keys/master.key` > `<data>/master.key` (an install from before 1.18; since 1.21 found by
 TOW itself on every start, not only by `tow-env.cmd`). `secret_store_status()["key_source"]` is
@@ -759,8 +759,8 @@ environment and Python 3.11 syntax.
   alone needs (the child interpreter, spawning an owned child with `popen_options`, the port
   probe) and takes `process_alive`, `terminate`, `port_owner`, `bind_children` and
   `die_with_parent` from `tow.platform`.
-- File locks are `tow.platform.locks` (`msvcrt` on Windows, `flock` elsewhere), used by `store.py`,
-  `log.py`, `supervisor/layout.py` and `web_update.py`.
+- File locks are `tow.platform.locks` (`msvcrt` on Windows, `flock` elsewhere), used by
+  `storage/locks.py`, `log.py`, `supervisor/layout.py` and `web_update.py`.
 
 ## 6. Launchers (built)
 
@@ -769,8 +769,8 @@ environment and Python 3.11 syntax.
   (the code), `TOW_ROOT` (discovery as in §1; one set before is kept only when it names the
   folder above `TOW_APP`, `scripts/tow` the same), `TOW_EXE`, `TOW_HOME`, `TOW_CONFIG`, the uv
   variables of §1 for a runtime install, `TOW_UV` (`runtime\bin\uv.exe` when present). A legacy
-  `data\master.key` and `data\lan-auth.token` are no longer set here (since 1.21 `tow.store` and
-  `tow.auth` find them, so `scripts/tow`, autostart and the task behave the same).
+  `data\master.key` and `data\lan-auth.token` are no longer set here (since 1.21 `tow.storage.keys`
+  and `tow.auth` find them, so `scripts/tow`, autostart and the task behave the same).
   No labels and no `exit /b` inside blocks (cmd.exe misreads labels in LF files and loses the
   exit code of `exit /b` without a number inside a block).
 - Network sign-in (`tow.access`): the password record in `secrets.enc`. An external access key
@@ -851,8 +851,8 @@ Built so far (this workstream):
   1.21.0); the dependency audit runs on one of them (uv.lock is the same everywhere), and
   `install.sh` is smoke-tested on Ubuntu and macOS.
 - Installers (`.github/workflows/installers.yml`): on pull requests that touch `scripts/`,
-  `install/`, the updater, what it relies on (`store.py`, `supervisor/layout.py`, `cli/`, the
-  texts) or the dependencies, weekly and by hand, the Windows bundle is built from
+  `install/`, the updater, what it relies on (`store.py`, `storage/`, `supervisor/layout.py`, `cli/`,
+  the texts) or the dependencies, weekly and by hand, the Windows bundle is built from
   the commit and tested as on a tag (below), and `scripts/update-smoke.py` updates the latest
   published release (the bundle on Windows, install.sh on Ubuntu and macOS) to the commit's source
   archive with the real updater (`--source`/`--sums`): a broken copy that changes `data/` and
