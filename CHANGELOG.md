@@ -22,6 +22,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Transmission's paused add can finish its initial verification of existing files before selection and start;
+  an unnecessary stop no longer cancels that check and causes already present pieces to be downloaded again.
+  Waiting remains bounded; a long verification stays pending without an automatic stop or start, and retries wait
+  before changing selection. Lightweight status polling does not repeatedly fetch the full file list.
+- Parallel CI jobs no longer compete to save the same dependency cache: pull requests and smoke jobs restore only,
+  while the protected main gate maintains one cache per runner. Release builds remain uncached.
 - Short recovery budgets no longer divide every provider's share below a usable second. A budget that cannot
   call even one service leaves the persistent cooldown unchanged, so a later full-budget check remains eligible.
   Slow preparation preserves the last actually attempted connection and allows later connections within the deadline.

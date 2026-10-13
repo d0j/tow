@@ -704,6 +704,7 @@
       "no_rpc": "no Transmission RPC at this address — check the port and path",
       "not_rpc": "the answer does not look like Transmission RPC",
       "no_session": "could not get an RPC session",
+      "check_in_progress": "initial file verification is still running; TOW has not started the download — retry after verification finishes",
       "too_old": "Transmission 3.0 or newer is needed (now {version})"
     },
     "deluge": {

@@ -8,12 +8,13 @@ download, and TOW never lets a client download before the file selection is appl
 from __future__ import annotations
 
 import base64
+import logging
 from typing import Any, ClassVar, cast
 
 import httpx
 
 from tow.clients.address import base_url
-from tow.clients.managed import AddMarkError, ClientError, ManagedClient
+from tow.clients.managed import OWNER, PENDING, AddMarkError, ClientError, ManagedClient
 from tow.clients.spec import TorrentClientAdapter
 
 KIND = "transmission"
@@ -35,6 +36,7 @@ DEFAULT_PATH = "/transmission/rpc"
 SESSION_HEADER = "X-Transmission-Session-Id"
 # Labels arrived in RPC 16 (Transmission 3.0).
 MIN_RPC_VERSION = 16
+_LOG = logging.getLogger(__name__)
 
 _FIELDS = [
     "hashString",
@@ -212,6 +214,52 @@ class TransmissionClient(ManagedClient):
         if unwanted:
             arguments["files-unwanted"] = unwanted
         self._rpc("torrent-set", **arguments)
+
+    def _stop_after_add(self, added: dict[str, Any]) -> bool:
+        """A paused add can verify existing files; stopping it cancels that verification."""
+        return super()._stop_after_add(self._wait_initial_verification(added))
+
+    def _verification_state(self, infohash: str) -> dict[str, Any] | None:
+        row = self._get(infohash, ["hashString", "status", "error", "labels"])
+        if row is None:
+            return None
+        status = int(row.get("status") or 0)
+        state = (
+            "error"
+            if int(row.get("error") or 0) == 3
+            else _STATES.get(status, "stoppedDL" if status == 0 else "unknown")
+        )
+        return {"hash": str(row.get("hashString") or infohash), "state": state, "tags": _labels(row)}
+
+    def _wait_initial_verification(self, added: dict[str, Any]) -> dict[str, Any]:
+        if str(added.get("state") or "").casefold().startswith("checking"):
+            return self._wait(
+                str(added["hash"]),
+                lambda info: not str(info.get("state") or "").casefold().startswith("checking"),
+                "client.transmission.check_in_progress",
+                polls=self.START_POLLS,
+                timeout=self.START_WAIT_SEC,
+                read=self._verification_state,
+            )
+        return added
+
+    def _ready_for_selection(self, before: dict[str, Any]) -> dict[str, Any]:
+        if str(before.get("state") or "").casefold().startswith("checking"):
+            self._wait_initial_verification(before)
+            return self._inspect_with_files(str(before["hash"]))
+        return before
+
+    def _stop_after_failure(self, infohash: str, *, error: Exception | None = None) -> None:
+        if not isinstance(error, ClientError) or error.code != "client.transmission.check_in_progress":
+            super()._stop_after_failure(infohash, error=error)
+            return
+        try:
+            info = self._verification_state(infohash)
+            if {OWNER, PENDING}.issubset(self._tags(info)) and str((info or {}).get("state")).startswith("checking"):
+                return  # the newly added paused task may finish checking; no start was requested
+        except Exception:  # noqa: BLE001 - an unreadable state still takes the normal safe-stop path
+            _LOG.debug("initial verification status unreadable; using safe-stop cleanup")
+        super()._stop_after_failure(infohash, error=error)
 
     def _stop(self, infohash: str) -> None:
         self._rpc("torrent-stop", ids=[infohash.lower()])
