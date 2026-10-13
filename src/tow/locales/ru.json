@@ -1201,6 +1201,8 @@
       "qbit_move_fail": "не перенесено",
       "add_check_fail": "сбой добавления",
       "check": "проверка",
+      "check_progress": "проверка прогресса",
+      "check_space": "проверка места на диске",
       "check_blocked": "проверка не завершилась",
       "topic_add": "добавлена",
       "topic_delete": "удалена",
@@ -1348,6 +1350,7 @@
       "qbit_down": "торрент-клиент недоступен"
     },
     "check_result": "проверено: {n}, без ошибок: {ok}",
+    "client_pass_result": "раздач: {n}",
     "site_skipped": "не проверено раздач: {n}",
     "check_preview": "предпросмотр, ничего не изменено",
     "check_error": {

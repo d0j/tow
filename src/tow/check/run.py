@@ -432,5 +432,9 @@ def _run_check(
     flush_notifications(cfg, secrets, how=how, notify=notify)
     if cleanup_pending:
         _record("check_persistence_cleanup_pending", how=how)
-    _record("check", apply=apply, ok=sum(1 for r in results if r.get("ok")), n=len(results), how=how)
+    # A pass that asks the client alone says so: its rows are not site checks, and "without
+    # errors" would count topics whose site refused them (the Log's "check · checked: 11, without
+    # errors: 11" while six topics had errors).
+    scope = {"scope": "space"} if space_only else {"scope": "progress"} if progress_only else {}
+    _record("check", apply=apply, ok=sum(1 for r in results if r.get("ok")), n=len(results), how=how, **scope)
     return {"qbit": pool.ping, "results": results}

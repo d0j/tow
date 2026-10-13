@@ -728,8 +728,20 @@ def event_title(rec: Mapping[str, Any], title_index: Mapping[str, str] | None = 
     return ""
 
 
+def _client_pass(rec: Mapping[str, Any]) -> str:
+    """ "progress" or "space" for a ``check`` event of a pass that asks the torrent client alone
+    (``scope``; TOW 1.28 wrote none: its passes are known by ``how="progress"``), else ""."""
+    named = rec.get("scope")
+    if named in ("progress", "space"):
+        return str(named)
+    return "progress" if rec.get("how") == "progress" else ""
+
+
 def _shown_kind(rec: Mapping[str, Any], kind: str) -> str:
-    """A pause button toggles: its one event kind reads as "resumed" when it turned pause off."""
+    """A pause button toggles: its one event kind reads as "resumed" when it turned pause off.
+    A check that asked only the client reads as that pass."""
+    if kind == "check" and (client_pass := _client_pass(rec)):
+        return f"check_{client_pass}"
     if kind == "topic_pause" and rec.get("paused") is False:
         return "topic_resume"
     if kind == "site_pause" and rec.get("status") == "resumed":
@@ -784,6 +796,8 @@ def format_event(rec: Mapping[str, Any], *, title_index: Mapping[str, str] | Non
         bits.append(_check_blocked_reason(rec, lang))
     if kind == "check_site_skipped" and isinstance(rec.get("topics"), int):
         bits.append(t("log.site_skipped", lang, n=rec["topics"]))
+    elif kind == "check" and rec.get("n") is not None and _client_pass(rec):
+        bits.append(t("log.client_pass_result", lang, n=rec.get("n")))  # no site was asked
     elif kind == "check" and rec.get("n") is not None:
         bits.append(t("log.check_result", lang, ok=rec.get("ok"), n=rec.get("n")))
         if rec.get("apply") is False:

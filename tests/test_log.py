@@ -67,6 +67,22 @@ def test_a_blocked_check_saved_without_its_error_says_the_best_it_knows(reason, 
     assert row["detail"] == f"авто · {says}"
 
 
+@pytest.mark.parametrize(
+    ("event", "label", "detail"),
+    [
+        ({"how": "auto"}, "Проверка", "авто · проверено: 11, без ошибок: 5"),
+        ({"how": "progress", "scope": "progress"}, "Проверка прогресса", "раздач: 11"),
+        ({"how": "progress", "scope": "space"}, "Проверка места на диске", "раздач: 11"),
+        ({"how": "progress"}, "Проверка прогресса", "раздач: 11"),  # as TOW 1.28 wrote it
+    ],
+)
+def test_the_log_names_a_pass_that_asks_only_the_client(event, label, detail):
+    """Qa10: the progress pass read "Проверка · проверено: 11, без ошибок: 11" while six topics
+    had errors: it asks no site, so its rows are no site checks."""
+    row = format_event({"kind": "check", "ok": 5 if event["how"] == "auto" else 11, "n": 11, **event})
+    assert (row["label"], row["detail"]) == (label, detail)
+
+
 def test_export_event_projection_rejects_hash_suffix_data():
     projected = export_event_projection({"hash": "a" * 64 + "SECRET"})
     assert "hash" not in projected
