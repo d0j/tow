@@ -112,3 +112,14 @@ def test_the_home_progress_link_is_a_24_px_target_that_looks_the_same():
     assert margin
     assert padding.group(1) == margin.group(1)
     assert 13 * 1.5 + 2 * 16 * float("." + padding.group(1)) >= 24  # the phone's 13 px line
+
+
+def test_a_long_settings_pill_wraps_on_a_phone_instead_of_losing_its_end():
+    """Qa10: at 390 px the Backups pill ("Ночная копия 13.10.2026 09:28:19 UTC+03:00") ended in
+    "…" with no tooltip, and a phone has none to show anyway. It wraps; nothing is cut off."""
+    phone = CSS.split("@media (max-width: 720px) {")
+    bodies = [dict(_rules(block)).get(".settings-accordion > summary .pill", "") for block in phone[1:]]
+    body = next(body for body in bodies if body)
+    assert "white-space: normal" in body
+    assert "text-overflow" not in body
+    assert "overflow: hidden" not in body

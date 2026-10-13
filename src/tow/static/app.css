@@ -760,7 +760,9 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
   .technical-details dl > div { grid-template-columns: 1fr; gap: .05rem; }
   .settings-accordion > summary { padding: .68rem .72rem; }
   .settings-panel { padding: .72rem; }
-  .settings-accordion > summary .pill { max-width: 48vw; overflow: hidden; text-overflow: ellipsis; }
+  /* A long pill ("Nightly backup 2026-10-13 09:28:19 UTC+03:00") wraps instead of losing its end:
+     a phone has no tooltip to show the rest. */
+  .settings-accordion > summary .pill { max-width: 48vw; white-space: normal; text-align: end; border-radius: .7rem; }
 }
 @media (max-width: 1099px) {
   .settings-layout { grid-template-columns: minmax(0, 48rem); }
