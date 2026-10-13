@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import hashlib
+import hmac
 import json
 import logging
 import re
@@ -112,8 +113,16 @@ def targets(secrets: dict[str, Any]) -> list[tuple[str, str, Notifier, dict[str,
 
 
 def fingerprint(settings: dict[str, Any]) -> str:
-    """Changes when the owner changes the settings (a blocked queue is retried then)."""
-    return hashlib.sha256(json.dumps(settings, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:16]
+    """Changes when the owner changes the settings (a blocked queue is retried then).
+
+    It is kept in state.json, which night copies hold unencrypted, and the settings include the
+    token or key: a plain hash of a short one (a 6-digit WhatsApp apikey) was guessed back in
+    seconds. An HMAC with a key derived from the master key gives nothing away."""
+    from tow.store import derive_local_secret
+
+    key = derive_local_secret("notifier-settings-fingerprint").encode("ascii")
+    payload = json.dumps(settings, sort_keys=True, default=str).encode("utf-8")
+    return hmac.new(key, payload, hashlib.sha256).hexdigest()[:16]
 
 
 def validate(kind: str, form: dict[str, str], current: dict[str, Any] | None) -> tuple[dict[str, Any], list[str]]:

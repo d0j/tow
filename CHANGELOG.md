@@ -37,6 +37,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The free-space hint under the folder of the add and edit forms no longer looks at a network share (`\\server\share`)
   while network paths are off in `config.yaml`, nor at a Windows device path: opening a share signs in to that server
   with your Windows account, and the add itself refuses such a folder anyway.
+- A messenger whose messages are held after a permanent error (a wrong token, a deleted webhook) no longer leaves a
+  plain hash of its settings in the data, which night copies keep unencrypted: a short key, such as a WhatsApp
+  apikey, could be guessed back from it. A held queue is tried once more after the update.
 - Home: a topic link that is not a web address (possible with a loosely written site pattern) is no longer made into
   a link to open.
 
