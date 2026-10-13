@@ -666,7 +666,7 @@ def _verify_clearance(response: httpx.Response, host: str, markers: list[str] | 
     if response.status_code in _REDIRECT_STATUSES:
         destination = urljoin(host + "/", response.headers.get("location") or "")
         if _origin(destination) != _origin(host):
-            raise ValueError("clearance verification changed origin")
+            raise MirrorFetchError("mirrors.redirect_cross_origin", failure="redirect_policy")
     verdict = response_verdict(response, maintenance_markers=markers, wanted=response.status_code in {401, 403})
     if verdict == Verdict.LOGIN_NEEDED:
         return
@@ -730,10 +730,10 @@ def _recover_challenges(
                         probe, host + "/", max_bytes=thttp.MAX_HTML_RESPONSE_BYTES, deadline=deadline
                     )
                 _verify_clearance(verified, host, maintenance_markers)
-                if time.monotonic() >= deadline:
-                    break
                 chain.accept(tracker, host, protection, clearance)
                 verified_access = True
+                if time.monotonic() >= deadline:
+                    break
                 merged = {**_cookies_for_host(cookies, host, hosts), **clearance.cookies}
                 with thttp.client(
                     ua=clearance.user_agent, cookies=merged, follow_redirects=False, public_only=public_only
@@ -760,19 +760,20 @@ def _recover_challenges(
                 chain.record_event("protection_restored", tracker, clearance.provider, "succeeded")
                 return r, host
             except MirrorFetchError as exc:
-                if verified_access and exc.failure not in {"cloudflare", "interactive"}:
+                if exc.failure not in {"cloudflare", "interactive"} and (
+                    verified_access or exc.failure != "redirect_policy"
+                ):
                     _observe(bucket, host, exc.failure)
                     _save_bucket(tracker, bucket, host)
-                    if _says_gone(exc):
+                    if verified_access and _says_gone(exc):
                         raise MirrorFetchError(exc.code, failure=exc.failure, cls="gone", **exc.params) from exc
                     raise  # preserve the site's real answer and its independently verified credential
                 chain.discard(tracker, host, expected=clearance)
+                chain.record_event("protection_replay_refused", tracker, clearance.provider, "failed")
             except Exception as exc:
-                if verified_access:
-                    _observe(bucket, host, "transport")
-                    _save_bucket(tracker, bucket, host)
-                    raise MirrorFetchError("mirrors.transport", failure="transport", error=type(exc).__name__) from exc
-                chain.discard(tracker, host, expected=clearance)
+                _observe(bucket, host, "transport")
+                _save_bucket(tracker, bucket, host)
+                raise MirrorFetchError("mirrors.transport", failure="transport", error=type(exc).__name__) from exc
     return None
 
 

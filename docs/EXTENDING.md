@@ -125,9 +125,15 @@ The shared settings card and ordered chain require no adapter-name branches.
 
 The contract is intentionally narrow: the caller supplies a validated local/private API endpoint and a public
 origin, never login cookies, credentials or a topic/download path. Return only a validated `cf_clearance`, its exact
-origin, matching User-Agent, finite expiry and provider kind. TOW independently replays the root with its pinned
+origin binding, matching User-Agent, finite expiry and provider connection id. TOW independently replays the root with its pinned
 transport before trusting the result. A provider's HTML is never tracker metadata. Enforce the absolute request
 budget and bounded response parsing inside the adapter, not only around it.
+
+Raise `ProviderUnavailableError` only for an API-level outage, busy response or protocol mismatch. A site's refusal
+or failed challenge must not trip the shared API fuse. The chain stamps an owned attempt identity on its validated
+candidate; adapters must not generate one. Conditional acceptance, discard and late API outcomes compare it with
+the durable reservation, including after reset. Test continuation to later providers when `max_attempts` is smaller
+than the connection count, and the v1 optional-cache read without a write. No browser serialization using pickle.
 
 Test wrong scope, expiry, user-agent, compression/size, redirects, finite time, request-secret isolation and
 fallback after refusal. Settings and dry-run must not contact the service. In-process plugins are trusted code,

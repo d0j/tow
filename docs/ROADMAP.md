@@ -41,6 +41,10 @@ Roughly in order of value:
 5. **Backups** — an off-machine copy target; restoring state and history from a night copy without the key.
 6. **Internals** — one HTTP connection per tracker per run; `qbit*` health keys renamed to `client*`.
 7. **Python 3.15** — move when the final release is out.
+8. **Optional browser transport** — isolated, separately managed browser sessions for path-specific/continuous
+   challenges, only after preserving origin/redirect/credential boundaries, bounded responses, cancellation,
+   process cleanup and three-platform tests. Native nodriver/zendriver and curl_cffi transport are not bundled today;
+   compatible external services are supported, but cookie replay cannot cover every browser-bound session.
 
 ## Out of scope
 

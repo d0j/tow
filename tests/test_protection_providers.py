@@ -154,7 +154,7 @@ def test_target_origin_refuses_topics_and_credentials(origin):
 
 
 def test_plugins_discovered_independently():
-    assert set(providers.adapters()) == {"flaresolverr", "byparr"}
+    assert set(providers.adapters()) == {"flaresolverr", "byparr", "flare_bypasser", "trawl"}
 
 
 def test_disabled_chain_no_dns_no_storage(safe_dns, monkeypatch):
@@ -574,11 +574,12 @@ def test_failed_old_replay_cannot_discard_newer_verified_clearance():
     old = clearance(cookies={"cf_clearance": "synthetic-old-token"})
     store.accept("sample", ORIGIN, configured, old, now=now)
     assert chain.cached("sample", ORIGIN, configured) == old
+    old = chain.cached("sample", ORIGIN, configured)
     replacement = clearance(cookies={"cf_clearance": "synthetic-new-token"}, provider="second")
     store.accept("sample", ORIGIN, configured, replacement, now=now)
     chain.discard("sample", ORIGIN, expected=old)
     assert chain.cached("sample", ORIGIN, configured) == replacement
-    chain.discard("sample", ORIGIN, expected=replacement)
+    chain.discard("sample", ORIGIN, expected=chain.cached("sample", ORIGIN, configured))
     assert chain.cached("sample", ORIGIN, configured) is None
     assert store.reserve("sample", ORIGIN, configured, now=now + 1) is False
 

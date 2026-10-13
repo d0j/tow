@@ -83,17 +83,18 @@
   </header>
 
   <div class="settings-content" id="settings-acc">
-    <details class="settings-section settings-accordion acc" id="acc-protection" data-q="Cloudflare challenge protection FlareSolverr Byparr modules">
+    <details class="settings-section settings-accordion acc" id="acc-protection" data-q="Cloudflare challenge protection FlareSolverr Byparr FlareBypasser zendriver nodriver Trawl modules">
   <summary>
     <span class="settings-summary-title">Site access</span>
     <span class="pill mut">Off</span>
   </summary>
   <div class="settings-panel">
     <p class="action-hint">Ordinary mirrors are tried first. Only an identified Cloudflare challenge may use these optional services. Turning this off leaves ordinary checks and browser sign-in available.</p>
+
     <details class="technical-details">
       <summary>How to connect</summary>
       <ol><li>Run your chosen external service separately. TOW does not install it or bundle a browser.</li><li>Enter its loopback or private-network IP address. Do not expose the service to the internet.</li><li>Enable the connections you need, set their order, then enable recovery and save. Saving does not contact the services.</li></ol>
-      <p class="action-hint">Use only services you trust and sandbox their browser&#39;s network access. They receive the public site&#39;s home address, not your password, sign-in cookies or topic link. TOW keeps only a verified clearance cookie, encrypted and time-limited. Captchas and download limits still require your action.</p>
+      <p class="action-hint">Use only services you trust and sandbox their browser&#39;s network access. They receive the public site&#39;s home address, not your password, sign-in cookies or topic link. TOW keeps only verified clearance, encrypted and time-limited. Interactive challenges may still require your action; download limits remain enforced.</p>
     </details>
 
     <form method="post" action="/settings/protection" class="settings-form compact-form" data-return-target="acc-protection">
@@ -103,33 +104,23 @@
         <div class="integration-list">
 
           <details class="integration-card protection-card">
-            <summary>Byparr · Add a connection</summary>
-            <input type="hidden" name="provider_id" value="new-byparr-1">
-            <input type="hidden" name="provider_kind" value="byparr">
+            <summary>Add a connection</summary>
+            <input type="hidden" name="provider_id" value="new-connection-1">
 
-            <label class="check-field"><input type="checkbox" name="provider_enabled" value="new-byparr-1"><span>Use this connection</span></label>
+            <div class="field"><label for="protection-kind-new-connection-1">Service type</label><select id="protection-kind-new-connection-1" name="provider_kind"><option value="">Choose a service</option><option value="byparr">Byparr</option><option value="flare_bypasser">FlareBypasser (zendriver)</option><option value="flaresolverr">FlareSolverr</option><option value="trawl">Trawl</option></select></div>
+
+
+
+            <label class="check-field"><input type="checkbox" name="provider_enabled" value="new-connection-1"><span>Use this connection</span></label>
             <div class="field-grid">
-              <div class="field"><label for="protection-url-new-byparr-1">Service address</label><input id="protection-url-new-byparr-1" name="provider_url" value="" placeholder="http://127.0.0.1:8191" maxlength="256" autocomplete="off"></div>
-              <div class="field"><label for="protection-order-new-byparr-1">Order</label><input id="protection-order-new-byparr-1" name="provider_order" value="1" type="number" min="1" max="16" inputmode="numeric"></div>
-            </div>
-
-          </details>
-
-          <details class="integration-card protection-card">
-            <summary>FlareSolverr · Add a connection</summary>
-            <input type="hidden" name="provider_id" value="new-flaresolverr-1">
-            <input type="hidden" name="provider_kind" value="flaresolverr">
-
-            <label class="check-field"><input type="checkbox" name="provider_enabled" value="new-flaresolverr-1"><span>Use this connection</span></label>
-            <div class="field-grid">
-              <div class="field"><label for="protection-url-new-flaresolverr-1">Service address</label><input id="protection-url-new-flaresolverr-1" name="provider_url" value="" placeholder="http://127.0.0.1:8191" maxlength="256" autocomplete="off"></div>
-              <div class="field"><label for="protection-order-new-flaresolverr-1">Order</label><input id="protection-order-new-flaresolverr-1" name="provider_order" value="2" type="number" min="1" max="16" inputmode="numeric"></div>
+              <div class="field"><label for="protection-url-new-connection-1">Service address</label><input id="protection-url-new-connection-1" name="provider_url" value="" placeholder="http://127.0.0.1:8191" maxlength="256" autocomplete="off"></div>
+              <div class="field"><label for="protection-order-new-connection-1">Order</label><input id="protection-order-new-connection-1" name="provider_order" value="1" type="number" min="1" max="16" inputmode="numeric"></div>
             </div>
 
           </details>
 
         </div>
-        <p class="action-hint">Lower numbers are tried first. A disabled, unavailable or failed connection does not block the next one. Blank disabled connections are not saved.</p>
+        <p class="action-hint">Lower numbers are tried first. If the attempt limit is reached without verified access, the next check continues with later connections. Unavailable connections are skipped. Blank disabled connections are not saved.</p>
         <details class="technical-details">
           <summary>Attempt limits</summary>
           <div class="field-grid">
@@ -144,8 +135,8 @@
 
     <details class="technical-details">
       <summary>Recovery</summary>
-      <p class="action-hint">If saved clearance becomes unreadable or unusable, reset its cookies and retry reservations. Service settings stay unchanged. The old encrypted record is retained in TOW&#39;s temporary folder until its normal cleanup; a running check blocks reset.</p>
-      <form method="post" action="/settings/protection/reset" data-return-target="acc-protection" data-confirm="Reset only saved site clearance and retry reservations? Service settings and site sign-ins remain unchanged.">
+      <p class="action-hint">If saved clearance becomes unreadable or unusable, reset its cookies, retry reservations and service cooldowns. Service settings stay unchanged. The old encrypted record is retained in TOW&#39;s temporary folder until its normal cleanup; a running check blocks reset.</p>
+      <form method="post" action="/settings/protection/reset" data-return-target="acc-protection" data-confirm="Reset saved site clearance, retry reservations and service cooldowns? Service settings and site sign-ins remain unchanged.">
         <button type="submit" class="ghost">Reset saved access</button>
       </form>
     </details>

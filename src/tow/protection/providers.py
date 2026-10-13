@@ -8,6 +8,8 @@ import math
 import re
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from types import ModuleType
 from typing import Any
 from urllib.parse import urlsplit
@@ -16,7 +18,7 @@ import httpcore
 import httpx
 
 from tow.plugins import scan
-from tow.protection.spec import Clearance, ProviderSpec, service_url, target_origin
+from tow.protection.spec import Clearance, ProviderSpec, ProviderUnavailableError, service_url, target_origin
 from tow.protection.transport import DeadlineBackend
 from tow.storage.jsonio import decode_json_bytes
 
@@ -67,7 +69,7 @@ def validate_clearance(value: Clearance, origin: str, *, now: float) -> Clearanc
     target_origin(origin)
     if set(value.cookies) != {"cf_clearance"}:
         raise ValueError("invalid clearance cookie names")
-    token = _text(value.cookies["cf_clearance"], 8192)
+    token = _text(value.cookies["cf_clearance"], 4096)
     if any(c in token for c in ';,"\\ '):
         raise ValueError("invalid clearance cookie value")
     ua = _text(value.user_agent, 1024)
@@ -76,7 +78,9 @@ def validate_clearance(value: Clearance, origin: str, *, now: float) -> Clearanc
     if not math.isfinite(value.expires_at) or not now < value.expires_at <= now + 86400:
         raise ValueError("invalid clearance expiry")
     provider = _text(value.provider, 48)
-    return Clearance({"cf_clearance": token}, ua, float(value.expires_at), provider)
+    if value.attempt_id is not None and not re.fullmatch(r"[0-9a-f]{32}", value.attempt_id):
+        raise ValueError("invalid clearance attempt")
+    return Clearance({"cf_clearance": token}, ua, float(value.expires_at), provider, value.attempt_id)
 
 
 def _solution(raw: object, origin: str, ident: str) -> Clearance:
@@ -114,20 +118,50 @@ def _solution(raw: object, origin: str, ident: str) -> Clearance:
     expiry = min(expiry, now + 86400)
     return validate_clearance(
         Clearance(
-            {"cf_clearance": _text(cookie.get("value"), 8192)}, _text(solution.get("userAgent"), 1024), expiry, ident
+            {"cf_clearance": _text(cookie.get("value"), 4096)}, _text(solution.get("userAgent"), 1024), expiry, ident
         ),
         origin,
         now=now,
     )
 
 
+def _retry_after(value: str | None) -> float:
+    """A finite service retry interval, never a reason to slow unrelated tracker HTTP."""
+    if not value:
+        return 0
+    try:
+        seconds = float(value)
+    except ValueError:
+        try:
+            when = parsedate_to_datetime(value)
+            when = when.replace(tzinfo=UTC) if when.tzinfo is None else when
+            seconds = (when - datetime.now(UTC)).total_seconds()
+        except ValueError, TypeError, OverflowError:
+            return 0
+    return min(86400.0, max(0.0, seconds)) if math.isfinite(seconds) else 0
+
+
+def _service_status(response: httpx.Response) -> None:
+    if response.status_code in {429, 503}:
+        raise ProviderUnavailableError("busy", retry_after=_retry_after(response.headers.get("retry-after")))
+    if response.status_code in {400, 401, 403, 404, 405, 422, 501}:
+        raise ProviderUnavailableError("protocol")
+    if response.status_code != 200:
+        raise ValueError("clearance service HTTP failure")  # an individual challenge can fail with HTTP 500
+
+
 def cookie_api(
-    provider: dict[str, Any], origin: str, timeout: float, *, media_field: str = "disableMedia"
+    provider: dict[str, Any],
+    origin: str,
+    timeout: float,
+    *,
+    media_field: str | None = "disableMedia",
+    command: str = "request.get",
 ) -> Clearance:
-    """FlareSolverr-compatible request.get, without login cookies, sessions or proxies."""
+    """Bounded cookie-only commands, without login cookies, sessions or proxies."""
     origin = target_origin(origin)
     endpoint = service_url(provider["url"])
-    if media_field not in {"disableMedia", "blockMedia"}:
+    if media_field not in {None, "disableMedia", "blockMedia"} or command not in {"request.get", "request.get_cookies"}:
         raise ValueError("invalid clearance media option")
     if timeout < 1:
         raise ValueError("clearance time budget exhausted")
@@ -136,12 +170,13 @@ def cookie_api(
     # Keep at least 1000 ms: Byparr interprets smaller maxTimeout values as seconds.
     browser_ms = int((timeout - 1 if timeout >= 2 else timeout) * 1000)
     payload = {
-        "cmd": "request.get",
+        "cmd": command,
         "url": origin + "/",
         "maxTimeout": browser_ms,
         "returnOnlyCookies": True,
-        media_field: True,
     }
+    if media_field is not None:
+        payload[media_field] = True
     # Every socket phase shares a hard deadline; numeric service addresses do not need DNS.
     with (
         httpx.Client(
@@ -149,8 +184,7 @@ def cookie_api(
         ) as client,
         client.stream("POST", endpoint, json=payload, headers={"Accept": "application/json"}) as response,
     ):
-        if response.status_code != 200:
-            raise ValueError("clearance service HTTP failure")
+        _service_status(response)
         if response.headers.get("content-encoding", "identity").strip().lower() not in {"", "identity"}:
             raise ValueError("compressed clearance response refused")
         length = response.headers.get("content-length")
@@ -166,7 +200,7 @@ def cookie_api(
     return _solution(decode_json_bytes(bytes(raw)), origin, provider["id"])
 
 
-# Both services explicitly implement this protocol; replacing a provider adds one adapter,
+# Services explicitly implement their protocol; replacing a provider adds one adapter,
 # not another branch in the orchestration chain.
 def registry() -> dict[str, ProviderSpec]:
     """Discover independently importable adapters; a broken module is skipped."""
