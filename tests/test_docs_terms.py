@@ -8,13 +8,15 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-ENGLISH = [ROOT / "README.md", ROOT / "docs" / "guide.md", ROOT / "docs" / "install.md"]
+ENGLISH = [ROOT / "README.md", ROOT / "docs" / "guide.md", ROOT / "docs" / "install.md", ROOT / "config.example.yaml"]
 RUSSIAN = [ROOT / "README.ru.md", ROOT / "docs" / "ru" / "guide.md", ROOT / "docs" / "ru" / "install.md"]
 
 # Word -> the term the table gives for it.
 _ENGLISH_WRONG = {
     r"`\.towx` files?": "TOW file (`.towx`)",
     r"\blog(?:ged)? in\b": "sign in",
+    r"\bnight(?:ly)?[ -]cop(?:y|ies)\b": "nightly backup",
+    r"\brevisions?\b": "version",
 }
 _RUSSIAN_WRONG = {
     r"файл(?:ы|ов|ам)? `\.towx`": "файл TOW (`.towx`)",
@@ -24,6 +26,7 @@ _RUSSIAN_WRONG = {
     r"\bхэш": "хеш",
     r"\bкэш": "кеш",
     r"процесс обновления": "программа обновления",
+    r"\bмагнет": "magnet-ссылка",
 }
 
 

@@ -44,7 +44,7 @@
 
 | | |
 |---|---|
-| **Сайты** | rutor, Kinozal, NNM-Club, RuTracker, Tapochek, UnionPeer, fast-torrent; другие — вручную |
+| **Сайты** | Rutor, Kinozal, NNM-Club, RuTracker, Tapochek, UnionPeer, Fast-Torrent; другие — вручную |
 | **Торрент-клиенты** | qBittorrent (веб-интерфейс), Transmission 3.0+, Deluge 2.x |
 | **Уведомления** | Telegram, Discord, WhatsApp (CallMeBot), ntfy |
 | **Системы** | Windows 10/11 (x64), Linux, macOS (Apple Silicon) — все три проверяются в CI |

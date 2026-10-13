@@ -58,6 +58,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   output does.
 - The rare answer while TOW cannot yet roll back an interrupted change of a site says so and asks to try again later,
   instead of "TOW site transaction recovery unavailable".
+- The user guide quotes all three messages of a busy port (another program, another TOW, a web server of this TOW that
+  `tow run` did not start) and what to do for each, instead of one row that said "often a second TOW"; the README and
+  the guides name the sites Rutor and Fast-Torrent as Sites does; `config.example.yaml` says nightly backup and
+  version, as the interface does. The Russian guide quotes the disk-space message as TOW writes it («TOW запустит
+  торрент сам») and its wording is corrected in a dozen places (magnet-ссылка, «Подождите», a check missed while the
+  computer slept or was off).
 
 ## [1.28.4] — 2026-10-12
 
