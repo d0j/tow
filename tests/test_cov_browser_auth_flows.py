@@ -600,6 +600,95 @@ def test_a_refused_cdp_command_is_a_plain_error(monkeypatch):
         asyncio.run(ba._wait_for_authenticated_topic(port=9222, topic_url=TOPIC, timeout_sec=30, process=FakeProcess()))
 
 
+@pytest.mark.parametrize("method", ["Network.enable", "Runtime.evaluate", "Network.getAllCookies"])
+def test_cdp_event_flood_cannot_extend_command_or_session_deadline(monkeypatch, method):
+    clock = [0.0]
+
+    class EventFlood(FakeCdp):
+        blocked = False
+        events = 0
+
+        async def send(self, raw):
+            self.blocked = json.loads(raw)["method"] == method
+            await super().send(raw)
+
+        async def recv(self):
+            if not self.blocked:
+                return await super().recv()
+            self.events += 1
+            assert self.events <= 35, "event messages reset the deadline indefinitely"
+            clock[0] += 1
+            return json.dumps({"method": "Network.dataReceived", "params": {}})
+
+    fake = EventFlood([_signed_in()])
+    _cdp(monkeypatch, fake)
+    monkeypatch.setattr(ba, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    with pytest.raises(ba.BrowserAuthError, match=t("browser_auth.not_confirmed")):
+        asyncio.run(ba._wait_for_authenticated_topic(port=9222, topic_url=TOPIC, timeout_sec=30, process=FakeProcess()))
+    assert fake.events > 0
+    assert clock[0] <= 30
+
+
+def test_setup_time_is_part_of_browser_sign_in_deadline(monkeypatch):
+    clock = [0.0]
+    fake = FakeCdp([_signed_in()])
+    opened = _cdp(monkeypatch, fake)
+
+    async def slow_target(*args):
+        clock[0] = 30
+        return PAGE_TARGET["webSocketDebuggerUrl"]
+
+    monkeypatch.setattr(ba, "_wait_target", slow_target)
+    monkeypatch.setattr(ba, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    with pytest.raises(ba.BrowserAuthError, match=t("browser_auth.not_confirmed")):
+        asyncio.run(ba._wait_for_authenticated_topic(port=9222, topic_url=TOPIC, timeout_sec=30, process=FakeProcess()))
+    assert opened == []
+
+
+def test_browser_sign_in_cancellation_propagates_and_closes_cdp(monkeypatch):
+    class Cancelled(FakeCdp):
+        closed = False
+
+        async def recv(self):
+            raise asyncio.CancelledError
+
+        async def __aexit__(self, *args):
+            self.closed = True
+            return False
+
+    fake = Cancelled([_signed_in()])
+    _cdp(monkeypatch, fake)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(ba._wait_for_authenticated_topic(port=9222, topic_url=TOPIC, timeout_sec=30, process=FakeProcess()))
+    assert fake.closed is True
+
+
+def test_silent_browser_socket_is_cancelled_by_the_absolute_deadline(monkeypatch):
+    class Silent(FakeCdp):
+        closed = False
+
+        async def recv(self):
+            await asyncio.Event().wait()
+            pytest.fail("the silent fake can only be cancelled")
+
+        async def __aexit__(self, *args):
+            self.closed = True
+            return False
+
+    fake = Silent([_signed_in()])
+    _cdp(monkeypatch, fake)
+
+    async def run():
+        await asyncio.wait_for(
+            ba._wait_for_authenticated_topic(port=9222, topic_url=TOPIC, timeout_sec=0.01, process=FakeProcess()),
+            timeout=5,
+        )
+
+    with pytest.raises(ba.BrowserAuthError, match=t("browser_auth.not_confirmed")):
+        asyncio.run(run())
+    assert fake.closed is True
+
+
 def test_a_bad_topic_url_and_a_missing_websockets_library_are_plain_errors(monkeypatch):
     with pytest.raises(ba.BrowserAuthError, match=t("browser_auth.bad_url")):
         asyncio.run(ba._wait_for_authenticated_topic(port=1, topic_url="not a url", timeout_sec=30, process=None))

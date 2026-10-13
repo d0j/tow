@@ -29,6 +29,8 @@ def is_public(value: str) -> bool:
     that IPv4 address. Raises ValueError for text that is not an address."""
     address = ipaddress.ip_address(value.split("%", 1)[0])
     if isinstance(address, ipaddress.IPv6Address):
+        if address.is_site_local:
+            return False  # deprecated fec0::/10 is not public, even when is_global says otherwise
         if address.ipv4_mapped is not None:
             address = address.ipv4_mapped
         elif any(address in network for network in _EMBEDDED_IPV4):

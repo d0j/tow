@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import math
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import replace
 from typing import Any
 from urllib.parse import urlsplit
@@ -21,6 +21,7 @@ from tow.protection.spec import (
     AttemptProof,
     Clearance,
     ProviderUnavailableError,
+    RecoveryBudget,
     public_probe_path,
     target_origin,
     validate_settings,
@@ -88,6 +89,7 @@ def candidates(
     public_only: bool = True,
     budget_sec: float | None = None,
     skip_cached: bool = False,
+    call_budget: RecoveryBudget | None = None,
 ) -> Iterator[Clearance]:
     """Yield credentials only; the caller must validate with its ordinary tracker request.
 
@@ -98,6 +100,10 @@ def candidates(
     try:
         settings = validate_settings(settings)
         if not settings["enabled"]:
+            return
+        if call_budget is None:
+            call_budget = RecoveryBudget(settings["max_attempts"])
+        if call_budget.remaining <= 0:
             return
         budget = _recovery_budget(settings["timeout_sec"], budget_sec)
         if budget is None:
@@ -119,7 +125,7 @@ def candidates(
             return
         available = adapters()
         enabled = [item for item in enabled if item["kind"] in available]
-        enabled = store.eligible_providers(site, origin, settings, enabled, now=time.time())[: settings["max_attempts"]]
+        enabled = store.eligible_providers(site, origin, settings, enabled, now=time.time())[: call_budget.remaining]
         if not enabled:
             return
         if deadline - time.monotonic() - verification_margin < 1:
@@ -127,10 +133,26 @@ def candidates(
         pending = store.prepare_attempt(site, origin, settings, now=time.time())
         if pending is None:
             return
-        attempt = pending.proof
     except Exception:  # noqa: BLE001 - optional recovery fails closed without exposing credentials
         _LOG.debug("clearance recovery unavailable")
         return
+    yield from _run_candidates(
+        pending, site, origin, probe_path, enabled, available, deadline, verification_margin, call_budget
+    )
+
+
+def _run_candidates(
+    pending: store.PendingAttempt,
+    site: str,
+    origin: str,
+    probe_path: str,
+    enabled: list[dict[str, Any]],
+    available: dict[str, Callable[[dict[str, Any], str, float], Clearance]],
+    deadline: float,
+    verification_margin: float,
+    call_budget: RecoveryBudget,
+) -> Iterator[Clearance]:
+    attempt = pending.proof
     last_called = None
     try:
         for index, provider in enumerate(enabled):
@@ -141,7 +163,9 @@ def candidates(
                 available_time = deadline - time.monotonic() - verification_margin
                 if available_time < 1:
                     return
-                slots = min(len(enabled) - index, math.floor(available_time))
+                slots = min(call_budget.remaining, len(enabled) - index, math.floor(available_time))
+                if slots <= 0:
+                    return
                 timeout = available_time / slots
                 provider_deadline = time.monotonic() + timeout
                 if not store.note_attempt(attempt, provider["id"]):
@@ -154,6 +178,8 @@ def candidates(
                 if timeout < 1:
                     record_event("protection_failed", site, provider["id"], "failed")
                     continue
+                if not call_budget.consume():
+                    return
                 last_called = provider["id"]  # a crash or ambiguous response retains the cooldown
                 clearance = solve({**provider, "_probe_path": probe_path}, origin, timeout)
                 if time.monotonic() >= deadline:

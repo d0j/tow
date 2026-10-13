@@ -58,7 +58,10 @@ The server-rate deadline is separate from the last observed response: an unrelat
 earlier answer cannot erase or shorten it. Dedicated sign-in origins have independent deadlines.
 
 An encrypted `data/protection.enc` stores verified clearance, matching User-Agent, expiry and durable cooldown leases.
-Defaults: 30 seconds for the recovery chain, at most 2 available providers, 1,800 seconds before another attempt.
+Defaults: 30 seconds for the recovery chain, at most 2 service calls, 1,800 seconds before another attempt.
+The call limit is shared across all mirrors, counting only service calls actually started. Mirrors with the oldest
+recovery attempt run first, so later mirrors remain reachable even when checks are farther apart than the retry
+interval. Missing/paused services and origins for which no call fits do not start a new cooldown.
 The lease is written before calling the service, so a crash does not cause an attempt on every tick. A configuration
 change invalidates the old clearance but does not erase cooldowns. Disabling the layer immediately prevents its use
 in subsequent requests; an already issued request cannot be recalled.
@@ -72,9 +75,27 @@ Encrypted format v2 reads v1 without rewriting it on inspection; a new write upg
 Failures older than 24 hours no longer raise the next day's first error to maximum backoff. The solver's share of
 the chain budget leaves up to 10 seconds (one third for smaller budgets) for independent verification. A transient
 probe transport error or origin outage preserves verified access and does not justify another solve attempt.
+Starting a new reservation retains still-valid verified access for unchanged settings with its own identity;
+the new attempt's identity cannot relabel it. Failed attempts retain provider rotation; a confirmed replacement
+resets that origin's provider order. Tagged legacy credentials are preserved on write, without rewriting a read.
+Older optional-cache readers safely ignore credentials with the new nested identity; passwords and torrent state
+are unchanged. Untagged or expired legacy access is not carried into a new reservation.
 Recovery does not replay a cached credential which the ordinary request already tried. A newly verified probe
 whose real resource is still challenged retains that origin's access but reports the path refusal; solving the
 same successful probe again is not justified. A missing probe preserves the original resource's mirror reasons.
+If the front page or trusted public probe refuses a cached session, only the exact session used for that request
+is discarded. The ordinary front-page check may include account cookies. A path-only challenge with a healthy
+probe, a quota, rate limit or outage does not revoke it. Preview
+never revokes access, and a late old refusal cannot discard a newer session even with identical cookie values.
+An outage or path refusal ends only that origin's attempt; other eligible mirrors can still recover within the
+shared budget. Their original reasons remain until the resource itself supplies a newer answer. A rate limit
+pauses that origin once; a quota or explicit ban ends all further recovery calls in that check. A topic is called
+gone only when every mirror actually tried reports it gone, not when another mirror remains inaccessible.
+Mixed failures keep each mirror's evidence: a ban on one mirror does not assert that all mirrors banned access.
+
+Explicit browser sign-in has one absolute deadline including connection and setup. Each command also has a fixed
+response deadline; unrelated browser events cannot extend either limit. Cancellation closes the dedicated channel;
+its bounded close handshake (up to two seconds) and existing process/profile cleanup may finish after the deadline.
 
 If that store is unreadable, ordinary HTTP remains available and the damaged file is not silently replaced. On the
 TOW computer, Settings → Site access → Recovery → **Reset saved access** explicitly moves the old encrypted bytes

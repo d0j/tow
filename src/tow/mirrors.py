@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Callable, Iterator
+from contextlib import ExitStack
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin, urlparse
 
 import httpcore
@@ -14,6 +15,9 @@ from tow.errors import Msg, TowError
 from tow.protection import Verdict, classify
 from tow.store import load_state, persistence_lock, save_state
 from tow.torrent import is_download_limit
+
+if TYPE_CHECKING:
+    from tow.protection.spec import Clearance
 
 
 def _now() -> float:
@@ -301,7 +305,13 @@ def origin_key(url: str) -> str | None:
 
 
 def cached_request_credentials(
-    tracker: str, host: str, protection: dict[str, Any] | None, ua: str | None, cookies: dict[str, str]
+    tracker: str,
+    host: str,
+    protection: dict[str, Any] | None,
+    ua: str | None,
+    cookies: dict[str, str],
+    *,
+    used: dict[str, Clearance] | None = None,
 ) -> tuple[str | None, dict[str, str]]:
     """Read-only reuse of verified origin-bound clearance; no external request."""
     if not protection or protection.get("enabled") is not True:
@@ -309,6 +319,8 @@ def cached_request_credentials(
     from tow.protection.chain import cached
 
     clearance = cached(tracker, host, protection)
+    if clearance is not None and used is not None:
+        used[host] = clearance  # the exact pre-request identity, not a later cache lookup
     return (clearance.user_agent, {**cookies, **clearance.cookies}) if clearance else (ua, cookies)
 
 
@@ -423,9 +435,18 @@ def response_verdict(
     from types import SimpleNamespace
 
     content = getattr(r, "content", None)
+    bounded = bytes(content[:65536]) if isinstance(content, (bytes, bytearray)) else None
+    if bounded is not None and isinstance(content, (bytes, bytearray)) and len(content) > len(bounded):
+        try:
+            bounded.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            if exc.reason == "unexpected end of data":
+                # A byte cap can split a valid UTF-8 character. Do not let that final
+                # fragment make the shared decoder reinterpret the entire prefix as cp1251.
+                bounded = bounded[: exc.start]
     page = SimpleNamespace(
-        content=bytes(content[:65536]) if isinstance(content, (bytes, bytearray)) else None,
-        text=str(getattr(r, "text", "") or "")[:65536],
+        content=bounded,
+        text="" if isinstance(content, (bytes, bytearray)) else str(getattr(r, "text", "") or "")[:65536],
         headers=r.headers,
     )
     return classify(
@@ -553,7 +574,14 @@ def _may_be_page_only(error: Exception) -> bool:
     return isinstance(error, _SLOW_ANSWER_ERRORS)
 
 
-def _host_answers(host: str, *, cookies: dict[str, str] | None, ua: str | None, public_only: bool) -> bool:
+def _host_answers(
+    host: str,
+    *,
+    cookies: dict[str, str] | None,
+    ua: str | None,
+    public_only: bool,
+    on_challenge: Callable[[], None] | None = None,
+) -> bool:
     """The host's front page answers - any status but a 5xx or 429, no Cloudflare check: a
     failure of another page is then that page's own and does not pause the host. A front page
     that fails too (a site-wide check, a host that hangs) says the host."""
@@ -564,10 +592,19 @@ def _host_answers(host: str, *, cookies: dict[str, str] | None, ua: str | None, 
         return True  # it answered, at length
     except Exception:  # noqa: BLE001 - a front page that does not come is the host's failure
         return False
+    verdict = response_verdict(r)
+    if verdict in {Verdict.CHALLENGE, Verdict.INTERACTIVE} and on_challenge is not None:
+        on_challenge()
     if r.status_code >= 500 or r.status_code == 429:
         return False
-    head = bytes(r.content[:8192]).decode("latin-1")
-    return not thttp.is_cloudflare(r.status_code, head, r.headers)
+    return verdict not in {
+        Verdict.CHALLENGE,
+        Verdict.INTERACTIVE,
+        Verdict.BLOCKED,
+        Verdict.RATE_LIMITED,
+        Verdict.ORIGIN_DOWN,
+        Verdict.MAINTENANCE,
+    }
 
 
 def _counts_against_host(
@@ -579,6 +616,7 @@ def _counts_against_host(
     ua: str | None,
     public_only: bool,
     persist: bool,
+    revoke_access: Callable[[], None] | None = None,
 ) -> bool:
     """Whether a failure counts towards the host's cooldown. A failure that may be one page's
     own counts only when the host's front page fails too; a preview (``persist=False``) keeps
@@ -587,7 +625,29 @@ def _counts_against_host(
         return False
     if not _may_be_page_only(error) or path.split("?", 1)[0] in {"", "/"}:
         return True
-    return persist and not _host_answers(host, cookies=cookies, ua=ua, public_only=public_only)
+    return persist and not _host_answers(
+        host, cookies=cookies, ua=ua, public_only=public_only, on_challenge=revoke_access
+    )
+
+
+def _access_revoker(tracker: str, host: str, access: Clearance | None, persist: bool) -> Callable[[], None] | None:
+    if not persist or access is None:
+        return None
+    from tow.protection import chain
+
+    return lambda: chain.discard(tracker, host, expected=access)
+
+
+def _invalidate_probe_access(tracker: str, path: str, failure: str, revoke: Callable[[], None] | None) -> None:
+    if revoke is None or failure not in {"cloudflare", "interactive"}:
+        return
+    from tow.protection.spec import public_probe_path
+
+    try:
+        if "/" + path.lstrip("/") in {"/", public_probe_path(tracker)}:
+            revoke()
+    except ValueError:
+        pass  # a broken optional probe declaration cannot change the resource's failure
 
 
 def pick_and_get(
@@ -619,8 +679,8 @@ def pick_and_get(
     if b.get("frozen"):
         raise MirrorFetchError("mirrors.frozen", failure="frozen", tracker=tracker)
     last_err = None
-    auth_err = None
     failures: list[Exception] = []
+    failure_indices: dict[str, int] = {}
     host_failures: list[bool] = []
     mirror_reasons: list[Msg] = []
     challenged: list[str] = []
@@ -634,7 +694,11 @@ def pick_and_get(
             continue
         url = host + (path if path.startswith("/") else "/" + path)
         host_cookies = _cookies_for_host(cookies, host, hosts)
-        host_ua, host_cookies = cached_request_credentials(tracker, host, protection, ua, host_cookies)
+        used_access: dict[str, Clearance] = {}
+        host_ua, host_cookies = cached_request_credentials(
+            tracker, host, protection, ua, host_cookies, used=used_access
+        )
+        revoke_access = _access_revoker(tracker, host, used_access.get(host), persist)
         try:
             with thttp.client(
                 ua=host_ua, cookies=host_cookies or None, follow_redirects=False, public_only=public_only
@@ -653,14 +717,14 @@ def pick_and_get(
             return r, host
         except Exception as e:  # noqa: BLE001 - any failure of a host is classified (_failure_code) and the next host tried
             last_err = e
+            failure_indices[host] = len(failures)
             failures.append(e)
             code = _failure_code(e)
             if code == "cloudflare":
                 challenged.append(host)
+            _invalidate_probe_access(tracker, path, code, revoke_access)
             mirror_reasons.append(Msg("mirrors.mirror_reason", host=urlparse(host).netloc, error=_failure_text(e)))
             _observe(b, host, code, getattr(e, "params", {}).get("status"))
-            if code == "auth":
-                auth_err = e
             if code == "quota":
                 host_failures.append(False)
                 if persist:
@@ -671,7 +735,14 @@ def pick_and_get(
             # front page answers), or TOW failing on a good answer, must not pause the whole
             # tracker for every other topic.
             host_failed = _counts_against_host(
-                e, host, path, cookies=host_cookies, ua=host_ua, public_only=public_only, persist=persist
+                e,
+                host,
+                path,
+                cookies=host_cookies,
+                ua=host_ua,
+                public_only=public_only,
+                persist=persist,
+                revoke_access=revoke_access,
             )
             host_failures.append(host_failed)
             if host_failed:
@@ -684,6 +755,7 @@ def pick_and_get(
             if persist:
                 _save_bucket(tracker, b, host)
     if persist and challenged and not (isinstance(last_err, MirrorFetchError) and last_err.failure == "quota"):
+        resource_failures: dict[str, Exception] = {}
         recovered = _recover_challenges(
             tracker,
             challenged,
@@ -699,16 +771,14 @@ def pick_and_get(
             public_only=public_only,
             download_limit=download_limit,
             maintenance_markers=maintenance_markers,
+            resource_failures=resource_failures,
         )
         if recovered is not None:
             return recovered
+        _merge_recovery_failures(failure_indices, failures, host_failures, mirror_reasons, resource_failures)
     if last_err is None:
         raise MirrorFetchError("mirrors.all_paused", failure="paused", tracker=tracker)
-    selected_err = (
-        last_err
-        if isinstance(last_err, MirrorFetchError) and last_err.failure == "quota"
-        else auth_err or _deciding_failure(failures)
-    )
+    selected_err = _preferred_failure(failures)
     failure = _failure_code(selected_err)
     if failure == "local":
         # A mirror answered and TOW failed on the answer: red, never "no mirror answered".
@@ -765,6 +835,7 @@ def _recover_challenges(
     public_only: bool,
     download_limit: bool,
     maintenance_markers: list[str] | None,
+    resource_failures: dict[str, Exception],
 ) -> tuple[httpx.Response, str] | None:
     """Only after ordinary mirrors fail; never send a login or download to a provider.
 
@@ -773,105 +844,185 @@ def _recover_challenges(
     """
     if not protection or protection.get("enabled") is not True:
         return None
-    from tow.protection import chain
-    from tow.protection.spec import public_probe_path
+    from tow.protection import chain, store
+    from tow.protection.spec import RecoveryBudget, public_probe_path
 
     try:
         probe_path = public_probe_path(tracker)
-    except ValueError:
-        return None  # a broken optional preset cannot disable ordinary mirrors
+        challenged = store.recovery_origins(tracker, challenged)
+    except Exception:  # noqa: BLE001 - unreadable optional storage/preset preserves ordinary mirror failures
+        return None
 
     deadline = time.monotonic() + float(protection.get("timeout_sec", 30))
     if not _recovery_supported(public_only, deadline):
         return None
+    call_budget = RecoveryBudget(int(protection.get("max_attempts", 2)))
     for host in challenged:
-        if time.monotonic() >= deadline:
+        if time.monotonic() >= deadline or call_budget.remaining <= 0:
             break
-        for clearance in chain.candidates(
-            tracker, host, protection, public_only=public_only, budget_sec=deadline - time.monotonic(), skip_cached=True
-        ):
-            verified_access = False
-            try:
-                with thttp.client(
-                    ua=clearance.user_agent, cookies=clearance.cookies, follow_redirects=False, public_only=public_only
-                ) as probe:
-                    verified = _deadline_get(
-                        probe, host + probe_path, max_bytes=thttp.MAX_HTML_RESPONSE_BYTES, deadline=deadline
-                    )
-                    verified = _follow_redirects(
-                        probe,
-                        verified,
-                        ua=clearance.user_agent,
-                        max_bytes=thttp.MAX_HTML_RESPONSE_BYTES,
-                        allowed_redirects=set(),
-                        public_only=public_only,
-                        deadline=deadline,
-                        probe_path=probe_path,
-                    )
-                _verify_clearance(verified, host, maintenance_markers)
-                chain.accept(tracker, host, protection, clearance)
-                verified_access = True
-                if time.monotonic() >= deadline:
-                    break
-                merged = {**_cookies_for_host(cookies, host, hosts), **clearance.cookies}
-                with thttp.client(
-                    ua=clearance.user_agent, cookies=merged, follow_redirects=False, public_only=public_only
-                ) as c:
-                    r = _deadline_get(
-                        c, host + (path if path.startswith("/") else "/" + path), max_bytes=max_bytes, deadline=deadline
-                    )
-                    r = _follow_redirects(
-                        c,
-                        r,
-                        ua=clearance.user_agent,
-                        max_bytes=max_bytes,
-                        allowed_redirects=allowed_redirects,
-                        public_only=public_only,
-                        deadline=deadline,
-                    )
-                _raise_for_status(r)
-                if ok is None or not ok(r):
-                    _refuse_page(
-                        r, wanted=ok is not None, download_limit=download_limit, maintenance_markers=maintenance_markers
-                    )
-                _observe(bucket, host, "ok", r.status_code)
-                _mark_host_ok(tracker, bucket, host, persist=True)
-                chain.record_event("protection_restored", tracker, clearance.provider, "succeeded")
-                return r, host
-            except MirrorFetchError as exc:
-                if exc.failure == "rate_limited":
-                    bucket["fail"][host] = int(bucket["fail"].get(host) or 0) + 1
-                    _observe(bucket, host, exc.failure, exc.params.get("status"))
-                    _pause_rate_limited(bucket, host, float(exc.params.get("retry_after") or 0))
-                    _save_bucket(tracker, bucket, host)
-                if verified_access and exc.failure in {"cloudflare", "interactive"}:
-                    # A path-specific refusal does not revoke independently verified access
-                    # elsewhere. Solving that same public probe again supplies no new evidence.
-                    _observe(bucket, host, exc.failure, exc.params.get("status"))
-                    _save_bucket(tracker, bucket, host)
-                    chain.record_event("protection_replay_refused", tracker, clearance.provider, "failed")
-                    raise
-                if not verified_access and exc.failure not in {"cloudflare", "interactive", "redirect_policy"}:
-                    chain.record_event("protection_replay_refused", tracker, clearance.provider, "failed")
-                    return None  # preserve the real resource's mirror reasons, not a probe-page failure
-                if exc.failure not in {"cloudflare", "interactive"} and (
-                    verified_access or exc.failure != "redirect_policy"
-                ):
-                    _observe(bucket, host, exc.failure, exc.params.get("status"))
-                    _save_bucket(tracker, bucket, host)
-                    if verified_access and _says_gone(exc):
-                        raise MirrorFetchError(exc.code, failure=exc.failure, cls="gone", **exc.params) from exc
-                    raise  # preserve the site's real answer and its independently verified credential
-                chain.discard(tracker, host, expected=clearance)
-                chain.record_event("protection_replay_refused", tracker, clearance.provider, "failed")
-            except Exception as exc:
-                if not verified_access:
-                    chain.record_event("protection_replay_refused", tracker, clearance.provider, "failed")
-                    return None  # an optional probe's outage/limit is not the resource's error
-                _observe(bucket, host, "transport")
-                _save_bucket(tracker, bucket, host)
-                raise MirrorFetchError("mirrors.transport", failure="transport", error=type(exc).__name__) from exc
+        if _host_paused(bucket, host, ignore_cool=True):
+            continue  # recovery cannot override a server's rate deadline
+        candidates = chain.candidates(
+            tracker,
+            host,
+            protection,
+            public_only=public_only,
+            budget_sec=deadline - time.monotonic(),
+            skip_cached=True,
+            call_budget=call_budget,
+        )
+        try:
+            with ExitStack() as cleanup:
+                if callable(close := getattr(candidates, "close", None)):
+                    cleanup.callback(close)
+                result = _recover_origin(
+                    candidates,
+                    tracker,
+                    host,
+                    hosts,
+                    path,
+                    bucket,
+                    protection=protection,
+                    cookies=cookies,
+                    ok=ok,
+                    max_bytes=max_bytes,
+                    allowed_redirects=allowed_redirects,
+                    public_only=public_only,
+                    download_limit=download_limit,
+                    maintenance_markers=maintenance_markers,
+                    probe_path=probe_path,
+                    deadline=deadline,
+                    resource_failures=resource_failures,
+                )
+        except _RecoveryStopped:
+            return None
+        if result is not None:
+            return result
     return None
+
+
+def _recover_origin(
+    candidates: Iterator[Clearance],
+    tracker: str,
+    host: str,
+    hosts: list[str],
+    path: str,
+    bucket: dict[str, Any],
+    *,
+    protection: dict[str, Any],
+    cookies: dict[str, Any] | None,
+    ok: Callable[[Any], bool] | None,
+    max_bytes: int,
+    allowed_redirects: set[str],
+    public_only: bool,
+    download_limit: bool,
+    maintenance_markers: list[str] | None,
+    probe_path: str,
+    deadline: float,
+    resource_failures: dict[str, Exception],
+) -> tuple[httpx.Response, str] | None:
+    from tow.protection import chain
+
+    for clearance in candidates:
+        verified_access = False
+        try:
+            with thttp.client(
+                ua=clearance.user_agent, cookies=clearance.cookies, follow_redirects=False, public_only=public_only
+            ) as probe:
+                verified = _deadline_get(
+                    probe, host + probe_path, max_bytes=thttp.MAX_HTML_RESPONSE_BYTES, deadline=deadline
+                )
+                verified = _follow_redirects(
+                    probe,
+                    verified,
+                    ua=clearance.user_agent,
+                    max_bytes=thttp.MAX_HTML_RESPONSE_BYTES,
+                    allowed_redirects=set(),
+                    public_only=public_only,
+                    deadline=deadline,
+                    probe_path=probe_path,
+                )
+            _verify_clearance(verified, host, maintenance_markers)
+            chain.accept(tracker, host, protection, clearance)
+            verified_access = True
+            if time.monotonic() >= deadline:
+                break
+            merged = {**_cookies_for_host(cookies, host, hosts), **clearance.cookies}
+            with thttp.client(
+                ua=clearance.user_agent, cookies=merged, follow_redirects=False, public_only=public_only
+            ) as c:
+                r = _deadline_get(
+                    c, host + (path if path.startswith("/") else "/" + path), max_bytes=max_bytes, deadline=deadline
+                )
+                r = _follow_redirects(
+                    c,
+                    r,
+                    ua=clearance.user_agent,
+                    max_bytes=max_bytes,
+                    allowed_redirects=allowed_redirects,
+                    public_only=public_only,
+                    deadline=deadline,
+                )
+            _raise_for_status(r)
+            if ok is None or not ok(r):
+                _refuse_page(
+                    r, wanted=ok is not None, download_limit=download_limit, maintenance_markers=maintenance_markers
+                )
+            _observe(bucket, host, "ok", r.status_code)
+            _mark_host_ok(tracker, bucket, host, persist=True)
+            chain.record_event("protection_restored", tracker, clearance.provider, "succeeded")
+            return r, host
+        except MirrorFetchError as exc:
+            if exc.failure == "rate_limited":
+                bucket["fail"][host] = int(bucket["fail"].get(host) or 0) + 1
+                _observe(bucket, host, exc.failure, exc.params.get("status"))
+                _pause_rate_limited(bucket, host, float(exc.params.get("retry_after") or 0))
+                _save_bucket(tracker, bucket, host)
+            chain.record_event("protection_replay_refused", tracker, clearance.provider, "failed")
+            if verified_access:
+                resource_failures[host] = exc
+                _observe(bucket, host, exc.failure, exc.params.get("status"))
+                _save_bucket(tracker, bucket, host)
+            if exc.failure in {"quota", "blocked"}:
+                # A probe ban/quota ends recovery too; do not manufacture resource evidence.
+                raise _RecoveryStopped from exc
+            if verified_access or exc.failure not in {"cloudflare", "interactive", "redirect_policy"}:
+                break  # stop this origin, not recovery of the next allowed mirror
+            chain.discard(tracker, host, expected=clearance)
+        except Exception as exc:  # noqa: BLE001 - optional probe/resource outage ends only this origin
+            chain.record_event("protection_replay_refused", tracker, clearance.provider, "failed")
+            if verified_access:
+                resource_failures[host] = exc
+                _observe(bucket, host, _failure_code(exc))
+                _save_bucket(tracker, bucket, host)
+            break
+    return None
+
+
+class _RecoveryStopped(Exception):
+    """No more service calls after a site's explicit ban or quota."""
+
+
+def _merge_recovery_failures(
+    indices: dict[str, int],
+    failures: list[Exception],
+    host_failures: list[bool],
+    reasons: list[Msg],
+    replacements: dict[str, Exception],
+) -> None:
+    for host, error in replacements.items():
+        index = indices[host]
+        failures[index] = error
+        host_failures[index] = False  # the origin's anonymous page independently answered
+        reasons[index] = Msg("mirrors.mirror_reason", host=urlparse(host).netloc, error=_failure_text(error))
+
+
+def _preferred_failure(failures: list[Exception]) -> Exception:
+    for failure_kind in ("quota", "auth"):
+        for error in reversed(failures):
+            if _failure_code(error) == failure_kind:
+                return error
+    return _deciding_failure(failures)
 
 
 def _reason_set(reasons: list[Msg]) -> Msg | str:

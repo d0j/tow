@@ -315,7 +315,7 @@ def _json_get(port: int, path: str) -> Any:
 async def _wait_target(
     port: int,
     process: subprocess.Popen[bytes],
-    timeout_sec: int,
+    timeout_sec: float,
     allowed_origins: set[str],
 ) -> str:
     deadline = time.monotonic() + min(30, timeout_sec)
@@ -347,6 +347,27 @@ async def _wait_for_authenticated_topic(
     timeout_sec: int,
     process: subprocess.Popen[bytes],
 ) -> tuple[dict[str, str], str]:
+    deadline = time.monotonic() + timeout_sec
+    try:
+        async with asyncio.timeout(timeout_sec):
+            return await _authenticated_topic(port, topic_url, process, deadline)
+    except TimeoutError as exc:
+        raise BrowserAuthError(t("browser_auth.not_confirmed")) from exc
+
+
+def _remaining(deadline: float) -> float:
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise TimeoutError("browser sign-in deadline exhausted")
+    return left
+
+
+async def _authenticated_topic(
+    port: int,
+    topic_url: str,
+    process: subprocess.Popen[bytes],
+    deadline: float,
+) -> tuple[dict[str, str], str]:
     try:
         from websockets.asyncio.client import connect
     except ImportError as exc:
@@ -357,19 +378,29 @@ async def _wait_for_authenticated_topic(
     expected_host = (parsed_topic.hostname or "").lower()
     if not expected_origin or not expected_host:
         raise BrowserAuthError(t("browser_auth.bad_url"))
-    ws_url = await _wait_target(port, process, timeout_sec, {expected_origin})
-    async with connect(ws_url, open_timeout=5, close_timeout=5, max_size=4 * 1024 * 1024) as socket_ws:
+    ws_url = await _wait_target(port, process, min(30, _remaining(deadline)), {expected_origin})
+    async with connect(
+        ws_url, open_timeout=min(5, _remaining(deadline)), close_timeout=2, max_size=4 * 1024 * 1024
+    ) as socket_ws:
         request_id = 0
 
         async def call(method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
             nonlocal request_id
             request_id += 1
             ident = request_id
-            await socket_ws.send(json.dumps({"id": ident, "method": method, "params": params or {}}))
+            command_deadline = min(deadline, time.monotonic() + 10)
+            timeout = _remaining(command_deadline)
+            await asyncio.wait_for(
+                socket_ws.send(json.dumps({"id": ident, "method": method, "params": params or {}})),
+                timeout=timeout,
+            )
             while True:
-                raw = await asyncio.wait_for(socket_ws.recv(), timeout=10)
+                if process.poll() is not None:
+                    raise BrowserAuthError(t("browser_auth.closed_before_confirm"))
+                timeout = _remaining(command_deadline)
+                raw = await asyncio.wait_for(socket_ws.recv(), timeout=timeout)
                 message = json.loads(raw)
-                if message.get("id") != ident:
+                if not isinstance(message, dict) or message.get("id") != ident:
                     continue
                 if "error" in message:
                     raise BrowserAuthError(t("browser_auth.cdp_refused"))
@@ -379,7 +410,6 @@ async def _wait_for_authenticated_topic(
         await call("Page.bringToFront")
         version = await call("Browser.getVersion")
         user_agent = str(version.get("userAgent") or "")
-        deadline = time.monotonic() + timeout_sec
         transient_errors = 0
         while time.monotonic() < deadline:
             if process.poll() is not None:
@@ -387,12 +417,13 @@ async def _wait_for_authenticated_topic(
             try:
                 result = await _evaluate_page(call)
             except (BrowserAuthError, TimeoutError, ValueError) as exc:
+                _remaining(deadline)  # expiry ends the session, not another transient retry
                 # The login page navigates while the owner signs in: "context destroyed" and
                 # slow replies are normal then. Only a long run of them ends the session (N6).
                 transient_errors += 1
                 if transient_errors >= MAX_TRANSIENT_CDP_ERRORS:
                     raise BrowserAuthError(t("browser_auth.not_responding")) from exc
-                await asyncio.sleep(1)
+                await asyncio.sleep(min(1, _remaining(deadline)))
                 continue
             transient_errors = 0
             value = (result.get("result") or {}).get("value") or {}
@@ -413,7 +444,7 @@ async def _wait_for_authenticated_topic(
                         cookies[name] = value
                 if cookies:
                     return cookies, user_agent
-            await asyncio.sleep(2)
+            await asyncio.sleep(min(2, _remaining(deadline)))
     raise BrowserAuthError(t("browser_auth.not_confirmed"))
 
 

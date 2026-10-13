@@ -5,6 +5,20 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.30.3] — 2026-10-13
+
+### Fixed
+
+- Site-access recovery continues to other eligible mirrors after a probe outage or path-specific refusal, with
+  one service-call budget and oldest-attempt ordering across mirrors. Real resource failures keep their mirror
+  evidence; quota/bans stop recovery, and server rate pauses are applied once.
+- A failed new recovery attempt retains still-valid verified access without relabelling its identity or accepting
+  late results. Provider rotation survives failed attempts; legacy optional-cache reads remain non-mutating.
+- Mirror health uses the shared HTML decoder and protection verdicts. Deprecated site-local IPv6 destinations
+  are refused by public-only site and announce validation, including mixed DNS answers.
+- Explicit browser sign-in has an absolute setup/session deadline and fixed command deadlines: unrelated events
+  cannot keep it waiting forever. Cancellation propagates and the dedicated channel closes.
+
 ## [1.30.2] — 2026-10-13
 
 ### Fixed
