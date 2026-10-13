@@ -9,11 +9,12 @@ from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
+from tow.config import as_bool
 from tow.episodes import parse_season_hint
 from tow.errors import TowError
 from tow.selection import SelectionPendingError, normalize_policy, resolve_selection
 from tow.torrent import MAX_TORRENT_BYTES, TorrentPathConflictError
-from tow.web import services
+from tow.web import _context, services
 
 router = APIRouter()
 _NO_STORE = {"Cache-Control": "no-store"}
@@ -91,7 +92,13 @@ async def content_space(request: Request, path: str = "") -> JSONResponse:
     ``\\\\host\\share`` of another computer, which sends that computer the account's sign-in."""
     if request.headers.get(SPACE_HEADER) != "1":
         return _error_response(TowError("content.unavailable"), 403)
-    return await _answer(lambda: services.folder_free(path))
+
+    def free() -> dict[str, Any]:
+        # A share only when an add may use one (allow_unc_save_paths), as the add itself decides.
+        allow_unc = as_bool(_context.config().get("allow_unc_save_paths"))
+        return services.folder_free(path, allow_unc=allow_unc)
+
+    return await _answer(free)
 
 
 @router.post("/content/resolve")

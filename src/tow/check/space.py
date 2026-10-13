@@ -131,15 +131,19 @@ def _measured(dest: str, wanted: Iterable[tuple[tuple[Path, ...], int, int]]) ->
     return True, Shortfall(needed=needed, free=free, path=str(probe))
 
 
-def folder_free(dest: str) -> dict[str, Any]:
+def folder_free(dest: str, *, allow_unc: bool = False) -> dict[str, Any]:
     """The free space the add and edit forms show for a folder, measured as an add measures it:
     ``free`` in bytes (None when this computer does not see the folder or cannot read it) and
-    the ``margin`` an add keeps. A hint only: the add itself decides (``measure``)."""
-    from tow.folders import seen_from_here
+    the ``margin`` an add keeps. A hint only: the add itself decides (``measure``).
+
+    Only a folder an add would take is looked at (``save_path_problem``): a ``\\\\host\\share``
+    only with ``allow_unc`` (``allow_unc_save_paths``), since opening it signs in to that host
+    with this account; never a device path (``\\\\.\\``, ``\\\\?\\``)."""
+    from tow.folders import save_path_problem, seen_from_here
 
     value = str(dest or "").strip()
     free: int | None = None
-    if value and len(value) <= 4096 and seen_from_here(value):
+    if value and len(value) <= 4096 and save_path_problem(value, allow_unc=allow_unc) is None and seen_from_here(value):
         probe = Path(value)
         while not probe.exists() and probe.parent != probe:
             probe = probe.parent
