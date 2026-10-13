@@ -796,7 +796,7 @@
     "full_path": "a full path is needed, for example D:\\Media",
     "dotdot": "the path must not contain ..",
     "protected_system": "TOW does not save to system folders (/etc, /usr, /System …) or to the folders programs start from — this protects against harmful files",
-    "ambiguous_name": "the folder name «{name}» ends in a dot or a space, or looks like a short 8.3 name (…~1): Windows would read it as another folder — type the full folder name"
+    "ambiguous_name": "the folder name “{name}” ends in a dot or a space, or looks like a short 8.3 name (…~1): Windows would read it as another folder — type the full folder name"
   },
   "guess": {
     "invalid_url": "this is not a link to a topic page",

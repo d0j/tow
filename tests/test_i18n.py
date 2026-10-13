@@ -832,6 +832,18 @@ def test_russian_texts_speak_plain_formal_russian():
     assert found == [], "\n".join(found)
 
 
+def test_each_language_quotes_with_its_own_marks():
+    """English quotes with “…”, Russian with «…»: the other language's marks look like a slip."""
+    foreign = {"en": re.compile("[«»]"), "ru": re.compile("[“”„]")}
+    found = [
+        f"{code} {key}: {value}"
+        for code, marks in foreign.items()
+        for key, value in sorted(i18n._load(code)[0].items())
+        if marks.search(json.dumps(value, ensure_ascii=False))
+    ]
+    assert found == [], "\n".join(found)
+
+
 # Words of the term table (CONTRIBUTING.md) that Russian says one way only.
 _RU_OFF_TERM = {
     r"логин (?:не )?сохранён": "a saved sign-in is «вход», as in every other sign-in message",
@@ -850,6 +862,23 @@ def test_russian_says_one_thing_one_way():
         if re.search(pattern, text, re.IGNORECASE)
     ]
     assert found == [], "\n".join(found)
+
+
+@pytest.mark.parametrize(
+    ("key", "says"),
+    [
+        # It said «откройте тему»: open the topic, where the English asks to open access to it.
+        ("notifier.ntfy.login_required", "откройте доступ к теме"),
+        # «Цифру номера»: a topic number has several digits, as the field above says.
+        ("sites.help.p5", "Цифры номера замените"),
+        # «метка TOW tow заменила бы её» read as two labels.
+        ("client.deluge.adopt_has_label", "метка tow, которую ставит TOW, заменила бы её"),
+        # «Вернуть» is the Undo button; going back to a release is a different action.
+        ("js.releases.previous", "Вернуться к {version}"),
+    ],
+)
+def test_russian_says_what_the_english_says(key, says):
+    assert says in i18n.translate(key, "ru")
 
 
 def test_the_history_says_a_client_event_of_the_torrent():
