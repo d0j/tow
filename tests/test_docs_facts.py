@@ -61,3 +61,18 @@ def test_contributing_names_every_golden_file():
     assert sorted(path.name for path in (ROOT / "tests" / "golden").iterdir()) == sorted(said)
     for name, words in said.items():
         assert words in contributing, name
+
+
+@pytest.mark.parametrize(
+    ("guide", "words"),
+    [
+        ("docs/guide.md", ("**Needs attention**", "folds", "opens again by itself", "puts the focus on the")),
+        ("docs/ru/guide.md", ("**Требует внимания**", "сворачивает", "раскрывается сам", "ставит фокус на")),
+    ],
+)
+def test_the_guides_say_how_the_needs_attention_banner_works(guide, words):
+    """Qa10: the banner is new in this release, and neither guide said it folds, opens again on a
+    new problem, or that its items lead to the fix."""
+    text = " ".join((ROOT / guide).read_text(encoding="utf-8").split())
+    for word in words:
+        assert word in text, word
