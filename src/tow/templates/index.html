@@ -216,7 +216,7 @@
   <span class="row-progress" data-label="{{ t('home.row.progress') }}"><span class="sr-only">{{ t('home.row.progress') }} </span><a class="download-details progress-link{% if ds.is_complete %} complete{% endif %}" href="/topics/{{ topic.id|urlencode }}/downloads.json" data-topic-id="{{ topic.id }}" title="{{ progress_title }}">{{ progress_text }}</a></span>
   {%- endif %}
   <span class="row-ops">
-    <a class="row-ico {{ tracker_tone }}" href="{{ topic.url }}" target="_blank" rel="noopener" title="{{ tracker_label }}" aria-label="{{ t('home.topic.site_aria_named', name=topic.series, label=tracker_label) }}">{{ icon('globe', 'sm') }}</a>
+    {% if topic.url|web_link %}<a class="row-ico {{ tracker_tone }}" href="{{ topic.url|web_link }}" target="_blank" rel="noopener" title="{{ tracker_label }}" aria-label="{{ t('home.topic.site_aria_named', name=topic.series, label=tracker_label) }}">{{ icon('globe', 'sm') }}</a>{% else %}<span class="row-ico {{ tracker_tone }}" title="{{ tracker_label }}">{{ icon('globe', 'sm') }}</span>{% endif %}
     <form method="post" action="/topics/{{ topic.id|urlencode }}/pause"><button class="row-ico{% if topic.paused %} on{% endif %}" type="submit" title="{{ pause_label }}" aria-label="{{ t('home.topic.resume_named' if topic.paused else 'home.topic.pause_named', name=topic.series) }}">{{ icon('play' if topic.paused else 'pause', 'sm') }}</button></form>
     <form method="post" action="/topics/{{ topic.id|urlencode }}/check"><button class="row-ico" type="submit" title="{{ t('home.topic.check_title') }}" aria-label="{{ t('home.topic.check_named', name=topic.series) }}">{{ icon('refresh', 'sm') }}</button></form>
   </span>
