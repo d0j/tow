@@ -16,7 +16,7 @@ from tow.web.site_form import NewSite, SiteEdit
 from tow.web.site_store import with_login
 from tow.web.templating import TEMPLATES, site_tones
 from tow.web.text import t
-from tow.web.views import add_draft, flash_redirect, request_flash, site_title_of
+from tow.web.views import add_draft, flash_redirect, issue_notes, request_flash, site_title_of
 
 router = APIRouter()
 
@@ -72,6 +72,10 @@ def sites(request: Request) -> Response:
             },
             "flash": request_flash(request),
             "add_draft": add_draft(request),
+            # The site a link opens (?open=<name>, "Needs attention"), without a script too, and
+            # what needs the owner there.
+            "open_site": str(request.query_params.get("open") or ""),
+            "notes": issue_notes(state, _context.config(), "sites"),
         },
     )
 

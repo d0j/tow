@@ -219,8 +219,9 @@ Each `Issue` (`issues/model.py`) carries:
 - `severity` — a `tow.status` tone, `"bad"` or `"warn"`; from an error class, `tow.status.error_tone(cls)`;
 - `message` — a catalog key (`issues.<kind>`, in every language file) and its values; a value named `at` is a time
   in epoch seconds. Say what is wrong, or the action the link takes ("Sign in to {site}"), never "open X";
-- `target` — `Target(page, open, filter, anchor, note)`: the page (`home`, `settings`, `history`), what it opens (a
-  Settings section, a Home topic), the page's own filters, and the id of the element that shows the problem in full.
+- `target` — `Target(page, open, filter, anchor, note)`: the page (`home`, `settings`, `history`, `sites`), what it
+  opens (a Settings section, a Home topic, a site), the page's own filters, and the id of the element that shows the
+  problem in full.
   An empty `anchor` lands on the issue's own note on that page (History shows those). `note=True` when that element
   does not say what is wrong by itself (a Settings card): the page puts the issue's text inside it with
   `{{ issue_notes_at(notes, '<anchor>') }}` (`_issue_notes.html`, the page's `notes` from `views.issue_notes`);

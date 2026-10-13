@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{% from "_issue_notes.html" import issue_notes_at %}
 {% block body %}
 <h1 id="page-title" class="sr-only">{{ t('sites.title') }}</h1>
 {#- A refused add comes back with the form open: the draft is the server's own record of it
@@ -85,7 +86,7 @@
   {% for name, spec in trackers.items() %}
     {% set mine = probes | selectattr('tracker', 'equalto', name) | list %}
     <div class="row-wrap{% if frozen.get(name) %} is-paused{% endif %}" id="site-row-{{ name }}" data-q="{{ (name ~ ' ' ~ (spec.title or '') ~ ' ' ~ ((spec.fetch_hosts or []) | join(' '))) | lower }}">
-    <details class="row-edit sites{% if frozen.get(name) %} is-paused{% endif %}">
+    <details class="row-edit sites{% if frozen.get(name) %} is-paused{% endif %}"{% if open_site == name %} open{% endif %}>
       <summary>
         {% set tone = site_tones.get(name, 'mut') %}
         {% if frozen.get(name) %}<span class="trk mut" title="{{ t('sites.paused') }}">{{ spec.title or name }}</span><span class="sr-only">{{ t('sites.paused') }}</span>
@@ -104,7 +105,7 @@
         {% set href = open_hosts.get(name) or '' %}
         <span class="row-ops-slot" aria-hidden="true"></span>
       </summary>
-      <div class="edit-panel">
+      <div class="edit-panel">{{ issue_notes_at(notes, 'site-row-' ~ name) }}
         {% if (spec.fetch_hosts or [])|length > 1 %}
         <div class="mirror-choice" role="group" aria-labelledby="mirror-choice-{{ name }}">
           <p class="sub" id="mirror-choice-{{ name }}">{{ t('sites.choose_main') }}</p>
@@ -127,7 +128,7 @@
           <div class="full-width"><label for="site-login-hosts-{{ name }}">{{ t('sites.login_hosts') }}</label><textarea id="site-login-hosts-{{ name }}" name="login_hosts" rows="2">{{ (spec.login_hosts or []) | join('\n') }}</textarea><p class="field-hint">{{ t('sites.login_hosts_hint') }}</p></div>
           <div><label for="site-download-path-{{ name }}">{{ t('sites.download_path') }}</label><input id="site-download-path-{{ name }}" name="download_path" value="{{ spec.download_path }}"></div>
           <div><label for="site-login-path-{{ name }}">{{ t('sites.login_path') }}</label><input id="site-login-path-{{ name }}" name="login_path" value="{{ spec.login_path or '' }}" placeholder="/forum/login.php"></div>
-          <div><label for="site-user-{{ name }}">{{ t('sites.login') }}</label><input id="site-user-{{ name }}" name="username" value="{{ (logins.get(name) or {}).user }}" autocomplete="username"></div>
+          <div><label for="site-user-{{ name }}">{{ t('sites.login') }}</label><input id="site-user-{{ name }}" name="username" value="{{ (logins.get(name) or {}).user }}" autocomplete="username"{{ fix_attrs('site_login', name) }}></div>
           <div><label for="site-pass-{{ name }}">{{ t('sites.password') }}</label><input id="site-pass-{{ name }}" name="password" type="password" placeholder="{{ t('sites.keep_password') }}" autocomplete="current-password"></div>
           <details class="advanced full-width">
             <summary>{{ t('sites.advanced') }}</summary>

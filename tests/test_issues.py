@@ -155,11 +155,15 @@ def test_sign_ins_are_one_issue_per_site_counted_over_topics_not_paused():
     # Several topics: the site's topics with a problem, the first one open, its sign-in focused.
     assert nnm.target == Target("home", open="a", filter=(("f", "problem"), ("t", "nnmclub")), anchor="row-a")
     assert nnm.fix == Fix("sign_in", "a", label="home.topic.sign_in")
-    # One topic: its own row. A site without a sign-in page offers no sign-in.
-    assert rutor.message == Message("issues.site_needs_login", {"site": "rutor", "count": 1})
-    assert rutor.target == Target("home", open="r1", anchor="row-r1")
-    assert rutor.fix is None
+    # A site without a sign-in page has no sign-in to offer: it asks for one, and its row on
+    # Sites opens at the user name, where a sign-in is added.
+    assert rutor.message == Message("issues.site_login_missing", {"site": "rutor", "count": 1})
+    assert rutor.target == Target("sites", open="rutor", anchor="site-row-rutor", note=True)
+    assert rutor.target_many is None
+    assert rutor.fix == Fix("site_login", "rutor", label="sites.login")
     assert unknown.message == Message("issues.site_needs_login_unknown", {"count": 1})
+    assert unknown.target == Target("home", open="u", anchor="row-u")
+    assert unknown.fix is None  # a site TOW does not know: the open row shows the error
     assert {issue.severity for issue in found} == {"bad"}
 
 

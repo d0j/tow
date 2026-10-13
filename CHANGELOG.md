@@ -64,6 +64,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   computer slept or was off).
 - Home → Needs attention: the Settings card a late check or a lost data folder leads to now says what is wrong (the
   checks have not run since …, the data folder was deleted or replaced), not only its usual contents.
+- Home → Needs attention: a site without a sign-in page whose topics are refused for want of a sign-in is no longer
+  listed as "Sign in to …", which led to a row with nothing to sign in with. It reads "Rutor asks you to sign in
+  (topics: N)" and opens the site's row on Sites with the user name focused, where a sign-in can be added.
 
 ## [1.28.4] — 2026-10-12
 

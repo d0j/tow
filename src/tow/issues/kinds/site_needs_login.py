@@ -1,5 +1,8 @@
 """A site asks for a sign-in: one issue per site, counted over the topics (not paused) whose
-last check it refused."""
+last check it refused.
+
+A site with a sign-in page asks the owner to sign in (Home, the topic's row). A site without one
+has no sign-in to offer: its Sites row opens at the user name, where a sign-in is added."""
 
 from __future__ import annotations
 
@@ -21,7 +24,25 @@ def _title(config: Mapping[str, Any], name: str) -> str:
     return str((site.get("title") if isinstance(site, Mapping) else "") or name)
 
 
+def _no_sign_in(config: Mapping[str, Any], topic_id: str, tracker: GenericHttpTracker) -> Issue:
+    """The site asks for a sign-in TOW has no way to make: its row on Sites, the user name
+    focused (the row itself says "No sign-in needed", so the page shows why it is open)."""
+    name = tracker.name
+    spot = Target("sites", open=name, anchor=f"site-row-{name}", note=True)
+    return Issue(
+        kind=KIND,
+        id=f"{KIND}:{name}",
+        severity=error_tone(CLASS),
+        message=Message("issues.site_login_missing", {"site": _title(config, name), "count": 1}),
+        subjects=(topic_id,),
+        target=spot,
+        fix=Fix("site_login", name, label="sites.login"),
+    )
+
+
 def _issue(config: Mapping[str, Any], topic_id: str, tracker: GenericHttpTracker | None) -> Issue:
+    if tracker is not None and not tracker.spec.get("login_path"):
+        return _no_sign_in(config, topic_id, tracker)
     name = tracker.name if tracker else ""
     message = (
         Message("issues.site_needs_login", {"site": _title(config, name), "count": 1})
@@ -30,7 +51,6 @@ def _issue(config: Mapping[str, Any], topic_id: str, tracker: GenericHttpTracker
     )
     row = f"row-{topic_id}"
     shown = (("f", "problem"), ("t", name)) if name else (("f", "problem"),)
-    sign_in = tracker is not None and bool(tracker.spec.get("login_path"))
     return Issue(
         kind=KIND,
         id=f"{KIND}:{name}",
@@ -41,8 +61,8 @@ def _issue(config: Mapping[str, Any], topic_id: str, tracker: GenericHttpTracker
         # first one open.
         target=Target("home", open=topic_id, anchor=row),
         target_many=Target("home", open=topic_id, filter=shown, anchor=row),
-        # A site without a sign-in page has no sign-in to offer: the open row shows the error.
-        fix=Fix("sign_in", topic_id, label="home.topic.sign_in") if sign_in else None,
+        # A topic of a site TOW does not know: the open row shows the error.
+        fix=Fix("sign_in", topic_id, label="home.topic.sign_in") if tracker is not None else None,
     )
 
 
