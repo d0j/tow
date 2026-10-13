@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 import pytest
-from helpers import bencode, make_torrent
+from helpers import bencode, make_torrent, raises_code
 from qbittorrentapi.torrents import TorrentFilesList, TorrentInfoList
 
 from tow.clients import qbittorrent
@@ -793,6 +793,126 @@ def test_transmission_overlap_distinguishes_stopped_from_checking_and_seeding(tm
     monkeypatch.setattr(server, "_row", lambda torrent: {**row_of(torrent), "status": status, "percentDone": 1.0})
     overlap = live_previous_overlap(_transmission(server), [H], META.files)
     assert bool(overlap) is (status != 0)
+
+
+@pytest.mark.parametrize("checking_status", [1, 2])
+@pytest.mark.parametrize("start", [False, True])
+def test_transmission_initial_verification_is_not_cancelled_before_selection(
+    tmp_path, monkeypatch, checking_status, start
+):
+    server = FakeTransmission()
+    checking = [6]
+    handler = server.handler
+
+    def request(request):
+        message = json.loads(request.content)
+        if (
+            server.torrents
+            and message["method"] == "torrent-get"
+            and "status" in message["arguments"].get("fields", [])
+        ):
+            checking[0] -= 1
+        return handler(request)
+
+    monkeypatch.setattr(server, "handler", request)
+    adapter = _transmission(server)
+    adapter.START_POLLS = 12
+    row = server._row
+    monkeypatch.setattr(
+        server, "_row", lambda torrent: {**row(torrent), "status": checking_status} if checking[0] > 0 else row(torrent)
+    )
+    result = adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01], start=start)
+    assert "torrent-stop" not in server.calls
+    assert checking[0] <= 0
+    assert _wanted(result) == [index == E01 for index in range(3)]
+    assert ("torrent-start" in server.calls) is start
+    assert result["tags"] == ["tow"]
+
+
+def test_transmission_unfinished_initial_verification_stays_pending_without_start(tmp_path, monkeypatch):
+    server = FakeTransmission()
+    adapter = _transmission(server)
+    adapter.START_POLLS = 3
+    row = server._row
+    monkeypatch.setattr(server, "_row", lambda torrent: {**row(torrent), "status": 2})
+    with raises_code("client.transmission.check_in_progress"):
+        adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert "torrent-start" not in server.calls
+    assert "torrent-stop" not in server.calls
+    assert set(server.torrents[K].labels) == {"tow", "tow-pending"}
+    assert not server.torrents[K].running
+
+
+@pytest.mark.parametrize("pending", [False, True])
+def test_transmission_selection_retry_does_not_interrupt_verification(tmp_path, monkeypatch, pending):
+    server = FakeTransmission()
+    adapter = _transmission(server)
+    adapter.START_POLLS = 3
+    labels = ["tow", "tow-pending"] if pending else ["tow"]
+    server.torrents[K] = Torrent(TORRENT, str(tmp_path), labels, paused=True)
+    row = server._row
+    monkeypatch.setattr(server, "_row", lambda torrent: {**row(torrent), "status": 2})
+    with raises_code("client.transmission.check_in_progress"):
+        adapter.configure_torrent_selection(TORRENT, H, [E01], ensure_started=True)
+    assert not set(server.calls) & {"torrent-stop", "torrent-start", "torrent-set"}
+    assert server.torrents[K].labels == labels
+    assert not server.torrents[K].running
+
+
+def test_transmission_verification_poll_reads_only_lightweight_status(tmp_path, monkeypatch):
+    server = FakeTransmission()
+    adapter = _transmission(server)
+    server.torrents[K] = Torrent(TORRENT, str(tmp_path), ["tow", "tow-pending"], paused=True)
+    read = adapter._get
+    fields = []
+
+    def light(infohash, requested):
+        fields.append(requested)
+        return read(infohash, requested)
+
+    monkeypatch.setattr(adapter, "_get", light)
+    adapter._wait_initial_verification({"hash": H, "state": "checkingDL"})
+    assert fields == [["hashString", "status", "error", "labels"]]
+
+
+@pytest.mark.parametrize("error_code", ["client.managed.start_unconfirmed", "client.managed.wrong_folder"])
+def test_transmission_other_failures_still_stop_pending_checking_torrent(tmp_path, monkeypatch, error_code):
+    server = FakeTransmission()
+    adapter = _transmission(server)
+    server.torrents[K] = Torrent(TORRENT, str(tmp_path), ["tow", "tow-pending"], paused=True)
+    row = server._row
+    monkeypatch.setattr(server, "_row", lambda torrent: {**row(torrent), "status": 2})
+    adapter._stop_after_failure(H, error=adapter._fail(error_code))
+    assert server.calls.count("torrent-stop") == 1
+
+
+@pytest.mark.parametrize("pending", [False, True])
+def test_transmission_selection_retry_continues_after_verification(tmp_path, monkeypatch, pending):
+    server = FakeTransmission()
+    labels = ["tow", "tow-pending"] if pending else ["tow"]
+    server.torrents[K] = Torrent(TORRENT, str(tmp_path), labels, paused=True)
+    remaining = [4]
+    handler = server.handler
+    row = server._row
+
+    def request(request):
+        message = json.loads(request.content)
+        if message["method"] == "torrent-get" and "status" in message["arguments"].get("fields", []):
+            remaining[0] -= 1
+        if message["method"] in {"torrent-start", "torrent-stop"}:
+            assert remaining[0] <= 0
+        return handler(request)
+
+    monkeypatch.setattr(server, "handler", request)
+    monkeypatch.setattr(
+        server, "_row", lambda torrent: {**row(torrent), "status": 2} if remaining[0] > 0 else row(torrent)
+    )
+    adapter = _transmission(server)
+    adapter.START_POLLS = 12
+    result = adapter.configure_torrent_selection(TORRENT, H, [E01], ensure_started=True)
+    assert _wanted(result) == [index == E01 for index in range(3)]
+    assert result["tags"] == ["tow"]
+    assert server.torrents[K].running
 
 
 @pytest.mark.parametrize("checking_status", [1, 2])

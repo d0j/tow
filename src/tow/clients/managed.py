@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import math
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, ClassVar
 
 from tow.clients import files
@@ -176,7 +176,14 @@ class ManagedClient:
             raise self._fail("client.managed.error_state", state=state)
 
     def _wait(
-        self, infohash: str, done: Any, error: str, *, polls: int | None = None, timeout: float | None = None
+        self,
+        infohash: str,
+        done: Any,
+        error: str,
+        *,
+        polls: int | None = None,
+        timeout: float | None = None,
+        read: Callable[[str], dict[str, Any] | None] | None = None,
     ) -> dict[str, Any]:
         """Poll until ``done(info)``; ``error`` (a catalog key) is the reason when it never comes."""
         last: dict[str, Any] | None = None
@@ -185,7 +192,7 @@ class ManagedClient:
         for attempt in range(attempts):
             if deadline is not None and time.monotonic() >= deadline:
                 break
-            last = self.inspect_torrent(infohash)
+            last = (read or self.inspect_torrent)(infohash)
             if deadline is not None and time.monotonic() >= deadline:
                 break
             if last is not None:
@@ -413,8 +420,9 @@ class ManagedClient:
             raise self._fail("client.managed.bad_selection")
         return metadata, destination, selected
 
-    def _stop_after_failure(self, infohash: str) -> None:
+    def _stop_after_failure(self, infohash: str, *, error: Exception | None = None) -> None:
         """A failed change stops the torrent it touched (when it is still TOW's)."""
+        del error  # optional context for a client's conservative cleanup policy
         try:
             self._require_owned(infohash)
             self._stop(infohash)
@@ -424,6 +432,10 @@ class ManagedClient:
     def _stop_after_add(self, added: dict[str, Any]) -> bool:
         """Whether the torrent just added must still be stopped (the client started it anyway)."""
         return not self._stopped(added)
+
+    def _ready_for_selection(self, before: dict[str, Any]) -> dict[str, Any]:
+        """A read-only client-specific preparation, before the selection transaction."""
+        return before
 
     def _finish_add(
         self,
@@ -453,9 +465,9 @@ class ManagedClient:
                 self._wait_started(infohash)
             release_requested = True
             return self._clear_pending(infohash)
-        except Exception:
+        except Exception as error:
             if not release_requested:
-                self._stop_after_failure(infohash)
+                self._stop_after_failure(infohash, error=error)
             raise
 
     def add_torrent_selected(
@@ -512,6 +524,9 @@ class ManagedClient:
         if str(infohash).casefold() not in valid_hashes:
             raise self._fail("client.managed.hash_changed_selection")
         before = self._inspect_with_files(infohash)
+        if OWNER not in self._tags(before):
+            raise self._fail("client.managed.not_owned")
+        before = self._ready_for_selection(before)
         if OWNER not in self._tags(before):
             raise self._fail("client.managed.not_owned")
         pending = PENDING in self._tags(before)

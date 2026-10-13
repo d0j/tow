@@ -396,6 +396,24 @@ def test_every_workflow_is_checked_here():
     assert found == ["ci", "installers", "real", "release"]
 
 
+@pytest.mark.parametrize("name", ["ci", "installers", "real"])
+def test_only_main_gate_writes_shared_uv_cache(name):
+    _text, flow = _workflow(name)
+    found = 0
+    for job_id, job in flow["jobs"].items():
+        for step in job["steps"]:
+            if not step.get("uses", "").startswith("astral-sh/setup-uv@"):
+                continue
+            found += 1
+            options = step.get("with", {})
+            assert options.get("restore-cache", True) is True
+            if name == "ci" and job_id == "gate":
+                assert options["save-cache"] == "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
+            else:
+                assert options["save-cache"] is False
+    assert found == {"ci": 1, "installers": 3, "real": 2}[name]
+
+
 @pytest.mark.parametrize("name", ["ci", "release", "installers", "real"])
 def test_every_workflow_pins_its_actions_and_only_reads_by_default(name):
     text, flow = _workflow(name)

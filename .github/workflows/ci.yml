@@ -38,6 +38,8 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
+          # One writer per runner cache: PRs and smoke jobs only restore it.
+          save-cache: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - name: Install Python from .python-version
         run: uv python install --no-bin --no-registry
       # update.py, the web update worker and its lock module run on the install's base Python,
