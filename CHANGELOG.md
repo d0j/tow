@@ -13,10 +13,18 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   torrent URL. Their result must pass a separate, same-origin TOW request. See [Site access](docs/PROTECTION.md).
 - Site response diagnostics distinguish challenges, access blocks, rate limits, origin outages, maintenance, sign-in
   and download quotas; Sites shows the last observed reason for each mirror without cutting it off on mobile.
+- Separate FlareBypasser and Trawl service adapters, a compact service-type selector and read-only API observations.
+  API outages use shared bounded backoff, distinct from a site's refusal. No browser dependencies are added to TOW.
 - A site's optional current-infohash capability avoids downloading an unchanged torrent only after client ownership
   and selection are verified. Kinozal supplies the first preset; progress reconciliation still runs.
 
 ### Fixed
+
+- A bounded failed access chain continues to later connections at the next eligible check. Late responses from
+  before reset or a new attempt cannot restore old access or remove a newer credential. Refused site replays are
+  explicitly logged without treating an answered API as verified site access.
+- A temporary root-request outage no longer revokes verified access or spends another solver attempt. Recovery
+  reserves time for independent verification, and a paused cursor no longer restarts and starves later connections.
 
 - A client's checking state no longer confirms a start. Start read-back has its own bounded wait; pending ownership
   is retained on failure. Recovery of a lost add acknowledgement never adopts a foreign duplicate.

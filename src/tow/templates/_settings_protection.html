@@ -5,6 +5,7 @@
   </summary>
   <div class="settings-panel">
     <p class="action-hint">{{ t('protection_ui.hint') }}</p>
+    {% if protection.store_unavailable %}<p class="form-error" role="status">{{ t('protection_ui.store_unavailable') }}</p>{% endif %}
     <details class="technical-details">
       <summary>{{ t('settings.common.how_to_connect') }}</summary>
       <ol><li>{{ t('protection_ui.step_install') }}</li><li>{{ t('protection_ui.step_address') }}</li><li>{{ t('protection_ui.step_enable') }}</li></ol>
@@ -18,10 +19,13 @@
         <div class="integration-list">
           {% for p in protection.cards %}
           <details class="integration-card protection-card"{% if p.url %} open{% endif %}>
-            <summary>{{ p.title }} · {{ t('protection_ui.add') if p.new else p.order }}</summary>
+            <summary>{% if p.new %}{{ t('protection_ui.add') }}{% else %}{{ p.title }} · {{ p.order }}{% endif %}</summary>
             <input type="hidden" name="provider_id" value="{{ p.id }}">
-            <input type="hidden" name="provider_kind" value="{{ p.kind }}">
+            {% if p.new %}
+            <div class="field"><label for="protection-kind-{{ p.id }}">{{ t('protection_ui.service_kind') }}</label><select id="protection-kind-{{ p.id }}" name="provider_kind"><option value="">{{ t('protection_ui.choose_kind') }}</option>{% for choice in protection.choices %}<option value="{{ choice.kind }}">{{ choice.title }}</option>{% endfor %}</select></div>
+            {% else %}<input type="hidden" name="provider_kind" value="{{ p.kind }}">{% endif %}
             {% if not p.available %}<p class="form-error" role="status">{{ t('protection_ui.unavailable') }}</p>{% endif %}
+            {% if not p.new and p.available %}<p class="action-hint" role="status">{% if not p.enabled or not protection.enabled %}{{ t('protection_ui.off') }}{% elif p.retry_sec %}{{ t('protection_ui.api_pause', seconds=p.retry_sec) }} · {{ t(p.api_key) }}{% else %}{{ t(p.api_key) }}{% endif %}</p>{% endif %}
             <label class="check-field"><input type="checkbox" name="provider_enabled" value="{{ p.id }}"{% if p.enabled %} checked{% endif %}><span>{{ t('protection_ui.provider_enabled') }}</span></label>
             <div class="field-grid">
               <div class="field"><label for="protection-url-{{ p.id }}">{{ t('protection_ui.address') }}</label><input id="protection-url-{{ p.id }}" name="provider_url" value="{{ p.url }}" placeholder="http://127.0.0.1:8191" maxlength="256" autocomplete="off"></div>

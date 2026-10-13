@@ -46,8 +46,10 @@ def test_default_card_closed_off_and_no_contacts(monkeypatch):
     section = card(page)
     assert 'name="enabled" value="1" checked' not in section
     assert 'class="pill mut">Выключено' in section
-    assert 'name="provider_kind" value="flaresolverr"' in section
-    assert 'name="provider_kind" value="byparr"' in section
+    assert 'name="provider_kind"' in section
+    assert '<option value="flaresolverr">' in section
+    assert '<option value="byparr">' in section
+    assert section.count('class="integration-card protection-card"') == 1
     assert "textarea" not in section
     assert 'style="' not in section
 
@@ -179,7 +181,7 @@ def test_unavailable_module_retained_and_rendered_without_success_claim():
     cfg["protection"] = configured
     save_config(cfg)
     section = card(client().get("/settings?open=protection").text)
-    assert 'class="pill mut">Включено · не проверено' in section
+    assert 'class="pill mut">Включено' in section
     assert "Модуль недоступен" in section
     assert 'name="provider_kind" value="future_provider"' in section
     assert 'class="pill ok"' not in section
@@ -188,8 +190,83 @@ def test_unavailable_module_retained_and_rendered_without_success_claim():
 def test_more_instances_can_be_added_each_save():
     client().post("/settings/protection", data=form())
     section = card(client().get("/settings").text)
-    assert section.count('name="provider_kind" value="flaresolverr"') == 2
-    assert section.count('name="provider_kind" value="byparr"') == 2
+    assert section.count('name="provider_kind" value="flaresolverr"') == 1
+    assert section.count('name="provider_kind" value="byparr"') == 1
+    assert '<option value="flaresolverr">' in section
+    assert '<option value="byparr">' in section
+
+
+@pytest.mark.parametrize("kind", ["flare_bypasser", "trawl"])
+def test_new_service_is_saved_without_any_external_contact(monkeypatch, kind):
+    monkeypatch.setattr("tow.protection.chain.candidates", lambda *a, **kw: pytest.fail("network requested"))
+    response = client().post(
+        "/settings/protection",
+        data=form(
+            enabled="",
+            provider_id=["new-connection-1"],
+            provider_kind=[kind],
+            provider_url=["http://127.0.0.1:8193"],
+            provider_order=["1"],
+            provider_enabled=[],
+        ),
+        follow_redirects=False,
+    )
+    assert flash_kind(response.headers["location"]) == "ok"
+    configured = load_config()["protection"]
+    assert configured["enabled"] is False
+    assert configured["providers"] == [
+        {"id": "new-connection-1", "kind": kind, "url": "http://127.0.0.1:8193/v1", "enabled": False}
+    ]
+
+
+@pytest.mark.parametrize("status", ["unknown", "succeeded", "unavailable", "busy", "protocol"])
+def test_service_observation_is_read_only_and_not_site_success(monkeypatch, status):
+    from tow.paths import data_dir
+    from tow.protection import store
+
+    client().post("/settings/protection", data=form())
+    configured = load_config()["protection"]
+    monkeypatch.setattr(services.time, "time", lambda: 1000)
+    if status != "unknown":
+        store.note_service(configured["providers"][0], status, now=1000, retry_after=60)
+    paths = [config_path(), state_path(), data_dir() / "protection.enc"]
+    before = [p.read_bytes() if p.exists() else None for p in paths]
+    view = services.protection_settings_view(load_config())
+    assert view["cards"][0]["api_status"] == status
+    section = card(client().get("/settings?open=protection").text)
+    assert 'class="pill ok"' not in section
+    if status == "succeeded":
+        assert "доступ к сайту проверяется отдельно" in section
+    elif status in {"busy", "unavailable", "protocol"}:
+        assert "Пауза сервиса: ещё 60 с" in section
+    assert [p.read_bytes() if p.exists() else None for p in paths] == before
+
+
+def test_corrupt_observation_does_not_break_render_or_claim_healthy():
+    from tow.paths import data_dir
+
+    client().post("/settings/protection", data=form())
+    path = data_dir() / "protection.enc"
+    path.write_bytes(b"synthetic-corrupt-data")
+    section = card(client().get("/settings?open=protection").text)
+    assert "не читается" in section
+    assert 'class="pill ok"' not in section
+    assert path.read_bytes() == b"synthetic-corrupt-data"
+
+
+def test_full_connection_limit_has_no_unsaveable_extra_card():
+    cfg = load_config()
+    cfg["protection"] = services.validate_protection_settings(
+        {
+            "providers": [
+                {"id": f"service-{i}", "kind": "trawl", "url": f"http://127.0.0.1:{8200 + i}/v1"} for i in range(16)
+            ]
+        }
+    )
+    save_config(cfg)
+    section = card(client().get("/settings").text)
+    assert section.count('class="integration-card protection-card"') == 16
+    assert "Добавить подключение" not in section
 
 
 def test_render_does_not_change_provider_configuration():

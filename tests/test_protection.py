@@ -283,6 +283,69 @@ def test_topic_transport_error_after_verified_root_keeps_access(monkeypatch):
     assert result.value.failure == "transport"
 
 
+@pytest.mark.parametrize("failure", [httpx.ReadTimeout("synthetic"), httpx.ConnectError("synthetic")])
+def test_root_transport_error_keeps_cached_access_and_never_requests_another_solver(monkeypatch, failure):
+    def handler(request):
+        if request.url.path == "/" and "cf_clearance=" in request.headers.get("cookie", ""):
+            raise failure
+        return httpx.Response(403, text=CF)
+
+    install(monkeypatch, handler)
+    monkeypatch.setattr(chain, "discard", lambda *a, **kw: pytest.fail("transport cannot revoke access"))
+
+    def candidates(*a, **kw):
+        yield clearance()
+        pytest.fail("transport cannot justify another solve attempt")
+
+    monkeypatch.setattr(chain, "candidates", candidates)
+    with pytest.raises(MirrorFetchError) as result:
+        pick_and_get("demo", SPEC["fetch_hosts"], "/topic/1", protection=settings())
+    assert result.value.failure == "transport"
+
+
+@pytest.mark.parametrize("status", [429, 500, 502, 503, 504, 522])
+def test_root_outage_does_not_revoke_access_or_consume_another_solver(monkeypatch, status):
+    def handler(request):
+        if request.url.path == "/" and "cf_clearance=" in request.headers.get("cookie", ""):
+            return httpx.Response(status, text="site outage")
+        return httpx.Response(403, text=CF)
+
+    install(monkeypatch, handler)
+    monkeypatch.setattr(chain, "discard", lambda *a, **kw: pytest.fail("outage cannot revoke access"))
+
+    def candidates(*a, **kw):
+        yield clearance()
+        pytest.fail("outage cannot justify another solve attempt")
+
+    monkeypatch.setattr(chain, "candidates", candidates)
+    with pytest.raises(MirrorFetchError):
+        pick_and_get("demo", SPEC["fetch_hosts"], "/topic/1", protection=settings())
+
+
+def test_verified_root_is_retained_when_no_time_is_left_for_the_resource(monkeypatch):
+    accepted = []
+    clock = [100.0]
+    monkeypatch.setattr("tow.mirrors.time.monotonic", lambda: clock[0])
+    real_verify = __import__("tow.mirrors", fromlist=["_verify_clearance"])._verify_clearance
+
+    def verify(*args):
+        real_verify(*args)
+        clock[0] = 130.0
+
+    def handler(request):
+        if request.url.path == "/" and "cf_clearance=" in request.headers.get("cookie", ""):
+            return httpx.Response(200, text="front page")
+        return httpx.Response(403, text=CF)
+
+    install(monkeypatch, handler)
+    monkeypatch.setattr("tow.mirrors._verify_clearance", verify)
+    monkeypatch.setattr(chain, "candidates", lambda *a, **kw: iter([clearance()]))
+    monkeypatch.setattr(chain, "accept", lambda *a: accepted.append(a))
+    with pytest.raises(MirrorFetchError):
+        pick_and_get("demo", SPEC["fetch_hosts"], "/topic/1", protection=settings())
+    assert len(accepted) == 1
+
+
 def test_long_topic_maintenance_title_is_not_a_site_outage():
     assert classify(200, "<title>Under Maintenance</title><div>" + "film description " * 1500 + "</div>") == Verdict.OK
     assert classify(200, "<title>Фильм: Технические работы — обсуждение</title><div>описание</div>") == Verdict.OK
@@ -297,6 +360,9 @@ def test_unsupported_deadline_transport_never_spends_provider_attempt(monkeypatc
 
 
 def test_root_only_clearance_does_not_clear_topic_failure_count(monkeypatch):
+    events = []
+    monkeypatch.setattr(chain, "record_event", lambda *a: events.append(a))
+
     def handler(request):
         if request.url.path == "/" and "cf_clearance=" in request.headers.get("cookie", ""):
             return httpx.Response(200, text="front page")
@@ -309,6 +375,7 @@ def test_root_only_clearance_does_not_clear_topic_failure_count(monkeypatch):
     bucket = load_state()["mirrors"]["demo"]
     assert bucket["fail"][SPEC["fetch_hosts"][0]] == 1
     assert bucket.get("active") is None
+    assert events == [("protection_replay_refused", "demo", "test", "failed")]
 
 
 def test_recent_challenge_prefers_other_mirrors_but_expired_evidence_does_not(monkeypatch):

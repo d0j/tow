@@ -5,9 +5,20 @@ from __future__ import annotations
 import ipaddress
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
+
+
+class ProviderUnavailableError(ValueError):
+    """An API-level outage, not a site's challenge or a refused clearance replay."""
+
+    def __init__(self, reason: str, *, retry_after: float = 0) -> None:
+        if reason not in {"unavailable", "busy", "protocol"}:
+            raise ValueError("invalid clearance failure reason")
+        super().__init__("clearance API " + reason)
+        self.reason = reason
+        self.retry_after = retry_after
 
 
 @dataclass(frozen=True, repr=False)
@@ -18,6 +29,14 @@ class Clearance:
     user_agent: str
     expires_at: float
     provider: str
+    attempt_id: str | None = field(default=None, compare=False)
+
+
+@dataclass(frozen=True, repr=False)
+class AttemptProof:
+    site: str
+    origin: str
+    nonce: str
 
 
 @dataclass(frozen=True)
@@ -53,7 +72,7 @@ def service_url(value: object) -> str:
         if port is not None and not 1 <= port <= 65535:
             raise ValueError
         host = f"[{address}]" if address.version == 6 else str(address)
-        authority = host if port is None else f"{host}:{port}"
+        authority = host if port is None or port == {"http": 80, "https": 443}[parts.scheme] else f"{host}:{port}"
         return urlunsplit((parts.scheme, authority, "/v1", "", ""))
     except ValueError:
         raise ValueError("invalid clearance service address") from None

@@ -6,14 +6,18 @@ import logging
 import math
 import time
 from collections.abc import Iterator
+from dataclasses import replace
 from typing import Any
 from urllib.parse import urlsplit
+
+import httpcore
+import httpx
 
 from tow.log import log_event
 from tow.net_guard import public_addresses
 from tow.protection import store
 from tow.protection.providers import adapters, validate_clearance
-from tow.protection.spec import Clearance, target_origin, validate_settings
+from tow.protection.spec import AttemptProof, Clearance, ProviderUnavailableError, target_origin, validate_settings
 
 _LOG = logging.getLogger(__name__)
 
@@ -37,6 +41,28 @@ def cached(site: str, origin: str, settings: dict[str, Any]) -> Clearance | None
         return None
 
 
+def _note_service(provider: dict[str, Any], status: str, attempt: AttemptProof, *, retry_after: float = 0) -> None:
+    try:
+        store.note_service(provider, status, now=time.time(), retry_after=retry_after, attempt=attempt)
+    except Exception:  # noqa: BLE001 - optional telemetry cannot fail a valid result or interrupt fallback
+        _LOG.debug("clearance service observation unavailable")
+
+
+def _failed_service(provider: dict[str, Any], error: Exception, attempt: AttemptProof) -> None:
+    if isinstance(error, ProviderUnavailableError):
+        _note_service(provider, error.reason, attempt, retry_after=error.retry_after)
+    elif isinstance(error, (httpx.ConnectError, httpx.ConnectTimeout, httpcore.ConnectError, httpcore.ConnectTimeout)):
+        _note_service(provider, "unavailable", attempt)
+
+
+def _recovery_budget(configured: float, limit: float | None) -> float | None:
+    if limit is not None:
+        if not isinstance(limit, (int, float)) or isinstance(limit, bool) or not math.isfinite(limit):
+            return None
+        configured = min(configured, limit)
+    return configured if configured >= 1 else None
+
+
 def candidates(
     site: str, origin: str, settings: dict[str, Any], *, public_only: bool = True, budget_sec: float | None = None
 ) -> Iterator[Clearance]:
@@ -50,18 +76,11 @@ def candidates(
         settings = validate_settings(settings)
         if not settings["enabled"]:
             return
-        budget = settings["timeout_sec"]
-        if budget_sec is not None:
-            if (
-                not isinstance(budget_sec, (int, float))
-                or isinstance(budget_sec, bool)
-                or not math.isfinite(budget_sec)
-            ):
-                return
-            budget = min(budget, budget_sec)
-        if budget < 1:
+        budget = _recovery_budget(settings["timeout_sec"], budget_sec)
+        if budget is None:
             return
         deadline = time.monotonic() + budget
+        verification_margin = min(10.0, budget / 3)
         enabled = [item for item in settings["providers"] if item["enabled"]]
         if not enabled:
             return
@@ -75,31 +94,50 @@ def candidates(
         if time.monotonic() >= deadline:
             return
         available = adapters()
-        enabled = [item for item in enabled if item["kind"] in available][: settings["max_attempts"]]
+        enabled = [item for item in enabled if item["kind"] in available]
+        enabled = store.eligible_providers(site, origin, settings, enabled, now=time.time())[: settings["max_attempts"]]
         if not enabled:
             return
-        if not store.reserve(site, origin, settings, now=time.time()):
+        nonce = store.reserve_attempt(site, origin, settings, now=time.time())
+        if nonce is None:
             return
+        attempt = AttemptProof(site, origin, nonce)
     except Exception:  # noqa: BLE001 - optional recovery fails closed without exposing credentials
         _LOG.debug("clearance recovery unavailable")
         return
     for index, provider in enumerate(enabled):
-        remaining = deadline - time.monotonic()
-        timeout = remaining / (len(enabled) - index)
-        if timeout < 1:
-            return
         try:
             solve = available.get(provider["kind"])
             if solve is None:
                 continue
+            if deadline - time.monotonic() - verification_margin < 1:
+                return
+            if not store.note_attempt(attempt, provider["id"]):
+                return
+            timeout = (deadline - time.monotonic() - verification_margin) / (len(enabled) - index)
+            if timeout < 1:
+                return
+            provider_deadline = time.monotonic() + timeout
             record_event("protection_attempt", site, provider["id"], "started")
+            timeout = min(timeout, provider_deadline - time.monotonic())
+            if timeout < 1:
+                record_event("protection_failed", site, provider["id"], "failed")
+                return
             clearance = solve(provider, origin, timeout)
             if time.monotonic() >= deadline:
+                record_event("protection_failed", site, provider["id"], "failed")
                 return
+            if time.monotonic() >= provider_deadline:
+                record_event("protection_failed", site, provider["id"], "failed")
+                continue  # even a misbehaving optional adapter cannot consume verification's reserved time
             if clearance.provider != provider["id"]:
+                record_event("protection_failed", site, provider["id"], "failed")
                 continue
-            yield validate_clearance(clearance, origin, now=time.time())
-        except Exception:  # noqa: BLE001 - one optional provider must never disable the next
+            validated = replace(validate_clearance(clearance, origin, now=time.time()), attempt_id=attempt.nonce)
+            _note_service(provider, "succeeded", attempt)
+            yield validated
+        except Exception as error:  # noqa: BLE001 - one optional provider must never disable the next
+            _failed_service(provider, error, attempt)
             record_event("protection_failed", site, provider["id"], "failed")
             _LOG.debug("clearance provider refused or unavailable")
 
@@ -112,7 +150,7 @@ def accept(site: str, origin: str, settings: dict[str, Any], clearance: Clearanc
             p["id"] for p in settings["providers"] if p["enabled"]
         }:
             return
-        store.accept(site, target_origin(origin), settings, clearance, now=time.time())
+        store.accept(site, target_origin(origin), settings, clearance, now=time.time(), require_attempt=True)
     except Exception:  # noqa: BLE001 - optional credential retention cannot fail a successful check
         _LOG.debug("clearance retention unavailable")
 

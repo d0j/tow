@@ -16,6 +16,8 @@ the route and action modules import and refuses any other way out of ``tow.web``
 
 from __future__ import annotations
 
+import math
+import time
 from collections.abc import Callable
 from functools import wraps
 from threading import BoundedSemaphore
@@ -48,6 +50,7 @@ from tow.protection.providers import adapters as protection_adapters
 from tow.protection.providers import registry as protection_registry
 from tow.protection.spec import validate_settings as validate_protection_settings
 from tow.protection.store import reset as _reset_protection
+from tow.protection.store import service_states as _protection_service_states
 from tow.ratelimit import LoginThrottle
 from tow.releases import release_status
 from tow.restore_points import (
@@ -189,25 +192,47 @@ __all__ = [
 
 
 def protection_settings_view(cfg: dict[str, Any]) -> dict[str, Any]:
-    """Configured, not proven working: render without network or credential-store access."""
+    """Read saved API observations, not credentials or network health invented by rendering."""
     settings = validate_protection_settings(cfg.get("protection"))
     available = protection_adapters()
     cards = [dict(item, available=item["kind"] in available, new=False) for item in settings["providers"]]
     ids = {item["id"] for item in cards}
-    for kind in sorted(available):
-        if len(cards) >= 16:
-            break
+    if available and len(cards) < 16:
         index = 1
-        ident = f"new-{kind[:30]}-{index}"
-        while ident in ids:
+        while (ident := f"new-connection-{index}") in ids:
             index += 1
-            ident = f"new-{kind[:30]}-{index}"
-        ids.add(ident)
-        cards.append({"id": ident, "kind": kind, "url": "", "enabled": False, "available": True, "new": True})
+        cards.append({"id": ident, "kind": "", "url": "", "enabled": False, "available": True, "new": True})
     names = {kind: spec.title for kind, spec in protection_registry().items()}
+    now = time.time()
+    unreadable = False
+    try:
+        states = _protection_service_states(settings["providers"], now=now) if settings["providers"] else {}
+    except Exception:  # noqa: BLE001 - unreadable optional diagnostics must not prevent settings or ordinary access
+        states = {}
+        unreadable = True
     for index, item in enumerate(cards, 1):
-        item.update(order=index, title=names.get(item["kind"], item["kind"]))
-    return dict(settings, cards=cards, configured=sum(bool(item["enabled"]) for item in settings["providers"]))
+        observation = states.get(item["id"], {"status": "unknown", "retry_at": 0})
+        item.update(
+            order=index,
+            title=names.get(item["kind"], item["kind"]),
+            api_status=observation["status"],
+            retry_sec=max(0, math.ceil(observation["retry_at"] - now)),
+            api_key={
+                "unknown": "protection_ui.api_unknown",
+                "succeeded": "protection_ui.api_succeeded",
+                "unavailable": "protection_ui.api_unavailable",
+                "busy": "protection_ui.api_busy",
+                "protocol": "protection_ui.api_protocol",
+            }.get(observation["status"], "protection_ui.api_unknown"),
+        )
+    choices = [{"kind": kind, "title": names.get(kind, kind)} for kind in sorted(available)]
+    return dict(
+        settings,
+        cards=cards,
+        choices=choices,
+        store_unavailable=unreadable,
+        configured=sum(bool(item["enabled"]) for item in settings["providers"]),
+    )
 
 
 def reset_protection() -> str:
