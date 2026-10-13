@@ -896,7 +896,8 @@
     "history_rebuilt": "The download history file was damaged: TOW started it over and keeps checking (the damaged file is kept next to it as download_history.json.corrupt-…). Downloads are not affected; events from before are not shown.",
     "site_needs_login": "Sign in to {site} (topics: {count})",
     "site_needs_login_unknown": "Sign in to the site (topics: {count})",
-    "site_login_missing": "{site} asks you to sign in (topics: {count})"
+    "site_login_missing": "{site} asks you to sign in (topics: {count})",
+    "site_signed_in": "Signed in to {site}: its other topics are checked at the next check (topics: {count})"
   },
   "home": {
     "title": "Topics",

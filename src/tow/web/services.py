@@ -41,6 +41,7 @@ from tow.lifecycle import request_restart, service_status, set_autostart
 from tow.locations import check_writable as folder_write_problem
 from tow.locations import free_bytes
 from tow.log import history_events, log_event, read_events
+from tow.mirrors import note_signed_in as _note_signed_in
 from tow.mirrors import prefer_host as _prefer_host
 from tow.notifiers import test as test_notifier
 from tow.ratelimit import LoginThrottle
@@ -135,6 +136,7 @@ __all__ = [
     "network_credential",
     "next_check_at",
     "night_cleanup_status",
+    "note_signed_in",
     "notify_topic_error",
     "persistence_lock",
     "prefer_host",
@@ -398,3 +400,4 @@ save_state = _single_file_write(_save_state)
 save_config = _single_file_write(_save_config)
 save_secrets = _single_file_write(_save_secrets)
 prefer_host = _single_file_write(_prefer_host)
+note_signed_in = _single_file_write(_note_signed_in)

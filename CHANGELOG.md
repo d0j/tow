@@ -70,6 +70,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Home → Needs attention: with scripts turned off in the browser, the item's link now puts the focus on the button
   that fixes the problem too. The link named the spot after a "#", and a browser ignores the page's own focus on such
   an address.
+- Home → Needs attention: after you sign in to a site from a topic's row, the site's other topics refused before no
+  longer ask you to sign in until their next check. The item says "Signed in to Kinozal: its other topics are checked
+  at the next check" and leads to Check all; TOW does not check them by itself, since each check may download a
+  .torrent and a site may limit those per day. Their rows keep the last error until a check replaces it.
 
 ## [1.28.4] — 2026-10-12
 

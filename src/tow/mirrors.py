@@ -179,6 +179,20 @@ def note_login(tracker: str) -> None:
         save_state(st)
 
 
+def note_signed_in(tracker: str) -> None:
+    """Remember that the owner's sign-in to this (still configured) site was just confirmed by a
+    check (``signed_in_at``): its other topics refused before that are not asked to sign in again
+    until their next check says so (``tow.issues.kinds.site_needs_login``)."""
+    from tow.config import load_config
+
+    with persistence_lock():
+        if not isinstance((load_config().get("trackers") or {}).get(tracker), dict):
+            return
+        st = load_state()
+        _bucket(st, tracker)["signed_in_at"] = _now()
+        save_state(st)
+
+
 def _origin(url: str) -> tuple[str, str, int] | None:
     try:
         parsed = urlparse(url)
