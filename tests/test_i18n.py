@@ -881,6 +881,14 @@ def test_russian_says_what_the_english_says(key, says):
     assert says in i18n.translate(key, "ru")
 
 
+def test_english_names_no_internal_step():
+    """The 503 while an interrupted site change cannot be rolled back said "TOW site transaction
+    recovery unavailable": it now says what happened and what to do, as the Russian did."""
+    text = i18n.translate("web.refused.recovery_unavailable", "en")
+    assert "transaction" not in text
+    assert "try again later" in text
+
+
 def test_the_history_says_a_client_event_of_the_torrent():
     """A client event is about the torrent, so every label agrees with «торрент» as "добавлен в
     клиент" does (they mixed «запущена», «остановлено» and «добавлен»)."""
