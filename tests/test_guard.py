@@ -37,6 +37,43 @@ def test_inner():
     result.stdout.fnmatch_lines(["*test guard violations*httpx request*"])
 
 
+def test_loopback_fixture_retries_service_ports_without_weakening_guard(pytester):
+    result = _inner(
+        pytester,
+        """
+import http.server
+import pytest
+
+def test_retries(monkeypatch, loopback_http_server):
+    ports = iter([8788, 9091, 19000])
+    closed = []
+    class Server:
+        def __init__(self, address, handler):
+            self.server_address = (address[0], next(ports))
+        def server_close(self):
+            closed.append(self.server_address[1])
+    monkeypatch.setattr(http.server, 'ThreadingHTTPServer', Server)
+    server = loopback_http_server(object())
+    assert server.server_address == ('127.0.0.1', 19000)
+    assert closed == [8788, 9091]
+    server.server_close()
+
+def test_bounded(monkeypatch, loopback_http_server):
+    closed = []
+    class Server:
+        def __init__(self, address, handler):
+            self.server_address = ('127.0.0.1', 8788)
+        def server_close(self):
+            closed.append(True)
+    monkeypatch.setattr(http.server, 'ThreadingHTTPServer', Server)
+    with pytest.raises(RuntimeError, match='no guarded loopback test port'):
+        loopback_http_server(object())
+    assert len(closed) == 32
+""",
+    )
+    result.assert_outcomes(passed=2)
+
+
 def test_swallowed_system_command_still_fails_the_test(pytester):
     result = _inner(
         pytester,

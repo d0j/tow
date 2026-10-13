@@ -399,6 +399,75 @@ def test_budget_passed_to_solver(safe_dns, monkeypatch):
     assert 0 < calls[0] <= 3
 
 
+@pytest.mark.parametrize("budget", [5, 6, 2])
+def test_short_budget_still_attempts_available_providers(safe_dns, monkeypatch, budget):
+    configured = settings(
+        timeout_sec=5,
+        max_attempts=4,
+        providers=[
+            {"id": f"service{i}", "kind": "byparr", "url": f"http://127.0.0.1:{8191 + i}", "enabled": True}
+            for i in range(4)
+        ],
+    )
+    clock = [100.0]
+    monkeypatch.setattr(chain.time, "monotonic", lambda: clock[0])
+    calls = []
+
+    def solve(provider, origin, timeout):
+        calls.append((provider["id"], timeout))
+        clock[0] += timeout
+        raise ValueError("synthetic site refusal")
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"byparr": solve})
+    assert list(chain.candidates("sample", ORIGIN, configured, budget_sec=budget)) == []
+    assert calls
+    assert all(timeout >= 1 for _, timeout in calls)
+    effective_budget = min(5, budget)
+    assert sum(timeout for _, timeout in calls) <= effective_budget * 2 / 3 + 1e-9
+    assert len(calls) <= 4
+
+
+@pytest.mark.parametrize("budget", [1, 1.25, 1.49])
+def test_insufficient_solver_budget_does_not_consume_cooldown(safe_dns, monkeypatch, budget):
+    configured = settings()
+    monkeypatch.setattr(chain.time, "monotonic", lambda: 100.0)
+    calls = []
+    monkeypatch.setattr(
+        chain, "adapters", lambda: {"byparr": lambda p, o, timeout: calls.append(timeout) or clearance("second")}
+    )
+    assert list(chain.candidates("sample", ORIGIN, configured, budget_sec=budget)) == []
+    assert calls == []
+    assert not (data_dir() / "protection.enc").exists()
+    assert len(list(chain.candidates("sample", ORIGIN, configured))) == 1
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("stage", ["reserve", "cursor", "log"])
+def test_preparation_exhaustion_releases_only_unused_reservation(safe_dns, monkeypatch, stage):
+    configured = settings(max_attempts=1)
+    clock = [100.0]
+    monkeypatch.setattr(chain.time, "monotonic", lambda: clock[0])
+    if stage == "log":
+        monkeypatch.setattr(chain, "record_event", lambda *args: clock.__setitem__(0, clock[0] + 0.5))
+    else:
+        name = "reserve_attempt" if stage == "reserve" else "note_attempt"
+        original = getattr(store, name)
+
+        def slow(*args, **kwargs):
+            result = original(*args, **kwargs)
+            clock[0] += 0.5
+            return result
+
+        monkeypatch.setattr(store, name, slow)
+    calls = []
+    monkeypatch.setattr(
+        chain, "adapters", lambda: {"byparr": lambda p, o, timeout: calls.append(timeout) or clearance("second")}
+    )
+    assert list(chain.candidates("sample", ORIGIN, configured, budget_sec=2)) == []
+    assert calls == []
+    assert store.reserve("sample", ORIGIN, configured, now=time.time()) is True
+
+
 def test_missing_plugin_not_counted_as_attempt(safe_dns, monkeypatch):
     monkeypatch.setattr(chain, "adapters", lambda: {"byparr": lambda *args: clearance("second")})
     assert [c.provider for c in chain.candidates("sample", ORIGIN, settings(max_attempts=1))] == ["second"]

@@ -310,6 +310,22 @@ def _refused_endpoint(host, port) -> bool:
     return host not in _LOOPBACK_HOSTS or port in _SERVICE_PORTS
 
 
+@pytest.fixture
+def loopback_http_server():
+    """Bind a test server without accidentally selecting a guarded live-service port."""
+    import http.server
+
+    def create(handler):
+        for _ in range(32):
+            server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+            if not _refused_endpoint(*server.server_address):
+                return server
+            server.server_close()
+        raise RuntimeError("no guarded loopback test port available")
+
+    return create
+
+
 def _is_multiprocessing_child(application_name, command_line) -> bool:
     """multiprocessing's spawn bootstrap of this interpreter (the only allowed child)."""
     import multiprocessing.spawn

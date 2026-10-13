@@ -17,7 +17,7 @@ import sys
 import tarfile
 import threading
 import urllib.request
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
 
@@ -74,7 +74,7 @@ class GitHub:
 
 
 @pytest.fixture
-def github(monkeypatch):
+def github(monkeypatch, loopback_http_server):
     site = GitHub()
 
     class Handler(BaseHTTPRequestHandler):
@@ -91,7 +91,7 @@ def github(monkeypatch):
         def log_message(self, *_args: Any) -> None:
             pass
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = loopback_http_server(Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     monkeypatch.setattr(urllib.request, "getproxies", dict)  # no proxy between the test and its server

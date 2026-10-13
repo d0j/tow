@@ -359,6 +359,67 @@ def test_attempt_identity_is_private_and_cannot_be_created_by_an_api(monkeypatch
     assert "1" * 32 not in repr(replace(clearance(), attempt_id=proof.nonce))
 
 
+def test_unused_reservation_restores_previous_clearance_and_cursor():
+    configured = settings(min_interval_sec=60)
+    old = AttemptProof("site", ORIGIN, store.reserve_attempt("site", ORIGIN, configured, now=1000))
+    store.note_attempt(old, "second")
+    value = replace(clearance(), expires_at=2000, attempt_id=old.nonce)
+    store.accept("site", ORIGIN, configured, value, now=1000, require_attempt=True)
+    pending = store.prepare_attempt("site", ORIGIN, configured, now=1100)
+    assert pending is not None
+    assert store.note_attempt(pending.proof, "first") is True
+    store.cancel_unused_attempt(pending)
+    assert store.read("site", ORIGIN, configured, now=1101) == value
+    store.discard("site", ORIGIN, expected=value)
+    assert store.eligible_providers("site", ORIGIN, configured, configured["providers"], now=1101)[0]["id"] == "first"
+
+
+@pytest.mark.parametrize("reset", [False, True])
+def test_unused_reservation_cannot_undo_reset_or_newer_attempt(reset):
+    configured = settings(min_interval_sec=60)
+    pending = store.prepare_attempt("site", ORIGIN, configured, now=1000)
+    assert pending is not None
+    if reset:
+        assert store.reset() is True
+        store.cancel_unused_attempt(pending)
+        assert not (data_dir() / "protection.enc").exists()
+    newer = store.prepare_attempt("site", ORIGIN, configured, now=1100)
+    assert newer is not None
+    store.cancel_unused_attempt(pending)
+    assert store.note_attempt(newer.proof, "second") is True
+    assert store.reserve("site", ORIGIN, configured, now=1101) is False
+
+
+@pytest.mark.parametrize("later", [False, True])
+def test_slow_later_preparation_does_not_advance_cursor_without_call(dns, monkeypatch, later):
+    configured = settings(max_attempts=3)
+    if later:
+        configured["providers"].append(
+            {"id": "third", "kind": "trawl", "url": "http://127.0.0.1:8193/v1", "enabled": True}
+        )
+    clock = [100.0]
+    calls = []
+    monkeypatch.setattr(chain.time, "monotonic", lambda: clock[0])
+    original = store.note_attempt
+
+    def slow(attempt, provider_id):
+        result = original(attempt, provider_id)
+        if provider_id == "second":
+            clock[0] += 10 if later else 20
+        return result
+
+    def refused(provider, origin, timeout):
+        calls.append(provider["id"])
+        raise ValueError("synthetic refusal")
+
+    monkeypatch.setattr(store, "note_attempt", slow)
+    monkeypatch.setattr(chain, "adapters", lambda: dict.fromkeys(["flaresolverr", "byparr", "trawl"], refused))
+    assert list(chain.candidates("site", ORIGIN, configured)) == []
+    assert calls == (["first", "third"] if later else ["first"])
+    ordered = store.eligible_providers("site", ORIGIN, configured, configured["providers"], now=time.time() + 1900)
+    assert ordered[0]["id"] == ("first" if later else "second")
+
+
 def test_paused_cursor_cannot_starve_last_provider(dns, monkeypatch):
     configured = settings(max_attempts=1, min_interval_sec=60)
     configured["providers"].append({"id": "third", "kind": "trawl", "url": "http://127.0.0.1:8193/v1", "enabled": True})
