@@ -267,6 +267,23 @@ def test_a_failed_check_lands_on_its_error_in_the_history_with_check_all(client)
         client, entry, anchor="latest-check_blocked", fix="check_all", label=t("base.check_all.title", "ru")
     )
     assert page.count('id="latest-check_blocked"') == 1  # the newest one
+    # The line says why, with the banner's verb (this event, as TOW 1.28 wrote it, has only a
+    # class: the line says where the details are).
+    line = html.unescape(re.sub(r"<[^>]+>", "", page.split('id="latest-check_blocked"', 1)[1].split("</div>", 1)[0]))
+    assert "Проверка не завершилась · авто · причина не записана" in line
+    assert "не завершилась" in entry["text"]
+
+
+def test_a_failed_check_says_its_error_on_the_landing(client):
+    from tow.check import record_check_failure
+
+    _home_state(_topic("z", 9))
+    record_check_failure(OSError(28, "No space left on device"))
+    entry = _entries(client)["check_blocked"]
+    page = client.get(entry["href"]).text
+    line = html.unescape(re.sub(r"<[^>]+>", "", page.split('id="latest-check_blocked"', 1)[1].split("</div>", 1)[0]))
+    assert "Проверка не завершилась · авто" in line
+    assert "No space left on device" in line
 
 
 def test_a_rebuilt_history_lands_on_its_note_with_nothing_to_focus(client):

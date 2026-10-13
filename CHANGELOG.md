@@ -74,6 +74,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   longer ask you to sign in until their next check. The item says "Signed in to Kinozal: its other topics are checked
   at the next check" and leads to Check all; TOW does not check them by itself, since each check may download a
   .torrent and a site may limit those per day. Their rows keep the last error until a check replaces it.
+- Home → Needs attention: "The last scheduled check did not complete" led to a History line "Check blocked · auto"
+  that never said why. The line now says "Check did not complete", as the banner does, followed by the error in the
+  reader's language; for a check recorded by an older TOW, its kind of error, or where the details are when none was
+  recorded.
 
 ## [1.28.4] — 2026-10-12
 

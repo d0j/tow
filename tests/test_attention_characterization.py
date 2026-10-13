@@ -10,7 +10,8 @@ Since the move (tow.issues): the worst first (red, then amber), each kind in its
 reads as the action its link takes ("Войти на NNM-Club (раздач: 2)"); a blocked check no longer
 sends the reader to Settings in words, and a check that failed for another reason no longer
 blames the passwords and tokens; the lost folder's text no longer names where the backups are
-(its link goes there).
+(its link goes there). A check blocked by the master key "did not complete", the verb of
+History's line for it.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from tow.store import load_state, save_state
 from tow.web import services, views
 
 NNM = "https://nnmclub.to/forum/viewtopic.php?t="
-BLOCKED = "Последняя плановая проверка заблокирована: сохранённые пароли и токены не открываются."
+BLOCKED = "Последняя плановая проверка не завершилась: сохранённые пароли и токены не открываются."
 HISTORY_REBUILT = (
     "Файл истории загрузок был повреждён: TOW начал историю заново и продолжает проверки (повреждённый файл "
     "сохранён рядом как download_history.json.corrupt-…). Загрузки не затронуты; прежние события не "
