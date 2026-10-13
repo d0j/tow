@@ -56,6 +56,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   replace the digits of the number, the Deluge label message no longer reads as two labels, the button for an older
   release says "Вернуться к …" instead of the Undo word "Вернуть", and `tow check --help` says "предпросмотр" as its
   output does.
+- The rare answer while TOW cannot yet roll back an interrupted change of a site says so and asks to try again later,
+  instead of "TOW site transaction recovery unavailable".
 
 ## [1.28.4] — 2026-10-12
 

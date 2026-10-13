@@ -2401,7 +2401,7 @@
       "request_too_large": "request too large",
       "unsupported_media": "unsupported media type",
       "forbidden": "forbidden",
-      "recovery_unavailable": "TOW site transaction recovery unavailable"
+      "recovery_unavailable": "TOW cannot roll back an interrupted site change; try again later"
     }
   },
   "site": {
