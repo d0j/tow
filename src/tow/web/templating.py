@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
@@ -300,9 +301,24 @@ def fix_open(context: Mapping[str, Any], action: str, subject: object = "") -> M
     return Markup(" open") if wanted == Fix(action, str(subject or "")).ref else Markup("")
 
 
+def web_link(url: object) -> str:
+    """``url`` when it is an http(s) address with a host, else "": a link a page may put in an
+    ``href``. A topic link is only as strict as its site's pattern, which the owner may write
+    loosely; a ``javascript:`` or ``data:`` link would otherwise become a link on Home."""
+    value = str(url or "").strip()
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return ""
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        return ""
+    return value
+
+
 def configure(templates: Jinja2Templates = TEMPLATES) -> None:
     """The globals every template may call."""
     templates.env.filters["sentence"] = sentence
+    templates.env.filters["web_link"] = web_link
     env = templates.env.globals
     env["t"] = i18n.translate
     env["tm"] = tm

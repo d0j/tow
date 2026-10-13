@@ -560,3 +560,30 @@ def test_turning_network_access_off_says_it_works_at_once():
     assert flash_of(closed.headers["location"]) == "доступ сохранён: другим устройствам TOW отказывает уже сейчас"
     opened = local.post("/settings/access", data={"allow_lan": "1"}, follow_redirects=False)
     assert "перезапустите TOW" in flash_of(opened.headers["location"])
+
+
+@pytest.mark.parametrize("url", ["javascript:alert(1)//?t=1234567", "data:text/html,x?t=1234567", "//t=1234567"])
+def test_a_topic_link_that_is_not_a_web_address_is_not_a_link_on_home(url):
+    """A topic link is only as strict as its site's pattern, which the owner may write loosely."""
+    from tow.config import load_config, save_config
+    from tow.store import save_state
+
+    cfg = load_config()
+    cfg["trackers"] = {
+        "fakesite": {
+            "url_regex": r".*?t=(\d+)",
+            "fetch_hosts": ["https://fake.example"],
+            "download_path": "/dl.php?t={id}",
+        }
+    }
+    save_config(cfg)
+    topics = [
+        {"id": "1234567", "title": "Show A", "url": url},
+        {"id": "7654321", "title": "Show B", "url": "https://fake.example/view?t=7654321"},
+    ]
+    save_state({"topics": topics})
+
+    page = TestClient(app).get("/", headers={"Accept": "text/html"}).text
+
+    assert 'href="https://fake.example/view?t=7654321"' in page  # a web address stays a link
+    assert f'href="{url}' not in page
