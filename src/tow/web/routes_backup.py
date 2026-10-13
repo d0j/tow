@@ -177,12 +177,13 @@ def settings_backup_location(
         moved = t("web.backup.old_copies_stay", path=old) if new != old else ""
         return _backup_redirect(t("web.backup.folder_default", title=location.title, path=new, moved=moved))
     raw = path.strip().strip('"')
-    if reason := problem(raw, location):
-        return _backup_redirect("web.backup.folder_refused", "err", title=location.title, reason=reason)
     if is_network_share(raw) and not access.is_local(request):
         # Even the check signs in to that server with the owner's Windows account (NTLM), and
-        # night copies would go there: only the owner at this computer names a server.
+        # night copies would go there: only the owner at this computer names a server. Before
+        # problem(), which resolves the folder of night copies and so opens the share already.
         return _backup_redirect("web.backup.share_local_only", "err")
+    if reason := problem(raw, location):
+        return _backup_redirect("web.backup.folder_refused", "err", title=location.title, reason=reason)
     target = resolve(raw, location)
     if reason := services.folder_write_problem(target):
         return _backup_redirect(f"{target}: {reason}", "err")
