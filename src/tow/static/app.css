@@ -1116,4 +1116,11 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 .issue-note { margin: 0 0 .8rem; color: var(--fg); background: var(--pill-warn-bg); border: 1px solid var(--warn); }
 /* A link inside a message's sentence is told from the words by more than colour (WCAG 1.4.1). */
 .secret-store a { text-decoration: underline; }
-.secret-store-copy { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-left: .4rem; }
+/* The master-key note: its "Copy the command" stays one 26 px line, beside the text on a wide
+   page and under it on a phone (the text column shrank it into two lines before). */
+.flash.secret-store { flex-wrap: wrap; }
+.flash.secret-store > span:first-child { flex: 1 1 24rem; }
+.secret-store-copy {
+  display: inline-flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: .4rem; margin-left: .4rem;
+}
+.secret-store-copy > button { white-space: nowrap; }

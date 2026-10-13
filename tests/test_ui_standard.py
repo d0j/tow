@@ -87,3 +87,14 @@ def test_long_site_names_and_sign_in_pills_stay_in_their_columns():
     sites = first(".list-head.sites, details.row-edit.sites > summary")
     assert "minmax(10rem,1fr) 8rem 6.4rem" in sites
     assert "justify-self: start" in first("details.row-edit.sites > summary > .pill")
+
+
+def test_the_copy_command_button_stays_one_line_in_the_master_key_note():
+    """Qa10: "Скопировать команду" wrapped into two lines (32 px) inside the note, at 1280 px too:
+    the note's text column shrank it. It keeps its width and one line, and goes under the text
+    on a phone (measured in a browser at 1280 and 390 px: 26 px)."""
+    rules = dict(_rules(CSS))
+    assert "flex: 0 0 auto" in rules[".secret-store-copy"]
+    assert "white-space: nowrap" in rules[".secret-store-copy > button"]
+    assert "flex-wrap: wrap" in rules[".flash.secret-store"]
+    assert "flex: 1 1 24rem" in rules[".flash.secret-store > span:first-child"]
