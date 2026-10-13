@@ -42,7 +42,7 @@ every new version to your torrent client.
 
 | | |
 |---|---|
-| **Sites** | rutor, Kinozal, NNM-Club, RuTracker, Tapochek, UnionPeer, fast-torrent; others by hand |
+| **Sites** | Rutor, Kinozal, NNM-Club, RuTracker, Tapochek, UnionPeer, Fast-Torrent; others by hand |
 | **Torrent clients** | qBittorrent (Web UI), Transmission 3.0+, Deluge 2.x |
 | **Notifications** | Telegram, Discord, WhatsApp (CallMeBot), ntfy |
 | **Systems** | Windows 10/11 (x64), Linux, macOS (Apple silicon) — all three in CI |

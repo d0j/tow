@@ -147,8 +147,8 @@ connected.
 | Check all | ↻ in the header on Home (asks to confirm) | Checks active topics now in the background, including those with personal timers; does not reset their countdowns. Ignores the mirror pause. |
 | One topic | ↻ in the row | That topic only; ignores the mirror pause. |
 
-A check missed while the computer slept or was off runs right after it wakes. Manual checks send notifications the
-same way as scheduled ones. **Pause** in a row skips the topic in scheduled checks; the row's check still works.
+A check missed while the computer slept or was off runs right after it wakes or starts. Manual checks send
+notifications the same way as scheduled ones. **Pause** in a row skips the topic in scheduled checks; the row's check still works.
 An empty personal timer uses the global interval. Saving a different personal interval starts a new countdown;
 manual checks and progress checks do not reset it.
 
@@ -157,7 +157,7 @@ manual checks and progress checks do not reset it.
 - **Mirrors.** TOW starts with the main mirror and moves on until one returns the `.torrent`; that one becomes the
   main mirror. To choose it yourself, open the site's row on **Sites** and press a mirror under “Main mirror — TOW
   tries it first”.
-- **Cooldown.** A mirror that fails three times in a row rests for an hour (rutor: 30 minutes); the others keep
+- **Cooldown.** A mirror that fails three times in a row rests for an hour (Rutor: 30 minutes); the others keep
   working. A site's `fail_threshold` and `cooldown_sec` in `config.yaml` change the count and the pause. A check you
   start (the row's ↻ on Home, **Check all topics now**) tries resting mirrors too, and a mirror that answers ends its
   pause; the check icon in the site's row on **Sites** (“Check the site's mirrors”) only shows which mirrors answer.
@@ -315,7 +315,7 @@ The left column is the text TOW shows (on Home, in a row, in a message or on a p
 | The torrent client is unavailable: new versions are not added. · torrent client unreachable | TOW cannot reach the client's Web UI. | Start the client, check its Web UI is on; Settings → Torrent clients → **Check**. |
 | Sign in to *site* (topics: *n*): open the topic's row. · the page has no torrent link — sign in to the site | The site wants a signed-in user for the `.torrent`. | Open the row → **Sign in**, or enter the user name and password on **Sites**. |
 | *site*: no mirror answered: … · no connection | Every mirror failed. | Usually temporary. If it lasts, open the site in a browser and add a working mirror on **Sites**. |
-| *site*: all mirrors are paused · *site*: the site is paused | Mirrors are resting after failures, or you paused the site. | Wait for the pause to end (an hour; rutor: 30 minutes), or start a check yourself (the row's ↻ on Home): it tries resting mirrors too. A site you paused: resume it on **Sites**. |
+| *site*: all mirrors are paused · *site*: the site is paused | Mirrors are resting after failures, or you paused the site. | Wait for the pause to end (an hour; Rutor: 30 minutes), or start a check yourself (the row's ↻ on Home): it tries resting mirrors too. A site you paused: resume it on **Sites**. |
 | the site is behind a Cloudflare check — open it in a browser | The site shows a browser challenge. | TOW does not bypass it. Try another mirror or wait. |
 | daily download limit reached | The site's download quota for today is used up. | Nothing; TOW tries again tomorrow. |
 | the previous version of the torrent is still active on the same file: … | A new version overlaps a torrent that is still seeding. | **Stop the previous one and add** in the row, or stop it in the client. |
@@ -329,7 +329,8 @@ The left column is the text TOW shows (on Home, in a row, in a message or on a p
 | the torrent is already in the client without the label tow, so TOW cannot manage it — … · the torrent was added (paused), but the client did not keep the label tow on it — … | The torrent has no `tow` mark: you or another program added it, or the client could not set the mark while adding. TOW does not change such a torrent. | Open the topic and choose **Adopt into TOW** (or `tow adopt --all-unmarked` for many): TOW marks the torrent, changes nothing else, and manages it from the next check. After the second message the button appears once the next check has found the torrent. Deluge keeps one label per torrent: one with a label of yours is adopted only with `tow adopt --replace-label ID`, which replaces that label with `tow`. Or remove it in the client and let TOW add it again. |
 | another check is running right now; press “Check” again in a minute | One check at a time. | Wait. |
 | TOW cannot read its settings file config.yaml (a page instead of TOW) | `config.yaml` has an error; the page names the line. | Correct `config.yaml` in the TOW folder at that place and reload the page: TOW reads it again by itself. If that does not work, copy `config.yaml` back from the newest nightly backup (`backup/night`) and reload. |
-| TOW is not started: port 8787 is already in use by another program. | Another program (often a second TOW) uses the port. | Stop that program, or set another `port:` in `config.yaml` and start TOW again. |
+| TOW is not started: port 8787 is already in use by another program. · … already in use by another TOW (another TOW folder, or a copy of this one). | Another program, or a second TOW, uses the port. | Stop that program or that TOW, or set another `port:` in `config.yaml` and start TOW again. |
+| TOW is not started: port 8787 is already in use by a web server of this TOW that tow run did not start … | A `tow serve` started by hand holds the port. | Stop that web server, then start TOW again. |
 | Scheduled checks have not run since … | TOW was not running, or checks keep failing. | `tow autostart status`; look at `data/logs/run.log`. |
 | The last scheduled check is blocked: saved passwords and tokens cannot be opened. … · The master key is missing … | The master key is missing or wrong. | `tow keys status`; put back `keys/master.key` from your copy, or `tow keys adopt --from FILE`. |
 | state.json was written by a newer TOW … | You went back to an older version. | Update TOW again, or restore a backup made by this version. |
