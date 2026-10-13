@@ -72,7 +72,7 @@ def test_a_lost_data_folder_counts_only_while_no_topic_is_watched():
         "bad",
         Message("issues.data_lost", {"folder": "D:\\TOW\\data"}),
     )
-    assert issue.target == Target("settings", open="transfer", anchor="backup-night")
+    assert issue.target == Target("settings", open="transfer", anchor="backup-night", note=True)
     assert issue.fix == Fix("restore_night", label="settings.common.restore")
     assert collect(_snapshot([{"id": "a", "url": NNM + "1"}], data_lost=lost)) == []
     assert data_lost.folder_lost({"folder": 5}, []) is None
@@ -92,7 +92,7 @@ def test_scheduled_checks_are_late_after_two_intervals_and_the_slack(last_schedu
     if listed:
         assert found[0].severity == "warn"
         assert found[0].message == Message("issues.check_stale", {"at": last_scheduled})
-        assert found[0].target == Target("settings", open="service", anchor="acc-service")
+        assert found[0].target == Target("settings", open="service", anchor="acc-service", note=True)
         assert found[0].fix == Fix("restart_service", label="settings.service.restart")
     assert collect(_snapshot(next_check_at=None)) == []
 

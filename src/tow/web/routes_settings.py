@@ -34,7 +34,7 @@ from tow.web import _context, services
 from tow.web.site_store import save_together, settings_undo
 from tow.web.templating import TEMPLATES
 from tow.web.text import format_bytes, t
-from tow.web.views import backup_view, flash_redirect, flash_ttl_sec, request_flash, service_view
+from tow.web.views import backup_view, flash_redirect, flash_ttl_sec, issue_notes, request_flash, service_view
 
 router = APIRouter()
 
@@ -94,6 +94,8 @@ def settings_page(request: Request) -> Response:
             "language_setting": _language_setting(cfg),
             "theme_setting": cfg.get("theme") if cfg.get("theme") in THEMES else "auto",
             "log_rows": [format_event(e, title_index=title_index) for e in services.read_events(limit=200)],
+            # What needs the owner and is said in its card ("Needs attention" lands there).
+            "notes": issue_notes(state, cfg, "settings"),
         },
     )
 
