@@ -45,8 +45,9 @@ flowchart TD
 - The schedule is the supervisor's own: checks every `interval_sec` after its last scheduled start
   (`data/run/schedule.json`), the night copy once per local day (a copy older than the latest slot is due; DST
   neither skips nor repeats a night). The watchdog duty only reports. Every job is one row of a table
-  (`tow.supervisor.jobs`: arguments, time limit, cadence, saved key); its order decides which of several due jobs
-  starts first.
+  (`tow.supervisor.jobs`: arguments, time limit, cadence, saved key). The table order initializes a new schedule;
+  afterwards the oldest overdue child runs first, with stable table-order ties. `last_child_attempt` is recorded
+  before dispatch, including a failed spawn, so a long-running global check cannot starve the other children.
 - A new revision whose selected files do not fit on the target drive (new bytes plus a 512 MiB margin, measured
   only on a drive this computer sees) is added stopped with its selection read back, and the topic keeps
   `waiting_space` (error `check.waiting_space`, class `disk`). While it waits no check downloads its `.torrent`
@@ -103,6 +104,7 @@ flowchart TD
 | `tow.check`, `check_steps`, `check_transaction` | A check run: fetch, decide, hand to the client, record — with a journal for the commit. The package exports `run_check` and the checks the web pages share; inside it `run` is the run, its commit and health record, `topic` one topic's check, `apply` what that check does in the client, `client_ops` hash identity, ownership, read-back and relocation, `reconcile` progress and the history commit, `space` the wait for disk space, `notices` the messages, `rows` a topic's result row. |
 | `tow.progress` | The progress pass: a topic's torrent in its client and its files on disk, recorded in the download history. The package exports `reconcile_topic`, `progress_summary` and the disk confirmation (`filesystem_confirmation`, `safe_relative_path`, `CONFIRMATION_REUSE_SEC`); inside it `confirmation` is the disk confirmation, `labels` the events and their wording, `presence` the torrent gone from its client or back and superseded revisions, `expected` the selected files and the episodes expected (selection, episodes, file rules, aliases), `history` the history index and item identity, `reconcile` the pass itself, `summary` the completion summary. |
 | `tow.trackers` | `generic.GenericHttpTracker` reads any configured site; `presets/<site>.py` adds what TOW knows about a particular site. `tow.mirrors` picks mirrors, cooldowns, redirects. |
+| `tow.protection` | Optional site-access layer: pure bounded verdicts (`detect`), validated settings/contracts (`spec`), independent adapter discovery and bounded service HTTP (`providers`, `solvers`), ordered finite fallback (`chain`), encrypted origin/expiry/config-bound clearance and durable leases (`store`), absolute deadline over the existing pinned network backend (`transport`). Mirrors remain first; account sign-in stays in the native tracker. See [PROTECTION.md](PROTECTION.md). |
 | `tow.clients` | Torrent adapters behind `TorrentClientAdapter`; qBittorrent, Transmission and Deluge all use the read-back contract of `managed.ManagedClient`; qBittorrent overrides its add, a full selection and the rollback's priority levels. The helper modules (`HELPERS`): `spec` (the contract and discovery), `factory` (the configured clients), `managed`, `files`, `address` (a client's Web UI address, shared by Transmission, Deluge and the web's reachability check), and `view` (the settings cards, as `notifiers.view` makes the messengers'). |
 | `tow.adopt` | Adopt into TOW: on the owner's request only, the `tow` mark on a torrent already in the client (added by hand or by another program), read back and logged; nothing else about the torrent changes. |
 | `tow.notifiers` | One module per messenger behind the `Notifier` protocol; `outbox` is the per-recipient delivery queue; `view` the settings cards and the header's status; `tow.delivery` groups, delays and digests. |
@@ -173,6 +175,7 @@ plus ten regexes, never a Python dispatch per file and mask.
     download_history.json  files of every revision
     secrets.enc            passwords, tokens, cookies, password record — Fernet, master key
     secrets-undo.enc       the secrets before the last undoable change
+    protection.enc         optional encrypted site-access cache and provider cooldown leases (bounded)
     sessions.json          revoked network sessions and the "Sign out everywhere" counter
     tow.jsonl              structured events — rotated
     restore-points/        restore points (.towx)

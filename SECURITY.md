@@ -38,6 +38,11 @@ otherwise.
   it. Night copies are signed; a modified copy is not restored.
 - **Outbound requests.** Site addresses entered in the UI may not point at this computer or the home network;
   download redirects may not leave the site's configured hosts.
+- **Optional access providers.** Disabled by default and configured only from this computer. Their API endpoint
+  must be a literal loopback/private address (or localhost), with no credentials, proxy or redirects. The service
+  receives only a public site's root URL, not account cookies, passwords, passkeys or torrent links. A bounded,
+  validated response is not proof: TOW verifies it through its own same-origin guarded request. Clearance and its
+  matching User-Agent are encrypted in the bounded `data/protection.enc` with expiry and durable attempt leases.
 - **Your torrents and folders.** TOW changes only torrents it added (tag `tow`) and refuses system and profile
   folders as download or backup targets.
 
@@ -58,6 +63,10 @@ otherwise.
   makes every request need the password, and all of them count as one device when wrong passwords are slowed
   down. Do not run TOW behind a proxy unless the proxy authenticates every request.
 - TOW is meant for one computer, a home network or a VPN. It is not hardened for direct exposure to the internet.
+- An external access provider operates its own browser, DNS and requests. TOW's public-only IP-pinned transport
+  does not constrain that separate process. Run only trusted services, keep their API private and restrict browser
+  egress to prevent access to LAN, link-local and cloud-metadata services. TOW does not install or sandbox them.
+  Imported Python plugin modules are trusted executable code, not a security boundary.
 - Traffic between a device and TOW over the network is plain HTTP: anyone who can watch the home network (a shared
   Wi-Fi, a compromised router) can read the password at sign-in and the session cookie, and that cookie works for
   90 days until the device signs out or you use "Sign out everywhere". Use a VPN (WireGuard, Tailscale) or an SSH

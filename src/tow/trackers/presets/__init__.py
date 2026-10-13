@@ -104,6 +104,9 @@ class SitePreset:
     browser_login: bool = False
     # The language-file key of what the owner is asked during that browser login.
     browser_login_hint: str = ""
+    # A cheap service page which names this topic's current v1 hash (empty disables).
+    infohash_path: str = ""
+    maintenance_markers: tuple[str, ...] = ()
     # The site's settings: a config without a trackers: section gets them (config.defaults).
     spec: Mapping[str, Any] = field(default_factory=dict)
     # The site's own rules for a pasted link: new site settings, or None (not this site's link).
@@ -118,6 +121,10 @@ class SitePreset:
             out["search_path"] = self.search_path
         if self.daily_limit:
             out["download_limit"] = True
+        if self.infohash_path:
+            out["infohash_path"] = self.infohash_path
+        if self.maintenance_markers:
+            out["maintenance_markers"] = list(self.maintenance_markers)
         return out
 
 

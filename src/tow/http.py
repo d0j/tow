@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import codecs
+import math
 import re
 import time
+import zlib
+from collections.abc import Iterator
 from typing import Any
 
 import httpx
@@ -125,7 +128,7 @@ def client(
     else:
         transport = None
     return httpx.Client(
-        headers={"User-Agent": ua or UA_DEFAULT},
+        headers={"User-Agent": ua or UA_DEFAULT, "Accept-Encoding": "gzip, deflate, identity"},
         cookies=cookies or {},
         follow_redirects=follow_redirects,
         timeout=httpx.Timeout(20.0, connect=5.0),
@@ -134,15 +137,119 @@ def client(
     )
 
 
-def get_limited(c: httpx.Client, url: str, *, max_bytes: int) -> httpx.Response:
+def get_limited(c: httpx.Client, url: str, *, max_bytes: int, deadline: float | None = None) -> httpx.Response:
     """Stream one response into a bounded in-memory httpx.Response."""
-    return request_limited(c, "GET", url, max_bytes=max_bytes)
+    return request_limited(c, "GET", url, max_bytes=max_bytes, deadline=deadline)
 
 
-def request_limited(c: httpx.Client, method: str, url: str, *, max_bytes: int, **kwargs: Any) -> httpx.Response:
+def _check_response_time(deadline: float) -> None:
+    if time.monotonic() > deadline:
+        raise ResponseTooSlowError("response time budget exhausted")
+
+
+class _BoundedDecoder:
+    """One coding layer: every zlib allocation has a maximum output length.
+
+    Complete streams need no unbounded flush: eof checks the trailer/CRC and all the
+    output has already been produced by decompress. Each layer's aggregate output,
+    including every concatenated gzip member, has the same byte limit.
+    """
+
+    def __init__(self, encoding: str, limit: int, deadline: float) -> None:
+        self.encoding = encoding
+        self.limit = limit
+        self.deadline = deadline
+        self.total = 0
+        self.prefix = b""
+        self.raw_retry = False
+        self.decoder = zlib.decompressobj(zlib.MAX_WBITS | 16) if encoding == "gzip" else None
+
+    def feed(self, raw: bytes) -> bytes:
+        _check_response_time(self.deadline)
+        if self.decoder is None:
+            self.prefix += raw
+            if len(self.prefix) < 2:
+                return b""
+            # HTTP deflate may be zlib-wrapped or raw; deciding from its two-byte
+            # zlib header also handles a raw stream split across tiny wire chunks.
+            first, second = self.prefix[:2]
+            wrapped = first & 15 == 8 and first >> 4 <= 7 and (first * 256 + second) % 31 == 0
+            self.raw_retry = wrapped
+            self.decoder = zlib.decompressobj(zlib.MAX_WBITS if wrapped else -zlib.MAX_WBITS)
+            raw, self.prefix = self.prefix, b""
+        out = bytearray()
+        while raw:
+            _check_response_time(self.deadline)
+            if self.decoder.eof:
+                if self.encoding != "gzip":
+                    raise httpx.DecodingError("trailing deflate data")
+                self.decoder = zlib.decompressobj(zlib.MAX_WBITS | 16)
+            retry_raw, self.raw_retry = self.raw_retry, False
+            try:
+                decoded = self.decoder.decompress(raw, self.limit - self.total + 1)
+            except zlib.error as exc:
+                if not retry_raw:
+                    raise httpx.DecodingError("invalid compressed response") from exc
+                # A valid raw stored block can resemble a zlib header. Retry only
+                # the first failed call, before any output was returned to callers.
+                self.decoder = zlib.decompressobj(-zlib.MAX_WBITS)
+                try:
+                    decoded = self.decoder.decompress(raw, self.limit - self.total + 1)
+                except zlib.error as raw_exc:
+                    raise httpx.DecodingError("invalid compressed response") from raw_exc
+            _check_response_time(self.deadline)
+            if len(decoded) > self.limit - self.total:
+                raise ResponseTooLargeError(f"decoded response body exceeds {self.limit} bytes")
+            self.total += len(decoded)
+            out.extend(decoded)
+            raw = self.decoder.unused_data if self.decoder.eof else self.decoder.unconsumed_tail
+        return bytes(out)
+
+    def finish(self) -> None:
+        if self.decoder is None or not self.decoder.eof:
+            raise httpx.DecodingError("truncated compressed response")
+
+
+def _response_encodings(response: httpx.Response) -> list[str]:
+    value = response.headers.get("content-encoding", "identity")
+    names = [name.strip().lower() for name in value.split(",")]
+    if len(names) > 3 or any(name not in {"gzip", "deflate", "identity"} for name in names):
+        raise httpx.DecodingError("unsupported response content encoding")
+    return [name for name in reversed(names) if name != "identity"]
+
+
+def _decoded_chunks(response: httpx.Response, *, limit: int, deadline: float, has_body: bool) -> Iterator[bytes]:
+    encodings = _response_encodings(response)
+    # MockTransport's preloaded responses (and tiny adapters) have already decoded
+    # their content before this function. Real streaming HTTP follows iter_raw.
+    if response.is_stream_consumed:
+        yield from response.iter_bytes(chunk_size=16384)
+        return
+    decoders = [_BoundedDecoder(name, limit, deadline) for name in encodings]
+    wire_size = 0
+    for raw in response.iter_raw(chunk_size=16384):
+        _check_response_time(deadline)
+        wire_size += len(raw)
+        if wire_size > limit:
+            raise ResponseTooLargeError(f"encoded response body exceeds {limit} bytes")
+        for decoder in decoders:
+            raw = decoder.feed(raw)
+        yield raw
+    if has_body and wire_size:
+        for decoder in decoders:
+            decoder.finish()
+
+
+def request_limited(
+    c: httpx.Client, method: str, url: str, *, max_bytes: int, deadline: float | None = None, **kwargs: Any
+) -> httpx.Response:
     """``c.request(method, url, **kwargs)`` with the body streamed into a bounded response."""
     if max_bytes <= 0:
         raise ValueError("max_bytes must be positive")
+    if deadline is not None and (isinstance(deadline, bool) or not math.isfinite(deadline)):
+        raise ValueError("invalid response deadline")
+    if deadline is not None and time.monotonic() >= deadline:
+        raise ResponseTooSlowError("response time budget exhausted")
     # A few adapter tests use a deliberately tiny client double. Real httpx
     # clients always take the streaming branch below.
     if not hasattr(c, "stream"):
@@ -156,8 +263,12 @@ def request_limited(c: httpx.Client, method: str, url: str, *, max_bytes: int, *
                 pass
         if len(response.content) > max_bytes:
             raise ResponseTooLargeError(f"response body exceeds {max_bytes} bytes")
+        if deadline is not None and time.monotonic() >= deadline:
+            raise ResponseTooSlowError("response time budget exhausted")
         return response
     with c.stream(method, url, **kwargs) as response:
+        if deadline is not None and time.monotonic() >= deadline:
+            raise ResponseTooSlowError("response time budget exhausted")
         declared = response.headers.get("content-length")
         if declared:
             try:
@@ -168,15 +279,24 @@ def request_limited(c: httpx.Client, method: str, url: str, *, max_bytes: int, *
                 raise ResponseTooLargeError(f"response body exceeds {max_bytes} bytes")
         chunks: list[bytes] = []
         size = 0
-        deadline = time.monotonic() + MAX_RESPONSE_SECONDS
-        for chunk in response.iter_bytes():
-            if time.monotonic() > deadline:
+        body_deadline = time.monotonic() + MAX_RESPONSE_SECONDS
+        if deadline is not None:
+            body_deadline = min(body_deadline, deadline)
+        for chunk in _decoded_chunks(
+            response,
+            limit=max_bytes,
+            deadline=body_deadline,
+            has_body=method != "HEAD" and response.status_code not in {204, 304},
+        ):
+            if time.monotonic() > body_deadline:
                 raise ResponseTooSlowError(f"response body took longer than {MAX_RESPONSE_SECONDS:.0f} s")
             size += len(chunk)
             if size > max_bytes:
                 raise ResponseTooLargeError(f"response body exceeds {max_bytes} bytes")
             chunks.append(chunk)
-        # ``iter_bytes()`` returns the decoded entity body.  Reusing the
+        if deadline is not None and time.monotonic() >= deadline:
+            raise ResponseTooSlowError("response time budget exhausted")
+        # The bounded decoders return the decoded entity body. Reusing the
         # upstream Content-Encoding header would make the newly constructed
         # response decode those bytes a second time (NNMClub serves gzip),
         # producing ``incorrect header check``.  Content-Length describes the

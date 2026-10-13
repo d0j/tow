@@ -15,6 +15,8 @@ from tow.check.client_ops import (
     PREVIOUS_REVISION_ACTIVE,
     blocked_revision,
     confirm_client_add,
+    info_confirms,
+    info_is_pending_tow_add,
     live_previous_overlap,
     magnet_matches_saved_hash,
 )
@@ -28,6 +30,7 @@ from tow.errors import TowError
 from tow.events import new_operation_id
 from tow.i18n import t
 from tow.log import error_class, error_fields, is_daily_limit, log_event, owner_language
+from tow.mirrors import MirrorFetchError
 from tow.records import CheckRow, Topic, mirror_of
 from tow.selection import SelectionPendingError, policy_from_topic, resolve_selection
 from tow.store import (
@@ -158,7 +161,7 @@ def _site_skipped(
     """Fill ``row`` and return True when the topic's site is not asked in this run: its daily
     download limit is reached, it is paused, or a preview would spend its download limit."""
     mirror_state = mirror_of(state, tr.name)
-    if tr.name in quota:
+    if tr.name in quota and not (getattr(tr, "spec", {}) or {}).get("infohash_path"):
         error = TowError("check.daily_limit")
     elif mirror_state is not None and mirror_state.get("frozen") is True:
         error = TowError("check.frozen")
@@ -274,6 +277,8 @@ def _confirm_matching_magnet(
         _observe_cached_magnet(url, magnet_url, topic)
     if not magnet_matches_saved_hash(magnet_url, old, topic_client):
         return False
+    if run.readd_removed and topic_client is not None and topic_client.inspect_torrent(old) is None:
+        return False  # a manual re-add needs metadata and the ordinary, confirmed add path
     saved_selection_ready = bool(
         not topic.get("selection_dirty")
         and (
@@ -284,7 +289,9 @@ def _confirm_matching_magnet(
     if not saved_selection_ready:
         raise TowError("check.link_unavailable_selection") from torrent_error
     if run.apply and policy["tracking_mode"] == "once":
-        if topic_client is None or not confirm_client_add(topic_client, old, str(topic.get("save_path") or "")):
+        if topic_client is None or not confirm_client_add(
+            topic_client, old, str(topic.get("save_path") or ""), require_tow_ownership=True
+        ):
             raise TowError("check.once_unconfirmed") from torrent_error
         topic["once_done"] = True
     tracker_title = _current_tracker_title(tr, url, run.secrets, run.ua, ignore_cool=run.ignore_cool, persist=False)
@@ -299,7 +306,7 @@ def _confirm_matching_magnet(
             "source": "matching_magnet",
             "fallback_reason": "tracker_auth",
             "warning": "torrent link unavailable; existing magnet identity confirmed",
-            "status": "skipped",
+            "status": "succeeded",
             "skipped": t("check.skip.magnet_confirmed", owner_language()),
         }
     )
@@ -480,12 +487,7 @@ def _check_revision(work: TopicCheck) -> None:
     if plan is None:
         return  # waiting for episodes that are not out yet
     _record_found(work, metadata, plan, h=h, migrates=hash_alias_migration)
-    needs_selection_update = bool(
-        h == old
-        and (
-            topic.get("selection_dirty") or (plan.mode != "all" and str(topic.get("selection_hash") or "").upper() != h)
-        )
-    )
+    needs_selection_update = _needs_selection_update(work, plan, h)
     _mark_preview(
         row,
         preview=not run.apply and (h != old or needs_selection_update),
@@ -511,7 +513,9 @@ def _check_revision(work: TopicCheck) -> None:
         topic["hash"] = h
     elif run.apply and policy["tracking_mode"] == "once":
         client = work.client
-        if client is None or not confirm_client_add(client, h, str(topic.get("save_path") or "")):
+        if client is None or not confirm_client_add(
+            client, h, str(topic.get("save_path") or ""), require_tow_ownership=True
+        ):
             raise TowError("check.once_unconfirmed")
         topic["once_done"] = True
 
@@ -525,6 +529,18 @@ def _check_revision(work: TopicCheck) -> None:
         # Refresh legacy/corrupt caches without any client mutation. A preview
         # changes only its in-memory copy; the applying commit remains journaled.
         store_file_aliases(topic, h, metadata.files, mode=plan.mode)
+
+
+def _needs_selection_update(work: TopicCheck, plan: Any, h: str) -> bool:
+    """The same revision has an unapplied rule, or its previously accepted add is unfinished."""
+    if h != work.old:
+        return False
+    topic = work.topic
+    if topic.get("selection_dirty") or (plan.mode != "all" and str(topic.get("selection_hash") or "").upper() != h):
+        return True
+    return bool(
+        work.run.apply and work.client is not None and info_is_pending_tow_add(work.client.inspect_torrent(h), h)
+    )
 
 
 def _readds_removed(work: TopicCheck, *, h: str, needs_selection_update: bool) -> bool:
@@ -560,6 +576,10 @@ def _fetch_revision(work: TopicCheck, policy: dict[str, Any]) -> Fetched | None:
         _reread_secrets(run)
     if (waiting := _blocked_revision(work)) is not None:
         return Fetched(waiting, None)
+    if _probe_unchanged_revision(work, policy):
+        return None
+    if work.tracker.name in run.quota:
+        raise TowError("check.daily_limit")
     try:
         blob = work.tracker.fetch_torrent(work.url, run.secrets, run.ua, ignore_cool=run.ignore_cool, persist=run.apply)
     except Exception as torrent_error:  # a tracker refusal may fall back to its magnet; else re-raised
@@ -567,6 +587,71 @@ def _fetch_revision(work: TopicCheck, policy: dict[str, Any]) -> Fetched | None:
             raise  # no temporary magnet add before the prepared identity is verified
         return _fetch_by_magnet(work, policy, torrent_error)
     return Fetched(blob, None)
+
+
+def _probe_unchanged_revision(work: TopicCheck, policy: dict[str, Any]) -> bool:
+    """A fresh site hash may avoid a download, but never the client's read-back.
+
+    A rule needing metadata, a missing/foreign torrent or a failed prior observation
+    always takes the full path. The normal progress reconcile still runs afterwards.
+    """
+    topic, run, tracker, client = work.topic, work.run, work.tracker, work.client
+    if not (run.apply and work.old and (getattr(tracker, "spec", {}) or {}).get("infohash_path")):
+        return False
+    if topic.get("selection_dirty") or space.waiting_of(topic) or blocked_revision(topic):
+        return False
+    if policy["mode"] != "all" and not (
+        topic.get("selection_verified") is True and str(topic.get("selection_hash") or "").upper() == work.old
+    ):
+        return False
+    probe = getattr(tracker, "fetch_revision_hash", None)
+    if not callable(probe):
+        return False
+    try:
+        current = probe(work.url, run.secrets, run.ua, ignore_cool=run.ignore_cool, persist=True)
+    except MirrorFetchError as exc:
+        endpoint_only = exc.failure in {
+            "http_topic",
+            "gone",
+            "unexpected",
+            "local",
+            "too_large",
+            "redirect_policy",
+            "redirect_loop",
+        } or (
+            exc.failure in {"cloudflare", "maintenance", "interactive"} and getattr(exc, "host_failure", None) is False
+        )
+        if not endpoint_only:
+            # The host or session already failed its fallback chain; a normal download
+            # would repeat that chain and count the same outage twice in one check.
+            raise
+        _LOG.info("revision endpoint unavailable for %s: %s", tracker.name, exc.failure)
+        return False
+    except Exception as exc:  # noqa: BLE001 - an optional unknown probe falls back to the normal download
+        _LOG.info("revision probe unavailable for %s: %s", tracker.name, type(exc).__name__)
+        return False
+    if not current or current.upper() != work.old or client is None:
+        return False
+    info = client.inspect_torrent(work.old)
+    if not info_confirms(info, work.old, str(topic.get("save_path") or ""), require_tow_ownership=True):
+        return False
+    if info_is_pending_tow_add(info, work.old):
+        return False
+    if policy["tracking_mode"] == "once":
+        topic["once_done"] = True
+    work.row.update(ok=True, hash=work.old, changed=False, source="site_infohash", status="succeeded")
+    run.record(
+        "tracker_checked",
+        component="tracker",
+        integration_id=tracker.name,
+        topic_id=topic.get("id"),
+        topic=topic.get("id"),
+        tracker=tracker.name,
+        hash=work.old,
+        status="succeeded",
+        how=run.how,
+    )
+    return True
 
 
 def _blocked_revision(work: TopicCheck) -> bytes | None:

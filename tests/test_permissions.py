@@ -398,3 +398,56 @@ def test_without_an_administrator_terminal_fix_closes_this_accounts_own_folders(
     for folder in (root, root / "keys", root / "data"):
         assert "BU" not in acl.sddl[str(folder)]
         assert "AU" not in acl.sddl[str(folder)]
+
+
+@pytest.mark.parametrize("failure", ["unknown", "error", "account"])
+def test_an_unavailable_permission_query_never_claims_the_folders_are_closed(install, monkeypatch, failure):
+    if failure == "error":
+
+        def unavailable(self, path, account, *, root=False):
+            raise OSError("synthetic ACL query failure")
+
+        monkeypatch.setattr(WindowsBackend, "shared_for", unavailable)
+    elif failure == "account":
+        monkeypatch.setattr(WindowsBackend, "current_account", lambda self: None)
+    else:
+        monkeypatch.setattr(WindowsBackend, "shared_for", lambda self, path, account, **kwargs: None)
+
+    result = permissions.status()
+
+    assert result["ok"] is False
+    assert result["unknown"] is True
+    assert all(row["open"] is None for row in result["folders"])
+    assert "fix_command" not in result
+    assert t("permissions.all_closed") not in permissions.text(result)
+    assert t("permissions.run_fix", command=permissions.fix_command(admin=False)) not in permissions.text(result)
+
+
+@pytest.mark.parametrize("elevated", [False, True])
+def test_fix_does_not_report_success_when_its_readback_is_unknown(install, monkeypatch, elevated):
+    _root, _acl, session = install
+    session.update(elevated=elevated)
+    monkeypatch.setattr(WindowsBackend, "shared_for", lambda self, path, account, **kwargs: None)
+    monkeypatch.setattr(WindowsBackend, "hand_over", lambda self, path, account: True)
+    monkeypatch.setattr("tow.store.protect_install_folders", lambda **kwargs: None)
+
+    result = permissions.fix()
+
+    assert result["ok"] is False
+    assert result["unknown"] is True
+    rendered = permissions.text(result)
+    assert t("permissions.all_closed") not in rendered
+    assert t("permissions.fixed") not in rendered
+    assert t("permissions.state_unknown") in rendered
+
+
+def test_a_status_without_any_inspectable_folders_is_unknown(install, monkeypatch):
+    monkeypatch.setattr(permissions, "_plain_dir", lambda path: False)
+
+    result = permissions.status()
+
+    assert result["ok"] is False
+    assert result["unknown"] is True
+    assert result["folders"] == []
+    assert "fix_command" not in result
+    assert t("permissions.all_closed") not in permissions.text(result)

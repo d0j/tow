@@ -44,6 +44,7 @@ E01, E02, NFO = (next(f.index for f in META.files if f.path.endswith(name)) for 
 def _no_waiting(monkeypatch):
     monkeypatch.setattr(ManagedClient, "PAUSE", 0)
     monkeypatch.setattr(ManagedClient, "POLLS", 5)
+    monkeypatch.setattr(ManagedClient, "START_POLLS", 5)
 
 
 class Torrent:
@@ -661,6 +662,217 @@ def test_a_start_the_client_drops_while_it_checks_is_given_again(client, tmp_pat
     info = adapter._wait_started(H)
     assert len(starts) == 2  # once by the caller, once again after the check
     assert not info["state"].startswith(("stopped", "paused")), info
+
+
+def test_a_check_longer_than_the_start_deadline_keeps_the_add_pending(client, tmp_path, monkeypatch):
+    adapter, server = client
+    real_start, real_inspect = adapter._start, adapter.inspect_torrent
+    checking = {"left": 0}
+    starts: list[str] = []
+
+    def start(infohash: str) -> None:
+        starts.append(infohash)
+        if len(starts) == 1:
+            checking["left"] = adapter.POLLS
+            return  # the client drops this start while it checks the files
+        real_start(infohash)
+
+    def inspect(infohash: str) -> dict[str, Any] | None:
+        info = real_inspect(infohash)
+        if info and checking["left"]:
+            checking["left"] -= 1
+            return {**info, "state": "checkingDL", "progress": 0.0}
+        return info
+
+    monkeypatch.setattr(adapter, "_start", start)
+    monkeypatch.setattr(adapter, "inspect_torrent", inspect)
+    with pytest.raises(ClientError) as error:
+        adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert error.value.code == "client.managed.start_unconfirmed"
+    assert {"tow", "tow-pending"}.issubset(adapter.inspect_torrent(H)["tags"])
+    assert not server.torrents[K].running
+    assert starts == [H]
+
+    # The next attempt completes the same pending add, without adding another torrent.
+    recovered = adapter.configure_torrent_selection(TORRENT, H, [E01], ensure_started=True)
+    assert recovered["state"] == "downloading"
+    assert recovered["tags"] == ["tow"]
+    assert len(server.torrents) == 1
+
+
+@pytest.mark.parametrize("timed_out", [False, True])
+def test_a_deluge_duplicate_added_meanwhile_is_not_adopted(tmp_path, monkeypatch, timed_out):
+    server = FakeDeluge()
+    adapter = _deluge(server)
+
+    def duplicate(filename, dump, options):
+        # A foreign add raced the preflight; Deluge refuses this duplicate with None.
+        server.torrents[K] = Torrent(TORRENT, options["download_location"], ["owners-label"], paused=False)
+        if timed_out:
+            raise httpx.ReadTimeout("synthetic add timeout")
+
+    monkeypatch.setattr(server, "m_core_add_torrent_file", duplicate)
+    with pytest.raises(ClientError) as error:
+        adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert error.value.code == ("client.deluge.no_connection" if timed_out else "client.deluge.add_refused")
+    torrent = server.torrents[K]
+    assert torrent.labels == ["owners-label"]
+    assert torrent.running
+    assert torrent.wanted == [True, True, True]
+    assert not set(server.calls) & {
+        "label.set_torrent",
+        "core.pause_torrents",
+        "core.resume_torrents",
+        "core.set_torrent_options",
+    }
+
+
+def test_a_transmission_add_timeout_does_not_claim_a_foreign_torrent(tmp_path, monkeypatch):
+    server = FakeTransmission()
+    handler = server.handler
+
+    def ambiguous(request):
+        if json.loads(request.content)["method"] == "torrent-add":
+            server.torrents[K] = Torrent(TORRENT, str(tmp_path), ["owners-label"], paused=False)
+            raise httpx.ReadTimeout("synthetic timeout")
+        return handler(request)
+
+    monkeypatch.setattr(server, "handler", ambiguous)
+    with pytest.raises(ClientError) as error:
+        _transmission(server).add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert error.value.code == "client.transmission.no_connection"
+    assert server.torrents[K].labels == ["owners-label"]
+    assert server.torrents[K].running
+    assert server.torrents[K].wanted == [True, True, True]
+
+
+def test_a_transmission_add_timeout_with_both_marks_can_finish(tmp_path, monkeypatch):
+    server = FakeTransmission()
+    handler = server.handler
+
+    def ambiguous(request):
+        answer = handler(request)
+        if json.loads(request.content)["method"] == "torrent-add" and K in server.torrents:
+            raise httpx.ReadTimeout("synthetic timeout after accepted add")
+        return answer
+
+    monkeypatch.setattr(server, "handler", ambiguous)
+    result = _transmission(server).add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert result["tags"] == ["tow"]
+    assert result["state"] == "downloading"
+    assert _wanted(result) == [index == E01 for index in range(3)]
+    assert len(server.torrents) == 1
+
+
+def test_a_deluge_confirmed_add_can_retry_its_failed_mark(tmp_path, monkeypatch):
+    server = FakeDeluge()
+    marking = server.m_label_set_torrent
+    attempts = []
+
+    def slow_mark(torrent_id, label):
+        attempts.append(torrent_id)
+        if len(attempts) == 1:
+            raise httpx.ReadTimeout("synthetic marking timeout")
+        return marking(torrent_id, label)
+
+    monkeypatch.setattr(server, "m_label_set_torrent", slow_mark)
+    result = _deluge(server).add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert result["tags"] == ["tow"]
+    assert result["state"] == "downloading"
+    assert _wanted(result) == [index == E01 for index in range(3)]
+    assert len(server.torrents) == 1
+
+
+@pytest.mark.parametrize("status", [0, 1, 2, 5, 6])
+def test_transmission_overlap_distinguishes_stopped_from_checking_and_seeding(tmp_path, monkeypatch, status):
+    from tow.check.client_ops import live_previous_overlap
+
+    server = FakeTransmission()
+    server.torrents[K] = Torrent(TORRENT, str(tmp_path), ["tow"], paused=True)
+    row_of = server._row
+    monkeypatch.setattr(server, "_row", lambda torrent: {**row_of(torrent), "status": status, "percentDone": 1.0})
+    overlap = live_previous_overlap(_transmission(server), [H], META.files)
+    assert bool(overlap) is (status != 0)
+
+
+@pytest.mark.parametrize("checking_status", [1, 2])
+def test_transmission_long_check_then_pause_gets_a_confirmed_restart(tmp_path, monkeypatch, checking_status):
+    server = FakeTransmission()
+    adapter = _transmission(server)
+    adapter.START_POLLS = 12
+    server.torrents[K] = Torrent(TORRENT, str(tmp_path), ["tow", "tow-pending"], paused=True)
+    row_of = server._row
+    states = iter([checking_status] * (adapter.POLLS + 1) + [0])
+
+    def row(torrent):
+        # More than the ordinary five polls, then a stopped complete seed; a retry must start it.
+        value = next(states, 6 if torrent.running else 0)
+        return {**row_of(torrent), "status": value, "percentDone": 1.0}
+
+    monkeypatch.setattr(server, "_row", row)
+    result = adapter._wait_started(H)
+    assert result["state"] == "uploading"
+    assert server.torrents[K].running
+    assert server.calls.count("torrent-start") == 1
+
+
+def test_start_confirmation_window_has_a_monotonic_deadline(client, tmp_path, monkeypatch):
+    adapter, server = client
+    adapter.START_POLLS = 100
+    adapter.START_WAIT_SEC = 2.0
+    labels = ["tow-pending"] if isinstance(server, FakeDeluge) else ["tow", "tow-pending"]
+    server.torrents[K] = Torrent(TORRENT, str(tmp_path), labels, paused=True)
+    _overlay(adapter, monkeypatch, state="checkingDL")
+    moments = iter([0.0, 0.0, 1.0, 2.0])
+    monkeypatch.setattr("tow.clients.managed.time.monotonic", lambda: next(moments, 2.0))
+    with pytest.raises(ClientError) as error:
+        adapter._wait_started(H)
+    assert error.value.code == "client.managed.start_unconfirmed"
+    assert "tow-pending" in adapter.inspect_torrent(H)["tags"]
+
+
+def test_an_expired_slow_read_cannot_issue_a_late_restart(client, tmp_path, monkeypatch):
+    adapter, server = client
+    adapter.START_WAIT_SEC = 2.0
+    labels = ["tow-pending"] if isinstance(server, FakeDeluge) else ["tow", "tow-pending"]
+    server.torrents[K] = Torrent(TORRENT, str(tmp_path), labels, paused=True)
+    real_inspect = adapter.inspect_torrent
+    now = {"value": 0.0}
+    starts = []
+
+    def slow(infohash):
+        info = real_inspect(infohash)
+        now["value"] = 3.0
+        return info
+
+    monkeypatch.setattr(adapter, "inspect_torrent", slow)
+    monkeypatch.setattr(adapter, "_start", starts.append)
+    monkeypatch.setattr("tow.clients.managed.time.monotonic", lambda: now["value"])
+    with pytest.raises(ClientError) as error:
+        adapter._wait_started(H)
+    assert error.value.code == "client.managed.start_unconfirmed"
+    assert not starts
+    assert "tow-pending" in real_inspect(H)["tags"]
+
+
+@pytest.mark.parametrize(
+    ("state", "progress", "expected"),
+    [
+        ("checkingDL", 1.0, False),
+        ("moving", 1.0, False),
+        ("stoppedUP", 1.0, False),
+        ("queuedUP", 1.0, False),
+        ("uploading", 0.5, False),
+        ("uploading", 1.0, True),
+        ("stalledUP", 1.0, True),
+        ("forcedUP", 1.0, True),
+    ],
+)
+def test_real_overlap_fixture_requires_an_actual_complete_seed(state, progress, expected):
+    from integration.test_real_clients import seeding
+
+    assert seeding({"state": state, "progress": progress}) is expected
+    assert not seeding(None)
 
 
 @pytest.mark.parametrize("state", ["error", "missingFiles", "unknown"])

@@ -18,6 +18,7 @@
   {% endif %}
 
   <div class="settings-content" id="settings-acc">
+    {% include '_settings_protection.html' %}
     <details class="settings-section settings-accordion acc" id="acc-language"{% if open_section == 'language' %} open{% endif %} data-q="{{ language_setting.search }}">
       <summary>
         <span class="settings-summary-title">{{ t('settings.language.title') }}{% if lang() != 'en' %} · Language{% endif %}</span>

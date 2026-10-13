@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import socket
+import time
 
 import httpcore
 import httpx
@@ -70,6 +71,91 @@ def test_pinned_connect_reports_the_last_failure_when_no_address_answers(monkeyp
     with pytest.raises(httpcore.ConnectError, match="refused by 2606:4700::1111"):
         PublicOnlyBackend().connect_tcp("tracker.example", 443)
     assert connected == ["93.184.216.34", "2606:4700::1111"]
+
+
+@pytest.mark.parametrize("count", [2, 3])
+def test_checked_addresses_share_one_connect_timeout(monkeypatch, count):
+    clock = [10.0]
+    connected = []
+    addresses = ["93.184.216.34", "2606:4700::1111", "1.1.1.1"][:count]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **kw: _answers(*addresses))
+
+    def connect(self, host, port, timeout=None, *args):
+        connected.append((host, timeout))
+        clock[0] += timeout
+        raise httpcore.ConnectTimeout("synthetic timed-out address")
+
+    monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", connect)
+    with pytest.raises(httpcore.ConnectTimeout, match="connection time budget"):
+        PublicOnlyBackend().connect_tcp("tracker.example", 443, timeout=10)
+    assert connected == [(addresses[0], 10)]
+    assert clock[0] == 20
+
+
+def test_alternative_checked_addresses_get_only_the_remaining_time(monkeypatch):
+    clock = [10.0]
+    connected = []
+    stream = object()
+    addresses = ["93.184.216.34", "2606:4700::1111", "1.1.1.1"]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **kw: _answers(*addresses))
+
+    def connect(self, host, port, timeout=None, *args):
+        connected.append((host, timeout))
+        if host == addresses[0]:
+            clock[0] += 4
+            raise httpcore.ConnectError("synthetic refused first address")
+        if host == addresses[1]:
+            clock[0] += 2
+            raise httpcore.ConnectTimeout("synthetic slow second address")
+        return stream
+
+    monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", connect)
+    assert PublicOnlyBackend().connect_tcp("tracker.example", 443, timeout=10) is stream
+    assert connected == [(addresses[0], 10), (addresses[1], 6), (addresses[2], 4)]
+
+
+@pytest.mark.parametrize("dns_seconds", [3, 10, 12])
+def test_dns_time_is_deducted_before_the_first_connection(monkeypatch, dns_seconds):
+    clock = [10.0]
+    connected = []
+    stream = object()
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+
+    def resolve(*args, **kwargs):
+        clock[0] += dns_seconds
+        return _answers("93.184.216.34")
+
+    def connect(self, host, port, timeout=None, *args):
+        connected.append((host, timeout))
+        return stream
+
+    monkeypatch.setattr(socket, "getaddrinfo", resolve)
+    monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", connect)
+    if dns_seconds < 10:
+        assert PublicOnlyBackend().connect_tcp("tracker.example", 443, timeout=10) is stream
+        assert connected == [("93.184.216.34", 10 - dns_seconds)]
+    else:
+        with pytest.raises(httpcore.ConnectTimeout, match="connection time budget"):
+            PublicOnlyBackend().connect_tcp("tracker.example", 443, timeout=10)
+        assert connected == []
+
+
+def test_immediate_failure_still_retries_an_alternative_without_timeout(monkeypatch):
+    connected = []
+    stream = object()
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **kw: _answers("93.184.216.34", "1.1.1.1"))
+
+    def connect(self, host, port, timeout=None, *args):
+        connected.append((host, timeout))
+        if host == "93.184.216.34":
+            raise httpcore.ConnectError("synthetic refused")
+        return stream
+
+    monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", connect)
+    assert PublicOnlyBackend().connect_tcp("tracker.example", 443, timeout=None) is stream
+    assert connected == [("93.184.216.34", None), ("1.1.1.1", None)]
 
 
 def test_pinned_connect_never_opens_a_socket_for_a_refused_answer(monkeypatch):

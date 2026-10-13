@@ -38,6 +38,21 @@ def test_an_unknown_or_missing_record_falls_back_to_the_stored_text():
     assert errors.render_stored("check.no_connection", None, "x", "en") == "no connection"
 
 
+@pytest.mark.parametrize("language", ["en", "ru"])
+def test_legacy_mirror_failure_has_optional_diagnostics_not_incomplete(language):
+    record = {
+        "code": "mirrors.all_failed",
+        "params": {
+            "tracker": "Site A",
+            "error": errors.as_value({"code": "mirrors.http_status", "params": {"status": 503}}),
+        },
+    }
+    assert errors.render(record, language, "old raw text", incomplete="old raw text").startswith("Site A:")
+    assert "details" not in record["params"]
+    incomplete = {"code": "mirrors.all_failed", "params": {"error": record["params"]["error"]}}
+    assert errors.render(incomplete, language, incomplete="required field missing") == "required field missing"
+
+
 def test_fractions_follow_the_readers_decimal_sign():
     error = TowError("check.low_disk", needed=1.5, free=0.25, path="D:\\")
     assert "1.5" in error.text("en")

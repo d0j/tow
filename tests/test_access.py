@@ -135,7 +135,13 @@ def _local_only_routes() -> set[tuple[str, str]]:
 
 def test_the_local_only_routes_declare_it():
     """Turning network access on/off and the first-start page: the dependency, not an if."""
-    assert _local_only_routes() == {("GET", "/setup"), ("POST", "/setup"), ("POST", "/settings/access")}
+    assert _local_only_routes() == {
+        ("GET", "/setup"),
+        ("POST", "/setup"),
+        ("POST", "/settings/access"),
+        ("POST", "/settings/protection"),
+        ("POST", "/settings/protection/reset"),
+    }
 
 
 def test_a_signed_in_device_cannot_use_a_local_only_route():

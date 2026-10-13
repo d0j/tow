@@ -194,6 +194,12 @@ def complete(info: dict[str, Any] | None) -> bool:
     return info is not None and float(info.get("progress") or 0) >= 1.0 and not state.startswith(("checking", "moving"))
 
 
+def seeding(info: dict[str, Any] | None) -> bool:
+    """The overlap test requires a complete active seed, not a transient file check."""
+    state = str((info or {}).get("state") or "").casefold()
+    return complete(info) and state.startswith(("uploading", "stalledup", "forcedup"))
+
+
 def summary(info: dict[str, Any] | None) -> Any:
     keys = ("state", "progress", "save_path", "tags")
     return None if info is None else {**{key: info.get(key) for key in keys}, "wanted": wanted(info)}
@@ -421,7 +427,11 @@ def test_tow_check_apply_hands_each_new_version_to_the_real_client(kind, tmp_pat
             site.torrent = first.content
             row = check_apply(capsys, raw)
             assert str(row.get("hash")).upper() == first.infohash, row
-            info = held(first)
+            info = wait_until(
+                "the first revision actually seeding before the overlap check",
+                lambda: info if seeding(info := held(first)) else None,
+                lambda: summary(adapter.inspect_torrent(first.infohash)),
+            )
             assert wanted(info) == {"Show.S01E01.mkv": True, "Show.S01E02.mkv": True, "notes.txt": False}
             assert not stopped(info), summary(info)  # started: it seeds its files
             assert str(topic()["hash"]).upper() == first.infohash

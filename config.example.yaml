@@ -7,6 +7,16 @@
 # restore_points_dir (default data/restore-points), quiet_hours, daily_digest_hour and
 # heartbeat_url. user_agent, clients and trackers say what happens without them.
 
+# Optional external site-access services: off when omitted. Configure on this computer in
+# Settings → Site access; services run separately and must have private, trusted endpoints.
+# protection:
+#   enabled: false
+#   timeout_sec: 30
+#   min_interval_sec: 1800
+#   max_attempts: 2
+#   providers:
+#     - {id: local-browser, kind: flaresolverr, url: http://127.0.0.1:8191/v1, enabled: false}
+
 # --- web interface -----------------------------------------------------------------------
 # Address and port of the web interface. 127.0.0.1 = this PC only; another address
 # (0.0.0.0, a LAN address) also needs allow_lan: true and a password (Settings).

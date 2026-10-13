@@ -42,6 +42,8 @@ PRESET = SitePreset(
     brands=("kinozal",),
     search_path="/browse.php?s={q}",
     daily_limit=True,
+    infohash_path="/get_srv_details.php?id={id}&action=2",
+    maintenance_markers=("ведутся технические работы", "technical works in progress"),
     spec={
         "title": "Kinozal",
         "url_regex": (

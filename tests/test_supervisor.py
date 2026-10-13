@@ -431,6 +431,55 @@ def test_jobs_run_one_at_a_time_with_the_tasks_arguments(tmp_path):
     assert sup.jobs_done["check"]["code"] == 0
 
 
+def test_long_global_checks_do_not_starve_other_due_children(tmp_path):
+    timers = {"synthetic": {"revision": "a", "set_at": T0, "minutes": 1}}
+    world, sup = make(
+        tmp_path,
+        facts={"last_scheduled_check": T0, "last_backup_ok": 0, "space_waiting": True, "topic_timers": timers},
+    )
+    sup.deps.load_config = lambda: {"interval_sec": 60}
+    world.clock.advance(3600)
+    dispatched = []
+    for _ in range(12):
+        sup.tick()
+        assert sup.job is not None
+        dispatched.append(sup.job.name)
+        # Every job takes longer than the global interval; only one child may run.
+        assert len([child for child in world.jobs() if child.code is None]) == 1
+        world.clock.advance(120)
+        sup.job.child.code = 0
+        sup.tick()
+        assert sup.job is None
+        world.clock.advance(1)
+    assert dispatched[0] == "check"
+    assert set(dispatched[:5]) == {"check", "backup", "progress", "timer", "space"}
+    assert dispatched.count("check") > 1
+    assert dispatched.count("timer") > 1
+    assert dispatched.count("space") > 1
+
+
+@pytest.mark.parametrize("failed_spawn", [False, True])
+def test_due_child_rotation_survives_a_restart_and_failed_spawn(tmp_path, failed_spawn):
+    world, sup = make(tmp_path, facts={"last_scheduled_check": T0, "last_backup_ok": 0})
+    sup.deps.load_config = lambda: {"interval_sec": 60}
+    world.clock.advance(3600)
+    if failed_spawn:
+
+        def refused(*_args):
+            raise OSError("synthetic refusal")
+
+        sup.deps.spawn = refused
+    sup._jobs_tick(world.clock.wall, world.clock.mono)
+    assert layout.read_json(layout.schedule_path())["last_child_attempt"] == "check"
+    world.clock.advance(120)
+    # A new supervisor keeps the cursor even when the previous spawn never succeeded.
+    restarted = Supervisor(world.deps(), python="py", home=tmp_path / "logs")
+    restarted.schedule.interval_sec = 60
+    restarted._jobs_tick(world.clock.wall, world.clock.mono)
+    assert restarted.job is not None
+    assert restarted.job.name == "backup"
+
+
 def test_job_and_background_failures_do_not_expose_exception_text(tmp_path, caplog):
     world, sup = make(tmp_path)
 

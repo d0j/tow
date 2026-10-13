@@ -3,6 +3,37 @@
 All notable changes to TOW. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project uses [semantic versioning](https://semver.org/). Русская версия: [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## [Unreleased]
+
+### Added
+
+- Optional site-access recovery through independently discovered FlareSolverr and Byparr adapters. All connections
+  start disabled; local-only settings offer ordering, per-connection switches, bounded attempts and encrypted-cache
+  reset. Ordinary mirrors run first; providers receive only the site's public root, never account credentials or a
+  torrent URL. Their result must pass a separate, same-origin TOW request. See [Site access](docs/PROTECTION.md).
+- Site response diagnostics distinguish challenges, access blocks, rate limits, origin outages, maintenance, sign-in
+  and download quotas; Sites shows the last observed reason for each mirror without cutting it off on mobile.
+- A site's optional current-infohash capability avoids downloading an unchanged torrent only after client ownership
+  and selection are verified. Kinozal supplies the first preset; progress reconciliation still runs.
+
+### Fixed
+
+- A client's checking state no longer confirms a start. Start read-back has its own bounded wait; pending ownership
+  is retained on failure. Recovery of a lost add acknowledgement never adopts a foreign duplicate.
+- Disk-space checks count allocated file bytes, not sparse logical sizes, and do not assume that an unknown allocation
+  is reusable space.
+- Repeated long checks no longer starve progress, personal timers, space checks or backups: the oldest overdue child
+  runs next, with its dispatch recorded before spawning.
+- Non-ASCII response headers no longer turn an acknowledged notification into an apparent delivery failure.
+- An unreadable permissions result is reported as unknown, not as a confirmed safe installation.
+- Tracker HTTP decompression is bounded before allocating its decoded body, including concatenated gzip members
+  and nested encodings. TOW advertises gzip/deflate/identity only; unsupported encodings are refused.
+- A topic-level error after verified access retains the working site credential and reports its real cause. A stale
+  failed replay cannot delete a newer credential; parent-domain cookie metadata never permits cross-origin reuse.
+- A matching magnet still reconciles client presence; a fresh verified site hash may clear a previous access error.
+- A failed native sign-in is not repeated for every topic during a manual check. A newly verified access token allows
+  one fresh sign-in attempt with its matching User-Agent.
+
 ## [1.29.0] — 2026-10-13
 
 ### Added

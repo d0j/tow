@@ -19,13 +19,16 @@ from tow.errors import Msg, TowError
 from tow.jsonish import as_dict
 from tow.mirrors import (
     MirrorFetchError,
+    cached_request_credentials,
     has_available_host,
     login_recent,
     note_login,
     origin_key,
     pick_and_get,
+    response_verdict,
     says_topic_removed,
 )
+from tow.protection import Verdict
 from tow.store import load_secrets, persistence_lock, save_secrets
 from tow.title import title_from_html
 from tow.torrent import is_download_limit, looks_like_torrent, parse_magnet_hashes
@@ -314,6 +317,8 @@ class GenericHttpTracker:
         known = presets.defaults(name)
         self.spec = {**known, **spec} if known else spec
         self._pages: dict[str, tuple[float, str]] = {}
+        self._login_attempted = False
+        self._challenged_logins: dict[str, str | None] = {}
         self._rx = validate_tracker_regex(spec["url_regex"], label="url")
 
     def _keep_page(self, tid: str, page_html: str) -> None:
@@ -351,7 +356,7 @@ class GenericHttpTracker:
                     or not value
                 ):
                     continue
-                if not names or key in names or key in ("uid", "pass"):
+                if not names or key in names or key in ("uid", "pass", "cf_clearance"):
                     out[key] = value
             return out
 
@@ -386,23 +391,45 @@ class GenericHttpTracker:
         hosts = list(self.spec.get("login_hosts") or [])
         if not (user and pw and path and hosts):
             return self._cookie_jar(secrets)
+        fresh_clearances = {
+            host
+            for host, old_clearance in self._challenged_logins.items()
+            if host in hosts
+            and (
+                token := cached_request_credentials(self.name, host, self._protection_settings(), ua, {})[1].get(
+                    "cf_clearance"
+                )
+            )
+            and token != old_clearance
+        }
+        if persist and ignore_cool and self._login_attempted and not fresh_clearances:
+            return self._cookie_jar(load_secrets())
         if not path.startswith("/") or path.startswith("//") or "\\" in path:
             raise TrackerSettingError("tracker.bad_login_path", prefix=self.name)
-        if persist and not ignore_cool and login_recent(self.name):
+        if persist and not ignore_cool and login_recent(self.name) and not fresh_clearances:
             # Tried a moment ago (by this check or an earlier one): what that saved is used and
             # the password is not sent again. A check the owner starts (ignore_cool) logs in.
             return self._cookie_jar(load_secrets())
         if persist:
+            self._login_attempted = self._login_attempted or ignore_cool
             note_login(self.name)
         form = login_form_data(self.spec, user, pw)
         pw_field = str((self.spec.get("login_form") or {}).get("pw_field") or "password")
         scoped = {}
         for host in hosts:
+            if fresh_clearances and host not in fresh_clearances:
+                continue  # only a newly verified clearance permits one additional login
             if persist and not has_available_host(self.name, [host], ignore_cool=ignore_cool):
                 continue
             try:
+                login_ua, clearance_cookies = cached_request_credentials(
+                    self.name, host, self._protection_settings(), ua, {}
+                )
+                old_clearance = clearance_cookies.get("cf_clearance")
+                self._challenged_logins.pop(host, None)
                 with thttp.client(
-                    ua=ua,
+                    ua=login_ua,
+                    cookies=clearance_cookies or None,
                     follow_redirects=False,
                     public_only=not as_bool(load_config().get("allow_private_tracker_hosts")),
                 ) as c:
@@ -410,6 +437,8 @@ class GenericHttpTracker:
                     response = thttp.request_limited(
                         c, "POST", host.rstrip("/") + path, max_bytes=thttp.MAX_HTML_RESPONSE_BYTES, data=form
                     )
+                    if response_verdict(response) == Verdict.CHALLENGE:
+                        self._challenged_logins[host] = old_clearance
                     if response.status_code >= 400 or login_form_came_back(response, pw_field):
                         # A login page shown again means the credentials were refused; its
                         # cookies are guest cookies and must not replace working ones.
@@ -490,6 +519,8 @@ class GenericHttpTracker:
             "allowed_redirect_origins": (list(self.spec.get("download_redirect_hosts") or []) if torrent_only else []),
             "public_only": not as_bool(load_config().get("allow_private_tracker_hosts")),
             "download_limit": torrent_only and as_bool(self.spec.get("download_limit")),
+            "maintenance_markers": list(self.spec.get("maintenance_markers") or []),
+            "protection": self._protection_settings(),
         }
         try:
             return pick_and_get(self.name, hosts, path, **kw)
@@ -501,6 +532,56 @@ class GenericHttpTracker:
                 raise
             kw["cookies"] = refreshed or None
             return pick_and_get(self.name, hosts, path, **kw)
+
+    def _protection_settings(self) -> dict[str, Any] | None:
+        if self.spec.get("protection") == "off" or self.spec.get("browser_auth"):
+            return None  # do not change the user agent of a user-operated browser session
+        raw = load_config().get("protection")
+        return raw if isinstance(raw, dict) else None
+
+    def fetch_revision_hash(
+        self, url: str, secrets: dict[str, Any], ua: str | None, *, ignore_cool: bool = False, persist: bool = True
+    ) -> str | None:
+        """The site's current v1 identity, without downloading a .torrent or using magnets.
+
+        Unknown/ambiguous HTML supplies no revision evidence. This capability is opt-in
+        per preset/site; an empty path disables it. The ordinary HTTP policy still applies.
+        """
+        path = self.spec.get("infohash_path")
+        tid = self.parse_id(url)
+        if not path or not tid:
+            return None
+        if not isinstance(path, str) or not path.startswith("/") or path.startswith("//") or "\\" in path:
+            raise TrackerSettingError("tracker.bad_login_path", prefix=self.name)
+        ua = self._effective_ua(secrets, ua)
+        cookies = self._cookie_jar(secrets)
+        hosts = list(self.spec.get("fetch_hosts") or [])
+        if (
+            persist
+            and self.spec.get("login_hosts")
+            and self.spec.get("login_path")
+            and not cookies
+            and has_available_host(self.name, hosts, ignore_cool=ignore_cool)
+        ):
+            cookies = self._login(secrets, ua, persist=persist, ignore_cool=ignore_cool)
+        response, _host = self._get(
+            hosts,
+            path.format(id=tid),
+            secrets,
+            ua,
+            cookies,
+            torrent_only=False,
+            ignore_cool=ignore_cool,
+            persist=persist,
+        )
+        page = html.unescape(re.sub(r"<[^>]*>", " ", site_text(thttp.html_text(response))))
+        hashes = {
+            match.group(1).upper()
+            for match in re.finditer(
+                r"(?:инфо\s*х[еэ]ш|info\s*hash)\s*:?\s*([a-fA-F0-9]{40})(?![a-fA-F0-9])", page, re.IGNORECASE
+            )
+        }
+        return next(iter(hashes)) if len(hashes) == 1 else None
 
     def _relogin(
         self,

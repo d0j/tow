@@ -158,6 +158,7 @@ class HistoryRecord(TypedDict, total=False):
     last_completed: HistoryItem
     last_event: dict[str, Any]
     client_present: bool
+    client_absence_observed: bool
     season_complete_at: str
 
 

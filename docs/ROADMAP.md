@@ -19,7 +19,7 @@ These hold in every release:
 | Area | State |
 |---|---|
 | Watching | Topics with watch or once; episodes, file patterns and graphical exact file/folder selection with verified metadata; explicit native magnet preview where supported; global or numeric personal tracker intervals with row countdowns; transactional add with read-back for qBittorrent, Transmission and Deluge; replacing a seeding revision on request; adopting a torrent already in the client without TOW's mark (**Adopt into TOW**, `tow adopt`); a version that does not fit on the drive added stopped and started once there is room, with the free space shown in the forms; a torrent removed from the client added again by the row's check. |
-| Sites | Seven site presets, one module per site; any similar site by hand; mirrors with fallback and cooldown; daily limits; password and browser sign-in. |
+| Sites | Seven site presets, one module per site; any similar site by hand; mirrors with fallback and cooldown; daily limits; password and browser sign-in; optional disabled-by-default external access providers, bounded fallback and verified current-infohash capabilities. See [Site access](PROTECTION.md). |
 | Notifications | Telegram, Discord, WhatsApp, ntfy; grouping, quiet hours, digest, a persistent outbox; watchdog alerts with the reason for downtime. |
 | Safety | One-step undo of any change; journaled multi-file writes recovered by any process; night copies (signed), restore points, `.towx` transfer; data version guard. |
 | Access | Loopback without password; network only with password, sessions, CSRF and CSP; local-only access switches; the install folder closed to the computer's other accounts (`tow permissions`, `tow permissions fix`). |
@@ -46,6 +46,8 @@ Roughly in order of value:
 
 - Downloading, streaming or moving media; hosting or indexing content.
 - Searching trackers or reading RSS feeds — TOW follows links you give it.
-- Bypassing captchas, Cloudflare challenges, download limits or other site protections.
+- Circumventing download quotas, IP/access bans or account permissions; automatically solving interactive captchas.
+  Optional external services may assist with a detected browser challenge, but neither TOW nor a provider guarantees
+  successful access. They never receive a torrent download URL or account credentials.
 - Exposing TOW directly to the internet; use a VPN or an SSH tunnel.
 - Clients that cannot be tested live and safely (closed-source clients with ads and outdated Web UIs).

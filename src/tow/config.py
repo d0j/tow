@@ -265,8 +265,18 @@ def path_safe_name(name: object) -> bool:
 
 
 # The type of each setting of a site TOW reads (tow.trackers.generic); empty (null) means "not set".
-_SITE_TEXT = ("title", "url_regex", "download_href_regex", "topic_path", "download_path", "login_path", "search_path")
-_SITE_FLAGS = ("browser_auth", "page_download")
+_SITE_TEXT = (
+    "title",
+    "url_regex",
+    "download_href_regex",
+    "topic_path",
+    "download_path",
+    "login_path",
+    "search_path",
+    "infohash_path",
+    "protection",
+)
+_SITE_FLAGS = ("browser_auth", "page_download", "download_limit")
 _SITE_NUMBERS = ("fail_threshold", "cooldown_sec")
 _LOGIN_FORM_KEYS = {"user_field", "pw_field", "extra"}
 
@@ -345,9 +355,28 @@ def _site_spec(name: object, spec: dict[str, Any]) -> None:
         raise ConfigError("config_error.site_text_list", site=site, key="cookie_names")
     if not _login_form(spec.get("login_form")):
         raise ConfigError("config_error.site_login_form", site=site)
+    if spec.get("maintenance_markers") is not None and (
+        not _texts(spec["maintenance_markers"])
+        or len(spec["maintenance_markers"]) > 16
+        or any(not value or len(value) > 200 for value in spec["maintenance_markers"])
+    ):
+        raise ConfigError("config_error.site_text_list", site=site, key="maintenance_markers")
+    if spec.get("protection") not in {None, "auto", "off"}:
+        raise ConfigError("protection.invalid_site")
+
+
+def _validate_protection(data: dict[str, Any]) -> None:
+    from tow.protection.spec import validate_settings
+
+    if "protection" in data:
+        try:
+            data["protection"] = validate_settings(data["protection"])
+        except ValueError:
+            raise ConfigError("protection.invalid_settings") from None
 
 
 def _validate(data: dict[str, Any]) -> None:
+    _validate_protection(data)
     _int_field(data, "port", 1, 65535)
     _int_field(data, "interval_sec", 60, 7 * 24 * 3600)
     _int_field(data, "flash_ttl_sec", 1, 24 * 3600)

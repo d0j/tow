@@ -11,6 +11,7 @@ import httpx
 
 from tow import http as thttp
 from tow.errors import Msg, TowError
+from tow.protection import Verdict, classify
 from tow.store import load_state, persistence_lock, save_state
 from tow.torrent import is_download_limit
 
@@ -26,6 +27,12 @@ _FAILURE_CLASSES = {
     "cloudflare": "cloudflare",
     "frozen": "frozen",
     "gone": "gone",
+    "interactive": "cloudflare",
+    "blocked": "tracker",
+    "rate_limited": "tracker",
+    "origin_down": "tracker",
+    "maintenance": "tracker",
+    "unexpected": "not_torrent",
 }
 # A password login is not repeated by scheduled checks within this time: a site that answers
 # every download with a page (a removed topic, a check page) must not get the password each time.
@@ -54,21 +61,26 @@ class MirrorFetchError(TowError, RuntimeError):
     ``http``, ``http_topic``, ``redirect_policy`` ...): it decides the mirror cooldown and the
     status class; the text is the catalog key (``mirrors.*``)."""
 
-    def __init__(self, code: str, /, *, failure: str, cls: str | None = None, **params: Any) -> None:
+    def __init__(
+        self, code: str, /, *, failure: str, cls: str | None = None, host_failure: bool | None = None, **params: Any
+    ) -> None:
         super().__init__(code, cls=cls or _FAILURE_CLASSES.get(failure), **params)
         self.failure = failure
+        self.host_failure = host_failure  # request-scoped evidence, not a persisted diagnostic or catalog value
 
     def __reduce__(self) -> tuple[Any, ...]:
-        return (_rebuild_fetch_error, (self.code, self.failure, self.error_class, self.params))
+        return (_rebuild_fetch_error, (self.code, self.failure, self.error_class, self.params, self.host_failure))
 
 
-def _rebuild_fetch_error(code: str, failure: str, cls: str, params: dict[str, Any]) -> MirrorFetchError:
-    return MirrorFetchError(code, failure=failure, cls=cls, **params)
+def _rebuild_fetch_error(
+    code: str, failure: str, cls: str, params: dict[str, Any], host_failure: bool | None = None
+) -> MirrorFetchError:
+    return MirrorFetchError(code, failure=failure, cls=cls, host_failure=host_failure, **params)
 
 
 # Failures that describe the requested topic, not the mirror's health; nor does TOW's own
 # failure on an answer it got (``local``): neither counts towards the mirror cooldown.
-_NOT_HOST_HEALTH_CODES = frozenset({"auth", "http_topic", "too_large", "gone", "local"})
+_NOT_HOST_HEALTH_CODES = frozenset({"auth", "http_topic", "too_large", "gone", "local", "unexpected"})
 
 
 def says_topic_removed(content: bytes | str) -> bool:
@@ -112,6 +124,8 @@ def _bucket(state: dict[str, Any], tracker: str) -> dict[str, Any]:
         b["active"] = None
     if not isinstance(b.get("frozen"), bool):
         b["frozen"] = False
+    if not isinstance(b.get("observed"), dict):
+        b["observed"] = {}
     return b
 
 
@@ -126,7 +140,12 @@ def _save_bucket(tracker: str, bucket: dict[str, Any], host: str) -> None:
             return
         st = load_state()
         current = _bucket(st, tracker)
-        before = (current["fail"].get(host), current["cool"].get(host), current["active"])
+        before = (
+            current["fail"].get(host),
+            current["cool"].get(host),
+            current["active"],
+            current.get("observed", {}).get(host),
+        )
         if host in bucket["fail"]:
             current["fail"][host] = bucket["fail"][host]
         else:
@@ -137,19 +156,44 @@ def _save_bucket(tracker: str, bucket: dict[str, Any], host: str) -> None:
             current["cool"].pop(host, None)
         if bucket.get("active") == host:
             current["active"] = host
+        observed = bucket.get("observed", {}).get(host)
+        if isinstance(observed, dict):
+            configured = {str(item).rstrip("/") for item in (spec.get("fetch_hosts") or [])}
+            current["observed"] = {
+                key: value for key, value in current.get("observed", {}).items() if key in configured
+            }
+            current["observed"][host] = observed
         # A healthy fetch from the active mirror changes nothing: no state rewrite + fsync.
-        if (current["fail"].get(host), current["cool"].get(host), current["active"]) != before:
+        if (
+            current["fail"].get(host),
+            current["cool"].get(host),
+            current["active"],
+            current.get("observed", {}).get(host),
+        ) != before:
             save_state(st)
 
 
-def _ordered(hosts: list[str], active: str | None) -> list[str]:
+def _ordered(hosts: list[str], active: str | None, observed: dict[str, Any] | None = None) -> list[str]:
     out = [h.rstrip("/") for h in hosts if h]
-    if not active:
-        return out
-    a = str(active).rstrip("/")
+    a = str(active or "").rstrip("/")
     if a in out:
-        return [a] + [h for h in out if h != a]
-    return out
+        out = [a] + [h for h in out if h != a]
+
+    def protected(host: str) -> bool:
+        row = (observed or {}).get(host)
+        if not isinstance(row, dict) or row.get("failure") not in {
+            "cloudflare",
+            "interactive",
+            "blocked",
+            "rate_limited",
+        }:
+            return False
+        at = row.get("at")
+        return (
+            isinstance(at, (int, float)) and not isinstance(at, bool) and math.isfinite(at) and 0 <= _now() - at < 3600
+        )
+
+    return sorted(out, key=protected)  # stable: healthy/unknown mirrors first; stale evidence expires
 
 
 def has_available_host(tracker: str, hosts: list[str], *, ignore_cool: bool = False) -> bool:
@@ -213,6 +257,18 @@ def origin_key(url: str) -> str | None:
     return f"{scheme}://{host}:{port}"
 
 
+def cached_request_credentials(
+    tracker: str, host: str, protection: dict[str, Any] | None, ua: str | None, cookies: dict[str, str]
+) -> tuple[str | None, dict[str, str]]:
+    """Read-only reuse of verified origin-bound clearance; no external request."""
+    if not protection or protection.get("enabled") is not True:
+        return ua, cookies
+    from tow.protection.chain import cached
+
+    clearance = cached(tracker, host, protection)
+    return (clearance.user_agent, {**cookies, **clearance.cookies}) if clearance else (ua, cookies)
+
+
 def _cookies_for_host(
     cookies: dict[str, Any] | None,
     host: str,
@@ -236,7 +292,14 @@ _REDIRECT_STATUSES = (301, 302, 303, 307, 308)
 
 
 def _follow_redirects(
-    c: Any, r: Any, *, ua: str | None, max_bytes: int, allowed_redirects: set[str], public_only: bool = False
+    c: Any,
+    r: Any,
+    *,
+    ua: str | None,
+    max_bytes: int,
+    allowed_redirects: set[str],
+    public_only: bool = False,
+    deadline: float | None = None,
 ) -> Any:
     """Follow at most five redirects: same-origin with the tracker client, allowlisted
     download hosts only in a fresh cookie-free client, anything else refused."""
@@ -252,14 +315,14 @@ def _follow_redirects(
         if current_origin is None:
             raise MirrorFetchError("mirrors.redirect_bad_origin", failure="redirect_policy")
         if next_origin == current_origin:
-            r = thttp.get_limited(c, nxt, max_bytes=max_bytes)
+            r = _deadline_get(c, nxt, max_bytes=max_bytes, deadline=deadline)
             continue
         if origin_key(nxt) not in allowed_redirects:
             raise MirrorFetchError("mirrors.redirect_cross_origin", failure="redirect_policy")
         # Download hosts are explicitly allowlisted, but tracker cookies must never cross
         # that boundary. Follow the rest of this redirect chain in a fresh cookie-free client.
         with thttp.client(ua=ua, follow_redirects=False, public_only=public_only) as clean:
-            r = thttp.get_limited(clean, nxt, max_bytes=max_bytes)
+            r = _deadline_get(clean, nxt, max_bytes=max_bytes, deadline=deadline)
             for _redirect in range(4):
                 if r.status_code not in _REDIRECT_STATUSES:
                     break
@@ -269,7 +332,7 @@ def _follow_redirects(
                 following = urljoin(str(r.url), loc)
                 if origin_key(following) not in allowed_redirects:
                     raise MirrorFetchError("mirrors.redirect_outside_allowlist", failure="redirect_policy")
-                r = thttp.get_limited(clean, following, max_bytes=max_bytes)
+                r = _deadline_get(clean, following, max_bytes=max_bytes, deadline=deadline)
             if r.status_code in _REDIRECT_STATUSES:
                 raise MirrorFetchError("mirrors.redirect_limit", failure="redirect_loop")
         break
@@ -278,12 +341,58 @@ def _follow_redirects(
     return r
 
 
+def _deadline_get(c: Any, url: str, *, max_bytes: int, deadline: float | None) -> httpx.Response:
+    if deadline is None:
+        return thttp.get_limited(c, url, max_bytes=max_bytes)
+    from tow.protection.transport import bounded_get
+
+    return bounded_get(c, url, max_bytes=max_bytes, deadline=deadline)
+
+
+_VERDICT_KEYS = {
+    Verdict.CHALLENGE: "mirrors.cloudflare",
+    Verdict.INTERACTIVE: "mirrors.interactive",
+    Verdict.BLOCKED: "mirrors.blocked",
+    Verdict.RATE_LIMITED: "mirrors.rate_limited",
+    Verdict.ORIGIN_DOWN: "mirrors.origin_down",
+    Verdict.MAINTENANCE: "mirrors.maintenance",
+    Verdict.LOGIN_NEEDED: "mirrors.http_auth",
+    Verdict.DAILY_LIMIT: "mirrors.daily_limit",
+    Verdict.UNEXPECTED: "mirrors.unexpected",
+}
+
+
+def response_verdict(
+    r: Any, *, maintenance_markers: list[str] | None = None, wanted: bool = False, download_limit: bool = False
+) -> Verdict:
+    from types import SimpleNamespace
+
+    content = getattr(r, "content", None)
+    page = SimpleNamespace(
+        content=bytes(content[:65536]) if isinstance(content, (bytes, bytearray)) else None,
+        text=str(getattr(r, "text", "") or "")[:65536],
+        headers=r.headers,
+    )
+    return classify(
+        r.status_code,
+        thttp.html_text(page),
+        r.headers,
+        maintenance_markers=maintenance_markers or (),
+        torrent_wanted=wanted,
+        daily_limit=download_limit and isinstance(content, (bytes, bytearray)) and is_download_limit(bytes(content)),
+    )
+
+
+def refuse_verdict(verdict: Verdict, status: int) -> None:
+    if verdict != Verdict.OK:
+        raise MirrorFetchError(_VERDICT_KEYS[verdict], failure=verdict.value, status=status)
+
+
 def _raise_for_status(r: Any) -> None:
     if r.status_code < 400:
         return
-    preview = r.text[:800] if r.headers.get("content-type", "").startswith("text") else ""
-    if thttp.is_cloudflare(r.status_code, preview or r.content[:800].decode("latin-1", "replace"), r.headers):
-        raise MirrorFetchError("mirrors.cloudflare", failure="cloudflare")
+    refuse_verdict(response_verdict(r), r.status_code)
+    preview = thttp.html_text(r)[:800]
     if r.status_code == 401 or (
         r.status_code == 403
         and any(marker in preview.casefold() for marker in ("login", "sign in", "авторизац", "войти"))
@@ -294,19 +403,13 @@ def _raise_for_status(r: Any) -> None:
     raise MirrorFetchError("mirrors.http_status", failure="http" if host_level else "http_topic", status=r.status_code)
 
 
-def _refuse_page(r: Any, *, wanted: bool, download_limit: bool) -> None:
+def _refuse_page(r: Any, *, wanted: bool, download_limit: bool, maintenance_markers: list[str] | None = None) -> None:
     """A good status, but not the answer: why. ``wanted``: a torrent was asked for (any other
     page is then refused; without it only a Cloudflare check page is)."""
-    head = bytes(r.content[:65536]).decode("latin-1")
-    if thttp.is_cloudflare(r.status_code, head, r.headers):
-        raise MirrorFetchError("mirrors.cloudflare", failure="cloudflare")
-    if not wanted:
-        return
-    if download_limit and is_download_limit(r.content):
-        raise MirrorFetchError("mirrors.daily_limit", failure="quota")
-    if says_topic_removed(r.content):
+    verdict = response_verdict(r, maintenance_markers=maintenance_markers, wanted=wanted, download_limit=download_limit)
+    if wanted and verdict == Verdict.UNEXPECTED and says_topic_removed(r.content):
         raise MirrorFetchError("mirrors.topic_removed", failure="gone")
-    raise MirrorFetchError("mirrors.not_torrent_login", failure="auth")
+    refuse_verdict(verdict, r.status_code)
 
 
 def _says_gone(error: Exception) -> bool:
@@ -329,6 +432,17 @@ def _mark_host_ok(tracker: str, bucket: dict[str, Any], host: str, *, persist: b
     bucket["active"] = host
     if persist:
         _save_bucket(tracker, bucket, host)
+
+
+def _observe(bucket: dict[str, Any], host: str, failure: str, status: int | None = None) -> None:
+    if not isinstance(bucket.get("observed"), dict):
+        bucket["observed"] = {}
+    old = bucket["observed"].get(host)
+    # A routine success does not rewrite/fsync state for every page. An error (or a
+    # transition back to success) is fresh evidence for Sites and mirror preference.
+    if failure == "ok" and isinstance(old, dict) and old.get("failure") == "ok":
+        return
+    bucket["observed"][host] = {"failure": failure, "at": _now(), "status": status}
 
 
 # What a host that does not answer well raises: the network library's errors, the socket's,
@@ -371,7 +485,7 @@ def _may_be_page_only(error: Exception) -> bool:
     on that page, or a page the host was too slow to give. A refused or reset connection, a
     name or TLS failure, a connect timeout and a 5xx always say the host."""
     if isinstance(error, MirrorFetchError):
-        return error.failure == "cloudflare"
+        return error.failure in {"cloudflare", "maintenance"}
     return isinstance(error, _SLOW_ANSWER_ERRORS)
 
 
@@ -428,6 +542,8 @@ def pick_and_get(
     allowed_redirect_origins: list[str] | None = None,
     public_only: bool = False,
     download_limit: bool = False,
+    maintenance_markers: list[str] | None = None,
+    protection: dict[str, Any] | None = None,
 ) -> tuple[httpx.Response, str]:
     """The first mirror's good answer: ``ok`` says what a good one is (None: any page that is
     not a Cloudflare check). ``download_limit``: the site has a daily download limit, so a
@@ -441,51 +557,86 @@ def pick_and_get(
     last_err = None
     auth_err = None
     failures: list[Exception] = []
+    host_failures: list[bool] = []
+    mirror_reasons: list[Msg] = []
+    challenged: list[str] = []
     allowed_redirects = {
         origin for value in (allowed_redirect_origins or []) if (origin := origin_key(value)) is not None
     }
 
-    for host in _ordered(hosts, b.get("active")):
+    for host in _ordered(hosts, b.get("active"), b.get("observed")):
         host = host.rstrip("/")
         until = float(b["cool"].get(host) or 0)
         if not ignore_cool and until > _now():
             continue
         url = host + (path if path.startswith("/") else "/" + path)
         host_cookies = _cookies_for_host(cookies, host, hosts)
+        host_ua, host_cookies = cached_request_credentials(tracker, host, protection, ua, host_cookies)
         try:
             with thttp.client(
-                ua=ua, cookies=host_cookies or None, follow_redirects=False, public_only=public_only
+                ua=host_ua, cookies=host_cookies or None, follow_redirects=False, public_only=public_only
             ) as c:
                 r = thttp.get_limited(c, url, max_bytes=max_bytes)
                 r = _follow_redirects(
-                    c, r, ua=ua, max_bytes=max_bytes, allowed_redirects=allowed_redirects, public_only=public_only
+                    c, r, ua=host_ua, max_bytes=max_bytes, allowed_redirects=allowed_redirects, public_only=public_only
                 )
             _raise_for_status(r)
             if ok is None or not ok(r):
-                _refuse_page(r, wanted=ok is not None, download_limit=download_limit)
+                _refuse_page(
+                    r, wanted=ok is not None, download_limit=download_limit, maintenance_markers=maintenance_markers
+                )
+            _observe(b, host, "ok", r.status_code)
             _mark_host_ok(tracker, b, host, persist=persist)
             return r, host
         except Exception as e:  # noqa: BLE001 - any failure of a host is classified (_failure_code) and the next host tried
             last_err = e
             failures.append(e)
             code = _failure_code(e)
+            if code == "cloudflare":
+                challenged.append(host)
+            mirror_reasons.append(Msg("mirrors.mirror_reason", host=urlparse(host).netloc, error=_failure_text(e)))
+            _observe(b, host, code, getattr(e, "params", {}).get("status"))
             if code == "auth":
                 auth_err = e
             if code == "quota":
+                host_failures.append(False)
+                if persist:
+                    _save_bucket(tracker, b, host)
                 break
             # Only host-health failures count towards the mirror cooldown; a missing or
             # oversized topic, a check page or a slow answer on one topic's page (its host's
             # front page answers), or TOW failing on a good answer, must not pause the whole
             # tracker for every other topic.
-            if _counts_against_host(
-                e, host, path, cookies=host_cookies, ua=ua, public_only=public_only, persist=persist
-            ):
+            host_failed = _counts_against_host(
+                e, host, path, cookies=host_cookies, ua=host_ua, public_only=public_only, persist=persist
+            )
+            host_failures.append(host_failed)
+            if host_failed:
                 n = int(b["fail"].get(host) or 0) + 1
                 b["fail"][host] = n
                 if n >= fail_threshold:
                     b["cool"][host] = _now() + cooldown_sec
-                if persist:
-                    _save_bucket(tracker, b, host)
+            if persist:
+                _save_bucket(tracker, b, host)
+    if persist and challenged and not (isinstance(last_err, MirrorFetchError) and last_err.failure == "quota"):
+        recovered = _recover_challenges(
+            tracker,
+            challenged,
+            hosts,
+            path,
+            b,
+            protection=protection,
+            cookies=cookies,
+            ua=ua,
+            ok=ok,
+            max_bytes=max_bytes,
+            allowed_redirects=allowed_redirects,
+            public_only=public_only,
+            download_limit=download_limit,
+            maintenance_markers=maintenance_markers,
+        )
+        if recovered is not None:
+            return recovered
     if last_err is None:
         raise MirrorFetchError("mirrors.all_paused", failure="paused", tracker=tracker)
     selected_err = (
@@ -503,9 +654,135 @@ def pick_and_get(
         "mirrors.all_failed",
         failure=failure,
         cls=_all_failed_class(selected_err),
+        host_failure=bool(host_failures) and all(host_failures),
         tracker=tracker,
         error=_failure_text(selected_err),
+        details=_reason_set(mirror_reasons[:16]),
     ) from selected_err
+
+
+def _verify_clearance(response: httpx.Response, host: str, markers: list[str] | None) -> None:
+    """An account sign-in page is reachable access, even when it carries HTTP 401/403."""
+    if response.status_code in _REDIRECT_STATUSES:
+        destination = urljoin(host + "/", response.headers.get("location") or "")
+        if _origin(destination) != _origin(host):
+            raise ValueError("clearance verification changed origin")
+    verdict = response_verdict(response, maintenance_markers=markers, wanted=response.status_code in {401, 403})
+    if verdict == Verdict.LOGIN_NEEDED:
+        return
+    _raise_for_status(response)
+    refuse_verdict(verdict, response.status_code)
+
+
+def _recovery_supported(public_only: bool, deadline: float) -> bool:
+    """Do not spend a solver attempt on a transport whose deadline cannot be enforced."""
+    from tow.protection.transport import with_deadline
+
+    try:
+        with thttp.client(follow_redirects=False, public_only=public_only) as client, with_deadline(client, deadline):
+            pass
+    except Exception:  # noqa: BLE001 - preserve normal mirror diagnostics; no service was contacted
+        return False
+    return True
+
+
+def _recover_challenges(
+    tracker: str,
+    challenged: list[str],
+    hosts: list[str],
+    path: str,
+    bucket: dict[str, Any],
+    *,
+    protection: dict[str, Any] | None,
+    cookies: dict[str, Any] | None,
+    ua: str | None,
+    ok: Callable[[Any], bool] | None,
+    max_bytes: int,
+    allowed_redirects: set[str],
+    public_only: bool,
+    download_limit: bool,
+    maintenance_markers: list[str] | None,
+) -> tuple[httpx.Response, str] | None:
+    """Only after ordinary mirrors fail; never send a login or download to a provider.
+
+    A provider supplies credentials, not an answer. A guarded GET of the origin's
+    root validates them; the requested path is then fetched normally once.
+    """
+    if not protection or protection.get("enabled") is not True:
+        return None
+    from tow.protection import chain
+
+    deadline = time.monotonic() + float(protection.get("timeout_sec", 30))
+    if not _recovery_supported(public_only, deadline):
+        return None
+    for host in challenged:
+        if time.monotonic() >= deadline:
+            break
+        for clearance in chain.candidates(
+            tracker, host, protection, public_only=public_only, budget_sec=deadline - time.monotonic()
+        ):
+            verified_access = False
+            try:
+                with thttp.client(
+                    ua=clearance.user_agent, cookies=clearance.cookies, follow_redirects=False, public_only=public_only
+                ) as probe:
+                    verified = _deadline_get(
+                        probe, host + "/", max_bytes=thttp.MAX_HTML_RESPONSE_BYTES, deadline=deadline
+                    )
+                _verify_clearance(verified, host, maintenance_markers)
+                if time.monotonic() >= deadline:
+                    break
+                chain.accept(tracker, host, protection, clearance)
+                verified_access = True
+                merged = {**_cookies_for_host(cookies, host, hosts), **clearance.cookies}
+                with thttp.client(
+                    ua=clearance.user_agent, cookies=merged, follow_redirects=False, public_only=public_only
+                ) as c:
+                    r = _deadline_get(
+                        c, host + (path if path.startswith("/") else "/" + path), max_bytes=max_bytes, deadline=deadline
+                    )
+                    r = _follow_redirects(
+                        c,
+                        r,
+                        ua=clearance.user_agent,
+                        max_bytes=max_bytes,
+                        allowed_redirects=allowed_redirects,
+                        public_only=public_only,
+                        deadline=deadline,
+                    )
+                _raise_for_status(r)
+                if ok is None or not ok(r):
+                    _refuse_page(
+                        r, wanted=ok is not None, download_limit=download_limit, maintenance_markers=maintenance_markers
+                    )
+                _observe(bucket, host, "ok", r.status_code)
+                _mark_host_ok(tracker, bucket, host, persist=True)
+                chain.record_event("protection_restored", tracker, clearance.provider, "succeeded")
+                return r, host
+            except MirrorFetchError as exc:
+                if verified_access and exc.failure not in {"cloudflare", "interactive"}:
+                    _observe(bucket, host, exc.failure)
+                    _save_bucket(tracker, bucket, host)
+                    if _says_gone(exc):
+                        raise MirrorFetchError(exc.code, failure=exc.failure, cls="gone", **exc.params) from exc
+                    raise  # preserve the site's real answer and its independently verified credential
+                chain.discard(tracker, host, expected=clearance)
+            except Exception as exc:
+                if verified_access:
+                    _observe(bucket, host, "transport")
+                    _save_bucket(tracker, bucket, host)
+                    raise MirrorFetchError("mirrors.transport", failure="transport", error=type(exc).__name__) from exc
+                chain.discard(tracker, host, expected=clearance)
+    return None
+
+
+def _reason_set(reasons: list[Msg]) -> Msg | str:
+    if not reasons:
+        return ""
+    result = reasons[0]
+    for reason in reasons[1:]:
+        result = Msg("mirrors.reason_pair", first=result, second=reason)
+    return result
 
 
 def _all_failed_class(error: Exception) -> str:

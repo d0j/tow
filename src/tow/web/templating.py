@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import socket
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -98,6 +98,22 @@ def _site_tones() -> tuple[dict[str, str], list[str]]:
         if name not in checked or _later(at, checked[name][0]):
             checked[name] = (at, tone)
     probed: dict[str, tuple[datetime | None, bool]] = {}
+    trackers = _context.config().get("trackers") or {}
+    for name, mirrors in as_dict(state.get("mirrors")).items():
+        if name not in trackers:
+            continue
+        for host, observation in as_dict(as_dict(mirrors).get("observed")).items():
+            if host not in (trackers[name].get("fetch_hosts") or []) or not isinstance(observation, dict):
+                continue
+            at = observation.get("at")
+            if isinstance(at, bool) or not isinstance(at, (int, float)):
+                continue
+            try:
+                observed_when = datetime.fromtimestamp(at, UTC)
+            except ValueError, OverflowError, OSError:
+                continue
+            if name not in checked or _later(observed_when, checked[name][0]):
+                checked[name] = (observed_when, "ok" if observation.get("failure") == "ok" else "warn")
     for probe in as_dict(state.get("doctor")).get("probes") or []:
         if not isinstance(probe, dict):
             continue

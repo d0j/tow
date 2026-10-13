@@ -44,6 +44,10 @@ from tow.log import history_events, log_event, read_events
 from tow.mirrors import note_signed_in as _note_signed_in
 from tow.mirrors import prefer_host as _prefer_host
 from tow.notifiers import test as test_notifier
+from tow.protection.providers import adapters as protection_adapters
+from tow.protection.providers import registry as protection_registry
+from tow.protection.spec import validate_settings as validate_protection_settings
+from tow.protection.store import reset as _reset_protection
 from tow.ratelimit import LoginThrottle
 from tow.releases import release_status
 from tow.restore_points import (
@@ -69,6 +73,7 @@ from tow.snapshots import (
 )
 from tow.snapshots import cleanup_status as night_cleanup_status
 from tow.snapshots import status as snapshot_status
+from tow.storage.locks import CheckBusyError
 from tow.store import (
     StoreWriteError,
     load_download_history,
@@ -85,6 +90,7 @@ from tow.store_transaction import transaction as store_transaction
 from tow.supervisor import data_lost
 from tow.supervisor.layout import install_id, next_check_at, topic_timer_status
 from tow.title import guess_topic_title
+from tow.trackers.presets import defaults as tracker_site_defaults
 from tow.undo import apply as apply_undo
 from tow.undo import cleanup as cleanup_secret_undo
 from tow.undo import stamped_here as undo_stamped_here
@@ -142,12 +148,14 @@ __all__ = [
     "prefer_host",
     "prepare_content",
     "prepare_magnet_content",
+    "protection_settings_view",
     "read_content",
     "read_events",
     "record_check_failure",
     "recover_store_transaction",
     "release_status",
     "request_restart",
+    "reset_protection",
     "restore_from_point",
     "restore_point_cleanup_status",
     "restore_point_delete_view",
@@ -170,12 +178,47 @@ __all__ = [
     "store_transaction",
     "test_notifier",
     "topic_timer_status",
+    "tracker_site_defaults",
     "undo_stamped_here",
+    "validate_protection_settings",
     "watchdog_problem",
     "web_update_log",
     "web_update_status",
     "write_generation",
 ]
+
+
+def protection_settings_view(cfg: dict[str, Any]) -> dict[str, Any]:
+    """Configured, not proven working: render without network or credential-store access."""
+    settings = validate_protection_settings(cfg.get("protection"))
+    available = protection_adapters()
+    cards = [dict(item, available=item["kind"] in available, new=False) for item in settings["providers"]]
+    ids = {item["id"] for item in cards}
+    for kind in sorted(available):
+        if len(cards) >= 16:
+            break
+        index = 1
+        ident = f"new-{kind[:30]}-{index}"
+        while ident in ids:
+            index += 1
+            ident = f"new-{kind[:30]}-{index}"
+        ids.add(ident)
+        cards.append({"id": ident, "kind": kind, "url": "", "enabled": False, "available": True, "new": True})
+    names = {kind: spec.title for kind, spec in protection_registry().items()}
+    for index, item in enumerate(cards, 1):
+        item.update(order=index, title=names.get(item["kind"], item["kind"]))
+    return dict(settings, cards=cards, configured=sum(bool(item["enabled"]) for item in settings["providers"]))
+
+
+def reset_protection() -> str:
+    """The reset's safe result, not exception text or encrypted payload contents."""
+    try:
+        return "reset" if _reset_protection() else "empty"
+    except CheckBusyError:
+        return "busy"
+    except ValueError, OSError, RuntimeError:
+        return "refused"
+
 
 # Failed sign-ins and password checks, per address and in total: one budget for the sign-in
 # page and the password card (a test gets a fresh one).
