@@ -226,10 +226,10 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
   encrypt the whole copy with the install's **master key** (`keys/master.key`). Checking/restoring a signed
   nightly backup or restoring a TOW file on another computer needs the same key. `tow export` / `tow import`
   work between installs with different keys.
-- **Automatic nightly backups** can be turned off in Settings → Backups without a restart. Existing copies and
-  manual actions stay available; a copy already running finishes normally. A daily slot missed while the
-  computer was off or asleep is caught up when TOW runs again, not after a fixed 24-hour wait. A nightly backup
-  that failed is tried again six hours later, or at the next daily time if that comes first.
+- **Automatic nightly backups** can be turned off in Settings → Backups without a restart. Existing copies stay, and
+  **Back up now** and **Restore** work as before; a copy already under way finishes normally. A daily slot missed
+  while the computer was off or asleep is caught up when TOW runs again, not after a fixed 24-hour wait. A nightly
+  backup that failed is tried again six hours later, or at the next daily time if that comes first.
 - **Keep nightly backups, days** accepts a whole number from 1 to 3650; new installations default to 7 days.
   An existing explicit count-based `backup_keep` policy stays in effect until you save days. Saving the field
   does not delete copies: retention applies only after a new copy passes verification. The new copy, the three

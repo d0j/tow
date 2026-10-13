@@ -706,7 +706,7 @@
     "connected": "Connected",
     "client": "Torrent client",
     "sites_title": "Sites",
-    "sites_note": "Only the home page of each site address is checked. That does not prove signing in or downloading a .torrent works — the topic check shows that.",
+    "sites_note": "Only the home page of each site address is checked: that does not tell whether signing in and downloading a .torrent work — a check of a topic does.",
     "th_site": "Site",
     "th_mirror": "Mirror",
     "th_status": "Status",
@@ -733,8 +733,8 @@
     "autostart": "Autostart",
     "autostart_on": "Starts automatically",
     "autostart_off": "Does not start automatically",
-    "autostart_foreign": "The autostart of this account ({where}) belongs to another TOW folder, not to this one. To start this TOW with the computer, turn autostart off in that TOW first, then on here.",
-    "autostart_stale": "The autostart of this account ({where}) points to a TOW folder that was moved or deleted, so it starts nothing. Turn autostart on here to take it over.",
+    "autostart_foreign": "This account's autostart entry “{where}” belongs to another TOW folder, not to this one. To start this TOW with the computer, turn autostart off in that TOW first, then on here.",
+    "autostart_stale": "This account's autostart entry “{where}” points to a TOW folder that was moved or deleted, so it starts nothing. Turn autostart on here to take it over.",
     "autostart_unread": "the system did not answer the question; the state above may be incomplete",
     "not_set": "Not set",
     "not_connected": "Not connected"
@@ -757,7 +757,7 @@
     "topics": "topics: {value}",
     "open_root": "WARNING: other accounts on this computer can change the TOW folder {value} and the program in it (and so read the master key); run tow permissions to see why and tow permissions fix to close it",
     "open_folders": "WARNING: other accounts on this computer can open: {value} (the master key opens every saved password); run tow permissions to see why and tow permissions fix to close them",
-    "autostart_stale": "WARNING: the autostart of this account ({where}) points to a TOW folder that was moved or deleted, so it starts nothing; run tow autostart on to take it over",
+    "autostart_stale": "WARNING: this account's autostart entry “{where}” points to a TOW folder that was moved or deleted, so it starts nothing; run tow autostart on to take it over",
     "probe_ok": "ok",
     "probe": "site {tracker} {host}: {result}"
   },
@@ -847,7 +847,7 @@
     "s6": {
       "title": "6. Backups",
       "night": "<b>Nightly backups</b> are made automatically every night; if a backup fails, you get a message. You can choose the folder, including another drive or a network folder.",
-      "create": "<b>Create a backup</b> makes a restore point — a copy “just in case” before important changes. <b>Restore</b> first checks the restore point and saves the current state.",
+      "create": "<b>Create a backup</b> makes a restore point — a copy “just in case” before important changes. <b>Restore</b> first checks the restore point and saves the current data.",
       "note": "A backup holds the settings, topics, history and encrypted passwords. Downloaded files and the torrent client itself are not in it. The address, port, access from other devices and the backup folders stay as they are when you restore.",
       "file": "<b>TOW file</b> (<code>.towx</code>) — a full encrypted copy of this TOW. Restoring it needs the same master key (<code>keys/master.key</code>): on another computer, put that key there first — it is not in the file, so keep it separately, for example on a USB stick. To move TOW to an install with a different key, use <code>{launcher} export</code> and <code>{launcher} import</code> in a terminal in the TOW folder: their file is protected by a passphrase instead."
     },
@@ -936,7 +936,7 @@
       "enter": "Enter the user name and password.",
       "username": "User name",
       "password": "Password",
-      "password_note": "The password never goes into the address, the TOW state or the log.",
+      "password_note": "The password never goes into the page address, TOW's data or the log.",
       "save_retry": "Save and retry"
     },
     "tools": {
@@ -1687,7 +1687,10 @@
       "make_main": "Make main",
       "checks_saved": "Check uses the saved settings.",
       "main_note": "TOW adds new topics to the main client; each topic can use a different client.",
-      "used_by": "Chosen for topics: {topics}.",
+      "used_by": {
+        "one": "Used by {n} topic.",
+        "other": "Used by {n} topics."
+      },
       "remove_confirm": "Remove the client “{title}” from TOW? The client itself and its torrents stay as they are (you can bring it back with “Undo”).",
       "empty": "No clients available.",
       "add_label": "Add a torrent client",
@@ -1799,7 +1802,7 @@
       "night_hint": "Settings, history and encrypted passwords. Automatic copies follow the night schedule and catch up after the computer turns on. Retention is set below.",
       "failed": "The last backup ({at}) failed: {error}",
       "make_now": "Back up now",
-      "night_restore_confirm": "Restore the settings and history from the nightly backup of {at}? TOW saves its current state separately first.",
+      "night_restore_confirm": "Restore the settings and history from the nightly backup of {at}? TOW first saves its current data separately.",
       "folders_hint": "You can choose another drive or a network folder (\\\\server\\folder — then it is reachable at night too). “Check” tries to write a file.",
       "folder": "Folder for {title}",
       "default_pill": "Default",
@@ -1817,20 +1820,20 @@
       "delete_title": "Delete backup?",
       "empty_archive": "Empty archive",
       "automatic": "Automatic nightly backups",
-      "automatic_hint": "Applies without restarting TOW. Turning this off keeps existing copies and manual actions; an already running copy finishes normally.",
+      "automatic_hint": "Applies without restarting TOW. Turning this off keeps the existing copies, and “Back up now” and “Restore” work as before; a copy already under way finishes normally.",
       "retention_days_label": "Keep nightly backups, days",
       "retention_note": "Older nightly backups are removed only after a new copy passes verification. The new copy, the three newest earlier copies (whatever their age) and copies with future dates are kept. Default: 7 days. Free space for a complete copy and a reserve is checked before writing.",
       "retention_legacy": "Currently the legacy rule applies (copies kept: {count}). Saving this field switches to retention by days.",
       "delete_warning": "Only this backup will be permanently deleted. Current settings, topics, history and other backups stay unchanged. This cannot be undone.",
-      "manual_restore_confirm": "Restore the settings and history from this backup? TOW saves its current state automatically before replacing it.",
+      "manual_restore_confirm": "Restore the settings and history from this backup? TOW saves its current data before replacing it.",
       "manual_empty": "No saved backups",
-      "manual_note": "Before restoring, TOW checks the backup and saves its current state. The network settings stay as they are now. The last 10 backups are kept.",
+      "manual_note": "Before restoring, TOW checks the backup and saves its current data. The network settings stay as they are now. The last 10 backups are kept.",
       "file_title": "TOW file",
       "file_intro": "A full encrypted copy to keep or to move together with the original master key.",
       "file_save": "Save file",
       "file_choose": "Choose a file:",
-      "file_restore_confirm": "Restore TOW from this file? The current state is saved automatically before it is replaced.",
-      "file_note": "Restoring needs the original <code>keys/master.key</code> — it is not in the file, so keep it separately. Before replacing data, TOW checks the file and saves the current state. <a href=\"{more}\">More</a>.",
+      "file_restore_confirm": "Restore TOW from this file? The current data is saved before it is replaced.",
+      "file_note": "Restoring needs the original <code>keys/master.key</code> — it is not in the file, so keep it separately. Before replacing data, TOW checks the file and saves the current data. <a href=\"{more}\">More</a>.",
       "night_restore_access": "Network access and its password stay as they are now."
     },
     "log": {
