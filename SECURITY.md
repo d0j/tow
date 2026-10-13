@@ -40,7 +40,8 @@ otherwise.
   download redirects may not leave the site's configured hosts.
 - **Optional access providers.** Disabled by default and configured only from this computer. Their API endpoint
   must be a literal loopback/private address (or localhost), with no credentials, proxy or redirects. The service
-  receives only a public site's root URL, not account cookies, passwords, passkeys or torrent links. A bounded,
+  receives only an audited public page (root by default, Kinozal's catalog), not account cookies, passwords,
+  passkeys or torrent links. Arbitrary probe paths and queries are refused. A bounded,
   validated response is not proof: TOW verifies it through its own same-origin guarded request. Clearance and its
   matching User-Agent are encrypted in the bounded `data/protection.enc` with expiry and durable attempt leases.
 - **Your torrents and folders.** TOW changes only torrents it added (tag `tow`) and refuses system and profile

@@ -106,6 +106,11 @@ class SitePreset:
     browser_login_hint: str = ""
     # A cheap service page which names this topic's current v1 hash (empty disables).
     infohash_path: str = ""
+    # A public, non-account page which exercises this site's path-specific challenge.
+    # Only audited paths accepted by protection.spec.public_probe_path may be used.
+    public_probe_path: str = "/"
+    # Exact obsolete default routes; custom routes are never guessed or rewritten.
+    download_path_aliases: Mapping[str, str] = field(default_factory=dict)
     maintenance_markers: tuple[str, ...] = ()
     # The site's settings: a config without a trackers: section gets them (config.defaults).
     spec: Mapping[str, Any] = field(default_factory=dict)
@@ -142,12 +147,33 @@ def _discover() -> tuple[SitePreset, ...]:
             preset = importlib.import_module(f"{package.__name__}.{info.name}").PRESET
             if not isinstance(preset, SitePreset):
                 raise TypeError("PRESET is not a SitePreset")
+            _validate_routes(preset)
         except Exception as exc:  # noqa: BLE001 - a broken plugin is skipped and named, never fatal
             SKIPPED.append((info.name, f"{type(exc).__name__}: {exc}"))
             _LOG.warning("tracker site module %s skipped: %s: %s", info.name, type(exc).__name__, exc)
             continue
         found[preset.name] = preset
     return tuple(found[name] for name in sorted(found))
+
+
+def _validate_routes(preset: SitePreset) -> None:
+    """Bad optional route declarations disable their module, never every configured site."""
+    from tow.protection.spec import validate_probe_path
+
+    validate_probe_path(preset.public_probe_path)
+    aliases = preset.download_path_aliases
+    if not isinstance(aliases, Mapping) or len(aliases) > 16:
+        raise ValueError("invalid download route aliases")
+    for route in (*aliases.keys(), *aliases.values()):
+        if (
+            not isinstance(route, str)
+            or not 1 <= len(route) <= 512
+            or not route.startswith("/")
+            or route.startswith("//")
+            or "{id}" not in route
+            or any(ord(c) < 32 or c in "\\#" for c in route)
+        ):
+            raise ValueError("invalid download route alias")
 
 
 def presets() -> dict[str, SitePreset]:
@@ -167,6 +193,15 @@ def get(name: str) -> SitePreset | None:
 def defaults(name: str) -> dict[str, Any]:
     preset = get(name)
     return preset.defaults() if preset else {}
+
+
+def normalize_spec(name: str, spec: dict[str, Any]) -> dict[str, Any]:
+    """Read old default routes through their replacement, without changing the source."""
+    preset = get(name)
+    path = spec.get("download_path")
+    if preset and isinstance(path, str) and path in preset.download_path_aliases:
+        return {**spec, "download_path": preset.download_path_aliases[path]}
+    return spec
 
 
 def label(name: str) -> str:

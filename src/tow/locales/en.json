@@ -25,7 +25,7 @@
     "step_install": "Run your chosen external service separately. TOW does not install it or bundle a browser.",
     "step_address": "Enter its loopback or private-network IP address. Do not expose the service to the internet.",
     "step_enable": "Enable the connections you need, set their order, then enable recovery and save. Saving does not contact the services.",
-    "trust": "Use only services you trust and sandbox their browser's network access. They receive the public site's home address, not your password, sign-in cookies or topic link. TOW keeps only verified clearance, encrypted and time-limited. Interactive challenges may still require your action; download limits remain enforced.",
+    "trust": "Use only services you trust and sandbox their browser's network access. They receive an audited public page, not your password, sign-in cookies or topic link. TOW keeps only verified clearance, encrypted and time-limited. Interactive challenges may still require your action; download limits remain enforced.",
     "local_only": "Change external recovery services on the computer running TOW, through its loopback address.",
     "enabled": "Use optional challenge recovery",
     "provider_enabled": "Use this connection",

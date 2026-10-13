@@ -9,7 +9,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - Optional site-access recovery through independently discovered FlareSolverr and Byparr adapters. All connections
   start disabled; local-only settings offer ordering, per-connection switches, bounded attempts and encrypted-cache
-  reset. Ordinary mirrors run first; providers receive only the site's public root, never account credentials or a
+  reset. Ordinary mirrors run first; providers receive only an audited public page, never account credentials or a
   torrent URL. Their result must pass a separate, same-origin TOW request. See [Site access](docs/PROTECTION.md).
 - Site response diagnostics distinguish challenges, access blocks, rate limits, origin outages, maintenance, sign-in
   and download quotas; Sites shows the last observed reason for each mirror without cutting it off on mobile.
@@ -20,6 +20,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Kinozal uses the current torrent download route, including configurations with the obsolete default; custom
+  routes are preserved. Its public catalog, not an unchallenged home page, verifies path-specific access. A probe
+  redirect is followed and checked independently, rather than accepted as proof by itself.
 - A bounded failed access chain continues to later connections at the next eligible check. Late responses from
   before reset or a new attempt cannot restore old access or remove a newer credential. Refused site replays are
   explicitly logged without treating an answered API as verified site access.

@@ -36,8 +36,12 @@ replace that session's User-Agent. It is not an unattended browser solver.
 
 1. Ask ordinary mirrors, with any still-valid previously verified access for the exact origin.
 2. Only when ordinary mirrors failed with a detected Cloudflare browser challenge, try enabled providers in order.
-3. Send the provider only the public origin's root URL: never a password, account cookie, topic, passkey or download.
-4. Validate the bounded response and replay that root from TOW using the returned clearance and matching User-Agent.
+3. Send the provider only an audited public page: the root by default, `/browse.php` for Kinozal. Never send a
+   password, account cookie, topic, passkey or download. The trusted site module chooses the probe; arbitrary
+   configuration URLs and query strings are not accepted.
+4. Validate the bounded response and replay that page from TOW using the returned clearance and matching User-Agent.
+   Redirects stay within the deadline and audited anonymous paths; a path-specific probe cannot redirect to
+   an open home page and pass. No probe follows a topic, download or query-bearing redirect.
 5. Fetch the requested resource through TOW's existing guarded HTTP, with normal account sign-in if needed.
 
 Cloudflare's [`cf-mitigated: challenge`](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/)
@@ -61,7 +65,10 @@ or a newer reservation cannot repopulate the cache, revoke a new credential or r
 Encrypted format v2 reads v1 without rewriting it on inspection; a new write upgrades only this optional cache.
 Failures older than 24 hours no longer raise the next day's first error to maximum backoff. The solver's share of
 the chain budget leaves up to 10 seconds (one third for smaller budgets) for independent verification. A transient
-root transport error or origin outage preserves verified access and does not justify another solve attempt.
+probe transport error or origin outage preserves verified access and does not justify another solve attempt.
+Recovery does not replay a cached credential which the ordinary request already tried. A newly verified probe
+whose real resource is still challenged retains that origin's access but reports the path refusal; solving the
+same successful probe again is not justified. A missing probe preserves the original resource's mirror reasons.
 
 If that store is unreadable, ordinary HTTP remains available and the damaged file is not silently replaced. On the
 TOW computer, Settings → Site access → Recovery → **Reset saved access** explicitly moves the old encrypted bytes
@@ -77,10 +84,14 @@ still runs. Unknown format or a missing optional endpoint falls back to the norm
 is reported without repeating the same failing requests. A changed rule, missing/foreign/pending task or changed
 hash takes the full client-confirmed path. This is not a quota bypass or proof from a cached old torrent.
 
+Kinozal's current download route is `/download.php?id={id}`. Its exact obsolete default
+`/.dl./download.php?id={id}` is read as that route, including old imported settings; reading does not rewrite
+the configuration file. Custom routes remain unchanged. Old pasted mirror links remain recognizable.
+
 ## Limits and troubleshooting
 
 - A service's `status: ok` is not proof; only TOW's independent replay can verify access.
-- Root-only recovery cannot solve a challenge restricted to one particular download path. An external service may
+- A public probe cannot solve every challenge restricted to one particular download path. An external service may
   attempt an interactive challenge, but TOW does not promise to complete it; the owner's action may still be needed.
   Browser/TLS fingerprints or a different public IP can make replay fail safely.
 - Cloudflare's [Precursor](https://developers.cloudflare.com/cloudflare-challenges/precursor/) may re-evaluate an

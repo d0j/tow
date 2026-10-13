@@ -105,6 +105,21 @@ def target_origin(value: str) -> str:
         raise ValueError("invalid clearance target") from None
 
 
+def validate_probe_path(path: object) -> str:
+    """Audited anonymous GET pages only, never arbitrary user/topic/download URLs."""
+    if not isinstance(path, str) or path not in {"/", "/browse.php"}:
+        raise ValueError("invalid public clearance probe")
+    return path
+
+
+def public_probe_path(site: str) -> str:
+    """A trusted site module, not a configuration field, chooses the public probe."""
+    from tow.trackers.presets import get
+
+    preset = get(site)
+    return validate_probe_path(preset.public_probe_path if preset else "/")
+
+
 def validate_settings(raw: object) -> dict[str, Any]:
     """Unknown keys, coercions and broken providers refuse the complete configuration."""
     if raw is None:
