@@ -219,7 +219,7 @@ def test_a_topic_paused_during_the_check_is_not_added_to_the_client(monkeypatch)
     row = out["results"][0]
     assert (row["status"], row["skipped"]) == (
         "skipped",
-        "приостановлено во время проверки — в торрент-клиент ничего не передано",
+        "раздачу поставили на паузу во время проверки — в торрент-клиент ничего не передано",
     )
     topic = load_state()["topics"][0]
     assert topic["paused"] is True
@@ -240,7 +240,7 @@ def test_a_topic_deleted_during_the_check_is_not_added_to_the_client(monkeypatch
     tracker.fetch_torrent = fetch
     out = check.run_check(apply=True, notify=False)
     assert client.add_calls == 0
-    assert out["results"][0]["skipped"].startswith("удалено во время проверки")
+    assert out["results"][0]["skipped"].startswith("раздачу убрали из TOW во время проверки")
     assert load_state()["topics"] == []
 
 

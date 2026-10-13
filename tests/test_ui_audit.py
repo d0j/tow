@@ -337,7 +337,7 @@ def test_doctor_shows_results_in_words_and_keeps_the_raw_text_in_a_tooltip(clien
 
     page = client.get("/doctor").text
 
-    assert ">не отвечает: торрент-клиент не настроен в «Настройках»</span>" in page
+    assert ">не отвечает: торрент-клиент не настроен в Настройках</span>" in page
     assert 'title="FAIL qbit secrets missing"' in page
     assert ">соединение отклонено</span>" in page
     assert ">отвечает (200)</span>" in page

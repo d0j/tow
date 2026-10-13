@@ -44,6 +44,13 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   set in the environment.
 - Home: a topic link that is not a web address (possible with a loosely written site pattern) is no longer made into
   a link to open.
+### Fixed
+
+- Russian texts name a sign-in, the torrent in the client and a pause the same way everywhere: "вход сохранён" instead
+  of "логин сохранён", the start of the torrent (not of the topic) that waited for disk space, "поставлена на паузу" /
+  "снята с паузы" in History as on the buttons, a topic paused or removed during a check, and Settings without
+  quotation marks. The History labels of torrent-client events now agree with the torrent ("запущен в клиенте", not
+  "запущена" or "остановлено").
 
 ## [1.28.4] — 2026-10-12
 

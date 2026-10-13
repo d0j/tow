@@ -432,7 +432,7 @@ def test_tracker_login_reports_unavailable_secret_store(no_check, monkeypatch, c
 
     response = client.post("/topics/t1/tracker-login", data={"username": "u", "password": "p"}, follow_redirects=False)
 
-    assert _flash(response) == "логин не сохранён: сохранённые пароли и токены не открываются — см. Настройки"
+    assert _flash(response) == "вход не сохранён: сохранённые пароли и токены не открываются — см. Настройки"
     assert _query(response)["credential_topic"] == "t1"
     assert not encrypted_secrets_path().exists()
 
@@ -1254,7 +1254,7 @@ def test_site_add_for_existing_site_saves_login_and_drops_older_undo(no_probe, c
         "/sites/new", data={"name": "rutor", "username": " user ", "password": "pw"}, follow_redirects=False
     )
 
-    assert _flash(response) == "логин сохранён"
+    assert _flash(response) == "вход сохранён"
     assert load_secrets()["trackers"]["rutor"] == {"username": "user", "password": "pw"}
     assert "undo" not in load_state()
     assert no_probe == []
