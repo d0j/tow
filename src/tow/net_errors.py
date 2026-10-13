@@ -9,6 +9,7 @@ reset - and keep the raw text under a "Details" toggle.
 
 from __future__ import annotations
 
+import errno
 import re
 
 from tow.i18n import t
@@ -96,6 +97,33 @@ def _bracketed_words(match: re.Match[str], lang: str | None) -> str:
     return f"({t(_KEYS[kind], lang)})" if kind else match.group(0)
 
 
+# OS errors of the network (a socket's), by their errno names on this system; Winsock's
+# (10000-11999) and the resolver's (negative) are all network ones.
+_NETWORK_ERRNO_NAMES = frozenset(
+    {
+        "EADDRINUSE", "EADDRNOTAVAIL", "EAFNOSUPPORT", "EALREADY", "ECONNABORTED", "ECONNREFUSED",
+        "ECONNRESET", "EHOSTDOWN", "EHOSTUNREACH", "EINPROGRESS", "EISCONN", "ENETDOWN", "ENETRESET",
+        "ENETUNREACH", "ENOBUFS", "ENOTCONN", "EPIPE", "EPROTO", "EPROTONOSUPPORT", "ESHUTDOWN",
+        "ETIMEDOUT", "ETOOMANYREFS",
+    }
+)  # fmt: skip
+_NETWORK_ERRNOS = frozenset(code for code, name in errno.errorcode.items() if name in _NETWORK_ERRNO_NAMES)
+_OS_ERROR = re.compile(r"\[(Errno|WinError) (-?\d+)\]")
+
+
+def _other_os_error(technical: str) -> bool:
+    """The technical part is an OS error that is not the network's ("[Errno 28] No space left on
+    device", "[WinError 32] The process cannot access the file…"): its own words say what it is,
+    and "network error" would not."""
+    match = _OS_ERROR.match(technical)
+    if not match:
+        return False
+    code = int(match.group(2))
+    if match.group(1) == "WinError":  # a Windows error code, not an errno: only Winsock's are the network's
+        return not 10000 <= code < 12000
+    return not (code < 0 or 10000 <= code < 12000 or code in _NETWORK_ERRNOS)
+
+
 def humanize(text: str, lang: str | None = None) -> str:
     """``text`` with its technical part said in words ("torrent client: connection refused");
     a text without one comes back unchanged, but for a known reason in brackets."""
@@ -104,6 +132,8 @@ def humanize(text: str, lang: str | None = None) -> str:
     if not starts:
         return _BRACKETED.sub(lambda match: _bracketed_words(match, lang), value)
     at = min(starts)
+    if reason(value[at:]) is None and _other_os_error(value[at:]):
+        return value
     head = value[:at]
     for english, name in _LIBRARY_HEADS:
         head = head.replace(english, name)

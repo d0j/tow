@@ -784,6 +784,17 @@ RAW_REFUSED = (
             "example: ни одно зеркало не ответило: нет связи (ответ не пришёл вовремя)",
         ),
         ("сайт ответил ошибкой (error 503)", "сайт ответил ошибкой (error 503)"),  # not a reason: kept
+        # Qa10: an OS error that is not the network's said "network error" (a full disk, a file
+        # another program holds); its own words stay. A socket's or the resolver's is the network.
+        ("[Errno 28] No space left on device", "[Errno 28] No space left on device"),
+        (
+            "OSError: [WinError 32] The process cannot access the file",
+            "OSError: [WinError 32] The process cannot access the file",
+        ),
+        ("[WinError 10065] A socket operation was attempted to an unreachable host", "ошибка сети"),
+        ("[Errno -3] Temporary failure in name resolution", "адрес не найден"),
+        ("[Errno -9] Address family for hostname not supported", "ошибка сети"),
+        ("ConnectionError([Errno 28] No space left on device)", "ошибка сети"),  # a request's wrapper first
     ],
 )
 def test_network_errors_are_said_in_words(raw, words):
