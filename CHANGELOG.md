@@ -100,6 +100,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   "the autostart of this account (TOW)"; Diagnostics says plainly that the home page of a site does not tell whether
   signing in and downloading a .torrent work; the note under automatic nightly backups names the buttons that keep
   working instead of "manual actions"; and the password and restore notes say TOW's data, not its state.
+- An error of the operating system that has nothing to do with the network, such as a full disk or a file another
+  program holds open, is no longer called "network error" in History, the Log or a topic's row; its own words are
+  shown.
 
 ## [1.28.4] — 2026-10-12
 
