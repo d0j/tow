@@ -202,7 +202,7 @@ def test_a_lost_data_folder_is_said_on_home_in_history_and_by_tow_watchdog(monke
     # Home says it as an issue, its link going to the night copies (tow.issues.kinds.data_lost).
     home = TestClient(app).get("/", headers={"Accept": "text/html"}).text
     assert t("issues.data_lost", folder=str(data_dir())) in home
-    assert 'href="/settings?open=transfer&amp;fix=restore_night#backup-night"' in home
+    assert 'href="/settings?open=transfer&amp;fix=restore_night&amp;spot=backup-night"' in home
 
     monkeypatch.setattr(
         watchdog, "run_watchdog", lambda **kwargs: {"service_ok": True, "checks_ok": True, "alerts": []}

@@ -1099,10 +1099,9 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
   header.app nav { gap: 0; }
 }
 
-/* Where a "Needs attention" link lands (#anchor): the spot lights up for a moment, below the
-   sticky header; under reduced motion a still outline instead. */
-.row-wrap:target, .integration-card:target, .settings-accordion:target, .flash:target, .log-line:target,
-.issue-note:target {
+/* Where a "Needs attention" link lands (#anchor, or ?spot= marked .landed by app.js): the spot
+   lights up for a moment, below the sticky header; under reduced motion a still outline instead. */
+:is(.row-wrap, .integration-card, .settings-accordion, .flash, .log-line, .issue-note):is(:target, .landed) {
   scroll-margin-top: 5.5rem; border-radius: 8px; animation: landing 2.6s ease-out 1;
 }
 @keyframes landing {
@@ -1110,8 +1109,9 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
   100% { box-shadow: 0 0 0 2px transparent, 0 0 0 7px transparent; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .row-wrap:target, .integration-card:target, .settings-accordion:target, .flash:target, .log-line:target,
-  .issue-note:target { animation: none; outline: 2px solid var(--acc); outline-offset: 2px; }
+  :is(.row-wrap, .integration-card, .settings-accordion, .flash, .log-line, .issue-note):is(:target, .landed) {
+    animation: none; outline: 2px solid var(--acc); outline-offset: 2px;
+  }
 }
 .issue-note { margin: 0 0 .8rem; color: var(--fg); background: var(--pill-warn-bg); border: 1px solid var(--warn); }
 /* A link inside a message's sentence is told from the words by more than colour (WCAG 1.4.1). */

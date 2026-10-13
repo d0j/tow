@@ -363,18 +363,25 @@ def issue_note_id(issue: Issue) -> str:
 
 def issue_href(issue: Issue) -> str:
     """Where the issue's link goes: its page with the page's own filters, what that page opens
-    (``open``), the control that fixes it (``fix``, focused there), and the spot that shows the
-    problem (``#anchor``, highlighted there)."""
+    (``open``), the control that fixes it (``fix``, focused there) and the spot that shows the
+    problem (highlighted there).
+
+    With a fix the spot is ``spot=``, not ``#anchor``: a browser does not honour ``autofocus`` on
+    a page whose address has a fragment (Chromium), and without a script the focus on the fix is
+    all there is. app.js brings the spot into view and lights it up. Without a fix the spot is the
+    fragment: the browser scrolls to it and the CSS lights it up, with or without a script."""
     from urllib.parse import urlencode
 
     target = issue.target
+    spot = target.anchor or issue_note_id(issue)
     params = [*target.filter]
     if target.open:
         params.append(("open", target.open))
-    if issue.fix is not None:
-        params.append(("fix", issue.fix.ref))
-    query = urlencode(params)
-    return f"{ISSUE_PAGES[target.page]}{'?' + query if query else ''}#{target.anchor or issue_note_id(issue)}"
+    if issue.fix is None:
+        query = urlencode(params)
+        return f"{ISSUE_PAGES[target.page]}{'?' + query if query else ''}#{spot}"
+    params += [("fix", issue.fix.ref), ("spot", spot)]
+    return f"{ISSUE_PAGES[target.page]}?{urlencode(params)}"
 
 
 def attention_view(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str, Any]:

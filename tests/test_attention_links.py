@@ -1,6 +1,7 @@
 """Every "Needs attention" item is a link to the problem itself: its page opens what shows the
-problem in full, marks the spot (#anchor) and focuses the control that fixes it (?fix=, also
-without a script: autofocus). One test per kind, and one that no kind is left out."""
+problem in full, marks the spot (?spot=, or #anchor when there is nothing to focus) and focuses
+the control that fixes it (?fix=, also without a script: autofocus). One test per kind, and one
+that no kind is left out."""
 
 from __future__ import annotations
 
@@ -48,8 +49,16 @@ def _land(client: TestClient, entry: dict, *, anchor: str, fix: str, label: str)
     """Follow the item's link; the page shows the spot and focuses the fix (when it has one)."""
     href = entry["href"]
     split = urlsplit(href)
-    assert split.fragment == anchor
-    assert parse_qs(split.query).get("fix", [""]) == [fix]
+    query = parse_qs(split.query)
+    assert query.get("fix", [""]) == [fix]
+    if fix:
+        # No #fragment: a browser ignores autofocus on such an address (Chromium), and without a
+        # script that focus is all there is. app.js finds the spot by ?spot=.
+        assert split.fragment == ""
+        assert query["spot"] == [anchor]
+    else:  # nothing to focus: the browser scrolls to the spot and the CSS lights it up
+        assert split.fragment == anchor
+        assert "spot" not in query
     assert entry["fix"] == fix
     assert entry["fix_label"] == label
     response = client.get(f"{split.path}?{split.query}" if split.query else split.path)
@@ -83,7 +92,7 @@ def test_one_topic_asking_for_a_sign_in_opens_its_row_with_the_sign_in_focused(c
     _home_state(_auth("a", 1), _topic("z", 9))
     entry = _entries(client)["site_needs_login"]
     assert entry["text"] == "Войти на NNM-Club (раздач: 1)"
-    assert entry["href"] == "/?open=a&fix=sign_in%3Aa#row-a"
+    assert entry["href"] == "/?open=a&fix=sign_in%3Aa&spot=row-a"
 
     page, tag = _land(client, entry, anchor="row-a", fix="sign_in:a", label="Войти на сайт")
     row = page.split('id="row-a"', 1)[1].split('class="row-wrap', 1)[0]
@@ -100,7 +109,7 @@ def test_several_topics_show_the_sites_problems_with_the_first_open(client):
     _home_state(_auth("a", 1), _auth("b", 2), _topic("z", 9))
     entry = _entries(client)["site_needs_login"]
     assert entry["text"] == "Войти на NNM-Club (раздач: 2)"
-    assert entry["href"] == "/?f=problem&t=nnmclub&open=a&fix=sign_in%3Aa#row-a"
+    assert entry["href"] == "/?f=problem&t=nnmclub&open=a&fix=sign_in%3Aa&spot=row-a"
 
     page, _ = _land(client, entry, anchor="row-a", fix="sign_in:a", label="Войти на сайт")
     assert 'data-tracker="nnmclub"' in page.split('id="row-a"', 1)[1].split(">", 1)[0]
@@ -133,8 +142,8 @@ def test_a_site_without_a_sign_in_opens_its_row_on_sites_at_the_user_name(client
     assert entry["fix_label"] == "Логин"
     split = urlsplit(entry["href"])
     assert split.path == "/sites"
-    assert parse_qs(split.query) == {"open": ["fakeone"], "fix": ["site_login:fakeone"]}
-    assert split.fragment == "site-row-fakeone"
+    assert parse_qs(split.query) == {"open": ["fakeone"], "fix": ["site_login:fakeone"], "spot": ["site-row-fakeone"]}
+    assert split.fragment == ""
 
     page = client.get(f"{split.path}?{split.query}").text
     row = page.split('id="site-row-fakeone"', 1)[1].split('id="site-row-faketwo"', 1)[0]
@@ -152,7 +161,7 @@ def test_a_site_without_a_sign_in_opens_its_row_on_sites_at_the_user_name(client
 def test_the_client_down_opens_its_card_with_the_status_and_check(client):
     _home_state(_topic("z", 9), qbit_ok=False)
     entry = _entries(client)["client_down"]
-    assert entry["href"] == "/settings?open=clients&fix=check_client%3Adefault#client-default"
+    assert entry["href"] == "/settings?open=clients&fix=check_client%3Adefault&spot=client-default"
 
     page, _ = _land(client, entry, anchor="client-default", fix="check_client:default", label="Проверить")
     assert re.search(r'id="acc-clients" open', page)  # the section open without a script
@@ -163,7 +172,7 @@ def test_the_client_down_opens_its_card_with_the_status_and_check(client):
 def test_late_checks_open_the_service_card_with_restart(client):
     _home_state(_topic("z", 9), auto_at_ts=int(time.time()) - 10 * 24 * 3600)
     entry = _entries(client)["check_stale"]
-    assert entry["href"] == "/settings?open=service&fix=restart_service#acc-service"
+    assert entry["href"] == "/settings?open=service&fix=restart_service&spot=acc-service"
 
     page, _ = _land(client, entry, anchor="acc-service", fix="restart_service", label="Перезапустить")
     assert re.search(r'id="acc-service" open', page)
@@ -176,7 +185,7 @@ def test_late_checks_open_the_service_card_with_restart(client):
 def test_a_check_blocked_by_the_master_key_lands_on_its_explanation_with_the_command(client):
     _home_state(_topic("z", 9), check_ok=False, check_error="secrets_migration_required")
     entry = _entries(client)["check_blocked"]
-    assert entry["href"] == "/settings?fix=copy_keys_status#secret-store"
+    assert entry["href"] == "/settings?fix=copy_keys_status&spot=secret-store"
 
     page, tag = _land(client, entry, anchor="secret-store", fix="copy_keys_status", label="Скопировать команду")
     assert re.search(r'data-copy-text="[^"]* keys status"', tag)
@@ -190,7 +199,7 @@ def test_a_failed_check_lands_on_its_error_in_the_history_with_check_all(client)
     log_event("check_blocked", reason="error", how="auto")
     log_event("check_blocked", reason="error", how="auto")
     entry = _entries(client)["check_blocked"]
-    assert entry["href"] == "/history?group=errors&fix=check_all#latest-check_blocked"
+    assert entry["href"] == "/history?group=errors&fix=check_all&spot=latest-check_blocked"
 
     page, _ = _land(
         client, entry, anchor="latest-check_blocked", fix="check_all", label=t("base.check_all.title", "ru")
@@ -220,7 +229,7 @@ def test_a_lost_data_folder_lands_on_the_night_copies_with_the_newest_restore(cl
     create_snapshot()
     monkeypatch.setattr(services, "data_lost", lambda: {"at": 1, "folder": "D:\\TOW\\data"})
     entry = _entries(client)["data_lost"]
-    assert entry["href"] == "/settings?open=transfer&fix=restore_night#backup-night"
+    assert entry["href"] == "/settings?open=transfer&fix=restore_night&spot=backup-night"
 
     page, _ = _land(client, entry, anchor="backup-night", fix="restore_night", label="Восстановить")
     assert re.search(r'id="acc-transfer" open', page)
