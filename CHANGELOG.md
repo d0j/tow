@@ -19,6 +19,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - History has the "Check all topics now" button, as Home does.
 - `tow status` adds a line "Needs attention: N" when something does, by the same rules as Home (`attention` in
   `--json`).
+- The in-app Guide and the user guide explain Home → Needs attention: what it lists, that each item leads to the
+  problem and focuses the button that fixes it, that it folds into a warning icon, and that it opens again by itself
+  on a new problem.
 
 ### Changed
 

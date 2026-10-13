@@ -73,10 +73,15 @@ def test_the_guide_covers_updates_adopting_signing_out_and_permissions(client):
     text = page.get_text(" ")
     for word in ("Взять под управление TOW", "Выйти на всех устройствах", "Другая версия или откат"):
         assert word in text, word
+    # Qa10: the Needs attention banner, new in this release: it folds, opens again on a new
+    # problem, and its items lead to the fix.
+    attention = page.select_one("#attention").get_text(" ")
+    for word in ("Требует внимания", "сворачивает", "раскрывается сам", "ставит фокус на кнопку"):
+        assert word in attention, word
     codes = [code.get_text() for code in page.select("code")]
     assert codes[-2].endswith("tow.cmd permissions") or codes[-2].endswith("tow permissions")
     assert codes[-1] == codes[-2] + " fix"
-    for key in ("help.s2.adopt", "help.s7.sign_out", "help.s9.update"):
+    for key in ("help.s2.adopt", "help.s2.attention", "help.s7.sign_out", "help.s9.update"):
         assert t(key, "ru") != t(key, "en")  # written in both languages
 
 

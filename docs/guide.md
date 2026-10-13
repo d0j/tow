@@ -49,6 +49,12 @@ The ↻ in the header depends on the page: on Home it is **Check all topics now*
 to the sites** (Diagnostics). The clock in the header counts down to the next scheduled check; before the first check
 it shows “—”, and its tooltip says “No check has run yet”.
 
+**Needs attention** at the top of Home lists what needs you now: a site that asks you to sign in, a torrent client
+that does not answer, scheduled checks that stopped or did not complete, a lost data folder. Each item is a link to
+the problem: it opens the topic, the site or the Settings card that shows it in full and puts the focus on the
+button that fixes it. The arrow folds the list into a warning icon with the number of problems, and this browser
+remembers that; the list opens again by itself when a new problem appears.
+
 ## Adding a topic
 
 1. **Home → +**, paste the link to the *topic page* (not a magnet link).
