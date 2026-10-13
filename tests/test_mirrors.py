@@ -551,3 +551,24 @@ def test_a_preview_does_not_ask_the_front_page(monkeypatch, tmp_path):
     with pytest.raises(MirrorFetchError):
         pick_and_get("site", ["http://site.example"], "/t/1", persist=False)
     assert asked == ["http://site.example/t/1"]
+
+
+def test_a_confirmed_sign_in_is_noted_for_a_configured_site_only(monkeypatch):
+    from tow import mirrors
+    from tow.config import load_config, save_config
+
+    cfg = load_config()
+    cfg["trackers"] = {
+        "kinozal": {"url_regex": r"^https://kinozal\.example/(\d+)", "fetch_hosts": ["https://k.example"]}
+    }
+    save_config(cfg)
+    save_state({"topics": [], "mirrors": {"kinozal": {"login_at": 5.0}}})
+    monkeypatch.setattr(mirrors, "_now", lambda: 1234.5)
+
+    mirrors.note_signed_in("kinozal")
+    mirrors.note_signed_in("gone")  # deleted meanwhile: nothing is written for it
+
+    buckets = load_state()["mirrors"]
+    assert buckets["kinozal"]["signed_in_at"] == 1234.5
+    assert buckets["kinozal"]["login_at"] == 5.0  # the rest of the site's entry is kept
+    assert "gone" not in buckets

@@ -158,6 +158,68 @@ def test_a_site_without_a_sign_in_opens_its_row_on_sites_at_the_user_name(client
     assert "issue-note" not in other
 
 
+KZ = "https://kinozal.guru/details.php?id="
+
+
+def _signed_in_check(monkeypatch, *, ok: bool) -> None:
+    """The check a sign-in runs: it checks the one topic, which passes (``ok``) or is refused."""
+    from tow.store import load_state
+
+    def check(*, ids, **_kw):
+        state = load_state()
+        for topic in state["topics"]:
+            if topic["id"] in ids and ok:
+                for key in ("last_error", "last_error_class"):
+                    topic.pop(key)
+                topic.update(last_ok=True, last_check="2099-01-01T00:00:00+00:00")
+        save_state(state)
+        row = {"id": ids[0], "ok": ok} if ok else {"id": ids[0], "ok": False, "error": "tracker auth required"}
+        return {"results": [row]}
+
+    monkeypatch.setattr(services, "run_check", check)
+
+
+def _sign_in(client: TestClient, topic: str) -> None:
+    """Home's sign-in prompt of ``topic``: a login and password, then the check of that topic."""
+    response = client.post(
+        f"/topics/{topic}/tracker-login",
+        data={"username": "u", "password": "p"},
+        headers={"Origin": "http://127.0.0.1"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+
+def test_after_a_sign_in_the_sites_other_topics_wait_for_their_next_check(client, monkeypatch):
+    refused = {"last_error_class": "tracker_auth", "last_error": "asks", "last_check": "2026-01-01T00:00:00+00:00"}
+    _home_state({"id": "a", "url": KZ + "1", **refused}, {"id": "b", "url": KZ + "2", **refused})
+    assert _entries(client)["site_needs_login"]["text"] == "Войти на Kinozal (раздач: 2)"
+    _signed_in_check(monkeypatch, ok=True)
+
+    _sign_in(client, "a")
+
+    entry = _entries(client)["site_needs_login"]
+    assert entry["text"] == "Вход на Kinozal выполнен: остальные раздачи проверятся при следующей проверке (раздач: 1)"
+    assert entry["severity"] == "warn"
+    assert entry["href"] == "/?open=b&fix=check_all&spot=row-b"
+    _land(client, entry, anchor="row-b", fix="check_all", label=t("base.check_all.title", "ru"))
+    from tow.store import load_state
+
+    other = next(topic for topic in load_state()["topics"] if topic["id"] == "b")
+    assert other["last_error_class"] == "tracker_auth"  # nothing cleared without a check
+    assert other["last_check"] == refused["last_check"]  # and nothing checked by itself
+
+
+def test_a_sign_in_the_check_refused_still_asks_to_sign_in(client, monkeypatch):
+    refused = {"last_error_class": "tracker_auth", "last_error": "asks", "last_check": "2026-01-01T00:00:00+00:00"}
+    _home_state({"id": "a", "url": KZ + "1", **refused}, {"id": "b", "url": KZ + "2", **refused})
+    _signed_in_check(monkeypatch, ok=False)
+
+    _sign_in(client, "a")
+
+    assert _entries(client)["site_needs_login"]["text"] == "Войти на Kinozal (раздач: 2)"
+
+
 def test_the_client_down_opens_its_card_with_the_status_and_check(client):
     _home_state(_topic("z", 9), qbit_ok=False)
     entry = _entries(client)["client_down"]

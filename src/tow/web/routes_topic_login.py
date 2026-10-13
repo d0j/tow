@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import quote, urlparse
@@ -101,6 +102,8 @@ def topics_tracker_login(tid: str, username: str = Form(""), password: str = For
         return home_redirect("web.login_retry.failed", "err", site=_title(tracker), error=exc, credential_topic=tid)
     row = topic_check_row(str(tid), out)
     flash, prompt, kind = _tracker_login_retry_flash(row, _title(tracker))
+    if kind == "ok":
+        _signed_in(tracker.name)
     if (
         prompt
         and row
@@ -121,6 +124,14 @@ def topics_tracker_login(tid: str, username: str = Form(""), password: str = For
             )
             flash, kind = t("web.topics.restore_failed", site=_title(tracker)), "err"
     return home_redirect(flash, kind, credential_topic=str(tid) if prompt else None)
+
+
+def _signed_in(tracker_name: str) -> None:
+    """The check confirmed the sign-in: the site's other topics refused before it are said to
+    wait for their next check, not to need a sign-in (Home's "Needs attention"). They are not
+    checked now: each check may download a .torrent, and a site may limit those per day."""
+    with suppress(OSError):  # a note not written: they ask for a sign-in until then, as before
+        services.note_signed_in(tracker_name)
 
 
 def _title(tracker: GenericHttpTracker) -> str:
@@ -214,6 +225,7 @@ def _browser_auth_callback(
         )
         if row and row.get("ok") and not magnet_fallback:
             services.log_event("browser_auth", topic=topic_id, tracker=tracker_name, status="verified", how="manual")
+            _signed_in(tracker_name)
             spec = (services.load_config().get("trackers") or {}).get(tracker_name)
             site = str((spec.get("title") if isinstance(spec, Mapping) else "") or tracker_name)
             return {"ok": True, "message": i18n.t("web.browser_auth.verified", lang, site=site)}

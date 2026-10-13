@@ -167,6 +167,44 @@ def test_sign_ins_are_one_issue_per_site_counted_over_topics_not_paused():
     assert {issue.severity for issue in found} == {"bad"}
 
 
+def test_after_a_sign_in_the_topics_refused_before_it_wait_for_their_next_check():
+    before = "2027-01-15T08:00:00+00:00"  # NOW is 2027-01-15T08:00:00Z
+    after = "2027-01-15T08:05:00+00:00"
+    signed = NOW + 60  # the sign-in, confirmed a minute later
+    state = {
+        "topics": [
+            _auth("a", NNM + "1", last_check=before),
+            _auth("b", NNM + "2", last_check=after),  # refused again after the sign-in: asks again
+            _auth("c", NNM + "3", last_check="15.01.2027 08:00"),  # a check time of TOW 1.24
+            _auth("r", RUTOR + "1", last_check=before),  # no sign-in page: it never "signed in"
+        ],
+        "mirrors": {"nnmclub": {"signed_in_at": signed}, "rutor": {"signed_in_at": signed}},
+    }
+    found = collect(Snapshot(state=state, config=CONFIG, now=NOW))
+    assert [(issue.id, issue.severity, issue.subjects) for issue in found] == [
+        ("site_needs_login:nnmclub", "bad", ("b",)),
+        ("site_needs_login:rutor", "bad", ("r",)),
+        ("site_needs_login:nnmclub:signed_in", "warn", ("a", "c")),
+    ]
+    waiting = found[2]
+    assert waiting.message == Message("issues.site_signed_in", {"site": "NNM-Club", "count": 2})
+    # Nothing is checked by itself (a check may download a .torrent): the owner's "Check all".
+    assert waiting.fix == Fix("check_all", label="base.check_all.title")
+    assert waiting.target == Target("home", open="a", filter=(("f", "problem"), ("t", "nnmclub")), anchor="row-a")
+    # The topics keep the error their last check saved.
+    assert all(topic["last_error_class"] == "tracker_auth" for topic in state["topics"])
+
+
+@pytest.mark.parametrize("signed_in_at", [None, "yesterday", True, float("nan")])
+def test_no_sign_in_on_record_asks_to_sign_in(signed_in_at):
+    state = {
+        "topics": [_auth("a", NNM + "1", last_check="2027-01-15T08:00:00+00:00")],
+        "mirrors": {"nnmclub": {"signed_in_at": signed_in_at}},
+    }
+    [issue] = collect(Snapshot(state=state, config=CONFIG, now=NOW))
+    assert issue.id == "site_needs_login:nnmclub"
+
+
 def test_worst_first_then_the_kinds_order():
     everything = _snapshot(
         [_auth("a", NNM + "1")],

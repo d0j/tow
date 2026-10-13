@@ -1120,6 +1120,8 @@ def test_browser_auth_callback_persists_session_and_rechecks_one_topic(monkeypat
     monkeypatch.setattr("tow.web.services.load_secrets", lambda: old)
     monkeypatch.setattr("tow.web.services.save_secrets", lambda value: saved.append(json.loads(json.dumps(value))))
     monkeypatch.setattr("tow.web.services.log_event", lambda *args, **kwargs: None)
+    noted: list[str] = []
+    monkeypatch.setattr("tow.web.services.note_signed_in", noted.append)
 
     def check(**kwargs):
         seen.update(kwargs)
@@ -1139,6 +1141,7 @@ def test_browser_auth_callback_persists_session_and_rechecks_one_topic(monkeypat
     }
     assert saved[-1]["trackers"]["nnmclub"]["browser_user_agent"] == "Mozilla/5.0 Edge/Test"
     assert saved[-1]["trackers"]["nnmclub"]["username"] == "saved-user"
+    assert noted == ["nnmclub"]  # the site's other topics wait for their next check
 
 
 def test_browser_auth_callback_requires_matching_successful_check_result(monkeypatch):
@@ -1148,6 +1151,7 @@ def test_browser_auth_callback_requires_matching_successful_check_result(monkeyp
     monkeypatch.setattr("tow.web.services.load_secrets", lambda: {"trackers": {}})
     monkeypatch.setattr("tow.web.services.save_secrets", lambda _value: None)
     monkeypatch.setattr("tow.web.services.log_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("tow.web.services.note_signed_in", lambda name: pytest.fail(f"{name}: no sign-in confirmed"))
     callback = _browser_auth_callback("wanted", "nnmclub", "https://nnmclub.to/forum/viewtopic.php?t=1")
 
     monkeypatch.setattr("tow.web.services.run_check", lambda **_kwargs: {"results": []})
