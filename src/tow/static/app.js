@@ -376,14 +376,12 @@ if (clock) {
   let last = Number(clock.dataset.last) * 1000;
   let iv = Number(clock.dataset.interval) * 1000;
   let checkOk = clock.dataset.checkOk !== "0";
-  let checkError = clock.dataset.error || "";
+  // Why the last attempt failed, in words: the page's, then each /health.json answer's.
+  let checkError = clock.dataset.errorText || clock.dataset.error || "";
   // While the check is overdue or failed, the countdown asks for /health.json: after 5 s,
   // then doubling up to 60 s while nothing changes (F6: it used to poll every 5 s forever).
   let pollDue = null;
   let pollDelay = 5000;
-  const errorText = (code) => ({
-    secrets_migration_required: t("js.clock.secrets_migration_required"),
-  })[code] || code;
   const fmt = (ms) => {
     const s = Math.max(0, Math.floor(ms / 1000));
     const h = Math.floor(s / 3600);
@@ -410,13 +408,13 @@ if (clock) {
     if (left <= 0) {
       showClock("00:00:00");
       clock.classList.add("bad");
-      showWords(checkError ? t("js.clock.last_attempt", { error: errorText(checkError) }) : t("js.clock.overdue_title"));
+      showWords(checkError ? t("js.clock.last_attempt", { error: checkError }) : t("js.clock.overdue_title"));
       ensurePoll();
       return;
     }
     clock.classList.toggle("bad", !checkOk);
     showClock(fmt(left));
-    showWords(checkOk ? t("js.clock.until_next") : (checkError ? t("js.clock.last_attempt", { error: errorText(checkError) }) : t("js.clock.last_attempt_failed")));
+    showWords(checkOk ? t("js.clock.until_next") : (checkError ? t("js.clock.last_attempt", { error: checkError }) : t("js.clock.last_attempt_failed")));
     if (!checkOk) ensurePoll();
   };
   healthPoll.add({
@@ -432,7 +430,7 @@ if (clock) {
         if (Number.isFinite(Number(data.next_from_ts))) last = Number(data.next_from_ts) * 1000;
         if (Number.isFinite(Number(data.interval_sec)) && Number(data.interval_sec) > 0) iv = Number(data.interval_sec) * 1000;
         checkOk = data.check_ok !== false;
-        checkError = data.check_error || "";
+        checkError = data.check_error_text || data.check_error || "";
         if (checkOk && last && last + iv > Date.now()) pollDue = null;
         tick();
       }

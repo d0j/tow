@@ -97,7 +97,7 @@ RU_ALLOWED = {
 # Russian catalog entries that still carry an English word (ru.json, 1.17 i18n item "untranslated
 # Russian entries"): checked apart below, so the main check guards everything else meanwhile.
 RU_KNOWN_LEAKS = {
-    "secrets": "js.clock.secrets_migration_required",
+    "secrets": "log.check_error.secrets",
     "tracker": "log.cls.tracker_auth",
     "torrent": "home.add.check_hint",
 }

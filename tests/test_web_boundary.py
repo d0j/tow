@@ -108,6 +108,7 @@ PURE: dict[str, set[str]] = {
         "error_class",
         "error_fields",
         "format_event",
+        "check_error_label",
         "index_event_titles",
         "owner_language",
     },

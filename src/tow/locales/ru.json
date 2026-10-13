@@ -1112,7 +1112,6 @@
       "starting": "Запуск…"
     },
     "clock": {
-      "secrets_migration_required": "пароли и токены не открываются",
       "never_checked": "Проверка ещё не выполнялась",
       "last_attempt": "Последняя попытка: {error}",
       "overdue_title": "Последняя проверка просрочена",

@@ -27,6 +27,7 @@ from tow.clock import parse_timestamp
 from tow.config import interval_sec_of, port_of
 from tow.issues import Fix
 from tow.jsonish import as_dict
+from tow.log import check_error_label
 from tow.status import site_check_tone
 from tow.web import _context, services
 from tow.web.text import t, tm
@@ -173,6 +174,8 @@ def header_health() -> dict[str, Any]:
         "next_from_ts": int(next_at - interval_sec) if next_at else 0,
         "check_ok": check_ok,
         "check_error": check_error,
+        # Why, in the page's language (the clock's tooltip: "Last attempt: torrent client").
+        "check_error_text": check_error_label(check_error) if check_error else "",
         "interval_sec": interval_sec,
         "ver": __version__,
     }

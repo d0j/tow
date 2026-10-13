@@ -89,6 +89,22 @@ def test_home_countdown_polls_with_backoff_and_never_in_a_hidden_tab():
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_the_clock_names_why_the_last_attempt_failed_in_words():
+    # The tooltip read "Последняя попытка: error": every class but the master key's was shown raw.
+    script = Path(__file__).parent / "js" / "clock_error_words.mjs"
+    result = subprocess.run(
+        [NODE, str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=True
+    )
+    verdict = json.loads(result.stdout.strip().splitlines()[-1])
+
+    assert verdict == {
+        "fromPage": "Последняя попытка: торрент-клиент",
+        "afterPoll": "Последняя попытка: сайт недоступен",
+    }
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_countdown_and_personal_timers_share_one_health_poll():
     # Two independent pollers asked /health.json at 0, 5, 15, 31, 35, 61 and 75 s.
     script = Path(__file__).parent / "js" / "health_poll.mjs"
