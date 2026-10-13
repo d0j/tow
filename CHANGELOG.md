@@ -92,6 +92,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   asks no site.
 - History and the Log name a site by its title, as Home does ("NNM-Club"), not by its settings key ("nnmclub"), also
   inside the error of a line.
+- Wording: Settings → Torrent clients says "Used by 2 topics." instead of "Chosen for topics: 2."; an autostart that
+  belongs to another TOW folder, or points to a moved one, is named as "this account's autostart entry “TOW”", not
+  "the autostart of this account (TOW)"; Diagnostics says plainly that the home page of a site does not tell whether
+  signing in and downloading a .torrent work; the note under automatic nightly backups names the buttons that keep
+  working instead of "manual actions"; and the password and restore notes say TOW's data, not its state.
 
 ## [1.28.4] — 2026-10-12
 

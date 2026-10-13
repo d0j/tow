@@ -1200,3 +1200,31 @@ def test_a_russian_count_never_stands_before_a_word_it_must_agree_with():
         if (key, match.group(1)) not in _RU_COUNTED_OK
     ]
     assert found == []
+
+
+def test_qa10_wording_says_what_it_means():
+    """Qa10, against the term table: a client is used in N topics (with plural forms), a line of
+    History was made "вручную" beside "авто", an autostart entry is named as such (not "this
+    account (TOW)"), and the Diagnostics, backup and password notes say data, not state."""
+    t = i18n.t
+    assert [t("settings.clients.used_by", "ru", n=n) for n in (1, 2, 5, 21)] == [
+        "Используется в 1 раздаче.",
+        "Используется в 2 раздачах.",
+        "Используется в 5 раздачах.",
+        "Используется в 21 раздаче.",
+    ]
+    assert [t("settings.clients.used_by", "en", n=n) for n in (1, 2)] == ["Used by 1 topic.", "Used by 2 topics."]
+    assert (t("log.how.manual", "ru"), t("log.how.auto", "ru")) == ("вручную", "авто")
+    for key in ("doctor.autostart_foreign", "doctor.autostart_stale", "doctor_report.autostart_stale"):
+        assert "записи (TOW)" not in t(key, "ru", where="TOW")
+        assert "«TOW»" in t(key, "ru", where="TOW")
+        assert "account (TOW)" not in t(key, "en", where="TOW")
+    assert "это не подтверждает" not in t("doctor.sites_note", "ru")
+    assert "ручные действия" not in t("settings.backups.automatic_hint", "ru")
+    assert "«Сделать копию сейчас»" in t("settings.backups.automatic_hint", "ru")
+    assert "manual actions" not in t("settings.backups.automatic_hint", "en")
+    locales = Path(i18n.__file__).parent / "locales"
+    assert "состояние TOW" not in (locales / "ru.json").read_text(encoding="utf-8")
+    assert "TOW state" not in (locales / "en.json").read_text(encoding="utf-8")
+    assert "ни в данные TOW" in t("home.auth.password_note", "ru")
+    assert "состояние" not in t("settings.backups.night_restore_confirm", "ru", at="x")

@@ -196,7 +196,7 @@
 
               </div>
               <p class="action-hint">Check uses the saved settings. TOW adds new topics to the main client; each topic can use a different client.</p>
-              <p class="action-hint">Chosen for topics: 2.</p>
+              <p class="action-hint">Used by 2 topics.</p>
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
             </form>
             <form id="ping-client-0" method="post" action="/settings/client/ping" data-return-target="acc-clients">
@@ -265,7 +265,7 @@
 
               </div>
               <p class="action-hint">Check uses the saved settings.</p>
-              <p class="action-hint">Chosen for topics: 1.</p>
+              <p class="action-hint">Used by 1 topic.</p>
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
             </form>
             <form id="ping-client-1" method="post" action="/settings/client/ping" data-return-target="acc-clients">
@@ -719,7 +719,7 @@
               <label class="check-field" for="backup-automatic">
                 <input id="backup-automatic" type="checkbox" name="enabled" value="1" checked aria-describedby="backup-automatic-hint" data-auto-submit-control>
                 <span>Automatic nightly backups</span>
-                <p id="backup-automatic-hint" data-auto-submit-status>Applies without restarting TOW. Turning this off keeps existing copies and manual actions; an already running copy finishes normally.</p>
+                <p id="backup-automatic-hint" data-auto-submit-status>Applies without restarting TOW. Turning this off keeps the existing copies, and “Back up now” and “Restore” work as before; a copy already under way finishes normally.</p>
               </label>
               <noscript><button type="submit">Save</button></noscript>
             </form>
@@ -755,7 +755,7 @@
 
           <article class="integration-card backup-card" id="backup-manual" aria-labelledby="backup-manual-title">
             <div class="integration-head">
-              <div><h2 id="backup-manual-title">Backups made by hand</h2><p>Before restoring, TOW checks the backup and saves its current state. The network settings stay as they are now. The last 10 backups are kept.</p></div>
+              <div><h2 id="backup-manual-title">Backups made by hand</h2><p>Before restoring, TOW checks the backup and saves its current data. The network settings stay as they are now. The last 10 backups are kept.</p></div>
               <span class="pill ok">Saved: 1</span>
             </div>
 
@@ -774,7 +774,7 @@
                   <form method="post" action="/settings/restore-points/rp-1/check" data-return-target="acc-transfer">
                     <button class="ghost" type="submit" data-busy-label="Checking…">Check</button>
                   </form>
-                  <form method="post" action="/settings/restore-points/rp-1/restore" data-return-target="acc-transfer" data-confirm="Restore the settings and history from this backup? TOW saves its current state automatically before replacing it.">
+                  <form method="post" action="/settings/restore-points/rp-1/restore" data-return-target="acc-transfer" data-confirm="Restore the settings and history from this backup? TOW saves its current data before replacing it.">
                     <button class="danger" type="submit" data-busy-label="Restoring…">Restore</button>
                   </form>
                   <a class="btn ghost danger" href="/settings/restore-points/rp-1/delete">Delete</a>
@@ -817,10 +817,10 @@
               <input id="portable-backup-file" name="backup_file" type="file" accept=".towx,application/octet-stream" required>
               <div class="settings-actions">
                 <button class="ghost" type="submit" name="operation" value="check" data-busy-label="Checking…">Check</button>
-                <button class="danger" type="submit" name="operation" value="restore" data-confirm="Restore TOW from this file? The current state is saved automatically before it is replaced." data-busy-label="Restoring…">Restore</button>
+                <button class="danger" type="submit" name="operation" value="restore" data-confirm="Restore TOW from this file? The current data is saved before it is replaced." data-busy-label="Restoring…">Restore</button>
               </div>
             </form>
-            <p class="section-note">Restoring needs the original <code>keys/master.key</code> — it is not in the file, so keep it separately. Before replacing data, TOW checks the file and saves the current state. <a href="/settings/help#export-import">More</a>.</p>
+            <p class="section-note">Restoring needs the original <code>keys/master.key</code> — it is not in the file, so keep it separately. Before replacing data, TOW checks the file and saves the current data. <a href="/settings/help#export-import">More</a>.</p>
           </article>
         </div>
       </div>

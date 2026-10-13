@@ -130,7 +130,7 @@
                 {% endif %}
               </div>
               <p class="action-hint">{{ t('settings.clients.checks_saved') }}{% if c.multi and c.default %} {{ t('settings.clients.main_note') }}{% endif %}</p>
-              {% if c.used_by %}<p class="action-hint">{{ t('settings.clients.used_by', topics=c.used_by) }}</p>{% endif %}
+              {% if c.used_by %}<p class="action-hint">{{ t('settings.clients.used_by', n=c.used_by) }}</p>{% endif %}
               <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved_save_first') }}</p>
             </form>
             <form id="ping-{{ c.form_id }}" method="post" action="/settings/client/ping" data-return-target="acc-clients">
