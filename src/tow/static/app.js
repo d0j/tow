@@ -286,27 +286,6 @@ if (flash) {
   flash.querySelector(".flash-x")?.addEventListener("click", hideFlash);
   const ttl = Number(flash.dataset.ttl);
   if (ttl > 0) window.setTimeout(whenUnused(flash, hideFlash), ttl * 1000);
-  const foldButton = flash.querySelector("[data-flash-fold]");
-  const message = flash.querySelector(":scope > span");
-  if (foldButton && message) {
-    message.id = "flash-message";
-    foldButton.hidden = false;
-    let autoFold = true;
-    const setFolded = (folded) => {
-      message.hidden = folded;
-      flash.classList.toggle("flash-folded", folded);
-      foldButton.setAttribute("aria-expanded", String(!folded));
-      foldButton.textContent = t(folded ? "js.flash_unfold" : "js.flash_fold");
-    };
-    foldButton.addEventListener("click", () => {
-      autoFold = false; // A manual choice is not undone by a pending hover/focus timer.
-      setFolded(!message.hidden);
-    });
-    const foldTtl = Number(flash.dataset.foldTtl);
-    if (foldTtl > 0) window.setTimeout(whenUnused(flash, () => {
-      if (autoFold) setFolded(true);
-    }), foldTtl * 1000);
-  }
   // A8: a status present when the page opens is not announced by a screen reader. Its words go
   // to an empty live region of the page a moment later (an error to the alert one); the message
   // itself stays as it was drawn, without its own role, so it is said once.
@@ -316,6 +295,11 @@ if (flash) {
     flash.removeAttribute("role");
     window.setTimeout(() => { live.textContent = words; }, 400);
   }
+}
+const problemResult = document.querySelector("[data-problem-result]");
+if (problemResult) {
+  const live = document.getElementById(problemResult.dataset.problemResult === "err" ? "announce-alert" : "announce");
+  if (live) window.setTimeout(() => { live.textContent = problemResult.textContent.trim(); }, 400);
 }
 const undoForm = document.getElementById("undo-form");
 if (undoForm) {
@@ -343,12 +327,16 @@ if (undoForm) {
 // never polls; showing it again asks at once when a reader is waiting.
 const healthPoll = (() => {
   const readers = [];
+  const failedUntil = new Map();
   let timer = 0;
   let inFlight = false;
   const plan = () => {
     window.clearTimeout(timer);
     timer = 0;
-    const due = readers.map((reader) => reader.due()).filter((at) => at !== null);
+    const due = readers.map((reader) => {
+      const at = reader.due();
+      return at === null ? null : Math.max(at, failedUntil.get(reader) || 0);
+    }).filter((at) => at !== null);
     if (document.hidden || inFlight || !due.length) return;
     timer = window.setTimeout(poll, Math.max(0, Math.min(...due) - Date.now()));
   };
@@ -365,7 +353,15 @@ const healthPoll = (() => {
       // No answer: every reader keeps what it knows and retries later.
     }
     inFlight = false;
-    readers.forEach((reader) => reader.receive(data));
+    readers.forEach((reader) => {
+      try {
+        reader.receive(data);
+        failedUntil.delete(reader);
+      } catch {
+        // One failed view must neither stop other readers nor spin on its overdue deadline.
+        failedUntil.set(reader, Date.now() + 60000);
+      }
+    });
     plan();
   };
   document.addEventListener("visibilitychange", () => {

@@ -1,92 +1,103 @@
-// Home's "Needs attention" folds into a warning button and remembers that per browser, for one
-// set of problems: the same fingerprint keeps it folded after a reload, another one (a new
-// problem) opens it by itself and forgets the old choice; no storage or a broken record leaves it
-// open. Runs the checked-in attention.js with a tiny DOM, as Home's <head> runs it.
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
 const source = readFileSync(new URL("../../src/tow/static/attention.js", import.meta.url), "utf8");
-
-const page = (fingerprint, storage) => {
-  const classes = new Set();
-  const loaded = [];
-  const focused = [];
-  const button = (name) => {
-    const listeners = {};
-    return { name, addEventListener: (event, fn) => { listeners[event] = fn; }, click: () => listeners.click(), focus: () => focused.push(name) };
-  };
-  const fold = button("fold");
-  const unfold = button("unfold");
-  const document = {
-    currentScript: { dataset: { fingerprint } },
-    documentElement: {
-      classList: {
-        add: (name) => classes.add(name),
-        toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)),
-      },
-    },
-    addEventListener: (event, fn) => event === "DOMContentLoaded" && loaded.push(fn),
-    querySelector: (selector) => ({ "[data-attention-fold]": fold, "[data-attention-unfold]": unfold })[selector] || null,
-  };
-  vm.runInNewContext(source, { document, localStorage: storage, JSON });
-  loaded.forEach((fn) => fn());
-  return { folded: () => classes.has("attention-folded"), js: classes.has("attention-js"), fold, unfold, focused };
-};
-
-const memory = () => {
-  const data = new Map();
-  return {
-    data,
-    getItem: (key) => (data.has(key) ? data.get(key) : null),
-    setItem: (key, value) => data.set(key, String(value)),
-    removeItem: (key) => data.delete(key),
-  };
-};
-const broken = {
-  getItem() { throw new Error("SecurityError"); },
-  setItem() { throw new Error("SecurityError"); },
-  removeItem() { throw new Error("SecurityError"); },
-};
-
-const store = memory();
-const first = page("aaaa", store);
-const openAtFirst = first.js && !first.folded();
-first.fold.click();
-const foldsAndFocusesTheButton = first.folded() && first.focused.at(-1) === "unfold"
-  && store.data.get("tow.attention") === JSON.stringify({ folded: true, fp: "aaaa" });
-
-const reload = page("aaaa", store);
-const staysFoldedAfterReload = reload.folded();
-reload.unfold.click();
-const opensAgainAndForgets = !reload.folded() && reload.focused.at(-1) === "fold" && !store.data.has("tow.attention");
-
-reload.fold.click();
-const changed = page("bbbb", store);
-const aNewProblemOpensIt = !changed.folded() && !store.data.has("tow.attention");
-
-page("aaaa", store).fold.click();
-const none = page("", store);
-const noProblemsForgetsTheChoice = !none.folded() && !store.data.has("tow.attention");
-
-store.data.set("tow.attention", "{not json");
-const brokenRecordOpens = !page("aaaa", store).folded();
-store.data.set("tow.attention", JSON.stringify({ folded: false, fp: "aaaa" }));
-const onlyAFoldedRecordFolds = !page("aaaa", store).folded();
-
-const blocked = page("aaaa", broken);
-const noStorageStaysOpen = !blocked.folded();
-blocked.fold.click();
-const noStorageStillFoldsThePage = blocked.folded();
-
-console.log(JSON.stringify({
-  openAtFirst,
-  foldsAndFocusesTheButton,
-  staysFoldedAfterReload,
-  opensAgainAndForgets,
-  aNewProblemOpensIt,
-  noProblemsForgetsTheChoice,
-  brokenRecordOpens,
-  onlyAFoldedRecordFolds,
-  noStorageStaysOpen,
-  noStorageStillFoldsThePage,
-}));
+function fixture({ polling = true } = {}) {
+  const listeners = {};
+  const document = { activeElement: null, addEventListener: (key, fn) => { listeners[key] = fn; } };
+  class Node {
+    constructor() { this.dataset = {}; this.children = []; this.attrs = {}; this.events = {}; this.open = false;
+      this.hidden = false; this.classList = { toggle: (key, value) => { this.attrs[key] = value; } }; }
+    setAttribute(key, value) { this.attrs[key] = value; }
+    append(node) { node.parent = this; this.children.push(node); }
+    replaceChildren(...nodes) {
+      for (const old of this.children) {
+        if (old.contains(document.activeElement)) document.activeElement = null;
+        old.parent = null;
+      }
+      this.children = []; nodes.forEach(node => this.append(node));
+    }
+    get firstElementChild() { return this.children[0]; }
+    contains(node) { return node === this || this.children.some(child => child.contains(node)); }
+    closest() { return this.dataset.issueId ? this : this.parent?.closest(); }
+    focus() { document.activeElement = this; }
+    addEventListener(key, fn) { this.events[key] = fn; }
+  }
+  const menu = new Node(), toggle = new Node(), counter = new Node(), list = new Node(), log = new Node();
+  menu.dataset.fingerprint = "old";
+  menu.append(toggle); menu.append(counter); menu.append(list);
+  menu.querySelector = key => ({ "[data-attention-toggle]": toggle, "[data-attention-count]": counter,
+    "[data-attention-list]": list })[key];
+  document.querySelector = () => menu;
+  document.getElementById = () => log;
+  document.createElement = () => new Node();
+  document.createElementNS = () => new Node();
+  let reader, now = 0, registrations = 0;
+  const context = { document, Date: { now: () => now } };
+  if (polling) context.healthPoll = { add: value => { reader = value; registrations++; } };
+  vm.runInNewContext(source, context);
+  listeners.DOMContentLoaded();
+  return { menu, toggle, counter, list, log, document, listeners, registrations,
+    receive: value => reader.receive(value), due: () => reader.due(), advance: value => { now = value; } };
+}
+const entry = (id = "a") => ({ id, text: "<Show A> — rate limited", severity: "warn", href: "/?open=a#row-a" });
+const snapshot = (entries = [entry()], fingerprint = "new") => ({ attention: {
+  entries, count: entries.length, label: `Current problems: ${entries.length}`, fingerprint, tone: entries.length ? "warn" : "",
+} });
+const test = fixture();
+assert.equal(test.menu.open, false);
+assert.equal(test.registrations, 1);
+assert.equal(test.due(), 15000);
+test.receive(snapshot());
+assert.equal(test.menu.hidden, false);
+assert.equal(test.menu.open, false);
+assert.equal(test.counter.textContent, "1");
+assert.equal(test.toggle.attrs["aria-label"], "Current problems: 1");
+assert.equal(test.list.firstElementChild.firstElementChild.firstElementChild.textContent, entry().text);
+assert.equal(test.list.firstElementChild.firstElementChild.attrs.href, entry().href);
+assert.equal(test.list.firstElementChild.firstElementChild.children[1].firstElementChild.attrs.href, "#i-next");
+test.menu.open = true;
+test.list.firstElementChild.firstElementChild.focus();
+test.receive(snapshot([entry(), entry("b")], "two"));
+assert.equal(test.document.activeElement, test.list.firstElementChild.firstElementChild);
+assert.equal(test.menu.open, true);
+test.receive(snapshot([], ""));
+assert.equal(test.menu.hidden, true);
+assert.equal(test.menu.open, false);
+assert.equal(test.document.activeElement, test.log);
+test.receive(snapshot());
+assert.equal(test.menu.hidden, false);
+assert.equal(test.menu.open, false);
+for (const invalid of [null, {}, { attention: null }, { attention: { ...snapshot().attention, count: 0 } },
+  { attention: { ...snapshot().attention, count: 1.5 } },
+  snapshot([null]), snapshot([false]), snapshot([{ ...entry(), href: "//evil.example" }]),
+  snapshot([{ ...entry(), href: "/\\evil" }])]) {
+  test.receive(invalid);
+  assert.equal(test.menu.hidden, false);
+  assert.equal(test.counter.textContent, "1");
+}
+assert.equal(test.due(), 60000);
+test.advance(60000); test.receive(snapshot());
+assert.equal(test.due(), 75000);
+test.menu.open = true;
+test.menu.events.keydown({ key: "Escape", preventDefault() {}, stopPropagation() {} });
+assert.equal(test.menu.open, false);
+assert.equal(test.document.activeElement, test.toggle);
+test.menu.open = true; test.listeners.pointerdown({ target: test.toggle });
+assert.equal(test.menu.open, true);
+test.listeners.pointerdown({ target: {} });
+assert.equal(test.menu.open, false);
+test.menu.open = true;
+test.menu.events.focusout({ relatedTarget: test.log });
+assert.equal(test.menu.open, false);
+test.receive(snapshot(Array.from({ length: 101 }, (_, n) => entry(String(n))), "many"));
+assert.equal(test.counter.textContent, "99+");
+assert.equal(test.toggle.attrs["aria-label"], "Current problems: 101");
+const native = fixture({ polling: false });
+native.menu.open = true;
+native.menu.events.keydown({ key: "Escape", preventDefault() {}, stopPropagation() {} });
+assert.equal(native.menu.open, false);
+console.log(JSON.stringify({ closedInitially: true, sharedPoll: true, safeText: true, retainedFocus: true,
+  recoveryHides: true, recurrenceClosed: true, invalidPreserves: true, backoff: true,
+  escapeAndOutside: true, nativeFallback: true, cappedCount: true }));

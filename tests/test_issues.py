@@ -53,6 +53,7 @@ def test_every_kind_is_found_once_in_its_order():
         "client_down",
         "history_rebuilt",
         "site_needs_login",
+        "topic_error",
     ]
     assert issues.SKIPPED == []
 
@@ -133,6 +134,86 @@ def test_a_rebuilt_history_is_said_with_nothing_to_fix():
     assert (issue.kind, issue.severity, issue.fix) == ("history_rebuilt", "warn", None)
     assert issue.target == Target("history")
     assert collect(_snapshot(health={"history_rebuilt_at": "yesterday"})) == []
+
+
+@pytest.mark.parametrize(
+    ("cls", "tone"),
+    [("tracker", "warn"), ("frozen", "warn"), ("qbit", "bad"), ("quota", "bad"), ("disk", "bad"), ("error", "bad")],
+)
+def test_current_topic_failures_have_their_own_issue_and_landing(cls, tone):
+    topic = {"id": "a", "title": "Show A", "last_error": "synthetic refusal", "last_error_class": cls}
+    [issue] = collect(_snapshot([topic]))
+    assert (issue.kind, issue.id, issue.severity) == ("topic_error", "topic_error:a", tone)
+    assert issue.message.params["title"] == "Show A"
+    assert issue.target == Target("home", open="a", anchor="row-a")
+    assert issue.fix is None
+    assert topic["last_error"] == "synthetic refusal"
+
+
+@pytest.mark.parametrize(
+    "topic",
+    [
+        {"id": "a"},
+        {"id": "a", "last_error": ""},
+        {"last_error": "timeout"},
+        {"id": "a", "last_error": "timeout", "paused": True},
+    ],
+)
+def test_topic_indicator_ignores_healthy_paused_or_unidentified_records(topic):
+    assert collect(_snapshot([topic])) == []
+
+
+def test_dead_default_client_is_not_counted_again_for_each_topic():
+    topics = [
+        {"id": "a", "last_error": "client down", "last_error_class": "qbit"},
+        {"id": "b", "last_error": "client down", "last_error_class": "qbit", "client_id": "other"},
+    ]
+    found = collect(_snapshot(topics, {"qbit_ok": False}))
+    assert [issue.id for issue in found] == ["client_down", "topic_error:b"]
+    assert found[0].subjects == ("nas", "a")
+    assert [issue.id for issue in collect(_snapshot(topics, {"qbit_ok": True}))] == ["topic_error:a", "topic_error:b"]
+
+
+def test_legacy_unknown_error_codes_use_the_saved_text():
+    from tow.errors import render_stored
+
+    topic = {"id": "a", "title": "Show A", "last_error": "legacy refusal", "last_error_code": "future.not_known"}
+    [issue] = collect(_snapshot([topic]))
+    assert render_stored(issue.message.key, dict(issue.message.params), "fallback") == "Show A — legacy refusal"
+
+
+def test_typed_topic_error_uses_current_site_title_and_keeps_saved_evidence():
+    import copy
+
+    from tow.errors import TowError, render_stored
+
+    error = TowError("mirrors.all_failed", tracker="nnmclub", error=TowError("mirrors.rate_limited"))
+    record = error.record()
+    topic = {
+        "id": "a",
+        "title": "Show A",
+        "last_error": "old diagnostic",
+        "last_error_class": "tracker",
+        "last_error_code": record["code"],
+        "last_error_params": record["params"],
+    }
+    before = copy.deepcopy(topic)
+    [issue] = collect(_snapshot([topic]))
+    rendered = render_stored(issue.message.key, dict(issue.message.params), "fallback")
+    assert "NNM-Club" in rendered
+    assert "old diagnostic" not in rendered
+    assert "частоту" in rendered
+    assert topic == before
+
+
+def test_cleared_error_with_a_legacy_auth_class_does_not_hold_the_indicator():
+    assert collect(_snapshot([{"id": "a", "url": NNM + "1", "last_error_class": "tracker_auth"}])) == []
+
+
+def test_auth_error_without_a_saved_class_still_has_a_problem_link():
+    [issue] = collect(_snapshot([{"id": "a", "url": NNM + "1", "last_error": "tracker auth required"}]))
+    assert issue.kind == "topic_error"
+    assert issue.severity == "bad"
 
 
 def test_sign_ins_are_one_issue_per_site_counted_over_topics_not_paused():

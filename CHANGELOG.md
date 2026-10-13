@@ -5,6 +5,16 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.30.2] — 2026-10-13
+
+### Fixed
+
+- Current problems use a small warning triangle and count in the existing header, not a separate message strip
+  or text fold buttons. Details open over the page, closed by default, including without JavaScript.
+- Failed topic checks are included. The shared status poll removes the indicator after confirmed recovery and
+  keeps the last known warning when the service cannot be reached. Past history notices do not hold it open;
+  duplicate check-result messages no longer take space, and keyboard focus is preserved during updates.
+
 ## [1.30.1] — 2026-10-13
 
 ### Fixed

@@ -1,6 +1,4 @@
-"""Home's "Needs attention" banner: it folds into a warning button with the number of problems and
-opens again from it (attention.js), the folded choice belongs to one set of problems (the
-fingerprint), and without the script the banner stays open."""
+"""Current problems use one native header disclosure, never a page-sized banner."""
 
 from __future__ import annotations
 
@@ -8,12 +6,15 @@ import re
 import time
 from pathlib import Path
 
+import pytest
+from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
 
 from tow.config import load_config, save_config
-from tow.store import save_state
+from tow.store import load_state, save_state
 from tow.web import app
 from tow.web.templating import _static_asset_version
+from tow.web.views import flash_location
 
 STATIC = Path(__file__).resolve().parents[1] / "src" / "tow" / "static"
 NNM = "https://nnmclub.to/forum/viewtopic.php?t="
@@ -30,86 +31,159 @@ def _state(*, client_down: bool = True, signs_in: int = 0) -> dict:
         }
         for n in range(1, signs_in + 1)
     ]
-    health = {"auto_at_ts": int(time.time()), "qbit_ok": not client_down, "history_rebuilt_at": int(time.time())}
-    return {"topics": topics, "mirrors": {}, "health": health}
+    return {
+        "topics": topics,
+        "mirrors": {},
+        "health": {
+            "auto_at_ts": int(time.time()),
+            "qbit_ok": not client_down,
+            "history_rebuilt_at": int(time.time()),
+        },
+    }
 
 
-def _home(state: dict, language: str = "ru") -> str:
+def _home(state: dict, language: str = "ru", path: str = "/") -> BeautifulSoup:
     cfg = load_config()
     cfg["language"] = language
     save_config(cfg)
     save_state(state)
-    return TestClient(app).get("/").text
+    response = TestClient(app).get(path)
+    assert response.status_code == 200
+    return BeautifulSoup(response.text, "html.parser")
 
 
-def _fingerprint(page: str) -> str:
-    match = re.search(r'<script src="/static/attention\.js\?v=[^"]+" data-fingerprint="(\w*)"></script>', page)
-    assert match, "attention.js is loaded in <head>, before the page is drawn"
-    return match.group(1)
+def _fingerprint(page: BeautifulSoup) -> str:
+    return page.select_one("[data-attention]")["data-fingerprint"]
 
 
-def test_the_banner_folds_into_a_warning_button_with_the_count():
+def test_only_a_triangle_and_count_in_the_header_default_closed():
     page = _home(_state(signs_in=2))
-    head = page.split("</head>", 1)[0]
-
-    assert "/static/attention.js" in head
-    assert " defer" not in head.split("attention.js", 1)[1].split(">", 1)[0]
-    assert '<section class="attention card" id="attention" role="status" aria-labelledby="attention-title">' in page
-    fold = re.search(r"<button[^>]*data-attention-fold[^>]*>", page).group(0)
-    assert 'class="ico attention-fold"' in fold
-    assert 'aria-expanded="true"' in fold
-    assert 'aria-controls="attention"' in fold
-    assert 'aria-label="Свернуть «Требует внимания»"' in fold
-    unfold = re.search(r"<button[^>]*data-attention-unfold[^>]*>", page).group(0)
-    assert 'class="attention-unfold bad"' in unfold  # the worst problem is red
-    assert 'aria-expanded="false"' in unfold
-    assert 'aria-controls="attention"' in unfold
-    assert 'aria-label="Требует внимания: 3. Показать"' in unfold  # the client, a site, the history
-    assert '<use href="#i-alert"/>' in page.split("data-attention-unfold", 1)[1].split("</button>", 1)[0]
-    assert '<span class="attention-count" aria-hidden="true">3</span>' in page
-    assert '<symbol id="i-alert"' in page
+    menu = page.select_one("header [data-attention]")
+    assert "hidden" not in menu.attrs
+    assert "open" not in menu.attrs
+    assert "bad" in menu["class"]
+    summary = menu.select_one("summary")
+    assert summary["aria-label"] == "Текущие проблемы: 2"
+    assert summary.select_one('use[href="#i-alert"]')
+    assert summary.get_text(strip=True) == "2"
+    assert summary.select_one("[data-attention-count]")["aria-hidden"] == "true"
+    assert len(menu.select("[data-issue-id]")) == 2
+    assert not page.select("main [data-attention], [data-attention-fold], [data-attention-unfold], [data-flash-fold]")
 
 
-def test_the_names_are_in_english_too():
-    page = _home(_state(), "en")
-
-    assert 'aria-label="Collapse “Needs attention”"' in page
-    assert 'aria-label="Needs attention: 2. Show"' in page
-
-
-def test_an_amber_set_folds_into_an_amber_button():
-    page = _home(_state(client_down=False))  # only the history notice
-
-    assert 'class="attention-unfold warn"' in page
+@pytest.mark.parametrize("path", ["/", "/sites", "/history", "/settings", "/settings/help"])
+def test_indicator_available_on_all_pages_without_duplicate_ids(path):
+    page = _home(_state(), "en", path)
+    assert page.select_one("header [data-attention-toggle]")["aria-label"] == "Current problems: 1"
+    identities = [element["id"] for element in page.select("[id]")]
+    assert len(identities) == len(set(identities))
 
 
-def test_the_fingerprint_names_the_set_of_problems():
+def test_tracker_failure_is_amber_and_escaped():
+    state = _state(client_down=False)
+    state["topics"] = [
+        {"id": "a", "title": "<Show A>", "url": NNM + "1", "last_error": "<timeout>", "last_error_class": "tracker"}
+    ]
+    menu = _home(state).select_one("[data-attention]")
+    assert "warn" in menu["class"]
+    assert menu.select_one("[data-attention-count]").get_text() == "1"
+    assert "<Show A> — <timeout>" in menu.get_text()
+    assert "&lt;timeout&gt;" in str(menu)
+    assert menu.select_one("a")["href"] == "/?open=a#row-a"
+
+
+def test_fingerprint_is_stable_across_languages_and_changes_with_observations():
     one = _fingerprint(_home(_state(signs_in=1)))
     assert re.fullmatch(r"[0-9a-f]{16}", one)
     assert _fingerprint(_home(_state(signs_in=1))) == one
-    assert _fingerprint(_home(_state(signs_in=1), "en")) == one  # not the words: the problems
-    assert _fingerprint(_home(_state(signs_in=2))) != one  # another topic asks for a sign-in
-    assert _fingerprint(_home(_state(client_down=False, signs_in=1))) != one  # the client answers again
+    assert _fingerprint(_home(_state(signs_in=1), "en")) == one
+    assert _fingerprint(_home(_state(signs_in=2))) != one
+    assert _fingerprint(_home(_state(client_down=False, signs_in=1))) != one
 
 
-def test_without_problems_no_banner_and_an_empty_fingerprint():
-    page = _home({"topics": [], "mirrors": {}, "health": {"auto_at_ts": int(time.time()), "qbit_ok": True}})
-
+def test_past_history_only_leaves_no_visible_indicator():
+    page = _home(_state(client_down=False))
+    menu = page.select_one("[data-attention]")
+    assert "hidden" in menu.attrs
     assert _fingerprint(page) == ""
-    assert 'id="attention"' not in page
-    assert "data-attention-unfold" not in page
+    assert not menu.select("[data-issue-id]")
 
 
-def test_without_the_script_the_banner_is_open_and_the_buttons_hidden():
+def test_native_disclosure_and_hidden_rule_work_without_scripts():
+    page = _home(_state())
+    assert page.select_one("details > summary[data-attention-toggle]")
+    assert not page.select_one("[data-attention]").has_attr("open")
     css = (STATIC / "app.css").read_text(encoding="utf-8")
-
-    assert ".attention-fold.ico, .attention-unfold { display: none; }" in css
-    shown = [rule.split("{", 1)[0].strip() for rule in re.findall(r"[^{}]+\{[^{}]*display: inline-flex[^{}]*\}", css)]
-    assert ".attention-js .attention-fold.ico" in shown
-    assert ".attention-js.attention-folded .attention-unfold" in shown
-    assert re.search(r"\.attention-folded \.attention \{ display: none; \}", css)
+    assert re.search(r"\.attention-menu\[hidden\]\s*\{\s*display:\s*none", css)
+    assert re.search(r"\.attention-panel\s*\{[^}]*position:\s*absolute", css)
 
 
-def test_the_script_is_part_of_the_static_version():
-    assert '"attention.js"' in (STATIC.parent / "web" / "templating.py").read_text(encoding="utf-8")
-    assert _static_asset_version()
+def test_health_snapshot_recovery_and_recurrence_do_not_mutate_state():
+    state = _state(client_down=False)
+    state["topics"] = [
+        {"id": "a", "title": "Show A", "url": NNM + "1", "last_error": "timeout", "last_error_class": "tracker"}
+    ]
+    save_state(state)
+    client = TestClient(app)
+    before = load_state()
+    first = client.get("/health.json").json()["attention"]
+    assert first["count"] == 1
+    assert load_state() == before
+    before["topics"][0].update(last_error=None, last_ok=True)
+    save_state(before)
+    recovered = client.get("/health.json").json()["attention"]
+    assert (recovered["count"], recovered["fingerprint"], recovered["entries"]) == (0, "", [])
+    before["topics"][0].update(last_error="timeout", last_ok=False)
+    save_state(before)
+    assert client.get("/health.json").json()["attention"]["count"] == 1
+
+
+@pytest.mark.parametrize("kind", ["warn", "err"])
+def test_check_result_does_not_duplicate_problem_with_a_large_flash(kind):
+    url = flash_location("/", "synthetic check result", kind, problem_topic="a")
+    state = _state(client_down=False)
+    state["topics"] = [{"id": "a", "title": "Show A", "last_error": "timeout", "last_error_class": "tracker"}]
+    page = _home(state, path=url)
+    assert not page.select("#flash")
+    assert page.select_one("[data-problem-result]")["data-problem-result"] == kind
+    assert page.select_one("[data-problem-result]").get_text() == "Synthetic check result"
+
+
+@pytest.mark.parametrize("topics", [[], [{"id": "a", "paused": True, "last_error": "timeout"}]])
+def test_an_unrepresented_failed_action_keeps_visible_feedback(topics):
+    url = flash_location("/", "synthetic failure", "err", problem_topic="a")
+    state = _state(client_down=False)
+    state["topics"] = topics
+    assert _home(state, path=url).select_one("#flash")
+
+
+def test_a_recovered_topic_does_not_resurrect_an_old_warning_redirect():
+    url = flash_location("/", "old failure", "warn", problem_topic="a")
+    state = _state(client_down=False)
+    state["topics"] = [{"id": "a", "last_error": None, "last_ok": True}]
+    page = _home(state, path=url)
+    assert not page.select_one("#flash")
+    assert page.select_one("[data-attention]").has_attr("hidden")
+    assert not page.select_one("[data-problem-result]")
+
+
+def test_dead_default_client_uses_one_triangle_not_a_duplicate_check_flash():
+    url = flash_location("/", "client refusal", "err", problem_topic="a")
+    state = _state()
+    state["topics"] = [{"id": "a", "title": "Show A", "last_error": "client refused", "last_error_class": "qbit"}]
+    page = _home(state, path=url)
+    assert not page.select_one("#flash")
+    assert page.select_one("[data-attention-count]").get_text() == "1"
+    assert len(page.select("[data-issue-id]")) == 1
+    assert page.select_one("[data-problem-result]")
+
+
+def test_script_is_versioned_and_uses_shared_poll():
+    page = _home(_state())
+    script = page.select_one('script[src^="/static/attention.js"]')
+    assert script.has_attr("defer")
+    assert _static_asset_version() in script["src"]
+    source = (STATIC / "attention.js").read_text(encoding="utf-8")
+    assert "healthPoll.add(" in source
+    assert "fetch(" not in source
+    assert "localStorage" not in source

@@ -400,7 +400,7 @@ def test_a_corrupt_download_history_does_not_block_the_check(monkeypatch):
     aside and says so on Home, instead of failing every run."""
     from tow.paths import download_history_path
     from tow.store import load_download_history
-    from tow.web.views import attention
+    from tow.web.views import attention, issue_notes
 
     save_state({"topics": [{**TOPIC, "hash": "HASH-NEW"}]})
     download_history_path().write_text("{ not json", encoding="utf-8")
@@ -419,7 +419,10 @@ def test_a_corrupt_download_history_does_not_block_the_check(monkeypatch):
     assert health["history_rebuilt_at"] == health["at_ts"]
     from tow.config import load_config
 
-    assert any("download_history.json.corrupt" in item["text"] for item in attention(load_state(), load_config()))
+    assert not any("download_history.json.corrupt" in item["text"] for item in attention(load_state(), load_config()))
+    assert any(
+        "download_history.json.corrupt" in item["text"] for item in issue_notes(load_state(), load_config(), "history")
+    )
 
     check.run_check(apply=True, notify=False)  # the next run reads the new file; the notice stays a while
     assert load_state()["health"]["history_rebuilt_at"] == health["history_rebuilt_at"]

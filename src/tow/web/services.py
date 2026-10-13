@@ -171,6 +171,7 @@ __all__ = [
     "save_config",
     "save_secrets",
     "save_state",
+    "scrub_text",
     "service_status",
     "set_autostart",
     "set_session_cookie",

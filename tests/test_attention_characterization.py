@@ -70,7 +70,7 @@ def test_every_item_of_today_worst_first():
     listed = _listed(_everything_but_the_lost_folder())
     items = [item["text"] for item in listed]
 
-    assert [item["severity"] for item in listed] == ["bad", "bad", "bad", "bad", "warn", "warn"]
+    assert [item["severity"] for item in listed] == ["bad", "bad", "bad", "bad", "warn"]
     assert items[:4] == [
         BLOCKED,
         "Торрент-клиент недоступен: новые версии не добавляются.",
@@ -78,7 +78,7 @@ def test_every_item_of_today_worst_first():
         "Войти на сайт (раздач: 1)",  # the unknown site
     ]
     assert items[4].startswith("Плановые проверки не выполнялись с ")
-    assert items[5] == HISTORY_REBUILT
+    assert HISTORY_REBUILT not in items  # A past recovery is in History, not a current fault.
 
 
 def test_a_check_that_failed_for_another_reason_is_listed_as_failed():

@@ -31,7 +31,7 @@ from tow.log import check_error_label
 from tow.status import site_check_tone
 from tow.web import _context, services
 from tow.web.text import t, tm
-from tow.web.views import flash_ttl_sec, stored_ui_time
+from tow.web.views import attention_view, flash_ttl_sec, stored_ui_time
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = PACKAGE_DIR / "static"
@@ -194,6 +194,7 @@ def header_health() -> dict[str, Any]:
         "check_error_text": check_error_label(check_error) if check_error else "",
         "interval_sec": interval_sec,
         "ver": __version__,
+        "attention": attention_view(state, cfg),
     }
 
 
@@ -226,6 +227,23 @@ def undo_in_message(flash: Mapping[str, Any] | None) -> bool:
 
 def undo_left_sec() -> int:
     return undo.undo_left_sec(_context.state())
+
+
+def problem_flash_hidden(flash: Mapping[str, Any] | None) -> bool:
+    """Persisted active failures use the triangle; keep feedback if that topic is not represented.
+
+    A recovered topic must not resurrect an old flash when its redirect is opened again.
+    Paused topics do not contribute current issues, so their failed action stays visible.
+    """
+    identity = str((flash or {}).get("problem_topic") or "")
+    if not identity:
+        return False
+    topic = next((item for item in _context.state().get("topics") or [] if str(item.get("id")) == identity), None)
+    if topic is None:
+        return False
+    if not topic.get("last_error"):
+        return True
+    return any(identity in issue["subjects"] for issue in _header_health_once()["attention"]["entries"])
 
 
 def login_help() -> dict[str, str]:
@@ -359,6 +377,7 @@ def configure(templates: Jinja2Templates = TEMPLATES) -> None:
     env["undo_in_message"] = undo_in_message
     env["undo_left_sec"] = undo_left_sec
     env["flash_ttl_sec"] = flash_ttl_sec
+    env["problem_flash_hidden"] = problem_flash_hidden
     env["login_help"] = login_help
     env["network_session"] = network_session
     env["site_title"] = site_title

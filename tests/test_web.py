@@ -2464,17 +2464,14 @@ def test_manual_failure_uses_the_displayed_owner_name_and_shared_shortening():
 
 
 @pytest.mark.parametrize("kind", ["ok", "warn", "err"])
-def test_only_warning_messages_receive_a_reopenable_fold_control(kind):
+def test_action_messages_do_not_have_extra_text_fold_controls(kind):
     from tow.web.views import flash_location
 
     page = TestClient(app).get(flash_location("/", "synthetic message", kind)).text
     flash = re.search(r'<div class="flash[^>]*id="flash"[^>]*>.*?</div>', page, flags=re.DOTALL).group(0)
-    assert ('data-fold-ttl="60"' in flash) is (kind == "warn")
-    assert ("data-flash-fold" in flash) is (kind == "warn")
-    assert ('aria-controls="flash-message"' in flash) is (kind == "warn")
+    assert "data-fold-ttl" not in flash
+    assert "data-flash-fold" not in flash
     assert (' data-ttl="60"' in flash) is (kind == "ok")
-    if kind == "warn":
-        assert "hidden>Свернуть</button>" in flash  # no scripts: warning remains readable
 
 
 def test_error_line_is_short_and_falls_back_to_the_message():
@@ -2664,7 +2661,8 @@ def test_no_banner_when_all_is_well():
 
     save_state({"topics": [], "mirrors": {}, "health": {"auto_at_ts": int(_time.time()), "qbit_ok": True}})
 
-    assert "Требует внимания" not in TestClient(app).get("/").text
+    page = TestClient(app).get("/").text
+    assert re.search(r'<details[^>]*id="current-problems"[^>]* hidden>', page)
 
 
 def test_a_successful_check_records_when_it_last_worked(monkeypatch):

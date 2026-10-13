@@ -49,11 +49,10 @@ The ↻ in the header depends on the page: on Home it is **Check all topics now*
 to the sites** (Diagnostics). The clock in the header counts down to the next scheduled check; before the first check
 it shows “—”, and its tooltip says “No check has run yet”.
 
-**Needs attention** at the top of Home lists what needs you now: a site that asks you to sign in, a torrent client
-that does not answer, scheduled checks that stopped or did not complete, a lost data folder. Each item is a link to
-the problem: it opens the topic, the site or the Settings card that shows it in full and puts the focus on the
-button that fixes it. The arrow folds the list into a warning icon with the number of problems, and this browser
-remembers that; the list opens again by itself when a new problem appears.
+The **warning triangle** in the header counts current problems, including failed topic checks. Click it to open
+**Needs attention**: the list is closed by default and opens over the page without moving the content. Each link
+opens the relevant topic, site or Settings card and focuses the fix button when available. The triangle disappears
+automatically after TOW confirms that no current problems remain; old History entries do not keep it visible.
 
 ## Adding a topic
 

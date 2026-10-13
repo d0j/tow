@@ -13,7 +13,7 @@ from tow.web import _context
 from tow.web.middleware import is_browser_navigation
 from tow.web.templating import TEMPLATES, header_health
 from tow.web.text import t
-from tow.web.views import add_draft, attention_view, credential_prompt, first_run, request_flash, topic_rows
+from tow.web.views import add_draft, credential_prompt, first_run, request_flash, topic_rows
 
 router = APIRouter()
 
@@ -69,8 +69,6 @@ def index(request: Request) -> Response:
             "credential_prompt": credential_prompt(request),
             "add_draft": add_draft(request),
             "flash": request_flash(request),
-            # The banner, and what folds it: the set of problems it was folded for, its colour.
-            "attention": attention_view(state, cfg),
             # A "Needs attention" link opens this topic's row (?open=<id>).
             "landing_topic": str(request.query_params.get("open") or ""),
             "first_steps": None if state.get("topics") else _first_steps(cfg, state),

@@ -12,7 +12,7 @@ NODE = shutil.which("node")
 
 @pytest.mark.allow_system
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
-def test_warning_folds_reopens_and_respects_focus_and_manual_choice():
+def test_compact_problem_result_is_announced_without_a_duplicate_flash():
     script = Path(__file__).parent / "js" / "flash_fold.mjs"
     result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=30, check=True)
     assert all(json.loads(result.stdout.strip()).values())
@@ -165,9 +165,17 @@ def test_a_closed_sign_in_prompt_leaves_the_address_and_gives_the_focus_back():
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
-def test_the_folded_banner_opens_again_for_a_new_set_of_problems():
+def test_problem_triangle_tracks_confirmed_recovery_and_preserves_errors_when_offline():
     script = Path(__file__).parent / "js" / "attention_fold.mjs"
     result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=30, check=True)
     verdict = json.loads(result.stdout.strip())
     assert verdict == dict.fromkeys(verdict, True), verdict
-    assert len(verdict) == 10
+    assert len(verdict) == 11
+
+
+@pytest.mark.allow_system
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_one_broken_health_reader_cannot_stall_or_spin_other_readers():
+    script = Path(__file__).parent / "js" / "health_poll_reader_failure.mjs"
+    result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=30, check=True)
+    assert all(json.loads(result.stdout.strip()).values())

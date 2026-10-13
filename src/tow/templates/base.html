@@ -9,6 +9,8 @@
 {{ sprite() }}
 <a class="skip" href="#main">{{ t('base.skip') }}</a>
 {% set path = request.url.path %}
+{% set h = header_health() %}
+{% set compact_problem = problem_flash_hidden(flash|default(none)) %}
 <header class="app">
   <nav aria-label="{{ t('base.nav.label') }}">
     <a href="/" class="ico{% if path == '/' %} on{% endif %}" {% if path == '/' %}aria-current="page"{% endif %} title="{{ t('base.nav.home') }}" aria-label="{{ t('base.nav.home') }}">{{ icon('home') }}</a>
@@ -20,14 +22,20 @@
       <span id="search-status" class="sr-only" aria-live="polite"></span>
     </details>
     <button type="button" class="ico" id="log-open" title="{{ t('base.log.open') }}" aria-label="{{ t('base.log.open') }}" aria-haspopup="dialog">{{ icon('log') }}</button>
+    <details class="attention-menu {{ h.attention.tone }}" id="current-problems" data-attention data-fingerprint="{{ h.attention.fingerprint }}"{% if not h.attention.count %} hidden{% endif %}>
+      <summary class="ico" data-attention-toggle aria-label="{{ h.attention.label }}" title="{{ h.attention.label }}">{{ icon('alert', 'sm') }}<span class="attention-count" data-attention-count aria-hidden="true">{{ h.attention.count }}</span></summary>
+      <div class="attention-panel" role="region" aria-labelledby="current-problems-title">
+        <strong id="current-problems-title">{{ t('home.attention') }}</strong>
+        <ul class="attention-list" data-attention-list>{% for item in h.attention.entries %}<li data-issue-id="{{ item.id }}"><a class="attention-link {{ item.severity }}" href="{{ item.href }}"><span>{{ item.text }}</span>{{ icon('next', 'sm') }}</a></li>{% endfor %}</ul>
+      </div>
+    </details>
     {% if path == '/' %}
     <a href="#new" class="ico plus" title="{{ t('base.new_topic') }}" aria-label="{{ t('base.new_topic') }}">{{ icon('plus') }}</a>
     {% elif path.startswith('/sites') %}
     <a href="#new" class="ico plus" title="{{ t('base.new_site') }}" aria-label="{{ t('base.new_site') }}">{{ icon('plus') }}</a>
     {% endif %}
   </nav>
-  {% set h = header_health() %}
-  {#- A strip that scrolls is reached by the keyboard (tabindex) and named (a group, A4/A10). -#}
+  {# A strip that scrolls is reached by the keyboard (tabindex) and named (a group, A4/A10). #}
   <div class="hdr-sites" role="group" aria-label="{{ t('base.header.sites') }}" tabindex="0">
     {#- The state is said in words too, not by the colour alone (A3). -#}
     {% set site_states = {'ok': t('base.header.site_ok'), 'warn': t('base.header.site_warn')} %}
@@ -50,7 +58,7 @@
     <div class="hdr-controls">
     {#- The undo of the action whose message is shown sits in that message (9); the header
         keeps it only for a later page while it lasts. -#}
-    {% set undo_in_flash = undo_in_message(flash) %}
+    {% set undo_in_flash = undo_in_message(flash) and not compact_problem %}
     {% if can_undo() and not undo_in_flash %}
     <form method="post" action="/undo" id="undo-form" data-ttl="{{ undo_left_sec() }}">
       <button class="ghost sm undo-btn" type="submit" data-keep title="{{ t('base.undo.title', what=undo_label()) }}"><span class="undo-ico">{{ icon('undo', 'sm') }}</span><span class="undo-text">{{ t('base.undo.button') }}</span></button>
@@ -76,11 +84,11 @@
 </header>
 <main id="main"{% if request.url.path == '/' %} class="home-page"{% endif %} aria-labelledby="page-title">
   {% if request.url.path == '/' %}<a class="release-notice" href="/settings?open=updates#acc-updates" data-release-notice aria-live="polite" hidden></a>{% endif %}
-  {#- Success fades, a warning folds into a reopenable control, and an error stays visible. -#}
-  {% if flash %}<div class="flash{% if flash.kind == 'err' %} error{% elif flash.kind == 'warn' %} warn{% endif %}" id="flash" role="{{ 'alert' if flash.kind == 'err' else 'status' }}"{% if flash.kind == 'ok' %} data-ttl="{{ undo_left_sec() if undo_in_flash else flash_ttl_sec() }}"{% elif flash.kind == 'warn' %} data-fold-ttl="{{ flash_ttl_sec() }}"{% endif %}><span>{{ flash.text|sentence }}</span>
+  {#- Persisted topic failures live in the current-problems icon, not a second message strip. -#}
+  {% if flash and not compact_problem %}<div class="flash{% if flash.kind == 'err' %} error{% elif flash.kind == 'warn' %} warn{% endif %}" id="flash" role="{{ 'alert' if flash.kind == 'err' else 'status' }}"{% if flash.kind == 'ok' %} data-ttl="{{ undo_left_sec() if undo_in_flash else flash_ttl_sec() }}"{% endif %}><span>{{ flash.text|sentence }}</span>
   {%- if undo_in_flash %}<form method="post" action="/undo" class="flash-undo" id="undo-form" data-ttl="{{ undo_left_sec() }}"><button class="ghost sm" type="submit" data-keep title="{{ t('base.undo.title', what=undo_label()) }}">{{ t('base.undo.button') }} <span class="undo-left" data-undo-left aria-hidden="true"></span></button></form>{% endif -%}
-  {%- if flash.kind == 'warn' %}<button type="button" class="ghost" data-flash-fold aria-expanded="true" aria-controls="flash-message" title="{{ flash.text|sentence }}" hidden>{{ t('js.flash_fold') }}</button>{% endif -%}
   <button type="button" class="flash-x" aria-label="{{ t('base.close') }}">{{ icon('close', 'sm') }}</button></div>{% endif %}
+  {% if compact_problem and flash.problem_topic in h.attention.subjects %}<span class="sr-only" data-problem-result="{{ flash.kind }}">{{ flash.text|sentence }}</span>{% endif %}
   {% block body %}{% endblock %}
   {#- Empty live regions: app.js puts an action's message here a moment after the page opens,
       so a screen reader says it (A8). -#}
@@ -104,6 +112,7 @@
 <script type="application/json" id="tow-i18n">{{ js_texts()|tojson }}</script>
 <script type="application/json" id="tow-content-i18n">{{ content_texts()|tojson }}</script>
 <script src="/static/app.js?v={{ static_version }}" defer></script>
+<script src="/static/attention.js?v={{ static_version }}" defer></script>
 <script src="/static/content.js?v={{ static_version }}" defer></script>
 <script src="/static/updates.js?v={{ static_version }}" defer></script>
 </body>
