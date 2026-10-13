@@ -51,6 +51,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   "снята с паузы" in History as on the buttons, a topic paused or removed during a check, and Settings without
   quotation marks. The History labels of torrent-client events now agree with the torrent ("запущен в клиенте", not
   "запущена" or "остановлено").
+- Wording: the English message about a folder name Windows would misread quotes it with English quotation marks; in
+  Russian, the ntfy message asks to open access to the topic (it said to open the topic), the Sites help says to
+  replace the digits of the number, the Deluge label message no longer reads as two labels, the button for an older
+  release says "Вернуться к …" instead of the Undo word "Вернуть", and `tow check --help` says "предпросмотр" as its
+  output does.
 
 ## [1.28.4] — 2026-10-12
 
