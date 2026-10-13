@@ -938,12 +938,13 @@ summary:focus-visible, select:focus-visible { outline: 2px solid var(--acc); out
    did: the text stays at the left edge, and the margin takes the padding back. */
 .row-progress > a {
   grid-column: 6; justify-self: start; min-width: 1.5rem; pointer-events: auto;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis;
   padding-block: .2rem; margin-block: -.2rem;
 }
 .row-wrap:has(> .row-progress) .topic-progress { visibility: hidden; }
 .row-wrap:has(> details[open]) > .row-progress { display: none; }
 .row-wrap:has(> details[open]) .topic-progress { visibility: visible; }
-.progress-ghost { font-weight: 700; white-space: nowrap; color: var(--acc); cursor: pointer; }
+.progress-ghost { display: block; overflow: hidden; text-overflow: ellipsis; font-weight: 700; white-space: nowrap; color: var(--acc); cursor: pointer; }
 .progress-ghost.complete { color: var(--ok); }
 @media (max-width: 720px) {
   .row-ops-slot { display: none; }

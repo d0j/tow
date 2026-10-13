@@ -125,7 +125,12 @@ def project_home_status(topic: dict[str, Any], history_record: dict[str, Any] | 
     return HomeStatus(
         torrent_tone=torrent_tone,
         tracker_tone=tracker_tone,
-        torrent_label=t(_TORRENT_LABELS[torrent_tone], lang),
+        torrent_label=t(
+            "check.verifying_files"
+            if not error and topic.get("verification_pending")
+            else _TORRENT_LABELS[torrent_tone],
+            lang,
+        ),
         tracker_label=t(tracker_key, lang),
         torrent_action=action,
         tracker_action=tracker_action,

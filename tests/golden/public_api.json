@@ -45,6 +45,7 @@
   "TorrentClientAdapter": "class(*args, **kwargs)",
   "TorrentClientAdapter.add_torrent_selected": "def(self, content: 'bytes', save_path: 'str | None', infohash: 'str', selected_indices: 'list[int] | tuple[int, ...]', *, start: 'bool' = True) -> 'dict[str, Any]'",
   "TorrentClientAdapter.configure_torrent_selection": "def(self, content: 'bytes', infohash: 'str', selected_indices: 'list[int] | tuple[int, ...]', *, ensure_started: 'bool' = False, keep_stopped: 'bool' = False) -> 'dict[str, Any]'",
+  "TorrentClientAdapter.finish_verification": "def(self, infohash: 'str', destination: 'str', receipt: 'dict[str, Any]', *, start_stopped: 'bool' = False, on_start: 'Callable[[], None] | None' = None) -> 'dict[str, Any]'",
   "TorrentClientAdapter.has_hash": "def(self, infohash: 'str') -> 'bool'",
   "TorrentClientAdapter.inspect_torrent": "def(self, infohash: 'str') -> 'dict[str, Any] | None'",
   "TorrentClientAdapter.materialize_magnet": "def(self, magnet_url: 'str', save_path: 'str | None', infohash: 'str') -> 'bytes'",

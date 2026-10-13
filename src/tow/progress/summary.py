@@ -27,6 +27,8 @@ def _completion_key(item: HistoryItem) -> tuple[float, int, int, str]:
 
 def summary_record(topic_record: HistoryRecord, expected: dict[str, Any] | None) -> dict[str, Any]:
     summary = summarize_completion(topic_record.get("items") or {}, expected)
+    if topic_record.get("verifying"):
+        summary.update(verifying=True, is_complete=False, completion_known=False)
     topic_record["summary"] = summary
     completed = [
         item
@@ -56,4 +58,7 @@ def completed_episode_keys(items: dict[str, HistoryItem]) -> set[str]:
 
 def progress_summary(topic_id: str, history: Mapping[str, Any]) -> dict[str, Any]:
     record = (history.get("topics") or {}).get(str(topic_id)) or {}
-    return summarize_completion(record.get("items") or {}, record.get("expected"))
+    summary = summarize_completion(record.get("items") or {}, record.get("expected"))
+    if record.get("verifying"):
+        summary.update(verifying=True, is_complete=False, completion_known=False)
+    return summary

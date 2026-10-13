@@ -57,6 +57,16 @@ class TorrentClientAdapter(Protocol):
 
     def inspect_torrent(self, infohash: str) -> dict[str, Any] | None: ...
 
+    def finish_verification(
+        self,
+        infohash: str,
+        destination: str,
+        receipt: dict[str, Any],
+        *,
+        start_stopped: bool = False,
+        on_start: Callable[[], None] | None = None,
+    ) -> dict[str, Any]: ...
+
     def add_torrent_selected(
         self,
         content: bytes,

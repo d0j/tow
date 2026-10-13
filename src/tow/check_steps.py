@@ -70,6 +70,7 @@ UNCONFIRMED_ADD_CODES = frozenset(
         "client.managed.not_visible",
         "client.managed.no_owner_mark",
         "client.managed.pending_not_cleared",
+        "client.managed.verification_pending",
     }
 )
 # The same errors as TOW 1.17 and older stored them (text only, English or Russian): frozen.
@@ -137,6 +138,7 @@ _CHECK_CLEARABLE_FIELDS = (
     "content_token",
     "content_hash",
     "waiting_space",
+    "verification_pending",
 )
 
 

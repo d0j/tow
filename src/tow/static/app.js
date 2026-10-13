@@ -904,7 +904,8 @@ if (downloadPop && downloadBody) {
   const renderDownloads = (j, append = false) => {
     const summary = j.summary || {};
     const expected = summary.expected == null ? "?" : summary.expected;
-    if (downloadTitle) downloadTitle.textContent = `${j.topic?.title || t("js.downloads.history")} — ${summary.completed || 0}/${expected}`;
+    const progressText = summary.verifying ? t("js.downloads.verifying") : `${summary.completed || 0}/${expected}`;
+    if (downloadTitle) downloadTitle.textContent = `${j.topic?.title || t("js.downloads.history")} — ${progressText}`;
     loadedDownloads = append ? loadedDownloads.concat(j.items || []) : (j.items || []);
     const rows = loadedDownloads.map((item) => {
       const line = document.createElement("div");

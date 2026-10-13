@@ -53,6 +53,13 @@ guarantees):
 6. states are reported in qBittorrent's words (`stoppedDL`, `downloading`, `uploading`, `moving`, `error`…), so the
    rest of TOW does not depend on the client.
 
+A long file check after a verified selection is deferred, not failed: `ClientVerificationPending` carries a
+validated receipt binding file ids, names, sizes and wanted flags to the hash and folder. `finish_verification`
+re-reads that evidence without re-adding, stopping or rewriting priorities. It clears the pending label only
+after a real running/completed state; `on_start` records an explicitly allowed retry immediately before its
+native request. Initial checks with an unverified partial selection remain paused, never promoted as success.
+The orchestration retains the revision but not `once_done` or an added notification until final confirmation.
+
 **Steps:**
 
 1. Subclass `ManagedClient` and implement only the primitives: `ping`, `inspect_torrent`, `_add_stopped`,

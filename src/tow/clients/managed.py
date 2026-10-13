@@ -19,6 +19,7 @@ own add (``_check_add`` and ``_finish_add`` around it), priority levels in
 
 from __future__ import annotations
 
+import copy
 import logging
 import math
 import time
@@ -66,6 +67,15 @@ class AddMarkError(Exception):
         self.infohash = infohash.upper()
         self.error = error
         super().__init__(str(error))
+
+
+class ClientVerificationPending(ClientError):
+    """The client is checking files; only a validated receipt permits deferring cleanup."""
+
+    def __init__(self, infohash: str, *, prefix: str, receipt: dict[str, Any] | None = None) -> None:
+        self.infohash = infohash.upper()
+        self.receipt = copy.deepcopy(receipt)
+        super().__init__("client.managed.verification_pending", prefix=prefix)
 
 
 class ManagedClient:
@@ -240,16 +250,23 @@ class ManagedClient:
         a check still running at the deadline is not a confirmed start: the add keeps its
         pending mark, and a later attempt can complete it once the check ends."""
         repeats = 0
+        last: dict[str, Any] | None = None
+
+        def read(current_hash: str) -> dict[str, Any] | None:
+            nonlocal last
+            last = self.inspect_torrent(current_hash)
+            return last
 
         def started(info: dict[str, Any]) -> bool:
-            nonlocal repeats
+            nonlocal repeats, last
+            last = info
             state = str(info.get("state") or "")
             if not state:
                 return False
-            if state.casefold().startswith("checking"):
+            if state.casefold().startswith("checking") or state.casefold() in {"moving", "metadl", "forcedmetadl"}:
                 return False
             if not self._stopped(info):
-                return True
+                return self._running(info)
             if repeats < self.START_REPEATS:
                 repeats += 1
                 self._require_owned(infohash)
@@ -257,13 +274,177 @@ class ManagedClient:
                 return False
             return completed_progress(info.get("progress"))
 
-        return self._wait(
-            infohash,
-            started,
-            "client.managed.start_unconfirmed",
-            polls=self.START_POLLS,
-            timeout=self.START_WAIT_SEC,
+        try:
+            return self._wait(
+                infohash,
+                started,
+                "client.managed.start_unconfirmed",
+                polls=self.START_POLLS,
+                timeout=self.START_WAIT_SEC,
+                read=read,
+            )
+        except ClientError as error:
+            if error.code == "client.managed.start_unconfirmed" and self._checking(last):
+                raise ClientVerificationPending(infohash, prefix=self.title) from None
+            raise
+
+    @staticmethod
+    def _checking(info: dict[str, Any] | None) -> bool:
+        return str((info or {}).get("state") or "").casefold().startswith("checking")
+
+    def _verification_receipt(
+        self, infohash: str, verified: dict[str, Any], metadata: TorrentMetadata, selected: set[int]
+    ) -> dict[str, Any]:
+        rows = list(verified.get("files") or [])
+        mapping = self._map_files(metadata.files, rows, metadata.name)
+        if not selected or not selected.issubset(mapping):
+            raise self._fail("client.managed.bad_selection")
+        return {
+            "hash": infohash.upper(),
+            "files": [{key: row.get(key) for key in ("index", "name", "size", "priority")} for row in rows],
+            "wanted": sorted(mapping[index] for index in selected),
+            "ignored": sorted(self._ignored_padding(rows, set(mapping.values()), metadata.files, selected)),
+        }
+
+    def _verify_receipt(
+        self, infohash: str, destination: str, receipt: dict[str, Any], *, require_pending: bool
+    ) -> dict[str, Any]:
+        """Fresh identity, ownership, folder and exact selection; never trust task progress."""
+        if not isinstance(receipt, dict):
+            raise self._fail("client.managed.wrong_selection")
+        rows, wanted, ignored = receipt.get("files"), receipt.get("wanted"), receipt.get("ignored", [])
+        if (
+            not isinstance(rows, list)
+            or not rows
+            or any(not isinstance(row, dict) for row in rows)
+            or not isinstance(wanted, list)
+            or not wanted
+            or not isinstance(ignored, list)
+            or any(type(index) is not int or index < 0 for index in [*wanted, *ignored])
+        ):
+            raise self._fail("client.managed.wrong_selection")
+        priorities = files.priorities(rows, fail=lambda: self._fail("client.managed.wrong_selection"))
+        padding = {row["index"] for row in rows if self._padding_like(row.get("name"))}
+        if (
+            not set(ignored).issubset(padding)
+            or set(wanted).intersection(ignored)
+            or not set(wanted).issubset(priorities)
+        ):
+            raise self._fail("client.managed.wrong_selection")
+        info = self.inspect_torrent(infohash)
+        if info is None:
+            raise self._fail("client.managed.missing")
+        identities = {str(info.get(key) or "").upper() for key in ("hash", "infohash_v1", "infohash_v2")}
+        identities.update(value[:40] for value in list(identities) if len(value) == 64)
+        if infohash.upper() not in identities or str(receipt.get("hash") or "").upper() != infohash.upper():
+            raise self._fail("client.managed.hash_changed_selection")
+        if OWNER not in self._tags(info) or (require_pending and PENDING not in self._tags(info)):
+            raise self._fail("client.managed.not_owned")
+        if not destination or not paths_equal(str(info.get("save_path") or ""), destination):
+            raise self._fail("client.managed.wrong_folder")
+        self._check_state(info)
+        files.verify_selection(
+            rows,
+            list(info.get("files") or []),
+            set(wanted),
+            ignored=set(ignored),
+            fail=lambda: self._fail("client.managed.wrong_selection"),
         )
+        return info
+
+    def finish_verification(
+        self,
+        infohash: str,
+        destination: str,
+        receipt: dict[str, Any],
+        *,
+        start_stopped: bool = False,
+        on_start: Callable[[], None] | None = None,
+    ) -> dict[str, Any]:
+        """Finish a verified transaction without re-adding, stopping or resetting file selection.
+
+        A dropped start may be explicitly retried by the caller, at most once per receipt.
+        Checking is a bounded observation, not a blocking wait on every scheduled pass.
+        """
+        issued = {"start": False}
+
+        def before_start() -> None:
+            if on_start is not None:
+                on_start()
+            issued["start"] = True
+
+        try:
+            return self._finish_verification(
+                infohash, destination, receipt, start_stopped=start_stopped, on_start=before_start
+            )
+        except ClientError as error:
+            if issued["start"] and error.code in {
+                "client.managed.wrong_selection",
+                "client.managed.wrong_folder",
+                "client.managed.hash_changed_selection",
+                "client.managed.error_state",
+            }:
+                self._stop_after_failure(infohash, error=error)
+            raise  # label/transport uncertainty alone must not interrupt a healthy verification
+
+    def _finish_verification(
+        self,
+        infohash: str,
+        destination: str,
+        receipt: dict[str, Any],
+        *,
+        start_stopped: bool,
+        on_start: Callable[[], None],
+    ) -> dict[str, Any]:
+        info = self._verify_receipt(infohash, destination, receipt, require_pending=False)
+        if self._checking(info):
+            raise ClientVerificationPending(infohash, prefix=self.title, receipt=receipt)
+        if self._stopped(info) and not completed_progress(info.get("progress")) and start_stopped:
+            self._require_owned(infohash)
+            on_start()
+            self._start(infohash)
+            try:
+                self._wait_started(infohash)
+            except ClientVerificationPending:
+                info = self._verify_receipt(infohash, destination, receipt, require_pending=False)
+                if self._checking(info):
+                    raise ClientVerificationPending(infohash, prefix=self.title, receipt=receipt) from None
+            info = self._verify_receipt(infohash, destination, receipt, require_pending=False)
+        self._assert_started(info)
+        if PENDING in self._tags(info):
+            self._clear_pending(infohash)
+        # Clearing the transaction label must not mask an ownership, path or priority change.
+        info = self._verify_receipt(infohash, destination, receipt, require_pending=False)
+        if self._checking(info):
+            raise ClientVerificationPending(infohash, prefix=self.title, receipt=receipt)
+        self._assert_started(info)
+        return info
+
+    def _assert_started(self, info: dict[str, Any]) -> None:
+        if not self._running(info) and not (self._stopped(info) and completed_progress(info.get("progress"))):
+            raise self._fail("client.managed.start_unconfirmed")
+
+    @staticmethod
+    def _running(info: dict[str, Any]) -> bool:
+        state = str(info.get("state") or "").casefold()
+        return state.startswith(("downloading", "uploading", "stalled", "queued", "forceddl", "forcedup"))
+
+    def _after_verification_timeout(
+        self,
+        infohash: str,
+        destination: str,
+        verified: dict[str, Any],
+        metadata: TorrentMetadata,
+        selected: set[int],
+        *,
+        require_pending: bool,
+    ) -> dict[str, Any]:
+        receipt = self._verification_receipt(infohash, verified, metadata, selected)
+        info = self._verify_receipt(infohash, destination, receipt, require_pending=require_pending)
+        if self._checking(info):
+            raise ClientVerificationPending(infohash, prefix=self.title, receipt=receipt)
+        self._assert_started(info)
+        return info
 
     def _inspect_with_files(self, infohash: str) -> dict[str, Any]:
         return self._wait(
@@ -454,19 +635,37 @@ class ManagedClient:
         try:
             if not paths_equal(str(added.get("save_path") or ""), destination):
                 raise self._fail("client.managed.wrong_folder")
+            if start and self._checking(added) and added.get("files"):
+                try:
+                    receipt = self._verification_receipt(infohash, added, metadata, selected)
+                    self._verify_receipt(infohash, destination, receipt, require_pending=True)
+                except ClientError as error:
+                    if error.code not in {
+                        "client.managed.wrong_selection",
+                        "client.managed.file_unmatched",
+                        "client.managed.bad_selection",
+                    }:
+                        raise
+                else:
+                    return self.finish_verification(infohash, destination, receipt, start_stopped=True)
             if self._stop_after_add(added):
                 self._require_owned(infohash)
                 self._stop(infohash)
             self._wait_stopped(infohash)
-            self._apply_selection(infohash, metadata.files, selected, metadata.name)
+            verified = self._apply_selection(infohash, metadata.files, selected, metadata.name)
             if start:
                 self._require_owned(infohash)
                 self._start(infohash)
-                self._wait_started(infohash)
+                try:
+                    self._wait_started(infohash)
+                except ClientVerificationPending:
+                    self._after_verification_timeout(
+                        infohash, destination, verified, metadata, selected, require_pending=True
+                    )
             release_requested = True
             return self._clear_pending(infohash)
         except Exception as error:
-            if not release_requested:
+            if not release_requested and not (isinstance(error, ClientVerificationPending) and error.receipt):
                 self._stop_after_failure(infohash, error=error)
             raise
 
@@ -526,6 +725,21 @@ class ManagedClient:
         before = self._inspect_with_files(infohash)
         if OWNER not in self._tags(before):
             raise self._fail("client.managed.not_owned")
+        pending = PENDING in self._tags(before)
+        selected = {int(index) for index in selected_indices}
+        if pending and self._checking(before) and not keep_stopped:
+            try:
+                receipt = self._verification_receipt(infohash, before, metadata, selected)
+                self._verify_receipt(infohash, str(before.get("save_path") or ""), receipt, require_pending=True)
+            except ClientError as error:
+                if error.code not in {
+                    "client.managed.wrong_selection",
+                    "client.managed.file_unmatched",
+                    "client.managed.bad_selection",
+                }:
+                    raise
+            else:
+                return self.finish_verification(infohash, str(before.get("save_path") or ""), receipt)
         before = self._ready_for_selection(before)
         if OWNER not in self._tags(before):
             raise self._fail("client.managed.not_owned")
@@ -539,19 +753,28 @@ class ManagedClient:
             self._require_owned(infohash)
             self._stop(infohash)
             self._wait_stopped(infohash)
-            verified = self._apply_selection(
-                infohash, metadata.files, {int(index) for index in selected_indices}, metadata.name
-            )
+            verified = self._apply_selection(infohash, metadata.files, selected, metadata.name)
             if not keep_stopped and (pending or not was_stopped or ensure_started):
                 self._require_owned(infohash)
                 self._start(infohash)
-                verified = self._wait_started(infohash)
+                try:
+                    started = self._wait_started(infohash)
+                except ClientVerificationPending:
+                    started = self._after_verification_timeout(
+                        infohash,
+                        str(before.get("save_path") or ""),
+                        verified,
+                        metadata,
+                        selected,
+                        require_pending=pending,
+                    )
+                verified = started
             if pending:
                 release_requested = True
                 verified = self._clear_pending(infohash)
             return verified
-        except Exception:
-            if release_requested:
+        except Exception as error:
+            if release_requested or (isinstance(error, ClientVerificationPending) and error.receipt):
                 raise
             try:
                 self._require_owned(infohash)
@@ -595,6 +818,7 @@ class ManagedClient:
             raise self._fail("client.managed.not_owned_stop")
         if self._stopped(info):
             return info
+        self._require_owned(infohash)
         self._stop(infohash)
         return self._wait_stopped(infohash)
 

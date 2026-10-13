@@ -13,7 +13,7 @@ from tow.clients import files
 from tow.clients.managed import OWNER, PENDING, ClientError, ManagedClient
 from tow.clients.spec import TorrentClientAdapter
 from tow.errors import Msg
-from tow.torrent import TorrentFile, parse_magnet_hashes, parse_torrent_metadata
+from tow.torrent import TorrentFile, TorrentMetadata, parse_magnet_hashes, parse_torrent_metadata
 
 _LOG = logging.getLogger("tow.clients")
 
@@ -503,6 +503,27 @@ class QBittorrentClient(ManagedClient):
         )
         self._require_owned(infohash)
         return verified
+
+    def _verification_receipt(
+        self, infohash: str, verified: dict[str, Any], metadata: TorrentMetadata, selected: set[int]
+    ) -> dict[str, Any]:
+        every = {row.index for row in metadata.files if not row.is_pad}
+        if selected != every or any(row.is_pad or self._padding_like(row.path) for row in metadata.files):
+            return super()._verification_receipt(infohash, verified, metadata, selected)
+        rows = list(verified.get("files") or [])
+        files.priorities(rows, fail=lambda: _fail("client.managed.wrong_selection"))
+        ignored = {row["index"] for row in rows if self._padding_like(row.get("name"))}
+        wanted = {row["index"] for row in rows if row["index"] not in ignored}
+        if len(wanted) != len(every):
+            raise _fail("client.managed.wrong_selection")
+        # The same all-files contract as _apply_selection: names may use another encoding.
+        return {
+            "hash": infohash.upper(),
+            "all_files": True,
+            "wanted": sorted(wanted),
+            "ignored": sorted(ignored),
+            "files": [{key: row.get(key) for key in ("index", "name", "size", "priority")} for row in rows],
+        }
 
     def _ignored_padding(
         self,

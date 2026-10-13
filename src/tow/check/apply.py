@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from tow.check import space
+from tow.check import space, verification
 from tow.check.client_ops import (
     PREVIOUS_REVISION_ACTIVE,
     assert_client_can_add,
@@ -21,10 +21,12 @@ from tow.check.client_ops import (
 )
 from tow.check.space import FREE_SPACE_MARGIN, Shortfall
 from tow.check_steps import client_identities, is_owned_add_recovery, store_revision
+from tow.clients.managed import ClientVerificationPending
 from tow.clients.spec import TorrentClientAdapter
 from tow.errors import TowError
 from tow.events import new_operation_id
 from tow.i18n import t
+from tow.jsonish import as_dict
 from tow.log import owner_language
 from tow.records import Topic, topics_of
 
@@ -236,17 +238,23 @@ def _update_client_selection(
     if not info_confirms(info, h, dest, require_tow_ownership=True):
         raise TowError("check.save_path_unconfirmed")
     owned_add_recovery = h != old and (is_owned_add_recovery(topic) or _unrecorded_own_add(run.state, topic, h))
-    completed_pending_add = resume or owned_add_recovery
+    pending_verification = as_dict(topic.get("verification_pending"))
+    recovering_verification = (
+        bool(row.get("verification_repair")) and str(pending_verification.get("hash") or "").upper() == h
+    )
+    completed_pending_add = (
+        resume or owned_add_recovery or (recovering_verification and not pending_verification.get("selection_update"))
+    )
     waiting = space.waiting_for(topic, h)
     # A waiting torrent, and an unfinished add left stopped (an earlier add whose files did not
     # fit and whose read-back failed): measured before anything starts it.
-    measured = waiting is not None or (completed_pending_add and space.is_stopped(info))
+    measured = waiting is not None or ((completed_pending_add or recovering_verification) and space.is_stopped(info))
     shortfall = _shortfall(run, client_id, dest, metadata, plan) if measured else None
     if waiting is not None and shortfall is None:
         revisions = [str(value) for value in topic.get("previous_hashes") or []]
         if overlap := live_previous_overlap(topic_client, revisions, metadata.files):
             raise TowError(PREVIOUS_REVISION_ACTIVE, file=overlap, hash=h.upper())
-    starts = (completed_pending_add or waiting is not None) and shortfall is None
+    starts = (completed_pending_add or recovering_verification or waiting is not None) and shortfall is None
     # Only when it must stay stopped (an adapter written for an older TOW does not know it).
     stays_stopped: dict[str, bool] = {"keep_stopped": True} if shortfall is not None else {}
     topic_client.configure_torrent_selection(blob, h, plan.selected_indices, ensure_started=starts, **stays_stopped)
@@ -279,7 +287,11 @@ def _update_client_selection(
         status="succeeded",
         how=run.how,
     )
-    kind = str((waiting or {}).get("kind") or ("updated" if old and h != old else "added"))
+    kind = str(
+        (waiting or {}).get("kind")
+        or (pending_verification.get("kind") if recovering_verification else "")
+        or ("updated" if old and h != old else "added")
+    )
     if shortfall is not None:
         # Not started: "added" is told when TOW starts it; now the owner hears the wait.
         space.wait_for_space(topic, run, row, h=h, client_id=client_id, info=after, shortfall=shortfall, kind=kind)
@@ -354,18 +366,24 @@ def apply_revision(
         files=metadata.files,
         replaces_revision=bool(h != old and old and not migrates),
     )
-    h, selection_verified = _hand_to_client(
-        work,
-        client,
-        fetched,
-        metadata,
-        h=h,
-        dest=dest,
-        migrates=migrates,
-        plan=plan,
-        policy=policy,
-        needs_selection_update=needs_selection_update,
-    )
+    try:
+        h, selection_verified = _hand_to_client(
+            work,
+            client,
+            fetched,
+            metadata,
+            h=h,
+            dest=dest,
+            migrates=migrates,
+            plan=plan,
+            policy=policy,
+            needs_selection_update=needs_selection_update,
+        )
+    except ClientVerificationPending as error:
+        h = verification.defer(work, error, metadata, plan)
+        selection_verified = True
+    else:
+        topic.pop("verification_pending", None)
     store_revision(
         topic,
         h=h,
@@ -373,7 +391,7 @@ def apply_revision(
         keep_previous=bool(old and old != h and not migrates),
         selection_verified=selection_verified,
         plan=plan,
-        once=policy["tracking_mode"] == "once",
+        once=policy["tracking_mode"] == "once" and not row.get("verification_pending"),
         files=metadata.files,
     )
     if not row.get("waiting_space"):

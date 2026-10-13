@@ -182,7 +182,8 @@
       </span>
       {#- The progress link lives outside <summary> (no link inside its button, A2) and is laid
           over this cell; the cell keeps the same words, unseen while the link covers it. -#}
-      {%- if ds.expected %}{% set progress_text = ('✓ ' if ds.is_complete else '') ~ ds.completed ~ '/' ~ ds.expected %}{% set progress_title = t('home.topic.episodes_history') %}
+      {%- if ds.verifying %}{% set progress_text = t('check.verifying_files') %}{% set progress_title = t('client.managed.verification_pending') %}
+      {%- elif ds.expected %}{% set progress_text = ('✓ ' if ds.is_complete else '') ~ ds.completed ~ '/' ~ ds.expected %}{% set progress_title = t('home.topic.episodes_history') %}
       {%- elif ds.completed %}{% set progress_text = t('home.topic.files_count', n=ds.completed) %}{% set progress_title = t('home.topic.files_history') %}
       {%- else %}{% set progress_text = '' %}{% endif %}
       <span class="progress-cell topic-progress" data-label="{{ t('home.row.progress') }}">

@@ -947,8 +947,74 @@ def test_start_confirmation_window_has_a_monotonic_deadline(client, tmp_path, mo
     monkeypatch.setattr("tow.clients.managed.time.monotonic", lambda: next(moments, 2.0))
     with pytest.raises(ClientError) as error:
         adapter._wait_started(H)
-    assert error.value.code == "client.managed.start_unconfirmed"
+    assert error.value.code == "client.managed.verification_pending"
     assert "tow-pending" in adapter.inspect_torrent(H)["tags"]
+
+
+def test_long_running_file_check_is_deferred_without_cleanup_for_every_client(client, tmp_path, monkeypatch):
+    from tow.clients.managed import ClientVerificationPending
+
+    adapter, server = client
+    real_start, real_inspect = adapter._start, adapter.inspect_torrent
+    checking = {"active": False}
+
+    def start(infohash):
+        real_start(infohash)
+        checking["active"] = True
+
+    def inspect(infohash):
+        info = real_inspect(infohash)
+        if info and checking["active"]:
+            return {**info, "state": "checkingDL", "progress": 1.0}
+        return info
+
+    monkeypatch.setattr(adapter, "_start", start)
+    monkeypatch.setattr(adapter, "inspect_torrent", inspect)
+    with pytest.raises(ClientVerificationPending) as error:
+        adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert error.value.receipt
+    assert server.torrents[K].running  # the 60-second boundary must not send stop/pause
+    assert "tow-pending" in real_inspect(H)["tags"]
+    checking["active"] = False
+    result = adapter.finish_verification(H, str(tmp_path), error.value.receipt)
+    assert result["state"] == "downloading"
+    assert result["tags"] == ["tow"]
+    assert _wanted(result) == [index == E01 for index in range(3)]
+
+
+def test_qbit_all_files_deferred_receipt_accepts_the_clients_legacy_spelling(tmp_path, monkeypatch):
+    from tow.clients.managed import ClientVerificationPending
+
+    server = FakeQbit()
+    adapter = _qbittorrent(server, monkeypatch)
+    real_add, real_start, real_inspect = server.torrents_add, adapter._start, adapter.inspect_torrent
+    checking = {"active": False}
+
+    def add(**kwargs):
+        result = real_add(**kwargs)
+        torrent = server.torrents[K]
+        torrent.files = [(f"legacy/file-{index}.mkv", size) for index, (_name, size) in enumerate(torrent.files)]
+        return result
+
+    def start(infohash):
+        real_start(infohash)
+        checking["active"] = True
+
+    def inspect(infohash):
+        info = real_inspect(infohash)
+        return {**info, "state": "checkingDL"} if info and checking["active"] else info
+
+    monkeypatch.setattr(server, "torrents_add", add)
+    monkeypatch.setattr(adapter, "_start", start)
+    monkeypatch.setattr(adapter, "inspect_torrent", inspect)
+    with pytest.raises(ClientVerificationPending) as error:
+        adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [0, 1, 2])
+    assert error.value.receipt["all_files"] is True
+    assert server.torrents[K].running
+    assert server.calls.index("torrents_stop") < server.calls.index("torrents_start")
+    assert server.calls.count("torrents_stop") == 1
+    checking["active"] = False
+    assert adapter.finish_verification(H, str(tmp_path), error.value.receipt)["tags"] == ["tow"]
 
 
 def test_an_expired_slow_read_cannot_issue_a_late_restart(client, tmp_path, monkeypatch):

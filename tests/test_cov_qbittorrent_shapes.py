@@ -299,7 +299,7 @@ def test_missing_files_while_stopping_is_an_unsafe_state(monkeypatch):
         _adapter(monkeypatch, api).stop_owned_torrent(H)
 
 
-@pytest.mark.parametrize("state", ["stalledUP", "uploading", "forcedDL", "queuedDL", "metaDL"])
+@pytest.mark.parametrize("state", ["stalledUP", "uploading", "forcedDL", "queuedDL"])
 def test_active_states_confirm_a_start(monkeypatch, state):
     api = QbitApi(state=state)
     assert _adapter(monkeypatch, api)._wait_started(H)["state"] == state
@@ -307,6 +307,15 @@ def test_active_states_confirm_a_start(monkeypatch, state):
 
 @pytest.mark.parametrize("state", ["checkingDL", "checkingUP", "checkingResumeData"])
 def test_a_file_check_does_not_confirm_a_start(monkeypatch, state):
+    api = QbitApi(state=state)
+    adapter = _adapter(monkeypatch, api)
+    adapter.START_POLLS = 3
+    with raises_code("client.managed.verification_pending", RuntimeError):
+        adapter._wait_started(H)
+
+
+@pytest.mark.parametrize("state", ["metaDL", "forcedMetaDL", "moving", "allocating", "unexpected"])
+def test_transient_or_unrecognized_state_does_not_confirm_a_start(monkeypatch, state):
     api = QbitApi(state=state)
     adapter = _adapter(monkeypatch, api)
     adapter.START_POLLS = 3
