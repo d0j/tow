@@ -3,6 +3,7 @@ line-length = 120
 # The detached updater and its lock module run on the install's base Python, which may be 3.11+: they must
 # keep 3.11 syntax even when formatted (parser tests enforce the same minimum).
 [per-file-target-version]
+"src/tow/platform/_local_service_worker.py" = "py311"
 "scripts/update.py" = "py311"
 "scripts/root_files.py" = "py311"
 "src/tow/update_worker.py" = "py311"

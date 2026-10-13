@@ -9,6 +9,9 @@
   },
   "protection_ui": {
     "title": "Site access",
+    "on_demand": "On demand",
+    "on_demand_hint": "Starts only for a browser challenge; stops after idle time. No autostart.",
+    "local_runtime_refused": "The installed local module could not be verified. Automatic start is blocked; check its manifest and files.",
     "search": "Cloudflare challenge protection FlareSolverr Byparr FlareBypasser zendriver nodriver Trawl modules",
     "off": "Off",
     "configured": "Enabled",

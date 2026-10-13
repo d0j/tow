@@ -48,6 +48,7 @@ from tow.mirrors import note_signed_in as _note_signed_in
 from tow.mirrors import prefer_host as _prefer_host
 from tow.notifiers import test as test_notifier
 from tow.notify import short_series_title
+from tow.protection.local_service import managed as _local_service_managed
 from tow.protection.providers import adapters as protection_adapters
 from tow.protection.providers import registry as protection_registry
 from tow.protection.spec import validate_settings as validate_protection_settings
@@ -221,6 +222,12 @@ def protection_settings_view(cfg: dict[str, Any]) -> dict[str, Any]:
         states = {}
         unreadable = True
     for index, item in enumerate(cards, 1):
+        item["on_demand"], item["local_runtime_refused"] = False, False
+        if not item["new"]:
+            try:
+                item["on_demand"] = _local_service_managed(item)
+            except OSError, ValueError, TypeError:
+                item["local_runtime_refused"] = True
         observation = states.get(item["id"], {"status": "unknown", "retry_at": 0})
         item.update(
             order=index,

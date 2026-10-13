@@ -162,6 +162,18 @@ def cookie_api(
     if timeout < 1:
         raise ValueError("clearance time budget exhausted")
     deadline = time.monotonic() + timeout
+    from tow.protection.local_service import ensure
+
+    try:
+        locally_managed = ensure(provider, deadline)
+    except OSError as exc:
+        raise ProviderUnavailableError("unavailable") from exc
+    except ValueError as exc:
+        raise ProviderUnavailableError("protocol") from exc
+    if locally_managed:
+        timeout = deadline - time.monotonic()
+        if timeout < 1:
+            raise ValueError("clearance time budget exhausted during local startup")
     # Leave time for the service to serialize and return after its browser timeout.
     # Keep at least 1000 ms: Byparr interprets smaller maxTimeout values as seconds.
     browser_ms = int((timeout - 1 if timeout >= 2 else timeout) * 1000)

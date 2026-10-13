@@ -120,7 +120,8 @@ def target_origin(value: str) -> str:
 
 def validate_probe_path(path: object) -> str:
     """Audited anonymous GET pages only, never arbitrary user/topic/download URLs."""
-    if not isinstance(path, str) or path not in {"/", "/browse.php"}:
+    # The catalog path remains supported for trusted presets/extensions; Kinozal uses direct sign-in.
+    if not isinstance(path, str) or path not in {"/", "/browse.php", "/login.php"}:
         raise ValueError("invalid public clearance probe")
     return path
 

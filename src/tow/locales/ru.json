@@ -9,6 +9,9 @@
   },
   "protection_ui": {
     "title": "Доступ к сайтам",
+    "on_demand": "По требованию",
+    "on_demand_hint": "Запускается только при браузерной проверке; останавливается после простоя. Без автозапуска.",
+    "local_runtime_refused": "Не удалось проверить установленный локальный модуль. Автоматический запуск заблокирован; проверьте его манифест и файлы.",
     "search": "Cloudflare защита проверка FlareSolverr Byparr FlareBypasser zendriver nodriver Trawl модули",
     "off": "Выключено",
     "configured": "Включено",
