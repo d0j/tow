@@ -96,6 +96,25 @@ def cls_label(cls: str, lang: str | None = None) -> str:
     return CLS_RU.label(cls, lang or owner_language(), cls)
 
 
+def check_error_label(code: str, lang: str | None = None) -> str:
+    """Why a check did not complete, in words: ``health.check_error`` (the header clock) and the
+    ``reason`` of a ``check_blocked`` event are an error class, or the master key's
+    ``secrets_migration_required``."""
+    lang = lang or owner_language()
+    if code == "secrets_migration_required":
+        return t("log.check_error.secrets", lang)
+    return CLS_RU.label(code, lang, code.replace("_", " "))
+
+
+def _check_blocked_reason(rec: Mapping[str, Any], lang: str) -> str:
+    """The reason of a ``check_blocked`` event saved without its error (TOW 1.28 and older): its
+    class in words; a plain "error", or none, says where the details are."""
+    reason = str(rec.get("reason") or "")
+    if reason and reason != "error":
+        return check_error_label(reason, lang)
+    return t("log.check_error.no_detail", lang)
+
+
 # Tracker announce addresses carry the owner's passkey (in the query or the path): udp:// as
 # well as http(s)://, and inside a magnet link's tr= values.
 _URL_RE = re.compile(r"(?:https?|udp|wss?)://[^\s'\"<>]+", re.IGNORECASE)
@@ -761,6 +780,8 @@ def format_event(rec: Mapping[str, Any], *, title_index: Mapping[str, str] | Non
         if cls and human.casefold().startswith(CLS_RU.label(cls, lang, cls).casefold()):
             bits.remove(CLS_RU.label(cls, lang, cls))  # "torrent client · torrent client: refused" says it twice
         bits.append(human[:220])
+    if kind == "check_blocked" and not raw and not (rec.get("error") or rec.get("error_code")):
+        bits.append(_check_blocked_reason(rec, lang))
     if kind == "check_site_skipped" and isinstance(rec.get("topics"), int):
         bits.append(t("log.site_skipped", lang, n=rec["topics"]))
     elif kind == "check" and rec.get("n") is not None:

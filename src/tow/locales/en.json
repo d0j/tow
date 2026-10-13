@@ -890,7 +890,7 @@
   "issues": {
     "data_lost": "TOW's data folder ({folder}) was deleted or replaced while TOW was running: the topics, history and settings kept there are gone from TOW, which goes on empty. Restore a nightly backup: the copies are kept outside the data folder.",
     "check_stale": "Scheduled checks have not run since {at}.",
-    "check_blocked_secrets": "The last scheduled check is blocked: saved passwords and tokens cannot be opened.",
+    "check_blocked_secrets": "The last scheduled check did not complete: saved passwords and tokens cannot be opened.",
     "check_failed": "The last scheduled check did not complete.",
     "client_down": "The torrent client is unavailable: new versions are not added.",
     "history_rebuilt": "The download history file was damaged: TOW started it over and keeps checking (the damaged file is kept next to it as download_history.json.corrupt-…). Downloads are not affected; events from before are not shown.",
@@ -1196,7 +1196,7 @@
       "qbit_move_fail": "not moved",
       "add_check_fail": "add failed",
       "check": "check",
-      "check_blocked": "check blocked",
+      "check_blocked": "check did not complete",
       "topic_add": "added",
       "topic_delete": "deleted",
       "topic_edit": "edited",
@@ -1344,7 +1344,11 @@
     },
     "check_result": "checked: {n}, without errors: {ok}",
     "site_skipped": "topics not checked: {n}",
-    "check_preview": "preview, nothing changed"
+    "check_preview": "preview, nothing changed",
+    "check_error": {
+      "secrets": "saved passwords and tokens cannot be opened",
+      "no_detail": "the reason was not recorded; the details are in the files of data/logs"
+    }
   },
   "login": {
     "page_title": "Sign in",

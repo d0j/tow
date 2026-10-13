@@ -811,9 +811,35 @@ def test_blocked_check_records_attempt_for_home_timer(monkeypatch):
     assert events == [
         (
             ("check_blocked",),
-            {"reason": "secrets_migration_required", "how": "auto"},
+            {
+                "reason": "secrets_migration_required",
+                "how": "auto",
+                # History says why: the error itself, not only its class.
+                "error": "legacy plaintext TOW secrets require explicit migrate",
+                "cls": "error",
+            },
         )
     ]
+
+
+def test_a_blocked_checks_history_line_says_why_in_the_readers_language(monkeypatch):
+    from tow.errors import TowError
+    from tow.i18n import use
+    from tow.log import format_event, read_events
+
+    save_state({"topics": []})
+    check.record_check_failure(TowError("check.client_unreachable", reason="timeout", prefix="qBittorrent"))
+    [event] = [e for e in read_events() if e["kind"] == "check_blocked"]
+    assert event["error_code"] == "check.client_unreachable"
+    use("ru")
+    ru = format_event(event)
+    use("en")
+    en = format_event(event)
+    assert ru["label"] == "Проверка не завершилась"  # the banner's verb
+    assert "qBittorrent" in ru["detail"]
+    assert "timeout" in ru["detail"]
+    assert en["label"] == "Check did not complete"
+    assert ru["detail"] != en["detail"]  # rendered again from its code, not the stored text
 
 
 def test_cli_check_secret_failure_records_apply_attempt_but_not_dry_run(monkeypatch, capsys):

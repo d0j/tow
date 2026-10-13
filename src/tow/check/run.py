@@ -19,7 +19,7 @@ from tow.clock import iso_now, machine_now
 from tow.config import load_config
 from tow.i18n import t
 from tow.jsonish import as_dict
-from tow.log import error_class, log_event, owner_language
+from tow.log import error_class, error_fields, log_event, owner_language
 from tow.notify import NotificationBatch
 from tow.records import CheckRow, Health, Topic, health_of, topics_of
 from tow.store import SecretStoreError, check_run_lock, load_state, persistence_lock, save_state
@@ -84,7 +84,9 @@ def record_check_failure(error: str | BaseException, *, how: str = "auto") -> He
         )
         state["health"] = health
         save_state(state)
-    log_event("check_blocked", reason=code, how=how)
+    # The reason in words for History: the error's code and values (rendered in the reader's
+    # language), its text for an error without one; ``reason`` stays the class the clock shows.
+    log_event("check_blocked", reason=code, how=how, **error_fields(error))
     return health
 
 

@@ -49,6 +49,24 @@ def test_pause_then_resume_reads_as_paused_then_resumed():
     assert labels == ["Поставлена на паузу", "Снята с паузы", "Сайт на паузе", "Сайт снят с паузы"]
 
 
+@pytest.mark.parametrize(
+    ("reason", "says"),
+    [
+        ("error", "причина не записана; подробности — в файлах папки data/logs"),
+        (None, "причина не записана; подробности — в файлах папки data/logs"),
+        ("qbit", "торрент-клиент"),
+        ("secrets_migration_required", "сохранённые пароли и токены не открываются"),
+    ],
+)
+def test_a_blocked_check_saved_without_its_error_says_the_best_it_knows(reason, says):
+    """TOW 1.28 kept only the class of a failed scheduled check ("reason"): History said
+    "Проверка заблокирована · авто" and never why."""
+    event = {"kind": "check_blocked", "how": "auto", **({"reason": reason} if reason else {})}
+    row = format_event(event)
+    assert row["label"] == "Проверка не завершилась"  # the verb of Home's "Needs attention"
+    assert row["detail"] == f"авто · {says}"
+
+
 def test_export_event_projection_rejects_hash_suffix_data():
     projected = export_event_projection({"hash": "a" * 64 + "SECRET"})
     assert "hash" not in projected
