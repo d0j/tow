@@ -53,6 +53,7 @@ interval_sec: 3600
 # Allow sites and messenger servers on this PC or the home network (a self-hosted tracker,
 # your own ntfy server). Off by default: a typed address cannot probe the home network.
 # allow_private_tracker_hosts: false
+# New-site previews remain public-only; the switch permits explicitly configured private sites.
 # allow_private_notifier_hosts: false
 
 # --- backups and restore points ----------------------------------------------------------

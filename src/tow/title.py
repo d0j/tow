@@ -3,7 +3,7 @@ from __future__ import annotations
 import functools
 import logging
 import re
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urlparse, urlsplit
 
 from tow import http as thttp
 from tow.torrent import looks_like_torrent
@@ -158,18 +158,35 @@ def _title_from_page(url: str) -> str:
 
     cfg = load_config()
     tracker = match_tracker(load_trackers(cfg), url)
-    if tracker is None or origin_key(url) not in {origin_key(host) for host in tracker.spec.get("fetch_hosts") or []}:
+    if tracker is None:
+        return ""
+    trusted_host = next(
+        (host for host in tracker.spec.get("fetch_hosts") or [] if origin_key(host) == origin_key(url)),
+        "",
+    )
+    if not trusted_host:
         return ""
     ua = cfg.get("user_agent")
     try:
         from tow.config import as_bool
 
-        with http_client(
-            ua=ua,
-            follow_redirects=False,
-            public_only=not as_bool(cfg.get("allow_private_tracker_hosts")),
-        ) as c:
-            r = get_limited(c, url.strip(), max_bytes=MAX_HTML_RESPONSE_BYTES)
+        # The authority comes from saved configuration, never the pasted URL.
+        # Joining URLs here would allow a //host path to replace that authority.
+        # Use the same construction in public mode to avoid parser disagreement.
+        parts = urlsplit(url.strip())
+        saved = urlsplit(trusted_host)
+        hostname = saved.hostname or ""
+        authority = f"[{hostname}]" if ":" in hostname else hostname
+        if saved.port is not None:
+            authority += f":{saved.port}"
+        page_url = saved.scheme + "://" + authority + (parts.path or "/")
+        if parts.query:
+            page_url += "?" + parts.query
+        if as_bool(cfg.get("allow_private_tracker_hosts")):
+            with http_client(ua=ua, follow_redirects=False) as c:
+                r = get_limited(c, page_url, max_bytes=MAX_HTML_RESPONSE_BYTES)
+        else:
+            r = thttp.get_public_page(page_url, ua=ua)
     except Exception as exc:  # noqa: BLE001 - a title guess never fails the add: the link's own words are used
         logging.getLogger("tow.title").warning("topic page not read for its title: %s", type(exc).__name__)
         return ""

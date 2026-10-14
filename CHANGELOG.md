@@ -5,6 +5,15 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.30.6] — 2026-10-14
+
+### Fixed
+
+- Automatic site previews always use a fresh public-only, IP-pinned connection, even when private trackers are
+  enabled. Preview redirects, environment proxies and URL credentials cannot escape that boundary. Title reads
+  with explicit private-tracker access derive their authority only from an already configured site. A narrow
+  CodeQL model describes the public-preview boundary without excluding generic HTTP requests from analysis.
+
 ## [1.30.5] — 2026-10-14
 
 ### Fixed

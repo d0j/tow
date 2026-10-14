@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from datetime import UTC
 from email.utils import parsedate_to_datetime
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -158,6 +159,24 @@ def client(
 def get_limited(c: httpx.Client, url: str, *, max_bytes: int, deadline: float | None = None) -> httpx.Response:
     """Stream one response into a bounded in-memory httpx.Response."""
     return request_limited(c, "GET", url, max_bytes=max_bytes, deadline=deadline)
+
+
+def get_public_page(url: str, *, ua: str | None = None) -> httpx.Response:
+    """Read an untrusted preview URL through a fresh public-only, IP-pinned client.
+
+    No caller-supplied transport, proxy, cookies or redirect policy can weaken this
+    boundary. Each socket checks all DNS answers and connects to a checked numeric
+    address, including after DNS rebinding. The response retains the HTML bounds.
+    """
+    # Reject malformed bracket/authority syntax before HTTPX normalizes it.
+    parts = urlsplit(url)
+    if not parts.hostname:
+        raise ValueError("preview requires an HTTP URL without credentials")
+    parsed = httpx.URL(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.host or parsed.userinfo:
+        raise ValueError("preview requires an HTTP URL without credentials")
+    with client(ua=ua, public_only=True, follow_redirects=False) as c:
+        return get_limited(c, str(parsed), max_bytes=MAX_HTML_RESPONSE_BYTES)
 
 
 def _check_response_time(deadline: float) -> None:

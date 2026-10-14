@@ -38,6 +38,11 @@ otherwise.
   it. Night copies are signed; a modified copy is not restored.
 - **Outbound requests.** Site addresses entered in the UI may not point at this computer or the home network;
   download redirects may not leave the site's configured hosts.
+  Automatic new-site previews always use a fresh public-only, IP-pinned client with no environment proxy,
+  URL credentials or redirects. The explicit `allow_private_tracker_hosts` setting permits private requests
+  for saved tracker origins (including their DNS answers); enable it only when those configured origins are
+  trusted. It does not grant private-network access to an unsaved-site preview. Public sites on custom ports
+  remain supported.
 - **Optional access providers.** Disabled by default and configured only from this computer. Their API endpoint
   must be a literal loopback/private address (or localhost), with no credentials, proxy or redirects. The service
   receives only an audited public page (root by default, Kinozal's catalog), not account cookies, passwords,

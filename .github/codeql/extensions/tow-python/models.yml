@@ -1,0 +1,10 @@
+extensions:
+  - addsTo:
+      pack: codeql/python-all
+      extensible: barrierModel
+    data:
+      # Only this dedicated request boundary creates a fresh public-only client,
+      # disables environment proxies/redirects, and pins sockets to checked IPs.
+      # Do not model get_limited, request_limited, arbitrary clients or returned
+      # URLs as safe: those can intentionally address configured private services.
+      - ["tow.http", "Member[get_public_page].Argument[0,url:]", "request-forgery"]
