@@ -231,6 +231,19 @@ def test_the_client_down_opens_its_card_with_the_status_and_check(client):
     assert "Не отвечает: новые версии не добавляются." in card
 
 
+def test_client_down_reads_the_current_client_factory_on_each_call(client, monkeypatch):
+    from tow.clients import factory
+
+    _home_state(_topic("z", 9), qbit_ok=False)
+    # Load the issue module before changing its dependency; a captured function
+    # would ignore the change, or retain it after discovery during another test.
+    assert _entries(client)["client_down"]["fix"] == "check_client:default"
+    with monkeypatch.context() as change:
+        change.setattr(factory, "default_client_id", lambda cfg: "main")
+        assert _entries(client)["client_down"]["fix"] == "check_client:main"
+    assert _entries(client)["client_down"]["fix"] == "check_client:default"
+
+
 def test_late_checks_open_the_service_card_with_restart(client):
     _home_state(_topic("z", 9), auto_at_ts=int(time.time()) - 10 * 24 * 3600)
     entry = _entries(client)["check_stale"]
