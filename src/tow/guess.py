@@ -201,16 +201,12 @@ def download_path_from_page(guessed: dict[str, Any], url: str, page: str) -> dic
 def _topic_page(url: str) -> str:
     """The topic page's text for a guess ("" when it cannot be read: the guess stands)."""
     from tow import http as thttp
-    from tow.config import as_bool, load_config
+    from tow.config import load_config
 
     cfg = load_config()
     try:
-        with thttp.client(
-            ua=cfg.get("user_agent"),
-            follow_redirects=False,
-            public_only=not as_bool(cfg.get("allow_private_tracker_hosts")),
-        ) as c:
-            response = thttp.get_limited(c, url, max_bytes=thttp.MAX_HTML_RESPONSE_BYTES)
+        # An unsaved site is not an explicitly configured private tracker.
+        response = thttp.get_public_page(url, ua=cfg.get("user_agent"))
     except Exception as exc:  # noqa: BLE001 - the page only improves the guess; the link alone still gives one
         logging.getLogger("tow.guess").warning("topic page not read for the site guess: %s", type(exc).__name__)
         return ""

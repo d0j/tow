@@ -283,7 +283,8 @@ def test_a_page_title_without_an_html_content_type_is_read_with_the_same_rules(m
     monkeypatch.setattr("tow.trackers.load_trackers", lambda cfg: {})
     monkeypatch.setattr("tow.http.get_limited", lambda c, url, max_bytes: response)
     monkeypatch.setattr(
-        "tow.trackers.match_tracker", lambda trackers, url: type("T", (), {"spec": {"fetch_hosts": ["x"]}})()
+        "tow.trackers.match_tracker",
+        lambda trackers, url: type("T", (), {"spec": {"fetch_hosts": ["https://t.example"]}})(),
     )
     assert title._title_from_page("https://t.example/1") == TITLE
 

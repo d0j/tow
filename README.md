@@ -32,6 +32,7 @@ every new version to your torrent client.
   Long verification of existing files continues without a restart; Home shows checking, not false completion.
 - **Mirrors.** Several addresses per site with fallback and cooldown; daily download limits respected; sign-in by
   password or a browser window.
+  New-site previews use public addresses only; private sites need explicit permission and saved configuration.
 - **Notifications.** One message per topic per check, quiet hours, a daily digest, a queue that survives restarts.
 - **History and undo.** Every file and version is recorded; the last change can be undone.
 - **Backups and updates.** Signed nightly backups, restore points, encrypted TOW files (`.towx`); updates from the
