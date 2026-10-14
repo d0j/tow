@@ -11,7 +11,7 @@ import pytest
 
 from tow.paths import data_dir
 from tow.protection import chain, providers, store
-from tow.protection.spec import Clearance, service_url, target_origin, validate_settings
+from tow.protection.spec import AccessFailure, Clearance, RecoveryBudget, service_url, target_origin, validate_settings
 
 ORIGIN = "https://tracker.example"
 
@@ -187,6 +187,154 @@ def test_missing_plugin_does_not_block_next(safe_dns, monkeypatch):
     assert [c.provider for c in chain.candidates("sample", ORIGIN, settings())] == ["second"]
 
 
+@pytest.mark.parametrize(("max_attempts", "expected"), [(1, []), (2, ["first"]), (4, ["first"])])
+def test_missing_cookie_last_chance_is_within_shared_budget(safe_dns, monkeypatch, max_attempts, expected):
+    calls = []
+
+    def solve(provider, origin, timeout):
+        calls.append(provider["id"])
+        raw = solution(cookies=[] if len(calls) == 1 else solution()["solution"]["cookies"])
+        return providers._solution(raw, origin, provider["id"])
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": solve})
+    configured = settings(max_attempts=max_attempts)
+    budget = RecoveryBudget(max_attempts)
+    assert [c.provider for c in chain.candidates("sample", ORIGIN, configured, call_budget=budget)] == expected
+    assert calls == ["first"] * min(2, max_attempts)
+    assert budget.remaining == max_attempts - len(calls)
+    assert list(chain.candidates("sample", ORIGIN, configured)) == []  # no new lease or calls
+
+
+def test_missing_cookie_gives_other_connections_priority(safe_dns, monkeypatch):
+    calls = []
+
+    def solve(provider, origin, timeout):
+        calls.append(provider["id"])
+        if provider["id"] == "first" and calls.count("first") == 1:
+            raise AccessFailure("missing_cookie", "validation", "synthetic")
+        return clearance(provider["id"])
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": solve, "byparr": solve})
+    assert [c.provider for c in chain.candidates("sample", ORIGIN, settings(max_attempts=3))] == ["second", "first"]
+    assert calls == ["first", "second", "first"]
+
+
+def test_repeated_missing_cookie_stops_after_one_last_chance(safe_dns, monkeypatch):
+    calls = []
+
+    def solve(provider, origin, timeout):
+        calls.append(provider["id"])
+        raise AccessFailure("missing_cookie", "validation", "synthetic")
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": solve})
+    assert list(chain.candidates("sample", ORIGIN, settings(max_attempts=4))) == []
+    assert calls == ["first", "first"]
+
+
+@pytest.mark.parametrize(("elapsed", "count"), [(0, 2), (19, 2), (20, 1), (30, 1)])
+def test_last_chance_keeps_verification_margin(safe_dns, monkeypatch, elapsed, count):
+    now = [0.0]
+    calls = []
+    monkeypatch.setattr(chain.time, "monotonic", lambda: now[0])
+
+    def solve(provider, origin, timeout):
+        calls.append(timeout)
+        now[0] += elapsed
+        raise AccessFailure("missing_cookie", "validation", "synthetic")
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": solve})
+    assert list(chain.candidates("sample", ORIGIN, settings(timeout_sec=30, max_attempts=4))) == []
+    assert len(calls) == count
+    assert all(1 <= value <= 20 for value in calls)
+
+
+@pytest.mark.parametrize("reason", ["refused", "origin", "status", "scope", "invalid_response", "limit", "timeout"])
+def test_other_provider_refusals_do_not_repeat_same_connection(safe_dns, monkeypatch, reason):
+    calls = []
+
+    def solve(provider, origin, timeout):
+        calls.append(provider["id"])
+        raise AccessFailure(reason, "validation", "synthetic")
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": solve})
+    assert list(chain.candidates("sample", ORIGIN, settings(max_attempts=4))) == []
+    assert calls == ["first"]
+
+
+def test_missing_cookie_outside_validation_does_not_retry(safe_dns, monkeypatch):
+    calls = []
+
+    def solve(provider, origin, timeout):
+        calls.append(provider["id"])
+        raise AccessFailure("missing_cookie", "service", "synthetic")
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": solve})
+    assert list(chain.candidates("sample", ORIGIN, settings(max_attempts=4))) == []
+    assert calls == ["first"]
+
+
+def test_ambiguous_cookie_does_not_authorize_last_chance(safe_dns, monkeypatch):
+    calls = []
+
+    def solve(provider, origin, timeout):
+        calls.append(provider["id"])
+        raw = solution()
+        raw["solution"]["cookies"].append(dict(raw["solution"]["cookies"][0]))
+        return providers._solution(raw, origin, provider["id"])
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": solve})
+    assert list(chain.candidates("sample", ORIGIN, settings(max_attempts=4))) == []
+    assert calls == ["first"]
+
+
+def test_last_chance_uses_anonymous_public_api_and_does_not_cache(safe_dns, monkeypatch):
+    seen = []
+    real_client = httpx.Client
+
+    def handler(request):
+        seen.append(request)
+        return (
+            httpx.Response(200, json=solution(cookies=[])) if len(seen) == 1 else httpx.Response(200, json=solution())
+        )
+
+    def client(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        kwargs["transport"].close()
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real_client(**kwargs)
+
+    monkeypatch.setattr(providers.httpx, "Client", client)
+    monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": providers.cookie_api})
+    values = list(chain.candidates("kinozal", ORIGIN, settings()))
+    assert len(values) == 1
+    assert values[0].cookies == {"cf_clearance": "synthetic-token"}
+    assert len(seen) == 2
+    for request in seen:
+        payload = json.loads(request.content)
+        assert payload["url"] == ORIGIN + "/login.php"
+        assert payload["returnOnlyCookies"] is True
+        assert "cookie" not in request.headers
+        assert "authorization" not in request.headers
+        assert set(payload) == {"cmd", "url", "maxTimeout", "returnOnlyCookies", "disableMedia"}
+    assert store.read("kinozal", ORIGIN, settings(), now=time.time()) is None
+
+
+def test_last_chance_never_resets_shared_mirror_call_limit(safe_dns, monkeypatch):
+    calls = []
+
+    def solve(provider, origin, timeout):
+        calls.append(provider["id"])
+        raise AccessFailure("missing_cookie", "validation", "synthetic")
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": solve})
+    budget = RecoveryBudget(2)
+    assert list(chain.candidates("sample", ORIGIN, settings(), call_budget=budget)) == []
+    assert list(chain.candidates("sample", "https://other.example", settings(), call_budget=budget)) == []
+    assert calls == ["first", "first"]
+    assert budget.remaining == 0
+
+
 def test_only_verified_clearance_retained_and_encrypted(safe_dns, monkeypatch):
     calls = []
 
@@ -337,6 +485,8 @@ def test_byparr_uses_its_documented_media_flag(monkeypatch):
 def test_browser_timeout_margin_never_uses_ambiguous_subsecond_units(monkeypatch, timeout, browser_ms):
     seen = []
     real_client = httpx.Client
+    # This checks protocol units, not elapsed time under parallel runner load.
+    monkeypatch.setattr(providers.time, "monotonic", lambda: 1000.0)
 
     def handler(request):
         seen.append(json.loads(request.content))
@@ -596,8 +746,9 @@ def test_capacity_is_bounded_and_only_expired_reservations_pruned(monkeypatch):
 def test_response_only_one_clearance_cookie_allowed():
     raw = solution()
     raw["solution"]["cookies"].append(dict(raw["solution"]["cookies"][0]))
-    with pytest.raises(ValueError, match="ambiguous clearance"):
+    with pytest.raises(AccessFailure, match="ambiguous clearance") as caught:
         providers._solution(raw, ORIGIN, "first")
+    assert caught.value.reason == "invalid_response"
 
 
 def test_session_cookie_lifetime_is_bounded(monkeypatch):
