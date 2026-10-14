@@ -176,7 +176,9 @@ def get_public_page(url: str, *, ua: str | None = None) -> httpx.Response:
     if parsed.scheme not in {"http", "https"} or not parsed.host or parsed.userinfo:
         raise ValueError("preview requires an HTTP URL without credentials")
     with client(ua=ua, public_only=True, follow_redirects=False) as c:
-        return get_limited(c, str(parsed), max_bytes=MAX_HTML_RESPONSE_BYTES)
+        # HTTPX parses this same input for the request; keep its data flow visible
+        # rather than relying on analyzer models of URL-object string conversion.
+        return get_limited(c, url, max_bytes=MAX_HTML_RESPONSE_BYTES)
 
 
 def _check_response_time(deadline: float) -> None:

@@ -13,6 +13,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   enabled. Preview redirects, environment proxies and URL credentials cannot escape that boundary. Title reads
   with explicit private-tracker access derive their authority only from an already configured site. A narrow
   CodeQL model describes the public-preview boundary without excluding generic HTTP requests from analysis.
+- Client warning discovery resolves the current client factory when collecting status, rather than retaining
+  a temporary resolver captured during module loading. A regression prevents order-dependent QA results.
 
 ## [1.30.5] — 2026-10-14
 
