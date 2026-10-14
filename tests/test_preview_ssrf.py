@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import socket
-from pathlib import Path
 
 import httpcore
 import httpx
 import pytest
-import yaml
 
 from tow import guess, http, title
 
@@ -219,17 +217,20 @@ def test_explicit_configured_private_title_preserves_ipv6_and_port(monkeypatch, 
     assert calls == [host + "/viewtopic.php?t=7"]
 
 
-def test_codeql_model_is_limited_to_the_dedicated_public_request_boundary():
-    folder = Path(__file__).parents[1] / ".github/codeql/extensions/tow-python"
-    model = yaml.safe_load((folder / "models.yml").read_text(encoding="utf-8"))
-    assert model == {
-        "extensions": [
-            {
-                "addsTo": {"pack": "codeql/python-all", "extensible": "barrierModel"},
-                "data": [["tow.http", "Member[get_public_page].Argument[0,url:]", "request-forgery"]],
-            }
-        ]
-    }
-    pack = yaml.safe_load((folder / "codeql-pack.yml").read_text(encoding="utf-8"))
-    assert pack["dataExtensions"] == ["models.yml"]
-    assert pack["extensionTargets"] == {"codeql/python-all": ">=7.2.4 <8.0.0"}
+@pytest.mark.parametrize("option", ["public_only", "follow_redirects", "cookies", "transport", "client"])
+def test_public_preview_does_not_accept_a_caller_policy_override(option, monkeypatch):
+    monkeypatch.setattr(http, "client", lambda **kwargs: pytest.fail("an override reached client creation"))
+    with pytest.raises(TypeError):
+        http.get_public_page("https://forum.example/viewtopic.php?t=7", **{option: False})
+
+
+def test_public_preview_owns_its_client_policy(monkeypatch):
+    calls = []
+
+    def client(**kwargs):
+        calls.append(kwargs)
+        return httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, content=b"page")))
+
+    monkeypatch.setattr(http, "client", client)
+    assert http.get_public_page("https://forum.example/viewtopic.php?t=7").content == b"page"
+    assert calls == [{"ua": None, "public_only": True, "follow_redirects": False}]
