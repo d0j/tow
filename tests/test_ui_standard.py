@@ -55,6 +55,12 @@ def test_templates_do_not_style_buttons_inline():
             assert "style=" not in tag, (path.name, tag)
 
 
+def test_site_access_fields_use_full_width_and_do_not_inherit_sibling_offsets():
+    rules = dict(_rules(CSS))
+    assert rules[".settings-form.compact-form.protection-form"].strip() == "max-width: none;"
+    assert rules[".settings-form.protection-form .field-grid > .field"].strip() == "margin-top: 0;"
+
+
 def test_help_anchor_desktop_clearance_does_not_add_settings_card_layout():
     body = dict(_rules(CSS)).get(".help-page h2[id]", "")
     assert "scroll-margin-top: 3.3rem" in body

@@ -5,6 +5,15 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.30.9] — 2026-10-14
+
+### Improved
+
+- Site access explains when recovery is needed, installed on-demand modules versus external services,
+  addresses, switches, fallback, shared limits and the meaning of saved API status. Essential setup instructions
+  are expanded inside the settings section; field hints are associated with their controls. The in-app guide
+  covers troubleshooting and reset boundaries. Ordinary button sizes and closed top-level accordions are retained.
+
 ## [1.30.8] — 2026-10-14
 
 ### Fixed

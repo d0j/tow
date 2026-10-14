@@ -100,55 +100,67 @@
     <span class="pill mut">Off</span>
   </summary>
   <div class="settings-panel">
-    <p class="action-hint">Ordinary mirrors are tried first. Only an identified Cloudflare challenge may use these optional services. Turning this off leaves ordinary checks and browser sign-in available.</p>
+    <p class="action-hint">Use this section when a site shows a Cloudflare browser challenge instead of a topic. If topics check without errors, you do not need to connect anything.</p>
 
-    <details class="technical-details">
-      <summary>How to connect</summary>
-      <ol><li>Run your chosen external service separately. TOW does not install it or bundle a browser.</li><li>Enter its loopback or private-network IP address. Do not expose the service to the internet.</li><li>Enable the connections you need, set their order, then enable recovery and save. Saving does not contact the services.</li></ol>
-      <p class="action-hint">Use only services you trust and sandbox their browser&#39;s network access. They receive an audited public page, not your password, sign-in cookies or topic link. TOW keeps only verified clearance, encrypted and time-limited. Interactive challenges may still require your action; download limits remain enforced.</p>
+
+    <details class="technical-details" id="protection-guide" open>
+      <summary>How it works and how to connect</summary>
+      <p>TOW tries ordinary mirrors first. If a Cloudflare challenge blocks access, an enabled service opens an anonymous public page in its browser. TOW receives clearance and checks the actual topic itself; a service response alone is not success.</p>
+      <ol><li>An On demand card means the module is already installed: no manual start is needed. For another connection, install and run your chosen service separately. TOW does not install services for you.</li><li>Choose the running service&#39;s type and enter its address, not a site or topic address. For example, http://127.0.0.1:8191 is a service on the TOW computer. Another computer needs its private-network IP; never expose the API to the internet.</li><li>Select Use this connection and the overall Use optional challenge recovery switch, then Save. On Sites, the site must allow these services; Off for this site takes precedence.</li><li>Open the failed topic on Home and select Check access now, or wait for its scheduled retry. TOW contacts a service only if ordinary mirrors encounter Cloudflare again. Saving settings does not test it.</li></ol>
+      <p class="action-hint"><a href="/settings/help#site-access">Read more in the guide</a></p>
     </details>
-
-    <form method="post" action="/settings/protection" class="settings-form compact-form" data-return-target="acc-protection">
+    <form method="post" action="/settings/protection" class="settings-form compact-form protection-form" data-return-target="acc-protection">
       <fieldset>
         <legend class="sr-only">Site access</legend>
-        <label class="check-field"><input type="checkbox" name="enabled" value="1"><span>Use optional challenge recovery</span></label>
+        <label class="check-field"><input type="checkbox" name="enabled" value="1" aria-describedby="protection-enabled-hint"><span>Use optional challenge recovery</span></label>
+        <p class="field-hint" id="protection-enabled-hint">Overall switch for additional services. Ordinary mirrors and browser sign-in also work without them. The change applies when saved.</p>
         <div class="integration-list">
 
           <details class="integration-card protection-card">
             <summary>Add a connection</summary>
             <input type="hidden" name="provider_id" value="new-connection-1">
 
-            <div class="field"><label for="protection-kind-new-connection-1">Service type</label><select id="protection-kind-new-connection-1" name="provider_kind"><option value="">Choose a service</option><option value="byparr">Byparr</option><option value="flare_bypasser">FlareBypasser (zendriver)</option><option value="flaresolverr">FlareSolverr</option><option value="trawl">Trawl</option></select></div>
+            <div class="field"><label for="protection-kind-new-connection-1">Service type</label><select id="protection-kind-new-connection-1" name="provider_kind" aria-describedby="protection-kind-hint-new-connection-1"><option value="">Choose a service</option><option value="byparr">Byparr</option><option value="flare_bypasser">FlareBypasser (zendriver)</option><option value="flaresolverr">FlareSolverr</option><option value="trawl">Trawl</option></select><p class="field-hint" id="protection-kind-hint-new-connection-1">Choose the program serving this address. Selecting a type does not install it.</p></div>
+
 
 
 
             <label class="check-field"><input type="checkbox" name="provider_enabled" value="new-connection-1"><span>Use this connection</span></label>
             <div class="field-grid">
-              <div class="field"><label for="protection-url-new-connection-1">Service address</label><input id="protection-url-new-connection-1" name="provider_url" value="" placeholder="http://127.0.0.1:8191" maxlength="256" autocomplete="off"></div>
-              <div class="field"><label for="protection-order-new-connection-1">Order</label><input id="protection-order-new-connection-1" name="provider_order" value="1" type="number" min="1" max="16" inputmode="numeric"></div>
+              <div class="field"><label for="protection-url-new-connection-1">Service address</label><input id="protection-url-new-connection-1" name="provider_url" value="" placeholder="http://127.0.0.1:8191" maxlength="256" autocomplete="off" aria-describedby="protection-url-hint-new-connection-1"><p class="field-hint" id="protection-url-hint-new-connection-1">The service address TOW uses, not a site mirror. 127.0.0.1 means the TOW computer; /v1 may be omitted.</p></div>
+              <div class="field"><label for="protection-order-new-connection-1">Order</label><input id="protection-order-new-connection-1" name="provider_order" value="1" type="number" min="1" max="16" inputmode="numeric" aria-describedby="protection-order-hint-new-connection-1"><p class="field-hint" id="protection-order-hint-new-connection-1">1 is first, 2 is next. Each number must be unique.</p></div>
             </div>
 
           </details>
 
         </div>
-        <p class="action-hint">Lower numbers are tried first. If the attempt limit is reached without verified access, the next check continues with later connections. Unavailable connections are skipped. Blank disabled connections are not saved.</p>
-        <details class="technical-details">
+
+        <p class="action-hint">If the first method fails, TOW considers the next within the shared call and time limit. Once that limit is reached, the next eligible check continues with later connections. Disabled connections and services in cooldown are not called.</p>
+        <p class="section-note">Connection status is the last observed response, not a test now. API answered does not prove topic access. Opening settings never starts a module; the topic on Home shows the last check result.</p>
+        <details class="technical-details protection-limits">
           <summary>Attempt limits</summary>
           <div class="field-grid">
-            <div class="field"><label for="protection-timeout">Total recovery time, seconds</label><input id="protection-timeout" name="timeout_sec" value="30" type="number" min="5" max="90" inputmode="numeric"></div>
-            <div class="field"><label for="protection-interval">Minimum retry interval, seconds</label><input id="protection-interval" name="min_interval_sec" value="1800" type="number" min="60" max="86400" inputmode="numeric"></div>
-            <div class="field"><label for="protection-attempts">Maximum service calls per recovery</label><input id="protection-attempts" name="max_attempts" value="2" type="number" min="1" max="4" inputmode="numeric"></div>
+            <div class="field"><label for="protection-timeout">Total recovery time, seconds</label><input id="protection-timeout" name="timeout_sec" value="30" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">One deadline for all service calls and independent access verification: 5–90 seconds. Not a timeout for each topic.</p></div>
+            <div class="field"><label for="protection-interval">Minimum retry interval, seconds</label><input id="protection-interval" name="min_interval_sec" value="1800" type="number" min="60" max="86400" inputmode="numeric" aria-describedby="protection-interval-hint"><p class="field-hint" id="protection-interval-hint">Minimum pause before another recovery attempt for one site origin: 60–86400 seconds. 1800 s = 30 minutes. Not the global or personal topic timer; the error shows a scheduled retry when known.</p></div>
+            <div class="field"><label for="protection-attempts">Maximum service calls per recovery</label><input id="protection-attempts" name="max_attempts" value="2" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">1 to 4 service calls in one recovery chain, shared across mirrors. A missing-clearance retry also consumes this limit. Not the number of topics checked.</p></div>
           </div>
         </details>
+        <p class="section-note">Save applies switches, addresses, order and limits. It does not start a service or download a .torrent.</p>
         <div class="settings-actions"><button type="submit">Save</button></div>
       </fieldset>
     </form>
+    <details class="technical-details">
+      <summary>If access is still blocked</summary>
+      <p>Expand the topic&#39;s warning for each mirror&#39;s reason and retry time. The log identifies the failed stage: module startup, service response or topic access. A connection failure needs its type and address checked; a sign-in error needs the account checked on Sites.</p>
+      <p>Services do not remove bans, download quotas or request rate limits. Wait out a 429 pause. An interactive check may require supported browser sign-in; access through every future challenge is not guaranteed.</p>
+      <p>Use only services you trust and sandbox their browser&#39;s network access. They receive an audited public page, not your password, sign-in cookies or topic link. TOW keeps only verified clearance, encrypted and time-limited. Interactive challenges may still require your action; download limits remain enforced.</p>
+    </details>
 
     <details class="technical-details">
-      <summary>Recovery</summary>
-      <p class="action-hint">If saved clearance becomes unreadable or unusable, reset its cookies, retry reservations and service cooldowns. Service settings stay unchanged. The old encrypted record is retained in TOW&#39;s temporary folder until its normal cleanup; a running check blocks reset.</p>
+      <summary>Reset saved access</summary>
+      <p class="action-hint" id="protection-reset-hint">Use only for damaged saved data or a stale clearance problem. Removes Cloudflare clearance, retry reservations and service cooldowns; site passwords, connections and torrents remain. Reset does not install a module or cancel site limits. The old encrypted record stays in the temporary folder until cleanup; a running check blocks reset.</p>
       <form method="post" action="/settings/protection/reset" data-return-target="acc-protection" data-confirm="Reset saved site clearance, retry reservations and service cooldowns? Service settings and site sign-ins remain unchanged.">
-        <button type="submit" class="ghost">Reset saved access</button>
+        <button type="submit" class="ghost" aria-describedby="protection-reset-hint">Reset saved access</button>
       </form>
     </details>
 

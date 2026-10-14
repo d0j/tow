@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 import pytest
+from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
 from helpers import flash_kind, open_network
 
@@ -267,6 +268,7 @@ def test_full_connection_limit_has_no_unsaveable_extra_card():
     section = card(client().get("/settings").text)
     assert section.count('class="integration-card protection-card"') == 16
     assert "Добавить подключение" not in section
+    assert "максимальное число подключений: 16" in section
 
 
 def test_render_does_not_change_provider_configuration():
@@ -275,6 +277,77 @@ def test_render_does_not_change_provider_configuration():
     response = client().get("/settings?open=protection")
     assert response.status_code == 200
     assert {p.name: p.read_bytes() if p.exists() else None for p in (config_path(), state_path())} == before
+
+
+@pytest.mark.parametrize("language", ["ru", "en"])
+def test_site_access_help_is_open_and_control_hints_are_bound(monkeypatch, language):
+    monkeypatch.setattr("tow.protection.chain.candidates", lambda *a, **kw: pytest.fail("network requested"))
+    cfg = load_config()
+    cfg["language"] = language
+    save_config(cfg)
+    client().post("/settings/protection", data=form())
+    before = {p.name: p.read_bytes() if p.exists() else None for p in (config_path(), state_path())}
+    page = BeautifulSoup(client().get("/settings?open=protection").text, "html.parser")
+    section = page.find(id="acc-protection")
+    guide = section.find(id="protection-guide")
+    assert guide.has_attr("open")
+    assert len(guide.find_all("li")) == 4
+    assert guide.find("a")["href"] == "/settings/help#site-access"
+    assert not section.find(class_="protection-limits").has_attr("open")
+    fields = section.find_all(attrs={"aria-describedby": True})
+    assert len(fields) == 12  # switch, existing/new cards, three limits and reset action
+    for control in fields:
+        for ident in control["aria-describedby"].split():
+            hints = page.find_all(id=ident)
+            assert len(hints) == 1
+            assert hints[0].get_text(strip=True)
+    assert {p.name: p.read_bytes() if p.exists() else None for p in (config_path(), state_path())} == before
+
+
+def test_installed_module_explanation_is_visible_without_starting_it(monkeypatch):
+    client().post("/settings/protection", data=form())
+    monkeypatch.setattr(services, "_local_service_managed", lambda provider: True)
+    monkeypatch.setattr("tow.protection.local_service.ensure", lambda *a, **kw: pytest.fail("module started"))
+    page = BeautifulSoup(client().get("/settings?open=protection").text, "html.parser")
+    cards = page.select(".protection-card")
+    assert len(cards) == 3
+    for existing in cards[:2]:
+        assert existing.has_attr("open")
+        assert "Модуль уже установлен" in existing.get_text()
+        assert "отдельный автозапуск не нужен" in existing.get_text()
+    assert "Модуль уже установлен" not in cards[-1].get_text()
+
+
+@pytest.mark.parametrize("language", ["ru", "en"])
+def test_in_app_guide_has_site_access_anchor_and_back_link(language):
+    cfg = load_config()
+    cfg["language"] = language
+    save_config(cfg)
+    page = BeautifulSoup(client().get("/settings/help").text, "html.parser")
+    assert page.find(id="site-access").name == "h2"
+    assert page.find("a", href="/settings?open=protection#acc-protection") is not None
+
+
+def test_network_view_explains_read_only_before_setup_and_keeps_controls_disabled(monkeypatch):
+    from tow.auth import SESSION_COOKIE, issue_session, lan_password_record, lan_password_session_key
+    from tow.store import save_secrets
+
+    open_network(monkeypatch)
+    record = lan_password_record("synthetic-password-long-enough")
+    save_secrets({"lan_auth": record})
+    remote = TestClient(
+        app,
+        base_url="http://192.168.1.2",
+        client=("192.168.1.3", 50000),
+        cookies={SESSION_COOKIE: issue_session(lan_password_session_key(record))},
+    )
+    response = remote.get("/settings?open=protection")
+    assert response.status_code == 200
+    section = BeautifulSoup(response.text, "html.parser").find(id="acc-protection")
+    words = section.get_text()
+    assert words.index("только для просмотра") < words.index("Как работает и как подключить")
+    assert section.find("fieldset").has_attr("disabled")
+    assert section.find(id="protection-reset-hint") is None
 
 
 def test_cards_escape_unknown_plugin_titles(monkeypatch):

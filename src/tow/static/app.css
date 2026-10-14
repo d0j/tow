@@ -583,6 +583,12 @@ details.help[open] > summary { color: var(--acc); border-color: var(--acc2); }
 /* One label style everywhere (the global one); a checkbox label reads as text. */
 .field label, .settings-form label { margin: 0; }
 .field-grid { display: grid; grid-template-columns: minmax(0, .7fr) minmax(0, 1.3fr); gap: .75rem; align-items: end; }
+.protection-card .field-grid, .protection-limits .field-grid { align-items: start; }
+.settings-form.compact-form.protection-form { max-width: none; }
+.settings-form.protection-form .field-grid > .field { margin-top: 0; }
+@media (min-width: 721px) {
+  .protection-card .field-grid { grid-template-columns: minmax(0, 1fr) 8rem; }
+}
 .field-hint, .action-hint, .section-note {
   margin: 0; color: var(--mut); font-size: 12px; line-height: 1.45;
 }
