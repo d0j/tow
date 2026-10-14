@@ -11,8 +11,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - Automatic site previews always use a fresh public-only, IP-pinned connection, even when private trackers are
   enabled. Preview redirects, environment proxies and URL credentials cannot escape that boundary. Title reads
-  with explicit private-tracker access derive their authority only from an already configured site. A narrow
-  CodeQL model describes the public-preview boundary without excluding generic HTTP requests from analysis.
+  with explicit private-tracker access derive their authority only from an already configured site. Regression
+  tests preserve the guarded socket policy without excluding generic HTTP requests from security analysis.
 - Client warning discovery resolves the current client factory when collecting status, rather than retaining
   a temporary resolver captured during module loading. A regression prevents order-dependent QA results.
 
