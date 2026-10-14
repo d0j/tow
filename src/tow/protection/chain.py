@@ -188,8 +188,10 @@ def _run_candidates(
 ) -> Iterator[Clearance]:
     attempt = pending.proof
     last_called = None
+    queue = list(enabled)
+    retried: set[str] = set()
     try:
-        for index, provider in enumerate(enabled):
+        for index, provider in enumerate(queue):
             started = time.monotonic()
             try:
                 solve = available.get(provider["kind"])
@@ -198,7 +200,7 @@ def _run_candidates(
                 available_time = deadline - time.monotonic() - verification_margin
                 if available_time < 1:
                     return
-                slots = min(call_budget.remaining, len(enabled) - index, math.floor(available_time))
+                slots = min(call_budget.remaining, len(queue) - index, math.floor(available_time))
                 if slots <= 0:
                     return
                 timeout = available_time / slots
@@ -248,6 +250,19 @@ def _run_candidates(
                     phase=phase,
                     elapsed_ms=max(0, int((time.monotonic() - started) * 1000)),
                 )
+                # Some browser responses finish before issuing a clearance. Give other
+                # connections priority, then permit one more anonymous call within the
+                # original reservation, shared call limit and verification deadline.
+                if (
+                    isinstance(error, AccessFailure)
+                    and error.reason == "missing_cookie"
+                    and error.phase == "validation"
+                    and provider["id"] not in retried
+                    and call_budget.remaining > 0
+                    and deadline - time.monotonic() - verification_margin >= 1
+                ):
+                    retried.add(provider["id"])
+                    queue.append(provider)
                 _LOG.debug("clearance provider refused or unavailable")
     finally:
         _finish_reservation(pending, last_called)

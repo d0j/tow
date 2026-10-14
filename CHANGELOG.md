@@ -5,6 +5,15 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.30.8] — 2026-10-14
+
+### Fixed
+
+- An anonymous browser-service answer with no clearance permits one last-chance call after other enabled
+  connections, within the original time, call and cooldown budgets. Ambiguous credentials, malformed responses,
+  refused origins, authentication and rate limits do not authorize this retry. Access still requires independent
+  verification and the real resource, not the service's success status.
+
 ## [1.30.7] — 2026-10-14
 
 ### Fixed

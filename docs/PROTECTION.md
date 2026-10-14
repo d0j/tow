@@ -91,6 +91,10 @@ Defaults: 30 seconds for the recovery chain, at most 2 service calls, 1,800 seco
 The call limit is shared across all mirrors, counting only service calls actually started. Mirrors with the oldest
 recovery attempt run first, so later mirrors remain reachable even when checks are farther apart than the retry
 interval. Missing/paused services and origins for which no call fits do not start a new cooldown.
+An otherwise successful anonymous service response without a clearance cookie allows one last-chance call to
+that connection, after the other enabled connections. It uses the same reservation and remaining call/time budget,
+including the verification margin; repeated missing cookies never loop. Ambiguous cookies, invalid responses,
+scope/origin mismatches, API pauses and refused resource replays do not authorize this retry.
 The lease is written before calling the service, so a crash does not cause an attempt on every tick. A configuration
 change invalidates the old clearance but does not erase cooldowns. Disabling the layer immediately prevents its use
 in subsequent requests; an already issued request cannot be recalled.

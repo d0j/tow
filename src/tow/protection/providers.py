@@ -108,8 +108,10 @@ def _solution(raw: object, origin: str, ident: str) -> Clearance:
     if not isinstance(cookies, list) or len(cookies) > 128:
         raise ValueError("invalid clearance cookies")
     selected = [cookie for cookie in cookies if isinstance(cookie, dict) and cookie.get("name") == "cf_clearance"]
+    if not selected:
+        raise AccessFailure("missing_cookie", "validation", "missing clearance cookie")
     if len(selected) != 1:
-        raise AccessFailure("missing_cookie", "validation", "missing or ambiguous clearance cookie")
+        raise AccessFailure("invalid_response", "validation", "ambiguous clearance cookie")
     cookie = selected[0]
     host = urlsplit(origin).hostname
     if host is None or not _cookie_scope(cookie.get("domain"), host) or cookie.get("path") != "/":
