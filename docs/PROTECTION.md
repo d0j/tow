@@ -5,6 +5,16 @@ is disabled when `protection` is omitted. It does not install a browser, change 
 
 ## Connecting an optional service
 
+Use this only when ordinary mirrors are blocked by a Cloudflare browser challenge. A working site does not
+need an additional connection. The expanded instructions in Settings explain setup; hints beside each field
+distinguish the service address, order and recovery budgets from topic-check timers. The in-app Guide has the
+same explanation and troubleshooting. Top-level settings sections remain closed until opened.
+
+If an existing card says **On demand**, its trusted module is already installed. Enable that connection and
+the overall switch, then Save; no manual startup or OS autostart is needed. The steps below apply when adding
+a separately operated service. Selecting its type in TOW does not install it. An address such as
+`http://127.0.0.1:8191` names the service on the TOW computer, not a tracker mirror or a topic.
+
 1. Run a trusted [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr),
    [Byparr](https://github.com/ThePhaseless/Byparr), [FlareBypasser](https://github.com/yoori/flare-bypasser) or
    [Trawl](https://github.com/germondai/trawl) service separately. Keep its API private and isolate browser egress
@@ -14,6 +24,12 @@ is disabled when `protection` is omitted. It does not install a browser, change 
 3. Enable that connection and the overall access layer, then Save. Saving does not contact or validate the service;
    the API remains unchecked until a real applying check has a reason to use it. An API answer is not proof of site
    access; its observed status and any service cooldown are shown separately.
+
+After saving, open a failed topic on Home and use **Check access now**, or wait for its scheduled retry.
+Only another ordinary Cloudflare refusal can start recovery; a working mirror does not call a service just
+to test its settings. The API status is its last observed call, not a live probe. Reset saved access removes
+clearance and recovery/service cooldown records, not site passwords, connection settings or client torrents;
+it neither installs a module nor cancels a server's rate limit.
 
 Multiple connections of one kind are supported. Lower order numbers run first. A missing module, disabled
 connection, refused response or failed attempt does not prevent another enabled connection from being considered
