@@ -7,11 +7,11 @@ from typing import Any
 
 from tow import i18n
 from tow.clients.factory import default_client_id
-from tow.errors import as_value
-from tow.issues.model import Issue, Message, Snapshot, Target
+from tow.errors import as_value, summary_record
+from tow.issues.model import Fix, Issue, Message, Snapshot, Target
 from tow.log import error_class
 from tow.records import shown_title
-from tow.status import error_tone
+from tow.status import TRACKER_WARNING_CLASSES, error_tone
 
 KIND = "topic_error"
 ORDER = 70
@@ -27,7 +27,9 @@ def _error(topic: Mapping[str, Any], config: Mapping[str, Any]) -> Any:
     if isinstance(spec, Mapping):
         params["tracker"] = spec.get("title") or name
     known = isinstance(code, str) and i18n.has(code)
-    return as_value({"code": code, "params": params} if known else None, str(topic.get("last_error") or ""))
+    return as_value(
+        summary_record({"code": code, "params": params}) if known else None, str(topic.get("last_error") or "")
+    )
 
 
 def collect(snapshot: Snapshot) -> list[Issue]:
@@ -45,6 +47,33 @@ def collect(snapshot: Snapshot) -> list[Issue]:
             and snapshot.health.get("qbit_ok") is False
             and str(topic.get("client_id") or default) == default
         ):
+            continue
+        site = (topic.get("last_error_params") or {}).get("tracker")
+        sites = snapshot.config.get("trackers") or {}
+        normalized = summary_record({"code": topic.get("last_error_code"), "params": topic.get("last_error_params")})
+        if (
+            cls in TRACKER_WARNING_CLASSES
+            and isinstance(site, str)
+            and site in sites
+            and normalized
+            and normalized.get("code") == "mirrors.access_retry"
+        ):
+            title = sites[site].get("title") or site
+            target = Target("home", open=identity, anchor=f"row-{identity}")
+            found.append(
+                Issue(
+                    kind=KIND,
+                    id=f"{KIND}:site:{site}",
+                    severity="warn",
+                    message=Message("issues.site_access", {"site": title, "count": 1}),
+                    subjects=(identity,),
+                    target=target,
+                    target_many=Target(
+                        "home", open=identity, anchor=f"row-{identity}", filter=(("f", "problem"), ("t", site))
+                    ),
+                    fix=Fix("check_topic", identity, label="site_access.retry_check"),
+                )
+            )
             continue
         found.append(
             Issue(

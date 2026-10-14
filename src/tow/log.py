@@ -269,6 +269,7 @@ def error_class(error: Any, code: str | None = None) -> str:
         record = errors.record_of(error)
         return str(record["cls"]) if record else _legacy_class(str(error))
     if isinstance(error, Mapping):
+        error = errors.value_record(error) or {}
         cls = error.get("cls")
         if isinstance(cls, str) and cls in _CLASSES:
             return cls
@@ -786,6 +787,53 @@ def _shown_kind(rec: Mapping[str, Any], kind: str) -> str:
     return kind
 
 
+_ACCESS_PHASE_KEYS = {
+    "startup": "site_access.phase.startup",
+    "service": "site_access.phase.service",
+    "validation": "site_access.phase.validation",
+    "probe": "site_access.phase.probe",
+    "resource": "site_access.phase.resource",
+}
+_ACCESS_REASON_KEYS = {
+    "invalid_module": "site_access.reason.invalid_module",
+    "timeout": "site_access.reason.timeout",
+    "unavailable": "site_access.reason.unavailable",
+    "busy": "site_access.reason.busy",
+    "warming": "site_access.reason.warming",
+    "protocol": "site_access.reason.protocol",
+    "refused": "site_access.reason.refused",
+    "origin": "site_access.reason.origin",
+    "status": "site_access.reason.status",
+    "missing_cookie": "site_access.reason.missing_cookie",
+    "scope": "site_access.reason.scope",
+    "invalid_response": "site_access.reason.invalid_response",
+    "limit": "site_access.reason.limit",
+    "provider_mismatch": "site_access.reason.provider_mismatch",
+    "failed": "site_access.reason.failed",
+    "cloudflare": "site_access.reason.cloudflare",
+    "interactive": "site_access.reason.interactive",
+    "rate_limited": "site_access.reason.rate_limited",
+    "quota": "site_access.reason.quota",
+    "blocked": "site_access.reason.blocked",
+    "auth": "site_access.reason.auth",
+    "origin_down": "site_access.reason.origin_down",
+    "transport": "site_access.reason.transport",
+}
+
+
+def _access_diagnostics(rec: Mapping[str, Any], lang: str) -> list[str]:
+    if not str(rec.get("kind") or "").startswith("protection_"):
+        return []
+    bits = []
+    for field, keys in (("phase", _ACCESS_PHASE_KEYS), ("reason", _ACCESS_REASON_KEYS)):
+        if key := keys.get(str(rec.get(field))):
+            bits.append(t(key, lang))
+    elapsed = rec.get("elapsed_ms")
+    if type(elapsed) is int and 0 <= elapsed <= 120000:
+        bits.append(t("site_access.elapsed", lang, seconds=round(elapsed / 1000, 1)))
+    return bits
+
+
 def format_event(
     rec: Mapping[str, Any],
     *,
@@ -857,6 +905,7 @@ def format_event(
         bits.extend(scrub_text(str(alert)).strip()[:400] for alert in alerts if str(alert).strip())
     if rec.get("tracker"):
         bits.append(str(rec["tracker"]))
+    bits.extend(_access_diagnostics(rec, lang))
     h = str(rec.get("hash") or "")
     if len(h) == 40 and re.fullmatch(r"[0-9a-fA-F]{40}", h):
         bits.append(h[:8])

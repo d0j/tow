@@ -362,7 +362,7 @@ def test_unsupported_deadline_transport_never_spends_provider_attempt(monkeypatc
 
 def test_root_only_clearance_does_not_clear_topic_failure_count(monkeypatch):
     events = []
-    monkeypatch.setattr(chain, "record_event", lambda *a: events.append(a))
+    monkeypatch.setattr(chain, "record_event", lambda *a, **kw: events.append(a))
 
     def handler(request):
         if request.url.path == "/" and "cf_clearance=" in request.headers.get("cookie", ""):

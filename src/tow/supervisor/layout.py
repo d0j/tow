@@ -377,6 +377,28 @@ def topic_timer_status(state: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return result
 
 
+def site_retry_status(state: dict[str, Any], cfg: dict[str, Any]) -> dict[str, str]:
+    from tow.site_retries import policies
+
+    active = policies(state, cfg)
+    if not active:
+        return {}
+    report = status()
+    if report.get("stopping"):
+        return {}
+    planned = report.get("site_retries")
+    planned = planned if isinstance(planned, dict) else {}
+    result = {}
+    for tid, item in active.items():
+        entry = planned.get(tid)
+        if isinstance(entry, dict) and entry.get("revision") == item["revision"]:
+            with suppress(ValueError, OverflowError, OSError, TypeError):
+                at = datetime.fromisoformat(str(entry.get("at")))
+                if _epoch(at.timestamp()):
+                    result[tid] = at.isoformat()
+    return result
+
+
 def next_check_at(interval_sec: int, health: dict[str, Any] | None = None) -> float | None:
     """When the next scheduled check starts (epoch seconds), or None when nothing says so.
 

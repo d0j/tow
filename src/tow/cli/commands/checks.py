@@ -138,6 +138,7 @@ def _add_check(sub: Subcommands) -> None:
     scope = c.add_mutually_exclusive_group()
     scope.add_argument("--global-only", action="store_true", help=argparse.SUPPRESS)
     scope.add_argument("--timer-only", action="store_true", help=argparse.SUPPRESS)
+    scope.add_argument("--site-retry-only", action="store_true", help=argparse.SUPPRESS)
 
 
 def _check(args: argparse.Namespace) -> int:
@@ -147,14 +148,30 @@ def _check(args: argparse.Namespace) -> int:
     check_state_version()  # a newer TOW's state.json: refused before anything is recorded
     apply = bool(args.apply) and not args.dry_run
     background = args.progress_only or args.space_only
-    how = "manual" if args.manual else "progress" if background else "timer" if args.timer_only else "auto"
+    how = (
+        "manual"
+        if args.manual
+        else "progress"
+        if background
+        else "retry"
+        if args.site_retry_only
+        else "timer"
+        if args.timer_only
+        else "auto"
+    )
     try:
         out = run_check(
             apply=apply,
             notify=args.notify,
             how=how,
             progress_only=args.progress_only,
-            scheduled_scope="global" if args.global_only else "timer" if args.timer_only else "",
+            scheduled_scope="global"
+            if args.global_only
+            else "timer"
+            if args.timer_only
+            else "site_retry"
+            if args.site_retry_only
+            else "",
             space_only=args.space_only,
         )
     except SecretStoreError as exc:

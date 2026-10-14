@@ -159,6 +159,8 @@ class Supervisor:
         self._persisted = layout.read_json(self._schedule_file)
         attempts = self._persisted.get("timer_attempts")
         self.schedule.timer_attempts = attempts if isinstance(attempts, dict) else {}
+        retries = self._persisted.get("site_retry_attempts")
+        self.schedule.site_retry_attempts = retries if isinstance(retries, dict) else {}
         self._control_dir = layout.control_dir()  # polled every second: resolved once
         self._status_file = layout.status_path()
 
@@ -187,6 +189,7 @@ class Supervisor:
             try:
                 self._facts = self.deps.facts()
                 self.schedule.topic_timers = dict(self._facts.get("topic_timers") or {})
+                self.schedule.site_retries = dict(self._facts.get("site_retries") or {})
                 self.schedule.space_waiting = bool(self._facts.get("space_waiting"))
             except Exception as exc:  # noqa: BLE001 - the supervisor loop never dies on a state read (logged)
                 LOG.warning("state not read: %s", type(exc).__name__)
@@ -520,6 +523,8 @@ class Supervisor:
     def _start_job(self, name: str, wall: float, mono: float, late: float = 0.0) -> None:
         if name == "timer" and not self._reserve_timers(wall):
             return
+        if name == "site_retry" and not self._reserve_site_retries(wall):
+            return
         if name == "backup":
             # A switch made after the periodic config refresh must still prevent launch.
             try:
@@ -576,6 +581,43 @@ class Supervisor:
             return False
         self._persisted = persisted
         self.schedule.timer_attempts = attempts
+        return True
+
+    def _reserve_site_retries(self, wall: float) -> bool:
+        from tow.topic_timers import retry_reservation as reservation
+
+        try:
+            self._facts = self.deps.facts()
+            self.schedule.site_retries = dict(self._facts.get("site_retries") or {})
+            batch = {}
+            for tid, at in self.schedule.site_retry_due(wall).items():
+                if at > wall:
+                    continue
+                item = self.schedule.site_retries[tid]
+                previous = reservation(item, self.schedule.site_retry_attempts.get(tid))
+                batch[tid] = {
+                    "revision": item["revision"],
+                    "observed_at": item["observed_at"],
+                    "started_at": wall,
+                    "count": previous.get("count", 0) + 1,
+                }
+            if not batch:
+                return False
+            attempts = {
+                tid: saved
+                for tid, saved in self.schedule.site_retry_attempts.items()
+                if tid in self.schedule.site_retries
+            }
+            attempts.update(batch)
+            persisted = {**self._persisted, "site_retry_attempts": attempts, "site_retry_batch": batch}
+            layout.write_json(self._schedule_file, persisted)
+        except Exception as exc:  # noqa: BLE001 - no automatic requests without a durable reservation
+            LOG.warning("site retries not reserved: %s", type(exc).__name__)
+            self.schedule.site_retries = {}
+            self._facts_at = self.deps.monotonic()
+            return False
+        self._persisted = persisted
+        self.schedule.site_retry_attempts = attempts
         return True
 
     def _finish_job(self, wall: float, mono: float, *, stopped: bool) -> bool:
@@ -666,6 +708,10 @@ class Supervisor:
                 for tid, at in self.schedule.timer_due(wall).items()
             },
             "woke_at": _now_iso(self.wake.woke_at) if self.wake.woke_at else None,
+            "site_retries": {
+                tid: {"at": _now_iso(at), "revision": self.schedule.site_retries[tid]["revision"]}
+                for tid, at in self.schedule.site_retry_due(wall).items()
+            },
         }
 
     def _write_status(self, wall: float, mono: float) -> None:

@@ -10,15 +10,39 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 
+class AccessFailure(ValueError):
+    """Safe, closed diagnostic values; never carry a service body or request URL."""
+
+    def __init__(self, reason: str, phase: str, message: str) -> None:
+        if reason not in {
+            "timeout",
+            "refused",
+            "origin",
+            "status",
+            "missing_cookie",
+            "scope",
+            "invalid_response",
+            "limit",
+        }:
+            raise ValueError("invalid access failure reason")
+        if phase not in {"startup", "service", "validation", "probe", "resource"}:
+            raise ValueError("invalid access failure phase")
+        super().__init__(message)
+        self.reason, self.phase = reason, phase
+
+
 class ProviderUnavailableError(ValueError):
     """An API-level outage, not a site's challenge or a refused clearance replay."""
 
-    def __init__(self, reason: str, *, retry_after: float = 0) -> None:
+    def __init__(self, reason: str, *, retry_after: float = 0, phase: str = "service") -> None:
         if reason not in {"unavailable", "busy", "protocol"}:
             raise ValueError("invalid clearance failure reason")
         super().__init__("clearance API " + reason)
         self.reason = reason
         self.retry_after = retry_after
+        if phase not in {"startup", "service"}:
+            raise ValueError("invalid clearance failure phase")
+        self.phase = phase
 
 
 @dataclass(frozen=True, repr=False)

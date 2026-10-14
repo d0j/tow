@@ -489,7 +489,7 @@ def test_slow_attempt_logging_never_extends_solver_deadline(dns, monkeypatch, de
     events = []
     monkeypatch.setattr(chain.time, "monotonic", lambda: clock[0])
 
-    def event(kind, *args):
+    def event(kind, *args, **kwargs):
         events.append(kind)
         if kind == "protection_attempt":
             clock[0] += delay
@@ -517,7 +517,7 @@ def test_late_and_wrong_provider_results_finish_the_attempt_event(dns, monkeypat
     clock = [100.0]
     events = []
     monkeypatch.setattr(chain.time, "monotonic", lambda: clock[0])
-    monkeypatch.setattr(chain, "record_event", lambda kind, *a: events.append(kind))
+    monkeypatch.setattr(chain, "record_event", lambda kind, *a, **kw: events.append(kind))
 
     def solve(*args):
         if failure == "late":

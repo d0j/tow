@@ -18,6 +18,7 @@ import httpx
 from tow.http import retry_after_seconds
 from tow.plugins import scan
 from tow.protection.spec import (
+    AccessFailure,
     Clearance,
     ProviderSpec,
     ProviderUnavailableError,
@@ -91,7 +92,7 @@ def validate_clearance(value: Clearance, origin: str, *, now: float) -> Clearanc
 
 def _solution(raw: object, origin: str, ident: str) -> Clearance:
     if not isinstance(raw, dict) or raw.get("status") != "ok" or not isinstance(raw.get("solution"), dict):
-        raise ValueError("clearance service refused")
+        raise AccessFailure("refused", "service", "clearance service refused")
     solution = raw["solution"]
     url = solution.get("url")
     if not isinstance(url, str):
@@ -100,19 +101,19 @@ def _solution(raw: object, origin: str, ident: str) -> Clearance:
     if parsed.username or parsed.password or parsed.fragment or "\\" in url:
         raise ValueError("invalid clearance response origin")
     if target_origin(f"{parsed.scheme}://{parsed.netloc}") != origin:
-        raise ValueError("clearance response changed origin")
+        raise AccessFailure("origin", "validation", "clearance response changed origin")
     if solution.get("status") != 200:
-        raise ValueError("clearance response not successful")
+        raise AccessFailure("status", "validation", "clearance response not successful")
     cookies = solution.get("cookies")
     if not isinstance(cookies, list) or len(cookies) > 128:
         raise ValueError("invalid clearance cookies")
     selected = [cookie for cookie in cookies if isinstance(cookie, dict) and cookie.get("name") == "cf_clearance"]
     if len(selected) != 1:
-        raise ValueError("missing or ambiguous clearance cookie")
+        raise AccessFailure("missing_cookie", "validation", "missing or ambiguous clearance cookie")
     cookie = selected[0]
     host = urlsplit(origin).hostname
     if host is None or not _cookie_scope(cookie.get("domain"), host) or cookie.get("path") != "/":
-        raise ValueError("clearance cookie scope mismatch")
+        raise AccessFailure("scope", "validation", "clearance cookie scope mismatch")
     if cookie.get("secure") is True and not origin.startswith("https://"):
         raise ValueError("secure clearance for an insecure origin")
     now = time.time()
@@ -138,11 +139,14 @@ def _retry_after(value: str | None) -> float:
 
 def _service_status(response: httpx.Response) -> None:
     if response.status_code in {429, 503}:
-        raise ProviderUnavailableError("busy", retry_after=_retry_after(response.headers.get("retry-after")))
+        phase = "startup" if response.headers.get("x-tow-module-state") == "warming" else "service"
+        raise ProviderUnavailableError(
+            "busy", retry_after=_retry_after(response.headers.get("retry-after")), phase=phase
+        )
     if response.status_code in {400, 401, 403, 404, 405, 422, 501}:
         raise ProviderUnavailableError("protocol")
     if response.status_code != 200:
-        raise ValueError("clearance service HTTP failure")  # an individual challenge can fail with HTTP 500
+        raise AccessFailure("status", "service", "clearance service HTTP failure")
 
 
 def cookie_api(
@@ -160,20 +164,22 @@ def cookie_api(
     if media_field not in {None, "disableMedia", "blockMedia"} or command not in {"request.get", "request.get_cookies"}:
         raise ValueError("invalid clearance media option")
     if timeout < 1:
-        raise ValueError("clearance time budget exhausted")
+        raise AccessFailure("timeout", "service", "clearance time budget exhausted")
     deadline = time.monotonic() + timeout
     from tow.protection.local_service import ensure
 
     try:
         locally_managed = ensure(provider, deadline)
+    except TimeoutError as exc:
+        raise AccessFailure("timeout", "startup", "local module startup deadline exceeded") from exc
     except OSError as exc:
-        raise ProviderUnavailableError("unavailable") from exc
+        raise ProviderUnavailableError("unavailable", phase="startup") from exc
     except ValueError as exc:
-        raise ProviderUnavailableError("protocol") from exc
+        raise ProviderUnavailableError("protocol", phase="startup") from exc
     if locally_managed:
         timeout = deadline - time.monotonic()
         if timeout < 1:
-            raise ValueError("clearance time budget exhausted during local startup")
+            raise AccessFailure("timeout", "startup", "clearance time budget exhausted during local startup")
     # Leave time for the service to serialize and return after its browser timeout.
     # Keep at least 1000 ms: Byparr interprets smaller maxTimeout values as seconds.
     browser_ms = int((timeout - 1 if timeout >= 2 else timeout) * 1000)
@@ -194,17 +200,19 @@ def cookie_api(
     ):
         _service_status(response)
         if response.headers.get("content-encoding", "identity").strip().lower() not in {"", "identity"}:
-            raise ValueError("compressed clearance response refused")
+            raise AccessFailure("invalid_response", "validation", "compressed clearance response refused")
         length = response.headers.get("content-length")
         if length is not None and not 0 <= int(length) <= _MAX_RESPONSE:
-            raise ValueError("clearance response limit")
+            raise AccessFailure("limit", "validation", "clearance response limit")
         raw = bytearray()
         for chunk in response.iter_bytes(chunk_size=16384):
-            if time.monotonic() >= deadline or len(raw) + len(chunk) > _MAX_RESPONSE:
-                raise ValueError("clearance response limit")
+            if time.monotonic() >= deadline:
+                raise AccessFailure("timeout", "service", "clearance time budget exhausted")
+            if len(raw) + len(chunk) > _MAX_RESPONSE:
+                raise AccessFailure("limit", "validation", "clearance response limit")
             raw.extend(chunk)
     if time.monotonic() >= deadline:
-        raise ValueError("clearance time budget exhausted")
+        raise AccessFailure("timeout", "service", "clearance time budget exhausted")
     return _solution(decode_json_bytes(bytes(raw)), origin, provider["id"])
 
 

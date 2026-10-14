@@ -38,6 +38,8 @@ from tow.content import read as read_content
 from tow.doctor import doctor_report, stale_autostart
 from tow.doctor import reason_text as doctor_reason
 from tow.errors import diagnostic_details as _diagnostic_details
+from tow.errors import render as _render_error
+from tow.errors import summary_record as _summary_record
 from tow.guess import guess_site
 from tow.issues import collect as collect_issues
 from tow.lifecycle import request_restart, service_status, set_autostart
@@ -94,7 +96,7 @@ from tow.store_transaction import commit as commit_stores
 from tow.store_transaction import recover as recover_store_transaction
 from tow.store_transaction import transaction as store_transaction
 from tow.supervisor import data_lost
-from tow.supervisor.layout import install_id, next_check_at, topic_timer_status
+from tow.supervisor.layout import install_id, next_check_at, site_retry_status, topic_timer_status
 from tow.title import guess_topic_title
 from tow.trackers.presets import defaults as tracker_site_defaults
 from tow.undo import apply as apply_undo
@@ -179,6 +181,8 @@ __all__ = [
     "short_series_title",
     "sign_out",
     "sign_out_everywhere",
+    "site_error_summary",
+    "site_retry_status",
     "snapshot_delete_view",
     "snapshot_path",
     "snapshot_status",
@@ -197,9 +201,16 @@ __all__ = [
 ]
 
 
+def site_error_summary(record: Mapping[str, Any], fallback: str = "") -> str:
+    return _render_error(_summary_record(record), fallback=fallback)
+
+
 def diagnostic_details(record: Mapping[str, Any] | None, lang: str | None = None) -> str:
     """Bounded, credential-redacted per-mirror evidence for the web's Details."""
-    return scrub_text(_diagnostic_details(record, lang))[:8192]
+    details = _diagnostic_details(record, lang)
+    if _summary_record(record) != record:
+        details = "\n".join(part for part in (_render_error(record, lang), details) if part)
+    return scrub_text(details)[:8192]
 
 
 def protection_settings_view(cfg: dict[str, Any]) -> dict[str, Any]:

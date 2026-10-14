@@ -39,7 +39,7 @@ def test_mirror_failure_notification_names_the_topic_and_does_not_repeat_mirrors
     assert "Show A" in message
     assert "Alternate title" not in message
     assert "a.example" not in message
-    assert message.count("частоту запросов") == 1
+    assert message.count("доступ к сайту временно ограничен") == 1
 
 
 def test_ping_no_token():

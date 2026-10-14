@@ -73,6 +73,13 @@ JOBS: tuple[JobSpec, ...] = (
         every_sec=5 * 60,
         first_delay_sec=5 * 60,
     ),
+    JobSpec(
+        "site_retry",
+        ("check", "--apply", "--notify", "--site-retry-only", "--json"),
+        timeout_sec=3600.0,
+        every_sec=None,
+        first_delay_sec=None,
+    ),
 )
 
 BY_NAME: Mapping[str, JobSpec] = MappingProxyType({job.name: job for job in JOBS})

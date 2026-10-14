@@ -202,7 +202,7 @@ def test_typed_topic_error_uses_current_site_title_and_keeps_saved_evidence():
     rendered = render_stored(issue.message.key, dict(issue.message.params), "fallback")
     assert "NNM-Club" in rendered
     assert "old diagnostic" not in rendered
-    assert "частоту" in rendered
+    assert "доступ к сайту ограничен" in rendered
     assert topic == before
 
 
