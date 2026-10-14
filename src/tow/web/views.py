@@ -546,6 +546,7 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
     _context.trackers()  # a site whose link pattern is broken fails the page, as it always did
     history = services.load_download_history()
     timers = services.topic_timer_status(dict(state))
+    retries = services.site_retry_status(dict(state), cfg)
     rows = []
     for topic in state.get("topics") or []:
         url = topic.get("url") or ""
@@ -561,15 +562,25 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
         next_season = _next_season_query(title, series, summary)
         # The error in the reader's language (from its code); an old record shows its stored text.
         site = _site_title(cfg, tr.name) if tr else ""
-        last_error = render_stored(
+        original_error = render_stored(
             topic.get("last_error_code"),
             _with_site_title(topic.get("last_error_params"), tr, site),
             str(topic.get("last_error") or ""),
+        )
+        last_error = services.site_error_summary(
+            {
+                "code": topic.get("last_error_code"),
+                "params": _with_site_title(topic.get("last_error_params"), tr, site),
+            },
+            fallback=str(topic.get("last_error") or ""),
         )
         rows.append(
             {
                 **topic,
                 "timer": timers.get(str(topic.get("id")), {}),
+                "site_retry_at": stored_ui_time(retries.get(str(topic.get("id"))))
+                if retries.get(str(topic.get("id")))
+                else "",
                 # Stored as an ISO time (by TOW 1.24 and before: as text in the language of the
                 # check): shown in this page's language.
                 "last_check": stored_ui_time(topic.get("last_check")),
@@ -577,7 +588,8 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "last_error": last_error,
                 "last_error_details": services.diagnostic_details(
                     {"code": topic.get("last_error_code"), "params": topic.get("last_error_params")}
-                ),
+                )
+                or (services.scrub_text(original_error)[:8192] if original_error != last_error else ""),
                 "replaces_revision": blocked_by_previous_revision(topic),
                 "adoptable": bool(unmarked_hash(topic)),
                 "tracker": tr.name if tr else t("web.site_unknown"),
@@ -603,7 +615,9 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
                     else ""
                 ),
                 "last_error_human": humanize(last_error),
-                "error_line": _error_line(humanize(last_error), cls, site),
+                "error_line": t("site_access.row_limited")
+                if original_error != last_error and cls in {"tracker", "cloudflare"}
+                else _error_line(humanize(last_error), cls, site),
                 "search_href": _search_href(tr, state, series),
                 "next_season_href": _search_href(tr, state, next_season) if next_season else "",
                 "torrent_tone": status.torrent_tone,

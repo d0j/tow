@@ -441,6 +441,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Connection", "close")
         if status == 503:
             self.send_header("Retry-After", "5")
+            if b'"local module warming"' in body:
+                self.send_header("X-TOW-Module-State", "warming")
         self.end_headers()
         self.wfile.write(body)
 

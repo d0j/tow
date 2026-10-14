@@ -311,6 +311,38 @@ def diagnostic_details(record: Mapping[str, Any] | None, lang: str | None = None
     return _shown(params.get("details"), lang or i18n.current())[0].strip()
 
 
+def summary_record(record: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
+    """A shared short site incident; never change the stored class or mirror evidence."""
+    if not isinstance(record, Mapping) or record.get("code") != "mirrors.all_failed":
+        return record
+    params = record.get("params")
+    if not isinstance(params, Mapping):
+        return record
+    primary = {"code": "mirrors.all_failed", "params": {"error": params.get("error")}}
+    if set(codes_in(primary)) & {
+        "mirrors.cloudflare",
+        "mirrors.rate_limited",
+        "mirrors.transport",
+        "mirrors.maintenance",
+    }:
+        return {"code": "mirrors.access_retry", "params": {"tracker": params.get("tracker")}}
+    return record
+
+
+def value_record(value: Any) -> Mapping[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    record = value.get(_MSG, value)
+    return record if isinstance(record, Mapping) else None
+
+
+def summary_of(error: Any, lang: str | None = None) -> str:
+    record: Mapping[str, Any] | None = record_of(error) if isinstance(error, BaseException) else None
+    if isinstance(error, Mapping):
+        record = value_record(error)
+    return render(summary_record(record), lang, text_of(error, lang))
+
+
 def as_value(record: Mapping[str, Any] | None, fallback: str = "") -> Any:
     """A stored record as a value of another message (rendered with it); ``fallback`` without one."""
     return {_MSG: dict(record)} if isinstance(record, Mapping) and record.get("code") else fallback

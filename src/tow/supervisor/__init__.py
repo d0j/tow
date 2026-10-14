@@ -99,8 +99,10 @@ def _stop(child: Any) -> bool:
 
 
 def _facts() -> dict[str, Any]:
+    from tow.config import load_config
     from tow.diagnostic_json import epoch
     from tow.records import topics_of
+    from tow.site_retries import policies
     from tow.snapshots import list_snapshots
     from tow.snapshots import status as backup_status
     from tow.store import load_state
@@ -119,6 +121,7 @@ def _facts() -> dict[str, Any]:
         "last_backup_ok": last_ok,
         "topic_timers": active_policies(state),
         "timer_policies": all_policies(state),
+        "site_retries": policies(state, load_config()),
         # A revision waits in its client for disk space (tow.check.space): the space pass runs.
         # Not for a file selection changed in TOW meanwhile: the pass leaves it to the next check,
         # and ran every 5 minutes for nothing but a client ping and a line in the log.

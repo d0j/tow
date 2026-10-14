@@ -113,7 +113,9 @@ class RunNotifications:
                     return
             else:
                 topic.pop("error_streak", None)
-            if self.previous_error_class.get(str(topic.get("id"))) == cls and topic.get("error_notified"):
+            previous = self.previous_error_class.get(str(topic.get("id")))
+            same = previous == cls or (previous in TRACKER_WARNING_CLASSES and cls in TRACKER_WARNING_CLASSES)
+            if same and topic.get("error_notified"):
                 return  # already reported; "снова работает" will close it
             topic["error_notified"] = True
         self.batch.queue(

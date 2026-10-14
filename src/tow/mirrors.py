@@ -925,6 +925,8 @@ def _recover_origin(
 
     for clearance in candidates:
         verified_access = False
+        phase = "probe"
+        started = time.monotonic()
         try:
             with thttp.client(
                 ua=clearance.user_agent, cookies=clearance.cookies, follow_redirects=False, public_only=public_only
@@ -948,6 +950,7 @@ def _recover_origin(
             if time.monotonic() >= deadline:
                 break
             merged = {**_cookies_for_host(cookies, host, hosts), **clearance.cookies}
+            phase = "resource"
             with thttp.client(
                 ua=clearance.user_agent, cookies=merged, follow_redirects=False, public_only=public_only
             ) as c:
@@ -978,7 +981,15 @@ def _recover_origin(
                 _observe(bucket, host, exc.failure, exc.params.get("status"))
                 _pause_rate_limited(bucket, host, float(exc.params.get("retry_after") or 0))
                 _save_bucket(tracker, bucket, host)
-            chain.record_event("protection_replay_refused", tracker, clearance.provider, "failed")
+            chain.record_event(
+                "protection_replay_refused",
+                tracker,
+                clearance.provider,
+                "failed",
+                reason=exc.failure,
+                phase=phase,
+                elapsed_ms=max(0, int((time.monotonic() - started) * 1000)),
+            )
             if verified_access:
                 resource_failures[host] = exc
                 _observe(bucket, host, exc.failure, exc.params.get("status"))
@@ -990,7 +1001,16 @@ def _recover_origin(
                 break  # stop this origin, not recovery of the next allowed mirror
             chain.discard(tracker, host, expected=clearance)
         except Exception as exc:  # noqa: BLE001 - optional probe/resource outage ends only this origin
-            chain.record_event("protection_replay_refused", tracker, clearance.provider, "failed")
+            reason, _ = chain.failure_details(exc, phase)
+            chain.record_event(
+                "protection_replay_refused",
+                tracker,
+                clearance.provider,
+                "failed",
+                reason=reason,
+                phase=phase,
+                elapsed_ms=max(0, int((time.monotonic() - started) * 1000)),
+            )
             if verified_access:
                 resource_failures[host] = exc
                 _observe(bucket, host, _failure_code(exc))

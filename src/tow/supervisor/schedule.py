@@ -69,6 +69,8 @@ class Schedule:
     topic_timers: dict[str, dict[str, Any]] = field(default_factory=dict)
     timer_attempts: dict[str, Any] = field(default_factory=dict)
     space_waiting: bool = False  # a topic waits for disk space: the space pass is due too
+    site_retries: dict[str, dict[str, Any]] = field(default_factory=dict)
+    site_retry_attempts: dict[str, Any] = field(default_factory=dict)
     _corrected: dict[str, tuple[float, float]] = field(default_factory=dict, init=False, repr=False)
 
     def _clamp(self, ts: float, now: float, *, source: str) -> float:
@@ -113,6 +115,31 @@ class Schedule:
         if last:
             return last + _every(job)
         return self._clamp(self.started_at, now, source="startup") + _first_delay(job)
+
+    def site_retry_due(self, now: float) -> dict[str, float]:
+        from tow.topic_timers import retry_deadline, retry_reservation
+
+        live = {f"site_retry:{tid}:{item['revision']}" for tid, item in self.site_retries.items()}
+        for source in list(self._corrected):
+            if source.startswith("site_retry:") and source not in live:
+                self._corrected.pop(source)
+        result = {}
+        for tid, item in self.site_retries.items():
+            saved = retry_reservation(item, self.site_retry_attempts.get(tid))
+            at = max(item["observed_at"], saved.get("started_at", 0))
+            anchor = self._clamp(at, now, source=f"site_retry:{tid}:{item['revision']}")
+            if (target := retry_deadline(item, saved, anchor=anchor)) is not None:
+                result[tid] = target
+        # One site's failures share a batch instead of launching one child per topic.
+        sites: dict[str, list[str]] = {}
+        for tid in result:
+            sites.setdefault(self.site_retries[tid]["site"], []).append(tid)
+        for ids in sites.values():
+            earliest = min(result[tid] for tid in ids)
+            window = [tid for tid in ids if result[tid] <= earliest + 30]
+            at = max(result[tid] for tid in window)
+            result.update(dict.fromkeys(window, at))
+        return result
 
     def _slot(self, day: date) -> float:
         return local_slot(day, self.backup_at, self.zone)
@@ -167,6 +194,10 @@ class Schedule:
                 case "space":
                     if self.space_waiting:
                         result["space"] = self._every_due_at(job, now)
+                case "site_retry":
+                    retries = self.site_retry_due(now)
+                    if retries:
+                        result["site_retry"] = min(retries.values())
                 case _:
                     result[job.name] = self._every_due_at(job, now)
         return result

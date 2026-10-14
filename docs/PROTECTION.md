@@ -146,6 +146,25 @@ the configuration file. Custom routes remain unchanged. Old pasted mirror links 
 
 ## Limits and troubleshooting
 
+Temporary tracker outages have their own bounded supervisor retry job: up to three extra checks per continuous
+outage, coalesced by site. Transport failures start after five minutes; Cloudflare waits at least 30 minutes
+or the configured recovery interval. Each failure doubles the delay up to two hours, with up to 30 seconds of
+stable site-level jitter; server mirror pauses remain a floor. The ordinary HTTP and provider guards still
+enforce their own leases and pauses. These checks never move the global or personal timer and cannot authorize
+re-adding a torrent removed by the owner. After the extra attempts, ordinary cadence remains in force.
+Pause, deletion, successful checks and changed topic/site rules invalidate an old batch. Reservations are written
+before spawn, so a failed or interrupted child cannot cause an every-tick retry. Authentication, quota, explicit
+bans, paused sites and completed one-time topics do not enter this queue.
+
+Home groups one site's temporary outage into one warning with its affected-topic count, keeps each mirror's
+actual reason in Details, and opens the Check access now control directly. A retry time is shown only when the
+running supervisor supplied a matching plan; inspection never schedules a check or starts a module. Error
+notifications are grouped from two affected topics, and switching between transport classes does not announce
+the same outage again. Confirmed recovery closes a previously announced failure once.
+
+Recovery events record closed, credential-free reason and phase codes, plus elapsed time: module startup,
+service request, response validation, public probe, or real-resource replay. API success is still not site access.
+
 - A service's `status: ok` is not proof; only TOW's independent replay can verify access.
 - A public probe cannot solve every challenge restricted to one particular download path. An external service may
   attempt an interactive challenge, but TOW does not promise to complete it; the owner's action may still be needed.

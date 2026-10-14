@@ -12,6 +12,28 @@ from tow.diagnostic_json import epoch
 from tow.errors import TowError
 
 MAX_INTERVAL_MIN = 7 * 24 * 60
+MAX_SITE_RETRIES = 3
+
+
+def retry_reservation(item: Mapping[str, Any], value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict) or value.get("revision") != item["revision"]:
+        return {}
+    if type(value.get("count")) is not int or not 1 <= value["count"] <= MAX_SITE_RETRIES:
+        return {}
+    if epoch(value.get("started_at")) is None:
+        return {}
+    return value
+
+
+def retry_deadline(item: Mapping[str, Any], attempt: Any, *, anchor: float) -> float | None:
+    previous = retry_reservation(item, attempt)
+    if isinstance(attempt, dict) and attempt.get("revision") == item["revision"] and not previous:
+        return None  # damaged current reservations cannot reset the finite retry budget
+    count = previous.get("count", 0)
+    if count >= MAX_SITE_RETRIES:
+        return None
+    limit = max(7200, item["delay"])
+    return float(max(anchor + min(limit, item["delay"] * 2**count) + item["jitter"], item["floor"]))
 
 
 def parse_interval(raw: str) -> int | None:

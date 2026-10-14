@@ -7,6 +7,44 @@
     "decimal": ".",
     "datetime_short": "%Y-%m-%d %H:%M"
   },
+  "site_access": {
+    "row_limited": "Site access limited",
+    "reason": {
+      "invalid_module": "Installed module is damaged or invalid",
+      "timeout": "Time limit reached",
+      "unavailable": "Service unavailable",
+      "busy": "Service busy",
+      "warming": "Module still starting",
+      "protocol": "Service refused the request",
+      "refused": "Challenge was not solved",
+      "origin": "Response belongs to another site",
+      "status": "Unsuccessful response",
+      "missing_cookie": "No unique access cookie returned",
+      "scope": "Access cookie has the wrong scope",
+      "invalid_response": "Invalid service response",
+      "limit": "Response limit reached",
+      "provider_mismatch": "Wrong service identity",
+      "failed": "Unexpected module failure",
+      "cloudflare": "Cloudflare refused access",
+      "interactive": "Interactive verification required",
+      "rate_limited": "Site request limit",
+      "quota": "Daily download limit",
+      "blocked": "Site blocked access",
+      "auth": "Site sign-in required",
+      "origin_down": "Site origin unavailable",
+      "transport": "Connection failed"
+    },
+    "phase": {
+      "startup": "Module startup",
+      "service": "Service request",
+      "validation": "Response validation",
+      "probe": "Public-page verification",
+      "resource": "Topic access"
+    },
+    "elapsed": "{seconds} s",
+    "retry_at": "Automatic retry: {at}",
+    "retry_check": "Check access now"
+  },
   "protection_ui": {
     "title": "Site access",
     "on_demand": "On demand",
@@ -938,6 +976,7 @@
     "no_events": "No downloads, errors, changes or notifications yet. Routine events — site checks, starts — are in the Log."
   },
   "issues": {
+    "site_access": "{site}: site access is limited (topics: {count})",
     "topic_error": "{title} — {error}",
     "data_lost": "TOW's data folder ({folder}) was deleted or replaced while TOW was running: the topics, history and settings kept there are gone from TOW, which goes on empty. Restore a nightly backup: the copies are kept outside the data folder.",
     "check_stale": "Scheduled checks have not run since {at}.",
@@ -1450,6 +1489,7 @@
     "no_hosts": "{tracker}: no mirrors given",
     "frozen": "{tracker}: the site is paused",
     "all_failed": "{tracker}: {error}",
+    "access_retry": "{tracker}: site access is temporarily limited",
     "transport": "no connection ({error})",
     "local": "{tracker}: TOW could not read the site's answer ({error})",
     "too_large": "the answer is too large"

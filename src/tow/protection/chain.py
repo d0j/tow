@@ -18,6 +18,7 @@ from tow.net_guard import public_addresses
 from tow.protection import store
 from tow.protection.providers import adapters, validate_clearance
 from tow.protection.spec import (
+    AccessFailure,
     AttemptProof,
     Clearance,
     ProviderUnavailableError,
@@ -30,10 +31,43 @@ from tow.protection.spec import (
 _LOG = logging.getLogger(__name__)
 
 
-def record_event(kind: str, site: str, provider: str, status: str) -> None:
+def record_event(
+    kind: str, site: str, provider: str, status: str, *, reason: str = "", phase: str = "", elapsed_ms: int = 0
+) -> None:
     """Optional diagnostics cannot change a confirmed site result or stop fallback."""
     try:
-        log_event(kind, tracker=site, provider=provider, status=status)
+        extra: dict[str, Any] = {}
+        if reason in {
+            "timeout",
+            "unavailable",
+            "busy",
+            "warming",
+            "protocol",
+            "refused",
+            "origin",
+            "status",
+            "missing_cookie",
+            "scope",
+            "invalid_response",
+            "limit",
+            "provider_mismatch",
+            "invalid_module",
+            "failed",
+            "cloudflare",
+            "interactive",
+            "rate_limited",
+            "quota",
+            "blocked",
+            "auth",
+            "origin_down",
+            "transport",
+        }:
+            extra["reason"] = reason
+        if phase in {"startup", "service", "validation", "probe", "resource"}:
+            extra["phase"] = phase
+        if type(elapsed_ms) is int and 0 <= elapsed_ms <= 120000:
+            extra["elapsed_ms"] = elapsed_ms
+        log_event(kind, tracker=site, provider=provider, status=status, **extra)
     except Exception:  # noqa: BLE001 - an optional log write is not tracker access or provider success
         _LOG.debug("optional site-access event not recorded")
 
@@ -156,6 +190,7 @@ def _run_candidates(
     last_called = None
     try:
         for index, provider in enumerate(enabled):
+            started = time.monotonic()
             try:
                 solve = available.get(provider["kind"])
                 if solve is None:
@@ -176,30 +211,61 @@ def _run_candidates(
                 record_event("protection_attempt", site, provider["id"], "started")
                 timeout = min(timeout, provider_deadline - time.monotonic())
                 if timeout < 1:
-                    record_event("protection_failed", site, provider["id"], "failed")
+                    record_event("protection_failed", site, provider["id"], "failed", reason="timeout", phase="service")
                     continue
                 if not call_budget.consume():
                     return
                 last_called = provider["id"]  # a crash or ambiguous response retains the cooldown
                 clearance = solve({**provider, "_probe_path": probe_path}, origin, timeout)
                 if time.monotonic() >= deadline:
-                    record_event("protection_failed", site, provider["id"], "failed")
+                    record_event("protection_failed", site, provider["id"], "failed", reason="timeout", phase="service")
                     return
                 if time.monotonic() >= provider_deadline:
-                    record_event("protection_failed", site, provider["id"], "failed")
+                    record_event("protection_failed", site, provider["id"], "failed", reason="timeout", phase="service")
                     continue  # even a misbehaving optional adapter cannot consume verification's reserved time
                 if clearance.provider != provider["id"]:
-                    record_event("protection_failed", site, provider["id"], "failed")
+                    record_event(
+                        "protection_failed",
+                        site,
+                        provider["id"],
+                        "failed",
+                        reason="provider_mismatch",
+                        phase="validation",
+                    )
                     continue
                 validated = replace(validate_clearance(clearance, origin, now=time.time()), attempt_id=attempt.nonce)
                 _note_service(provider, "succeeded", attempt)
                 yield validated
             except Exception as error:  # noqa: BLE001 - one optional provider must never disable the next
                 _failed_service(provider, error, attempt)
-                record_event("protection_failed", site, provider["id"], "failed")
+                reason, phase = failure_details(error)
+                record_event(
+                    "protection_failed",
+                    site,
+                    provider["id"],
+                    "failed",
+                    reason=reason,
+                    phase=phase,
+                    elapsed_ms=max(0, int((time.monotonic() - started) * 1000)),
+                )
                 _LOG.debug("clearance provider refused or unavailable")
     finally:
         _finish_reservation(pending, last_called)
+
+
+def failure_details(error: Exception, phase: str = "service") -> tuple[str, str]:
+    if isinstance(error, (AccessFailure, ProviderUnavailableError)):
+        if error.reason == "protocol" and error.phase == "startup":
+            return "invalid_module", "startup"
+        reason = "warming" if error.reason == "busy" and error.phase == "startup" else error.reason
+        return reason, error.phase
+    if isinstance(error, (TimeoutError, httpx.TimeoutException, httpcore.TimeoutException)):
+        return "timeout", phase
+    if isinstance(error, (httpx.ConnectError, httpcore.ConnectError, ConnectionError)):
+        return "unavailable", phase
+    if isinstance(error, (ValueError, TypeError)):
+        return "invalid_response", "validation"
+    return "failed", phase
 
 
 def accept(site: str, origin: str, settings: dict[str, Any], clearance: Clearance) -> None:

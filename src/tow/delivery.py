@@ -31,6 +31,7 @@ from tow.i18n import t
 from tow.log import cls_label, error_class, history_events
 from tow.notify import PendingNotification, error_parts, event_text, short_series_title
 from tow.records import Topic, shown_title
+from tow.status import TRACKER_WARNING_CLASSES
 from tow.store import load_state, persistence_lock, save_state
 
 GROUP_MIN = 3
@@ -64,14 +65,20 @@ def compose(items: Iterable[PendingNotification]) -> list[tuple[str, str, Topic 
     for item in items:
         if item.kind == "error" and item.tracker:
             first = next(iter(error_parts(item.error)), "")
-            groups.setdefault((item.tracker, error_class(first)), []).append(item)
+            cls = error_class(first)
+            groups.setdefault((item.tracker, "tracker" if cls in TRACKER_WARNING_CLASSES else cls), []).append(item)
         elif item.kind == "recovered" and item.tracker:
             # As the failure was one message for the site, so is its end ("" is no error class).
             groups.setdefault((item.tracker, ""), []).append(item)
-    grouped = {id(item) for members in groups.values() if len(members) >= GROUP_MIN for item in members}
+    grouped = {
+        id(item)
+        for (_, cls), members in groups.items()
+        if len(members) >= (2 if cls in {"tracker", ""} else GROUP_MIN)
+        for item in members
+    }
     messages: list[tuple[str, str, Topic | None]] = []
     for (tracker, cls), members in groups.items():
-        if len(members) < GROUP_MIN:
+        if len(members) < (2 if cls in {"tracker", ""} else GROUP_MIN):
             continue
         names = [short_series_title(shown_title(m.topic), lang) for m in members]
         listed = ", ".join(names[:5]) + (t("notify.and_more", lang, count=len(names) - 5) if len(names) > 5 else "")
@@ -86,6 +93,9 @@ def compose(items: Iterable[PendingNotification]) -> list[tuple[str, str, Topic 
                 n=len(members),
                 topics=listed,
             )
+        url = str(members[0].topic.get("url") or "")
+        if url:
+            text += "\n" + url
         messages.append((text, members[0].operation_id, None))
     for item in items:
         if id(item) in grouped:

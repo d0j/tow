@@ -448,7 +448,7 @@ def test_preparation_exhaustion_releases_only_unused_reservation(safe_dns, monke
     clock = [100.0]
     monkeypatch.setattr(chain.time, "monotonic", lambda: clock[0])
     if stage == "log":
-        monkeypatch.setattr(chain, "record_event", lambda *args: clock.__setitem__(0, clock[0] + 0.5))
+        monkeypatch.setattr(chain, "record_event", lambda *args, **kwargs: clock.__setitem__(0, clock[0] + 0.5))
     else:
         name = "reserve_attempt" if stage == "reserve" else "note_attempt"
         original = getattr(store, name)

@@ -58,7 +58,7 @@ def _joined(*errors: Any) -> Any:
 
 def error_text(error: Any, lang: str) -> str:
     """The errors of a notification in ``lang``."""
-    texts = (scrub_text(tow_errors.text_of(part, lang)) for part in error_parts(error))
+    texts = (scrub_text(tow_errors.summary_of(part, lang)) for part in error_parts(error))
     return "; ".join(dict.fromkeys(text for text in texts if text))
 
 

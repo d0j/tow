@@ -14,7 +14,7 @@ from tow import cli
 from tow.supervisor import core
 from tow.supervisor.jobs import BY_NAME, JOBS
 
-SCOPES = ("global_only", "timer_only", "progress_only", "space_only")
+SCOPES = ("global_only", "timer_only", "progress_only", "space_only", "site_retry_only")
 # What each child job must be: its command and the one scope flag it sets (None: not a check).
 EXPECTED = {
     "check": ("check", "global_only"),
@@ -22,6 +22,7 @@ EXPECTED = {
     "progress": ("check", "progress_only"),
     "space": ("check", "space_only"),
     "backup": ("backup", None),
+    "site_retry": ("check", "site_retry_only"),
 }
 CHILDREN = [job for job in JOBS if job.argv is not None]
 
@@ -61,7 +62,7 @@ def test_the_watchdog_runs_inside_the_supervisor():
 
 def test_the_priority_and_the_saved_keys():
     # The first due job starts: a check before a night copy, before the passes.
-    assert [job.name for job in JOBS] == ["check", "backup", "progress", "watchdog", "timer", "space"]
+    assert [job.name for job in JOBS] == ["check", "backup", "progress", "watchdog", "timer", "space", "site_retry"]
     # data/run/schedule.json of a running install keeps these keys: renaming one loses the cadence.
     saved = {job.name: job.persisted_key for job in JOBS if job.persisted_key}
     assert saved == {"check": "check_started_at", "backup": "backup_attempt_at"}

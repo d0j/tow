@@ -5,6 +5,19 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.30.7] — 2026-10-14
+
+### Fixed
+
+- Temporary site failures get at most three coalesced early checks with backoff and jitter, independently of
+  global and personal cadence. Durable reservations survive restart; pause, deletion, changed policy, server
+  rate limits and recovery are rechecked before dispatch. Authentication, quota, bans and client errors do not
+  authorize these retries.
+- Site-access failures record a safe reason, phase and duration. Home and messages use a consistent short site
+  incident, retaining the actual mirror reasons in Details. The warning links directly to Check access now and
+  shows the supervisor's retry time when known. Wrapped typed errors retain their severity for notification
+  grouping; a switch between Cloudflare and rate limiting does not repeat the same outage notification.
+
 ## [1.30.6] — 2026-10-14
 
 ### Fixed
