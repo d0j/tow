@@ -25,7 +25,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   kinds of checks.
 - A topic of a site you paused no longer offers Check access now: the check would only report the pause again.
 - When no mirror of a site could be reached at all (for example, this computer has no network), Home, Needs
-  attention and messages say "no connection" again instead of "site access is temporarily limited".
+  attention and messages say "no connection to the site" instead of "site access is temporarily limited";
+  Needs attention still shows one entry for the site with Check access now.
 - A message about one site failing or working again for several topics links the site instead of the first
   of those topics.
 

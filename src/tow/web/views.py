@@ -686,7 +686,14 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
                     else ""
                 ),
                 "last_error_human": humanize(last_error),
-                "error_line": t("site_access.row_limited")
+                "error_line": t(
+                    "site_access.row_no_connection"
+                    if services.site_incident(
+                        {"code": topic.get("last_error_code"), "params": topic.get("last_error_params")}
+                    )
+                    == "mirrors.connection_retry"
+                    else "site_access.row_limited"
+                )
                 if original_error != last_error and cls in {"tracker", "cloudflare"}
                 else _error_line(humanize(last_error), cls, site),
                 "search_href": _search_href(tr, state, series),
