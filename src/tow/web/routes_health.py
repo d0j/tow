@@ -46,7 +46,7 @@ def updates_status() -> Response:
     try:
         result = services.web_update_status()
     except WebUpdateError as exc:
-        return JSONResponse({"ok": False, "error": t(str(exc))}, status_code=503)
+        return JSONResponse({"ok": False, "error": t(str(exc), **exc.params)}, status_code=503)
     if result.get("reason"):
         result["message"] = t(result["reason"])
     error = result.get("error")
@@ -70,7 +70,11 @@ def updates_install(version: str = Form("")) -> Response:
     try:
         result = services.start_web_update(version)
     except WebUpdateError as exc:
-        return JSONResponse({"ok": False, "error": t(str(exc))}, status_code=409)
+        # The reason goes to the log too: the page's answer is the only other place it was said.
+        services.log_event(
+            "settings_update_refused", target_version=version, reason=t(str(exc), **exc.params), how="manual"
+        )
+        return JSONResponse({"ok": False, "error": t(str(exc), **exc.params)}, status_code=409)
     services.log_event("settings_update_started", target_version=result["target"], how="manual")
     return JSONResponse(result, status_code=202, headers={"Cache-Control": "no-store"})
 
@@ -80,7 +84,7 @@ def updates_log() -> Response:
     try:
         result = services.web_update_log()
     except WebUpdateError as exc:
-        return JSONResponse({"ok": False, "error": t(str(exc))}, status_code=503)
+        return JSONResponse({"ok": False, "error": t(str(exc), **exc.params)}, status_code=503)
     return JSONResponse({"text": result}, headers={"Cache-Control": "no-store"})
 
 

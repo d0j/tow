@@ -34,7 +34,11 @@ _TERMINAL = frozenset({"ok", "refused", "failed", "rolled_back", "recovered"})
 
 
 class WebUpdateError(RuntimeError):
-    pass
+    """A catalog key (the message) and its `params` (a restore point's own reason, for one)."""
+
+    def __init__(self, key: str, **params: str) -> None:
+        super().__init__(key)
+        self.params = params
 
 
 def _safe_file(path: Path) -> bool:
@@ -333,7 +337,7 @@ def start(version: str) -> dict[str, Any]:
         try:
             safety = create_restore_point()
         except RestorePointError as exc:
-            raise WebUpdateError("releases.backup_failed") from exc
+            raise WebUpdateError("releases.backup_failed_because", reason=str(exc) or exc.reason) from exc
         job_id = uuid.uuid4().hex
         folder = path.parent / job_id
         try:

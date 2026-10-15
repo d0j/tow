@@ -107,8 +107,9 @@ def test_backup_failure_never_launches_an_updater(install, monkeypatch):
         raise RestorePointError("synthetic backup failure")
 
     monkeypatch.setattr(web_update, "create_restore_point", failed)
-    with pytest.raises(web_update.WebUpdateError, match=r"releases\.backup_failed"):
+    with pytest.raises(web_update.WebUpdateError, match=r"releases\.backup_failed_because") as refused:
         web_update.start("1.22.21")
+    assert refused.value.params == {"reason": "synthetic backup failure"}  # the owner reads why
     assert not install[1]
     assert not (install[0] / "runtime" / "web-update" / "job.json").exists()
 
@@ -694,3 +695,21 @@ def test_folders_of_earlier_updates_are_pruned_but_never_the_current_or_a_live_o
     left = {path.name for path in parent.iterdir() if path.is_dir()}
     newest = set(ids[-web_update.JOB_FOLDERS_KEPT :])
     assert left == {current, live, "notes", result["id"], *newest}
+
+
+def test_a_refused_web_install_says_why_and_logs_it(monkeypatch):
+    # "Could not create and verify the restore point" alone left the owner and the log without the cause.
+    events = []
+    monkeypatch.setattr(services, "log_event", lambda kind, **kw: events.append((kind, kw)))
+
+    def refused(_version):
+        raise web_update.WebUpdateError("releases.backup_failed_because", reason="synthetic cause")
+
+    monkeypatch.setattr(services, "start_web_update", refused)
+    response = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
+        "/updates/install", data={"version": "1.22.21"}
+    )
+    assert response.status_code == 409
+    assert "synthetic cause" in response.json()["error"]
+    assert [(kind, kw["target_version"]) for kind, kw in events] == [("settings_update_refused", "1.22.21")]
+    assert "synthetic cause" in events[0][1]["reason"]
