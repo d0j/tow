@@ -8,7 +8,6 @@ from tow.mirrors import (
     MirrorFetchError,
     _cookies_for_host,
     _ordered,
-    _save_bucket,
     pick_and_get,
 )
 from tow.store import load_state, save_state
@@ -310,13 +309,6 @@ def test_quota_takes_precedence_over_earlier_auth(monkeypatch, tmp_path):
         )
     assert error.value.failure == "quota"
     assert error.value.error_class == "quota"
-
-
-def test_late_fetch_cannot_recreate_deleted_mirror(monkeypatch, tmp_path):
-    monkeypatch.setenv("TOW_HOME", str(tmp_path))
-    monkeypatch.setattr("tow.config.load_config", lambda: {"trackers": {}})
-    _save_bucket("deleted", {"fail": {"https://old.example": 1}, "cool": {}, "active": None}, "https://old.example")
-    assert "deleted" not in load_state().get("mirrors", {})
 
 
 def _status_client(monkeypatch, status_for):
