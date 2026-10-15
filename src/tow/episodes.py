@@ -743,6 +743,22 @@ def _folder_seasons(path: PurePosixPath) -> set[int]:
     return seasons
 
 
+_SPECIAL_WORD = re.compile(
+    r"(?i)(?:^|[ ._\-\[(])(ova|oad|special|спец(?:выпуск)?|ncop|nced|omake)(?:\b|\d)",
+)
+_REGULAR_MARKER = re.compile(r"(?i)\bs0*[1-9]\d?[ ._-]*e\d{1,4}")
+
+
+def _special_name(stem: str) -> bool:
+    """The name says a special, an OVA or a creditless opening - unless the word is the title of
+    a regular episode after its marker ("Show.S01E05.Special.Guest", "Show.S01E05.The.Special")."""
+    marker = _REGULAR_MARKER.search(stem)
+    return any(
+        marker is None or found.start() < marker.end() or found.group(1).casefold() in {"ncop", "nced", "omake"}
+        for found in _SPECIAL_WORD.finditer(stem)
+    )
+
+
 def _coverage_with_folder_season(name: str) -> tuple[EpisodeLabel, ...]:
     path = PurePosixPath(str(name or "").replace("\\", "/"))
     if re.search(
@@ -759,11 +775,7 @@ def _coverage_with_folder_season(name: str) -> tuple[EpisodeLabel, ...]:
         for part in path.parts[:-1]
     ):
         return ()
-    if re.search(
-        r"(?i)(?:^|[ ._\-\[(])(?:ova|oad|special|спец(?:выпуск)?|"
-        r"ncop|nced|omake)(?:\b|\d)",
-        path.stem,
-    ):
+    if _special_name(path.stem):
         return ()
     seasons = _folder_seasons(path)
     if 0 in seasons:

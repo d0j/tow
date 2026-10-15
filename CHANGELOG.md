@@ -152,6 +152,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   several seasons named so no longer counts every season's first episode as one.
 - A numbered film, part or volume before a release tag (`Movie 2 [1080p].mkv`, `Part 2 [1080p].mkv`) is no
   longer taken for episode 2.
+- A regular episode whose title has a word such as Special or OVA after its marker
+  (`Show.S01E05.Special.Guest.mkv`) counts again; a special, an OVA or a creditless opening is still left out.
 
 ## [1.31.2] — 2026-10-15
 

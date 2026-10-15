@@ -6,11 +6,16 @@ from __future__ import annotations
 
 import pytest
 
-from tow.episodes import parse_episode_coverage
+from tow.episodes import parse_episode_coverage, resolve_episode_coverages
 
 
 def _keys(name: str) -> list[str]:
     return [label.key for label in parse_episode_coverage(name)]
+
+
+def _resolved(name: str) -> list[str]:
+    (coverage,) = resolve_episode_coverages([name])
+    return [label.key for label in coverage]
 
 
 S01E01_02 = ["episode:s01e01", "episode:s01e02"]
@@ -88,3 +93,31 @@ def test_a_season_number_before_its_word(name, keys):
 )
 def test_a_numbered_film_before_a_release_tag(name, keys):
     assert _keys(name) == keys
+
+
+@pytest.mark.parametrize(
+    ("name", "keys"),
+    [
+        # An episode titled with a special word after its SxxEyy marker is a regular episode.
+        ("Show.S01E05.Special.Guest.mkv", ["episode:s01e05"]),
+        ("Show.S01E05.The.Special.mkv", ["episode:s01e05"]),
+        ("Show.S01E05.OVA.Story.mkv", ["episode:s01e05"]),
+        ("Show.S01E05.Trailer.Park.mkv", ["episode:s01e05"]),
+        ("Show.S01E05.Preview.Night.mkv", ["episode:s01e05"]),
+        # Controls: the word names the file a special, a preview or a creditless opening.
+        ("Show OVA S01E01.mkv", []),
+        ("Show.OVA.01.mkv", []),
+        ("Show OVA - 01.mkv", []),
+        ("Show.Special.01.mkv", []),
+        ("Show.S00E01.Special.mkv", []),
+        ("Show.S01E01.NCOP.mkv", []),
+        ("Show.S01E01.NCED.mkv", []),
+        ("Show.S01E01.sample.mkv", []),
+        ("Show.S01E01 [Preview].mkv", []),
+        ("Show.S01E01-trailer.mp4", []),
+        ("[Preview] Show.S01E01.mkv", []),
+        ("Specials/Show.S01E01.Special.mkv", []),
+    ],
+)
+def test_an_episode_titled_with_a_special_word(name, keys):
+    assert _resolved(name) == keys
