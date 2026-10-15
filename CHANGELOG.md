@@ -16,6 +16,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   the top of the form.
 - The Log and a topic's episode list open as tall as their lines (up to most of the screen) instead of always
   filling the screen, even for three lines.
+- The search icon in the header is only on Home and Sites, the pages it filters. On History with a search it
+  opened by itself over the page's title; elsewhere it filtered nothing.
 
 ## [1.31.2] — 2026-10-15
 

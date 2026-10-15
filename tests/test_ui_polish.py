@@ -27,6 +27,27 @@ def client():
     return TestClient(app, headers=ORIGIN)
 
 
+def test_the_header_search_is_only_on_the_pages_it_filters(client):
+    """The header search filters Home's topics and the Sites list (their [data-q] rows). On History
+    with a search (`/history?q=zzzz`) it opened by itself with the same words and covered the
+    page's title; on History, Settings, the Guide, Diagnostics and 404 it filtered nothing and said
+    "Showing 0"."""
+    from tow.store import save_state
+
+    save_state(
+        {"topics": [{"id": "t1", "title": "Show", "url": "http://rutor.info/torrent/1/x", "save_path": "Z:\\a"}]}
+    )
+    for path in ("/", "/?q=show", "/sites"):
+        page = client.get(path).text
+        assert '<details class="hdr-search">' in page, path
+        assert 'id="q"' in page, path
+    for path in ("/history?q=zzzz", "/history", "/settings", "/settings/help", "/doctor", "/no-such-page"):
+        page = client.get(path).text
+        assert "hdr-search" not in page, path
+        assert 'id="q"' not in page, path
+        assert 'id="search-status"' not in page, path
+
+
 def test_the_log_and_the_episodes_open_as_tall_as_their_lines():
     """The Log and a topic's episodes always opened ~790 px tall, even for three lines: on a modal
     dialog (inset-block: 0) `height: auto` stretches it to the screen (Chromium: 798 px with auto,

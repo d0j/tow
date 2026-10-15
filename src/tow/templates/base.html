@@ -14,12 +14,16 @@
   <nav aria-label="{{ t('base.nav.label') }}">
     <a href="/" class="ico{% if path == '/' %} on{% endif %}" {% if path == '/' %}aria-current="page"{% endif %} title="{{ t('base.nav.home') }}" aria-label="{{ t('base.nav.home') }}">{{ icon('home') }}</a>
     <a href="/sites" class="ico{% if path.startswith('/sites') %} on{% endif %}" {% if path.startswith('/sites') %}aria-current="page"{% endif %} title="{{ t('base.nav.sites') }}" aria-label="{{ t('base.nav.sites') }}">{{ icon('globe') }}</a>
+    {#- The search filters the rows of Home and Sites ([data-q]); elsewhere it would filter nothing
+        (History has its own, and the header's opened over its title with the same words). -#}
+    {% if path in ('/', '/sites') %}
     <details class="hdr-search">
       <summary title="{{ t('base.search.open') }}" aria-label="{{ t('base.search.open') }}">{{ icon('search') }}</summary>
       <label class="sr-only" for="q">{{ t('base.search.label') }}</label>
       <input id="q" type="search" placeholder="{{ t('base.search.placeholder') }}" autocomplete="off">
       <span id="search-status" class="sr-only" aria-live="polite"></span>
     </details>
+    {% endif %}
     <button type="button" class="ico" id="log-open" title="{{ t('base.log.open') }}" aria-label="{{ t('base.log.open') }}" aria-haspopup="dialog">{{ icon('log') }}</button>
     <details class="attention-menu{% if h.attention.tone %} {{ h.attention.tone }}{% endif %}" id="current-problems" data-attention data-fingerprint="{{ h.attention.fingerprint }}"{% if not h.attention.count %} hidden{% endif %}>
       <summary class="ico" data-attention-toggle aria-label="{{ h.attention.label }}" title="{{ h.attention.label }}">{{ icon('alert', 'sm') }}<span class="attention-count" data-attention-count aria-hidden="true">{{ h.attention.count }}</span></summary>
