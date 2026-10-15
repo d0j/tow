@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import time
 from urllib.parse import parse_qs, urlsplit
 
@@ -676,6 +677,33 @@ def test_a_result_is_dated_when_its_check_ended_not_when_it_was_asked_for(client
     when = BeautifulSoup(client.get(f"/?check_result={job}").text, "html.parser").select_one("#check-result .sub")
     assert when.get_text() == at(clock.wall)
     assert at(asked) != at(clock.wall)
+
+
+def test_a_sign_in_whose_check_must_wait_is_checked_from_the_queue(client, monkeypatch, consumers):
+    # "Sign-in saved; press Check in a minute" left the new password unconfirmed until the owner came back.
+    monkeypatch.setattr("tow.web.services.load_config", lambda: {"trackers": {"nnmclub": NNM}})
+    save_state({"topics": [{"id": "t1", "title": "Show A", "url": "https://nnmclub.to/forum/viewtopic.php?t=1234567"}]})
+    secrets = {"trackers": {"nnmclub": {}}}
+    monkeypatch.setattr("tow.web.services.load_secrets", lambda: copy.deepcopy(secrets))
+    monkeypatch.setattr("tow.web.services.save_secrets", lambda value: secrets.update(copy.deepcopy(value)))
+    monkeypatch.setattr("tow.web.services.log_event", lambda *_a, **_kw: None)
+    calls = []
+
+    def check(**kw):
+        calls.append(kw["ids"])
+        if len(calls) == 1:
+            raise CheckBusyError("a scheduled check holds the lock")
+        return {"results": [{"id": "t1", "title": "Show A", "ok": True}]}
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    response = client.post(
+        "/topics/t1/tracker-login", data={"username": "user", "password": "pass"}, follow_redirects=False
+    )
+    job = _job(response)
+    consumers[0].run()
+    assert calls == [["t1"], ["t1"]]
+    assert _status(client, job)["status"] == "done"
+    assert secrets["trackers"]["nnmclub"] == {"username": "user", "password": "pass"}
 
 
 class _ThreadStop(BaseException):
