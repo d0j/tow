@@ -637,6 +637,28 @@ def test_the_following_page_of_a_finished_check_says_it_finished(client, monkeyp
     assert not note.select_one("form")  # nothing left to cancel
 
 
+def test_a_result_is_dated_when_its_check_ended_not_when_it_was_asked_for(client, monkeypatch, consumers, clock):
+    from datetime import UTC, datetime
+
+    from tow.clock import format_ui_timestamp
+
+    def at(seconds):
+        return format_ui_timestamp(datetime.fromtimestamp(seconds, UTC).isoformat())
+
+    asked = clock.wall
+
+    def check(**_kw):
+        clock.wall += 2 * 3600  # it waited and ran for two hours
+        return {"results": [{"id": "a", "title": "Show A", "ok": True}]}
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    job = _job(client.post("/check", data={"mode": "apply"}, follow_redirects=False))
+    consumers[0].run()
+    when = BeautifulSoup(client.get(f"/?check_result={job}").text, "html.parser").select_one("#check-result .sub")
+    assert when.get_text() == at(clock.wall)
+    assert at(asked) != at(clock.wall)
+
+
 class _ThreadStop(BaseException):
     """Not an Exception: what ends a thread (SystemExit, KeyboardInterrupt) in the middle of a check."""
 

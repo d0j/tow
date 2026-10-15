@@ -71,7 +71,6 @@ def submit(
             "adopted": adopted,
             "lang": lang,
             "status": "queued",
-            "started_at": time.time(),
         }
         JOBS[job["id"]] = job
         PENDING.append(job["id"])
@@ -149,7 +148,8 @@ def _finish(job: dict[str, Any]) -> None:
     with LOCK:
         if job["status"] not in {"done", "failed"}:
             job["status"] = "failed"
-        job["finished_at"] = time.monotonic()
+        # finished_at times the record's hour; the result page is dated by ended_at.
+        job.update(finished_at=time.monotonic(), ended_at=time.time())
         PENDING.remove(job["id"])
 
 
@@ -182,5 +182,5 @@ def cancel(job_id: str) -> bool:
         if job is None or job["status"] != "queued":
             return False
         PENDING.remove(job_id)
-        job.update(status="failed", finished_at=time.monotonic(), cancelled=True)
+        job.update(status="failed", finished_at=time.monotonic(), ended_at=time.time(), cancelled=True)
         return True
