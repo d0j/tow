@@ -78,18 +78,37 @@ class TokenStore:
 FLASHES = TokenStore(ttl=600, limit=256)
 
 
+def _local_href(href: str) -> str:
+    """A link a message may carry: a page of this TOW ("/..."), else none."""
+    value = str(href or "")
+    if not value.startswith("/") or value.startswith("//") or "\\" in value or any(ord(ch) <= 32 for ch in value):
+        return ""
+    return value[:500]
+
+
 def record(
-    text: str, kind: str = "ok", *, subject: str = "", message_id: str = "", at: float | None = None
+    text: str,
+    kind: str = "ok",
+    *,
+    subject: str = "",
+    message_id: str = "",
+    at: float | None = None,
+    href: str = "",
+    link: str = "",
 ) -> dict[str, str]:
     """One message: ``text`` in the page's language, its kind, what it is about, its identity in
-    the page's history (a new random one by default) and when it was said."""
-    return {
+    the page's history (a new random one by default), when it was said, and the page it offers
+    (``href``, named ``link``: "View results"), a page of this TOW only."""
+    said = {
         "id": message_id or secrets.token_urlsafe(9),
         "text": text,
         "kind": kind if kind in KINDS else "ok",
         "subject": " ".join(str(subject or "").split())[:200],
         "at": str(int(time.time() if at is None else at)),
     }
+    if (target := _local_href(href)) and link:
+        said.update(href=target, link=" ".join(str(link).split())[:80])
+    return said
 
 
 def request_flash(request: Request) -> dict[str, str] | None:
@@ -158,13 +177,24 @@ def message_text(message: Mapping[str, Any] | None) -> str:
     return t("web.message.subject_result", subject=subject, result=text)
 
 
-def flash_location(url: str, message: Any, kind: str = "ok", /, *, subject: str | None = None, **params: Any) -> str:
+def flash_location(
+    url: str,
+    message: Any,
+    kind: str = "ok",
+    /,
+    *,
+    subject: str | None = None,
+    href: str = "",
+    link: str = "",
+    **params: Any,
+) -> str:
     """``url`` with ``flash=<token>`` of a message kept on the server (see ``flash_redirect``).
-    ``subject``: what it is about; None takes the request's (``resolve_subject``), "" is none."""
+    ``subject``: what it is about; None takes the request's (``resolve_subject``), "" is none.
+    ``href``/``link``: a page of this TOW the message offers, and its name."""
     text = flash_text(message, **params)
     if not text:
         return url
-    said = record(text, kind, subject=_context.subject() if subject is None else subject)
+    said = record(text, kind, subject=_context.subject() if subject is None else subject, href=href, link=link)
     # The undo this action made goes with its message: a check right after a save says
     # "Connected" without an "Undo" that would put the save back.
     if stamped := services.undo_stamped_here():
