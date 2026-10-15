@@ -151,14 +151,17 @@ def parse_season_hint(title: str) -> int | None:
         r"(?i)\bs\d{1,2}e\d{1,4}\s*[-–—~]\s*s\d{1,2}e\d{1,4}\b"
         r"|\bs\d{1,2}\s*(?:[-–—,+/&]|\band\b|\bи\b|\bto\b|\bпо\b|\s+)\s*s\d{1,2}\b"
         r"|\bs\d{1,2}\s*[-–—]\s*\d{1,2}\b(?!\s*[-–—]\s*\d)"
-        r"|\b(?:season|сезон)\w*\s*[:№#.]?\s*\d{1,2}\s*(?:[-–—,+/&]|\band\b|\bи\b|\bto\b|\bпо\b)\s*(?:(?:season|сезон)\w*\s*)?\d{1,2}\b(?!\s*[-–—]\s*\d)"
+        # "Сезон 1-2", not "3 сезон: 1-8" or "Сезон 1 / 12 серий" (one season, its episodes).
+        r"|(?<!\d\s)\b(?:season|сезон)\w*\s*[:№#.]?\s*\d{1,2}\s*(?:[-–—,+/&]|\band\b|\bи\b|\bto\b|\bпо\b)\s*"
+        r"(?:(?:season|сезон)\w*\s*)?\d{1,2}\b(?!\s*[-–—]\s*\d)(?!\s*(?:сери|эпизод|episode))"
         r"|\b\d{1,2}\s*(?:season|сезон)\w*\s*(?:[-–—,+/&]|\band\b|\bи\b|\bto\b|\bпо\b)\s*\d{1,2}\s*(?:season|сезон)\w*\b"
         r"|\b\d{1,2}\s*(?:[-–—,+/&]|\band\b|\bи\b|\bto\b|\bпо\b)\s*\d{1,2}\s*(?:season|сезон)\w*\b",
         text,
     ):
         return None
     patterns = (
-        r"(?i)(?:^|[^\w])s(?:eason)?[ ._-]*0*(\d{1,2})(?!\d)",
+        # Not "Ocean's 11": a possessive "s" is no season.
+        r"(?i)(?:^|[^\w'’])s(?:eason)?[ ._-]*0*(\d{1,2})(?!\d)",
         # Not "2 сезон 3 серия": the number after "сезон" is the episode there.
         r"(?i)(?<!\d\s)\b(?:season|сезон)\s*[:№#.]?\s*0*(\d{1,2})\b",
         r"(?i)\b0*(\d{1,2})\s*(?:season|сезон)\b",

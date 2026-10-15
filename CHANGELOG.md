@@ -154,6 +154,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   longer taken for episode 2.
 - A regular episode whose title has a word such as Special or OVA after its marker
   (`Show.S01E05.Special.Guest.mkv`) counts again; a special, an OVA or a creditless opening is still left out.
+- A topic title with one season and its episode range (`Шоу (3 сезон: 1-8 серии из 10)`,
+  `Сезон 1 / 12 серий из 12`) is no longer taken for several seasons, so its progress counts that season only; a
+  possessive like `Ocean's 11` is no longer season 11.
 
 ## [1.31.2] — 2026-10-15
 
