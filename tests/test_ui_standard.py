@@ -9,7 +9,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-CSS = (Path(__file__).parents[1] / "src" / "tow" / "static" / "app.css").read_text(encoding="utf-8")
+ROOT = Path(__file__).parents[1]
+CSS = (ROOT / "src" / "tow" / "static" / "app.css").read_text(encoding="utf-8")
+# Phones and touch screens: fields grow to a 44 px touch target with 16 px text.
+TOUCH = "@media (max-width: 720px), (pointer: coarse) {"
 SIZE = re.compile(r"(?<![\w-])(height|min-height|max-height|font-size|font|line-height|padding|padding-block)\s*:")
 BUTTON = re.compile(r"(^|[\s,>+~(])(button|\.btn)\b")
 ICON = re.compile(r"\.(ico|row-ico|flash-x)\b")
@@ -34,6 +37,47 @@ def test_button_height_is_26px_and_text_12_5px():
     assert "min-height: var(--btn-h)" in shared
     assert "font-size: 12.5px" in shared
     assert shared.index("font: inherit") < shared.index("font-size: 12.5px")  # not overridden
+
+
+def _first(selector: str, css: str = CSS) -> str:
+    """The first rule for ``selector`` (the base rule comes before any media override)."""
+    return next(body for name, body in _rules(css) if name == selector)
+
+
+def _block(opening: str) -> str:
+    """The text of the @media block that starts with ``opening`` (up to its closing brace)."""
+    start = CSS.index(opening) + len(opening)
+    depth = 1
+    for end in range(start, len(CSS)):
+        depth += {"{": 1, "}": -1}.get(CSS[end], 0)
+        if depth == 0:
+            return CSS[start:end]
+    raise AssertionError(f"unclosed {opening}")
+
+
+def test_fields_are_36px_on_a_desktop_and_44px_on_phones_and_touch_screens():
+    """The owner asked for smaller fields: 40 px fields with 15 px text outweighed their 12 px
+    labels and the 26 px buttons beside them. A field is 36 px with 14 px text on a desktop; on a
+    phone or a touch screen it stays a 44 px target with 16 px text (no zoom on focus in iOS)."""
+    assert "--field-h: 2.25rem;" in _first(":root")  # 36 px
+    touch = _block(TOUCH)
+    assert "--field-h: 2.75rem;" in _first(":root", touch)  # 44 px
+    assert "font-size: 14px" in _first("input, textarea, select")
+    assert "font-size: 16px" in _first("input, textarea, select", touch)
+    assert "height: var(--field-h)" in _first(
+        'input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select'
+    )
+    # The folder list's arrow sits in the middle of whatever height the field has.
+    assert "top: calc((var(--field-h) - var(--btn-h)) / 2)" in _first(".folder-toggle")
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Inputs and selects are 36 px with 14 px text, 44 px with 16 px text on phones and touch" in agents
+    assert "stay 40 px" not in agents
+
+
+def test_placeholders_are_as_readable_as_hints():
+    """A placeholder at the browser's grey was 3.6:1 in the dark theme; it is the hints' muted colour
+    (6.5-7:1)."""
+    assert "color: var(--mut)" in _first("::placeholder")
 
 
 def test_no_rule_sizes_a_button_on_its_own():

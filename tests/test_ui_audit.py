@@ -520,7 +520,7 @@ def test_chips_take_size_from_the_shared_button_rule():
     assert "height" not in chip
 
 
-def test_sort_select_and_file_field_are_40px_fields():
+def test_sort_select_and_file_field_are_fields_of_the_shared_height():
     assert "height" not in _rule("#list-sort")
     file_rule = _rule('.portable-import-form input[type="file"]')
     assert "height: var(--field-h);" in file_rule
