@@ -260,6 +260,75 @@ def test_refused_targets_stop_nothing(install, github, ref, release, message):
     assert leftovers(install) == []
 
 
+@pytest.mark.parametrize(
+    "ref",
+    [
+        "v1.23.0/../../../other/repo/releases/download/v1.23.0",
+        "v1.23.0-evil",
+        "v1.23.0.1",
+        "v1.23.0?x=1",
+        " v1.23.0",
+    ],
+)
+def test_a_ref_that_only_starts_like_a_release_is_refused_before_any_download(install, github, ref):
+    """The ref goes into GitHub URLs: only an exact release name is taken."""
+    github.release("v1.23.0", tarball("1.23.0"))
+    machine = Machine(install["app"], github)
+    code, lines = run(machine, ref)
+    assert code == 2
+    assert "updates to a release tag" in lines[-1]
+    assert github.asked == []
+    assert machine.calls == []
+
+
+def test_a_latest_release_with_a_strange_tag_is_refused(install, github):
+    github.routes[f"/{REPO}/releases/latest"] = (302, b"", {"Location": f"/{REPO}/releases/tag/v1.23.0-x"})
+    machine = Machine(install["app"], github)
+    code, lines = run(machine)
+    assert code == 2
+    assert "updates to a release tag" in lines[-1]
+    assert machine.calls == []
+
+
+def test_a_download_is_not_redirected_to_another_host(install, github):
+    """A redirect may only stay on the configured GitHub or go to GitHub's own download hosts
+    over HTTPS; urllib followed one to any host, http and ftp included."""
+    archive = tarball("1.23.0")
+    github.release("v1.23.0", archive)
+    elsewhere = github.url.replace("127.0.0.1", "localhost") + "/elsewhere/SHA256SUMS"
+    github.routes[f"/{REPO}/releases/download/v1.23.0/SHA256SUMS"] = (302, b"", {"Location": elsewhere})
+    github.routes["/elsewhere/SHA256SUMS"] = (200, sums(**{"tow-source.tar.gz": archive}), {})
+    machine = Machine(install["app"], github)
+    code, lines = run(machine, "v1.23.0")
+    assert code == 2
+    assert "the download failed" in lines[-1]
+    assert "/elsewhere/SHA256SUMS" not in github.asked
+    assert machine.calls == []
+
+
+def test_a_download_follows_a_redirect_on_the_same_host(install, github):
+    archive = tarball("1.23.0")
+    github.release("v1.23.0", archive)
+    moved = f"/{REPO}/releases/download/v1.23.0/SHA256SUMS"
+    github.routes["/moved/SHA256SUMS"] = github.routes[moved]
+    github.routes[moved] = (302, b"", {"Location": "/moved/SHA256SUMS"})
+    machine = Machine(install["app"], github)
+    code, lines = run(machine, "v1.23.0")
+    assert code == 0, lines
+
+
+def test_only_github_download_hosts_over_https_are_followed():
+    allowed = updater.allowed_redirect
+    assert allowed("https://github.com", "https://objects.githubusercontent.com/x")
+    assert allowed("https://github.com", "https://release-assets.githubusercontent.com/x")
+    assert allowed("https://github.com", "https://codeload.github.com/d0j/tow/tar.gz/refs/tags/v1.23.0")
+    assert allowed("https://github.com", "https://github.com/d0j/tow/x")
+    assert not allowed("https://github.com", "http://objects.githubusercontent.com/x")
+    assert not allowed("https://github.com", "https://evil.example/x")
+    assert not allowed("https://github.com", "ftp://github.com/x")
+    assert not allowed("https://github.com", "https://github.com.evil.example/x")
+
+
 def test_a_leftover_that_cannot_be_removed_is_said_and_stops_nothing(install, github, monkeypatch):
     # app.new of an earlier cut-off update, held by another program: its removal failed quietly,
     # the unpacked release could not take its place, and the run ended in a traceback.

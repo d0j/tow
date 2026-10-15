@@ -139,6 +139,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Restoring a backup, a restore point or a TOW file - also from another device - now keeps this computer's
   opt-ins for shares and the home network and its access providers too, as it already kept network access, the
   password and the backup folders.
+- The updater (`Update TOW.cmd`, `tow update`, `deploy.ps1`) takes as `--ref` only an exact release name such
+  as `v1.32.0` or a commit's hash: something that merely starts like a release, a branch or another git
+  expression is refused before anything is downloaded or stopped, and a release name means the release tag
+  even where a branch has the same name. Downloads follow redirects only within GitHub.
 
 ## [1.31.2] — 2026-10-15
 

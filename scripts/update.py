@@ -81,6 +81,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener
 
 # Not `from datetime import UTC`: Python 3.10 has none, and must reach the version check in main().
@@ -92,6 +93,11 @@ APP = HERE.parents[1] / "app" if HERE.parent.name == "runtime" else HERE.parents
 # Where an install without git gets its releases (the source archive and SHA256SUMS of a tag).
 GITHUB = "https://github.com"
 REPO = "d0j/tow"
+# Where GitHub sends a release download (the archive of a tag, an uploaded asset): a download may
+# be redirected there over HTTPS, or within GITHUB itself, never anywhere else.
+DOWNLOAD_HOSTS = frozenset(
+    {"github.com", "codeload.github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"}
+)
 SOURCE_ASSET = "tow-source.tar.gz"
 SUMS_ASSET = "SHA256SUMS"
 MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024
@@ -345,6 +351,40 @@ def version_tuple(text: str) -> tuple[int, ...] | None:
     return tuple(int(part) for part in match.groups()) if match else None
 
 
+def release_version(ref: str) -> tuple[int, ...] | None:
+    """The version a ``--ref`` names when it is exactly a release tag (``v1.31.2``), else None:
+    the ref goes into GitHub URLs and git revisions, so ``v1.30.0/../x`` or ``v1.30.0~1`` is none."""
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", ref or "")
+    return tuple(int(part) for part in match.groups()) if match else None
+
+
+def allowed_redirect(base: str, target: str) -> bool:
+    """A download may move within ``base`` (the GitHub it was asked of: scheme, host and port)
+    or to GitHub's download hosts over HTTPS; never to another host, to http or to ftp."""
+    to, home = urlsplit(target), urlsplit(base)
+    if to.username is not None or to.password is not None:
+        return False
+    if (to.scheme, to.netloc.lower()) == (home.scheme, home.netloc.lower()):
+        return True
+    try:
+        port = to.port
+    except ValueError:
+        return False
+    return to.scheme == "https" and (to.hostname or "").lower() in DOWNLOAD_HOSTS and port in (None, 443)
+
+
+class _StayOnGitHub(HTTPRedirectHandler):
+    """urllib's redirects, refused where ``allowed_redirect`` says no."""
+
+    def __init__(self, base: str) -> None:
+        self.base = base
+
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> Any:
+        if not allowed_redirect(self.base, newurl):
+            raise URLError(f"a redirect to {urlsplit(newurl).scheme}://{urlsplit(newurl).hostname} was refused")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def same_path(left: str | Path, right: str | Path) -> bool:
     def norm(value: str | Path) -> str:
         return os.path.normcase(os.path.normpath(str(value).strip().strip('"')))
@@ -485,7 +525,8 @@ class System:
         """``url`` into ``destination``; False when there is nothing there (404)."""
         request = Request(url, headers={"User-Agent": "tow-update"})
         try:
-            with self._opener().open(request, timeout=60) as response, destination.open("wb") as handle:
+            opener = self._opener(_StayOnGitHub(self.github))
+            with opener.open(request, timeout=60) as response, destination.open("wb") as handle:
                 size = 0
                 for chunk in iter(lambda: response.read(1 << 20), b""):
                     size += len(chunk)
@@ -912,10 +953,20 @@ class GitCode:
             self.sys.git("fetch", "--tags", "--prune", "origin")
         except UpdateError as exc:
             raise UpdateError(self.work.text("fetch_failed", error=exc)) from exc
+        # A release tag as a tag (never a branch of that name), or a commit by its hash; no other
+        # revision expression (a branch, HEAD~1, :/text, an option).
+        if release_version(ref) is not None:
+            revision = f"refs/tags/{ref}^{{commit}}"
+        elif re.fullmatch(r"[0-9a-fA-F]{7,64}", ref):
+            revision = f"{ref}^{{commit}}"
+        else:
+            raise UpdateError(self.work.text("no_ref", ref=ref))
         try:
-            target = self.sys.git("rev-parse", "--verify", f"{ref}^{{commit}}")
+            target = self.sys.git("rev-parse", "--verify", "--quiet", revision)
         except UpdateError as exc:
             raise UpdateError(self.work.text("no_ref", ref=ref)) from exc
+        if not target:
+            raise UpdateError(self.work.text("no_ref", ref=ref))
         self.work.refuse_too_old(target)
         self.refuse_clashes(target)
         return target
@@ -1139,10 +1190,12 @@ class ArchiveCode:
         if path is None:
             path = self.downloads / SUMS_ASSET
             if not self._fetch(
-                f"{self.sys.github}/{self.sys.repo}/releases/download/{tag}/{SUMS_ASSET}", path, required=False
+                f"{self.sys.github}/{self.sys.repo}/releases/download/{quote(tag, safe='')}/{SUMS_ASSET}",
+                path,
+                required=False,
             ):
                 # No SHA256SUMS: a tag that does not exist at all is named as such.
-                url = f"{self.sys.github}/{self.sys.repo}/archive/refs/tags/{tag}.tar.gz"
+                url = f"{self.sys.github}/{self.sys.repo}/archive/refs/tags/{quote(tag, safe='')}.tar.gz"
                 if not self._fetch(url, self.downloads / SOURCE_ASSET, required=False):
                     raise UpdateError(self.work.text("no_release", ref=tag, url=url))
                 raise UpdateError(self.work.text("not_verified"))
@@ -1165,7 +1218,8 @@ class ArchiveCode:
         expected = self._expected(tag)
         base = f"{self.sys.github}/{self.sys.repo}"
         archive = self.downloads / SOURCE_ASSET
-        urls = [f"{base}/archive/refs/tags/{tag}.tar.gz", f"{base}/releases/download/{tag}/{SOURCE_ASSET}"]
+        quoted = quote(tag, safe="")
+        urls = [f"{base}/archive/refs/tags/{quoted}.tar.gz", f"{base}/releases/download/{quoted}/{SOURCE_ASSET}"]
         found = False
         for url in urls:
             if not self._fetch(url, archive, required=False):
@@ -1185,12 +1239,12 @@ class ArchiveCode:
                     self.work.text("download_failed", url=f"{self.sys.github}/{self.sys.repo}", error=exc)
                 ) from exc
             # Only a release named by its tag installs again, or goes back.
-            latest, installed = version_tuple(ref), version_tuple(self.work.version())
+            latest, installed = release_version(ref), version_tuple(self.work.version())
             if latest is not None and installed is not None and latest < installed:
                 raise UpdateError(self.work.text("latest_older", ref=ref, version=self.work.version()))
             if latest is not None and latest == installed:
                 return None
-        requested = version_tuple(ref)
+        requested = release_version(ref)
         if requested is None:
             raise UpdateError(self.work.text("archive_ref", ref=ref))
         # Before any download: a release this install cannot go to is refused as such, not as a
@@ -1205,7 +1259,7 @@ class ArchiveCode:
         except (OSError, tarfile.TarError, UpdateError) as exc:
             raise UpdateError(self.work.text("bad_archive", error=exc)) from exc
         version = _project_version(top / "pyproject.toml")
-        if version_tuple(version) != version_tuple(ref):
+        if version_tuple(version) != requested:
             raise UpdateError(self.work.text("wrong_version", ref=ref, version=version or "?"))
         parsed = version_tuple(version)
         if parsed is not None and parsed < MINIMUM_ARCHIVE_TARGET:
