@@ -209,4 +209,6 @@ def check_status(job: str = "") -> Response:
 def cancel_check(job: str) -> Response:
     if check_jobs.cancel(job):
         return flash_redirect("/", "web.check_all.cancelled")
+    if check_jobs.get(job) is None:  # never started here, or its record is gone: nothing to say it did
+        return flash_redirect("/", "web.check_all.cancel_unknown", "warn")
     return flash_redirect("/", "web.check_all.cannot_cancel", "warn")
