@@ -189,8 +189,22 @@ $stamps = @($ast.FindAll({
 }, $true))
 $try = $stamps[0].Parent
 while ($try -and $try -isnot [System.Management.Automation.Language.TryStatementAst]) { $try = $try.Parent }
+function Get-Calls([string]$Name) {
+    @($ast.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq $Name
+    }, $true) | Where-Object {
+        $parent = $_.Parent
+        while ($parent -and $parent -isnot [System.Management.Automation.Language.FunctionDefinitionAst]) {
+            $parent = $parent.Parent
+        }
+        -not $parent  # the gate's own flow, not a function's body
+    } | ForEach-Object { $_.Extent.StartOffset })
+}
 @{runs=@($runs); stamps=$stamps.Count; stamp_at=$stamps[0].Extent.StartOffset;
-  try_from=$try.Body.Extent.StartOffset; try_to=$try.Body.Extent.EndOffset} | ConvertTo-Json -Compress -Depth 4
+  try_from=$try.Body.Extent.StartOffset; try_to=$try.Body.Extent.EndOffset;
+  listed=@(Get-Calls 'Get-UntrackedFiles'); checked=@(Get-Calls 'Assert-NoNewFiles')} |
+    ConvertTo-Json -Compress -Depth 4
 """
 
 
@@ -202,3 +216,55 @@ def test_every_full_test_run_has_the_deadline_and_the_pass_is_recorded_after_it(
     assert {run["name"] for run in full} == {"Invoke-ToolWithDeadline"}
     assert result["stamps"] == 1
     assert all(result["try_from"] <= run["at"] < result["stamp_at"] < result["try_to"] for run in full)
+
+
+@pytest.mark.allow_system
+def test_every_test_run_is_followed_by_the_check_for_new_files():
+    """Collection (-Quick) and the full run: the untracked files are listed once before them, and
+    each is checked after it, before the tree is recorded as passed."""
+    result = _run(SHAPE_HARNESS)
+    assert len(result["listed"]) == 1
+    assert len(result["checked"]) == 2
+    for run in result["runs"]:
+        assert result["listed"][0] < run["at"]
+        assert any(run["at"] < at for at in result["checked"]), run
+    assert all(at < result["stamp_at"] for at in result["checked"])
+
+
+# The gate's own check for new files, in a throwaway repository.
+NEW_FILES_HARNESS = r"""
+$ErrorActionPreference = 'Stop'
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $env:TOW_TEST_GATE, [ref]$null, [ref]$parseErrors)
+if ($parseErrors) { throw 'gate parse failed' }
+$names = 'Get-UntrackedFiles', 'Assert-NoNewFiles'
+$functions = @($ast.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -in $names
+}, $true))
+if ($functions.Count -ne $names.Count) { throw 'the check for new files is required' }
+$functions | ForEach-Object { . ([scriptblock]::Create($_.Extent.Text)) }
+Set-Location -LiteralPath $env:TOW_TEST_REPO
+$before = @(Get-UntrackedFiles)
+$quiet = $null
+try { Assert-NoNewFiles $before } catch { $quiet = $_.Exception.Message }
+Set-Content -LiteralPath (Join-Path $env:TOW_TEST_REPO 'cwd.txt') -Value 'x'
+Set-Content -LiteralPath (Join-Path $env:TOW_TEST_REPO 'ignored/state.json') -Value '{}'
+$failure = $null
+try { Assert-NoNewFiles $before } catch { $failure = $_.Exception.Message }
+@{before=@($before); quiet=$quiet; failure=$failure} | ConvertTo-Json -Compress
+"""
+
+
+@pytest.mark.allow_system
+def test_a_file_a_test_run_leaves_in_the_checkout_fails_the_gate(tmp_path):
+    repo = tmp_path / "checkout"
+    (repo / "ignored").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(repo)], check=True, timeout=60)
+    (repo / ".gitignore").write_text("/ignored/\n", encoding="utf-8")
+    (repo / "notes.txt").write_text("there before the run", encoding="utf-8")
+    result = _run(NEW_FILES_HARNESS, TOW_TEST_REPO=str(repo))
+    assert result["before"] == [".gitignore", "notes.txt"]
+    assert result["quiet"] is None  # nothing new: the gate goes on
+    assert result["failure"] == "gate failed: the test run left files in the checkout: cwd.txt"

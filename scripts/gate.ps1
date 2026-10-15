@@ -13,7 +13,8 @@
     TOW_GATE_REQUIRE_COVERAGE=1 asks for it; then the gate fails instead. The test run has a
     wall-clock deadline of 30 minutes (TOW_GATE_PYTEST_DEADLINE_SEC overrides it), collection and
     worker shutdown included: past it, only that run's process tree is stopped and the gate fails
-    without recording the tree as passed.
+    without recording the tree as passed. A test run (or -Quick's collection) that leaves a new
+    untracked, not ignored file in the checkout fails the gate and names it.
     -Quick skips the test suite and the wheel smoke; it only collects the tests (every test
     module must import).
     -Staged checks what the next commit contains (the index), not the working tree: the
@@ -163,6 +164,20 @@ function Get-WorkingTree {
     }
 }
 
+# The checkout's untracked files that are not ignored. A test run must not add any: a child
+# process the test guard lets through can write where the guard cannot see it (a cwd.txt with a
+# worktree path was committed that way).
+function Get-UntrackedFiles {
+    $files = @(git ls-files --others --exclude-standard)
+    if ($LASTEXITCODE -ne 0) { throw 'gate failed: git ls-files could not list the untracked files' }
+    $files
+}
+
+function Assert-NoNewFiles([string[]]$Before) {
+    $new = @(Get-UntrackedFiles | Where-Object { $_ -notin $Before })
+    if ($new) { throw "gate failed: the test run left files in the checkout: $($new -join ', ')" }
+}
+
 function Save-PassedTree([string]$Tree) {
     $file = Join-Path (git rev-parse --git-common-dir) 'tow-gate-passed'
     $lines = @(if (Test-Path $file) { Get-Content $file }) + $Tree | Select-Object -Unique -Last 200
@@ -225,6 +240,9 @@ try {
     else {
         Step 'whitespace (tracked files)' { git diff --check $EmptyTree }
     }
+    # -Staged runs in the exported snapshot, which is no checkout.
+    $untracked = $null
+    if (-not $Staged) { $untracked = @(Get-UntrackedFiles) }
     if ($Quick) {
         # Without the suite, at least every test module imports and every test is found: a broken
         # import in a test file used to pass the pre-commit gate and fail only the full one.
@@ -232,6 +250,7 @@ try {
             $collected = Invoke-Tool pytest --collect-only -q -p no:cacheprovider 2>&1
             if ($LASTEXITCODE -ne 0) { $collected | Write-Host } else { $collected | Select-Object -Last 1 | Write-Host }
         }
+        if ($null -ne $untracked) { Assert-NoNewFiles $untracked }
     }
     else {
         # pytest-xdist (a locked dev dependency) spreads the suite over every core; the workers
@@ -254,6 +273,7 @@ try {
             Skip 'coverage' "$PytestCov is not available offline"
             Step 'pytest (parallel, random order)' { Invoke-ToolWithDeadline pytest -q -ra -p no:cacheprovider @parallel --test-order random }
         }
+        Assert-NoNewFiles $untracked
         Test-Wheel
     }
     if ($Audit) {
