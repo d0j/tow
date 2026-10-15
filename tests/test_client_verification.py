@@ -807,6 +807,60 @@ def test_a_site_failure_while_the_client_verifies_leaves_the_receipt_alone(world
     assert _run(space_only=True)["ok"]
 
 
+def _block(client):
+    _run()
+    client.torrents[H].update(state="stoppedDL", progress=0.3, tags=["tow"])
+    _run(space_only=True)
+    assert load_state()["topics"][0]["verification_pending"]["blocked"]
+    client.calls.clear()
+
+
+def test_a_blocked_unchanged_revision_is_confirmed_by_the_probe_without_a_download(world):
+    client, tracker, _sent = world
+    tracker.spec = {"infohash_path": "/details?id={id}", "download_limit": True}
+    _block(client)
+    tracker.site_hash = H
+    row = _run()
+    topic = load_state()["topics"][0]
+    assert row["status"] == "failed"
+    assert topic["last_error_code"] == "client.managed.start_unconfirmed"  # equality never clears it
+    assert topic["site_ok_at"] == topic["last_check"]
+    assert tracker.fetches == 1
+    assert client.calls == []
+
+
+def test_a_blocked_receipt_still_finds_a_newer_revision(world):
+    client, tracker, _sent = world
+    tracker.spec = {"infohash_path": "/details?id={id}", "download_limit": True}
+    _block(client)
+    tracker.site_hash = NEW_H
+    tracker.content = NEW_TORRENT
+    client.checking = False
+    row = _run()
+    assert tracker.fetches == 2
+    assert row["ok"]
+    assert load_state()["topics"][0]["hash"] == NEW_H
+    assert client.calls[0][0] == "add"
+
+
+def test_a_limited_site_without_revision_evidence_is_not_asked_for_a_blocked_torrent(world):
+    client, tracker, _sent = world
+    tracker.spec = {"download_limit": True}
+    _run()
+    client.torrents[H].update(state="downloading", progress=0.5)
+    client.torrents[H]["files"][0]["priority"] = 0  # the owner changed it: only a new handover repairs it
+    _run(space_only=True)
+    client.calls.clear()
+    row = _run()
+    assert row["status"] == "failed"
+    assert tracker.fetches == 1
+    assert "by hand" in row["error"] or "вручную" in row["error"]
+    assert load_state()["topics"][0]["verification_pending"]["blocked"] == "client.managed.wrong_selection"
+    assert client.calls == []
+    check.run_check(apply=True, notify=False, how="manual", ids=["slow"])
+    assert tracker.fetches == 2  # a check started by hand still fetches it
+
+
 def test_terminal_failure_is_not_scheduled_every_five_minutes(world):
     client, _tracker, _sent = world
     _run()

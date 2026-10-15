@@ -16,7 +16,7 @@ from tow.clients import files
 from tow.clients.managed import ClientVerificationPending
 from tow.clients.spec import TorrentClientAdapter
 from tow.clock import machine_now, parse_timestamp
-from tow.errors import TowError
+from tow.errors import Msg, TowError
 from tow.events import new_operation_id
 from tow.i18n import t
 from tow.jsonish import as_dict
@@ -98,11 +98,16 @@ def awaits_client(topic: Topic, row: dict[str, Any]) -> bool:
     return bool(waiting) and not waiting.get("blocked") and not row.get("ok")
 
 
-def blocked_row(topic: Topic, row: dict[str, Any], h: str) -> None:
+def blocked_row(topic: Topic, row: dict[str, Any], h: str, *, by_hand_only: bool = False) -> None:
+    """The row of a handover its client failed. ``by_hand_only``: the site was not asked for a
+    newer revision (a daily download limit, no way to ask without a download) - the row says
+    that a check started by hand looks for one."""
     waiting = as_dict(topic.get("verification_pending"))
     error = TowError(
         str(waiting.get("blocked") or "check.selection_unconfirmed"), **as_dict(waiting.get("blocked_params"))
     )
+    if by_hand_only:
+        error = TowError("check.two_errors", first=error, second=Msg("check.blocked_by_hand"), cls=error.error_class)
     row.update(ok=False, changed=False, hash=h, status="failed")
     set_error(row, error)
 

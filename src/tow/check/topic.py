@@ -505,6 +505,31 @@ def _observe_while_verifying(topic: Topic, run: CheckRun, row: CheckRow, tr: Any
     )
 
 
+def _blocked_unchanged(work: TopicCheck) -> bool:
+    """A handover its client failed waits for the owner (a blocked receipt): whether the site
+    still has that revision is asked without downloading the .torrent when the site can say it
+    (``_site_revision``). Unchanged: the row keeps the client's failure, nothing is downloaded.
+    A site with a daily download limit that cannot say it is not asked for the .torrent either
+    - a check started by hand fetches it. True: the check ends here."""
+    topic, run, row = work.topic, work.run, work.row
+    blocked = as_dict(topic.get("verification_pending")).get("blocked")
+    if not (work.old and blocked) or run.readd_removed or topic.get("selection_dirty"):
+        return False
+    if run.apply:
+        _reread_secrets(run)
+    revision = _site_revision(work)
+    if revision is None:
+        if not _download_limited(work.tracker):
+            return False  # ordinary revision discovery: its .torrent, as before
+        verification.blocked_row(topic, row, work.old, by_hand_only=True)
+        return True
+    row["site_answered"] = True
+    if work.old not in revision.identities:
+        return False  # a newer revision: downloaded and handed over as always
+    verification.blocked_row(topic, row, work.old)
+    return True
+
+
 def _site_skipped_after_wait(work: TopicCheck) -> bool:
     """The wait for disk space ended in this check: its site is asked now only when it would
     have been asked without the wait."""
@@ -550,6 +575,8 @@ def _check_revision(work: TopicCheck) -> None:
     """Fetch the topic's current revision, identify it and bring the client in line with it."""
     topic, run, row, old = work.topic, work.run, work.row, work.old
     policy = policy_from_topic(topic)
+    if _blocked_unchanged(work):
+        return
     fetched = _fetch_revision(work, policy)
     row["site_answered"] = True  # whatever the client says next, the site gave the revision
     if fetched is None:

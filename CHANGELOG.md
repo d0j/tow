@@ -129,6 +129,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - While the torrent client still checks a torrent's files, a scheduled check now asks the site which version is
   current (its revision page or the topic page's magnet link, never a .torrent download) and changes nothing in the
   client; the site's icon shows that answer, and a newer version is handled once the client is done.
+- A torrent whose handover the client failed no longer makes every check download its .torrent again: the site is
+  asked whether that version is still current (its revision page or the topic page's magnet link), and a site with a
+  daily download limit that cannot say so is left alone until you check the topic by hand.
 
 ## [1.30.10] — 2026-10-15
 
