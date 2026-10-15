@@ -66,7 +66,7 @@ def accept_check(*, topic_id: str, apply: bool, action: str, adopted: bool = Fal
     answer is a short acknowledgement, not a page: the page follows the check by its id
     (``/check/status``) and shows its result where it is. The same id again is the same check.
     A full queue answers as before (a redirect with its message)."""
-    job, added = check_jobs.submit(
+    job, _added = check_jobs.submit(
         topic_id=topic_id,
         apply=apply,
         lang=owner_language(),
@@ -77,7 +77,9 @@ def accept_check(*, topic_id: str, apply: bool, action: str, adopted: bool = Fal
     )
     if job is None:
         return flash_redirect("/", "web.check_all.queue_full", "warn")
-    starts_now = added and job["position"] == 1 and job["status"] in {"queued", "running"}
+    # The head of its lane runs or starts next - also when this is the same click again (the
+    # action id already registered) or a click that joined a waiting check: "started", not "queued".
+    starts_now = job["position"] == 1 and job["status"] in {"queued", "running"}
     message = check_status_message(job)
     if job["status"] in {"queued", "running"}:
         message["text"] = i18n.t("web.check_all.started" if starts_now else "web.check_all.queued")

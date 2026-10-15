@@ -786,3 +786,21 @@ def test_a_check_of_only_skipped_or_unsaved_rows_is_no_success():
     assert check_report({"results": rows}, apply=True)["kind"] == "info"
     assert check_report({"results": [*rows, {"id": "c", "title": "Show C", "ok": True}]}, apply=True)["kind"] == "ok"
     assert check_report({"results": []}, apply=True)["kind"] == "info"
+
+
+def test_the_same_click_again_says_its_check_started_not_queued(client, consumers):
+    # A page that sent its Check again (the answer was lost) got "queued; it will start after the
+    # current check" for the very check at the head of the lane.
+    import json as _json
+
+    from tow import i18n
+
+    first = check_actions.accept_check(topic_id="a", apply=True, action="click-1")
+    again = check_actions.accept_check(topic_id="a", apply=True, action="click-1")
+    started = i18n.t("web.check_all.started")
+
+    assert _json.loads(first.body)["message"]["text"] == started
+    assert _json.loads(again.body)["message"]["text"] == started
+    assert _json.loads(again.body)["job"] == _json.loads(first.body)["job"]
+    behind = check_actions.accept_check(topic_id="b", apply=True, action="click-2")
+    assert _json.loads(behind.body)["message"]["text"] == i18n.t("web.check_all.queued")
