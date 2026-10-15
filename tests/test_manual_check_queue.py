@@ -618,6 +618,25 @@ def test_a_result_has_one_address_rendered_from_its_job(client, monkeypatch, con
     assert "удалена из очереди" in other.select_one("#check-result").get_text()
 
 
+@pytest.mark.parametrize("ends", ["done", "failed"])
+def test_the_following_page_of_a_finished_check_says_it_finished(client, monkeypatch, consumers, ends):
+    # Opened again (reload, Back, no script) after its check ended: the job is there, so not
+    # "TOW restarted or the record expired".
+    def check(**_kw):
+        if ends == "failed":
+            raise ValueError("synthetic")
+        return {"results": []}
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    job = _job(client.post("/check", data={"mode": "apply"}, follow_redirects=False))
+    consumers[0].run()
+    note = BeautifulSoup(client.get(f"/?check_job={job}").text, "html.parser").select_one("#check-activity")
+    assert "Проверка завершена." in note.get_text()
+    assert "перезапущен" not in note.get_text()
+    assert note.select_one(f'a[href="/?check_result={job}#check-result"]')
+    assert not note.select_one("form")  # nothing left to cancel
+
+
 class _ThreadStop(BaseException):
     """Not an Exception: what ends a thread (SystemExit, KeyboardInterrupt) in the middle of a check."""
 
