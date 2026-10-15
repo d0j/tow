@@ -72,7 +72,7 @@ def _status_view() -> dict[str, Any]:
         "running": running is not None,
         "pid": (running or {}).get("pid"),
         "client": client_title,
-        "client_ok": health.get("qbit_ok") if "qbit_ok" in health else None,
+        "client_ok": _client_ok(state, cfg, health),
         "sites": len(cfg.get("trackers") or {}),
         "topics": len(state.get("topics") or []),
         # Written from the number beside "at" (an older TOW stored "at" already written in the
@@ -90,6 +90,25 @@ def _status_view() -> dict[str, Any]:
         "autostart_where": stale,
         "update_interrupted": running is None and layout.interrupted_update(),
     }
+
+
+def _client_ok(state: dict[str, Any], cfg: dict[str, Any], health: dict[str, Any]) -> bool | None:
+    """Whether the main client answers, by the header's rule (``tow.issues.clients.down``: the last
+    check, or Settings' "Check" since then); None when nothing has asked it yet."""
+    import time
+
+    from tow.clients.factory import default_client_id
+    from tow.issues import Snapshot
+    from tow.issues.clients import down
+
+    try:
+        default = default_client_id(cfg)
+    except IndexError, RuntimeError, ValueError:
+        return None
+    marks = health.get("ping_failed")
+    if "qbit_ok" not in health and not (isinstance(marks, dict) and default in marks):
+        return None
+    return default not in down(Snapshot(state=state, config=cfg, now=time.time()))
 
 
 def _issues(state: dict[str, Any], cfg: dict[str, Any], next_at: float | None) -> list[Any]:

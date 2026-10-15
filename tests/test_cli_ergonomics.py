@@ -284,3 +284,23 @@ def test_status_counts_what_needs_attention_on_a_line_of_its_own(monkeypatch, ca
     save_state({"topics": [topic], "health": {"qbit_ok": True, "history_rebuilt_at": int(time.time())}})
     assert cli.main(["status", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["attention"] == 0
+
+
+def test_status_says_the_client_does_not_answer_when_the_header_says_so(monkeypatch, capsys):
+    # Settings' "Check" found the client not answering (the header's evidence): `tow status`
+    # still said it answers, from the last check's word alone.
+    from tow.clients.factory import default_client_id
+    from tow.config import load_config
+    from tow.store import save_state
+
+    monkeypatch.setattr("tow.autostart.backend", lambda: type("B", (), {"status": lambda self: {"on": True}})())
+    default = default_client_id(load_config())
+    save_state({"topics": [], "health": {"qbit_ok": True, "ping_failed": {default: 1}}})
+    assert cli.main(["status", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["client_ok"] is False
+    save_state({"topics": [], "health": {"qbit_ok": True}})
+    assert cli.main(["status", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["client_ok"] is True
+    save_state({"topics": [], "health": {}})
+    assert cli.main(["status", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["client_ok"] is None
