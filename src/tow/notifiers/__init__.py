@@ -32,7 +32,7 @@ from typing import Any
 from tow.errors import Msg
 from tow.i18n import t
 from tow.notifiers.base import DeliveryError, Field, message_language, ui_language
-from tow.notifiers.outbox import OUTBOX_LIMIT, enqueue, flush, parts_for, unblock
+from tow.notifiers.outbox import OUTBOX_LIMIT, enqueue, flush, parts_for, prune, unblock
 from tow.notifiers.registry import (
     connected,
     get,
@@ -87,7 +87,14 @@ def send_all(secrets: dict[str, Any], text: str) -> dict[str, tuple[bool, str]]:
 
 
 def flush_outbox(secrets: dict[str, Any]) -> dict[str, tuple[bool, str]]:
-    """Deliver queued messages only (the watchdog calls this every 10 minutes)."""
+    """Deliver queued messages only (the watchdog calls this every 10 minutes); the queues of
+    recipients no longer in the settings are forgotten first."""
+    from tow.store import load_state, persistence_lock, save_state
+
+    with persistence_lock():
+        state = load_state()
+        if prune(state, secrets):
+            save_state(state)
     results = flush(secrets)
     return _by_kind(results, list(results))
 

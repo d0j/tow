@@ -23,6 +23,7 @@ the queue's write sends that part again (no messenger here offers a way to dedup
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
@@ -167,8 +168,53 @@ def _tidy(state: dict[str, Any]) -> None:
         state.pop("notify_lease", None)
 
 
+def _saved_recipients(secrets: dict[str, Any]) -> dict[str, set[str]]:
+    """Per messenger with saved settings (connected, turned off or incomplete): its recipients'
+    queue keys. A messenger whose recipients cannot be told is left out (its queues are kept)."""
+    from tow.notifiers.registry import kinds, raw_settings
+
+    found: dict[str, set[str]] = {}
+    for kind, module in kinds().items():
+        raw = raw_settings(secrets, kind)
+        if raw is None:
+            found[kind] = set()
+            continue
+        split = getattr(module, "targets", None)
+        try:
+            names = [name for name, _settings in split(raw)] if callable(split) else [""]
+        except Exception:  # noqa: BLE001 - settings it cannot split: its queues stay as they are
+            continue
+        found[kind] = {f"{kind}:{name}" if name else kind for name in names}
+    return found
+
+
+def prune(state: dict[str, Any], secrets: dict[str, Any]) -> int:
+    """Forget the queues of recipients no longer in the settings (a removed chat, a group that
+    moved to a new id, a deleted messenger): they were never sent nor cleaned. Returns how many
+    queues went (in ``state``; the caller saves it) and logs it with their waiting messages."""
+    saved = _saved_recipients(secrets)
+    outbox = state.get("notify_outbox")
+    if not isinstance(outbox, dict):
+        return 0
+    stale = [key for key in outbox if key.split(":", 1)[0] in saved and key not in saved[key.split(":", 1)[0]]]
+    count = 0
+    for key in stale:
+        box = outbox.pop(key)
+        count += len(box.get("items") or []) if isinstance(box, dict) else len(box) if isinstance(box, list) else 0
+        for field in ("notify_status", "notify_lease", "notify_dropped"):
+            if isinstance(state.get(field), dict):
+                state[field].pop(key, None)
+    if stale:
+        _tidy(state)
+        logging.getLogger("tow.notifiers").info(
+            "queues of %d removed recipient(s) forgotten, %d message(s) with them", len(stale), count
+        )
+    return len(stale)
+
+
 def enqueue(state: dict[str, Any], secrets: dict[str, Any], text: str) -> list[str]:
     """Add ``text`` for every connected recipient (in ``state``; the caller saves it)."""
+    prune(state, secrets)
     keys = []
     for key, _kind, _module, _settings in targets(secrets):
         box = _box(state, key)
