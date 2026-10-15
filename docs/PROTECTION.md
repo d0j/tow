@@ -181,10 +181,10 @@ TOW computer, Settings → Site access → Recovery → **Reset saved access** e
 to TOW's private temporary folder, until normal cleanup. It does not remove site passwords or service settings;
 reset is refused while an applying check is active. The same action resets saved service cooldowns.
 
-## Current revision without another download
+## Current version without another download
 
 A site may expose `infohash_path` with `{id}`. Kinozal's preset supplies its service-information page. Only a unique
-labelled current hash is accepted. If it matches the stored revision, the client must independently confirm the
+labelled current hash is accepted. If it matches the stored version, the client must independently confirm the
 owned torrent, path and verified selection before TOW skips downloading its `.torrent`. Progress reconciliation
 still runs. Unknown format or a missing optional endpoint falls back to the normal download; a host-level failure
 is reported without repeating the same failing requests. A changed rule, missing/foreign/pending task or changed
