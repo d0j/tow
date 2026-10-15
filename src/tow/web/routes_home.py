@@ -100,7 +100,10 @@ def index(request: Request) -> Response:
             "add_draft": add_draft(request),
             "flash": request_flash(request) or said,
             "check_result": result,
-            "check_result_at": ui_time(datetime.fromtimestamp(result["started_at"], UTC).isoformat()) if result else "",
+            # When the result was observed: its check's end, not when it was asked for.
+            "check_result_at": ui_time(datetime.fromtimestamp(result["ended_at"], UTC).isoformat())
+            if result and result.get("ended_at")
+            else "",
             "check_result_message": check_job_message(result) if result and not said else "",
             "check_result_requested": bool(result_id),
             "check_activity": active,
