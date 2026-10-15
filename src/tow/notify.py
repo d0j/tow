@@ -161,17 +161,6 @@ class NotificationBatch:
         return iter(self._items.values())
 
 
-def ping(secrets: dict[str, Any]) -> bool:
-    """Notifications work: a messenger is connected and its last delivery did not fail.
-
-    No network call: the result comes from real deliveries (see tow.notifiers).
-    """
-    from tow.notifiers import health
-    from tow.store import load_state
-
-    return health(secrets, load_state()) is True
-
-
 def short_series_title(title: str, lang: str | None = None) -> str:
     value = " ".join((title or "")[:4096].split()).strip()[:512]
     value = re.split(r"\s*\[[^\]]*\]", value, maxsplit=1)[0].strip()
