@@ -147,10 +147,48 @@ def import_text(result: dict[str, Any]) -> str:
     lines += [t("cli.bundle.path_mapped", old=item["old"], new=item["new"]) for item in result.get("path_maps") or []]
     # "unmapped topic path: D:\TV" - the folder after the colon, said in the owner's words.
     lines += [t("cli.bundle.path_unmapped", path=str(w).split(": ", 1)[-1]) for w in result.get("path_warnings") or []]
+    lines += _security_lines(result.get("security_settings") or [])
     lines.append(t("cli.bundle.import_notes"))
     if result.get("log_error"):
         lines.append(t("cli.bundle.log_unrecorded"))
     return "\n".join(lines)
+
+
+def _setting_value(value: Any) -> str:
+    from tow.i18n import t
+
+    if value is None:
+        return "—"
+    if value == "set":
+        return t("cli.bundle.security_set")
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return str(value)
+
+
+def _security_lines(changes: list[dict[str, Any]]) -> list[str]:
+    """The security settings a transfer file holds otherwise than this TOW, and which stay."""
+    from tow.i18n import t
+
+    if not changes:
+        return []
+    lines = [t("cli.bundle.security_header")]
+    for item in changes:
+        name = t("cli.bundle.security_password") if item.get("setting") == "lan_auth" else str(item.get("setting"))
+        here = item.get("this_computer")
+        lines.append(
+            t(
+                "cli.bundle.security_item",
+                name=name,
+                file=_setting_value(item.get("file")),
+                here=t("cli.bundle.security_unknown") if here == "unknown" else _setting_value(here),
+            )
+        )
+    kept = any(item.get("kept") for item in changes)
+    lines.append(t("cli.bundle.security_kept" if kept else "cli.bundle.security_taken"))
+    return lines
 
 
 def rollback_text(result: dict[str, Any]) -> str:

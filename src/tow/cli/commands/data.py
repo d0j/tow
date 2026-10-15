@@ -105,13 +105,16 @@ def _add_import(sub: Subcommands) -> None:
     import_cmd.add_argument("--input", required=True, type=Path, help=t("cli.help.import_input"))
     import_cmd.add_argument("--path-map", action="append", default=[], help=t("cli.help.import_path_map"))
     import_cmd.add_argument("--apply", action="store_true", help=t("cli.help.import_apply"))
+    import_cmd.add_argument(
+        "--accept-security-settings", action="store_true", help=t("cli.help.import_accept_security")
+    )
     json_option(import_cmd)
 
 
 def _import(args: argparse.Namespace) -> int:
     from getpass import getpass
 
-    from tow.bundle import ExportImportError, import_bundle, parse_path_maps
+    from tow.bundle import ExportImportError, import_bundle, parse_path_maps, this_install_settings
     from tow.errors import Msg
     from tow.i18n import t
 
@@ -121,7 +124,19 @@ def _import(args: argparse.Namespace) -> int:
             raise ExportImportError("import input missing", owner_text=Msg("cli.bundle.no_input", path=str(args.input)))
         parse_path_maps(args.path_map)
         passphrase = getpass(t("cli.bundle.passphrase"))
-        return import_bundle(args.input, passphrase, apply=args.apply, path_maps=args.path_map)
+        # A file someone handed over must not open this TOW to the network with their password,
+        # point its backups at their share or turn the home-network opt-ins on: this computer's
+        # security settings stay unless the owner takes the file's by name.
+        if args.accept_security_settings:
+            return import_bundle(args.input, passphrase, apply=args.apply, path_maps=args.path_map)
+        return import_bundle(
+            args.input,
+            passphrase,
+            apply=args.apply,
+            path_maps=args.path_map,
+            config_overrides=this_install_settings(),
+            preserve_secret_keys={"lan_auth"},
+        )
 
     return _guarded(args, run, "cli.bundle.import_failed", importing=True, text=render.import_text)
 

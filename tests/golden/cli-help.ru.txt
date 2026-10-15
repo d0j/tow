@@ -264,16 +264,21 @@ $ tow export --help
   --json           вывод для программ (JSON), в том числе при ошибке
 
 $ tow import --help
-использование: tow import [-h] --input INPUT [--path-map PATH_MAP] [--apply] [--json]
+использование: tow import [-h] --input INPUT [--path-map PATH_MAP] [--apply]
+                          [--accept-security-settings] [--json]
 
 восстановить из файла `tow export` (без --apply только просмотр)
 
 параметры:
-  -h, --help           показать эту справку и выйти
-  --input INPUT        файл, записанный `tow export`
-  --path-map PATH_MAP  СТАРОЕ=НОВОЕ: заменить начало папок раздач (можно указать несколько раз)
-  --apply              восстановить (без него только просмотр)
-  --json               вывод для программ (JSON), в том числе при ошибке
+  -h, --help            показать эту справку и выйти
+  --input INPUT         файл, записанный `tow export`
+  --path-map PATH_MAP   СТАРОЕ=НОВОЕ: заменить начало папок раздач (можно указать несколько раз)
+  --apply               восстановить (без него только просмотр)
+  --accept-security-settings
+                        взять из файла и доступ из сети, пароль, папки резервных копий, разрешения
+                        для общих папок и домашней сети и сервисы доступа (без него остаются
+                        значения этого компьютера)
+  --json                вывод для программ (JSON), в том числе при ошибке
 
 $ tow import-rollback --help
 использование: tow import-rollback [-h] --checkpoint CHECKPOINT [--apply] [--json]
