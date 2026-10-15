@@ -43,6 +43,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Home on a phone shows a topic in two or three lines (name and buttons; site and folder; the event with its
   progress) without a label on every line; on a tablet the folder column is left out (the edit panel has it).
   The progress now sits at the end of the event instead of a mostly empty column of its own.
+- The sign-in dialog says which site it is for (“Sign in to RuTracker”), puts the user name and password side
+  by side with an eye to show what you typed, and says the password is stored encrypted; the browser sign-in
+  says that its window opens on the computer running TOW.
 
 ### Fixed
 

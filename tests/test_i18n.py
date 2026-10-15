@@ -1239,5 +1239,7 @@ def test_qa10_wording_says_what_it_means():
     locales = Path(i18n.__file__).parent / "locales"
     assert "состояние TOW" not in (locales / "ru.json").read_text(encoding="utf-8")
     assert "TOW state" not in (locales / "en.json").read_text(encoding="utf-8")
-    assert "ни в данные TOW" in t("home.auth.password_note", "ru")
+    # The sign-in dialog saves the password (encrypted): the note says so, not "never in TOW's data".
+    assert "зашифрованным" in t("home.auth.password_note", "ru")
+    assert "ни в данные TOW" not in t("home.auth.password_note", "ru")
     assert "состояние" not in t("settings.backups.night_restore_confirm", "ru", at="x")

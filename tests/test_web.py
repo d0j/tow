@@ -1056,7 +1056,8 @@ def test_nnmclub_auth_failure_opens_home_credential_prompt(monkeypatch):
     assert f'action="/topics/{topic_id}/tracker-browser-auth"' in home.text
     assert 'name="password"' not in home.text
     dialog = home.text.split('<dialog class="credential-prompt"', 1)[1].split("</dialog>", 1)[0]
-    assert "Нужен вход на сайт" in dialog
+    assert "Вход на NNM-Club" in dialog  # the title names the site (1.32)
+    assert "Окно браузера откроется на компьютере с TOW." in dialog
     assert 'data-native-post="1"' not in dialog
     assert "Войти" in dialog
     assert "NNMClub" not in dialog

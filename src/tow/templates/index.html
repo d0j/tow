@@ -99,11 +99,14 @@
   </form>
 </details>
 {% if credential_prompt %}
+{% from "_reveal.html" import reveal %}
+{#- The title names the site; the line under it, the topic that asked. -#}
 <dialog class="credential-prompt" open aria-labelledby="tracker-credentials-title-{{ credential_prompt.id }}">
-  <h2 id="tracker-credentials-title-{{ credential_prompt.id }}">{{ t('home.auth.title') }}</h2>
+  <h2 id="tracker-credentials-title-{{ credential_prompt.id }}">{{ t('home.auth.title', site=site_title(credential_prompt.tracker)) }}</h2>
   <p class="sub">{{ credential_prompt.title or credential_prompt.url or credential_prompt.id }}</p>
   {% if credential_prompt.browser_auth %}
   <form method="post" action="/topics/{{ credential_prompt.id|urlencode }}/tracker-browser-auth" data-browser-auth-start>
+    <p class="field-hint">{{ t('home.auth.browser_where') }}</p>
     <div class="actions">
       <button type="submit">{{ t('home.auth.start') }}</button>
       <a class="btn ghost" href="/">{{ t('home.cancel') }}</a>
@@ -113,13 +116,15 @@
   <p class="sub" role="status" data-browser-auth-status data-topic-id="{{ credential_prompt.id }}" data-operation-id="{{ credential_prompt.browser_auth_status.operation_id }}">{{ credential_prompt.browser_auth_status.message }}</p>
   {% endif %}
   {% else %}
-  <form method="post" action="/topics/{{ credential_prompt.id|urlencode }}/tracker-login">
-    <p>{{ t('home.auth.enter') }}</p>
-    <label for="tracker-username-{{ credential_prompt.id }}">{{ t('home.auth.username') }}</label>
-    <input id="tracker-username-{{ credential_prompt.id }}" name="username" value="{{ credential_prompt.username }}" autocomplete="username" required>
-    <label for="tracker-password-{{ credential_prompt.id }}">{{ t('home.auth.password') }}</label>
-    <input id="tracker-password-{{ credential_prompt.id }}" name="password" type="password" autocomplete="current-password" required>
-    <p class="sub">{{ t('home.auth.password_note') }}</p>
+  {% set password_id = 'tracker-password-' ~ credential_prompt.id %}
+  <form class="form-grid" method="post" action="/topics/{{ credential_prompt.id|urlencode }}/tracker-login">
+    <div class="field-row">
+      <div class="field"><label for="tracker-username-{{ credential_prompt.id }}">{{ t('home.auth.username') }}</label>
+        <input id="tracker-username-{{ credential_prompt.id }}" class="w-m" name="username" value="{{ credential_prompt.username }}" autocomplete="username" required></div>
+      <div class="field"><label for="{{ password_id }}">{{ t('home.auth.password') }}</label>
+        <span class="secret"><input id="{{ password_id }}" class="w-m" name="password" type="password" autocomplete="current-password" required aria-describedby="{{ password_id }}-note">{{ reveal(password_id, t('home.auth.password')) }}</span></div>
+    </div>
+    <p class="field-hint" id="{{ password_id }}-note">{{ t('home.auth.password_note') }}</p>
     <div class="actions">
       <button type="submit" data-busy-label="{{ t('common.busy.checking') }}">{{ t('home.auth.save_retry') }}</button>
       <a class="btn ghost" href="/">{{ t('home.cancel') }}</a>
