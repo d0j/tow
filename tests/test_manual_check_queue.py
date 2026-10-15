@@ -252,6 +252,33 @@ def test_a_check_waiting_too_long_for_the_lock_ends_as_not_run(client, monkeypat
     assert _status(client, behind)["status"] == "done"  # the queue moved on
 
 
+def test_a_long_running_check_says_since_when_and_keeps_its_lane(client, monkeypatch, consumers, clock):
+    # No watchdog kills a hung check (that could overlap client writes): the page says how long it runs.
+    from datetime import UTC, datetime
+
+    from tow.clock import format_ui_timestamp
+
+    calls, seen = [], {}
+    began = format_ui_timestamp(datetime.fromtimestamp(clock.wall, UTC).isoformat())
+
+    def check(**kw):
+        calls.append(kw["ids"])
+        if kw["ids"] == ["b"]:
+            clock.wall += 2 * 3600  # it runs for hours
+            seen["status"] = _status(client, job)
+            seen["page"] = client.get(f"/?check_job={job}").text
+            seen["behind"] = _status(client, _job(client.post("/topics/c/check", follow_redirects=False)))
+        return {"results": [{"id": kw["ids"][0], "title": "Show", "ok": True}]}
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    job = check_jobs.submit(topic_id="b", apply=True, lang="ru", perform=routes_check._perform_check)[0]["id"]
+    consumers[0].run()
+    assert seen["status"]["progress"].startswith(f"Идёт проверка с {began}.")
+    assert seen["status"]["progress"] in seen["page"]
+    assert (seen["behind"]["status"], seen["behind"]["position"]) == ("queued", 2)
+    assert calls == [["b"], ["c"]]
+
+
 def test_a_check_that_gets_the_lock_just_in_time_runs(client, monkeypatch, consumers, clock):
     start = clock.mono
 

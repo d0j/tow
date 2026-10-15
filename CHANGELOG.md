@@ -85,7 +85,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   queues, and applying checks still never run at the same time.
 - A topic check waiting for another check (a scheduled one, or one from the command line) says since when it
   waits instead of “position 1” forever. After 65 minutes it ends as not run, without marking the topic or its
-  site as failed.
+  site as failed. A running check says since when it runs, so one that takes unusually long is visible.
 
 ## [1.30.10] — 2026-10-15
 

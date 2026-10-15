@@ -356,7 +356,8 @@ def check_report(out: dict[str, Any], *, apply: bool) -> dict[str, Any]:
 def check_progress(job: Mapping[str, Any]) -> str:
     """Where a manual check that waits or runs is, in words (Home's note and its polling)."""
     if job.get("status") == "running":
-        return t("web.check_all.progress_running")
+        since = job.get("running_since")
+        return t("web.check_all.progress_running", at=_epoch_time(since) if isinstance(since, (int, float)) else "—")
     if isinstance(job.get("waiting_since"), (int, float)):
         return t("web.check_all.progress_waiting", at=_epoch_time(job["waiting_since"]))
     return t("web.check_all.progress_queued", position=job.get("position") or 1)
