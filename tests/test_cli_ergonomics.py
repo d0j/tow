@@ -277,3 +277,10 @@ def test_status_counts_what_needs_attention_on_a_line_of_its_own(monkeypatch, ca
     assert lines[1] == {"en": "Needs attention: 2", "ru": "Требует внимания: 2"}[language]
     assert cli.main(["status", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["attention"] == 2
+
+    # A note (the download history was started over) is not counted, as on Home.
+    import time
+
+    save_state({"topics": [topic], "health": {"qbit_ok": True, "history_rebuilt_at": int(time.time())}})
+    assert cli.main(["status", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["attention"] == 0

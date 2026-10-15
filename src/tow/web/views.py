@@ -24,6 +24,7 @@ from tow.config import as_bool, flash_ttl, interval_sec_of
 from tow.episodes import expected_for_topic
 from tow.errors import render_stored
 from tow.issues import Issue, Snapshot, fingerprint, worst
+from tow.issues import attention as needing_attention
 from tow.jsonish import as_dict
 from tow.log import error_class, owner_language
 from tow.net_errors import humanize
@@ -534,8 +535,8 @@ def issue_href(issue: Issue) -> str:
 
 def attention_view(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str, Any]:
     """Current header problems, worst first, with stable identities and links to their fixes."""
-    # Past history loss remains a note on History, not an active failure counter.
-    found = [issue for issue in issues_now(state, cfg) if issue.kind != "history_rebuilt"]
+    # Past history loss remains a note on History, not an active failure counter (tow.issues).
+    found = needing_attention(issues_now(state, cfg))
     return {
         "entries": [
             {

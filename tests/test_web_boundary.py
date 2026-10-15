@@ -88,8 +88,9 @@ PURE: dict[str, set[str]] = {
     "tow.folders": {"paths_equal", "recent_save_roots", "remember_save_root", "resolve_save_path"},
     "tow.guess": {"GuessError", "canon_watch_url", "guess_from_url"},
     # What needs the owner, as data: the snapshot handed to services.collect_issues, the issue and
-    # the control that fixes it, the name of a set of issues and the worst severity among them; no I/O.
-    "tow.issues": {"Fix", "Issue", "Snapshot", "fingerprint", "worst"},
+    # the control that fixes it, the name of a set of issues and the worst severity among them, and
+    # which of them need attention now (a filter); no I/O.
+    "tow.issues": {"Fix", "Issue", "Snapshot", "attention", "fingerprint", "worst"},
     # datetime_pattern, format_datetime: how a language writes a date (its catalog's pattern); no I/O.
     "tow.i18n": {
         "AUTO",

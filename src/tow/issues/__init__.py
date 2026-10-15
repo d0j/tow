@@ -13,10 +13,11 @@ messengers when something changes): issues ask nothing and send nothing.
 
 from __future__ import annotations
 
-from tow.issues.collect import SKIPPED, Kind, collect, known_kinds
+from tow.issues.collect import NOTE_KINDS, SKIPPED, Kind, attention, collect, known_kinds
 from tow.issues.model import SEVERITIES, Fix, Issue, Message, Snapshot, Target, fingerprint, worst
 
 __all__ = [
+    "NOTE_KINDS",
     "SEVERITIES",
     "SKIPPED",
     "Fix",
@@ -25,6 +26,7 @@ __all__ = [
     "Message",
     "Snapshot",
     "Target",
+    "attention",
     "collect",
     "fingerprint",
     "known_kinds",
