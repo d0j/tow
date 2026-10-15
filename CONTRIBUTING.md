@@ -142,7 +142,7 @@ Windows bundle and `install.ps1`, and the update of the latest release to the pu
 Merge the pull request with **Rebase and merge** once it is up to date with `main` (its last `ci` run then
 covers the merge; otherwise wait for `ci` on `main`): `main` gets every commit as it is, with no merge commit,
 and the release commit is its tip. GitHub cannot rebase-merge more than 100 commits; split a longer branch.
-Whoever merges deletes the merged head branch on GitHub and locally. Fetch `origin/main` and create an annotated tag on the release commit with the message `TOW X.Y.Z`
+GitHub deletes the merged head branch (the repository setting); delete the local one. Fetch `origin/main` and create an annotated tag on the release commit with the message `TOW X.Y.Z`
 (`git tag -a vX.Y.Z -m "TOW X.Y.Z" origin/main`). Publish it with:
 
 ```sh
