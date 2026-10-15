@@ -23,7 +23,6 @@ from tow.web.views import (
     credential_prompt,
     first_run,
     topic_rows,
-    ui_time,
 )
 
 router = APIRouter()
@@ -115,9 +114,9 @@ def index(request: Request) -> Response:
             "flash": request_flash(request) or said,
             "check_result": result,
             # When the result was observed: its check's end, not when it was asked for.
-            "check_result_at": ui_time(datetime.fromtimestamp(result["ended_at"], UTC).isoformat())
+            "check_result_at": datetime.fromtimestamp(result["ended_at"], UTC)
             if result and result.get("ended_at")
-            else "",
+            else None,
             "check_result_message": check_job_message(result) if result and not said else "",
             "check_result_requested": bool(result_id) and not topic_result and not pending_result,
             "check_result_close": _without(request, "check_result"),

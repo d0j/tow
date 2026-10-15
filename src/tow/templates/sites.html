@@ -8,7 +8,7 @@
 {% set draft = add_draft or {} %}
 {% set bad_field = {'name': 'site-name', 'url_regex': 'site-regex', 'fetch_hosts': 'site-hosts', 'download_path': 'site-dl', 'login_path': 'site-login-path', 'topic_path': 'site-topic-path', 'download_href_regex': 'site-href-rx', 'from_url': 'from-url'}.get(draft.get('kind'), 'site-name') if draft.get('error') else '' %}
 {% macro invalid(field, hint='') %}{% if bad_field == field %} aria-invalid="true" aria-describedby="add-error{{ ' ' ~ hint if hint }}"{% elif hint %} aria-describedby="{{ hint }}"{% endif %}{% endmacro %}
-{% from "_reveal.html" import reveal %}
+{% from "_secret.html" import reveal, saved_hint %}
 {#- A site card's field that a refused save was about: marked and focused. -#}
 {% macro mark(field, bad) %}{% if bad == field %} aria-invalid="true" autofocus{% endif %}{% endmacro %}
 <details class="add card" id="new"{% if draft.get('error') %} open{% endif %}>
@@ -150,7 +150,7 @@
             <div class="field-row password-group">
               <div class="field"><label for="site-user-{{ name }}">{{ t('sites.login') }}</label><input id="site-user-{{ name }}" class="w-m" name="username" value="{{ login.user }}" autocomplete="username"{{ fix_attrs('site_login', name) }}></div>
               <div class="field"><label for="site-pass-{{ name }}">{{ t('sites.password') }}</label><span class="secret"><input id="site-pass-{{ name }}" class="w-m" name="password" type="password" autocomplete="current-password"{% if login.password %} aria-describedby="site-pass-saved-{{ name }}"{% endif %}{{ mark('password', bad) }}>{{ reveal('site-pass-' ~ name, t('sites.password')) }}</span>
-                {%- if login.password %}<p class="field-hint" id="site-pass-saved-{{ name }}">{{ t('web.secret.saved_keep') }}</p>{% endif %}</div>
+                {%- if login.password %}{{ saved_hint('site-pass-saved-' ~ name) }}{% endif %}</div>
             </div>
           </div>
           <div class="field"><label for="site-hosts-{{ name }}">{{ t('sites.mirrors') }}</label><textarea id="site-hosts-{{ name }}" class="w-xl" name="fetch_hosts" rows="{{ [[(spec.fetch_hosts or [])|length, 2]|max, 4]|min }}" spellcheck="false"{{ mark('fetch_hosts', bad) }}>{{ (spec.fetch_hosts or []) | join('\n') }}</textarea></div>

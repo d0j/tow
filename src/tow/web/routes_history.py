@@ -29,7 +29,6 @@ def history_page(request: Request, group: str = "", q: str = "") -> Response:
     seen: set[str] = set()
     for event in services.history_events(group=group, text=q, limit=HISTORY_LIMIT, title_index=title_index):
         row = format_event(event, title_index=title_index, site_titles=site_titles)
-        row["at_iso"] = str(event.get("created_at") or event.get("ts") or "")  # for the short time
         # The newest line of each kind has an address ("Needs attention" links to the newest
         # failed check: #latest-check_blocked).
         kind = str(event.get("kind") or "")

@@ -1,7 +1,0 @@
-{#- The eye beside a password field (the shared secret control: app.js handles [data-reveal] on the
-    whole document, so a loaded edit panel has it too). It shows only what was typed here, never a
-    stored secret. ``field`` names the field in its accessible name. -#}
-{% from "_icons.html" import icon %}
-{% macro reveal(target, field) -%}
-<button type="button" class="ico reveal" data-reveal="{{ target }}" aria-controls="{{ target }}" aria-pressed="false" aria-label="{{ t('web.secret.show', field=field) }}">{{ icon('eye', 'sm') }}</button>
-{%- endmacro %}

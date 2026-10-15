@@ -14,7 +14,7 @@
 {#- Check all's report: page content, closed in place (only its own parameter goes). -#}
 <section class="card check-results" id="check-result" aria-labelledby="check-result-title">
   <div class="check-results-head"><h2 id="check-result-title">{{ t('web.check_all.results') }}</h2><a class="flash-x" href="{{ check_result_close }}" data-check-result-close aria-label="{{ t('base.close') }}" title="{{ t('base.close') }}">{{ icon('close', 'sm') }}</a></div>
-  {% if check_result_at %}<p class="sub">{{ check_result_at }}</p>{% endif %}
+  {% if check_result_at %}<p class="sub">{{ check_result_at|short_time }}</p>{% endif %}
   {% if check_result and check_result.report %}
   <p>{{ check_result.report.summary|sentence }}</p>
   {% if check_result.report.rows %}<p class="sub">{{ t('web.check_all.observation') }}</p>{% endif %}
@@ -99,7 +99,7 @@
   </form>
 </details>
 {% if credential_prompt %}
-{% from "_reveal.html" import reveal %}
+{% from "_secret.html" import reveal %}
 {#- The title names the site; the line under it, the topic that asked. -#}
 <dialog class="credential-prompt" open aria-labelledby="tracker-credentials-title-{{ credential_prompt.id }}">
   <h2 id="tracker-credentials-title-{{ credential_prompt.id }}">{{ t('home.auth.title', site=site_title(credential_prompt.tracker)) }}</h2>

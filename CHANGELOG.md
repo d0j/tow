@@ -53,6 +53,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - History no longer explains the log's file sizes on every visit (it says only that the list stops at its
   latest 300 events, when it does), its search box is as wide as a search, and a search that finds nothing
   offers “Show all”.
+- Home's rows and edit panel, History and the results of “Check all topics now” write their times by the same short rule
+  (“20:31”, “15 Oct, 20:31”), the full time in the tooltip.
 
 ### Fixed
 
@@ -66,9 +68,6 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   “Saved · leave empty to keep”.
 - A refused site name says the rule plainly (“Short name: small Latin letters, digits and _”), and for “new”
   or “guess” that TOW uses the name itself, instead of listing both in every refusal.
-
-### Fixed
-
 - A field that was refused (a wrong link, a bad site name) now has a red border, not only the red message at
   the top of the form.
 - The Log and a topic's episode list open as tall as their lines (up to most of the screen) instead of always

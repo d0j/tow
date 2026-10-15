@@ -917,10 +917,14 @@ def test_a_topics_check_times_are_written_in_the_pages_language():
             ]
         }
     )
+    from tow.web.text import short_time
+
     panel = TestClient(app, headers=ORIGIN).get("/topics/t1/edit-panel").text
     assert "07.10.2026" not in panel
-    assert format_ui_timestamp(datetime(2026, 10, 7, 9, 16, 13, tzinfo=UTC), "en") in panel
-    assert format_ui_timestamp(datetime(2026, 10, 6, 5, 0, 0, tzinfo=UTC), "en") in panel
+    # Written by the one time rule (1.32): the short form, the full time in this language its tooltip.
+    for moment in (datetime(2026, 10, 7, 9, 16, 13, tzinfo=UTC), datetime(2026, 10, 6, 5, 0, 0, tzinfo=UTC)):
+        assert str(short_time(moment)) in panel
+        assert format_ui_timestamp(moment, "en").rsplit(" ", 2)[0] in panel
 
 
 def test_a_check_stores_its_times_as_iso_and_the_pages_write_them():
@@ -946,8 +950,10 @@ def test_a_check_stores_its_times_as_iso_and_the_pages_write_them():
         assert datetime.fromisoformat(value).utcoffset() is not None
     web = TestClient(app, headers=ORIGIN)
     assert web.get("/health.json").json()["at"] == format_ui_timestamp(health["at"], "en")
+    from tow.web.text import short_time
+
     panel = web.get("/topics/t1/edit-panel").text
-    assert format_ui_timestamp(stored["topics"][0]["last_ok_at"], "en") in panel
+    assert str(short_time(stored["topics"][0]["last_ok_at"])) in panel  # the one time rule (1.32)
 
 
 def test_stored_times_that_are_not_dates_stay_as_they_are():
