@@ -2146,16 +2146,41 @@ def test_blocked_check_keeps_the_last_known_client_and_bot_status():
 
 
 @pytest.mark.parametrize(
-    ("argv", "how"), [(["check", "--apply"], "auto"), (["check", "--apply", "--manual"], "manual")]
+    ("argv", "how"),
+    [
+        # A person's own run, with or without the old --manual: a manual check past cooldowns.
+        (["check", "--apply"], "manual"),
+        (["check", "--apply", "--manual"], "manual"),
+        # What `tow run` passes (tow.supervisor.jobs) keeps its kind.
+        (["check", "--apply", "--notify", "--global-only"], "auto"),
+        (["check", "--apply", "--notify", "--timer-only"], "timer"),
+        (["check", "--apply", "--notify", "--site-retry-only"], "retry"),
+        (["check", "--apply", "--notify", "--progress-only"], "progress"),
+        (["check", "--apply", "--notify", "--space-only"], "progress"),
+    ],
 )
 def test_cli_check_says_whether_a_person_ran_it(monkeypatch, argv, how):
+    # A hand-typed `tow check --apply` ran as the scheduled check: it moved the header countdown
+    # and the watchdog's last scheduled check, and kept mirror cooldowns unlike the web's Check all.
     from tow import cli
+    from tow.supervisor.jobs import BY_NAME
 
     seen = {}
     monkeypatch.setattr(check, "run_check", lambda **kwargs: seen.update(kwargs) or {"results": []})
 
     assert cli.main([*argv, "--json"]) == 0
     assert seen["how"] == how
+    assert seen["ignore_cool"] is (how == "manual")
+    assert list(BY_NAME["check"].argv or ()) == ["check", "--apply", "--notify", "--global-only", "--json"]
+
+
+def test_cli_check_refuses_a_client_only_pass_with_a_scope_before_recording_anything(monkeypatch, capsys):
+    from tow import cli
+
+    monkeypatch.setattr(check, "run_check", lambda **_kw: pytest.fail("not run"))
+    monkeypatch.setattr(check, "record_check_failure", lambda *_a, **_kw: pytest.fail("nothing failed"))
+    assert cli.main(["check", "--apply", "--progress-only", "--global-only", "--json"]) == 1  # usage
+    assert '"ok": false' in capsys.readouterr().out
 
 
 def test_title_request_uses_cookies_saved_by_a_relogin_during_the_fetch(monkeypatch):

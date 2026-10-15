@@ -194,6 +194,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   not complete" until the next scheduled check; only a check of every topic (scheduled or Check all) says that
   checks fail, now as "The last check of every topic did not complete". Such a failure also keeps the week's note
   about a restarted download history and the client marks of Settings' "Check".
+- `tow check --apply` typed by hand is a manual check, as Check all on the web: it no longer moves the header's
+  countdown or the watchdog's "last scheduled check" (which could hide a stopped `tow run`), and it is not held
+  back by a mirror's pause. `--progress-only` or `--space-only` with another scope flag is refused before anything
+  is recorded.
 
 ## [1.31.2] — 2026-10-15
 

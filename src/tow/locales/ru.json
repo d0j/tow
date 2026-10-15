@@ -471,7 +471,8 @@
       "client": "клиент: {value}",
       "preview": "(предпросмотр, ничего не изменено)",
       "total": "итого: {n}, с ошибкой: {failed}",
-      "total_waiting": "итого: {n}, в ожидании: {waiting}, с ошибкой: {failed}"
+      "total_waiting": "итого: {n}, в ожидании: {waiting}, с ошибкой: {failed}",
+      "scope_refused": "--progress-only и --space-only спрашивают только торрент-клиент: их нельзя сочетать с --global-only, --timer-only и --site-retry-only."
     },
     "serve_blocked": "TOW не запущен: {error}",
     "run": {

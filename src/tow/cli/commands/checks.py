@@ -129,7 +129,7 @@ def _add_check(sub: Subcommands) -> None:
     c.add_argument("--apply", action="store_true", help=t("cli.help.check_apply"))
     c.add_argument("--dry-run", action="store_true", help=t("cli.help.check_dry_run"))
     c.add_argument("--notify", action="store_true", help=t("cli.help.check_notify"))
-    # A person running the CLI by hand; the scheduled task omits it (the header countdown follows auto runs).
+    # Accepted as before; a run without a scope flag is a person's own anyway (``_how``).
     c.add_argument("--manual", action="store_true", help=argparse.SUPPRESS)
     # G2: the progress pass of `tow run` - completions from the torrent client only, no tracker requests.
     c.add_argument("--progress-only", action="store_true", help=argparse.SUPPRESS)
@@ -141,29 +141,40 @@ def _add_check(sub: Subcommands) -> None:
     scope.add_argument("--site-retry-only", action="store_true", help=argparse.SUPPRESS)
 
 
+def _how(args: argparse.Namespace) -> str:
+    """Whose check this is. Only `tow run` passes a scope flag (``tow.supervisor.jobs``):
+    --global-only is the scheduled check ("auto": the header countdown, the watchdog's last
+    scheduled check), the others its timer, site retry and client-only passes. Without one a
+    person typed it: a manual check, as the web's Check all."""
+    if args.progress_only or args.space_only:
+        return "progress"
+    if args.site_retry_only:
+        return "retry"
+    if args.timer_only:
+        return "timer"
+    if args.global_only and not args.manual:
+        return "auto"
+    return "manual"
+
+
 def _check(args: argparse.Namespace) -> int:
     from tow.check import record_check_failure, run_check
+    from tow.i18n import t
     from tow.store import SecretStoreError, check_state_version
 
     check_state_version()  # a newer TOW's state.json: refused before anything is recorded
+    if (args.progress_only or args.space_only) and (args.global_only or args.timer_only or args.site_retry_only):
+        render.show({"ok": False, "error": t("cli.check.scope_refused")}, args.json)
+        return EXIT_USAGE  # refused before anything is recorded: not a failed check
     apply = bool(args.apply) and not args.dry_run
-    background = args.progress_only or args.space_only
-    how = (
-        "manual"
-        if args.manual
-        else "progress"
-        if background
-        else "retry"
-        if args.site_retry_only
-        else "timer"
-        if args.timer_only
-        else "auto"
-    )
+    how = _how(args)
     try:
         out = run_check(
             apply=apply,
             notify=args.notify,
             how=how,
+            # By hand, like Check all on the web: past a mirror's cooldown.
+            ignore_cool=how == "manual",
             progress_only=args.progress_only,
             scheduled_scope="global"
             if args.global_only
@@ -178,12 +189,10 @@ def _check(args: argparse.Namespace) -> int:
         if apply:
             record_check_failure(exc, how=how, whole=how in {"auto", "manual"})
         render.show({"ok": False, "error": str(exc), "blocked": True}, args.json)
-        return 3
+        return EXIT_CANNOT_RUN
     except Exception as exc:  # noqa: BLE001 - store, transaction, client library: recorded instead of a bare traceback
         if apply:
             record_check_failure(exc, how=how, whole=how in {"auto", "manual"})
-        from tow.i18n import t
-
         render.show({"ok": False, "error": t("cli.command_failed")}, args.json)
         return EXIT_CANNOT_RUN
     render.show(out, args.json)
