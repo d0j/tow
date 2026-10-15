@@ -234,6 +234,14 @@ def test_a_check_is_sent_with_its_kept_action_id_and_followed_where_the_page_is(
     assert len(verdict) == 9
 
 
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_a_secret_fields_eye_shows_and_hides_what_was_typed_and_nothing_else():
+    verdict = _verdict("secret_reveal.mjs")
+    assert verdict == dict.fromkeys(verdict, True), verdict
+    assert len(verdict) == 7
+
+
 @pytest.mark.allow_system
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_one_broken_health_reader_cannot_stall_or_spin_other_readers():

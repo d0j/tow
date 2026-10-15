@@ -1370,6 +1370,50 @@ document.addEventListener("click", (event) => {
   details.querySelector("summary")?.focus();
 });
 
+// A secret field's eye (_secret.html: data-reveal="<field id>"): it shows what was typed or
+// pasted in the field and hides it again - it only changes the field's type; a saved secret is
+// never in the page to show. Delegated, so a panel loaded later has it too. A click leaves the
+// focus and the caret in the field (the keyboard's stays on the eye); the eye says its state
+// (aria-pressed) and what it does next ("Hide “Bot token”").
+const revealName = (button, field) => button.dataset.revealName
+  || [...document.querySelectorAll("label[for]")].find((label) => label.getAttribute("for") === field.id)?.textContent.trim()
+  || "";
+const setRevealed = (button, field, shown) => {
+  field.type = shown ? "text" : "password";
+  button.setAttribute("aria-pressed", String(shown));
+  const said = t(shown ? "web.secret.hide" : "web.secret.show", { field: revealName(button, field) });
+  button.setAttribute("aria-label", said);
+  button.title = said;
+  button.querySelector("use")?.setAttribute("href", shown ? "#i-eye-off" : "#i-eye");
+};
+document.addEventListener("pointerdown", (event) => {
+  if (event.target.closest?.("[data-reveal]")) event.preventDefault();
+});
+document.addEventListener("click", (event) => {
+  const button = event.target.closest?.("[data-reveal]");
+  const field = button ? document.getElementById(button.dataset.reveal) : null;
+  if (!field || !["password", "text"].includes(field.type)) return;
+  event.preventDefault();
+  const focused = document.activeElement === field;
+  const { selectionStart: start, selectionEnd: end, selectionDirection: direction } = field;
+  setRevealed(button, field, field.type === "password");
+  if (!focused) return;
+  field.focus();
+  try {
+    field.setSelectionRange(start, end, direction || "none");
+  } catch {
+    // a field without a caret: the focus is enough
+  }
+});
+// Sent or reset (Cancel), a shown secret is hidden again first: the next page, the emptied form
+// and a password manager see a password field.
+const hideRevealed = (form) => form?.querySelectorAll?.('[data-reveal][aria-pressed="true"]').forEach((button) => {
+  const field = document.getElementById(button.dataset.reveal);
+  if (field) setRevealed(button, field, false);
+});
+document.addEventListener("submit", (event) => hideRevealed(event.target), true);
+document.addEventListener("reset", (event) => hideRevealed(event.target), true);
+
 // Editable recent folders: the arrow shows every recent path, even when the input is filled.
 // Keep native text editing; a highlighted suggestion changes the value only when accepted.
 let openFolders = null;

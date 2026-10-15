@@ -2640,6 +2640,11 @@
       "saved_sign_in_again": "Password saved. Sign in again on this device: TOW could not write its sign-in file data/sessions.json.",
       "sign_out_failed": "No device was signed out: TOW could not write its sign-in file data/sessions.json. Check that TOW's data can be changed, then try again."
     },
+    "secret": {
+      "show": "Show “{field}”",
+      "hide": "Hide “{field}”",
+      "saved_keep": "Saved · leave empty to keep"
+    },
     "network_closed": "TOW is open only on the computer it runs on: access from other devices is turned off.",
     "refused": {
       "untrusted_host": "untrusted host",

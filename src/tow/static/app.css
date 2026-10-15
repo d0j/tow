@@ -253,6 +253,17 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { he
 .secret:has(> .w-xl) { max-width: 36rem; }
 .input-unit:has(> .w-xs) { grid-template-columns: minmax(0, 6.5rem) auto; justify-content: start; }
 .input-unit:has(> .w-s) { grid-template-columns: minmax(0, 12rem) auto; justify-content: start; }
+/* A secret field and its eye (_secret.html): the eye sits inside the field's right end, a square
+   icon button (exempt from the 26 px rule) a little smaller than the field, 28 px or 36 px. */
+.secret { position: relative; display: block; min-width: 0; }
+.secret > input { padding-right: calc(var(--field-h) + .1rem); }
+.secret > button.ico.reveal {
+  position: absolute; top: 50%; right: .2rem; transform: translateY(-50%);
+  width: calc(var(--field-h) - .5rem); height: calc(var(--field-h) - .5rem); min-height: 0; padding: 0;
+  color: var(--mut); background: transparent; border: 0; border-radius: 6px;
+}
+.secret > button.ico.reveal:hover { color: var(--fg); background: var(--panel); filter: none; }
+.secret > button.ico.reveal[aria-pressed="true"] { color: var(--acc); }
 /* One form layout (Settings, Sites, the add and edit forms, dialogs): at most 46 rem wide, its
    groups (a .field: label, field, hint; a .field-row; a check field; the buttons) 9 px apart, a
    label 3 px above its field, help text at most 68 characters a line. The form is the container
