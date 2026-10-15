@@ -32,7 +32,7 @@ $script:steps = [System.Collections.Generic.List[string]]::new()
 $script:skipped = [System.Collections.Generic.List[string]]::new()
 function Step([string]$Name, [scriptblock]$Command) { $script:steps.Add($Name) }
 function Skip([string]$Name, [string]$Why) { $script:skipped.Add($Name) }
-$PytestCov = 'pytest-cov>=7.1'
+$PytestCov = 'pytest-cov'
 . ([scriptblock]::Create($assignments[0].Extent.Text))
 $global:LASTEXITCODE = 1  # pytest-cov could not be had
 $failure = $null
@@ -77,6 +77,19 @@ def test_ci_never_skips_coverage_silently(variables):
 def test_a_developer_machine_without_pytest_cov_runs_the_tests_and_says_so():
     result = _run(COVERAGE_HARNESS, CI="false")
     assert result == {"failure": None, "steps": ["pytest (parallel, random order)"], "skipped": ["coverage"]}
+
+
+def test_coverage_comes_from_the_lock_not_from_the_network():
+    """pytest-cov (and coverage under it) came in with `uv run --with pytest-cov>=7.1` on every run:
+    unpinned, without hashes. Both are locked dev dependencies now."""
+    import tomllib
+
+    root = GATE.parents[1]
+    assert "--with" not in GATE.read_text(encoding="utf-8")
+    dev = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["dependency-groups"]["dev"]
+    assert any(requirement.startswith("pytest-cov>=") for requirement in dev)
+    locked = {package["name"] for package in tomllib.loads((root / "uv.lock").read_text(encoding="utf-8"))["package"]}
+    assert {"pytest-cov", "coverage"} <= locked
 
 
 # The gate's own Invoke-WithDeadline, run on a synthetic program tree that never ends by itself.

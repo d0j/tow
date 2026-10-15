@@ -21,6 +21,13 @@ $clauses = @($ast.FindAll({
     $node.Clauses[0].Item1.Extent.Text -eq '$Audit'
 }, $true))
 if ($clauses.Count -ne 1) { throw 'one audit clause required' }
+$pins = @($ast.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+    $node.Left.Extent.Text -eq '$PipAudit'
+}, $true))
+if ($pins.Count -ne 1) { throw 'one pinned audit tool required' }
+. ([scriptblock]::Create($pins[0].Extent.Text))
 $script:body = [scriptblock]::Create($clauses[0].Extent.Text)
 $script:label = 'outer-fixture'
 $script:inside = $false
@@ -45,6 +52,10 @@ function uv {
     $global:LASTEXITCODE = if ($env:TOW_TEST_CASE -eq 'export_failure') { 7 } else { 0 }
 }
 function uvx {
+    # The audit tool runs outside the lock: one exact version, never the newest of the day.
+    if ($args[0] -ne '--from' -or $args[1] -notmatch '^pip-audit==\d+(\.\d+)+$' -or $args[2] -ne 'pip-audit') {
+        throw 'unpinned audit tool'
+    }
     $index = [Array]::IndexOf($args, '-r')
     if ($index -lt 0) { throw 'unexpected audit command' }
     $target = [string]$args[$index + 1]

@@ -9,8 +9,9 @@
     coverage and its threshold (pyproject [tool.coverage]), then the wheel smoke. On success it
     records the tree it passed on, so the pre-push hook lets exactly that content through
     without running it again.
-    Coverage is skipped only when pytest-cov cannot be had and neither CI (CI=true) nor
-    TOW_GATE_REQUIRE_COVERAGE=1 asks for it; then the gate fails instead. The test run has a
+    Coverage (pytest-cov, a locked dev dependency) is skipped only when the environment lacks it
+    and neither CI (CI=true) nor TOW_GATE_REQUIRE_COVERAGE=1 asks for it; then the gate fails
+    instead. The test run has a
     wall-clock deadline of 30 minutes (TOW_GATE_PYTEST_DEADLINE_SEC overrides it), collection and
     worker shutdown included: past it, only that run's process tree is stopped and the gate fails
     without recording the tree as passed. A test run (or -Quick's collection) that leaves a new
@@ -37,7 +38,9 @@ Set-Location $Root
 # git's empty tree: a diff against it covers every tracked file, not only the uncommitted changes.
 $EmptyTree = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 $Skipped = [System.Collections.Generic.List[string]]::new()
-$PytestCov = 'pytest-cov>=7.1'
+$PytestCov = 'pytest-cov'
+# The audit tool runs outside the lock (uvx): its version is pinned here, raised by hand.
+$PipAudit = 'pip-audit==2.10.1'
 # The per-test limit (pyproject, 300 s) does not bound collection, worker start or shutdown: the
 # whole run gets six times the usual five minutes.
 $PytestDeadlineSec = if ($env:TOW_GATE_PYTEST_DEADLINE_SEC) { [int]$env:TOW_GATE_PYTEST_DEADLINE_SEC } else { 1800 }
@@ -257,20 +260,20 @@ try {
         # share one shuffle seed (tests/conftest.py), and tests that share an expensive module
         # fixture stay together (--dist loadgroup, `xdist_group`).
         $parallel = @('-n', 'auto', '--dist', 'loadgroup')
-        # pytest-cov is not a locked dependency (an offline lock cannot add it): `uv run --with`
-        # brings it in from uv's cache or the network; without either, coverage is skipped on a
-        # developer's machine, never in CI or when TOW_GATE_REQUIRE_COVERAGE=1.
-        Invoke-Tool --with $PytestCov python -c 'import pytest_cov' 2>$null
+        # pytest-cov and coverage are locked dev dependencies (before: fetched unpinned on every
+        # run). An environment without them skips coverage on a developer's machine, never in CI
+        # or when TOW_GATE_REQUIRE_COVERAGE=1.
+        Invoke-Tool python -c 'import pytest_cov' 2>$null
         if ($LASTEXITCODE -eq 0) {
             Step 'pytest (parallel, random order, branch coverage, threshold in pyproject)' {
-                Invoke-ToolWithDeadline --with $PytestCov pytest -q -ra -p no:cacheprovider @parallel --test-order random --cov --cov-report=
+                Invoke-ToolWithDeadline pytest -q -ra -p no:cacheprovider @parallel --test-order random --cov --cov-report=
             }
         }
         elseif ($RequireCoverage) {
             throw "gate failed: coverage is required here (CI or TOW_GATE_REQUIRE_COVERAGE=1), but $PytestCov is not available"
         }
         else {
-            Skip 'coverage' "$PytestCov is not available offline"
+            Skip 'coverage' "$PytestCov is not in the environment (uv sync --frozen installs it)"
             Step 'pytest (parallel, random order)' { Invoke-ToolWithDeadline pytest -q -ra -p no:cacheprovider @parallel --test-order random }
         }
         Assert-NoNewFiles $untracked
@@ -281,7 +284,7 @@ try {
         $requirements = [IO.Path]::GetTempFileName()
         try {
             Step 'export locked requirements' { uv export --frozen --no-dev --no-hashes --no-emit-project --format requirements-txt -o $requirements }
-            Step 'pip-audit' { uvx pip-audit --strict -r $requirements --progress-spinner off }
+            Step 'pip-audit' { uvx --from $PipAudit pip-audit --strict -r $requirements --progress-spinner off }
         }
         finally {
             Remove-Item -LiteralPath $requirements -Force -ErrorAction SilentlyContinue
