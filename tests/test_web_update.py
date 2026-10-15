@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tow import update_worker, web_update
+from tow.i18n import t
 from tow.restore_points import RestorePointError
 from tow.store import save_secrets, save_state
 from tow.web import app, services
@@ -109,7 +110,8 @@ def test_backup_failure_never_launches_an_updater(install, monkeypatch):
     monkeypatch.setattr(web_update, "create_restore_point", failed)
     with pytest.raises(web_update.WebUpdateError, match=r"releases\.backup_failed_because") as refused:
         web_update.start("1.22.21")
-    assert refused.value.params == {"reason": "synthetic backup failure"}  # the owner reads why
+    # The page names the kind in fixed words; the restore point's own words go to the Log only.
+    assert refused.value.params == {"reason": "releases.backup_reason.other"}
     assert not install[1]
     assert not (install[0] / "runtime" / "web-update" / "job.json").exists()
 
@@ -697,19 +699,25 @@ def test_folders_of_earlier_updates_are_pruned_but_never_the_current_or_a_live_o
     assert left == {current, live, "notes", result["id"], *newest}
 
 
-def test_a_refused_web_install_says_why_and_logs_it(monkeypatch):
-    # "Could not create and verify the restore point" alone left the owner and the log without the cause.
+def test_a_refused_web_install_says_why_and_logs_the_details(install, monkeypatch):
+    # "Could not create and verify the restore point" alone left the owner and the Log without
+    # the cause; the cause's own words (a field name, a system error) stay out of the HTTP answer.
+    from tow.restore_points import CREATE_FAILED
+
     events = []
-    monkeypatch.setattr(services, "log_event", lambda kind, **kw: events.append((kind, kw)))
+    monkeypatch.setattr(web_update, "log_event", lambda kind, **kw: events.append((kind, kw)))
 
-    def refused(_version):
-        raise web_update.WebUpdateError("releases.backup_failed_because", reason="synthetic cause")
+    def failed():
+        raise RestorePointError("plaintext field state.json:synthetic.token", kind=CREATE_FAILED)
 
-    monkeypatch.setattr(services, "start_web_update", refused)
+    monkeypatch.setattr(web_update, "create_restore_point", failed)
+    monkeypatch.setattr(services, "start_web_update", web_update.start)
     response = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
         "/updates/install", data={"version": "1.22.21"}
     )
     assert response.status_code == 409
-    assert "synthetic cause" in response.json()["error"]
+    said = response.json()["error"]
+    assert "synthetic" not in said
+    assert t("releases.backup_reason.write") in said
     assert [(kind, kw["target_version"]) for kind, kw in events] == [("settings_update_refused", "1.22.21")]
-    assert "synthetic cause" in events[0][1]["reason"]
+    assert "state.json:synthetic.token" in events[0][1]["reason"]

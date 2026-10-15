@@ -297,6 +297,11 @@
     "busy": "An update is already running. Wait for its result.",
     "no_python": "The install's base Python could not be verified. Nothing was changed.",
     "backup_failed_because": "Could not create and verify the restore point ({reason}). The update was not started.",
+    "backup_reason": {
+      "master_key": "the master key cannot be read",
+      "other": "its cause is in the Log",
+      "write": "it could not be written; the cause is in the Log"
+    },
     "launch_failed": "The updater could not start. TOW was not stopped and the restore point was kept. Update from the terminal (see How to update).",
     "broker_failed": "The update could not be started safely. TOW was not stopped and the restore point was kept. Update from the terminal (see How to update).",
     "inherited_job": "The update could not be started safely. TOW was not stopped and the restore point was kept. Update from the terminal (see How to update).",

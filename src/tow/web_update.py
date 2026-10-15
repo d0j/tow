@@ -18,10 +18,10 @@ import httpx
 
 from tow import __version__, platform, releases
 from tow.diagnostic_json import check_epochs
-from tow.log import scrub_text
+from tow.log import log_event, scrub_text
 from tow.paths import repo_root, root, runtime_dir
 from tow.platform import locks
-from tow.restore_points import RestorePointError, create_restore_point
+from tow.restore_points import CREATE_FAILED, MASTER_KEY, RestorePointError, create_restore_point
 from tow.store import StoreCorruptionError, atomic_write_bytes, decode_json_bytes, persistence_lock
 
 MINIMUM_WEB_VERSION = (1, 22, 21)
@@ -33,8 +33,15 @@ _ACTIVE = frozenset({"queued", "preparing", "stopping", "backup", "installing", 
 _TERMINAL = frozenset({"ok", "refused", "failed", "rolled_back", "recovered"})
 
 
+# Why a restore point before an update failed, in fixed words (its details are in the Log).
+_RESTORE_POINT_REASONS = {
+    MASTER_KEY: "releases.backup_reason.master_key",
+    CREATE_FAILED: "releases.backup_reason.write",
+}
+
+
 class WebUpdateError(RuntimeError):
-    """A catalog key (the message) and its `params` (a restore point's own reason, for one)."""
+    """A catalog key (the message) and its `params`: catalog keys too, translated with it."""
 
     def __init__(self, key: str, **params: str) -> None:
         super().__init__(key)
@@ -337,7 +344,13 @@ def start(version: str) -> dict[str, Any]:
         try:
             safety = create_restore_point()
         except RestorePointError as exc:
-            raise WebUpdateError("releases.backup_failed_because", reason=str(exc) or exc.reason) from exc
+            # The page names the kind of failure in fixed words; the restore point's own words (a
+            # field name, a system error) go to the owner's Log only, never into an HTTP answer.
+            log_event("settings_update_refused", target_version=version, reason=str(exc), how="manual")
+            raise WebUpdateError(
+                "releases.backup_failed_because",
+                reason=_RESTORE_POINT_REASONS.get(exc.kind, "releases.backup_reason.other"),
+            ) from exc
         job_id = uuid.uuid4().hex
         folder = path.parent / job_id
         try:
