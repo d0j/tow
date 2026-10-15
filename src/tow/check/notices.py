@@ -86,6 +86,9 @@ class RunNotifications:
     previous_error_class: dict[str, str]
     client_errors: dict[str, Exception]
     default_client_id: str
+    # The run's kind (``run_check``'s ``how``): the supervisor's early retries of a site outage
+    # ("retry") come minutes apart, so they do not count towards the streak below.
+    how: str = "auto"
 
     def queue(
         self,
@@ -105,6 +108,10 @@ class RunNotifications:
                 return  # a single "торрент-клиент недоступен" covers every topic of a dead client
             cls = error_cls or error_class(error)
             if cls in TRACKER_WARNING_CLASSES:
+                if self.how == "retry":
+                    # A failed retry says the outage goes on, not how long: the scheduled and
+                    # manual checks count it (a successful retry still ends it).
+                    return
                 # A site's transport trouble (amber) often passes by itself: reported once it
                 # lasted several checks in a row, not as an error/recovered pair every other run.
                 streak = _streak(topic.get("error_streak")) + 1
