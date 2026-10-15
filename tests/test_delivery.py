@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
+from typing import ClassVar
 
 import pytest
 
@@ -248,3 +249,23 @@ def test_a_digest_whose_hour_falls_in_the_evening_quiet_hours_comes_when_they_en
     assert len(sent) == 1
     # Before its hour, a digest that was not held by the quiet hours is not due yet.
     assert delivery.maybe_digest(cfg={"daily_digest_hour": 9}, send=send, now=morning) is False
+
+
+def test_a_failed_first_check_that_was_reported_is_closed_by_works_again(monkeypatch):
+    # notify_topic_error sent "Problem" for a new topic's crashed first check but left no mark:
+    # the check that then worked never said "works again".
+    from tow.check import notices
+
+    save_state({"topics": [{"id": "t1", "title": "Show A", "url": "https://site-a.example/t/1"}], "mirrors": {}})
+    notices.notify_topic_error(dict(load_state()["topics"][0]), "site-a: all hosts failed", how="manual")
+    assert load_state()["topics"][0]["error_notified"] is True
+
+    class Run:
+        notify = True
+        queued: ClassVar[list[str]] = []
+
+        def queue_notification(self, _topic, **kw):
+            self.queued.append(kw["kind"])
+
+    notices.queue_recoveries(load_state(), [{"id": "t1", "ok": True, "tracker": "site-a"}], Run())
+    assert Run.queued == ["recovered"]
