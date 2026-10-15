@@ -159,3 +159,11 @@ def test_a_probes_failure_code_is_said_in_words_without_a_raw_placeholder(error)
     assert "{" not in text
     assert text != error
     assert "_" not in text
+
+
+def test_a_sign_in_page_answered_with_200_does_not_say_error_200(monkeypatch):
+    install(monkeypatch, lambda r: httpx.Response(200, text=LOGIN))
+    with pytest.raises(MirrorFetchError) as error:
+        pick_and_get("demo", SPEC["fetch_hosts"], "/download/1", ok=lambda r: False, persist=False)
+    assert "200" not in error.value.text("en")
+    assert error.value.params["error"].text("en") == "the site asks to sign in"

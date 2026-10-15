@@ -71,6 +71,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   mirror again for every topic, and never sets a damaged state file aside.
 - Sites says every mirror problem in words (no connection, too many redirects, HTTP error 503...) instead of an
   internal code or a raw `{status}`.
+- A site showing its sign-in page instead of a torrent is reported as "the site asks to sign in", no longer with
+  "(error 200)".
 
 ## [1.30.10] — 2026-10-15
 
