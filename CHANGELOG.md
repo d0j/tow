@@ -81,6 +81,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Pressing “Check” while that same check is already running queues one more check after it instead of
   silently joining the running one, which may have read the topic before your change. Further clicks share
   the waiting check, and an adoption asked for meanwhile is kept.
+- A preview of every topic no longer holds up a topic check: previews and applying checks wait in separate
+  queues, and applying checks still never run at the same time.
 
 ## [1.30.10] — 2026-10-15
 

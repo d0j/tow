@@ -130,6 +130,36 @@ def test_a_click_during_a_running_check_gets_one_follow_up_check(client, monkeyp
     assert check_jobs.get(seen["follow_up"])["adopted"] is True  # the shared request kept the adoption
 
 
+def test_a_waiting_preview_never_delays_an_applying_check(client, monkeypatch, consumers):
+    # A preview never takes the check lock, so it waits in a lane of its own.
+    calls = []
+    busy = [True]
+
+    def check(**kw):
+        calls.append((kw["apply"], kw.get("ids")))
+        if kw["apply"] and busy[0]:
+            raise CheckBusyError("a scheduled check holds the lock")
+        return {"results": [{"id": (kw.get("ids") or ["a"])[0], "title": "Show A", "ok": True}]}
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    preview = _job(client.post("/check", data={"mode": "dry"}, follow_redirects=False))
+    busy[0] = False
+    at_once = client.post("/topics/b/check", follow_redirects=False)
+    assert "check_job" not in at_once.headers["location"]  # checked now, not queued behind the preview
+    assert calls == [(True, ["b"])]
+    busy[0] = True
+    queued = _job(client.post("/topics/c/check", follow_redirects=False))
+    assert _status(client, queued)["position"] == 1  # first of its own lane
+    assert len(consumers) == 2  # the applying lane has its own consumer
+    busy[0] = False
+    consumers[1].run()
+    assert _status(client, queued)["status"] == "done"
+    assert _status(client, preview)["status"] == "queued"  # still waiting: it delayed nothing
+    consumers[0].run()
+    assert _status(client, preview)["status"] == "done"
+    assert calls == [(True, ["b"]), (True, ["c"]), (True, ["c"]), (False, None)]
+
+
 def test_scheduled_lock_busy_is_retried_without_recording_a_failure(client, monkeypatch):
     attempts = []
 
@@ -278,7 +308,7 @@ def test_a_broken_result_handler_does_not_strand_the_queue(client, crash):
     job, _ = check_jobs.submit(topic_id="a", apply=True, lang="ru", perform=broken)
     finished = wait_for_check_job(client, job["id"])
     assert finished["status"] == "failed"
-    assert not check_jobs.has_pending()
+    assert not check_jobs.has_pending(apply=True)
     assert "не подтвержден" not in finished.get("flash", "")  # never fabricated success
     assert "Результат недоступен" in client.get(f"/?check_result={job['id']}").text
 
@@ -299,7 +329,7 @@ def test_a_consumer_ended_mid_check_never_leaves_its_job_running_or_replays_it(c
     with pytest.raises(_ThreadStop):
         consumers[0].run()
     assert _status(client, first["id"])["status"] == "failed"
-    assert not check_jobs.has_pending()
+    assert not check_jobs.has_pending(apply=True)
     # The next request gets a new consumer, which never runs the ended job (a re-add) again.
     second, _ = check_jobs.submit(topic_id="b", apply=True, lang="ru", perform=ended)
     assert len(consumers) == 2

@@ -181,14 +181,14 @@ def _umask_restored():
 
 @pytest.fixture(autouse=True)
 def _no_background_check_outlives_its_test():
-    """The web "check all" job runs in a 'tow-check-all' thread; it ends with its test.
+    """A manual web check runs in a 'tow-check-apply' or 'tow-check-preview' thread; it ends with its test.
 
     Otherwise it could keep running into the next test (or after this test's TOW_HOME
     is gone) and its job state would leak into the next /check request.
     """
     yield
     module = sys.modules.get("tow.web.check_jobs")
-    stray = [thread for thread in threading.enumerate() if thread.name == "tow-check-all"]
+    stray = [thread for thread in threading.enumerate() if thread.name in {"tow-check-apply", "tow-check-preview"}]
     for thread in stray:
         thread.join(timeout=10)
     if module is not None:
@@ -197,7 +197,7 @@ def _no_background_check_outlives_its_test():
             module.PENDING.clear()
     alive = [thread for thread in stray if thread.is_alive()]
     if alive:
-        pytest.fail(f"background 'check all' thread still running 10 s after the test: {alive}")
+        pytest.fail(f"manual check thread still running 10 s after the test: {alive}")
 
 
 @pytest.fixture(autouse=True)
