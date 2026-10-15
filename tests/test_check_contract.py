@@ -2425,6 +2425,39 @@ def test_a_progress_pass_keeps_a_failed_scheduled_check_failed(monkeypatch):
     assert not health.get("check_failures")
 
 
+@pytest.mark.parametrize(
+    ("how", "ids"), [("retry", None), ("timer", None), ("manual", ["t1"])], ids=["site-retry", "timer", "one-topic"]
+)
+def test_a_partial_run_keeps_a_failed_scheduled_check_failed(monkeypatch, how, ids):
+    # A site retry (or a personal timer, or one topic checked by hand) that went well wrote a fresh
+    # health record: the header and "Needs attention" said the failed scheduled check was fine,
+    # and the watchdog lost the count of scheduled checks failing in a row.
+    client = FakeClient()
+    client.present = True
+    _wire_fake_check(monkeypatch, client)
+    _seed_watched_topic(last_check="earlier")
+    for _ in range(2):
+        check.record_check_failure(RuntimeError("secrets"), how="auto")
+    check.run_check(apply=True, notify=False, how=how, ids=ids)
+    health = load_state()["health"]
+    assert (health["check_ok"], health["check_error"], health["check_failures"]) == (False, "error", 2)
+
+
+def test_a_manual_check_of_every_topic_clears_a_failed_scheduled_check(monkeypatch):
+    # "Needs attention" offers Check all for a failed scheduled check: it checks what the
+    # scheduled check would have.
+    client = FakeClient()
+    client.present = True
+    _wire_fake_check(monkeypatch, client)
+    _seed_watched_topic(last_check="earlier")
+    check.record_check_failure(RuntimeError("secrets"), how="auto")
+    check.run_check(apply=True, notify=False, how="manual")
+    health = load_state()["health"]
+    assert health.get("check_ok", True) is True
+    assert not health.get("check_error")
+    assert not health.get("check_failures")
+
+
 def test_cli_progress_only_is_its_own_kind_of_run(monkeypatch):
     from tow import cli
 
