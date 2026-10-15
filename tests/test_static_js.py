@@ -211,6 +211,15 @@ def test_every_check_this_tab_started_is_followed_within_bounds_to_exactly_one_r
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_a_row_drawn_again_behaves_like_a_row_the_page_opened_with():
+    # The progress link of a refreshed row opened downloads.json instead of the dialog.
+    verdict = _verdict("row_listeners.mjs")
+    assert verdict == dict.fromkeys(verdict, True), verdict
+    assert len(verdict) == 4
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_a_row_whose_check_ended_is_drawn_again_but_never_under_the_owners_hands():
     verdict = _verdict("row_refresh.mjs")
     assert verdict == dict.fromkeys(verdict, True), verdict

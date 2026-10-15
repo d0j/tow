@@ -448,7 +448,14 @@ if (clock) {
 // check or a page reload.
 // A Home row checks.js has drawn again when its check ended: the header asks for its health at
 // once, and the search below takes the new row in place of the old one.
-window.towRows = { health: () => healthPoll.now(), replaced: () => {} };
+// What a row needs beyond the page's delegated listeners (its icons keep their clicks), for
+// the rows the page opened with and for a row drawn again.
+const initRow = (row) => {
+  row.querySelectorAll(".row-ops, .mirror-pick").forEach((el) => {
+    el.addEventListener("click", (e) => e.stopPropagation());
+  });
+};
+window.towRows = { health: () => healthPoll.now(), replaced: (_old, row) => initRow(row) };
 
 const topicTimerNodes = Array.from(document.querySelectorAll("[data-topic-timer]"));
 if (topicTimerNodes.length) {
@@ -624,9 +631,7 @@ if (browserAuthStatus) {
     pollBrowserAuth();
   }
 }
-document.querySelectorAll(".row-ops, .mirror-pick").forEach((el) => {
-  el.addEventListener("click", (e) => e.stopPropagation());
-});
+initRow(document);
 
 const topicUrl = document.getElementById("topic-url");
 if (topicUrl) {
@@ -934,23 +939,24 @@ if (downloadPop && downloadBody) {
     }
     downloadBody.replaceChildren(...(content.length ? content : [Object.assign(document.createElement("div"), { className: "mut", textContent: t("js.downloads.no_events") })]));
   };
-  document.querySelectorAll("a.download-details").forEach((link) => {
-    link.addEventListener("click", async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      downloadBody.replaceChildren(Object.assign(document.createElement("div"), { className: "mut", textContent: t("js.downloads.loading") }));
-      // The focus comes back to the link, or to its row's summary when the row is open (the
-      // link is then hidden and its words in the summary were clicked).
-      downloadOpener = e.currentTarget.getClientRects().length ? e.currentTarget : e.currentTarget.closest(".row-wrap")?.querySelector("summary");
-      downloadBaseUrl = link.href;
-      loadedDownloads = [];
-      downloadPop.showModal();
-      try {
-        await loadDownloadPage(link.href);
-      } catch (error) {
-        downloadBody.replaceChildren(Object.assign(document.createElement("div"), { className: "mut", textContent: error.message || t("js.downloads.open_failed") }));
-      }
-    });
+  // Delegated: a row drawn again when its check ended (checks.js) has a new link.
+  document.addEventListener("click", async (e) => {
+    const link = e.target.closest?.("a.download-details");
+    if (!link) return;
+    e.preventDefault();
+    e.stopPropagation();
+    downloadBody.replaceChildren(Object.assign(document.createElement("div"), { className: "mut", textContent: t("js.downloads.loading") }));
+    // The focus comes back to the link, or to its row's summary when the row is open (the
+    // link is then hidden and its words in the summary were clicked).
+    downloadOpener = link.getClientRects().length ? link : link.closest(".row-wrap")?.querySelector("summary");
+    downloadBaseUrl = link.href || link.getAttribute("href");
+    loadedDownloads = [];
+    downloadPop.showModal();
+    try {
+      await loadDownloadPage(downloadBaseUrl);
+    } catch (error) {
+      downloadBody.replaceChildren(Object.assign(document.createElement("div"), { className: "mut", textContent: error.message || t("js.downloads.open_failed") }));
+    }
   });
   // An open row shows its progress as words in its summary (the link covers only a closed row,
   // A2): a click on them opens the same episodes instead of folding the row.
@@ -1242,7 +1248,9 @@ if (q) {
   sortRows();
   announce();
   // The search, the filters and the order know the new row; one that no longer matches hides.
+  const initReplaced = window.towRows.replaced;
   window.towRows.replaced = (old, row) => {
+    initReplaced(old, row);
     for (const rows of [searchable, originalOrder]) {
       const index = rows.indexOf(old);
       if (index >= 0) rows[index] = row;
