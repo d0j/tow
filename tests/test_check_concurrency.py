@@ -397,7 +397,8 @@ def test_reconcile_does_not_hold_the_data_lock(monkeypatch):
 
 def test_a_corrupt_download_history_does_not_block_the_check(monkeypatch):
     """The history is rebuildable: the check goes on with an empty one, keeps the damaged file
-    aside and says so on Home, instead of failing every run."""
+    aside and says so on the History page (not in Home's "Needs attention"), instead of failing
+    every run."""
     from tow.paths import download_history_path
     from tow.store import load_download_history
     from tow.web.views import attention, issue_notes
