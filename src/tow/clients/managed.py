@@ -40,6 +40,9 @@ UNSAFE_STATES = frozenset({"error", "missingfiles", "unknown"})
 # Preparation a client does on its own before a torrent runs, besides checking its files:
 # qBittorrent reserves the files' disk space first ("allocating").
 PREPARING_STATES = frozenset({"allocating"})
+# A receipt's phase: the add was handed over while the client checked the data it found, before
+# its selection was applied (``_finish_initial_check`` applies it once the check ends).
+AWAITING_INITIAL_CHECK = "awaiting_initial_check"
 
 
 def completed_progress(value: object) -> bool:
@@ -324,9 +327,16 @@ class ManagedClient:
         }
 
     def _verify_receipt(
-        self, infohash: str, destination: str, receipt: dict[str, Any], *, require_pending: bool
+        self,
+        infohash: str,
+        destination: str,
+        receipt: dict[str, Any],
+        *,
+        require_pending: bool,
+        applied: bool = True,
     ) -> dict[str, Any]:
-        """Fresh identity, ownership, folder and exact selection; never trust task progress."""
+        """Fresh identity, ownership, folder and exact selection; never trust task progress.
+        ``applied=False``: a selection not applied yet - the file identities, not their flags."""
         if not isinstance(receipt, dict):
             raise self._fail("client.managed.wrong_selection")
         rows, wanted, ignored = receipt.get("files"), receipt.get("wanted"), receipt.get("ignored", [])
@@ -360,6 +370,11 @@ class ManagedClient:
         if not destination or not paths_equal(str(info.get("save_path") or ""), destination):
             raise self._fail("client.managed.wrong_folder")
         self._check_state(info)
+        if not applied:
+            files.verify_identities(
+                rows, list(info.get("files") or []), fail=lambda: self._fail("client.managed.wrong_selection")
+            )
+            return info
         files.verify_selection(
             rows,
             list(info.get("files") or []),
@@ -418,6 +433,8 @@ class ManagedClient:
         start_stopped: bool,
         on_start: Callable[[], None],
     ) -> dict[str, Any]:
+        if isinstance(receipt, dict) and receipt.get("phase") == AWAITING_INITIAL_CHECK:
+            return self._finish_initial_check(infohash, destination, receipt, on_start=on_start)
         info = self._verify_receipt(infohash, destination, receipt, require_pending=False)
         if self._preparing(info, after_check=True):
             raise ClientVerificationPending(infohash, prefix=self.title, receipt=receipt)
@@ -443,6 +460,82 @@ class ManagedClient:
             raise ClientVerificationPending(infohash, prefix=self.title, receipt=receipt)
         self._assert_started(info)
         return info
+
+    def _defers_initial_check(self, info: dict[str, Any]) -> bool:
+        """The client checks the data it found for a torrent added stopped, and stopping it would
+        cancel that check (Transmission): the add is handed over before its selection instead of
+        waiting for the check (``_awaiting_initial_check``). No client by default."""
+        del info
+        return False
+
+    def _awaiting_initial_check(
+        self,
+        infohash: str,
+        info: dict[str, Any],
+        destination: str,
+        metadata: TorrentMetadata,
+        selected: set[int],
+        *,
+        start: bool,
+    ) -> ClientVerificationPending:
+        """The add, handed over while its client checks: hash, folder and file identities bound to
+        the requested selection, not applied yet (``phase``), and whether it starts afterwards. No
+        stop, start or selection change happens before the check ends; validated as handed over."""
+        rows = list(info.get("files") or [])
+        mapping = self._map_files(metadata.files, rows, metadata.name)
+        if not selected or not selected.issubset(mapping):
+            raise self._fail("client.managed.bad_selection")
+        receipt = {
+            "hash": infohash.upper(),
+            "phase": AWAITING_INITIAL_CHECK,
+            "start": start,
+            "files": [{key: row.get(key) for key in ("index", "name", "size", "priority")} for row in rows],
+            "wanted": sorted(mapping[index] for index in selected),
+            "ignored": sorted(self._ignored_padding(rows, set(mapping.values()), metadata.files, selected)),
+        }
+        self._verify_receipt(infohash, destination, receipt, require_pending=True, applied=False)
+        return ClientVerificationPending(infohash, prefix=self.title, receipt=receipt)
+
+    def _finish_initial_check(
+        self, infohash: str, destination: str, receipt: dict[str, Any], *, on_start: Callable[[], None]
+    ) -> dict[str, Any]:
+        """The client's check of an add handed over before its selection ended: the selection is
+        applied to the stopped torrent and read back, then it starts when the add asked for it
+        and is released - from then on an ordinary receipt. Changed ownership, folder or files
+        refuse it before anything is applied; a check still running changes nothing."""
+        info = self._verify_receipt(infohash, destination, receipt, require_pending=True, applied=False)
+        if self._preparing(info, after_check=True):
+            raise ClientVerificationPending(infohash, prefix=self.title, receipt=receipt)
+        rows = list(receipt["files"])
+        wanted, ignored = set(receipt["wanted"]), set(receipt.get("ignored") or [])
+        if not self._stopped(info):
+            self._require_owned(infohash)
+            self._stop(infohash)
+            self._wait_stopped(infohash)
+        self._require_owned(infohash)
+        self._set_wanted(infohash, wanted, sorted(int(row["index"]) for row in rows))
+        verified = self._inspect_with_files(infohash)
+        files.verify_selection(
+            rows,
+            list(verified.get("files") or []),
+            wanted,
+            ignored=ignored,
+            fail=lambda: self._fail("client.managed.wrong_selection"),
+        )
+        applied = {key: value for key, value in receipt.items() if key not in {"phase", "start"}}
+        applied["files"] = [
+            {key: row.get(key) for key in ("index", "name", "size", "priority")} for row in verified.get("files") or []
+        ]
+        if receipt.get("start") is not True:
+            return self._clear_pending(infohash)  # released stopped: its files wait for disk space
+        self._require_owned(infohash)
+        on_start()
+        self._start(infohash)
+        try:
+            self._wait_started(infohash, repeats=0)
+        except ClientVerificationPending:
+            raise ClientVerificationPending(infohash, prefix=self.title, receipt=applied) from None
+        return self._finish_verification(infohash, destination, applied, start_stopped=False, on_start=on_start)
 
     def _assert_started(self, info: dict[str, Any]) -> None:
         if not self._running(info) and not (self._stopped(info) and completed_progress(info.get("progress"))):
@@ -672,6 +765,8 @@ class ManagedClient:
                         raise
                 else:
                     return self.finish_verification(infohash, destination, receipt, start_stopped=True)
+            if self._defers_initial_check(added) and added.get("files"):
+                raise self._awaiting_initial_check(infohash, added, destination, metadata, selected, start=start)
             if self._stop_after_add(added):
                 self._require_owned(infohash)
                 self._stop(infohash)
@@ -766,6 +861,10 @@ class ManagedClient:
                 return self.finish_verification(
                     infohash, str(before.get("save_path") or ""), receipt, start_stopped=True
                 )
+        if pending and self._defers_initial_check(before):
+            raise self._awaiting_initial_check(
+                infohash, before, str(before.get("save_path") or ""), metadata, selected, start=not keep_stopped
+            )
         before = self._ready_for_selection(before)
         if OWNER not in self._tags(before):
             raise self._fail("client.managed.not_owned")

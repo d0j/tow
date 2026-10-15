@@ -798,67 +798,117 @@ def test_transmission_overlap_distinguishes_stopped_from_checking_and_seeding(tm
     assert bool(overlap) is (status != 0)
 
 
+class CheckingTransmission(FakeTransmission):
+    """transmission-daemon verifying the data it found for a paused add: status 2 (1 while it
+    waits for its turn), the check's own percentDone rising from 0, for as long as ``checking``."""
+
+    def __init__(self, status: int = 2) -> None:
+        super().__init__()
+        self.checking = True
+        self.status = status
+        self.reads = 0
+
+    def _row(self, t: Torrent) -> dict[str, Any]:
+        row = FakeTransmission._row(t)
+        if self.checking:
+            self.reads += 1
+            row.update(status=self.status, percentDone=min(0.9, 0.1 * self.reads))
+        return row
+
+
+def _never_waits(adapter: TransmissionClient, monkeypatch) -> None:
+    def waited(*_args, **_kwargs):
+        raise AssertionError("waited for the client's check")
+
+    monkeypatch.setattr(adapter, "_wait_initial_verification", waited)
+
+
 @pytest.mark.parametrize("checking_status", [1, 2])
 @pytest.mark.parametrize("start", [False, True])
-def test_transmission_initial_verification_is_not_cancelled_before_selection(
+def test_transmission_initial_verification_is_handed_over_before_its_selection(
     tmp_path, monkeypatch, checking_status, start
 ):
-    server = FakeTransmission()
-    checking = [6]
-    handler = server.handler
+    """A long check of the data a paused add found returns at once (no 60 s wait, no red error),
+    never starts all files, and its selection is applied - stopped, read back - once it ends."""
+    from tow.clients.managed import ClientVerificationPending
 
-    def request(request):
-        message = json.loads(request.content)
-        if (
-            server.torrents
-            and message["method"] == "torrent-get"
-            and "status" in message["arguments"].get("fields", [])
-        ):
-            checking[0] -= 1
-        return handler(request)
-
-    monkeypatch.setattr(server, "handler", request)
+    server = CheckingTransmission(checking_status)
     adapter = _transmission(server)
-    adapter.START_POLLS = 12
-    row = server._row
-    monkeypatch.setattr(
-        server, "_row", lambda torrent: {**row(torrent), "status": checking_status} if checking[0] > 0 else row(torrent)
-    )
-    result = adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01], start=start)
-    assert "torrent-stop" not in server.calls
-    assert checking[0] <= 0
-    assert _wanted(result) == [index == E01 for index in range(3)]
-    assert ("torrent-start" in server.calls) is start
-    assert result["tags"] == ["tow"]
-
-
-def test_transmission_unfinished_initial_verification_stays_pending_without_start(tmp_path, monkeypatch):
-    server = FakeTransmission()
-    adapter = _transmission(server)
-    adapter.START_POLLS = 3
-    row = server._row
-    monkeypatch.setattr(server, "_row", lambda torrent: {**row(torrent), "status": 2})
-    with raises_code("client.transmission.check_in_progress"):
-        adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
-    assert "torrent-start" not in server.calls
-    assert "torrent-stop" not in server.calls
+    _never_waits(adapter, monkeypatch)
+    with pytest.raises(ClientVerificationPending) as error:
+        adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01], start=start)
+    receipt = error.value.receipt
+    assert (receipt["phase"], receipt["start"]) == ("awaiting_initial_check", start)
+    assert not {"torrent-stop", "torrent-start"} & set(server.calls)  # a stop would cancel the check
+    assert server.torrents[K].wanted == [True, True, True]  # not applied yet; it never runs like this
     assert set(server.torrents[K].labels) == {"tow", "tow-pending"}
-    assert not server.torrents[K].running
+    server.calls.clear()
+    with pytest.raises(ClientVerificationPending):
+        adapter.finish_verification(H, str(tmp_path), receipt, start_stopped=True)
+    assert not {"torrent-set", "torrent-stop", "torrent-start"} & set(server.calls)  # still checking
+    server.checking = False
+    server.calls.clear()
+    info = adapter.finish_verification(H, str(tmp_path), receipt, start_stopped=True)
+    assert _wanted(info) == [index == E01 for index in range(3)]
+    assert info["tags"] == ["tow"]
+    assert server.torrents[K].running is start
+    if start:
+        assert server.calls.index("torrent-set") < server.calls.index("torrent-start")
 
 
-@pytest.mark.parametrize("pending", [False, True])
-def test_transmission_selection_retry_does_not_interrupt_verification(tmp_path, monkeypatch, pending):
+@pytest.mark.parametrize(
+    ("change", "code"),
+    [("owner", "not_owned"), ("folder", "wrong_folder"), ("files", "wrong_selection"), ("gone", "missing")],
+)
+def test_transmission_changed_evidence_after_the_initial_check_applies_nothing(tmp_path, monkeypatch, change, code):
+    from tow.clients.managed import ClientVerificationPending
+
+    server = CheckingTransmission()
+    adapter = _transmission(server)
+    with pytest.raises(ClientVerificationPending) as error:
+        adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    server.checking = False
+    torrent = server.torrents[K]
+    if change == "owner":
+        torrent.labels = ["owners-label"]
+    elif change == "folder":
+        torrent.path = str(tmp_path / "elsewhere")
+    elif change == "files":
+        torrent.files[0] = ("Show S01/other.mkv", torrent.files[0][1])
+    else:
+        server.torrents.clear()
+    server.calls.clear()
+    with raises_code(f"client.managed.{code}"):
+        adapter.finish_verification(H, str(tmp_path), error.value.receipt, start_stopped=True)
+    assert not {"torrent-set", "torrent-start", "torrent-stop"} & set(server.calls)
+
+
+def test_transmission_pending_retry_during_the_initial_check_is_handed_over(tmp_path, monkeypatch):
+    from tow.clients.managed import ClientVerificationPending
+
+    server = CheckingTransmission()
+    adapter = _transmission(server)
+    _never_waits(adapter, monkeypatch)
+    server.torrents[K] = Torrent(TORRENT, str(tmp_path), ["tow", "tow-pending"], paused=True)
+    with pytest.raises(ClientVerificationPending) as error:
+        adapter.configure_torrent_selection(TORRENT, H, [E01], ensure_started=True)
+    assert error.value.receipt["phase"] == "awaiting_initial_check"
+    assert error.value.receipt["start"] is True
+    assert not {"torrent-stop", "torrent-start", "torrent-set"} & set(server.calls)
+
+
+def test_transmission_selection_retry_does_not_interrupt_verification(tmp_path, monkeypatch):
+    """TOW's own finished torrent checking its files: a selection change waits for the check."""
     server = FakeTransmission()
     adapter = _transmission(server)
     adapter.START_POLLS = 3
-    labels = ["tow", "tow-pending"] if pending else ["tow"]
-    server.torrents[K] = Torrent(TORRENT, str(tmp_path), labels, paused=True)
+    server.torrents[K] = Torrent(TORRENT, str(tmp_path), ["tow"], paused=True)
     row = server._row
     monkeypatch.setattr(server, "_row", lambda torrent: {**row(torrent), "status": 2})
     with raises_code("client.transmission.check_in_progress"):
         adapter.configure_torrent_selection(TORRENT, H, [E01], ensure_started=True)
     assert not set(server.calls) & {"torrent-stop", "torrent-start", "torrent-set"}
-    assert server.torrents[K].labels == labels
+    assert server.torrents[K].labels == ["tow"]
     assert not server.torrents[K].running
 
 
@@ -889,10 +939,9 @@ def test_transmission_other_failures_still_stop_pending_checking_torrent(tmp_pat
     assert server.calls.count("torrent-stop") == 1
 
 
-@pytest.mark.parametrize("pending", [False, True])
-def test_transmission_selection_retry_continues_after_verification(tmp_path, monkeypatch, pending):
+def test_transmission_selection_retry_continues_after_verification(tmp_path, monkeypatch):
     server = FakeTransmission()
-    labels = ["tow", "tow-pending"] if pending else ["tow"]
+    labels = ["tow"]
     server.torrents[K] = Torrent(TORRENT, str(tmp_path), labels, paused=True)
     remaining = [4]
     handler = server.handler
