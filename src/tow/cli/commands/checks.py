@@ -105,7 +105,9 @@ def _adopt(args: argparse.Namespace) -> int:
         try:
             result = adopt_topic(item["id"], how="manual", replace_label=args.replace_label)
         except CheckBusyError:
-            say({"ok": False, "adopted": adopted, "error": t("cli.adopt.busy")})
+            # A check started meanwhile: what was adopted before it is said too, not hidden.
+            busy = "\n".join([*lines, t("cli.adopt.busy")])
+            say({"ok": False, "adopted": adopted, **problem_fields, "error": busy})
             return EXIT_CANNOT_RUN
         except Exception as exc:  # noqa: BLE001 - one topic's failure is reported (and logged); the others go on
             failed += 1

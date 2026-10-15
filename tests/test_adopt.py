@@ -395,6 +395,27 @@ def test_cli_reports_an_unknown_topic(monkeypatch, capsys):
     assert client.torrents[NEW]["tags"] == ["tow"]
 
 
+def test_cli_says_what_it_adopted_before_a_check_started(monkeypatch, capsys):
+    # A check that started mid-way ended `tow adopt` with "a check is running" alone: the topics
+    # it had already adopted were not named.
+    from tow.i18n import t
+    from tow.store import CheckBusyError
+
+    _two_unmarked(monkeypatch)
+    real = adopt.adopt_topic
+
+    def busy_after_the_first(topic_id, **kwargs):
+        if topic_id == "t2":
+            raise CheckBusyError("a check runs")
+        return real(topic_id, **kwargs)
+
+    monkeypatch.setattr(adopt, "adopt_topic", busy_after_the_first)
+    assert cli.main(["adopt", "--all-unmarked", "--yes"]) == cli.EXIT_CANNOT_RUN
+    out = capsys.readouterr().out
+    assert "t1" in out
+    assert t("cli.adopt.busy") in out
+
+
 def test_cli_without_an_answer_changes_nothing(monkeypatch):
     client = _two_unmarked(monkeypatch)
 
