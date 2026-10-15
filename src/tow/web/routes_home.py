@@ -51,6 +51,16 @@ def _first_steps(cfg: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _activity_text(job: dict[str, Any] | None) -> str:
+    """The note of the page that follows a manual check: where it is, that it finished (opened
+    again after it ended: reload, Back, no script), or that this server no longer knows it."""
+    if job is None:
+        return t("web.check_all.unconfirmed")
+    if job["status"] in {"queued", "running"}:
+        return check_progress(job)
+    return t("web.check_all.finished")
+
+
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request) -> Response:
     from tow.clients.factory import client_configurations, default_client_id
@@ -94,9 +104,7 @@ def index(request: Request) -> Response:
             "check_result_message": check_job_message(result) if result and not said else "",
             "check_result_requested": bool(result_id),
             "check_activity": active,
-            "check_activity_text": check_progress(active)
-            if active and active["status"] in {"queued", "running"}
-            else t("web.check_all.unconfirmed"),
+            "check_activity_text": _activity_text(active),
             "check_activity_title": next(
                 (row["series"] for row in rows if active and str(row["id"]) == active["topic_id"]),
                 t("base.check_all.title"),

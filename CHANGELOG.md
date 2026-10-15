@@ -99,6 +99,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A manual check's results open at their own address, which shows them for the hour TOW keeps them (its
   message used to vanish after ten minutes). A results page still waiting for its check now shows the results
   when the check ends instead of staying on “waiting”, and Back no longer returns to the waiting page.
+  The waiting page of a check that has ended says it finished, with the link to its results, instead of “TOW
+  restarted or the record expired”.
 
 ## [1.30.10] — 2026-10-15
 
