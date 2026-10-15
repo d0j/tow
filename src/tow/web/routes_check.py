@@ -80,7 +80,7 @@ def topics_check(tid: str) -> Response:
 def _check_topic(tid: str, *, adopted: bool = False) -> Response:
     """Check one topic now and say what it found; ``adopted``: the owner has just adopted its
     torrent into TOW, which a check that changes nothing else confirms."""
-    if check_jobs.has_pending():
+    if check_jobs.has_pending(apply=True):  # never ahead of an applying check that waits
         return _enqueue(topic_id=tid, apply=True, adopted=adopted)
     try:
         out = services.run_check(apply=True, notify=True, ids=[tid], ignore_cool=True, how="manual", wait=False)

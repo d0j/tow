@@ -157,7 +157,7 @@ def manual_check_consumers(monkeypatch: Any) -> list[ManualCheckConsumer]:
         return started[-1]
 
     monkeypatch.setattr(check_jobs, "_start", start)
-    monkeypatch.setattr(check_jobs, "_worker", None)  # restored after the test: no fake outlives it
+    monkeypatch.setattr(check_jobs, "_WORKERS", {})  # restored after the test: no fake outlives it
     return started
 
 

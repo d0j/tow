@@ -1,7 +1,9 @@
-"""Bounded FIFO for manual checks in this web process, never overlapping client writes.
+"""Bounded FIFO lanes for manual checks in this web process, never overlapping client writes.
 
-Like flash messages, these jobs live for this server's lifetime. A restart never
-replays a manual re-add; a missing job is explicitly reported as unconfirmed.
+Applying checks and previews wait in lanes of their own, each with one consumer: a preview takes
+no check lock and never delays an applying check, and two applying checks never overlap. Like
+flash messages, these jobs live for this server's lifetime. A restart never replays a manual
+re-add; a missing job is explicitly reported as unconfirmed.
 """
 
 from __future__ import annotations
@@ -18,18 +20,24 @@ from tow.store import CheckBusyError
 
 LOCK = threading.RLock()
 JOBS: dict[str, dict[str, Any]] = {}
-PENDING: deque[str] = deque()
-_worker: threading.Thread | None = None
-MAX_PENDING = 32
+PENDING: deque[str] = deque()  # the jobs of both lanes that wait or run, oldest first
+# The consumer of each lane, by the lane's ``apply``.
+_WORKERS: dict[bool, threading.Thread] = {}
+MAX_PENDING = 32  # per lane
 RESULT_TTL = 3600
+
+
+def _lane(apply: bool) -> list[str]:
+    """The jobs of one lane that wait or run, oldest first (the caller holds LOCK)."""
+    return [key for key in PENDING if JOBS[key]["apply"] == apply]
 
 
 def submit(
     *, topic_id: str, apply: bool, lang: str, perform: Callable[[dict[str, Any]], None], adopted: bool = False
 ) -> tuple[dict[str, Any] | None, bool]:
-    """Share a request that still waits, enqueue anything else once, and keep exactly one FIFO
-    consumer. The returned job carries its ``position`` in the queue (1: next or running)."""
-    global _worker
+    """Share a request that still waits, enqueue anything else once in its lane, and keep exactly
+    one FIFO consumer per lane. The returned job carries its ``position`` in its lane (1: next or
+    running)."""
     with LOCK:
         now = time.monotonic()
         for key, job in list(JOBS.items()):
@@ -41,7 +49,7 @@ def submit(
             if job["status"] == "queued" and job["topic_id"] == topic_id and job["apply"] == apply:
                 job["adopted"] = bool(job.get("adopted")) or adopted
                 return get(job["id"]), False
-        if len(PENDING) >= MAX_PENDING:
+        if len(_lane(apply)) >= MAX_PENDING:
             return None, False
         # Bound completed records independently of the pending-work limit.
         while len(JOBS) >= 64:
@@ -63,9 +71,10 @@ def submit(
         }
         JOBS[job["id"]] = job
         PENDING.append(job["id"])
-        if _worker is None or not _worker.is_alive():
+        worker = _WORKERS.get(apply)
+        if worker is None or not worker.is_alive():
             try:
-                _worker = _start("tow-check-all", _consume, perform)
+                _WORKERS[apply] = _start("tow-check-apply" if apply else "tow-check-preview", _consume, apply, perform)
             except RuntimeError:
                 PENDING.remove(job["id"])
                 del JOBS[job["id"]]
@@ -80,14 +89,14 @@ def _start(name: str, target: Callable[..., None], *args: Any) -> threading.Thre
     return worker
 
 
-def _consume(perform: Callable[[dict[str, Any]], None]) -> None:
-    global _worker
+def _consume(apply: bool, perform: Callable[[dict[str, Any]], None]) -> None:
     while True:
         with LOCK:
-            if not PENDING:
-                _worker = None
+            lane = _lane(apply)
+            if not lane:
+                _WORKERS.pop(apply, None)
                 return
-            job = JOBS[PENDING[0]]
+            job = JOBS[lane[0]]
             job["status"] = "running"
         try:
             perform(job)
@@ -123,7 +132,8 @@ def get(job_id: str) -> dict[str, Any] | None:
         if job is None or job.get("finished_at", time.monotonic()) + RESULT_TTL < time.monotonic():
             return None
         result = copy.deepcopy(job)
-        result["position"] = list(PENDING).index(job_id) + 1 if job_id in PENDING else 0
+        lane = _lane(job["apply"]) if job_id in PENDING else []
+        result["position"] = lane.index(job_id) + 1 if lane else 0
         return result
 
 
@@ -132,9 +142,10 @@ def pending_topic(topic_id: str) -> dict[str, Any] | None:
         return next((get(key) for key in PENDING if JOBS[key]["topic_id"] == topic_id), None)
 
 
-def has_pending() -> bool:
+def has_pending(*, apply: bool) -> bool:
+    """Work waits or runs in the lane of applying checks (``apply``) or of previews."""
     with LOCK:
-        return bool(PENDING)
+        return bool(_lane(apply))
 
 
 def cancel(job_id: str) -> bool:
