@@ -141,9 +141,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   check (as the file system reports it), so a torrent waiting for disk space is no longer held back by its own
   partly downloaded files.
 - Transmission: a new torrent whose existing files Transmission checks for a long time no longer holds every check
-  for a minute and turns red; TOW hands it over at once and applies its file selection, then starts it (or lets it
-  wait for disk space), once Transmission's check ends - never with all files and without downloading the .torrent
-  again.
+  for a minute and turns red; TOW waits up to 5 seconds for the check (a short one is finished in the same check as
+  before), then hands the torrent over and applies its file selection, then starts it (or lets it wait for disk
+  space), once Transmission's check ends - never with all files and without downloading the .torrent again.
 - A topic check that waited in the queue no longer adds back a torrent you removed from the client after
   pressing Check; one a check had already found missing before you pressed it is still added back.
 - The same holds when that check repairs a torrent whose file selection or folder had changed in the client, and
