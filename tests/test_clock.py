@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -42,6 +42,29 @@ def test_local_zone_seam_drives_every_local_time(monkeypatch, zone, stamp, iso):
     assert iso_from_epoch(datetime(2026, 9, 11, 18, 30, 47, tzinfo=UTC).timestamp()) == iso
     assert machine_now().tzinfo is zone
     assert parse_timestamp("2026-09-13T19:05:25").tzinfo is zone
+
+
+def test_quiet_hours_and_service_times_read_the_seam_on_each_call(monkeypatch):
+    """delivery and diagnostic_json copied local_zone at import: in a full run they kept the real
+    one (this machine's zone) and quiet hours followed the runner's zone, not the pinned one."""
+    from tow import delivery, diagnostic_json
+
+    asked = []
+
+    class Zone(tzinfo):
+        def utcoffset(self, _dt):
+            asked.append("zone")
+            return timedelta(hours=14)
+
+        def dst(self, _dt):
+            return timedelta(0)
+
+    monkeypatch.setattr(tow.clock, "local_zone", lambda: Zone())
+    delivery.quiet_now({"quiet_hours": "1-2"})
+    assert asked
+    asked.clear()
+    assert diagnostic_json.epoch(1_800_000_000) == 1_800_000_000
+    assert asked
 
 
 def test_a_naive_time_is_local_wall_time_of_its_own_date():
