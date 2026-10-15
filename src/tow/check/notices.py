@@ -175,8 +175,16 @@ def notify_topic_error(topic: dict[str, Any], error: Any, *, tracker: str = "", 
     a check's messages are: held during the quiet hours, through the messengers' queue."""
     from tow import delivery
     from tow.config import load_config
-    from tow.store import load_secrets
+    from tow.store import load_secrets, load_state, persistence_lock, save_state
 
     secrets = load_secrets()
     item = PendingNotification("error", new_operation_id("add-check"), cast(Topic, topic), tracker, error)
     delivery.deliver([item], cfg=load_config(), send=_sender(secrets, how=how))
+    # As a check marks a reported failure: the next check that works says "works again" (it
+    # closes only marked failures).
+    with persistence_lock():
+        state = load_state()
+        saved = next((row for row in topics_of(state) if str(row.get("id")) == str(topic.get("id"))), None)
+        if saved is not None and not saved.get("error_notified"):
+            saved["error_notified"] = True
+            save_state(state)

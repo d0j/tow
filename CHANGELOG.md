@@ -180,6 +180,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   `quiet_hours: "22-7"`) is sent when the quiet hours end; it was never sent.
 - Messages waiting for a recipient that is no longer in the settings (a removed Telegram chat, a group that moved
   to a new id, a removed messenger) are forgotten instead of waiting for ever.
+- When the first check of a newly added topic failed and the owner was told, the check that works again now says
+  so ("works again"); nothing closed that message before.
 
 ## [1.31.2] — 2026-10-15
 
