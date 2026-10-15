@@ -20,7 +20,7 @@ def collect(snapshot: Snapshot) -> list[Issue]:
         return []
     cfg = dict(snapshot.config)
     default = factory.default_client_id(cfg)
-    rows = {str(row["id"]): row for row in factory.client_configurations(cfg)}
+    rows = {str(row["id"]): row for row in factory.client_configurations(cfg) if row.get("enabled", True)}
     issues = []
     for client in found:
         affected = tuple(
