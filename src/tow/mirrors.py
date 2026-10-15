@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import math
 import time
 from collections.abc import Callable, Iterator
@@ -107,7 +108,7 @@ def _bucket(state: dict[str, Any], tracker: str) -> dict[str, Any]:
     b = mirrors.get(tracker)
     if not isinstance(b, dict):
         b = mirrors[tracker] = {}
-    for key in ("fail", "cool", "rate_cool"):
+    for key in ("fail", "cool", "rate_cool", "failed_at"):
         raw = b.get(key)
         if not isinstance(raw, dict):
             b[key] = {}
@@ -133,58 +134,95 @@ def _bucket(state: dict[str, Any], tracker: str) -> dict[str, Any]:
     return b
 
 
-def _save_bucket(tracker: str, bucket: dict[str, Any], host: str) -> None:
+def _configured_hosts(spec: object) -> set[str]:
+    if not isinstance(spec, dict):
+        return set()
+    return {str(item).rstrip("/") for item in [*(spec.get("fetch_hosts") or []), *(spec.get("login_hosts") or [])]}
+
+
+def _record(tracker: str, host: str, change: Callable[[dict[str, Any]], None]) -> None:
+    """Apply one answer of ``host`` to the site's entry as it is saved now, under the lock.
+
+    Counts and deadlines change from the saved values, never from a copy this request read
+    before it went out: overlapping checks (a web action beside a scheduled check) lose
+    nothing. A site deleted meanwhile is not recreated; nothing is written when nothing changed.
+    """
     from tow.config import load_config
 
+    host = host.rstrip("/")
     with persistence_lock():
-        spec = (load_config().get("trackers") or {}).get(tracker)
-        if not isinstance(spec, dict) or host.rstrip("/") not in {
-            str(item).rstrip("/") for item in [*(spec.get("fetch_hosts") or []), *(spec.get("login_hosts") or [])]
-        }:
+        configured = _configured_hosts((load_config().get("trackers") or {}).get(tracker))
+        if host not in configured:
             return
         st = load_state()
         current = _bucket(st, tracker)
-        before = (
-            current["fail"].get(host),
-            current["cool"].get(host),
-            current["rate_cool"].get(host),
-            current["active"],
-            current.get("observed", {}).get(host),
-        )
-        if host in bucket["fail"]:
-            current["fail"][host] = bucket["fail"][host]
-        else:
-            current["fail"].pop(host, None)
-        if host in bucket["cool"]:
-            current["cool"][host] = bucket["cool"][host]
-        else:
-            current["cool"].pop(host, None)
-        if host in bucket["rate_cool"]:
-            current["rate_cool"][host] = max(float(current["rate_cool"].get(host) or 0), bucket["rate_cool"][host])
-        elif float(current["rate_cool"].get(host) or 0) <= _now():
-            current["rate_cool"].pop(host, None)
-        if float(current["rate_cool"].get(host) or 0) > _now():
-            current["cool"][host] = max(float(current["cool"].get(host) or 0), current["rate_cool"][host])
-        if bucket.get("active") == host:
-            current["active"] = host
-        observed = bucket.get("observed", {}).get(host)
-        if isinstance(observed, dict):
-            configured = {
-                str(item).rstrip("/") for item in [*(spec.get("fetch_hosts") or []), *(spec.get("login_hosts") or [])]
-            }
-            current["observed"] = {
-                key: value for key, value in current.get("observed", {}).items() if key in configured
-            }
-            current["observed"][host] = observed
+        before = copy.deepcopy(current)
+        change(current)
+        _prune(current, configured)
         # A healthy fetch from the active mirror changes nothing: no state rewrite + fsync.
-        if (
-            current["fail"].get(host),
-            current["cool"].get(host),
-            current["rate_cool"].get(host),
-            current["active"],
-            current.get("observed", {}).get(host),
-        ) != before:
+        if current != before:
             save_state(st)
+
+
+def _prune(bucket: dict[str, Any], configured: set[str]) -> None:
+    """Drop pauses that ended and observations of hosts that are no longer the site's."""
+    now = _now()
+    for key in ("cool", "rate_cool"):
+        bucket[key] = {host: until for host, until in bucket[key].items() if until > now}
+    bucket["observed"] = {host: row for host, row in bucket["observed"].items() if host in configured}
+
+
+def _later(saved: object, token: float) -> bool:
+    """``saved`` (when a recorded request started) is later than ``token`` (when this one did).
+    A saved time ahead of the clock says the clock went back since: it orders nothing."""
+    return (
+        isinstance(saved, (int, float))
+        and not isinstance(saved, bool)
+        and math.isfinite(saved)
+        and token < saved <= _now()
+    )
+
+
+def _note_failure(
+    bucket: dict[str, Any],
+    host: str,
+    failure: str,
+    *,
+    status: int | None,
+    token: float,
+    counts: bool,
+    fail_threshold: int = 3,
+    cooldown_sec: int = 3600,
+    retry_after: float = 0,
+) -> None:
+    """A failed request to ``host`` that started at ``token``; ``counts``: towards its cooldown."""
+    _observe(bucket, host, failure, status, token=token)
+    if not counts:
+        return
+    failures = int(bucket["fail"].get(host) or 0) + 1
+    bucket["fail"][host] = failures
+    bucket["failed_at"][host] = max(token, float(bucket["failed_at"].get(host) or 0))
+    if failure == "rate_limited":
+        _pause_rate_limited(bucket, host, retry_after)
+    elif failures >= fail_threshold:
+        bucket["cool"][host] = max(float(bucket["cool"].get(host) or 0), _now() + cooldown_sec)
+
+
+def _note_success(bucket: dict[str, Any], host: str, *, status: int | None, token: float) -> None:
+    """A good answer of ``host`` to a request that started at ``token``. A failure of a request
+    that started later stands (its answer came first); so does a server's rate deadline."""
+    _observe(bucket, host, "ok", status, token=token)
+    if _later(bucket["failed_at"].get(host), token):
+        return
+    bucket["fail"][host] = 0
+    bucket["failed_at"].pop(host, None)
+    rate_until = float(bucket["rate_cool"].get(host) or 0)
+    if rate_until > _now():
+        bucket["cool"][host] = max(float(bucket["cool"].get(host) or 0), rate_until)
+    else:
+        bucket["cool"].pop(host, None)
+        bucket["rate_cool"].pop(host, None)
+    bucket["active"] = host
 
 
 def _ordered(hosts: list[str], active: str | None, observed: dict[str, Any] | None = None) -> list[str]:
@@ -238,15 +276,22 @@ def note_rate_limit(tracker: str, host: str, response: httpx.Response, *, persis
     if response_verdict(response) != Verdict.RATE_LIMITED:
         return False
     if persist:
-        with persistence_lock():
-            host = host.rstrip("/")
-            bucket = _bucket(load_state(), tracker)
-            bucket["fail"][host] = int(bucket["fail"].get(host) or 0) + 1
-            _observe(bucket, host, "rate_limited", response.status_code)
-            _pause_rate_limited(
-                bucket, host, thttp.retry_after_seconds(response.headers.get("retry-after"), now=_now())
-            )
-            _save_bucket(tracker, bucket, host)
+        token = _now()
+        host = host.rstrip("/")
+        retry_after = thttp.retry_after_seconds(response.headers.get("retry-after"), now=token)
+        _record(
+            tracker,
+            host,
+            lambda bucket: _note_failure(
+                bucket,
+                host,
+                "rate_limited",
+                status=response.status_code,
+                token=token,
+                counts=True,
+                retry_after=retry_after,
+            ),
+        )
     return True
 
 
@@ -511,24 +556,68 @@ def _deciding_failure(failures: list[Exception]) -> Exception:
     return next(error for error in reversed(failures) if not _says_gone(error))
 
 
-def _mark_host_ok(tracker: str, bucket: dict[str, Any], host: str, *, persist: bool) -> None:
-    bucket["fail"][host] = 0
-    bucket["cool"].pop(host, None)
-    bucket["rate_cool"].pop(host, None)
-    bucket["active"] = host
+def _mark_host_ok(
+    tracker: str,
+    bucket: dict[str, Any],
+    host: str,
+    *,
+    persist: bool,
+    status: int | None = None,
+    token: float | None = None,
+) -> None:
+    """A good answer: in this request's view, and (``persist``) in the saved entry."""
+    started = _now() if token is None else token
+    _note_success(bucket, host, status=status, token=started)
     if persist:
-        _save_bucket(tracker, bucket, host)
+        _record(tracker, host, lambda saved: _note_success(saved, host, status=status, token=started))
 
 
-def _observe(bucket: dict[str, Any], host: str, failure: str, status: int | None = None) -> None:
+def _mark_host_failed(
+    tracker: str,
+    bucket: dict[str, Any],
+    host: str,
+    failure: str,
+    *,
+    persist: bool,
+    status: int | None,
+    token: float,
+    counts: bool,
+    fail_threshold: int = 3,
+    cooldown_sec: int = 3600,
+    retry_after: float = 0,
+) -> None:
+    """A failed request: in this request's view, and (``persist``) in the saved entry."""
+
+    def change(target: dict[str, Any]) -> None:
+        _note_failure(
+            target,
+            host,
+            failure,
+            status=status,
+            token=token,
+            counts=counts,
+            fail_threshold=fail_threshold,
+            cooldown_sec=cooldown_sec,
+            retry_after=retry_after,
+        )
+
+    change(bucket)
+    if persist:
+        _record(tracker, host, change)
+
+
+def _observe(bucket: dict[str, Any], host: str, failure: str, status: int | None = None, *, token: float) -> None:
     if not isinstance(bucket.get("observed"), dict):
         bucket["observed"] = {}
     old = bucket["observed"].get(host)
-    # A routine success does not rewrite/fsync state for every page. An error (or a
-    # transition back to success) is fresh evidence for Sites and mirror preference.
-    if failure == "ok" and isinstance(old, dict) and old.get("failure") == "ok":
-        return
-    bucket["observed"][host] = {"failure": failure, "at": _now(), "status": status}
+    if isinstance(old, dict):
+        if _later(old.get("token"), token):
+            return  # a request that started later already said how the mirror is
+        # A routine success does not rewrite/fsync state for every page. An error (or a
+        # transition back to success) is fresh evidence for Sites and mirror preference.
+        if failure == "ok" and old.get("failure") == "ok":
+            return
+    bucket["observed"][host] = {"failure": failure, "at": _now(), "status": status, "token": token}
 
 
 # What a host that does not answer well raises: the network library's errors, the socket's,
@@ -700,6 +789,7 @@ def pick_and_get(
             tracker, host, protection, ua, host_cookies, used=used_access
         )
         revoke_access = _access_revoker(tracker, host, used_access.get(host), persist)
+        token = _now()  # orders this request's answer against overlapping ones (_later)
         try:
             with thttp.client(
                 ua=host_ua, cookies=host_cookies or None, follow_redirects=False, public_only=public_only
@@ -713,8 +803,7 @@ def pick_and_get(
                 _refuse_page(
                     r, wanted=ok is not None, download_limit=download_limit, maintenance_markers=maintenance_markers
                 )
-            _observe(b, host, "ok", r.status_code)
-            _mark_host_ok(tracker, b, host, persist=persist)
+            _mark_host_ok(tracker, b, host, persist=persist, status=r.status_code, token=token)
             return r, host
         except Exception as e:  # noqa: BLE001 - any failure of a host is classified (_failure_code) and the next host tried
             last_err = e
@@ -725,11 +814,10 @@ def pick_and_get(
                 challenged.append(host)
             _invalidate_probe_access(tracker, path, code, revoke_access)
             mirror_reasons.append(Msg("mirrors.mirror_reason", host=urlparse(host).netloc, error=_failure_text(e)))
-            _observe(b, host, code, getattr(e, "params", {}).get("status"))
+            status = getattr(e, "params", {}).get("status")
             if code == "quota":
                 host_failures.append(False)
-                if persist:
-                    _save_bucket(tracker, b, host)
+                _mark_host_failed(tracker, b, host, code, persist=persist, status=status, token=token, counts=False)
                 break
             # Only host-health failures count towards the mirror cooldown; a missing or
             # oversized topic, a check page or a slow answer on one topic's page (its host's
@@ -746,15 +834,19 @@ def pick_and_get(
                 revoke_access=revoke_access,
             )
             host_failures.append(host_failed)
-            if host_failed:
-                n = int(b["fail"].get(host) or 0) + 1
-                b["fail"][host] = n
-                if code == "rate_limited":
-                    _pause_rate_limited(b, host, float(getattr(e, "params", {}).get("retry_after") or 0))
-                elif n >= fail_threshold:
-                    b["cool"][host] = _now() + cooldown_sec
-            if persist:
-                _save_bucket(tracker, b, host)
+            _mark_host_failed(
+                tracker,
+                b,
+                host,
+                code,
+                persist=persist,
+                status=status,
+                token=token,
+                counts=host_failed,
+                fail_threshold=fail_threshold,
+                cooldown_sec=cooldown_sec,
+                retry_after=float(getattr(e, "params", {}).get("retry_after") or 0),
+            )
     if persist and challenged and not (isinstance(last_err, MirrorFetchError) and last_err.failure == "quota"):
         resource_failures: dict[str, Exception] = {}
         recovered = _recover_challenges(
@@ -930,6 +1022,7 @@ def _recover_origin(
         verified_access = False
         phase = "probe"
         started = time.monotonic()
+        token = _now()
         try:
             with thttp.client(
                 ua=clearance.user_agent, cookies=clearance.cookies, follow_redirects=False, public_only=public_only
@@ -974,16 +1067,23 @@ def _recover_origin(
                 _refuse_page(
                     r, wanted=ok is not None, download_limit=download_limit, maintenance_markers=maintenance_markers
                 )
-            _observe(bucket, host, "ok", r.status_code)
-            _mark_host_ok(tracker, bucket, host, persist=True)
+            _mark_host_ok(tracker, bucket, host, persist=True, status=r.status_code, token=token)
             chain.record_event("protection_restored", tracker, clearance.provider, "succeeded")
             return r, host
         except MirrorFetchError as exc:
-            if exc.failure == "rate_limited":
-                bucket["fail"][host] = int(bucket["fail"].get(host) or 0) + 1
-                _observe(bucket, host, exc.failure, exc.params.get("status"))
-                _pause_rate_limited(bucket, host, float(exc.params.get("retry_after") or 0))
-                _save_bucket(tracker, bucket, host)
+            rate_limited = exc.failure == "rate_limited"
+            if rate_limited:
+                _mark_host_failed(
+                    tracker,
+                    bucket,
+                    host,
+                    exc.failure,
+                    persist=True,
+                    status=exc.params.get("status"),
+                    token=token,
+                    counts=True,
+                    retry_after=float(exc.params.get("retry_after") or 0),
+                )
             chain.record_event(
                 "protection_replay_refused",
                 tracker,
@@ -995,8 +1095,17 @@ def _recover_origin(
             )
             if verified_access:
                 resource_failures[host] = exc
-                _observe(bucket, host, exc.failure, exc.params.get("status"))
-                _save_bucket(tracker, bucket, host)
+                if not rate_limited:
+                    _mark_host_failed(
+                        tracker,
+                        bucket,
+                        host,
+                        exc.failure,
+                        persist=True,
+                        status=exc.params.get("status"),
+                        token=token,
+                        counts=False,
+                    )
             if exc.failure in {"quota", "blocked"}:
                 # A probe ban/quota ends recovery too; do not manufacture resource evidence.
                 raise _RecoveryStopped from exc
@@ -1016,8 +1125,9 @@ def _recover_origin(
             )
             if verified_access:
                 resource_failures[host] = exc
-                _observe(bucket, host, _failure_code(exc))
-                _save_bucket(tracker, bucket, host)
+                _mark_host_failed(
+                    tracker, bucket, host, _failure_code(exc), persist=True, status=None, token=token, counts=False
+                )
             break
     return None
 
