@@ -2580,3 +2580,31 @@ def test_a_failed_partial_run_keeps_what_the_last_whole_check_said():
 
     health = check.record_check_failure(SecretStoreError("store.no_master_key"), how="progress")
     assert (health["check_ok"], health["check_error"]) == (False, "secrets_migration_required")  # blocks every check
+
+
+@pytest.mark.parametrize(
+    ("old_name", "new_path", "overlaps"),
+    [
+        # A readable ASCII file of the running old version: no Cyrillic file of the new one is it.
+        ("Show.S01/Show.S01E01.1080p.mkv", "Шоу.S01E09.rus.srt", False),
+        ("Show.S01/Show.S01E01.1080p.mkv", "Шоу/Серия 09.mkv", False),
+        ("Show.S01/Show.S01E01.1080p.mkv", "Show.S01E09.mkv", False),
+        # A name the client could not decode is still taken for the file it may be (fail closed).
+        ("Show/_____.avi", "Серия.avi", True),
+        ("Show/??????.avi", "Серия.avi", True),
+        ("Show/��.avi", "Серия.avi", True),
+        ("Show/Серия.avi", "Серия.avi", True),
+    ],
+)
+def test_only_a_name_that_shows_decoding_loss_overlaps_a_non_ascii_file(old_name, new_path, overlaps):
+    # Every ASCII name of a running previous version counted as "maybe garbled", so a Russian
+    # subtitle of the new version was refused as "the previous version is still active".
+    old = "EF" * 20
+
+    class Old:
+        def inspect_torrent(self, h):
+            files = [{"index": 0, "name": old_name, "size": 1, "priority": 1}]
+            return {"hash": old, "state": "uploading", "files": files} if h == old else None
+
+    found = client_ops._active_revision_overlap(Old(), old, (SimpleNamespace(path=new_path),))
+    assert (found == old_name) is overlaps
