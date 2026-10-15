@@ -35,6 +35,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   as part of the site's sign-in, where it outlived its expiry and a site-access reset. An answer that sets only
   such cookies no longer replaces a working sign-in. A clearance an earlier version saved there is not sent and
   is removed at the next successful sign-in; sign-ins made in a browser window are kept as they are.
+- The installed site-access module is stopped with Windows' own `taskkill` from the system folder, never with
+  a program of that name found in the module's folder or on `PATH`.
 
 ### Fixed
 
