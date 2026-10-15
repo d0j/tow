@@ -94,7 +94,9 @@ class _TokenStore:
 # action itself is saved or refused as before. Nothing of the owner's input touches the disk.
 _ADD_DRAFTS = _TokenStore(ttl=600, limit=64)
 _FLASHES = _TokenStore(ttl=600, limit=256)
-FLASH_KINDS = ("ok", "warn", "err")
+# ok: done; info: accepted, queued, skipped or awaiting confirmation; warn: transport trouble or a
+# real caution; err: an actionable failure (the status-colour contract).
+FLASH_KINDS = ("ok", "info", "warn", "err")
 
 
 def request_flash(request: Request) -> dict[str, str] | None:
@@ -344,7 +346,7 @@ def failed_check_feedback(
     if not row or row.get("ok"):
         return None
     if row.get("status") == "verification_pending":
-        return _feedback(t("web.check.verifying"), "warn")
+        return _feedback(t("web.check.verifying"), "info")  # deferred: TOW confirms it later
     error = humanize(_row_error(row))
     if row.get("status") == "waiting_space":
         # Not a failed check: the torrent is in the client, stopped, and TOW starts it once its
@@ -472,7 +474,9 @@ def check_result_flash(job: Mapping[str, Any]) -> dict[str, str] | None:
         # One identity per job: the result page opened again is not a new message.
         "id": "check-" + str(job.get("id") or ""),
         "text": str(said.get("text") or check_job_message(job)),
-        "kind": str(said.get("kind") or job.get("kind") or ("warn" if stopped else "err")),
+        "kind": str(
+            said.get("kind") or job.get("kind") or ("info" if job.get("cancelled") else "warn" if stopped else "err")
+        ),
         # Named when it was asked for: a topic deleted meanwhile keeps its name.
         "subject": str(job.get("subject") or ""),
         "at": str(int(job["ended_at"])) if isinstance(job.get("ended_at"), (int, float)) else "",

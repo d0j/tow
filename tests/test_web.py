@@ -2492,7 +2492,8 @@ def test_action_messages_do_not_have_extra_text_fold_controls(kind):
     flash = re.search(r'<div class="flash[^>]*id="flash"[^>]*>.*?</div>', page, flags=re.DOTALL).group(0)
     assert "data-fold-ttl" not in flash
     assert "data-flash-fold" not in flash
-    assert (' data-ttl="60"' in flash) is (kind == "ok")
+    # Its reading time is messages.js's, by kind; the "Undo" setting no longer times it.
+    assert " data-ttl=" not in flash
 
 
 def test_error_line_is_short_and_falls_back_to_the_message():

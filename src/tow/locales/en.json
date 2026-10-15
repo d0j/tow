@@ -1279,6 +1279,22 @@
     },
     "edit": {
       "load_failed": "The edit form did not open: {error}"
+    },
+    "messages": {
+      "title": "Recent messages",
+      "label_unread": "Recent messages: {count} unread",
+      "collapse": "Collapse into recent messages",
+      "mark_read": "Mark all read",
+      "clear": "Clear history",
+      "empty": "No messages yet",
+      "details": "Details",
+      "undo": "Undo",
+      "undo_title": "Undo this change",
+      "undo_available": "You can undo {what}",
+      "kind_ok": "Done",
+      "kind_info": "Note",
+      "kind_warn": "Warning",
+      "kind_err": "Error"
     }
   },
   "locations": {

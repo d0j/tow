@@ -12,23 +12,31 @@ def _page_with(text: str, kind: str) -> str:
     return TestClient(app).get(flash_location("/", text, kind)).text
 
 
-def test_an_error_is_an_alert_that_stays():
-    page = _page_with("не удалось проверить", "err")
-    assert '<div class="flash error" id="flash" role="alert"' in page
-    assert "Не удалось проверить" in page
+def _strip(page: str):
+    from bs4 import BeautifulSoup
+
+    return BeautifulSoup(page, "html.parser").select_one("#flash")
 
 
-def test_an_action_warning_stays_and_a_success_fades():
-    warn = _page_with("сохранено, но не проверено", "warn")
-    assert '<div class="flash warn" id="flash" role="status"' in warn
-    ok = _page_with("сохранено", "ok")
-    assert 'class="flash" id="flash" role="status" data-ttl=' in ok
+def test_an_error_is_an_alert():
+    strip = _strip(_page_with("не удалось проверить", "err"))
+    assert (strip["class"], strip["role"], strip["data-kind"]) == (["flash", "error"], "alert", "err")
+    assert strip.select_one(".msg-text").get_text() == "Не удалось проверить"
+
+
+def test_every_kind_has_its_own_look_and_no_timer_from_the_undo_setting():
+    # The time a message stays is the page script's, by its kind (messages.js): not the "Undo"
+    # setting's (data-ttl), which made every success last as long as the undo.
+    for kind, look in (("ok", "ok"), ("info", "info"), ("warn", "warn")):
+        strip = _strip(_page_with("сохранено", kind))
+        assert (strip["class"], strip["role"], strip["data-kind"]) == (["flash", look], "status", kind)
+        assert "data-ttl" not in strip.attrs
 
 
 @pytest.mark.parametrize("text", ["не подходит", "nothing failed here", "not a problem"])
 def test_the_words_never_decide_the_colour(text):
     """1.17 coloured a message by its words ("не", "not", ...): a success saying "not" was red."""
-    assert 'class="flash" id="flash" role="status"' in _page_with(text, "ok")
+    assert _strip(_page_with(text, "ok"))["class"] == ["flash", "ok"]
 
 
 def test_the_address_carries_a_token_not_the_text():

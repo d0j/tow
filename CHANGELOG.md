@@ -14,6 +14,14 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   only a screen reader heard it and nothing on the screen confirmed the click. A check of one topic, run at
   once or from the queue, ends in exactly one message and no longer opens a "Check results" card that
   repeated it.
+- Every message after an action has one look and one place, at the top of the page: a success is green (it
+  was blue), a note neutral, a warning amber and an error red. It stays for a while (10 seconds, a warning 25,
+  an error 30), not counting time under the pointer, in focus or in a hidden tab, then collapses into a new
+  "Recent messages" icon in the header, coloured by the worst unread message, where this tab's messages of the
+  last day can be read again, marked read or cleared. A screen reader says each message once, not again after
+  a reload. "Undo" sits in its message and in that list with the time it has left; the separate "Undo" button
+  in the header is gone (it stays for a browser without scripts). How long a message stays no longer depends on
+  the "Show Undo" setting, and a result in Settings is no longer moved into the card it is about.
 - "Undo" puts back only the change its own message is about: an "Undo" from an earlier message, pressed after
   a newer change, is refused with a clear message instead of undoing that newer change.
 

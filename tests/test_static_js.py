@@ -10,6 +10,31 @@ import pytest
 NODE = shutil.which("node")
 
 
+def _verdict(name: str) -> dict:
+    script = Path(__file__).parent / "js" / name
+    result = subprocess.run(
+        [NODE, str(script)], capture_output=True, text=True, encoding="utf-8", timeout=30, check=False
+    )
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout.strip().splitlines()[-1])
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_recent_messages_time_pause_read_store_and_undo_by_a_fake_clock():
+    verdict = _verdict("messages_center.mjs")
+    assert verdict == dict.fromkeys(verdict, True), verdict
+    assert len(verdict) == 10
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_the_page_shows_a_message_once_then_keeps_it_in_the_header_history():
+    verdict = _verdict("messages_page.mjs")
+    assert verdict == dict.fromkeys(verdict, True), verdict
+    assert len(verdict) == 9
+
+
 @pytest.mark.allow_system
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_content_picker_boundaries_and_async_selection():

@@ -67,6 +67,8 @@ def _normalised(page: str) -> str:
     page = re.sub(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?( [A-Z]{2,5})?( UTC([+-]\d{2}:\d{2})?)?", "<time>", page)
     page = re.sub(r"[\d.,]+ (B|KB|MB|GB|TB) free", "<size> free", page)
     page = re.sub(r'value="tow-[0-9a-f]{12}"', 'value="tow-<random>"', page)
+    # Where the tab keeps its recent messages: a hash of this install's folders.
+    page = re.sub(r'data-namespace="[0-9a-f]{16}"', 'data-namespace="<install>"', page)
     page = re.sub(r"<root>[^\"<]*", lambda m: m.group(0).replace("\\", "/"), page)
     # Without the spaces the templates leave at line ends (the repository refuses trailing spaces).
     return "\n".join(line.rstrip() for line in page.strip().splitlines()) + "\n"

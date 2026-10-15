@@ -41,7 +41,7 @@ def _strip(client: TestClient, location: str) -> str:
     page = BeautifulSoup(client.get(location).text, "html.parser")
     strip = page.select_one("#flash")
     assert strip is not None
-    return strip.select_one(":scope > span").get_text(" ", strip=True)
+    return strip.select_one(".msg-text").get_text(" ", strip=True)
 
 
 def test_a_topic_action_names_its_topic_once(client):
@@ -192,6 +192,28 @@ def test_the_record_has_a_stable_identity_and_goes_whole_to_a_script(client):
     assert body["flash"]["id"] != token
     page = BeautifulSoup(client.get(location).text, "html.parser")
     assert page.select_one("#flash")["data-message-id"] == body["flash"]["id"]
+
+
+def test_the_page_hands_its_message_and_undo_to_the_script(client):
+    import re
+
+    client.post("/topics/t1/delete")
+    location = flash_location("/", "synthetic", "warn", subject="Show <A>")
+    page = BeautifulSoup(client.get(location).text, "html.parser")
+    host = page.select_one("main > #msg-host")
+    assert host["data-subject-format"] == "{subject} — {result}"
+    assert re.fullmatch(r"[0-9a-f]{16}", host["data-namespace"])
+    assert host["data-undo-stamp"] == load_state()["undo"]["ts"]
+    assert int(host["data-undo-left"]) > 0
+    assert host["data-undo-text"].startswith("You can undo ")
+    strip = host.select_one("#flash")
+    assert (strip["data-kind"], strip["data-subject"], strip["data-text"]) == ("warn", "Show <A>", "synthetic")
+    assert strip.select_one(".msg-ico")["aria-label"] == "Warning"
+    assert "data-ttl" not in strip.attrs  # its time is the script's, not the Undo setting's
+    menu = page.select_one("header [data-messages]")
+    assert menu.has_attr("hidden")  # shown by the script, which keeps the history
+    assert menu.select_one('summary use[href="#i-message"]')
+    assert page.select_one('script[src^="/static/messages.js"]').has_attr("defer")
 
 
 def test_an_explicit_subject_wins_and_an_empty_one_opts_out(client):
