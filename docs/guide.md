@@ -156,7 +156,8 @@ longer find is said to be unconfirmed, not success.
 
 A check of every topic ends with one message linking to its **Results** card (kept for one hour in this web
 session; × closes it in place). **Results** separates updates, unchanged topics, waits, skips and errors, with
-topic names and links to current status and actions. File verification by the client is a wait, not a failure or a confirmed add; Home says
+topic names and links to current status and actions. File verification by the client is a wait, not a failure
+or a confirmed add; Home says
 **Checking files** until read-back confirms it. A verification still waiting after 12 hours turns red so you
 can look at the client; TOW still finishes it when the client does. A run's report is historical: a later
 successful check can already have cleared its error. Diagnostic run totals use the same outcome rules.
