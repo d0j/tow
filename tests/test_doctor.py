@@ -399,3 +399,63 @@ def test_a_mirror_that_answers_with_a_missing_page_answers(monkeypatch, status):
     assert [(probe["ok"], probe["status"]) for probe in report["probes"]] == [(True, status), (True, status)]
     assert report["ok"] is True
     assert report["degraded"] == []
+
+
+def _probing(monkeypatch, handler, *, mirrors=None):
+    """A configured site "demo" on https://a.example and https://b.example, probed through ``handler``."""
+    from tow.config import load_config, save_config
+
+    cfg = load_config()
+    cfg["trackers"] = {
+        "demo": {"url_regex": r"^https://a\.example/t/(\d+)", "fetch_hosts": ["https://a.example", "https://b.example"]}
+    }
+    save_config(cfg)
+    save_state({"topics": [], "mirrors": mirrors or {}})
+    hits = []
+
+    def tracked(request):
+        hits.append(request.url.host)
+        return handler(request)
+
+    monkeypatch.setattr("tow.doctor._autostart", lambda: {"on": False})
+    monkeypatch.setattr(
+        "tow.doctor.http_client",
+        lambda **kw: httpx.Client(transport=httpx.MockTransport(tracked), follow_redirects=kw["follow_redirects"]),
+    )
+    return hits
+
+
+def test_a_probe_leaves_a_mirror_alone_while_its_server_asked_to_wait(monkeypatch):
+    import time
+
+    hits = _probing(
+        monkeypatch,
+        lambda request: httpx.Response(200, text="front page"),
+        mirrors={"demo": {"rate_cool": {"https://a.example": time.time() + 600}}},
+    )
+    report = doctor_report(probe=True, names=["demo"])
+    assert hits == ["b.example"]
+    rows = {probe["host"]: probe for probe in report["probes"]}
+    assert rows["https://a.example"]["ok"] is False
+    assert rows["https://a.example"]["error"] == "rate_limited"
+    assert rows["https://b.example"]["ok"] is True
+
+
+def test_a_probe_answered_with_429_saves_the_servers_deadline(monkeypatch):
+    import time
+
+    from tow.mirrors import has_available_host
+
+    _probing(
+        monkeypatch,
+        lambda request: (
+            httpx.Response(429, headers={"retry-after": "600"})
+            if request.url.host == "a.example"
+            else httpx.Response(200, text="front page")
+        ),
+    )
+    doctor_report(probe=True, names=["demo"])
+    deadline = load_state()["mirrors"]["demo"]["rate_cool"]["https://a.example"]
+    assert time.time() + 500 < deadline <= time.time() + 600
+    assert not has_available_host("demo", ["https://a.example"], ignore_cool=True)
+    assert load_state()["doctor"]["probes"][0]["error"] == "rate_limited"

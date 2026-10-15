@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from copy import deepcopy
 from typing import Any
 from urllib.parse import urljoin
@@ -15,7 +16,7 @@ from tow.http import client as http_client
 from tow.i18n import t
 from tow.jsonish import as_dict
 from tow.log import owner_language
-from tow.mirrors import origin_key, response_verdict
+from tow.mirrors import note_rate_limit, origin_key, rate_deadline, response_verdict
 from tow.protection import Verdict
 from tow.store import load_secrets, load_state, persistence_lock, save_state
 
@@ -154,9 +155,17 @@ def doctor_report(*, probe: bool = True, names: list[str] | None = None) -> dict
             for host in spec.get("fetch_hosts") or []:
                 # "at": the header and Sites weigh a probe against the latest check by time.
                 row = {"tracker": name, "host": host, "ok": False, "at": iso_now()}
+                if rate_deadline(state, name, host, now=time.time()):
+                    # The server asked to be left alone until then: a probe waits as a check does.
+                    row["error"] = Verdict.RATE_LIMITED.value
+                    out["ok"] = False
+                    new_probes.append(row)
+                    continue
                 try:
                     r = _probe_root(c, host)
                     verdict = response_verdict(r, maintenance_markers=list(spec.get("maintenance_markers") or []))
+                    if verdict == Verdict.RATE_LIMITED:
+                        note_rate_limit(name, host, r, persist=True)  # the deadline checks keep too
                     if verdict not in {Verdict.OK, Verdict.LOGIN_NEEDED}:
                         row["error"] = verdict.value
                         out["ok"] = False

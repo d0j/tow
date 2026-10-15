@@ -73,6 +73,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   internal code or a raw `{status}`.
 - A site showing its sign-in page instead of a torrent is reported as "the site asks to sign in", no longer with
   "(error 200)".
+- Diagnostics and "Check the site's mirrors" no longer ask a mirror whose server asked TOW to wait, and a "too many
+  requests" answer to them now makes checks wait as well.
 
 ## [1.30.10] — 2026-10-15
 
