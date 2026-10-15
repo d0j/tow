@@ -81,10 +81,53 @@ def _legacy_content_ref(path: list[str | int], key: str, item: Any) -> bool:
     )
 
 
-def _secret_key_path(value: Any, path: str = "", *, state: bool = False) -> str | None:
+# Maps whose keys are data, not field names: a site's name (from its domain: my-token.example is
+# ``my_token``), a host, a client's id, a messenger, a topic's id, a file's identity
+# (``file:<path>``). Their keys are never read as a credential's name - one site or file so named
+# refused every restore point, and so the web update, for good - while the fields of what they
+# hold still are. Positions per store, from its root; "*" is any key.
+_HOST_MAPS = ("observed", "access", "cool", "rate_cool", "fail", "failed_at")
+_DATA_KEYED: dict[str, frozenset[tuple[str, ...]]] = {
+    "config.yaml": frozenset({("trackers",)}),
+    "state.json": frozenset(
+        {
+            ("mirrors",),
+            *(("mirrors", "*", name) for name in _HOST_MAPS),
+            *(("undo", "mirror", name) for name in _HOST_MAPS),  # a site's mirror state an undo keeps
+            ("daily_limit",),
+            ("health", "clients_ok"),
+            ("health", "clients_empty"),
+            ("health", "ping_failed"),
+            ("notify_outbox",),
+            ("notify_lease",),
+            ("notify_status",),
+            ("notify_dropped",),
+        }
+    ),
+    "download_history.json": frozenset({("topics",), ("topics", "*", "items")}),
+}
+
+
+def _data_keyed(store: str, path: list[str | int]) -> bool:
+    """The mapping at ``path`` of ``store`` is keyed by data (``_DATA_KEYED``)."""
+    return any(
+        len(pattern) == len(path)
+        and all((want == "*" and isinstance(got, str)) or want == got for want, got in zip(pattern, path, strict=True))
+        for pattern in _DATA_KEYED.get(store, ())
+    )
+
+
+def secret_field_path(store: str, data: Any) -> str | None:
+    """Path of the first credential-named field in ``data``, the contents of ``store``
+    (config.yaml, state.json or download_history.json), or None."""
+    return _secret_key_path(data, store=store)
+
+
+def _secret_key_path(value: Any, path: str = "", *, state: bool = False, store: str = "") -> str | None:
     """Path of the first credential-named field in ``value``, or None (``state``: state.json,
-    where an old messenger lease's claim is not one)."""
-    segments = _secret_segments(value, set(), state=state)
+    where an old messenger lease's claim is not one; ``store``: the file ``value`` is, whose
+    data-keyed maps are known)."""
+    segments = _secret_segments(value, set(), store="state.json" if state else store)
     if segments is None:
         return None
     for segment in segments:
@@ -95,16 +138,24 @@ def _secret_key_path(value: Any, path: str = "", *, state: bool = False) -> str 
     return path
 
 
-def _secret_segments(value: Any, seen: set[int], *, state: bool = False) -> list[str | int] | None:
+def _children(item: dict[Any, Any] | list[Any], store: str, path: list[str | int]) -> tuple[bool, bool, Any]:
+    """A container's stack entry: (a mapping, its keys are data, its children)."""
+    if isinstance(item, dict):
+        return True, bool(store) and _data_keyed(store, path), iter(item.items())
+    return False, False, iter(enumerate(item))
+
+
+def _secret_segments(value: Any, seen: set[int], *, store: str = "") -> list[str | int] | None:
     # Shared containers need one scan. Build a path only for the actual match,
     # not one long prefix per innocent child of a large-keyed mapping.
     if not isinstance(value, (dict, list)):
         return None
+    state = store == "state.json"
     seen.add(id(value))
-    stack = [(isinstance(value, dict), iter(value.items()) if isinstance(value, dict) else iter(enumerate(value)))]
     path: list[str | int] = []
+    stack = [_children(value, store, path)]
     while stack:
-        mapping, children = stack[-1]
+        mapping, data_keys, children = stack[-1]
         try:
             key, item = next(children)
         except StopIteration:
@@ -113,7 +164,7 @@ def _secret_segments(value: Any, seen: set[int], *, state: bool = False) -> list
                 path.pop()
             continue
         segment = str(key) if mapping else key
-        if mapping:
+        if mapping and not data_keys:
             lowered = str(key).lower()
             is_secret_name = lowered in _SECRET_FIELD_NAMES or lowered.endswith(_SECRET_FIELD_SUFFIXES)
             if (
@@ -127,9 +178,7 @@ def _secret_segments(value: Any, seen: set[int], *, state: bool = False) -> list
         if isinstance(item, (dict, list)) and id(item) not in seen:
             seen.add(id(item))
             path.append(segment)
-            stack.append(
-                (isinstance(item, dict), iter(item.items()) if isinstance(item, dict) else iter(enumerate(item)))
-            )
+            stack.append(_children(item, store, path))
     return None
 
 
@@ -139,7 +188,7 @@ def refuse_plaintext_secrets(config_data: Any, state_data: Any, history_data: An
         ("state.json", state_data),
         ("download_history.json", history_data),
     ):
-        found = _secret_key_path(data, state=label == "state.json")
+        found = secret_field_path(label, data)
         if found:
             raise ExportImportError(f"plaintext secret-shaped field outside encrypted payload: {label}:{found}")
 
