@@ -16,16 +16,18 @@ htmlcov/
 .env
 
 # Install state: in a development checkout the checkout itself is the install root, so its
-# config, data, keys, backups and runtime are local scratch state (docs/PORTABLE.md).
+# config, data, keys, backups and runtime are local scratch state (docs/PORTABLE.md). Anchored to
+# the root: a test fixture named data/, keys/, *.jsonl or *.towx elsewhere is not ignored.
 /config.yaml
-data/
-keys/
-master.key
+/data/
+/keys/
 /backup/
 /runtime/
 /update-state.json
 /deploy-state.json
 /.update.lock
-*.jsonl
-*.towx
-.tmp-tests/
+/*.jsonl
+/*.towx
+/.tmp-tests/
+# A master key is never committed, wherever it lies.
+master.key

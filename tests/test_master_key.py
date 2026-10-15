@@ -297,4 +297,5 @@ def test_copies_of_the_data_never_carry_the_install_key(no_env_key, monkeypatch,
 
 def test_the_keys_folder_is_never_committed():
     ignored = (Path(__file__).parents[1] / ".gitignore").read_text(encoding="utf-8").splitlines()
-    assert "keys/" in ignored
+    assert "/keys/" in ignored  # the install root's keys folder (the checkout is the install root)
+    assert "master.key" in ignored  # and a master key wherever it lies
