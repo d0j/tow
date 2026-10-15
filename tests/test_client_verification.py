@@ -588,6 +588,87 @@ def test_manual_readd_finishes_as_added_not_selection_updated(world):
     assert sent == ["added"]
 
 
+@pytest.fixture
+def clock(monkeypatch):
+    """The wall clock verification reads, moved by the test (minutes from a fixed start)."""
+    from datetime import UTC, datetime, timedelta
+
+    start = datetime(2026, 10, 14, 12, 0, tzinfo=UTC)
+    moment = {"minutes": 0.0}
+    monkeypatch.setattr(verification, "machine_now", lambda: start + timedelta(minutes=moment["minutes"]))
+    return moment
+
+
+def _blocked():
+    return load_state()["topics"][0]["verification_pending"].get("blocked")
+
+
+def test_a_torrent_not_listed_once_is_not_blocked_and_recovers(world, clock):
+    client, tracker, _sent = world
+    _run()
+    kept = client.torrents.pop(H)
+    row = _run(space_only=True)
+    assert row["status"] == "verification_pending"
+    assert not row.get("error")
+    assert not _blocked()
+    clock["minutes"] = 5
+    client.torrents[H] = {**kept, "state": "downloading", "progress": 0.2}
+    assert _run(space_only=True)["ok"]
+    assert "verification_pending" not in load_state()["topics"][0]
+    assert tracker.fetches == 1
+
+
+def test_a_torrent_absent_from_two_answers_ten_minutes_apart_is_blocked(world, clock):
+    client, _tracker, _sent = world
+    _run()
+    client.torrents.clear()
+    client.calls.clear()
+    for minutes in (0, 1, 2, 5, 9.9):
+        clock["minutes"] = minutes
+        assert _run(space_only=True)["status"] == "verification_pending"
+        assert not _blocked()
+    clock["minutes"] = 10
+    row = _run(space_only=True)
+    assert row["status"] == "failed"
+    assert _blocked() == "client.managed.missing"
+    assert client.calls == []  # never added again by a pass
+
+
+def test_a_client_that_does_not_answer_does_not_count_as_an_absence(world, clock, monkeypatch):
+    client, _tracker, _sent = world
+    _run()
+    real_inspect = client.inspect_torrent
+
+    def unreachable(_h):
+        raise ClientError("client.transmission.no_connection", prefix="Fake")
+
+    monkeypatch.setattr(client, "inspect_torrent", unreachable)
+    _run(space_only=True)
+    pending = load_state()["topics"][0]["verification_pending"]
+    assert "missing_since" not in pending
+    monkeypatch.setattr(client, "inspect_torrent", real_inspect)
+    client.torrents.clear()
+    clock["minutes"] = 10
+    assert _run(space_only=True)["status"] == "verification_pending"
+    clock["minutes"] = 15
+    assert _run(space_only=True)["status"] == "verification_pending"
+    clock["minutes"] = 20
+    assert _run(space_only=True)["status"] == "failed"
+
+
+def test_a_clock_set_back_does_not_confirm_an_absence_early(world, clock):
+    client, _tracker, _sent = world
+    _run()
+    client.torrents.clear()
+    clock["minutes"] = 60
+    _run(space_only=True)
+    clock["minutes"] = 0  # set back an hour
+    assert _run(space_only=True)["status"] == "verification_pending"
+    clock["minutes"] = 9
+    assert _run(space_only=True)["status"] == "verification_pending"
+    assert not _blocked()
+
+
 def test_terminal_failure_is_not_scheduled_every_five_minutes(world):
     client, _tracker, _sent = world
     _run()
