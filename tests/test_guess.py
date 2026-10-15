@@ -30,6 +30,28 @@ def test_nnm_viewtopic():
     assert _id(g, "https://nnmclub.to/forum/viewtopic.php?t=555") == "555"
 
 
+@pytest.mark.parametrize(
+    "url",
+    ["https://nnmclub.to/forum/viewtopic.php?t=555", "https://nnmclub.to/forum/download.php?id=2345678"],
+)
+def test_a_pasted_nnm_link_gives_a_site_that_signs_in_and_downloads(url):
+    # A plain forum guess had no browser sign-in and no bulk.nnmclub.to download host: the new
+    # site could neither sign in (Turnstile) nor take its .torrent files.
+    from tow.web.site_form import NewSite, new_site_spec
+
+    guessed = guess_from_url(url)
+    assert guessed["browser_auth"] is True
+    assert guessed["download_redirect_hosts"] == ["https://bulk.nnmclub.to"]
+    _hosts, spec = new_site_spec("nnmclub", NewSite(from_url=url), guessed)
+    assert spec["browser_auth"] is True
+    assert spec["download_redirect_hosts"] == ["https://bulk.nnmclub.to"]
+    assert spec["download_href_regex"] == r"download\.php\?id=(\d+)"
+    assert _id(spec, "https://nnmclub.to/forum/viewtopic.php?t=555") == "555"
+    _hosts, plain = new_site_spec("fresh", NewSite(), guess_from_url("https://fresh.example/viewtopic.php?t=5"))
+    assert "browser_auth" not in plain
+    assert "download_redirect_hosts" not in plain
+
+
 def test_rutracker_dl():
     g = guess_from_url("https://rutracker.org/forum/dl.php?t=7654321")
     assert g["name"] == "rutracker"

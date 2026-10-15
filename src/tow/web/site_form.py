@@ -258,6 +258,11 @@ def new_site_spec(key: str, form: NewSite, guessed: dict[str, Any]) -> tuple[lis
         spec["topic_path"] = paths["topic_path"]
     if href:
         spec["download_href_regex"] = href
+    # What a known site's own rules add (NNM-Club: a browser sign-in, .torrent files from another host).
+    if guessed.get("browser_auth") is True:
+        spec["browser_auth"] = True
+    if redirect_hosts := [str(host) for host in guessed.get("download_redirect_hosts") or [] if host]:
+        spec["download_redirect_hosts"] = redirect_hosts
     return hosts, spec
 
 
