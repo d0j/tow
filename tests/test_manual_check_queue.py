@@ -439,17 +439,22 @@ def test_expired_result_is_not_exposed_or_retained():
 
 
 @pytest.mark.parametrize("crash", [True, False])
-def test_a_broken_result_handler_does_not_strand_the_queue(client, crash):
+def test_a_broken_result_handler_does_not_strand_the_queue(client, consumers, crash):
     def broken(_job):
         if crash:
             raise ValueError("synthetic handler failure")
 
     job, _ = check_jobs.submit(topic_id="a", apply=True, lang="ru", perform=broken)
-    finished = wait_for_check_job(client, job["id"])
+    consumers[0].run()
+    finished = _status(client, job["id"])
     assert finished["status"] == "failed"
     assert not check_jobs.has_pending(apply=True)
     assert "не подтвержден" not in finished.get("flash", "")  # never fabricated success
-    assert "Результат недоступен" in client.get(f"/?check_result={job['id']}").text
+    # Not "TOW restarted or the record expired": the job is here, and it ended in an error.
+    assert finished["flash"].startswith("проверка остановилась из-за внутренней ошибки TOW")
+    page = client.get(f"/?check_result={job['id']}").text
+    assert "Проверка остановилась из-за внутренней ошибки TOW" in page
+    assert "Результат недоступен" not in page
 
 
 NNM = {
