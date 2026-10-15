@@ -69,6 +69,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   healthy mirror until a download shows it gone, and a mirror that keeps answering refreshes its time on Sites.
 - A preview (dry run) remembers a site's request limit for the rest of the preview instead of asking the limited
   mirror again for every topic, and never sets a damaged state file aside.
+- Sites says every mirror problem in words (no connection, too many redirects, HTTP error 503...) instead of an
+  internal code or a raw `{status}`.
 
 ## [1.30.10] — 2026-10-15
 

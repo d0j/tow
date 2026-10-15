@@ -845,7 +845,11 @@
       "reset": "соединение сброшено",
       "http": "ошибка HTTP {code}",
       "unknown": "неизвестная ошибка",
-      "network": "ошибка сети"
+      "network": "ошибка сети",
+      "no_connection": "нет связи",
+      "http_error": "ошибка HTTP",
+      "local": "TOW не смог прочитать ответ",
+      "paused": "на паузе"
     },
     "autostart": "Автозапуск",
     "autostart_on": "Автозапуск включён",
