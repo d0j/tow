@@ -95,4 +95,35 @@ verdict.lostAnswerLookedUp = true;
 }
 verdict.pageAnswerForgets = true;
 
+// The answer's headers arrived but its body broke off: TOW may have accepted it - still followed
+// by its id, never forgotten, never sent again.
+{
+  const test = page(() => Promise.resolve({
+    ok: true, status: 200, headers: { get: () => "application/json" }, json: async () => { throw new TypeError("network error"); },
+  }));
+  await test.submit();
+  assert.equal(test.checks.forgotten.length, 0);
+  assert.equal(test.sent.length, 1);
+  assert.equal(test.shown[0].id, "check-act1xyz");
+}
+verdict.brokenBodyStillFollowed = true;
+
+// An error page (no words of TOW's): nobody knows whether it was accepted - still followed.
+{
+  const test = page(() => Promise.resolve({ ok: false, status: 502, headers: { get: () => "text/html" }, text: async () => "<html>bad gateway</html>" }));
+  await test.submit();
+  assert.equal(test.checks.forgotten.length, 0);
+  assert.equal(test.shown[0].id, "check-act1xyz");
+}
+verdict.errorPageStillFollowed = true;
+
+// TOW refused it in words (an update is running): definitely not accepted - forgotten, said why.
+{
+  const test = page(() => Promise.resolve({ ok: false, status: 409, headers: { get: () => "application/json" }, text: async () => JSON.stringify({ error: "An update is running" }) }));
+  await test.submit();
+  assert.equal(JSON.stringify(test.checks.forgotten), JSON.stringify(["act1xyz"]));
+  assert.equal(test.shown[0].text, "js.submit.failed");
+}
+verdict.refusalForgets = true;
+
 console.log(JSON.stringify(verdict));

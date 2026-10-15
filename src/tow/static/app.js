@@ -136,7 +136,9 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
   form.dataset.submitting = "1";
   const body = preparedBody || (submitter ? new FormData(form, submitter) : new FormData(form));
   const action = beginCheck(form, submitter, body);
-  let answered = false;
+  // A check is forgotten only on a whole, definite answer that TOW did not take it (its refusal
+  // in words, a page to open); a broken or unreadable answer leaves it to the lookup by its id.
+  let definite = false;
   try {
     // X-TOW-Fetch: the server answers {"redirect": url} instead of a 303, so the next
     // page is rendered once (by the location change), not twice.
@@ -147,7 +149,6 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
       redirect: "follow",
       headers: { Accept: "text/html", "X-TOW-Fetch": "1" },
     });
-    answered = true;
     if (!response.ok) {
       // TOW's own refusal says why, in words (JSON, or a plain text before any page); an error
       // page's HTML is never shown - then nobody knows what was done.
@@ -166,6 +167,7 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
       }
       detail = typeof detail === "string" ? detail.replace(/\s+/g, " ").slice(0, 240) : "";
       if (!detail) throw new Error(`HTTP ${response.status}`);
+      definite = true;
       throw new Refused(detail);
     }
     let nextUrl = null;
@@ -183,14 +185,16 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
       nextUrl = new URL(response.url);
     }
     if (!nextUrl) throw new Error(t("js.submit.no_next_page"));
+    definite = true;
     if (action) window.towChecks.forget(action); // answered with a page (a refusal, a full queue)
     if (form.dataset.returnTarget) nextUrl.hash = form.dataset.returnTarget;
     rememberFocus(form, nextUrl);
     window.location.assign(nextUrl);
   } catch (error) {
     restoreForm(form, submitter);
-    if (action && !answered) {
-      // The answer was lost: TOW may have the check. It is looked up by its action id, never sent again.
+    if (action && !definite) {
+      // The answer was lost or broke off: TOW may have the check. It is looked up by its action id,
+      // never sent again.
       showMessage({ id: `check-${action}`, kind: "info", subject: subjectOf(form), text: t("js.checks.sent") });
       return;
     }
