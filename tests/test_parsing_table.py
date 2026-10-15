@@ -68,3 +68,23 @@ def test_a_multi_episode_marker_before_a_quality_tag(name, keys):
 )
 def test_a_season_number_before_its_word(name, keys):
     assert _keys(name) == keys
+
+
+@pytest.mark.parametrize(
+    ("name", "keys"),
+    [
+        # A numbered film, part or volume before a release tag is no episode.
+        ("Movie 2 [1080p].mkv", []),
+        ("Part 2 [1080p].mkv", []),
+        ("Film 2 [1080p].mkv", []),
+        ("Vol 2 [1080p].mkv", []),
+        ("Vol. 2 [1080p].mkv", []),
+        ("Фильм 2 [1080p].mkv", []),
+        # Controls: an episode number before a release tag.
+        ("Show 13 [1080p].mkv", ["episode:e13"]),
+        ("[Grp] Show 01 [1080p].mkv", ["episode:e01"]),
+        ("Rampart 2 [1080p].mkv", ["episode:e02"]),
+    ],
+)
+def test_a_numbered_film_before_a_release_tag(name, keys):
+    assert _keys(name) == keys
