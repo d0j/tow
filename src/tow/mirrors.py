@@ -257,7 +257,12 @@ def _note_failure(
     _observe(bucket, host, failure, status, token=token, download=download)
     if not counts:
         return
-    failures = int(bucket["fail"].get(host) or 0) + 1
+    failures = int(bucket["fail"].get(host) or 0)
+    if failures and token - float(bucket["failed_at"].get(host) or 0) > cooldown_sec:
+        # Failures "in a row" of an outage a cooldown or more ago (a spare mirror tried while the
+        # active one was down) are no streak: this one starts a new count.
+        failures = 0
+    failures += 1
     bucket["fail"][host] = failures
     bucket["failed_at"][host] = max(token, float(bucket["failed_at"].get(host) or 0))
     if failure == "rate_limited":

@@ -285,3 +285,25 @@ def test_a_damaged_saved_observation_does_not_break_an_applying_run(monkeypatch)
     _saved(observed={HOST: {"failure": "ok", "at": "yesterday", "token": None}}, access={HOST: "x"})
     assert run.fetch_title("https://site.example/topic/2", {}, None, persist=True) == "Show A"
     assert load_state()["mirrors"]["demo"]["observed"][HOST]["failure"] == "ok"
+
+
+def test_failures_of_an_outage_long_ago_do_not_make_a_streak(monkeypatch):
+    # A spare mirror that failed twice months ago (tried while the active one was down) went into
+    # a full cooldown at its next single transient failure.
+    from tow import mirrors
+
+    clock = [1_800_000_000.0]
+    monkeypatch.setattr(mirrors, "_now", lambda: clock[0])
+    bucket = mirrors._bucket({}, "site")
+    host = "https://spare.example"
+    for _ in range(2):
+        mirrors._note_failure(bucket, host, "transport", status=None, token=clock[0], counts=True, cooldown_sec=3600)
+    assert host not in bucket["cool"]
+    clock[0] += 90 * 24 * 3600
+    mirrors._note_failure(bucket, host, "transport", status=None, token=clock[0], counts=True, cooldown_sec=3600)
+    assert bucket["fail"][host] == 1
+    assert host not in bucket["cool"]
+    # Three in a row within the cooldown still rest the mirror.
+    for _ in range(2):
+        mirrors._note_failure(bucket, host, "transport", status=None, token=clock[0], counts=True, cooldown_sec=3600)
+    assert bucket["cool"][host] == clock[0] + 3600
