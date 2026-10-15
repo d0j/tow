@@ -700,6 +700,62 @@ def test_a_queued_manual_check_readds_only_a_removal_seen_before_the_click(world
     assert seen
 
 
+@pytest.mark.parametrize("blocked", ["wrong_selection", "wrong_folder"])
+def test_a_queued_repair_never_readds_a_torrent_removed_after_the_click(world, blocked):
+    """A row's check that repairs a blocked receipt waited in the queue; the owner removed the
+    torrent meanwhile: the repair is no reason to add it back - only a removal seen before the
+    click is."""
+    import time
+
+    client, _tracker, _sent = world
+    _run()
+    client.torrents[H].update(state="downloading", progress=0.5)
+    if blocked == "wrong_selection":
+        client.torrents[H]["files"][0]["priority"] = 0
+    else:
+        client.torrents[H]["save_path"] = "E:/elsewhere"
+    _run(space_only=True)
+    assert _blocked() == f"client.managed.{blocked}"
+    clicked = time.time()
+    client.torrents.clear()  # removed in the client after the click
+    client.calls.clear()
+    row = check.run_check(apply=True, notify=False, how="manual", ids=["slow"], readd_since=clicked)["results"][0]
+    assert "add" not in [call[0] for call in client.calls]
+    assert not row["ok"]
+    assert row["error_record"]["code"] == "check.removed_from_client"
+    assert load_state()["topics"][0]["client_removed_at"]  # seen gone now: a later click adds it back
+    client.checking = False
+    row = check.run_check(apply=True, notify=False, how="manual", ids=["slow"], readd_since=time.time() + 1)
+    assert client.calls[0][0] == "add"
+    assert row["results"][0]["ok"]
+
+
+@pytest.mark.parametrize("queued", [False, True])
+def test_a_new_file_selection_never_readds_a_torrent_the_owner_removed(world, queued):
+    """The owner chose other files of a topic whose torrent they removed in the client: neither
+    a scheduled check nor a row's check asked before the removal adds it back for the selection."""
+    import time
+
+    client, _tracker, _sent = world
+    _watch()
+    client.checking = False
+    assert _run()["ok"]
+    clicked = time.time()
+    disk = load_state()
+    disk["topics"][0].update(selection={"mode": "files", "value": "*e02.mkv"}, selection_dirty=True)
+    save_state(disk)
+    client.torrents.clear()
+    client.calls.clear()
+    if queued:
+        row = check.run_check(apply=True, notify=False, how="manual", ids=["slow"], readd_since=clicked)
+        row = row["results"][0]
+    else:
+        row = _run()
+    assert "add" not in [call[0] for call in client.calls]
+    assert not row["ok"]
+    assert row["error_record"]["code"] == "check.removed_from_client"
+
+
 def test_a_manual_check_started_at_once_still_readds_a_removed_torrent(world):
     client, _tracker, _sent = world
     _watch()

@@ -146,6 +146,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   again.
 - A topic check that waited in the queue no longer adds back a torrent you removed from the client after
   pressing Check; one a check had already found missing before you pressed it is still added back.
+- The same holds when that check repairs a torrent whose file selection or folder had changed in the client, and
+  when you chose other files of a topic whose torrent you removed: TOW reports the torrent as removed instead of
+  adding it back, also in a scheduled check. Pressing Check again adds it back.
 
 ## [1.30.10] — 2026-10-15
 
