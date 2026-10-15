@@ -106,6 +106,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Going back to a version older than 1.30.5 (from the terminal or from Settings) is refused while a torrent
   client is still checking the files of a topic TOW handed to it, naming the topics: those versions would take
   the topic for done and never apply its file choice nor start it. Before, only the guide said to wait.
+- A web server that keeps crashing no longer sends "TOW is down" and "TOW is up again" every 10 minutes:
+  the watchdog of `tow run` says it is down only after two checks in a row found it so (TOW restarts it by
+  itself and says that once, then once every 6 hours), and the time it was down counts from the first. The
+  restart messages now also wait for the end of the quiet hours.
 
 ## [1.31.2] — 2026-10-15
 

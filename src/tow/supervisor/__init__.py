@@ -179,7 +179,7 @@ def _watchdog_pass(wake_ts: float | None) -> Any:
         port_listening=lambda _port: False,
         crash_line=lambda since: pulse.last_crash_line(layout.logs_dir(), since),
     )
-    report = run_watchdog(wake_ts=wake_ts, probes=probes, data_id=_data_seen["id"])
+    report = run_watchdog(wake_ts=wake_ts, probes=probes, data_id=_data_seen["id"], confirm_down=True)
     if isinstance(report, dict) and report.get("data_lost"):
         # Said once (and in run.log): the folder TOW goes on with now is the one watched next.
         LOG.error("the data folder was deleted or replaced while TOW ran: restore a night copy")
@@ -246,7 +246,15 @@ def _job_stopped(name: str, minutes: float) -> None:
 
 
 def _send(text: str) -> bool:
+    """A restart alert of the web server: held during the quiet hours, as the watchdog's are,
+    and sent with them when they end (False: not sent now)."""
+    from tow.config import load_config
+    from tow.delivery import hold, quiet_now
     from tow.watchdog import send_to_messengers
+
+    if quiet_now(load_config()):
+        hold(text)
+        return False
 
     return send_to_messengers(text)
 

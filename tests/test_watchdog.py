@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from tow.check import run as check_run
-from tow.store import save_state
+from tow.store import load_state, save_state
 from tow.watchdog import run_watchdog
 
 
@@ -91,6 +91,56 @@ def test_outage_is_reported_once_and_its_end_too(clock):
     assert first == ["TOW недоступен: процесс не запущен (закрыт или аварийно завершился)"]
     assert second == []
     assert third == ["TOW снова работает (не работал 1 мин)"]
+
+
+DOWN = "TOW недоступен: процесс не запущен (закрыт или аварийно завершился)"
+
+
+def _supervised(clock, *, up):
+    """A pass of ``tow run``, which starts its web server again by itself."""
+    state = load_state()
+    state["health"] = {"auto_at_ts": int(clock.t)}  # the checks keep running meanwhile
+    save_state(state)
+    sent: list[str] = []
+    run_watchdog(
+        is_healthy=lambda _port: up,
+        deploy_running=lambda: False,
+        send=lambda text: sent.append(text) or True,
+        now=clock.now,
+        sleep=clock.sleep,
+        confirm_down=True,
+    )
+    clock.sleep(600)
+    return sent
+
+
+def test_a_server_in_a_crash_loop_is_not_said_down_and_up_on_every_pass(clock):
+    """A server that crashes a few minutes after each start alternated "down" and "up again" on
+    every pass of the supervised watchdog (up to 144 messages a day); the supervisor restarts it
+    and says so itself (the first restart, then once per 6 hours)."""
+    said = [text for up in (False, True) * 6 for text in _supervised(clock, up=up)]
+    assert said == []
+
+
+def test_a_supervised_outage_is_said_once_from_its_second_pass_and_its_end_with_its_length(clock):
+    said = [_supervised(clock, up=up) for up in (False, False, False, True, True)]
+    assert said == [[], [DOWN], [], ["TOW снова работает (не работал 30 мин)"], []]
+
+
+def test_a_restart_alert_of_the_supervisor_waits_for_the_end_of_the_quiet_hours(monkeypatch):
+    """The supervisor's "web server restarted" went out at night; the watchdog's alerts wait."""
+    from tow import delivery, supervisor, watchdog
+
+    monkeypatch.setattr(delivery, "quiet_now", lambda cfg, now=None: True)
+    monkeypatch.setattr(watchdog, "send_to_messengers", lambda _text: pytest.fail("sent during the quiet hours"))
+    assert supervisor._send("TOW restarted the web server") is False
+    assert load_state()["notify_queue"] == ["TOW restarted the web server"]
+
+    sent: list[str] = []
+    monkeypatch.setattr(delivery, "quiet_now", lambda cfg, now=None: False)
+    monkeypatch.setattr(watchdog, "send_to_messengers", lambda text: sent.append(text) or True)
+    assert supervisor._send("again") is True
+    assert sent == ["again"]
 
 
 def test_a_deploy_is_not_an_outage(clock):
