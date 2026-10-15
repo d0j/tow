@@ -159,11 +159,13 @@ def test_a_hung_test_run_is_stopped_at_its_deadline_with_its_whole_tree(tmp_path
 
 @pytest.mark.allow_system
 def test_a_finished_test_run_keeps_its_exit_code_and_the_gates_location(tmp_path):
-    record = "import os; open('cwd.txt', 'w').write(os.getcwd()); raise SystemExit(3)"
-    result = _deadline(tmp_path, 60, ["-c", record])
+    # The child records its working folder at an absolute path: a relative file lands wherever the
+    # child starts, and when that was wrong it left cwd.txt in the checkout.
+    record = "import os, sys; open(sys.argv[1], 'w').write(os.getcwd()); raise SystemExit(3)"
+    result = _deadline(tmp_path, 60, ["-c", record, tmp_path / "cwd.txt"])
     assert (result["failure"], result["code"], result["alive"]) == (None, 3, [])
     assert result["elapsed"] < 60
-    assert Path((tmp_path / "pids" / "cwd.txt").read_text(encoding="utf-8")) == tmp_path / "pids"
+    assert Path((tmp_path / "cwd.txt").read_text(encoding="utf-8")) == tmp_path / "pids"
 
 
 # Every full test run of the gate goes through the deadline, and the passed tree is recorded
