@@ -204,13 +204,22 @@ def test_damaged_site_settings_mean_no_retries():
     assert site_retries.policies({"topics": [failed()], "mirrors": {}}, {"trackers": ["demo"]}) == {}
 
 
-def _unreadable_retry_state() -> dict[str, Any]:
+def _unreadable_retry_state(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     from tow.store import save_state
 
-    # A value no reader expects (a cooldown that is not a host map) in the saved site record.
-    state = {"topics": [failed()], "mirrors": {"demo": {"cool": ["https://demo.example"]}}}
+    state = {"topics": [failed()], "mirrors": {}}
     save_state(state)
+
+    def unreadable(*_args: Any, **_kwargs: Any) -> dict[str, dict[str, Any]]:
+        raise TypeError("a saved value no reader expects")
+
+    monkeypatch.setattr(site_retries, "policies", unreadable)
     return state
+
+
+def test_a_cooldown_that_is_not_a_host_map_is_no_pause():
+    state = {"topics": [failed()], "mirrors": {"demo": {"cool": ["https://demo.example"]}}}
+    assert site_retries.policies(state, config(), now=T0)["a"]["floor"] == 0.0
 
 
 def test_supervisor_facts_survive_an_unreadable_retry_record(monkeypatch, caplog):
@@ -218,14 +227,14 @@ def test_supervisor_facts_survive_an_unreadable_retry_record(monkeypatch, caplog
     from tow.supervisor import _facts
 
     monkeypatch.setattr(config_module, "load_config", config)
-    _unreadable_retry_state()
+    _unreadable_retry_state(monkeypatch)
     facts = _facts()
     assert facts["site_retries"] == {}
     assert facts["topic_ids"] == {"a"}  # the other facts are still read
     assert "site retries not planned" in caplog.text
 
 
-def test_home_shows_topics_with_an_unreadable_retry_record():
+def test_home_shows_topics_with_an_unreadable_retry_record(monkeypatch):
     from fastapi.testclient import TestClient
 
     from tow.config import save_config
@@ -243,7 +252,7 @@ def test_home_shows_topics_with_an_unreadable_retry_record():
     }
     save_config(cfg)
     save_secrets({"init_done": True})
-    state = _unreadable_retry_state()
+    state = _unreadable_retry_state(monkeypatch)
     assert layout.site_retry_status(state, cfg) == {}
     page = TestClient(app).get("/")
     assert page.status_code == 200
