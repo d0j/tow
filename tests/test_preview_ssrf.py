@@ -7,6 +7,7 @@ import socket
 import httpcore
 import httpx
 import pytest
+from helpers import PUBLIC_IPV4
 
 from tow import guess, http, title
 
@@ -48,7 +49,7 @@ class _Stream(httpcore.NetworkStream):
 
 @pytest.fixture
 def network(monkeypatch):
-    evidence = {"dns": [], "connect": [], "addresses": ["93.184.216.34"], "stream": _Stream()}
+    evidence = {"dns": [], "connect": [], "addresses": [PUBLIC_IPV4], "stream": _Stream()}
 
     def resolve(host, port, **kwargs):
         evidence["dns"].append((host, port))
@@ -79,7 +80,7 @@ def network(monkeypatch):
         ["::1"],
         ["::ffff:127.0.0.1"],
         ["64:ff9b::7f00:1"],
-        ["93.184.216.34", "127.0.0.1"],
+        [PUBLIC_IPV4, "127.0.0.1"],
     ],
 )
 def test_preview_entry_points_refuse_unsafe_dns(network, monkeypatch, addresses, entry, private_enabled):
@@ -118,7 +119,7 @@ def test_public_boundary_pins_socket_and_keeps_host_and_tls_sni(network, monkeyp
     assert response.status_code == 200
     assert response.content == b"<html><h1>Show A</h1></html>"
     assert network["dns"] == [("forum.example", 443)]
-    assert network["connect"] == [("93.184.216.34", 443)]
+    assert network["connect"] == [(PUBLIC_IPV4, 443)]
     assert network["stream"].sni == ["forum.example"]
     request = b"".join(network["stream"].writes).lower()
     assert b"host: forum.example\r\n" in request
@@ -156,7 +157,7 @@ def test_a_new_preview_rechecks_dns_and_refuses_rebinding(network):
     with pytest.raises(httpx.ConnectError, match="non-public"):
         http.get_public_page("https://forum.example/viewtopic.php?t=7")
     assert network["dns"] == [("forum.example", 443), ("forum.example", 443)]
-    assert network["connect"] == [("93.184.216.34", 443)]
+    assert network["connect"] == [(PUBLIC_IPV4, 443)]
 
 
 @pytest.mark.parametrize("route", ["/sites/guess", "/topics/guess-title"])

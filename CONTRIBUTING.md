@@ -66,6 +66,9 @@ the `installers` workflow on 24.04). The legacy
   intended change, regenerate a golden file with `uv run --frozen python tests/<its test>.py` and review the diff.
 - **Test data is synthetic**: made-up titles (`Show A`, `Сериал А`), topic ids (`1234567`), private-range or
   documentation IP addresses, paths like `D:\TV` or `/srv/media`. No real topic links, user names or addresses.
+  A test of the public-address guards needs an address TOW counts as public, which documentation ranges are
+  not: it uses the named constants of `tests/helpers.py` (`PUBLIC_IPV4`, `PUBLIC_IPV4_B`, `PUBLIC_IPV4_C`,
+  `PUBLIC_IPV6`), never another literal; nothing connects to them. `test_docs_facts.py` checks this.
 
 ## Code
 

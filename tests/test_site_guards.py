@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import raises_code
+from helpers import PUBLIC_IPV4, raises_code
 
 from tow.trackers.generic import regex_redos_risk, validate_tracker_regex
 from tow.web.site_form import (
@@ -26,14 +26,14 @@ def test_internal_hosts_are_detected(host):
     assert internal_host(host)
 
 
-@pytest.mark.parametrize("host", ["rutor.info", "kinozal.guru", "93.184.216.34"])
+@pytest.mark.parametrize("host", ["rutor.info", "kinozal.guru", PUBLIC_IPV4])
 def test_public_hosts_are_not_internal(host, monkeypatch):
-    monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: ["93.184.216.34"])
+    monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: [PUBLIC_IPV4])
     assert not internal_host(host)
 
 
 def test_internal_tracker_hosts_are_refused_unless_enabled(monkeypatch):
-    monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: ["93.184.216.34"])
+    monkeypatch.setattr("tow.web.site_form._resolve_addresses", lambda _name: [PUBLIC_IPV4])
     monkeypatch.setattr("tow.web.services.load_config", dict)
     with pytest.raises(ValueError, match="домашнюю сеть"):
         valid_site_hosts(["http://127.0.0.1:8080"])
@@ -50,9 +50,9 @@ def test_an_unresolved_tracker_host_is_named_as_unreachable_not_as_home_network(
     monkeypatch.setattr("tow.web.services.load_config", dict)
 
     assert valid_site_hosts(["https://unresolved.example"]) == ["https://unresolved.example"]
-    assert unresolved_hosts(["https://unresolved.example", "https://93.184.216.34"]) == ["unresolved.example"]
+    assert unresolved_hosts(["https://unresolved.example", f"https://{PUBLIC_IPV4}"]) == ["unresolved.example"]
     assert "unresolved.example" in unresolved_note(["https://unresolved.example"])
-    assert unresolved_note(["https://93.184.216.34"]) == ""
+    assert unresolved_note([f"https://{PUBLIC_IPV4}"]) == ""
 
 
 def test_saving_a_site_whose_mirror_does_not_resolve_warns(monkeypatch):

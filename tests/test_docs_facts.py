@@ -63,6 +63,38 @@ def test_contributing_names_every_golden_file():
         assert words in contributing, name
 
 
+_ADDRESS = re.compile(
+    r"(?<![\w.:])(\d{1,3}(?:\.\d{1,3}){3}|[0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{0,4}){2,7}(?:\.\d{1,3}){0,3})(?![\w.:])"
+)
+# Dotted text that is not an address: a fake Deluge's libtorrent version.
+_NOT_ADDRESSES = frozenset({"2.1.1.0"})
+
+
+def test_tests_use_only_the_named_public_addresses():
+    """Tests used several real public addresses ad hoc; CONTRIBUTING asks for synthetic ones.
+
+    A public address (as ``tow.net_guard.is_public`` judges it, an embedded IPv4 included) is one
+    of the named constants of ``tests/helpers.py``, which CONTRIBUTING lists."""
+    from helpers import PUBLIC_ADDRESSES
+
+    from tow.net_guard import is_public
+
+    found = []
+    for path in sorted((ROOT / "tests").rglob("*.py")):
+        for match in _ADDRESS.finditer(path.read_text(encoding="utf-8")):
+            literal = match.group(1)
+            try:
+                public = is_public(literal)
+            except ValueError:
+                continue
+            if public and literal not in _NOT_ADDRESSES and not any(name in literal for name in PUBLIC_ADDRESSES):
+                found.append(f"{path.relative_to(ROOT)}: {literal}")
+    assert found == [], "use a constant of tests/helpers.py (PUBLIC_IPV4...) or a documentation address"
+    contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    for name in ("PUBLIC_IPV4", "PUBLIC_IPV6", "tests/helpers.py"):
+        assert f"`{name}`" in contributing, name
+
+
 @pytest.mark.parametrize(
     ("guide", "words"),
     [
