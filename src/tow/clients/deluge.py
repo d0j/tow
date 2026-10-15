@@ -84,7 +84,8 @@ class DelugeClient(ManagedClient):
         url = base_url(host, port)
         self._url = url.rstrip("/") + "/json"
         self._password = password
-        self._http = httpx.Client(timeout=15.0, transport=transport, follow_redirects=False)
+        # trust_env=False: a system or HTTP_PROXY proxy would receive the password of auth.login.
+        self._http = httpx.Client(timeout=15.0, transport=transport, follow_redirects=False, trust_env=False)
         self._id = 0
         self._ready = False
         self._labels_ready = False

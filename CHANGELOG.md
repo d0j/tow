@@ -121,6 +121,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   `/Users/<name>/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup`, is refused like the same folder
   with `C:`: a torrent client on a Windows PC opens such a path on its own drive, so a file could have landed in
   a system or Startup folder. Folders of a client on Linux or in a container (`/downloads`) are still accepted.
+- The passwords of Transmission, Deluge and qBittorrent, and the site cookies the sign-in browser hands to TOW,
+  no longer go through a proxy set in Windows or in `HTTP_PROXY`: TOW talks to the torrent client and to the
+  sign-in browser directly, and qBittorrent's answers are no longer followed to another address. (Requests to
+  trackers already ignored such a proxy.)
 
 ## [1.31.2] — 2026-10-15
 

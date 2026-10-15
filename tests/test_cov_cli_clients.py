@@ -261,7 +261,12 @@ def test_from_secrets_requires_host_and_defaults_port(monkeypatch):
     assert built[0]["port"] == 8080
     assert built[0]["username"] == ""
     assert built[0]["password"] == ""
-    assert built[0]["REQUESTS_ARGS"] == {"timeout": 8}
+    # No proxy and no redirect for the login and the session cookie (test_client_proxies.py).
+    assert built[0]["REQUESTS_ARGS"] == {
+        "timeout": 8,
+        "allow_redirects": False,
+        "proxies": {"http": None, "https": None, "all": None},
+    }
     assert built[1]["port"] == 9090
     assert built[1]["username"] == "u"
 

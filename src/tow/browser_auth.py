@@ -303,10 +303,16 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _open_local(url: str, timeout: float) -> Any:
+    """Open a URL of the browser's debugging endpoint on this PC, never through a proxy: a system
+    or HTTP_PROXY proxy would see the pages (and the cookies asked for later) and could answer."""
+    return urllib.request.build_opener(urllib.request.ProxyHandler({})).open(url, timeout=timeout)
+
+
 def _json_get(port: int, path: str) -> Any:
     url = f"http://127.0.0.1:{port}{path}"
     try:
-        with urllib.request.urlopen(url, timeout=2) as response:
+        with _open_local(url, timeout=2) as response:
             return json.loads(response.read().decode("utf-8"))
     except (OSError, ValueError, urllib.error.URLError, urllib.error.HTTPError) as exc:
         raise BrowserAuthError(t("browser_auth.cdp_unavailable")) from exc
@@ -379,8 +385,9 @@ async def _authenticated_topic(
     if not expected_origin or not expected_host:
         raise BrowserAuthError(t("browser_auth.bad_url"))
     ws_url = await _wait_target(port, process, min(30, _remaining(deadline)), {expected_origin})
+    # proxy=None: the tracker cookies the browser hands over never cross a system proxy.
     async with connect(
-        ws_url, open_timeout=min(5, _remaining(deadline)), close_timeout=2, max_size=4 * 1024 * 1024
+        ws_url, open_timeout=min(5, _remaining(deadline)), close_timeout=2, max_size=4 * 1024 * 1024, proxy=None
     ) as socket_ws:
         request_id = 0
 
