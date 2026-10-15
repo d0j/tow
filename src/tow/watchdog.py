@@ -485,8 +485,15 @@ def _remember(p: _Pass, current: dict[str, bool], machine: Machine | None) -> No
     if machine is not None:
         saved["asleep_sec"] = round(machine.asleep_sec, 1)
         saved["boot_ts"] = int(machine.boot_ts)
+    # The probe's own answer (``service`` may still say the last confirmed state, run_watchdog).
+    failed = not report["service_ok"] and not report.get("skipped")
+    saved["service_failed"] = failed
+    if failed:
+        saved["failed_since"] = previous.get("failed_since") if previous.get("service_failed") else int(p.now())
     if not current["service"]:
-        saved["down_since"] = int(p.now()) if previous.get("service", True) else previous.get("down_since")
+        saved["down_since"] = (
+            saved.get("failed_since", int(p.now())) if previous.get("service", True) else previous.get("down_since")
+        )
     problem = {"at": int(p.now()), "text": "\n".join(report["alerts"])} if report["alerts"] else None
     if problem or previous.get("last_problem"):
         saved["last_problem"] = problem or previous.get("last_problem")
@@ -505,11 +512,16 @@ def run_watchdog(
     probes: Probes | None = None,
     wake_ts: float | None = None,
     data_id: str | None = None,
+    confirm_down: bool = False,
 ) -> dict[str, Any]:
     """One watchdog pass; returns what it saw and why.
 
     ``tow run`` calls it every 10 minutes with its own probes, ``wake_ts``, the last time it
-    saw the machine wake up, and ``data_id``, the data folder's id it saw at its start.
+    saw the machine wake up, ``data_id``, the data folder's id it saw at its start, and
+    ``confirm_down``: it starts its web server again by itself, so a server that does not answer
+    is said to be down only when the pass before found it so too. A server in a crash loop
+    answered on every other pass and was said down and up again each time (up to 144 messages
+    a day); the supervisor says its restarts itself (the first, then once per 6 hours).
     """
     from tow.store import load_state
 
@@ -559,6 +571,8 @@ def run_watchdog(
             current[key] = previous[key]
     if report.get("skipped"):
         current["service"] = previous.get("service", True)  # a deploy is not an outage
+    elif confirm_down and not report["service_ok"] and not previous.get("service_failed"):
+        current["service"] = previous.get("service", True)  # the first failed pass: not said yet
     _outage(p, probes, machine)
     _change_alerts(p, current)
     _remember(p, current, machine)
