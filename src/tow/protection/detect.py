@@ -81,7 +81,8 @@ def classify(
     ``daily_limit`` is an already identified quota page, not a guess based on the
     word "limit"; ``topic_removed`` a page already identified as saying the topic does not
     exist. Authentication needs a 401, an actual short sign-in page, or a password field on
-    a page of any length that answered a download.
+    a page of any length that answered a download; a password field on a removed topic's page
+    is neither. The daily limit comes before all of them.
     """
     body = text[:65536]
     h = {str(key).casefold(): str(value).casefold() for key, value in (headers or {}).items()}
@@ -119,10 +120,12 @@ def classify(
         return Verdict.LOGIN_NEEDED
     if not (torrent_wanted or title in _LOGIN_TITLES):
         return Verdict.OK
-    password = _has_password_field(body)
+    # A page saying the topic is gone may still carry the site's sign-in widget: the widget is no
+    # sign-in page then, on a short page as on a long one. A sign-in title or message still is.
+    password = not topic_removed and _has_password_field(body)
     # A download answered by a full site page with its sign-in form (a header widget, news
-    # around it): the session expired, however long the page. A removed topic says so first.
-    if torrent_wanted and password and not topic_removed:
+    # around it): the session expired, however long the page.
+    if torrent_wanted and password:
         return Verdict.LOGIN_NEEDED
     if len(plain) < 2000 and (
         password

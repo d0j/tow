@@ -48,6 +48,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   retry interval (30 minutes by default): the site is tried again once the module's short pause is over.
 - A download answered by a full site page with a sign-in form is recognised as an expired sign-in: TOW signs
   in again once instead of reporting "not a torrent file". A removed topic and the daily limit still win.
+- A "topic not found" page that carries the site's sign-in form, answering a download or shown as the topic
+  page, is reported as a removed topic instead of a sign-in problem, and TOW no longer signs in because of it.
 - Settings and each site-access request no longer read the installed module's whole program file to check it:
   it is checked again when the file changes, and always right before the module starts.
 - Site-access services are asked for an uncompressed answer, the only kind TOW accepts: a service that
