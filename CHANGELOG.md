@@ -138,6 +138,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Windows: what a torrent client already wrote into a sparse or compressed file now counts toward the free-space
   check (as the file system reports it), so a torrent waiting for disk space is no longer held back by its own
   partly downloaded files.
+- Transmission: a new torrent whose existing files Transmission checks for a long time no longer holds every check
+  for a minute and turns red; TOW hands it over at once and applies its file selection, then starts it (or lets it
+  wait for disk space), once Transmission's check ends - never with all files and without downloading the .torrent
+  again.
 
 ## [1.30.10] — 2026-10-15
 

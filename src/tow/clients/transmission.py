@@ -215,9 +215,10 @@ class TransmissionClient(ManagedClient):
             arguments["files-unwanted"] = unwanted
         self._rpc("torrent-set", **arguments)
 
-    def _stop_after_add(self, added: dict[str, Any]) -> bool:
-        """A paused add can verify existing files; stopping it cancels that verification."""
-        return super()._stop_after_add(self._wait_initial_verification(added))
+    def _defers_initial_check(self, info: dict[str, Any]) -> bool:
+        """A paused add verifies the data it found; stopping it cancels that verification, and a
+        large one outlasts any wait: the add is handed over before its selection."""
+        return str(info.get("state") or "").casefold().startswith("checking")
 
     def _verification_state(self, infohash: str) -> dict[str, Any] | None:
         row = self._get(infohash, ["hashString", "status", "error", "labels"])

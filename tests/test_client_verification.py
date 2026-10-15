@@ -39,6 +39,16 @@ class VerifyingClient(FakeClient):
     def __init__(self):
         super().__init__()
         self.checking = True
+        # Transmission: a paused add checks the data it found, and a stop would cancel that.
+        self.initial_check = False
+
+    def _add_stopped(self, content, save_path, labels):
+        super()._add_stopped(content, save_path, labels)
+        if self.initial_check:
+            self.torrents[H].update(state="checkingDL", progress=0.0)
+
+    def _defers_initial_check(self, info):
+        return self.initial_check and str(info.get("state") or "").startswith("checking")
 
     def _start(self, infohash):
         super()._start(infohash)
@@ -544,6 +554,52 @@ def test_a_start_given_by_a_selection_retry_counts_as_the_receipts_one_start(wor
     client.calls.clear()
     assert not _run(space_only=True)["ok"]
     assert client.calls == []
+
+
+@pytest.mark.parametrize("fits", [True, False])
+def test_an_add_checked_before_its_selection_is_finished_by_the_passes(world, monkeypatch, fits):
+    """Transmission checks the data a paused add found for hours: the add is handed over at once,
+    survives restarts in the saved receipt, and the passes apply its selection, stopped and read
+    back, once the check ends - then start it, or let it wait for disk space - with no new
+    download from the site."""
+    client, tracker, sent = world
+    client.initial_check, client.checking = True, False
+    folder = load_state()["topics"][0]["save_path"]
+    if not fits:
+        full = space.Shortfall(needed=1024**3, free=0, path=folder)
+        monkeypatch.setattr(apply_step, "free_space_problem", lambda *args, **kwargs: full)
+        monkeypatch.setattr(space, "_measured", lambda *args, **kwargs: (True, full))
+    first = _run()
+    assert first["status"] == "verification_pending"
+    assert not first.get("error")
+    receipt = load_state()["topics"][0]["verification_pending"]["receipt"]
+    assert (receipt["phase"], receipt["start"]) == ("awaiting_initial_check", fits)
+    assert [call[0] for call in client.calls] == ["add"]
+    assert client.wanted_torrent_indices() == {0, 1, 2}  # not applied, never running like this
+    client.calls.clear()
+    assert _run(space_only=True)["status"] == "verification_pending"  # still checking: nothing changes
+    assert client.calls == []
+    client.torrents[H]["state"] = "stoppedDL"  # the check ended
+    row = _run(space_only=True)
+    topic = load_state()["topics"][0]
+    assert client.wanted_torrent_indices() == {E01}
+    assert "verification_pending" not in topic
+    if fits:
+        assert row["ok"]
+        assert [call[0] for call in client.calls] == ["set_wanted", "start", "labels"]
+        assert client.torrents[H]["state"] == "downloading"
+        assert sent == ["updated"]
+    else:
+        assert row["status"] == "waiting_space"
+        assert [call[0] for call in client.calls] == ["set_wanted", "labels"]
+        assert client.torrents[H]["state"] == "stoppedDL"
+        assert topic["waiting_space"]["hash"] == H
+        assert topic["last_error_code"] == "check.waiting_space"
+        monkeypatch.setattr(space, "_measured", lambda *args, **kwargs: (True, None))
+        assert _run(space_only=True)["ok"]
+        assert client.torrents[H]["state"] == "downloading"
+        assert sent == ["error", "updated", "recovered"]  # as for every reported wait for disk space
+    assert tracker.fetches == 1
 
 
 def test_preflight_transport_failure_does_not_consume_the_resume_attempt(world, monkeypatch):

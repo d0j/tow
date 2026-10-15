@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from tow.check.client_ops import client_unreachable, info_confirms, info_owned_by_tow
 from tow.check.rows import client_marks, removal_seen_by, set_error, stamp_result, withdrawn_meanwhile
 from tow.clients import files
-from tow.clients.managed import ClientVerificationPending
+from tow.clients.managed import AWAITING_INITIAL_CHECK, ClientVerificationPending
 from tow.clients.spec import TorrentClientAdapter
 from tow.clock import machine_now, parse_timestamp
 from tow.errors import Msg, TowError
@@ -271,6 +271,7 @@ def _defer(work: TopicCheck, error: ClientVerificationPending, metadata: Any, pl
 
     rows = list(receipt.get("files") or [])
     ignored = set(receipt.get("ignored") or [])
+    awaiting = receipt.get("phase") == AWAITING_INITIAL_CHECK
     if receipt.get("all_files"):
         source = {item.index for item in metadata.files if not item.is_pad}
         allowed_ignored = {row["index"] for row in rows if files.padding_like(row.get("name"))}
@@ -292,9 +293,13 @@ def _defer(work: TopicCheck, error: ClientVerificationPending, metadata: Any, pl
         str(receipt.get("hash") or "").upper() != h
         or set(receipt.get("wanted") or []) != wanted
         or not ignored.issubset(allowed_ignored)
+        or (awaiting and (receipt.get("all_files") or type(receipt.get("start")) is not bool))
     ):
         raise fail()
-    files.verify_selection(rows, list((info or {}).get("files") or []), wanted, ignored=ignored, fail=fail)
+    if awaiting:  # not applied yet: the client checks the data it found (Transmission)
+        files.verify_identities(rows, list((info or {}).get("files") or []), fail=fail)
+    else:
+        files.verify_selection(rows, list((info or {}).get("files") or []), wanted, ignored=ignored, fail=fail)
     waiting_space = as_dict(work.topic.get("waiting_space"))
     waited_for_space = str(waiting_space.get("hash") or "").upper() == h
     previous = as_dict(work.topic.get("verification_pending"))
@@ -387,7 +392,8 @@ def _confirm(
     client: TorrentClientAdapter | None,
     client_id: str,
     h: str,
-) -> bool:
+) -> dict[str, Any] | None:
+    """The client's confirmation of the receipt; None: the owner's check repairs it instead."""
     if client is None:
         raise client_unreachable(run, client_id)
     info = client.inspect_torrent(h)
@@ -396,7 +402,7 @@ def _confirm(
         or str(waiting.get("blocked") or "") in OWNER_REPAIR_CODES
         or waiting.get("repair_only")
     ):
-        return False  # only the owner's explicit row check may re-add or repair altered evidence
+        return None  # only the owner's explicit row check may re-add or repair altered evidence
     _observe_presence(waiting, info)  # never re-added here: a confirmed absence blocks the receipt
     # Retry a dropped start once, only for an unfinished TOW add; a later explicit check
     # may retry it again. Never resume an ordinary torrent paused in the client by its owner.
@@ -409,14 +415,14 @@ def _confirm(
     finish = getattr(client, "finish_verification", None)
     if not callable(finish):
         raise TowError("check.selection_unconfirmed")
-    finish(
+    confirmed = finish(
         h,
         str(waiting.get("path") or ""),
         waiting.get("receipt") or {},
         start_stopped=retry,
         on_start=lambda: waiting.__setitem__("resume_attempted", True),
     )
-    return True
+    return confirmed if isinstance(confirmed, dict) else {}
 
 
 def _restore_check_times(topic: Topic, previous_check: str | None, previous_ok_at: str | None) -> None:
@@ -481,7 +487,8 @@ def _recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: boo
     previous_ok_at = topic.get("last_ok_at")
     before_error = (topic.get("last_error_code"), topic.get("last_error_params"), topic.get("last_error"))
     try:
-        if not _confirm(topic, run, waiting, client, client_id, h):
+        confirmed = _confirm(topic, run, waiting, client, client_id, h)
+        if confirmed is None:
             row["verification_repair"] = True  # request-local intent, not a persisted selection edit
             return False
     except _NotListedYet:
@@ -493,11 +500,12 @@ def _recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: boo
         else:
             waiting.pop("blocked", None)
             waiting.pop("blocked_params", None)
+            _adopt_receipt(waiting, error.receipt)
             _still_waiting(topic, run, row, waiting, h, before_error)
     except Exception as error:  # noqa: BLE001 - one failed confirmation never ends the batch
         _failed(topic, run, row, waiting, error, before_error)
     else:
-        _finished(topic, run, row, waiting, client_id, h)
+        _finished(topic, run, row, waiting, client_id, h, client=client, info=confirmed)
     stamp_result(topic, row)
     if pass_only:
         _restore_check_times(topic, previous_check, previous_ok_at)
@@ -547,10 +555,38 @@ def _failed(
         run.queue_notification(topic, kind="error", operation_id=new_operation_id("check-error"), error=error)
 
 
+def _adopt_receipt(waiting: dict[str, Any], receipt: dict[str, Any]) -> None:
+    """The adapter applied a selection handed over before it (the client's own check ended) and
+    the start is not confirmed yet: the same hash and selection, now read back, is the receipt
+    the next pass confirms."""
+    current = as_dict(waiting.get("receipt"))
+    if (
+        current.get("phase") == AWAITING_INITIAL_CHECK
+        and receipt.get("phase") is None
+        and str(receipt.get("hash") or "").upper() == str(current.get("hash") or "").upper()
+        and receipt.get("wanted") == current.get("wanted")
+        and receipt.get("ignored", []) == current.get("ignored", [])
+    ):
+        waiting["receipt"] = copy.deepcopy(receipt)
+
+
 def _finished(
-    topic: Topic, run: CheckRun, row: dict[str, Any], waiting: dict[str, Any], client_id: str, h: str
+    topic: Topic,
+    run: CheckRun,
+    row: dict[str, Any],
+    waiting: dict[str, Any],
+    client_id: str,
+    h: str,
+    *,
+    client: TorrentClientAdapter | None = None,
+    info: dict[str, Any] | None = None,
 ) -> None:
-    """The client confirmed the transaction: the receipt is done, History and the owner hear it."""
+    """The client confirmed the transaction: the receipt is done, History and the owner hear it.
+    An add handed over before its selection that did not fit stays stopped and waits for room."""
+    receipt = as_dict(waiting.get("receipt"))
+    if receipt.get("phase") == AWAITING_INITIAL_CHECK and receipt.get("start") is False:
+        _wait_for_room(topic, run, row, waiting, client_id, h, client=client, info=info or {})
+        return
     topic.pop("verification_pending", None)
     if str(topic.get("tracking_mode") or "watch") == "once":
         topic["once_done"] = True
@@ -576,3 +612,51 @@ def _finished(
     )
     if run.notify and not waiting.get("selection_update"):
         run.queue_notification(topic, kind=str(waiting.get("kind") or "added"), operation_id=new_operation_id("bot"))
+
+
+def _wait_for_room(
+    topic: Topic,
+    run: CheckRun,
+    row: dict[str, Any],
+    waiting: dict[str, Any],
+    client_id: str,
+    h: str,
+    *,
+    client: TorrentClientAdapter | None,
+    info: dict[str, Any],
+) -> None:
+    """Its selection applied and read back, stopped and released, the add whose files did not
+    fit waits for room as such an add always does (``tow.check.space``): measured now, started
+    by TOW once it fits - "added" is told then."""
+    from tow.check import space
+
+    topic.pop("verification_pending", None)
+    run.record(
+        "client_added",
+        operation_id=new_operation_id("client-confirm"),
+        component="client",
+        integration_id=client_id,
+        client_id=client_id,
+        topic_id=topic.get("id"),
+        topic=topic.get("id"),
+        hash=h,
+        started=False,
+        status="succeeded",
+        reason="verification_finished",
+        how=run.how,
+    )
+    path = str(waiting.get("path") or "")
+    topic["waiting_space"] = {
+        "hash": h,
+        "client": client_id,
+        "needed": 0,
+        "free": 0,
+        "path": path,
+        "since": _stamp(),
+        "selection": space.selection_key(info),
+        "kind": str(waiting.get("kind") or "added"),
+    }
+    for key in ("error", "error_record", "error_class", "skipped"):
+        row.pop(key, None)
+    row["verification_pending"] = False
+    space.recheck(topic, run, row, client, client_id)

@@ -58,6 +58,25 @@ def verify_selection(
             raise fail()
 
 
+def verify_identities(
+    before: list[dict[str, Any]], after: list[dict[str, Any]], *, fail: Callable[[], Exception]
+) -> None:
+    """Confirm every file identity (index, path, size) whatever its flag: for a selection that
+    is not applied yet."""
+
+    def identities(rows: list[dict[str, Any]]) -> dict[int, tuple[str, Any]]:
+        result: dict[int, tuple[str, Any]] = {}
+        for row in rows:
+            index = row.get("index")
+            if type(index) is not int or index < 0 or index in result:
+                raise fail()
+            result[index] = (normalize_path(row.get("name")), row.get("size"))
+        return result
+
+    if not before or identities(before) != identities(after):
+        raise fail()
+
+
 def map_files(
     source_files: tuple[TorrentFile, ...],
     client_files: list[dict[str, Any]],
