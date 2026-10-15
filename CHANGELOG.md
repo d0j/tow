@@ -29,6 +29,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   Needs attention still shows one entry for the site with Check access now.
 - A message about one site failing or working again for several topics links the site instead of the first
   of those topics.
+### Security
+
+- A password sign-in made with a verified site-access clearance no longer saves Cloudflare's clearance cookie
+  as part of the site's sign-in, where it outlived its expiry and a site-access reset. An answer that sets only
+  such cookies no longer replaces a working sign-in. A clearance an earlier version saved there is not sent and
+  is removed at the next successful sign-in; sign-ins made in a browser window are kept as they are.
 
 ## [1.30.10] — 2026-10-15
 
