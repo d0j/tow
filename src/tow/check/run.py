@@ -117,6 +117,16 @@ def _note_history_rebuilt(health: Health, previous: Health, *, rebuilt: bool) ->
         health["history_rebuilt_at"] = earlier
 
 
+def _note_history_trimmed(health: Health, previous: Health, *, trimmed: bool) -> None:
+    """A watched topic's download history started over to fit a restore point: said a week."""
+    if trimmed:
+        health["history_trimmed_at"] = health["at_ts"]
+        return
+    earlier = previous.get("history_trimmed_at")
+    if isinstance(earlier, int) and health["at_ts"] - earlier < HISTORY_REBUILT_NOTICE_SEC:
+        health["history_trimmed_at"] = earlier
+
+
 def run_check(
     *,
     apply: bool,
@@ -231,7 +241,7 @@ class _RunResult:
     whole: bool = True
 
 
-def _commit_run_state(result: _RunResult, history_rebuilt: bool = False) -> None:
+def _commit_run_state(result: _RunResult, history_rebuilt: bool = False, *, history_trimmed: bool = False) -> None:
     """Write the run's result onto the state as it is on disk now (the owner's edits made
     meanwhile are kept), with the health record and the staged messages, in one write."""
     state, pool, how = result.state, result.pool, result.how
@@ -247,6 +257,7 @@ def _commit_run_state(result: _RunResult, history_rebuilt: bool = False) -> None
     # one topic must not move it.
     previous_health = health_of(load_state(quarantine=False))
     _note_history_rebuilt(health, previous_health, rebuilt=history_rebuilt)
+    _note_history_trimmed(health, previous_health, trimmed=history_trimmed)
     health["auto_at_ts"] = health["at_ts"] if how == "auto" else previous_health.get("auto_at_ts")
     health["auto_ok_at_ts"] = health["at_ts"] if how == "auto" else _last_good_scheduled_check(previous_health)
     if not result.whole:
@@ -456,7 +467,7 @@ def _run_check(
         run,
         pending_reconcile_records,
         want,
-        lambda rebuilt: _commit_run_state(outcome, rebuilt),
+        lambda rebuilt: _commit_run_state(outcome, rebuilt, history_trimmed=run.history_started_over > 0),
     )
     for event_kind, fields in pending_reconcile_records:
         _record(event_kind, **fields)

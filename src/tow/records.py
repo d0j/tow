@@ -103,6 +103,7 @@ class Health(TypedDict, total=False):
     auto_at_ts: int | None
     auto_ok_at_ts: int | None
     history_rebuilt_at: int
+    history_trimmed_at: int  # a watched topic's history started over to fit a restore point
     ping_failed: dict[str, int]  # client -> when Settings' "Check" found it not answering
 
 

@@ -247,7 +247,8 @@ are enforced by `tests/test_ui_standard.py` and the CSP.
 
 ## Issue
 
-**Today:** `data_lost`, `check_stale`, `check_blocked`, `client_down`, `history_rebuilt`, `site_needs_login`.
+**Today:** `data_lost`, `check_stale`, `check_blocked`, `client_down`, `history_rebuilt`, `history_trimmed`,
+`site_needs_login`.
 
 An issue is something that needs the owner now, said from saved state: Home's "Needs attention" lists it as a
 link to the problem, and `tow status` counts it. A kind is one module in `src/tow/issues/kinds/`, found by

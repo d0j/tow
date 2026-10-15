@@ -18,6 +18,7 @@ from tow.errors import TowError
 from tow.events import new_operation_id
 from tow.jsonish import as_dict
 from tow.log import error_fields
+from tow.paths import download_history_path
 from tow.progress import reconcile_topic
 from tow.records import DownloadHistory, HistoryRecord, Topic, topics_of
 from tow.store import (
@@ -89,6 +90,24 @@ def _load_history(*, quarantine: bool) -> tuple[DownloadHistory, bool]:
         return {"schema_version": 1, "topics": {}}, True
 
 
+def _fit_history(history: DownloadHistory, watched: set[str], run: CheckRun) -> bool:
+    """The history within what a restore point holds (``download_history.fit``); True when
+    anything was dropped. Measured only once the file on disk is half that big."""
+    try:
+        size = download_history_path().stat().st_size
+    except OSError:
+        size = 0
+    if size <= download_history.MAX_BYTES // 2:
+        return False
+    trimmed, started_over = download_history.fit(history, watched=watched)
+    if trimmed:
+        run.record(
+            "download_history_trimmed", component="storage", status="trimmed", topics=len(started_over), how=run.how
+        )
+    run.history_started_over = len(started_over)
+    return trimmed
+
+
 def reconcile_and_commit(
     state: dict[str, Any],
     results: list[dict[str, Any]],
@@ -117,6 +136,7 @@ def reconcile_and_commit(
             history = history_seen  # restored meanwhile: an empty-history reconcile must not overwrite it
         changed = _merge_history(disk_history, history_seen, history)
         pruned = download_history.prune(disk_history, watched=watched, keep_days=keep_days, max_items=max_items)
+        pruned = _fit_history(disk_history, watched, run) or pruned
         if disk_rebuilt:
             run.record("download_history_rebuilt", component="storage", status="rebuilt", how=run.how)
         if not disk_rebuilt and not changed and not pruned:

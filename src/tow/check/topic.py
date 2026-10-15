@@ -215,6 +215,9 @@ class CheckRun:
     queue_notification: Callable[..., None]
     # How long the download history keeps what is no longer watched (tow.download_history).
     history_retention: tuple[int, int] = (download_history.DEFAULT_KEEP_DAYS, download_history.DEFAULT_MAX_ITEMS)
+    # Watched topics whose download history had to start over this run to fit a restore point
+    # (tow.download_history.fit): said in Needs attention for a week.
+    history_started_over: int = 0
     # Clients on another computer: a folder they name is not measured on this one's disks (G6).
     remote_clients: frozenset[str] = frozenset()
     # The secrets.enc that ``secrets`` was decrypted from (see _reread_secrets).
