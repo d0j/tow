@@ -114,7 +114,7 @@
 
           <details class="integration-card client-card" id="client-main">
             <summary class="integration-head">
-              <h2>Living room <span class="card-meta">192.0.2.10</span></h2>
+              <h2>Living room <span class="card-meta">192.0.2.10 · 2 topics</span></h2>
               <span class="integration-pills">
                 <span class="pill ok">Main</span>
                 <span class="pill mut">Set up</span>
@@ -125,7 +125,7 @@
             <details class="technical-details notifier-steps" >
               <summary>How to connect</summary>
               <ol>
-                <li>In qBittorrent: Tools → Options → Web UI.</li><li>Turn on “Web User Interface (Remote control)”, set a user name and password; the port is usually 8080.</li><li>If qBittorrent runs on this computer, the address is 127.0.0.1.</li><li>Fill in the fields below, press “Save”, then “Check”.</li>
+                <li>In qBittorrent: Tools → Options → Web UI.</li><li>Turn on “Web User Interface (Remote control)”, set a user name and password; the port is usually 8080.</li><li>If qBittorrent runs on this computer, the address is 127.0.0.1.</li>
               </ol>
               <p class="action-hint">TOW marks its torrents with the tag tow and never touches others.</p>
             </details>
@@ -164,8 +164,7 @@
                 <button class="ghost" type="submit" form="ping-client-0" data-keep data-check-saved data-busy-label="Checking…" data-fix="check_client:main">Check</button>
 
               </div>
-              <p class="action-hint">Check uses the saved settings. TOW adds new topics to the main client; each topic can use a different client.</p>
-              <p class="action-hint">Used by 2 topics.</p>
+              <p class="action-hint">New topics go to the main client.</p>
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
             </form>
             <form id="ping-client-0" method="post" action="/settings/client/ping" data-return-target="client-main">
@@ -183,7 +182,7 @@
 
           <details class="integration-card client-card" id="client-nas">
             <summary class="integration-head">
-              <h2>Transmission <span class="card-meta">http://nas.example:9091/transmission</span></h2>
+              <h2>Transmission <span class="card-meta">http://nas.example:9091/transmission · 1 topic</span></h2>
               <span class="integration-pills">
 
                 <span class="pill mut">Set up</span>
@@ -194,7 +193,7 @@
             <details class="technical-details notifier-steps" >
               <summary>How to connect</summary>
               <ol>
-                <li>In Transmission: Edit → Preferences → Remote.</li><li>Turn on “Allow remote access”; the port is usually 9091. User name and password are optional.</li><li>If Transmission runs on another computer, add this computer&#39;s address to the allowed list.</li><li>Fill in the fields below, press “Save”, then “Check”.</li>
+                <li>In Transmission: Edit → Preferences → Remote.</li><li>Turn on “Allow remote access”; the port is usually 9091. User name and password are optional.</li><li>If Transmission runs on another computer, add this computer&#39;s address to the allowed list.</li>
               </ol>
               <p class="action-hint">Transmission 3.0 or newer is needed: TOW marks its torrents with the label tow. Magnet links are not supported with Transmission — it starts downloading before TOW can choose the files.</p>
             </details>
@@ -236,8 +235,7 @@
                 <button class="ghost danger" type="submit" form="remove-client-1">Remove</button>
 
               </div>
-              <p class="action-hint">Check uses the saved settings.</p>
-              <p class="action-hint">Used by 1 topic.</p>
+
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
             </form>
             <form id="ping-client-1" method="post" action="/settings/client/ping" data-return-target="client-nas">
@@ -263,7 +261,7 @@
         </div>
         <form method="post" action="/settings/client/add" class="settings-form client-add" data-return-target="acc-clients">
           <div class="field">
-            <label for="client-add-kind">Add a torrent client</label>
+            <label for="client-add-kind">Add a client</label>
             <div class="client-add-row">
               <select id="client-add-kind" name="kind" class="w-m">
                 <option value="qbittorrent">qBittorrent</option><option value="transmission">Transmission</option><option value="deluge">Deluge</option>
@@ -271,7 +269,6 @@
               <button type="submit">Add</button>
             </div>
           </div>
-          <p class="support-note">Supported: qBittorrent, Transmission, Deluge. You can connect several clients at once.</p>
         </form>
       </div>
     </details>
@@ -282,7 +279,7 @@
         <span class="pill ok">Connected</span>
       </summary>
       <div class="settings-panel">
-        <p class="support-note">Connect one or more messengers — every message goes to all of them. If a messenger is unavailable, the message waits in a queue and goes out later by itself.</p>
+        <p class="support-note">Messages go to every connected messenger; if one is down, they are sent later.</p>
         <div class="integration-list cards-2">
 
           <details class="integration-card notifier-card" id="notifier-telegram" open>
@@ -298,9 +295,9 @@
             <details class="technical-details notifier-steps" >
               <summary>How to connect</summary>
               <ol>
-                <li>Send @BotFather the command /newbot and choose a name — it will send you the bot token.</li><li>Open your bot and press “Start” (or send it anything).</li><li>Find out your ID: message @userinfobot — it replies with a number.</li><li>Paste the token and ID below, press “Save”, then “Check”.</li>
+                <li>Send @BotFather the command /newbot and choose a name — it will send you the bot token.</li><li>Open your bot and press “Start” (or send it anything).</li><li>Find out your ID: message @userinfobot — it replies with a number.</li>
               </ol>
-              <p class="action-hint">Several recipients are fine: IDs separated by commas (for a group, its ID with a minus sign).</p>
+              <p class="action-hint">Several: separate with commas; a group ID starts with “-”.</p>
             </details>
             <form id="notifier-form-telegram" method="post" action="/settings/notifier/telegram" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
@@ -318,7 +315,7 @@
 
                 <div class="field">
 
-                  <label for="nf-telegram-chat_ids">Recipient IDs, separated by commas</label>
+                  <label for="nf-telegram-chat_ids">Recipient IDs</label>
 
                   <input id="nf-telegram-chat_ids" name="chat_ids" class="w-m" value="1001" placeholder="123456789" autocomplete="off" spellcheck="false" autocapitalize="off">
 
@@ -333,7 +330,7 @@
                 <button class="ghost danger" type="submit" form="notifier-remove-telegram">Disconnect</button>
 
               </div>
-              <p class="action-hint">“Check” sends a test message using the saved settings.</p>
+              <p class="action-hint">“Check” sends a test message.</p>
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
             </form>
 
@@ -355,9 +352,9 @@
             <details class="technical-details notifier-steps" open>
               <summary>How to connect</summary>
               <ol>
-                <li>In Discord, open the channel → ⚙ “Edit Channel” → “Integrations” → “Webhooks”.</li><li>Press “New Webhook”; you may name it TOW.</li><li>Press “Copy Webhook URL”.</li><li>Paste the address below, press “Save”, then “Check”.</li>
+                <li>In Discord, open the channel → ⚙ “Edit Channel” → “Integrations” → “Webhooks”.</li><li>Press “New Webhook”; you may name it TOW.</li><li>Press “Copy Webhook URL”.</li>
               </ol>
-              <p class="action-hint">The webhook address is a key to the channel: TOW keeps it encrypted and never shows it to anyone.</p>
+              <p class="action-hint">The webhook is a key to the channel; TOW keeps it encrypted.</p>
             </details>
             <form id="notifier-form-discord" method="post" action="/settings/notifier/discord" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
@@ -379,7 +376,7 @@
                 <button type="submit">Save</button>
 
               </div>
-              <p class="action-hint">After “Save” a “Check” button appears — it sends a test message.</p>
+
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
             </form>
 
@@ -398,9 +395,9 @@
             <details class="technical-details notifier-steps" open>
               <summary>How to connect</summary>
               <ol>
-                <li>Open callmebot.com → the WhatsApp section and add the number shown there to your phone&#39;s contacts.</li><li>Send it this phrase in WhatsApp: I allow callmebot to send me messages</li><li>It replies with an apikey — a number.</li><li>Enter your WhatsApp number and this apikey below, press “Save”, then “Check”.</li>
+                <li>Open callmebot.com → the WhatsApp section and add the number shown there to your phone&#39;s contacts.</li><li>Send it this phrase in WhatsApp: I allow callmebot to send me messages</li><li>It replies with an apikey — a number.</li>
               </ol>
-              <p class="action-hint">Messages go through the free CallMeBot service, not the official WhatsApp API: it needs no business account, but it dislikes frequent messages — TOW groups them anyway.</p>
+              <p class="action-hint">Sent via the free CallMeBot service, not the official WhatsApp API.</p>
             </details>
             <form id="notifier-form-whatsapp" method="post" action="/settings/notifier/whatsapp" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
@@ -430,7 +427,7 @@
                 <button type="submit">Save</button>
 
               </div>
-              <p class="action-hint">After “Save” a “Check” button appears — it sends a test message.</p>
+
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
             </form>
 
@@ -449,7 +446,7 @@
             <details class="technical-details notifier-steps" open>
               <summary>How to connect</summary>
               <ol>
-                <li>Install the ntfy app on your phone (Google Play, App Store or F-Droid).</li><li>Take the ntfy topic name below (already made up, long and hard to guess) or choose your own.</li><li>In the app, press “+” and subscribe to this ntfy topic.</li><li>Press “Save”, then “Check” — a notification will arrive on your phone.</li>
+                <li>Install the ntfy app on your phone (Google Play, App Store or F-Droid).</li><li>Take the ntfy topic name below (already made up, long and hard to guess) or choose your own.</li><li>In the app, press “+” and subscribe to this ntfy topic.</li>
               </ol>
               <p class="action-hint">Anyone who knows the ntfy topic name can read its messages: do not make the name short and do not publish it.</p>
             </details>
@@ -480,7 +477,7 @@
                 <button type="submit">Save</button>
 
               </div>
-              <p class="action-hint">After “Save” a “Check” button appears — it sends a test message.</p>
+
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
             </form>
 
@@ -497,14 +494,13 @@
       </summary>
       <div class="settings-panel">
         <form method="post" action="/settings/interval" class="settings-form form-grid" data-return-target="acc-intervals"><div class="field">
-            <label for="interval_min">Global timer</label>
+            <label for="interval_min">Check topics every</label>
             <div class="input-unit"><input id="interval_min" name="interval_min" value="60" class="w-xs" type="number" min="1" step="1" inputmode="numeric" aria-describedby="interval-hint"><span>min</span></div>
-            <p class="field-hint" id="interval-hint">Active topics without a personal timer are checked every 1 h. A new interval applies within a minute and counts from the last check. Set a personal timer when adding or editing a topic.</p>
+            <p class="field-hint" id="interval-hint">Topics with a personal timer keep it. A new value applies within a minute.</p>
           </div>
           <div class="field">
             <label for="flash_ttl_min">Show “Undo” for</label>
-            <div class="input-unit"><input id="flash_ttl_min" name="flash_ttl_min" value="1" class="w-xs" type="number" min="1" step="1" inputmode="numeric" aria-describedby="undo-hint"><span>min</span></div>
-            <p class="field-hint" id="undo-hint">How long the Undo button stays after a change.</p>
+            <div class="input-unit"><input id="flash_ttl_min" name="flash_ttl_min" value="1" class="w-xs" type="number" min="1" step="1" inputmode="numeric"><span>min</span></div>
           </div>
           <div class="settings-actions"><button type="submit">Save</button></div>
           <p class="unsaved-state" role="status" hidden>There are unsaved changes.</p>
@@ -518,7 +514,7 @@
         <span class="pill mut">This computer only</span>
       </summary>
       <div class="settings-panel">
-        <p class="action-hint">On this computer TOW opens without a password. From other devices — a phone, a laptop, through Tailscale — only with a password; a device stays signed in for 90 days, even after TOW restarts. After a password change the other devices have to sign in again.</p>
+        <p class="action-hint">Other devices (phone, laptop, Tailscale) sign in with a password and stay signed in for 90 days.</p>
 
         <div class="integration-list">
 
@@ -534,10 +530,10 @@
                 <div class="field-row">
                 <div class="field">
 
-                  <label for="lan-password">Password</label>
-                  <span class="secret"><input id="lan-password" name="lan_password" type="password" class="w-m" autocomplete="new-password" minlength="8" aria-describedby="lan-password-hint"><button type="button" class="ico reveal" data-reveal="lan-password" data-reveal-name="Password" aria-controls="lan-password" aria-pressed="false" aria-label="Show “Password”" title="Show “Password”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
+                  <label for="lan-password">New password</label>
+                  <span class="secret"><input id="lan-password" name="lan_password" type="password" class="w-m" autocomplete="new-password" minlength="8" aria-describedby="lan-password-hint"><button type="button" class="ico reveal" data-reveal="lan-password" data-reveal-name="New password" aria-controls="lan-password" aria-pressed="false" aria-label="Show “New password”" title="Show “New password”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
 
-                  <p class="field-hint" id="lan-password-hint">At least 8 characters. Easy to remember: three or four words joined with hyphens.</p>
+                  <p class="field-hint" id="lan-password-hint">8+ characters; three or four words with hyphens are easy to remember.</p>
                 </div>
                 <div class="field">
                   <label for="lan-password2">Repeat the password</label>
@@ -547,10 +543,10 @@
                 <div class="field">
                   <label for="lan-hint">Reminder (optional)</label>
                   <input id="lan-hint" name="hint" type="text" class="w-l" maxlength="120" value="" autocomplete="off" aria-describedby="lan-hint-help">
-                  <p class="field-hint" id="lan-hint-help">Shown on the sign-in page under “Forgot your password?”. Anyone on your network who opens that page can read it — never write the password itself.</p>
+                  <p class="field-hint" id="lan-hint-help">Anyone who opens the sign-in page can read it — never include the password.</p>
                 </div>
               </fieldset>
-              <p class="action-hint">Forgot the password? On this computer a new one is set without the old one. Other devices then sign in again.</p>
+              <p class="action-hint">Forgot it? Set a new one here — the old one is not needed; other devices then sign in again.</p>
               <div class="settings-actions"><button type="submit">Save password</button></div>
               <p class="unsaved-state" role="status" hidden>There are unsaved changes.</p>
             </form>
@@ -570,7 +566,7 @@
 
                 <div class="check-field">
                   <input id="allow-lan" name="allow_lan" value="1" type="checkbox" disabled aria-describedby="allow-lan-hint allow-lan-locked">
-                  <label for="allow-lan">Open TOW from other devices (with a password)</label>
+                  <label for="allow-lan">Open TOW from other devices</label>
                   <p id="allow-lan-hint">Turning it on takes effect after TOW restarts; turning it off works at once.</p>
                   <p id="allow-lan-locked" class="locked-hint">Set a password above first: without it no other device can sign in.</p>
                 </div>
@@ -597,7 +593,7 @@
         <div class="integration-list backup-list">
           <article class="integration-card backup-card" id="backup-night" aria-labelledby="backup-night-title">
             <div class="integration-head">
-              <div><h2 id="backup-night-title">Nightly backups</h2><p>Settings, history and encrypted passwords. Automatic copies follow the night schedule and catch up after the computer turns on. Retention is set below.</p></div>
+              <div><h2 id="backup-night-title">Nightly backups</h2><p>Settings, history and encrypted passwords, every night.</p></div>
 
             </div>
 
@@ -610,7 +606,7 @@
               <label class="check-field" for="backup-automatic">
                 <input id="backup-automatic" type="checkbox" name="enabled" value="1" checked aria-describedby="backup-automatic-hint" data-auto-submit-control>
                 <span>Automatic nightly backups</span>
-                <p id="backup-automatic-hint" data-auto-submit-status>Applies without restarting TOW. Turning this off keeps the existing copies, and “Back up now” and “Restore” work as before; a copy already under way finishes normally.</p>
+                <p id="backup-automatic-hint" data-auto-submit-status>Turning it off keeps existing copies; “Back up now” still works.</p>
               </label>
               <noscript><button type="submit">Save</button></noscript>
             </form>
@@ -621,17 +617,17 @@
                   <input id="backup-days" type="number" name="days" value="7" class="w-xs" min="1" max="3650" required aria-describedby="backup-days-hint">
                   <button type="submit">Save</button>
                 </div>
-                <p class="field-hint" id="backup-days-hint">Older nightly backups are removed only after a new copy passes verification. The new copy, the three newest earlier copies (whatever their age) and copies with future dates are kept. Default: 7 days. Free space for a complete copy and a reserve is checked before writing.</p>
+                <p class="field-hint" id="backup-days-hint">Older copies are deleted only after a new one is verified; the 3 newest always stay.</p>
               </div>
             </form>
 
             <details class="backup-location">
-              <summary>Folder for nightly backups</summary>
+              <summary>Folder <span class="pill mut">Default</span></summary>
 
         <form method="post" action="/settings/backup/location" class="settings-form form-grid backup-folder" data-return-target="acc-transfer">
           <input type="hidden" name="kind" value="night">
           <div class="field">
-            <label for="backup-path-night">Folder for nightly backups <span class="pill mut">Default</span></label>
+            <label for="backup-path-night" class="sr-only">Folder for nightly backups</label>
             <input id="backup-path-night" name="path" value="" class="w-xl" placeholder="<root>/backup/night" autocomplete="off" spellcheck="false">
 
             <p class="field-hint"><size> free · You can choose another drive or a network folder (\\server\folder — then it is reachable at night too). “Check” tries to write a file.</p>
@@ -648,7 +644,7 @@
 
           <article class="integration-card backup-card" id="backup-manual" aria-labelledby="backup-manual-title">
             <div class="integration-head">
-              <div><h2 id="backup-manual-title">Backups made by hand</h2><p>Before restoring, TOW checks the backup and saves its current data. The network settings stay as they are now. The last 10 backups are kept.</p></div>
+              <div><h2 id="backup-manual-title">Backups made by hand</h2><p>The last 10 are kept. Restoring keeps the network settings as they are.</p></div>
               <span class="pill ok">Saved: 1</span>
             </div>
 
@@ -678,12 +674,12 @@
             </details>
 
             <details class="backup-location">
-              <summary>Folder for backups made with “Create a backup”</summary>
+              <summary>Folder <span class="pill mut">Default</span></summary>
 
         <form method="post" action="/settings/backup/location" class="settings-form form-grid backup-folder" data-return-target="acc-transfer">
           <input type="hidden" name="kind" value="manual">
           <div class="field">
-            <label for="backup-path-manual">Folder for backups made with “Create a backup” <span class="pill mut">Default</span></label>
+            <label for="backup-path-manual" class="sr-only">Folder for backups made with “Create a backup”</label>
             <input id="backup-path-manual" name="path" value="" class="w-xl" placeholder="<root>/restore-points" autocomplete="off" spellcheck="false">
 
             <p class="field-hint"><size> free</p>
@@ -706,14 +702,14 @@
               <button type="submit">Save file</button>
             </form>
             <form method="post" action="/settings/portable/import" enctype="multipart/form-data" data-return-target="acc-transfer" class="portable-import-form">
-              <label for="portable-backup-file">Choose a file: <code>.towx</code></label>
+              <label for="portable-backup-file">File <code>.towx</code></label>
               <input id="portable-backup-file" name="backup_file" type="file" class="w-l" accept=".towx,application/octet-stream" required>
               <div class="settings-actions">
                 <button class="ghost" type="submit" name="operation" value="check" data-busy-label="Checking…">Check</button>
                 <button class="danger" type="submit" name="operation" value="restore" data-confirm="Restore TOW from this file? The current data is saved before it is replaced." data-busy-label="Restoring…">Restore</button>
               </div>
             </form>
-            <p class="section-note">Restoring needs the original <code>keys/master.key</code> — it is not in the file, so keep it separately. Before replacing data, TOW checks the file and saves the current data. <a href="/settings/help#export-import">More</a>.</p>
+            <p class="section-note">Restoring needs the original <code>keys/master.key</code> — keep it separately. <a href="/settings/help#export-import">More</a>.</p>
           </article>
         </div>
       </div>
@@ -721,18 +717,17 @@
 
     <details class="settings-section settings-accordion acc" id="acc-updates" data-q="version update release rollback log automatic">
       <summary>
-        <span class="settings-summary-title">Version and updates</span>
+        <span id="settings-updates-title" class="settings-summary-title">Version and updates</span>
         <span class="pill mut"><version></span>
       </summary>
       <div class="settings-panel">
-        <section id="updates" class="release-panel" aria-labelledby="release-title">
-          <p id="release-title">Installed: TOW <version></p>
+        <section id="updates" class="release-panel" aria-labelledby="settings-updates-title">
           <form method="post" action="/settings/updates" class="compact-form immediate-form" data-return-target="acc-updates" data-auto-submit>
             <input type="hidden" name="enabled" value="0">
             <div class="check-field">
               <input id="check-updates" name="enabled" value="1" type="checkbox" checked aria-describedby="check-updates-hint" data-auto-submit-control>
               <label for="check-updates">Check for updates automatically</label>
-              <p id="check-updates-hint" data-auto-submit-status>At most once every 12 hours, while a TOW page is open. When it is off, TOW checks only when you press the button.</p>
+              <p id="check-updates-hint" data-auto-submit-status>At most every 12 h while a TOW page is open.</p>
             </div>
             <noscript><button type="submit">Apply</button></noscript>
           </form>
@@ -761,7 +756,7 @@
           <p class="action-hint">Stable releases only. Nothing is installed without you.</p>
           <details class="technical-details">
             <summary>How to update</summary>
-            <p>The “Update” button above installs a newer release, or “Update TOW” in the TOW folder on the computer running TOW (“Update TOW.cmd” on Windows, “Update TOW.command” on macOS, update-tow on Linux). For a chosen version, open a terminal in the TOW folder (the one with config.yaml) and run the command below with that version: it shows how. The update makes an update snapshot first.</p>
+            <p>Press “Update” above, or run “Update TOW” in the TOW folder. For a specific version run:</p>
             <code data-release-command>scripts/tow update --ref v<version></code>
           </details>
           <details class="technical-details" data-update-log>
@@ -777,17 +772,16 @@
     <details class="settings-section settings-accordion acc" id="acc-service" data-q="service autostart restart windows">
       <summary>
         <span id="settings-service-title" class="settings-summary-title">TOW service</span>
-        <span class="pill ok">Starts automatically</span>
+        <span class="pill ok">Autostart on</span>
       </summary>
       <div class="settings-panel">
-        <p class="action-hint">TOW runs as one service: the web page, scheduled checks, nightly backups and the watchdog.</p>
         <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
           <input type="hidden" name="enabled" value="0">
           <input type="hidden" name="without_login" value="0">
           <div class="check-field">
             <input id="service-autostart" name="enabled" value="1" type="checkbox" checked aria-describedby="service-autostart-hint" data-auto-submit-control>
-            <label for="service-autostart">Start automatically</label>
-            <p id="service-autostart-hint" data-auto-submit-status>Start TOW when you sign in to this computer. The change takes effect at once.</p>
+            <label for="service-autostart">Start TOW when I sign in to this computer</label>
+            <p id="service-autostart-hint" data-auto-submit-status></p>
           </div>
           <noscript><button type="submit">Apply</button></noscript>
         </form>
@@ -798,21 +792,18 @@
           <form method="post" action="/settings/service/restart" data-return-target="acc-service" data-confirm="Restart TOW? The page may be unavailable for a few seconds.">
             <button type="submit" data-fix="restart_service">Restart</button>
           </form>
-          <p>The page will be unavailable for a few seconds.</p>
         </div>
         <div class="watchdog-note">
-          <p class="action-hint">The watchdog checks the schedule and reports downtime and its cause to connected messengers. When the web server fails, the TOW service restarts it; the watchdog itself does not restart TOW.</p>
+          <p class="action-hint">The watchdog reports downtime to your messengers; it does not restart TOW.</p>
 
         </div>
-
-        <p class="restart-result">Web page running since: <b><time></b>.</p>
-
 
         <p class="restart-result" role="note">Last requested restart: <b><time></b> · from settings · being checked.</p>
 
         <details class="technical-details">
           <summary>Technical details</summary>
           <dl>
+            <div><dt>Web page running since</dt><dd><time></dd></div>
             <div><dt>PID</dt><dd><code>4321</code></dd></div>
             <div><dt>Autostart</dt><dd><code>—</code></dd></div>
             <div><dt>Web server</dt><dd><code>—</code></dd></div>
@@ -840,7 +831,7 @@
               </select>
               <button type="submit">Save</button>
             </div>
-            <p id="language-note" class="field-hint">Messages to messengers use the same language.</p>
+            <p id="language-note" class="field-hint">Messenger messages use it too.</p>
           </div>
         </form>
         <form method="post" action="/settings/theme" class="theme-form" id="acc-theme" data-return-target="acc-theme" data-theme-form>
@@ -865,7 +856,7 @@
 
             </div>
           </fieldset>
-          <p id="theme-hint" class="field-hint">The colours of TOW&#39;s pages on every device. “As the system” follows the light or dark mode of the computer or phone that opens them.</p>
+          <p id="theme-hint" class="field-hint">Applies on every device.</p>
           <noscript><div class="settings-actions"><button type="submit">Save</button></div></noscript>
         </form>
       </div>
@@ -877,52 +868,51 @@
     <span class="pill mut">Off</span>
   </summary>
   <div class="settings-panel">
-    <p class="action-hint">Use this section when a site shows a Cloudflare browser challenge instead of a topic. If topics check without errors, you do not need to connect anything.</p>
+    <p class="action-hint">Only needed when a site shows a Cloudflare check instead of the topic.</p>
 
 
-    <details class="technical-details" id="protection-guide" open>
-      <summary>How it works and how to connect</summary>
-      <p>TOW tries ordinary mirrors first. If a Cloudflare challenge blocks access, an enabled service opens an anonymous public page in its browser. TOW receives clearance and checks the actual topic itself; a service response alone is not success.</p>
-      <ol><li>An On demand card means the module is already installed: no manual start is needed. For another connection, install and run your chosen service separately. TOW does not install services for you.</li><li>Choose the running service&#39;s type and enter its address, not a site or topic address. For example, http://127.0.0.1:8191 is a service on the TOW computer. Another computer needs its private-network IP; never expose the API to the internet.</li><li>Select Use this connection and the overall Use optional challenge recovery switch, then Save. On Sites, the site must allow these services; Off for this site takes precedence.</li><li>Open the failed topic on Home and select Check access now, or wait for its scheduled retry. TOW contacts a service only if ordinary mirrors encounter Cloudflare again. Saving settings does not test it.</li></ol>
+    <details class="technical-details notifier-steps" id="protection-guide" open>
+      <summary>How to connect</summary>
+      <ol><li>Install and start the service yourself (FlareSolverr, Byparr…). An “On demand” module is already installed.</li><li>Choose its type and enter its address, e.g. http://127.0.0.1:8191.</li><li>Tick “Use this connection” and “Use challenge recovery”, then Save.</li><li>On Home, open the failed topic and press “Check access now”.</li></ol>
       <p class="action-hint"><a href="/settings/help#site-access">Read more in the guide</a></p>
     </details>
     <form method="post" action="/settings/protection" class="settings-form form-grid protection-form" data-return-target="acc-protection">
       <fieldset>
         <legend class="sr-only">Site access</legend>
-        <label class="check-field"><input type="checkbox" name="enabled" value="1" aria-describedby="protection-enabled-hint"><span>Use optional challenge recovery</span></label>
-        <p class="field-hint" id="protection-enabled-hint">Overall switch for additional services. Ordinary mirrors and browser sign-in also work without them. The change applies when saved.</p>
+        <label class="check-field"><input type="checkbox" name="enabled" value="1" aria-describedby="protection-enabled-hint"><span>Use challenge recovery</span></label>
+        <p class="field-hint" id="protection-enabled-hint">Mirrors and browser sign-in work without it.</p>
         <div class="integration-list">
 
           <details class="integration-card protection-card">
-            <summary>Add a connection</summary>
+            <summary class="integration-head">
+              <h2>Add a connection</h2>
+
+            </summary>
             <input type="hidden" name="provider_id" value="new-connection-1">
 
-            <div class="field"><label for="protection-kind-new-connection-1">Service type</label><select id="protection-kind-new-connection-1" name="provider_kind" class="w-m" aria-describedby="protection-kind-hint-new-connection-1"><option value="">Choose a service</option><option value="byparr">Byparr</option><option value="flare_bypasser">FlareBypasser (zendriver)</option><option value="flaresolverr">FlareSolverr</option><option value="trawl">Trawl</option></select><p class="field-hint" id="protection-kind-hint-new-connection-1">Choose the program serving this address. Selecting a type does not install it.</p></div>
+            <div class="field"><label for="protection-kind-new-connection-1">Service type</label><select id="protection-kind-new-connection-1" name="provider_kind" class="w-m"><option value="">Choose a service</option><option value="byparr">Byparr</option><option value="flare_bypasser">FlareBypasser (zendriver)</option><option value="flaresolverr">FlareSolverr</option><option value="trawl">Trawl</option></select></div>
 
 
 
 
             <label class="check-field"><input type="checkbox" name="provider_enabled" value="new-connection-1"><span>Use this connection</span></label>
             <div class="field-row keep">
-              <div class="field"><label for="protection-url-new-connection-1">Service address</label><input id="protection-url-new-connection-1" name="provider_url" value="" class="w-l" placeholder="http://127.0.0.1:8191" maxlength="256" autocomplete="off" aria-describedby="protection-url-hint-new-connection-1"><p class="field-hint" id="protection-url-hint-new-connection-1">The service address TOW uses, not a site mirror. 127.0.0.1 means the TOW computer; /v1 may be omitted.</p></div>
-              <div class="field"><label for="protection-order-new-connection-1">Order</label><input id="protection-order-new-connection-1" name="provider_order" value="1" class="w-xs" type="number" min="1" max="16" inputmode="numeric" aria-describedby="protection-order-hint-new-connection-1"><p class="field-hint" id="protection-order-hint-new-connection-1">1 is first, 2 is next. Each number must be unique.</p></div>
+              <div class="field"><label for="protection-url-new-connection-1">Service address</label><input id="protection-url-new-connection-1" name="provider_url" value="" class="w-l" placeholder="http://127.0.0.1:8191" maxlength="256" autocomplete="off" spellcheck="false" aria-describedby="protection-url-hint-new-connection-1"><p class="field-hint" id="protection-url-hint-new-connection-1">127.0.0.1 is this computer; /v1 is optional.</p></div>
+              <div class="field"><label for="protection-order-new-connection-1">Order (1 = first)</label><input id="protection-order-new-connection-1" name="provider_order" value="1" class="w-xs" type="number" min="1" max="16" inputmode="numeric"></div>
             </div>
 
           </details>
 
         </div>
 
-        <p class="action-hint">If the first method fails, TOW considers the next within the shared call and time limit. Once that limit is reached, the next eligible check continues with later connections. Disabled connections and services in cooldown are not called.</p>
-        <p class="section-note">Connection status is the last observed response, not a test now. API answered does not prove topic access. Opening settings never starts a module; the topic on Home shows the last check result.</p>
         <details class="technical-details protection-limits">
           <summary>Attempt limits</summary>
           <div class="field-row">
-            <div class="field"><label for="protection-timeout">Total recovery time, seconds</label><input id="protection-timeout" name="timeout_sec" value="30" class="w-xs" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">One deadline for all service calls and independent access verification: 5–90 seconds. Not a timeout for each topic.</p></div>
-            <div class="field"><label for="protection-interval">Minimum retry interval, seconds</label><input id="protection-interval" name="min_interval_sec" value="1800" class="w-xs" type="number" min="60" max="86400" inputmode="numeric" aria-describedby="protection-interval-hint"><p class="field-hint" id="protection-interval-hint">Minimum pause before another recovery attempt for one site origin: 60–86400 seconds. 1800 s = 30 minutes. Not the global or personal topic timer; the error shows a scheduled retry when known.</p></div>
-            <div class="field"><label for="protection-attempts">Maximum service calls per recovery</label><input id="protection-attempts" name="max_attempts" value="2" class="w-xs" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">1 to 4 service calls in one recovery chain, shared across mirrors. A missing-clearance retry also consumes this limit. Not the number of topics checked.</p></div>
+            <div class="field"><label for="protection-timeout">Time limit, s</label><input id="protection-timeout" name="timeout_sec" value="30" class="w-xs" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">5–90, for the whole recovery.</p></div>
+            <div class="field"><label for="protection-interval">Retry after, s</label><input id="protection-interval" name="min_interval_sec" value="1800" class="w-xs" type="number" min="60" max="86400" inputmode="numeric" aria-describedby="protection-interval-hint"><p class="field-hint" id="protection-interval-hint">60–86400 per site; 1800 = 30 min.</p></div>
+            <div class="field"><label for="protection-attempts">Calls per recovery</label><input id="protection-attempts" name="max_attempts" value="2" class="w-xs" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">From 1 to 4.</p></div>
           </div>
         </details>
-        <p class="section-note">Save applies switches, addresses, order and limits. It does not start a service or download a .torrent.</p>
         <div class="settings-actions"><button type="submit">Save</button></div>
       </fieldset>
     </form>
@@ -935,7 +925,7 @@
 
     <details class="technical-details">
       <summary>Reset saved access</summary>
-      <p class="action-hint" id="protection-reset-hint">Use only for damaged saved data or a stale clearance problem. Removes Cloudflare clearance, retry reservations and service cooldowns; site passwords, connections and torrents remain. Reset does not install a module or cancel site limits. The old encrypted record stays in the temporary folder until cleanup; a running check blocks reset.</p>
+      <p class="action-hint" id="protection-reset-hint">Clears Cloudflare clearance, retry records and cooldowns. Sign-ins, connections and torrents stay. Not available during a check.</p>
       <form method="post" action="/settings/protection/reset" data-return-target="acc-protection" data-confirm="Reset saved site clearance, retry reservations and service cooldowns? Service settings and site sign-ins remain unchanged.">
         <button type="submit" class="ghost" aria-describedby="protection-reset-hint">Reset saved access</button>
       </form>

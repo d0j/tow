@@ -19,7 +19,6 @@ STEPS = (
     "notifier.whatsapp.step_contact",
     "notifier.whatsapp.step_allow",
     "notifier.whatsapp.step_apikey",
-    "notifier.whatsapp.step_save",
 )
 NOTE = "notifier.whatsapp.note"
 FIELDS = (

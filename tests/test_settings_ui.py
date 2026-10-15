@@ -29,16 +29,17 @@ def test_settings_explains_global_and_personal_timers(language, custom_minutes):
 
     page = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text
     interval = page.split('id="acc-intervals"', 1)[1].split('id="acc-access"', 1)[0]
+    # The label says what the number does; the hint, that a topic's own timer stays its own.
     if language == "ru":
-        assert '<label for="interval_min">Общий таймер</label>' in interval
-        assert "Активные раздачи без личного таймера проверяются раз в 2 ч." in interval
-        assert "Личный таймер задаётся при добавлении или редактировании раздачи." in interval
-        assert "Каждая раздача проверяется" not in interval
+        assert '<span class="pill mut">2 ч</span>' in interval
+        assert '<label for="interval_min">Проверять раздачи каждые</label>' in interval
+        assert "Раздачи с личным таймером проверяются по нему." in interval
+        assert "Общий таймер" not in interval
     else:
-        assert '<label for="interval_min">Global timer</label>' in interval
-        assert "Active topics without a personal timer are checked every 2 h." in interval
-        assert "Set a personal timer when adding or editing a topic." in interval
-        assert "Every watched topic is checked" not in interval
+        assert '<span class="pill mut">2 h</span>' in interval
+        assert '<label for="interval_min">Check topics every</label>' in interval
+        assert "Topics with a personal timer keep it." in interval
+        assert "Global timer" not in interval
 
 
 def test_settings_sections_follow_the_owners_order_and_language_holds_the_theme():
@@ -109,8 +110,8 @@ def test_settings_ui_is_sectioned_and_explains_actions():
     accordion_tags = re.findall(r'<details class="settings-section settings-accordion[^>]+>', page)
     assert len(accordion_tags) == 10  # protection is independently optional; language and theme share one
     assert all(" open" not in tag for tag in accordion_tags)
-    assert "Проверяются сохранённые настройки." in page
-    assert "После «Сохранить» появится кнопка «Проверить» — она отправит пробное сообщение." in page
+    assert "Проверяются сохранённые настройки." not in page  # Check is disabled while unsaved anyway
+    assert "появится кнопка «Проверить»" not in page  # it described a button that was not there
     assert 'data-confirm="Перезапустить TOW?' in page
     assert 'aria-describedby="allow-lan-hint' in page  # plus allow-lan-locked while there is no password
     assert 'aria-describedby="lan-password-hint"' in page
@@ -119,7 +120,7 @@ def test_settings_ui_is_sectioned_and_explains_actions():
     assert ".settings-page.settings-page-compact { width: 100%; max-width: none; }" in css
     assert "min-height: 0; padding: .38rem .62rem" in css
     assert 'action="/settings/client/add"' in page
-    assert "Поддерживаются: qBittorrent, Transmission, Deluge." in page
+    assert "Поддерживаются:" not in page  # the list below names them
     assert "пока не поддерживаются" not in page
     assert 'method="post" action="/settings/portable/export" data-native-submit' in page
     assert 'action="/settings/portable/import"' in page
@@ -130,7 +131,7 @@ def test_settings_ui_is_sectioned_and_explains_actions():
     assert "uv run --frozen tow import" not in page
     assert "Сохранённых копий нет</span>" in page
     assert 'action="/settings/restore-points"' in page
-    assert "Перед восстановлением TOW проверит копию" in page
+    assert "Хранятся 10 последних. Восстановление не меняет доступ по сети." in page
     assert ">Сохранить файл</button>" in page
     assert ">Проверить</button>" in page
     assert ">Восстановить</button>" in page
@@ -283,7 +284,7 @@ def test_settings_translates_restart_marker_to_human_status(monkeypatch):
     page = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text
     service = page.split('id="acc-service"', 1)[1].split('id="acc-language"', 1)[0]
 
-    assert "Веб-страница работает с:" in service
+    assert "<dt>Веб-страница работает с</dt>" in service
     assert "02.10" in service
     assert "Последний перезапуск по запросу:" in service
     assert "из настроек" in service
@@ -455,3 +456,31 @@ def test_secret_fields_have_an_eye_and_the_right_autofill():
             rf'data-reveal="{field_id}"[^>]* aria-controls="{field_id}" aria-pressed="false"',
             page,
         ), field_id
+
+
+def test_settings_say_each_thing_once_and_the_guide_keeps_the_long_texts():
+    """The Settings page carried 1239 words (S2, English): instructions repeated beside their
+    buttons, architecture, absent events. The shortened texts keep what is needed; the long
+    site-access explanation stays in the guide, word for word."""
+    from markupsafe import escape
+
+    from tow.config import load_config, save_config
+    from tow.i18n import translate
+
+    cfg = load_config()
+    cfg["language"] = "en"
+    save_config(cfg)
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    page = client.get("/settings").text
+    assert "press “Save”, then “Check”" not in page  # the buttons are right below the steps
+    assert "TOW runs as one service" not in page
+    assert "has not been restarted from here yet" not in page
+    assert "Installed: TOW" not in page.split('id="acc-updates"', 1)[1].split('id="acc-service"', 1)[0]
+    assert "TOW tries ordinary mirrors first" not in page  # how it works: the guide
+    # Kept, briefly: what a remote reader can see, and that the network needs the password.
+    assert "Anyone who opens the sign-in page can read it — never include the password." in page
+    assert "Turning it on takes effect after TOW restarts; turning it off works at once." in page
+    guide = client.get("/settings/help").text
+    for key in ("guide_hint", "sequence", "guide_step_install", "guide_step_address", "guide_step_enable"):
+        assert str(escape(translate(f"protection_ui.{key}", "en"))) in guide, key
+    assert "TOW does not install services for you." in guide

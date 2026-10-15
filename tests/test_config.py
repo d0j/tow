@@ -471,7 +471,7 @@ def test_the_checks_card_says_when_a_new_interval_applies():
     from tow.web import app
 
     page = TestClient(app).get("/settings").text
-    assert "Новый интервал начинает действовать в течение минуты" in page
+    assert "Новое значение действует в течение минуты" in page
 
 
 def test_the_example_config_states_when_release_discovery_runs():

@@ -18,7 +18,6 @@ STEPS = (
     "notifier.discord.step_channel",
     "notifier.discord.step_new",
     "notifier.discord.step_copy",
-    "notifier.discord.step_save",
 )
 NOTE = "notifier.discord.note"
 FIELDS = (

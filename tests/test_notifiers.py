@@ -792,8 +792,8 @@ def test_settings_show_the_watchdogs_last_message():
     from tow.paths import data_dir
 
     page = _client().get("/settings").text
-    assert "Сторож следит за расписанием" in page
-    assert "сам сторож TOW не перезапускает" in page
+    assert "Сторож сообщает о простое в мессенджеры" in page
+    assert "сам TOW он не перезапускает" in page
     assert "Последнее сообщение сторожа" not in page
     (data_dir() / "watchdog.json").write_text(
         json.dumps(

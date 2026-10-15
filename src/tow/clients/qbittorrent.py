@@ -29,7 +29,6 @@ STEPS = (
     "client.qbittorrent.step_open",
     "client.qbittorrent.step_enable",
     "client.qbittorrent.step_address",
-    "client.qbittorrent.step_save",
 )
 NOTE = "client.qbittorrent.note"
 # Who reports the errors (in front of each message).
