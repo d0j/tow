@@ -30,6 +30,13 @@ _SECRET_FIELD_NAMES = frozenset(
 )
 _SECRET_FIELD_SUFFIXES = ("_password", "_passwd", "_token", "_cookies", "_api_key")
 
+
+def credential_name(key: str) -> bool:
+    """A field so named holds a credential: refused outside the encrypted secrets (unless empty)."""
+    lowered = key.lower()
+    return lowered in _SECRET_FIELD_NAMES or lowered.endswith(_SECRET_FIELD_SUFFIXES)
+
+
 # A field of that shape TOW itself writes that is not a credential: a messenger delivery's
 # claim in state.json (``notify_lease.<recipient>.token``, "<pid>:<thread>:<12 hex>"), as TOW
 # 1.28 and older named it (now ``owner``). Exempt only there and only in that exact form: a
@@ -164,17 +171,16 @@ def _secret_segments(value: Any, seen: set[int], *, store: str = "") -> list[str
                 path.pop()
             continue
         segment = str(key) if mapping else key
-        if mapping and not data_keys:
-            lowered = str(key).lower()
-            is_secret_name = lowered in _SECRET_FIELD_NAMES or lowered.endswith(_SECRET_FIELD_SUFFIXES)
-            if (
-                is_secret_name
-                and item not in (None, "", False, True)
-                and not (state and _legacy_lease_owner(path, str(key), item))
-                and not (state and _legacy_mirror_order(path, str(key), item))
-                and not (state and _legacy_content_ref(path, str(key), item))
-            ):
-                return [*path, segment]
+        if (
+            mapping
+            and not data_keys
+            and credential_name(str(key))
+            and item not in (None, "", False, True)
+            and not (state and _legacy_lease_owner(path, str(key), item))
+            and not (state and _legacy_mirror_order(path, str(key), item))
+            and not (state and _legacy_content_ref(path, str(key), item))
+        ):
+            return [*path, segment]
         if isinstance(item, (dict, list)) and id(item) not in seen:
             seen.add(id(item))
             path.append(segment)
