@@ -298,7 +298,7 @@ def _doctor_view(report: dict[str, Any] | None) -> dict[str, Any] | None:
     view["probes"] = [
         {
             **probe,
-            "text": t("doctor.probe_ok", status=probe.get("status") or "")
+            "text": t("doctor.probe_ok")  # its HTTP status is the pill's tooltip
             if probe.get("ok")
             else services.doctor_reason(str(probe.get("error") or "")),
         }

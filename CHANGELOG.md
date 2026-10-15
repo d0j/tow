@@ -59,6 +59,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   show only for a yes, each password with an eye, and “Start” with the box clear does what “Later — this
   computer only” did. The sign-in page is compact, with an eye on its password field, and says a sign-in
   that ended in a note above it.
+- Diagnostics no longer writes the HTTP status beside every mirror that answers (it is the tooltip), and the
+  page for an unknown address says one sentence.
 
 ### Fixed
 
