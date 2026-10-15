@@ -902,6 +902,57 @@ def test_the_switch_record_is_flushed_to_disk(install, github, monkeypatch):
     assert flushed  # the record of the switch, its cut-off time and its acceptance
 
 
+def test_the_snapshot_and_the_updaters_copy_are_on_disk_before_the_code_is_switched(install, github, monkeypatch):
+    """A power cut while the code moves must find the snapshot and runtime/update.py whole: both
+    were left in the system's cache, and the recovery then refused a damaged snapshot (the data
+    never touched) or the start files ran a cut-off update.py."""
+    github.release("v1.23.0", tarball("1.23.0"))
+    points = install["root"] / "data" / "restore-points"
+    points.mkdir()
+    (points / "20261001T000000Z-0123abcd.towx").write_bytes(b"synthetic point")
+    synced: list[str] = []
+    real_sync = getattr(updater, "_sync", None)
+
+    def sync(handle):
+        synced.append(Path(handle.name).name)
+        real_sync(handle)
+
+    monkeypatch.setattr(updater, "_sync", sync, raising=False)
+    before_switch: list[str] = []
+    real_journal = updater.ArchiveCode._write_journal
+
+    def journal(self, record):
+        if record["phase"] == "switching":
+            before_switch.extend(synced)
+        real_journal(self, record)
+
+    monkeypatch.setattr(updater.ArchiveCode, "_write_journal", journal)
+
+    code, lines = run(Machine(install["app"], github), "v1.23.0")
+
+    assert code == 0, lines
+    snapshot = {"state.json", "20261001T000000Z-0123abcd.towx", "config.yaml", "SNAPSHOT.json"}
+    assert snapshot <= set(before_switch), before_switch
+    assert ".update.py.tmp" in before_switch  # written beside runtime/update.py, flushed, then renamed
+    assert (install["root"] / "runtime" / "update.py").read_bytes() == SCRIPT.read_bytes()
+
+
+def test_an_unchanged_copy_of_the_updater_is_not_written_again(install, github, monkeypatch):
+    github.release("v1.23.0", tarball("1.23.0"))
+    copy = install["root"] / "runtime" / "update.py"
+    copy.parent.mkdir()
+    copy.write_bytes(SCRIPT.read_bytes())
+    writes: list[str] = []
+    real_copy, real_replace = updater.shutil.copy2, updater.os.replace
+    monkeypatch.setattr(updater.shutil, "copy2", lambda src, dst, **kw: writes.append(str(dst)) or real_copy(src, dst))
+    monkeypatch.setattr(updater.os, "replace", lambda src, dst: writes.append(str(dst)) or real_replace(src, dst))
+
+    code, lines = run(Machine(install["app"], github), "v1.23.0")
+
+    assert code == 0, lines
+    assert str(copy) not in writes
+
+
 @pytest.mark.allow_system  # this Python runs the copy; a refused tag ends it before TOW is stopped or started
 def test_the_copy_in_runtime_updates_the_install_it_belongs_to(install):
     # The start files run <TOW>/runtime/update.py while a switch record exists: it must find

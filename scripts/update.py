@@ -244,6 +244,49 @@ def _hash(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _sync(handle: Any) -> None:
+    """What was written through ``handle`` is on the disk, not only in the system's cache."""
+    handle.flush()
+    os.fsync(handle.fileno())
+
+
+def _sync_folder(folder: Path) -> None:
+    """The folder's entries (a file created or renamed in it) are on the disk too, where the system
+    can do it: not on Windows, where a folder cannot be opened so (NTFS journals them)."""
+    with contextlib.suppress(OSError):
+        handle = os.open(folder, os.O_RDONLY)
+        try:
+            os.fsync(handle)
+        finally:
+            os.close(handle)
+
+
+def durable_copy(source: Path, destination: Path) -> None:
+    """``destination`` holds ``source``'s bytes on the disk when this returns (times and mode as
+    shutil.copy2 copies them): a power cut right after cannot leave it empty or cut short."""
+    with source.open("rb") as reader, destination.open("wb") as writer:
+        shutil.copyfileobj(reader, writer, 1024 * 1024)
+        _sync(writer)
+    shutil.copystat(source, destination)
+
+
+def replace_durably(source: Path, target: Path) -> None:
+    """``target`` becomes a copy of ``source`` through a flushed temporary file beside it and a
+    rename, and only when it differs: a power cut leaves the old copy or the new one, whole."""
+    content = source.read_bytes()
+    if target.is_file() and target.read_bytes() == content:
+        return
+    temporary = target.with_name(f".{target.name}.tmp")
+    try:
+        durable_copy(source, temporary)
+        os.replace(temporary, target)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            temporary.unlink()  # never left beside the copy (missing when the copy failed)
+        raise
+    _sync_folder(target.parent)
+
+
 def _kept(relative: Path) -> bool:
     if any(part in SKIP_DIRS for part in relative.parts[:-1]):
         return False
@@ -996,12 +1039,7 @@ class ArchiveCode:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, self.journal)
-        with contextlib.suppress(OSError):  # the folder entry too, where the system can (not Windows)
-            folder = os.open(self.journal.parent, os.O_RDONLY)
-            try:
-                os.fsync(folder)
-            finally:
-                os.close(folder)
+        _sync_folder(self.journal.parent)  # the folder entry too, where the system can (not Windows)
 
     def recover_pending(self, *, finalize: bool = True) -> str | None:
         """Idempotently put back the old code after a hard interruption."""
@@ -1176,7 +1214,8 @@ class ArchiveCode:
         stable = self.work.root / "runtime" / "update.py"
         stable.parent.mkdir(parents=True, exist_ok=True)
         if stable.resolve() != HERE:  # not when this is that copy, run by the start files
-            shutil.copy2(HERE, stable)  # callable even if app/scripts disappears mid-switch
+            # Callable even if app/scripts disappears mid-switch, and whole after a power cut.
+            replace_durably(HERE, stable)
         remove_tree(self.prev)  # one previous version is kept
         self.prev.mkdir()
         self.moved_out, self.moved_in = [], []
@@ -1559,20 +1598,23 @@ class Update:
         ours = not folder.exists()
         try:
             try:
+                # Every file and folder is on the disk before the code is switched: a power cut
+                # mid-switch otherwise left a snapshot the recovery refused as damaged.
                 self.manifest = data_files(data)
+                folders = {folder.parent, folder, folder / "data"}
                 for relative in self.manifest:
                     destination = folder / "data" / relative
                     destination.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(data / relative, destination)
-                shutil.copy2(self.root / "config.yaml", folder / "config.yaml")
+                    durable_copy(data / relative, destination)
+                    folders.update(parent for parent in destination.parents if parent.is_relative_to(folder))
+                durable_copy(self.root / "config.yaml", folder / "config.yaml")
                 self.manifest["../config.yaml"] = _hash(self.root / "config.yaml")
-                (folder / "SNAPSHOT.json").write_text(
-                    json.dumps(
-                        {"ref": self.ref, "target": target, "created_at": _now_iso(), "files": self.manifest}, indent=2
-                    )
-                    + "\n",
-                    encoding="utf-8",
-                )
+                with (folder / "SNAPSHOT.json").open("w", encoding="utf-8") as handle:
+                    record = {"ref": self.ref, "target": target, "created_at": _now_iso(), "files": self.manifest}
+                    handle.write(json.dumps(record, indent=2) + "\n")
+                    _sync(handle)
+                for entry in sorted(folders, key=lambda path: len(path.parts), reverse=True):
+                    _sync_folder(entry)
             except OSError as exc:
                 raise UpdateError(self.text("snapshot_failed", error=exc)) from exc
             self._load_snapshot(folder)  # read back every byte before switching the code
@@ -1702,15 +1744,9 @@ class Update:
         new = self.app / "scripts" / "update.py"
         if not isinstance(self.code, ArchiveCode) or not stable.is_file() or not new.is_file():
             return
-        temporary = stable.with_name(".update.py.tmp")
         try:
-            if new.read_bytes() == stable.read_bytes():
-                return
-            shutil.copy2(new, temporary)
-            os.replace(temporary, stable)
+            replace_durably(new, stable)
         except OSError as exc:
-            with contextlib.suppress(OSError):
-                temporary.unlink()  # never left beside the copy (missing when the copy failed)
             self.say("root_files_failed", error=exc)
 
     # --- the run -----------------------------------------------------------------------------
