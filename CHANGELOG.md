@@ -42,6 +42,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A torrent client card in Settings that does not answer shows one red note and a red Not answering pill instead
   of a red line under a grey Set up pill; the Torrent clients section turns red for an additional client that
   does not answer too, not only for the main one.
+- The problems Settings keeps showing (a messenger that fails, autostart that belongs to another TOW folder, a
+  failed night backup, an unreadable list of copies, site access that cannot be read) are the same notes as the
+  others, red or amber by what they are; a failed night backup and a lost data folder stay two separate notes.
 
 ## [1.30.11] — 2026-10-15
 

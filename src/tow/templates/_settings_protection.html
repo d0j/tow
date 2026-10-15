@@ -1,3 +1,4 @@
+{%- from "_note.html" import note -%}
 <details class="settings-section settings-accordion acc" id="acc-protection"{% if open_section == 'protection' %} open{% endif %} data-q="{{ t('protection_ui.search') }}">
   <summary>
     <span class="settings-summary-title">{{ t('protection_ui.title') }}</span>
@@ -5,8 +6,8 @@
   </summary>
   <div class="settings-panel">
     <p class="action-hint">{{ t('protection_ui.hint') }}</p>
-    {% if protection.store_unavailable %}<p class="form-error" role="status">{{ t('protection_ui.store_unavailable') }}</p>{% endif %}
-    {% if not access_local %}<p class="action-hint" role="status">{{ t('protection_ui.local_only') }}</p>{% endif %}
+    {% if protection.store_unavailable %}{{ note(t('protection_ui.store_unavailable'), 'bad') }}{% endif %}
+    {% if not access_local %}<p class="action-hint" role="note">{{ t('protection_ui.local_only') }}</p>{% endif %}
     <details class="technical-details" id="protection-guide" open>
       <summary>{{ t('protection_ui.how_to') }}</summary>
       <p>{{ t('protection_ui.sequence') }}</p>
@@ -26,8 +27,8 @@
             {% if p.new %}
             <div class="field"><label for="protection-kind-{{ p.id }}">{{ t('protection_ui.service_kind') }}</label><select id="protection-kind-{{ p.id }}" name="provider_kind" aria-describedby="protection-kind-hint-{{ p.id }}"><option value="">{{ t('protection_ui.choose_kind') }}</option>{% for choice in protection.choices %}<option value="{{ choice.kind }}">{{ choice.title }}</option>{% endfor %}</select><p class="field-hint" id="protection-kind-hint-{{ p.id }}">{{ t('protection_ui.service_kind_hint') }}</p></div>
             {% else %}<input type="hidden" name="provider_kind" value="{{ p.kind }}">{% endif %}
-            {% if not p.available %}<p class="form-error" role="status">{{ t('protection_ui.unavailable') }}</p>{% endif %}{% if p.local_runtime_refused %}<p class="form-error" role="status">{{ t('protection_ui.local_runtime_refused') }}</p>{% endif %}
-            {% if not p.new and p.available %}<p class="action-hint" role="status">{% if not p.enabled or not protection.enabled %}{{ t('protection_ui.off') }}{% elif p.retry_sec %}{{ t('protection_ui.api_pause', seconds=p.retry_sec) }} · {{ t(p.api_key) }}{% else %}{{ t(p.api_key) }}{% endif %}</p>{% endif %}
+            {% if not p.available %}{{ note(t('protection_ui.unavailable'), 'bad') }}{% endif %}{% if p.local_runtime_refused %}{{ note(t('protection_ui.local_runtime_refused'), 'bad') }}{% endif %}
+            {% if not p.new and p.available %}<p class="action-hint" role="note">{% if not p.enabled or not protection.enabled %}{{ t('protection_ui.off') }}{% elif p.retry_sec %}{{ t('protection_ui.api_pause', seconds=p.retry_sec) }} · {{ t(p.api_key) }}{% else %}{{ t(p.api_key) }}{% endif %}</p>{% endif %}
             {% if p.on_demand %}<p class="action-hint">{{ t('protection_ui.on_demand_details') }}</p>{% endif %}
             <label class="check-field"><input type="checkbox" name="provider_enabled" value="{{ p.id }}"{% if p.enabled %} checked{% endif %}><span>{{ t('protection_ui.provider_enabled') }}</span></label>
             <div class="field-grid">

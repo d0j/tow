@@ -197,13 +197,13 @@
               {% endif %}
             </summary>
             {% if n.connected and n.error %}
-            <p class="form-error" role="status">{{ n.error }}</p>
+            {{ note(n.error, 'bad') }}
             {% endif %}
             {% if n.queued %}
             <p class="action-hint">{{ t('settings.notify.queued', count=n.queued, name=n.title) }}</p>
             {% endif %}
             {% if n.dropped %}
-            <p class="form-error" role="status">{{ t('settings.notify.dropped', count=n.dropped) }}</p>
+            {{ note(t('settings.notify.dropped', count=n.dropped), 'bad') }}
             {% endif %}
             <details class="technical-details notifier-steps" {% if not n.connected %}open{% endif %}>
               <summary>{{ t('settings.common.how_to_connect') }}</summary>
@@ -279,7 +279,7 @@
       <div class="settings-panel">
         <p class="action-hint">{{ t('settings.access.intro') }}</p>
         {% if allow_lan and not lan_password_set %}
-        <p class="notice neutral" role="status">{{ tm('settings.access.no_password') }}</p>
+        {{ note(tm('settings.access.no_password')) }}
         {% endif %}
         <div class="integration-list">
           {% if access_local or lan_password_set %}
@@ -352,7 +352,7 @@
               <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved') }}</p>
             </form>
             {% else %}
-            <p class="notice neutral">{{ t('settings.access.local_only') }}</p>
+            {{ note(t('settings.access.local_only')) }}
             {% endif %}
           </article>
         </div>
@@ -431,8 +431,8 @@
           </div>
           <noscript><button type="submit">{{ t('settings.service.apply') }}</button></noscript>
         </form>
-        {% if service.autostart_foreign %}<p class="form-error warn" role="status">{{ t('doctor.autostart_foreign', where=(service.autostart_detail or {}).get('where') or 'TOW') }}</p>{% endif %}
-        {% if service.autostart_stale %}<p class="form-error warn" role="status">{{ t('doctor.autostart_stale', where=(service.autostart_detail or {}).get('where') or 'TOW') }}</p>{% endif %}
+        {% if service.autostart_foreign %}{{ note(t('doctor.autostart_foreign', where=(service.autostart_detail or {}).get('where') or 'TOW'), 'warn') }}{% endif %}
+        {% if service.autostart_stale %}{{ note(t('doctor.autostart_stale', where=(service.autostart_detail or {}).get('where') or 'TOW'), 'warn') }}{% endif %}
         {% if service.supports_without_login and service.autostart %}
         <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
           <input type="hidden" name="enabled" value="1">
@@ -462,9 +462,9 @@
         <p class="restart-result">{{ t('settings.service.running_since') }} <b>{{ service.running_since }}</b>.</p>
         {% endif %}
         {% if service.restart_view %}
-        <p class="restart-result{% if service.restart_view.failed %} error{% endif %}" role="status">{{ t('settings.service.last_restart') }} <b>{{ service.restart_view.at }}</b> · {{ service.restart_view.reason }} · {{ service.restart_view.state }}.</p>
+        <p class="restart-result{% if service.restart_view.failed %} error{% endif %}" role="note">{{ t('settings.service.last_restart') }} <b>{{ service.restart_view.at }}</b> · {{ service.restart_view.reason }} · {{ service.restart_view.state }}.</p>
         {% else %}
-        <p class="restart-result" role="status">{{ t('settings.service.no_restarts') }}</p>
+        <p class="restart-result" role="note">{{ t('settings.service.no_restarts') }}</p>
         {% endif %}
         <details class="technical-details">
           <summary>{{ t('settings.common.technical') }}</summary>
@@ -509,9 +509,9 @@
               <div><h2 id="backup-night-title">{{ t('settings.backups.night_title') }}</h2><p>{{ t('settings.backups.night_hint') }}</p></div>
               {% if backups.cleanup_pending or (night_cleanup_unknown and backups.snapshots) %}<span class="pill warn">{{ t('settings.backups.pill_cleanup' if backups.cleanup_pending else 'settings.backups.pill_unknown') }}</span>{% endif %}
             </div>
-            {{ issue_notes_at(notes, 'backup-night') }}{% if backups.read_error %}<p class="form-error" role="alert">{{ backups.error }}</p>{% elif backups.failed %}<p class="form-error" role="alert">{{ t('settings.backups.failed', at=backups.error_at, error=backups.error) }}</p>{% endif %}
-            {% if backups.cleanup_pending %}<p class="section-note" role="status">{{ t('backup.snapshot.cleanup_warning') }}</p>{% endif %}
-            {% if backups.cleanup_legacy %}<p class="section-note" role="status">{{ t('backup.snapshot.cleanup_legacy') }}</p>{% elif night_cleanup_unknown %}<p class="section-note" role="status">{{ t('backup.snapshot.cleanup_unknown') }}</p>{% endif %}
+            {{ issue_notes_at(notes, 'backup-night') }}{% if backups.read_error %}{{ note(backups.error, 'bad') }}{% elif backups.failed %}{{ note(t('settings.backups.failed', at=backups.error_at, error=backups.error), 'bad') }}{% endif %}{# one note per condition: a lost data folder (its issue) and a failed copy are two #}
+            {% if backups.cleanup_pending %}<p class="section-note" role="note">{{ t('backup.snapshot.cleanup_warning') }}</p>{% endif %}
+            {% if backups.cleanup_legacy %}<p class="section-note" role="note">{{ t('backup.snapshot.cleanup_legacy') }}</p>{% elif night_cleanup_unknown %}<p class="section-note" role="note">{{ t('backup.snapshot.cleanup_unknown') }}</p>{% endif %}
             <form method="post" action="/settings/backup/now" data-return-target="acc-transfer" class="settings-actions backup-make">
               <button type="submit" data-busy-label="{{ t('common.busy.copying') }}">{{ t('settings.backups.make_now') }}</button>
             </form>
@@ -564,8 +564,8 @@
               <div><h2 id="backup-manual-title">{{ t('settings.backups.manual_title') }}</h2><p>{{ t('settings.backups.manual_note') }}</p></div>
               <span class="pill {{ 'warn' if backups.point_cleanup_pending or point_cleanup_unknown else ('ok' if restore_points else 'mut') }}">{% if backups.point_cleanup_pending %}{{ t('settings.backups.pill_cleanup') }}{% elif point_cleanup_unknown %}{{ t('settings.backups.pill_unknown') }}{% elif restore_points %}{{ t('settings.backups.saved_count', n=restore_points|length) }}{% else %}{{ t('settings.backups.manual_empty') }}{% endif %}</span>
             </div>
-            {% if backups.point_cleanup_pending %}<p class="section-note" role="status">{{ t('backup.restore_point.cleanup_pending') }}</p>{% endif %}
-            {% if point_cleanup_unknown %}<p class="section-note" role="status">{{ t('backup.restore_point.cleanup_legacy' if backups.point_cleanup_legacy else 'backup.restore_point.cleanup_unknown') }}</p>{% endif %}
+            {% if backups.point_cleanup_pending %}<p class="section-note" role="note">{{ t('backup.restore_point.cleanup_pending') }}</p>{% endif %}
+            {% if point_cleanup_unknown %}<p class="section-note" role="note">{{ t('backup.restore_point.cleanup_legacy' if backups.point_cleanup_legacy else 'backup.restore_point.cleanup_unknown') }}</p>{% endif %}
             <form method="post" action="/settings/restore-points" data-return-target="acc-transfer" class="settings-actions backup-make">
               <button type="submit" data-busy-label="{{ t('common.busy.copying') }}">{{ t('settings.backups.create') }}</button>
             </form>

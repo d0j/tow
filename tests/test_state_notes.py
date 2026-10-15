@@ -194,3 +194,50 @@ def test_a_client_that_answers_has_no_note(client):
     page = _page(client, "/settings")
     assert page.select("#client-default [role=note]") == []
     assert page.select_one("#client-default .integration-pills .pill.bad") is None
+
+
+SETTINGS_SOURCES = ("settings.html", "_settings_protection.html")
+
+
+@pytest.mark.parametrize("name", SETTINGS_SOURCES)
+def test_lasting_states_are_notes_not_alerts_or_field_errors(name):
+    """Sol 7 / audit 3.5: static state blocks used role status (client, messengers, autostart),
+    alert (backups, the master key) and note (the topic's last error) for the same kind of content,
+    and .form-error - the field validation style - for states. They are notes now; .form-error is
+    left to field validation, role alert to what a submit refused."""
+    source = (TEMPLATES / name).read_text(encoding="utf-8")
+    assert "form-error" not in source
+    assert 'role="alert"' not in source
+    assert "notice error" not in source
+    assert "notice neutral" not in source
+    static_status = [
+        line.strip()[:80]
+        for line in source.splitlines()
+        if 'role="status"' in line
+        and not any(live in line for live in ("data-", "unsaved-state", "copy-command-status", "sr-only"))
+    ]
+    assert static_status == []  # a live region only where a script changes the words
+
+
+def test_backup_failures_are_red_notes_beside_the_lost_data_note(client, monkeypatch):
+    """D7: the night copies card showed an amber issue note beside a red .form-error (role alert):
+    two styles for two different failures. Both are kept, in one component, each in its colour."""
+    _state()
+    monkeypatch.setattr(services, "data_lost", lambda: {"at": 1, "folder": "D:\\TOW\\data"})
+    monkeypatch.setattr(
+        "tow.web.routes_settings.backup_view",
+        lambda cfg, request: {**_real_backup_view(cfg, request), "failed": True, "error": "disk full", "error_at": "x"},
+    )
+    card = _page(client, "/settings").select_one("#backup-night")
+    notes = card.select(".notice")
+    assert [(n.get("data-issue-id"), n["class"]) for n in notes] == [
+        ("data_lost", ["notice", "bad"]),
+        (None, ["notice", "bad"]),
+    ]
+    assert "disk full" in notes[1].get_text()
+
+
+def _real_backup_view(cfg, request):
+    from tow.web.views import backup_view
+
+    return backup_view(cfg, request)
