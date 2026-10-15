@@ -222,10 +222,24 @@ def topic_check_row(topic_id: str, out: dict[str, Any]) -> CheckRow | None:
     return next((r for r in out.get("results") or [] if str(r.get("id")) == str(topic_id)), None)
 
 
+# A row of a check's report in the status-colour contract (AGENTS.md): a failure of the site's
+# transport is amber, any other failure red, waiting amber, new data blue, a skip grey.
+_REPORT_TONES = {"pending": "warn", "skipped": "mut", "new": "new", "same": "ok"}
+
+
+def _report_tone(outcome: str, row: CheckRow) -> str:
+    if outcome == "fail":
+        return "warn" if row_class(row) in TRACKER_WARNING_CLASSES else "bad"
+    return _REPORT_TONES[outcome]
+
+
 def check_report(out: dict[str, Any], *, apply: bool) -> dict[str, Any]:
-    """Mutually exclusive outcomes: waiting/skipped/unsaved are not failed or unchanged."""
+    """Mutually exclusive outcomes: waiting/skipped/unsaved are not failed or unchanged. Each row
+    has its colour (``tone``); the report's ``kind`` is its worst result's (a red failure stays
+    red however many rows passed); a reason that only repeats its row's label is left out."""
     counts = services.check_outcome_counts(out.get("results") or [])
     details: list[dict[str, str]] = []
+    tones: set[str] = set()
     labels = {
         "new": "web.check_all.outcome_new",
         "same": "web.check_all.outcome_same",
@@ -259,6 +273,11 @@ def check_report(out: dict[str, Any], *, apply: bool) -> dict[str, Any]:
             )
         else:
             reason = t("web.common.no_changes")
+        tone = _report_tone(outcome, row)
+        tones.add(tone)
+        label = t("web.check_all.outcome_preview" if not apply and outcome == "new" else labels[outcome])
+        if outcome == "same" or reason.strip().casefold() in {label.casefold(), t("web.common.no_changes").casefold()}:
+            reason = ""  # "Unchanged ... no changes" said it twice
         if len(details) < 100:
             topic_id = str(row.get("id") or "")
             details.append(
@@ -266,7 +285,8 @@ def check_report(out: dict[str, Any], *, apply: bool) -> dict[str, Any]:
                     "topic_id": topic_id if re.fullmatch(r"[A-Za-z0-9_-]{1,64}", topic_id) else "",
                     "title": services.scrub_text(shown_title(row))[:200],
                     "outcome": outcome,
-                    "label": t("web.check_all.outcome_preview" if not apply and outcome == "new" else labels[outcome]),
+                    "tone": tone,
+                    "label": label,
                     "reason": humanize(services.scrub_text(reason))[:1000],
                 }
             )
@@ -286,7 +306,8 @@ def check_report(out: dict[str, Any], *, apply: bool) -> dict[str, Any]:
         )
         or t("web.check_all.empty")
     )
-    return {"summary": summary, "counts": counts, "rows": details, "total": sum(counts.values())}
+    kind = "err" if "bad" in tones else "warn" if "warn" in tones else "ok"
+    return {"summary": summary, "counts": counts, "rows": details, "total": sum(counts.values()), "kind": kind}
 
 
 def check_progress(job: Mapping[str, Any]) -> str:

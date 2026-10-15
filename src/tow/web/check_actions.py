@@ -106,8 +106,8 @@ def _job_result(job: dict[str, Any], out: dict[str, Any]) -> tuple[str, str, str
         feedback = topic_feedback(topic_id, row, adopted=bool(job.get("adopted")))
         flash, status, kind = feedback["text"], "done" if row is not None else "failed", feedback["kind"]
     else:
-        waiting_or_failed = report["counts"]["fail"] or report["counts"]["pending"]
-        flash, status, kind = report["summary"], "done", "warn" if waiting_or_failed else "ok"
+        # The worst result's colour: a red failure is not made amber by the rows that passed.
+        flash, status, kind = report["summary"], "done", report["kind"]
     if status == "done":
         with check_jobs.LOCK:
             job["report"] = report

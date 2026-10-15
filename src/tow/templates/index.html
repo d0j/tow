@@ -6,24 +6,24 @@
 <div class="issue-note check-activity" id="check-activity" role="status"><span>{{ check_activity_title }} — <span data-check-status{% if check_activity_result %} data-check-result-pending{% endif %}>{{ check_activity_text }}</span></span>{% if not check_activity_result %} <a href="/?check_result={{ check_activity_id|urlencode }}{% if not (check_activity and check_activity.topic_id) %}#check-result{% endif %}">{{ t('web.check_all.results') }}</a>{% endif %}{% if check_activity and check_activity.status == 'queued' %}<form method="post" action="/check/{{ check_activity.id|urlencode }}/cancel"><button type="submit" class="ghost">{{ t('web.check_all.cancel') }}</button></form>{% endif %}</div>
 {% endif %}
 {% if check_result_requested %}
+{#- Check all's report: page content, closed in place (only its own parameter goes). -#}
 <section class="card check-results" id="check-result" aria-labelledby="check-result-title">
-  <h2 id="check-result-title">{{ t('web.check_all.results') }}</h2>
+  <div class="check-results-head"><h2 id="check-result-title">{{ t('web.check_all.results') }}</h2><a class="flash-x" href="{{ check_result_close }}" data-check-result-close aria-label="{{ t('base.close') }}" title="{{ t('base.close') }}">{{ icon('close', 'sm') }}</a></div>
   {% if check_result_at %}<p class="sub">{{ check_result_at }}</p>{% endif %}
   {% if check_result and check_result.report %}
   <p>{{ check_result.report.summary|sentence }}</p>
-  <p class="sub">{{ t('web.check_all.observation') }}</p>
+  {% if check_result.report.rows %}<p class="sub">{{ t('web.check_all.observation') }}</p>{% endif %}
   <ul class="check-result-list">
     {% for row in check_result.report.rows %}
-    <li class="check-result-row"><span class="pill {{ 'bad' if row.outcome == 'fail' else 'warn' if row.outcome == 'pending' else 'mut' if row.outcome == 'skipped' else 'ok' }}">{{ row.label }}</span>
+    <li class="check-result-row"><span class="pill {{ row.tone or ('bad' if row.outcome == 'fail' else 'warn' if row.outcome == 'pending' else 'mut' if row.outcome == 'skipped' else 'ok') }}">{{ row.label }}</span>
       {% if row.topic_id %}<a href="/?open={{ row.topic_id|urlencode }}&amp;spot=row-{{ row.topic_id|urlencode }}#row-{{ row.topic_id|urlencode }}">{{ row.title or t('home.head.torrent') }}</a>{% else %}<span>{{ row.title or t('home.head.torrent') }}</span>{% endif %}
-      <span>{{ row.reason }}</span></li>
+      {% if row.reason %}<span>{{ row.reason }}</span>{% endif %}</li>
     {% endfor %}
   </ul>
   {% if check_result.report.total > check_result.report.rows|length %}<p class="sub">{{ t('web.check_all.more', n=check_result.report.total) }}</p>{% endif %}
-  {% elif check_result and check_result.status in ['running', 'queued'] %}<p data-check-result-pending>{{ t('web.check_all.waiting') }}</p>
   {% elif check_result %}{% if check_result_message %}<p>{{ check_result_message|sentence }}</p>{% endif %}
   {% else %}<p>{{ t('web.check_all.unconfirmed') }}</p>{% endif %}
-  <p><a href="/history?group=errors">{{ t('web.check_all.history') }}</a> · <a href="/">{{ t('base.close') }}</a></p>
+  <p><a href="/history?group=errors">{{ t('web.check_all.history') }}</a></p>
 </section>
 {% endif %}
 {# The draft comes only from the server's own record of a refused add (?add=<token>), never

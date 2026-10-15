@@ -26,6 +26,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   or a copied command cannot be confirmed - it says so as a message about that topic, with a link to reload or
   to open the form as a page, instead of grey text that covered the topic's row. A request whose answer was
   lost says the result could not be confirmed (it may have been done) and is never sent again by itself.
+- The "Check results" card of a check of all topics closes with its × in place, keeping the page's filters
+  and open row (its "Close" link reloaded Home without them), and its heading is no longer hidden under the
+  header. Its rows follow the status colours: a site that did not answer is amber, a failure to fix red, new
+  data blue; a reason that only repeated the row's label and the help line of an empty list are gone, and a red
+  failure is no longer reported in amber because other topics passed.
 - "Undo" puts back only the change its own message is about: an "Undo" from an earlier message, pressed after
   a newer change, is refused with a clear message instead of undoing that newer change.
 - Notes about a lasting problem on Settings, Sites and History are one kind of note in the problem's own colour:
