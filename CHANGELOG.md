@@ -128,6 +128,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A tracker mirror that sends its answer a byte at a time can no longer hold a check for hours (and with it
   every other check waiting for it): each request to a site now ends within two and a half minutes, connecting
   and the answer's headers included; before, only the body of the answer had a time limit.
+- When a site refuses the `.torrent` and a check takes the page's magnet link instead, the torrent client now
+  gets only its info-hash and the trackers a site may be at, as the preview of a new topic already did: trackers,
+  peers and web seeds in the home network that a page put into the link are left out.
 
 ## [1.31.2] — 2026-10-15
 
