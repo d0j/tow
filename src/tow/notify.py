@@ -140,6 +140,7 @@ class NotificationBatch:
                         current.tracker,
                         _joined(current.error, error),
                         current.episodes,
+                        recovered=current.recovered,
                     )
                 return
             if new_priority == current_priority:
@@ -152,7 +153,9 @@ class NotificationBatch:
                     episodes = ", ".join(labels)
             if current.kind in _EVENTS and kind in _EVENTS:
                 error = _joined(current.error, error)
-        self._items[topic_id] = PendingNotification(kind, operation_id, topic, tracker, error, episodes)
+        # A later event of the same topic keeps "works again" said with an earlier one.
+        recovered = bool(current and current.recovered and kind in _EVENTS)
+        self._items[topic_id] = PendingNotification(kind, operation_id, topic, tracker, error, episodes, recovered)
 
     def __iter__(self) -> Iterator[PendingNotification]:
         return iter(self._items.values())
