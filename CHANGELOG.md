@@ -40,6 +40,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - When several mirrors of a site show a Cloudflare check, each mirror that can still be recovered gets a
   site-access service call before one mirror gets its last-chance call. The shared call and time limits stay.
+- An installed site-access module that does not start in time is paused like an unavailable service (from
+  30 seconds up to 30 minutes) instead of being started again for the next site; other services still run.
 
 ## [1.30.10] — 2026-10-15
 
