@@ -39,6 +39,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A torrent client that Check in Settings found not answering is listed in Needs attention at once, as the
   header already showed it; each additional client that does not answer has its own entry naming it, and its
   failed topics are counted there instead of once each. The main client is never listed twice.
+- A torrent client card in Settings that does not answer shows one red note and a red Not answering pill instead
+  of a red line under a grey Set up pill; the Torrent clients section turns red for an additional client that
+  does not answer too, not only for the main one.
 
 ## [1.30.11] — 2026-10-15
 
