@@ -92,6 +92,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   waited is reported as not found instead of as skipped.
 - A preview of every topic started on Home that fails no longer writes a failed check to the health record
   or the log: a preview writes nothing, as documented.
+- When a manual check ran but its result page could not be built, Home said the result could not be confirmed
+  and History said the check did not complete. It now says the check ran and its result could not be shown,
+  with its own History entry.
 
 ## [1.30.10] — 2026-10-15
 

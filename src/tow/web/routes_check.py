@@ -129,19 +129,6 @@ def _perform_check(job: dict[str, Any]) -> None:
             wait=False,
             ids=[topic_id] if topic_id else None,
         )
-        report = check_report(out, apply=job["apply"])
-        if topic_id:
-            # A topic's check says what a check of it at once says; deleted meanwhile, it was
-            # never checked ("not found"), and there is no result of it to show.
-            row = topic_check_row(topic_id, out)
-            feedback = _topic_feedback(topic_id, row, adopted=bool(job.get("adopted")))
-            flash, status, kind = feedback["text"], "done" if row is not None else "failed", feedback["kind"]
-        else:
-            waiting_or_failed = report["counts"]["fail"] or report["counts"]["pending"]
-            flash, status, kind = report["summary"], "done", "warn" if waiting_or_failed else "ok"
-        if status == "done":
-            with check_jobs.LOCK:
-                job["report"] = report
     except CheckBusyError:
         raise  # the FIFO retries the head without duplicating work or consuming a failure
     except SecretStoreError as exc:
@@ -152,6 +139,13 @@ def _perform_check(job: dict[str, Any]) -> None:
         if job["apply"]:
             services.log_event("check_blocked", how="manual", reason="result_unconfirmed", **error_fields(exc))
         flash, status, kind = i18n.t("web.check_all.not_run", lang, error=type(exc).__name__), "failed", "err"
+    else:
+        try:
+            flash, status, kind, feedback = _job_result(job, out)
+        except Exception as exc:  # noqa: BLE001 - the check ran and saved what it found; only its words failed
+            if job["apply"]:
+                services.log_event("check_report_failed", how="manual", **error_fields(exc))
+            flash, status, kind = i18n.t("web.check_all.report_failed", lang, error=type(exc).__name__), "done", "warn"
     # The page follows the job and then opens Home with its result (a message kept on the server).
     credential = feedback.get("credential_topic")
     redirect = flash_location(
@@ -163,6 +157,26 @@ def _perform_check(job: dict[str, Any]) -> None:
     )
     with check_jobs.LOCK:
         job.update({"status": status, "flash": flash, "kind": kind, "feedback": feedback, "redirect": redirect})
+
+
+def _job_result(job: dict[str, Any], out: dict[str, Any]) -> tuple[str, str, str, dict[str, str]]:
+    """(message, status, kind, a topic's feedback) of a check that ran; its report goes with the job."""
+    topic_id = str(job.get("topic_id") or "")
+    report = check_report(out, apply=job["apply"])
+    feedback: dict[str, str] = {}
+    if topic_id:
+        # A topic's check says what a check of it at once says; deleted meanwhile, it was never
+        # checked ("not found"), and there is no result of it to show.
+        row = topic_check_row(topic_id, out)
+        feedback = _topic_feedback(topic_id, row, adopted=bool(job.get("adopted")))
+        flash, status, kind = feedback["text"], "done" if row is not None else "failed", feedback["kind"]
+    else:
+        waiting_or_failed = report["counts"]["fail"] or report["counts"]["pending"]
+        flash, status, kind = report["summary"], "done", "warn" if waiting_or_failed else "ok"
+    if status == "done":
+        with check_jobs.LOCK:
+            job["report"] = report
+    return flash, status, kind, feedback
 
 
 @router.post("/check")

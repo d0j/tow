@@ -486,6 +486,7 @@ HISTORY_GROUPS = {
             "client_add_failed",
             "reconcile_failed",
             "check_blocked",
+            "check_report_failed",
             "client_unreachable",
             "browser_auth_failed",
             "watchdog_alert",
