@@ -125,7 +125,10 @@ def test_wrapper_restores_existing_policy_and_timeouts(clock):
             assert pool._network_backend.wrapped is original
             assert client.timeout.read == 10
         assert pool._network_backend is original
-        assert isinstance(original, net_guard.PublicOnlyBackend)
+        # Every tracker client holds each request to its own deadline (tow.http) over the
+        # public-only backend; the recovery's deadline goes on top of both.
+        assert isinstance(original, thttp.RequestDeadlineBackend)
+        assert isinstance(original.wrapped, net_guard.PublicOnlyBackend)
         assert client.timeout == timeout
 
 
