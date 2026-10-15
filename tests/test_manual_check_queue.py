@@ -14,7 +14,7 @@ from helpers import flash_of, flash_record, manual_check_consumers, wait_for_che
 from tow.check_outcomes import counts_of, outcome_of
 from tow.log import format_event
 from tow.store import CheckBusyError, SecretStoreError, save_state
-from tow.web import app, check_actions, check_jobs
+from tow.web import app, check_actions, check_jobs, views
 from tow.web.views import check_report
 
 
@@ -512,15 +512,13 @@ WAITING_SPACE = "ждёт места на диске: не хватает 40,5 �
 
 
 def _shown(client, location):
-    """What the owner meets after a check: the message with its kind - as a message, or folded
-    into "Needs attention" when that already shows the topic - and the sign-in prompt."""
+    """What the owner meets after a check: the one message with its kind (also while "Needs
+    attention" lists the topic), never a result card, and the sign-in prompt."""
     page = BeautifulSoup(client.get(location).text, "html.parser")
     query = parse_qs(urlsplit(location).query)
-    if (flash := page.select_one("#flash")) is not None:
-        message = (flash.get_text(" ", strip=True), " ".join(flash.get("class")))
-    else:
-        folded = page.select_one("[data-problem-result]")
-        message = (folded.get_text(" ", strip=True), "folded " + folded["data-problem-result"])
+    assert not page.select("#check-result")
+    (flash,) = page.select("#flash")
+    message = (flash.get_text(" ", strip=True), " ".join(flash.get("class")))
     return message, (query.get("credential_topic") or [""])[0]
 
 
@@ -563,9 +561,9 @@ def test_a_queued_topic_check_says_what_a_check_at_once_says(client, monkeypatch
     job = _job(client.post(f"/topics/t1/{route}", follow_redirects=False))
     consumers[0].run()
     assert _shown(client, _status(client, job)["redirect"]) == at_once
-    assert at_once[0][0]
-    # The topic it is about (Home folds a message about a topic already under "Needs attention").
-    assert check_jobs.get(job)["feedback"]["problem_topic"] == flash_record(location).get("problem_topic", "")
+    assert at_once[0][0].startswith("Show A — ")
+    # The topic it is about, named once: the queued one as it was when the check was asked for.
+    assert views.check_result_flash(check_jobs.get(job))["subject"] == flash_record(location)["subject"] == "Show A"
 
 
 @pytest.mark.parametrize("error", [None, SecretStoreError("secret gate"), ValueError("bad state")])
@@ -648,15 +646,18 @@ def test_a_result_has_one_address_rendered_from_its_job(client, monkeypatch, con
     for _ in range(3):
         done, gone = _status(client, job), _status(client, cancelled)
     assert len(views._FLASHES._records) == before
-    assert done["redirect"] == f"/?check_result={job}#check-result"
-    assert gone["redirect"] == f"/?check_result={cancelled}#check-result"
+    # A topic's check ends in one message: no result card to scroll to.
+    assert done["redirect"] == f"/?check_result={job}"
+    assert gone["redirect"] == f"/?check_result={cancelled}"
     views._FLASHES.clear()  # every message token has expired meanwhile
     page = BeautifulSoup(client.get(done["redirect"]).text, "html.parser")
-    # Folded into "Needs attention", which shows the topic's error, as after a check at once.
-    assert done["flash"][1:] in page.select_one('[data-problem-result="err"]').get_text()
-    assert page.select_one("#check-result .check-result-row a[href='/?open=t1&spot=row-t1#row-t1']")
+    # Shown as after a check at once, also while "Needs attention" shows the topic's error.
+    assert done["flash"][1:] in page.select_one("#flash.error").get_text()
+    assert page.select_one("#flash").get_text().startswith("Show A — ")
+    assert not page.select("#check-result")
     other = BeautifulSoup(client.get(gone["redirect"]).text, "html.parser")
-    assert "удалена из очереди" in other.select_one("#check-result").get_text()
+    assert "удалена из очереди" in other.select_one("#flash").get_text()
+    assert not other.select("#check-result")
 
 
 @pytest.mark.parametrize("ends", ["done", "failed"])

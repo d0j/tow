@@ -10,6 +10,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A message about a topic, a site or a torrent client now starts with its name ("Harbour Clock — no
   changes"), after a success as well as a failure, so after several clicks each result says which topic it is
   about. A queued check is named as its topic was when the check was asked for, and no message names it twice.
+- A failed check of a topic is shown as a message again, also while "Needs attention" lists the topic: before,
+  only a screen reader heard it and nothing on the screen confirmed the click. A check of one topic, run at
+  once or from the queue, ends in exactly one message and no longer opens a "Check results" card that
+  repeated it.
 
 ## [1.30.11] — 2026-10-15
 

@@ -117,6 +117,70 @@ def test_a_queued_check_keeps_the_name_its_topic_had_when_asked_for(client, monk
     assert (said["subject"], said["kind"], said["id"]) == (SUBJECT, "err", f"check-{job}")
 
 
+def test_a_failed_check_is_shown_and_its_topic_stays_in_needs_attention(client, monkeypatch):
+    row = {"id": "t1", "title": TITLE, "ok": False, "error": "timeout", "error_class": "tracker"}
+    state = load_state()
+    state["topics"][0].update(last_ok=False, last_error="timeout", last_error_class="tracker")
+    save_state(state)
+    monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: {"results": [row]})
+    location = client.post("/topics/t1/check", follow_redirects=False).headers["location"]
+    page = BeautifulSoup(client.get(location).text, "html.parser")
+    strip = page.select_one("#flash")
+    assert strip is not None
+    assert strip.get_text(" ", strip=True).count(SUBJECT) == 1
+    assert strip.get_text(" ", strip=True).startswith(f"{SUBJECT} — ")
+    assert not page.select("[data-problem-result]")
+    assert page.select_one("[data-attention-count]").get_text() == "1"
+
+
+def _queued(client, monkeypatch, check):
+    from helpers import manual_check_consumers
+
+    from tow.store import CheckBusyError
+
+    consumers = manual_check_consumers(monkeypatch)
+    calls = []
+
+    def run(**kw):
+        calls.append(1)
+        if len(calls) == 1:
+            raise CheckBusyError("busy")
+        return check(**kw)
+
+    monkeypatch.setattr("tow.web.services.run_check", run)
+    response = client.post("/topics/t1/check", follow_redirects=False)
+    job = parse_qs(urlparse(response.headers["location"]).query)["check_job"][0]
+    consumers[0].run()
+    return job
+
+
+def _broken(**_kw):
+    raise ValueError("synthetic")
+
+
+@pytest.mark.parametrize(
+    ("check", "kind"),
+    [
+        (lambda **_kw: {"results": [{"id": "t1", "title": TITLE, "ok": True}]}, "ok"),
+        (lambda **_kw: {"results": [{"id": "t1", "ok": False, "error": "refused", "error_class": "qbit"}]}, "err"),
+        (_broken, "err"),
+    ],
+)
+def test_a_queued_topic_check_ends_in_one_message_and_no_result_card(client, monkeypatch, check, kind):
+    job = _queued(client, monkeypatch, check)
+    status = client.get(f"/check/status?job={job}").json()
+    assert "#check-result" not in status["redirect"]
+    page = BeautifulSoup(client.get(status["redirect"]).text, "html.parser")
+    assert not page.select("#check-result, .check-results")
+    strips = page.select("#flash")
+    assert len(strips) == 1
+    text = strips[0].get_text(" ", strip=True)
+    assert text.startswith(f"{SUBJECT} — ")
+    assert text.count(SUBJECT) == 1
+    assert ("error" in strips[0]["class"]) is (kind == "err")
+    assert strips[0]["data-message-id"] == f"check-{job}"
+
+
 def test_the_record_has_a_stable_identity_and_goes_whole_to_a_script(client):
     response = client.post("/topics/t1/pause", headers={"X-TOW-Fetch": "1"})
     body = response.json()

@@ -138,44 +138,45 @@ def test_health_snapshot_recovery_and_recurrence_do_not_mutate_state():
     assert client.get("/health.json").json()["attention"]["count"] == 1
 
 
+# The result of a click is a message, "Needs attention" what is still wrong: a failed check is
+# shown as a message also while the triangle lists its topic (it used to be folded into a hidden
+# text only a screen reader read - sighted owners saw nothing confirm the click).
 @pytest.mark.parametrize("kind", ["warn", "err"])
-def test_check_result_does_not_duplicate_problem_with_a_large_flash(kind):
-    url = flash_location("/", "synthetic check result", kind, problem_topic="a")
+def test_a_failed_check_is_a_visible_message_beside_the_triangle(kind):
+    url = flash_location("/", "synthetic check result", kind, subject="Show A")
     state = _state(client_down=False)
     state["topics"] = [{"id": "a", "title": "Show A", "last_error": "timeout", "last_error_class": "tracker"}]
     page = _home(state, path=url)
-    assert not page.select("#flash")
-    assert page.select_one("[data-problem-result]")["data-problem-result"] == kind
-    assert page.select_one("[data-problem-result]").get_text() == "Synthetic check result"
+    assert page.select_one("#flash").get_text(" ", strip=True) == "Show A — synthetic check result"
+    assert page.select_one("[data-attention-count]").get_text() == "1"
+    assert not page.select("[data-problem-result]")
 
 
 @pytest.mark.parametrize("topics", [[], [{"id": "a", "paused": True, "last_error": "timeout"}]])
 def test_an_unrepresented_failed_action_keeps_visible_feedback(topics):
-    url = flash_location("/", "synthetic failure", "err", problem_topic="a")
+    url = flash_location("/", "synthetic failure", "err")
     state = _state(client_down=False)
     state["topics"] = topics
     assert _home(state, path=url).select_one("#flash")
 
 
-def test_a_recovered_topic_does_not_resurrect_an_old_warning_redirect():
-    url = flash_location("/", "old failure", "warn", problem_topic="a")
+def test_a_recovered_topic_leaves_the_triangle_and_its_message_says_what_the_click_found():
+    url = flash_location("/", "old failure", "warn")
     state = _state(client_down=False)
     state["topics"] = [{"id": "a", "last_error": None, "last_ok": True}]
     page = _home(state, path=url)
-    assert not page.select_one("#flash")
+    assert page.select_one("#flash")
     assert page.select_one("[data-attention]").has_attr("hidden")
-    assert not page.select_one("[data-problem-result]")
 
 
-def test_dead_default_client_uses_one_triangle_not_a_duplicate_check_flash():
-    url = flash_location("/", "client refusal", "err", problem_topic="a")
+def test_dead_default_client_has_one_triangle_entry_and_one_message():
+    url = flash_location("/", "client refusal", "err")
     state = _state()
     state["topics"] = [{"id": "a", "title": "Show A", "last_error": "client refused", "last_error_class": "qbit"}]
     page = _home(state, path=url)
-    assert not page.select_one("#flash")
+    assert len(page.select("#flash")) == 1
     assert page.select_one("[data-attention-count]").get_text() == "1"
     assert len(page.select("[data-issue-id]")) == 1
-    assert page.select_one("[data-problem-result]")
 
 
 def test_script_is_versioned_and_uses_shared_poll():

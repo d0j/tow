@@ -3,7 +3,7 @@
 {% block body %}
 <h1 id="page-title" class="sr-only">{{ t('home.title') }}</h1>
 {% if check_activity_requested %}
-<div class="issue-note check-activity" id="check-activity" role="status"><span>{{ check_activity_title }} — <span data-check-status>{{ check_activity_text }}</span></span> <a href="/?check_result={{ request.query_params.get('check_job', '')|urlencode }}#check-result">{{ t('web.check_all.results') }}</a>{% if check_activity and check_activity.status == 'queued' %}<form method="post" action="/check/{{ check_activity.id|urlencode }}/cancel"><button type="submit" class="ghost">{{ t('web.check_all.cancel') }}</button></form>{% endif %}</div>
+<div class="issue-note check-activity" id="check-activity" role="status"><span>{{ check_activity_title }} — <span data-check-status{% if check_activity_result %} data-check-result-pending{% endif %}>{{ check_activity_text }}</span></span>{% if not check_activity_result %} <a href="/?check_result={{ check_activity_id|urlencode }}{% if not (check_activity and check_activity.topic_id) %}#check-result{% endif %}">{{ t('web.check_all.results') }}</a>{% endif %}{% if check_activity and check_activity.status == 'queued' %}<form method="post" action="/check/{{ check_activity.id|urlencode }}/cancel"><button type="submit" class="ghost">{{ t('web.check_all.cancel') }}</button></form>{% endif %}</div>
 {% endif %}
 {% if check_result_requested %}
 <section class="card check-results" id="check-result" aria-labelledby="check-result-title">
