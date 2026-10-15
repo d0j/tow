@@ -15,29 +15,37 @@ def test_untrusted_title_whitespace_finishes_in_a_bounded_isolated_process():
     # A subprocess deadline stops a regressed backtracking pattern safely. It
     # imports the locked interpreter's source module, writes nothing and has no
     # client, network or runtime state operations.
+    # The child times the parsing alone, in processor time (about 0.05 s): the deadline
+    # is only the stop for a hang. As the oracle, a 5 s wall clock also covered starting
+    # the process and the interpreter, which a busy runner (an antivirus scanning each
+    # new process) can stall for seconds.
     module_path = str(Path(tow.episodes.__file__).resolve())
     script = """
 import importlib.util
 import sys
+import time
 spec = importlib.util.spec_from_file_location('tow.episodes_title_probe', sys.argv[1])
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
+started = time.process_time()
 gap = ' ' * 40000
 assert module.parse_expected_count('Show 3: 1' + gap + '!') is None
 assert module.parse_expected_count('Show 1 of 14' + gap + '!')['total'] == 14
 assert module.parse_season_hint('Show Season' + gap + '3 [1 of 14]') == 3
 assert module.parse_expected_count('Show ' + '[1 of 14] ' * 12000)['total'] == 14
-print('ok')
+print('ok', time.process_time() - started)
 """
     result = subprocess.run(
         [sys.executable, "-I", "-B", "-c", script, module_path],
         capture_output=True,
         text=True,
-        timeout=5,
+        timeout=60,
         check=True,
     )
-    assert result.stdout.strip() == "ok"
+    word, seconds = result.stdout.split()
+    assert word == "ok"
+    assert float(seconds) < 2, f"parsing the hostile titles took {seconds} s of processor time"
 
 
 @pytest.mark.parametrize("gap", [" ", "\t", "\n", "\u00a0", "\u2003"])
