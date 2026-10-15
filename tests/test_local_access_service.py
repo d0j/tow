@@ -570,3 +570,24 @@ def test_a_cached_digest_never_lets_a_changed_module_run(installed, monkeypatch)
     monkeypatch.setattr(worker.subprocess, "Popen", lambda *a, **k: pytest.fail("changed module started"))
     with pytest.raises(ValueError, match="changed"):
         worker.NativeService(folder, manifest).launch(worker.time.monotonic() + 10)
+
+
+@pytest.mark.parametrize(
+    ("root", "expected"),
+    [
+        ("D:\\Windows", "D:\\Windows\\System32\\taskkill.exe"),
+        (None, "C:\\Windows\\System32\\taskkill.exe"),
+        ("Windows", "C:\\Windows\\System32\\taskkill.exe"),  # a relative root would search the work folder
+    ],
+)
+def test_stopping_the_module_runs_the_systems_own_taskkill(installed, monkeypatch, root, expected):
+    service = worker.NativeService(*installed)
+    service.child = Mock(pid=4321, poll=Mock(return_value=None), wait=Mock(return_value=0))
+    calls = []
+    monkeypatch.setattr(worker, "sys", SimpleNamespace(platform="win32"))
+    monkeypatch.setattr(worker.subprocess, "run", lambda argv, **kwargs: calls.append(argv))
+    monkeypatch.delenv("SYSTEMROOT", raising=False)
+    if root is not None:
+        monkeypatch.setenv("SYSTEMROOT", root)
+    assert service.stop() is True
+    assert calls == [[expected, "/PID", "4321", "/T", "/F"]]

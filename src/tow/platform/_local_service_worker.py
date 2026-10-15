@@ -11,6 +11,7 @@ import hashlib
 import http.client
 import ipaddress
 import json
+import ntpath
 import os
 import re
 import shutil
@@ -245,6 +246,15 @@ def native_environment(folder: Path) -> dict[str, str]:
     return env
 
 
+def system_program(name: str) -> str:
+    """A Windows system program by its full path. A bare name is looked for in the current
+    folder and on PATH first, where another program of that name may be found."""
+    root = os.environ.get("SYSTEMROOT", "")  # any case on Windows
+    if not ntpath.isabs(root) or not re.fullmatch(r"[A-Za-z]:", ntpath.splitdrive(root)[0]):
+        root = "C:\\Windows"
+    return ntpath.join(root, "System32", name)
+
+
 class NativeService:
     def __init__(self, folder: Path, manifest: dict[str, Any]):
         self.folder, self.manifest = folder, manifest
@@ -331,7 +341,10 @@ class NativeService:
         try:
             if sys.platform == "win32":
                 subprocess.run(
-                    ["taskkill", "/PID", str(child.pid), "/T", "/F"], capture_output=True, timeout=10, check=False
+                    [system_program("taskkill.exe"), "/PID", str(child.pid), "/T", "/F"],
+                    capture_output=True,
+                    timeout=10,
+                    check=False,
                 )
             else:
                 import signal
