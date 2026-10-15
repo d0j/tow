@@ -60,6 +60,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   arriving late no longer resets a later failure, and two failures no longer count as one. Ended pauses are removed.
 - A mirror pause saved before the computer's clock went back no longer lasts for days: a server's limit is kept
   for at most a day and an ordinary pause for at most the site's cooldown. Site retries read the same pauses.
+- A site's or a site-access service's "retry at <time>" is counted from the time its own answer gives: a computer
+  clock that is off no longer lengthens or shortens the pause.
 
 ## [1.30.10] — 2026-10-15
 

@@ -19,20 +19,46 @@ MAX_TORRENT_RESPONSE_BYTES = 16 * 1024 * 1024
 MAX_RESPONSE_SECONDS = 120.0
 
 
-def retry_after_seconds(value: object, *, now: float) -> float:
-    """Bounded HTTP Retry-After, delta-seconds or HTTP-date; malformed input is no hint."""
+def _http_date(value: object) -> float | None:
+    """An HTTP-date header as epoch seconds; None when it is not one."""
+    if not isinstance(value, str) or not value or len(value) > 128:
+        return None
+    try:
+        when = parsedate_to_datetime(value.strip())
+        when = when.replace(tzinfo=UTC) if when.tzinfo is None else when
+        seconds = when.timestamp()
+    except ValueError, TypeError, OverflowError, OSError:
+        return None
+    return seconds if math.isfinite(seconds) else None
+
+
+def retry_after_seconds(value: object, *, now: float, date: object = None, age: object = None) -> float:
+    """Bounded HTTP Retry-After, delta-seconds or HTTP-date; malformed input is no hint.
+
+    An HTTP-date is counted from the answer's own ``Date`` (plus its cache ``Age``) when the
+    server sent a usable one: a computer clock that is off neither lengthens nor shortens the
+    pause. Without one, from ``now``. Whatever the dates say, the result is 0 to 86400 seconds.
+    """
     if not isinstance(value, str) or not value or len(value) > 128 or not math.isfinite(now):
         return 0
     value = value.strip()
     if re.fullmatch(r"[0-9]+", value):
         return float(min(86400, int(value)))
-    try:
-        when = parsedate_to_datetime(value)
-        when = when.replace(tzinfo=UTC) if when.tzinfo is None else when
-        seconds = when.timestamp() - now
-        return min(86400.0, max(0.0, seconds)) if math.isfinite(seconds) else 0
-    except ValueError, TypeError, OverflowError, OSError:
+    when = _http_date(value)
+    if when is None:
         return 0
+    server_now = _http_date(date)
+    if server_now is None:
+        seconds = when - now
+    else:
+        cached = age.strip() if isinstance(age, str) and len(age) <= 16 else ""
+        seconds = when - server_now - (int(cached) if re.fullmatch(r"[0-9]+", cached) else 0)
+    return min(86400.0, max(0.0, seconds))
+
+
+def retry_after_from(headers: Any, *, now: float) -> float:
+    """``retry_after_seconds`` of an answer's headers: Retry-After with its Date and Age."""
+    return retry_after_seconds(headers.get("retry-after"), now=now, date=headers.get("date"), age=headers.get("age"))
 
 
 class ResponseTooLargeError(RuntimeError):

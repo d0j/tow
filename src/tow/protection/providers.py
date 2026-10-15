@@ -134,9 +134,9 @@ def _solution(raw: object, origin: str, ident: str) -> Clearance:
     )
 
 
-def _retry_after(value: str | None) -> float:
+def _retry_after(value: str | None, date: str | None = None, age: str | None = None) -> float:
     """A finite service retry interval, never a reason to slow unrelated tracker HTTP."""
-    return retry_after_seconds(value, now=time.time())
+    return retry_after_seconds(value, now=time.time(), date=date, age=age)
 
 
 def _service_status(response: httpx.Response, *, local: bool = False) -> None:
@@ -145,9 +145,9 @@ def _service_status(response: httpx.Response, *, local: bool = False) -> None:
     if response.status_code in {429, 503}:
         warming = local and response.headers.get("x-tow-module-state") == "warming"
         phase = "startup" if warming else "service"
-        raise ProviderUnavailableError(
-            "busy", retry_after=_retry_after(response.headers.get("retry-after")), phase=phase
-        )
+        headers = response.headers
+        retry_after = _retry_after(headers.get("retry-after"), headers.get("date"), headers.get("age"))
+        raise ProviderUnavailableError("busy", retry_after=retry_after, phase=phase)
     if response.status_code in {400, 401, 403, 404, 405, 422, 501}:
         raise ProviderUnavailableError("protocol")
     if response.status_code != 200:
