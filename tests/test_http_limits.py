@@ -382,3 +382,18 @@ def test_a_services_dated_retry_after_uses_its_date():
     from tow.protection import providers
 
     assert providers._retry_after(_http_date(10**9 + 120), _http_date(10**9)) == 120
+
+
+def test_a_body_cut_by_a_shorter_deadline_says_that_deadline(monkeypatch):
+    # The message said "longer than 120 s" when the caller's 30-second recovery deadline cut it.
+    clock = [1000.0]
+    monkeypatch.setattr(thttp.time, "monotonic", lambda: clock[0])
+
+    def slow_chunks(*_args, **_kwargs):
+        clock[0] += 100  # the body trickles in
+        yield b"x"
+
+    monkeypatch.setattr(thttp, "_decoded_chunks", slow_chunks)
+    with _client(b"x" * 10) as c, pytest.raises(thttp.ResponseTooSlowError) as slow:
+        thttp.get_limited(c, "https://t.example/x", max_bytes=1024, deadline=1030.0)
+    assert str(slow.value) == "response body took longer than 30 s"

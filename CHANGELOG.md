@@ -75,6 +75,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   "(error 200)".
 - Diagnostics and "Check the site's mirrors" no longer ask a mirror whose server asked TOW to wait, and a "too many
   requests" answer to them now makes checks wait as well.
+- A site answer stopped by a shorter time limit names that limit instead of always saying 120 seconds.
 
 ## [1.30.10] — 2026-10-15
 
