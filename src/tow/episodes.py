@@ -204,16 +204,18 @@ def parse_episode_label(name: str) -> EpisodeLabel | None:
 
 # What may not follow the last number of an episode marker: a fraction (S01E05.5 is a special,
 # ``_fractional_special``), audio channels glued to a codec (E01-5.1x264) or a bit depth. A
-# quality, a bit depth or a year after a dot (.1080p, .10bit, .4K, .2019) ends the marker.
-_NOT_FRACTION = r"(?!\.\d{1,2}(?:[xх]\d|(?![0-9a-zа-яё])))"
+# quality, a bit depth or a year after a dot (.1080p, .10bit, .4K, .2019) ends the marker, and
+# so does an audio layout (.5.1, .2.0: a number with a second ".digit" is no fraction).
+_NOT_FRACTION = r"(?!\.\d{1,2}(?:[xх]\d|(?![0-9a-zа-яё])(?!\.\d)))"
 _MARKER_END = r"(?!\w|[-_. ]\s*bits?\b)" + _NOT_FRACTION
 
 
 def _fractional_special(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, ...] | None:
-    """Fractional specials (``S01E05.5``) need their own identity; never guess."""
+    """Fractional specials (``S01E05.5``) need their own identity; never guess. Not an audio
+    layout right after the episode (``S01E05.5.1``, ``.2.0``, ``.7.1.Atmos``)."""
     if re.search(
         r"(?i)(?:s\d{1,2}[ ._-]*e|(?:episode|ep|серия|эпизод)\s*)"
-        r"\d{1,4}\.\d{1,2}(?:v\d+)?\b",
+        r"\d{1,4}\.\d{1,2}(?!\.\d)(?:v\d+)?\b",
         text,
     ):
         # Fractional specials need a distinct identity model. Never collapse
