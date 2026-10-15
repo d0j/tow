@@ -62,6 +62,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   for at most a day and an ordinary pause for at most the site's cooldown. Site retries read the same pauses.
 - A site's or a site-access service's "retry at <time>" is counted from the time its own answer gives: a computer
   clock that is off no longer lengthens or shortens the pause.
+- A mirror that answers "unavailable" (503) with a time to retry is left alone by scheduled checks until then, for
+  at most the site's cooldown; a check you start still tries it.
 
 ## [1.30.10] — 2026-10-15
 
