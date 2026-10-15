@@ -848,3 +848,42 @@ def test_a_sign_in_checked_from_the_queue_is_confirmed_or_put_back(client, monke
         assert signed_in == ["nnmclub"]
         assert ended["flash"] == i18n.t("web.login_retry.ok", site="NNM-Club")
     assert check_jobs.FOLLOW_UPS == {}  # no password kept beside a finished job
+
+
+@pytest.mark.parametrize("ends", ["added", "crash"])
+def test_a_new_topics_first_check_from_the_queue_says_what_a_check_at_once_says(client, monkeypatch, consumers, ends):
+    # Queued behind another check, a new topic's first check lost "topic added; ..." and a crash of
+    # it was neither logged as the add's failed check nor sent to the messengers.
+    from tow import i18n
+
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda _url: "")
+    notified, events = [], []
+    monkeypatch.setattr("tow.web.services.notify_topic_error", lambda topic, error, **_kw: notified.append(error))
+    real_log = views.services.log_event
+    monkeypatch.setattr("tow.web.services.log_event", lambda kind, **kw: events.append(kind) or real_log(kind, **kw))
+    calls = []
+
+    def check(**kw):
+        calls.append(kw["ids"])
+        if len(calls) == 1:
+            raise CheckBusyError("a scheduled check holds the lock")
+        if ends == "crash":
+            raise RuntimeError("storage exploded")
+        return {"results": [{"id": kw["ids"][0], "title": "Show", "ok": True, "added": True}]}
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    response = client.post(
+        "/topics/add",
+        data={"url": "http://rutor.info/torrent/101/show", "title": "Show", "save_path": r"M:\anime"},
+        follow_redirects=False,
+    )
+    job = _job(response)
+    consumers[0].run()
+    ended = _status(client, job)
+    if ends == "added":
+        assert ended["flash"] == i18n.t("web.topics.added_confirmed")
+        assert notified == []
+    else:
+        assert ended["flash"] == i18n.t("web.topics.added_check_failed")
+        assert "add_check_fail" in events
+        assert [str(error) for error in notified] == ["storage exploded"]

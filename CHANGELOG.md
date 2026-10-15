@@ -205,6 +205,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   new key and the reminder's question go to standard error.
 - A sign-in typed on Home whose check had to wait for another check is now confirmed like one checked at once:
   the site's other topics stop asking for a sign-in, and a password the site refused is put back.
+- The first check of a newly added topic that had to wait for another check says "topic added; ..." as one
+  checked at once does, and its failure is logged and sent to the messengers as well.
 
 ## [1.31.2] — 2026-10-15
 
