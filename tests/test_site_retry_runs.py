@@ -248,3 +248,124 @@ def test_home_shows_topics_with_an_unreadable_retry_record():
     page = TestClient(app).get("/")
     assert page.status_code == 200
     assert "Show A" in page.text
+
+
+# --- what Home shows of the supervisor's plan -----------------------------------------------------
+
+
+def _report(monkeypatch, planned: dict[str, Any], **extra: Any) -> None:
+    layout.write_json(layout.status_path(), {"site_retries": planned, **extra})
+    monkeypatch.setattr(layout, "running", lambda: {"pid": 4242})
+
+
+def test_home_shows_the_planned_retry_of_the_current_outage(monkeypatch):
+    state = {"topics": [failed("a"), failed("b"), failed("c")], "mirrors": {}}
+    plan = site_retries.policies(state, config())
+    at = datetime.fromtimestamp(T0 + 1800, UTC).isoformat()
+    _report(
+        monkeypatch,
+        {
+            "a": {"at": at, "revision": plan["a"]["revision"]},
+            "b": {"at": at, "revision": "an earlier outage"},
+            "c": {"at": "not a time", "revision": plan["c"]["revision"]},
+        },
+    )
+    assert layout.site_retry_status(state, config()) == {"a": at}
+
+
+def test_home_invents_no_retry_time(monkeypatch):
+    state = {"topics": [failed("a")], "mirrors": {}}
+    plan = site_retries.policies(state, config())
+    planned = {"a": {"at": datetime.fromtimestamp(T0, UTC).isoformat(), "revision": plan["a"]["revision"]}}
+    _report(monkeypatch, planned, stopping=True)
+    assert layout.site_retry_status(state, config()) == {}  # TOW is stopping: nothing will run
+    monkeypatch.setattr(layout, "running", lambda: None)
+    assert layout.site_retry_status(state, config()) == {}  # no supervisor
+    _report(monkeypatch, planned)
+    assert layout.site_retry_status({"topics": [], "mirrors": {}}, config()) == {}  # nothing to retry
+
+
+# --- the retry run itself ---------------------------------------------------------------------------
+
+
+def _wire_retry_run(monkeypatch, *, fail: bool) -> list[str]:
+    """The site of ``failed`` topics and a client holding their torrents; returns the fetched URLs."""
+    from test_check_pipeline import NEW, Client, Tracker, _wire
+
+    from tow.check import run as check_run
+
+    fetched: list[str] = []
+
+    class Site(Tracker):
+        def fetch_torrent(self, url, secrets, ua, *, ignore_cool=False, persist=True):
+            fetched.append(url)
+            if fail:
+                raise errors.TowError(
+                    "mirrors.all_failed", tracker="demo", error=errors.TowError("mirrors.transport", error="x")
+                )
+            return b"torrent"
+
+    client = Client()
+    client.put(NEW, "/media/tv", tags=["tow"])  # the one torrent the synthetic topics share
+    _wire(monkeypatch, {"main": client}, Site())
+    monkeypatch.setattr(check_run, "load_config", lambda: {**config(), "client": {"id": "main", "kind": "fake"}})
+    return fetched
+
+
+def _seed_retry_batch() -> None:
+    """Topics a and b failed on the site, c is fine; the supervisor reserved a retry of a only."""
+    from test_check_pipeline import NEW
+
+    from tow.store import save_download_history, save_state
+
+    topics = [
+        {**failed(identity), "hash": NEW, "save_path": "/media/tv", "error_streak": 1, "last_ok": False}
+        for identity in "ab"
+    ]
+    topics.append({**failed("c"), "hash": NEW, "save_path": "/media/tv", "last_ok": True})
+    for key in ("last_error", "last_error_code", "last_error_params", "last_error_class"):
+        topics[2].pop(key)
+    save_state({"topics": topics, "mirrors": {}})
+    save_download_history({"schema_version": 1, "topics": {}})
+    item = site_retries.policies({"topics": topics, "mirrors": {}}, config())["a"]
+    batch = {"a": {"revision": item["revision"], "observed_at": item["observed_at"], "count": 1, "started_at": T0}}
+    layout.write_json(layout.schedule_path(), {"site_retry_batch": batch, "site_retry_attempts": batch})
+
+
+def test_a_retry_run_checks_only_its_reserved_topics_and_reports_nothing(monkeypatch):
+    from test_check_pipeline import _notified
+
+    from tow import check
+    from tow.store import load_state
+
+    fetched = _wire_retry_run(monkeypatch, fail=True)
+    notified = _notified(monkeypatch)
+    _seed_retry_batch()
+    out = check.run_check(apply=True, notify=True, how="retry", scheduled_scope="site_retry")
+    assert [row["id"] for row in out["results"]] == ["a"]
+    assert fetched == ["https://demo.example/topic/a"]
+    assert notified == []
+    saved = {topic["id"]: topic for topic in load_state()["topics"]}
+    assert saved["a"]["error_streak"] == 1  # the outage is not "longer" for an early retry
+    assert saved["a"]["last_error_class"] == "tracker"
+
+
+def test_the_retry_command_of_the_supervisor_recovers_the_topic(monkeypatch):
+    from test_check_pipeline import _notified
+
+    from tow import check, cli
+    from tow.store import load_state
+
+    fetched = _wire_retry_run(monkeypatch, fail=False)
+    notified = _notified(monkeypatch)
+    _seed_retry_batch()
+    check.record_check_failure(RuntimeError("synthetic"), how="auto")
+    assert cli.main(["check", "--apply", "--notify", "--site-retry-only", "--json"]) == 0
+    assert fetched == ["https://demo.example/topic/a"]
+    assert notified == []  # the failure was never reported, so neither is its end
+    state = load_state()
+    saved = {topic["id"]: topic for topic in state["topics"]}
+    assert not saved["a"].get("last_error")
+    assert "error_streak" not in saved["a"]
+    assert saved["b"]["last_error_class"] == "tracker"
+    assert state["health"]["check_ok"] is False  # the failed scheduled check is still failed
