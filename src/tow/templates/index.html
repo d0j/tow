@@ -3,7 +3,12 @@
 {% block body %}
 <h1 id="page-title" class="sr-only">{{ t('home.title') }}</h1>
 {% if check_activity_requested %}
-<div class="issue-note check-activity" id="check-activity" role="status"><span>{{ check_activity_title }} — <span data-check-status{% if check_activity_result %} data-check-result-pending{% endif %}>{{ check_activity_text }}</span></span>{% if not check_activity_result %} <a href="/?check_result={{ check_activity_id|urlencode }}{% if not (check_activity and check_activity.topic_id) %}#check-result{% endif %}">{{ t('web.check_all.results') }}</a>{% endif %}{% if check_activity and check_activity.status == 'queued' %}<form method="post" action="/check/{{ check_activity.id|urlencode }}/cancel"><button type="submit" class="ghost">{{ t('web.check_all.cancel') }}</button></form>{% endif %}</div>
+{#- The page that follows a check (no script started it, or its result opened before it ended).
+    checks.js takes it over: the check becomes its message, updated in place. -#}
+{% set activity_done = check_activity and check_activity.status not in ('queued', 'running') %}
+<div class="notice check-activity" id="check-activity" role="status" data-check-job="{{ check_activity_id }}" data-check-status="{{ 'finished' if activity_done or not check_activity else check_activity.status }}" data-check-subject="{{ check_activity.subject if check_activity else '' }}" data-check-topic="{{ check_activity.topic_id if check_activity else '' }}"><span>{{ check_activity_title }} — <span data-check-status>{{ check_activity_text }}</span></span>
+  {%- if activity_done %} <a href="/?check_result={{ check_activity_id|urlencode }}{% if not check_activity.topic_id %}#check-result{% endif %}">{{ t('web.check_all.results') }}</a>{% endif %}
+  {%- if check_activity and check_activity.status == 'queued' %}<form method="post" action="/check/{{ check_activity.id|urlencode }}/cancel"><button type="submit" class="ghost">{{ t('web.check_all.cancel') }}</button></form>{% endif %}</div>
 {% endif %}
 {% if check_result_requested %}
 {#- Check all's report: page content, closed in place (only its own parameter goes). -#}

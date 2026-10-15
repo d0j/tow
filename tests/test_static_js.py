@@ -24,7 +24,7 @@ def _verdict(name: str) -> dict:
 def test_recent_messages_time_pause_read_store_and_undo_by_a_fake_clock():
     verdict = _verdict("messages_center.mjs")
     assert verdict == dict.fromkeys(verdict, True), verdict
-    assert len(verdict) == 10
+    assert len(verdict) == 11
 
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
@@ -199,40 +199,22 @@ def test_problem_triangle_tracks_confirmed_recovery_and_preserves_errors_when_of
     assert len(verdict) == 11
 
 
-def _follow_check(scenario: str) -> dict:
-    script = Path(__file__).parent / "js" / "check_result_follow.mjs"
-    result = subprocess.run([NODE, str(script), scenario], capture_output=True, text=True, timeout=30, check=True)
-    return json.loads(result.stdout.strip().splitlines()[-1])
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_every_check_this_tab_started_is_followed_within_bounds_to_exactly_one_result():
+    # D10: the page that followed a check navigated away from results the other clicks were waiting
+    # for; a finished check opened a second page. One bounded scheduler follows them all instead.
+    verdict = _verdict("check_scheduler.mjs")
+    assert verdict == dict.fromkeys(verdict, True), verdict
+    assert len(verdict) == 11
 
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
-def test_a_finished_check_opens_its_result_in_place_of_the_page_that_followed_it():
-    # location.assign kept the following page in the history: Back returned to it.
-    following = _follow_check("following")
-    assert following["progress"][:2] == ["Queued: position 2.", "Checking since 12:00."]
-    assert following["replaced"] == ["http://127.0.0.1/?check_result=J1&credential_topic=t1#check-result"]
-    assert following["assigned"] == []
-    assert following["reloaded"] == 0
-
-
-@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
-@pytest.mark.skipif(NODE is None, reason="node is not installed")
-def test_a_waiting_result_page_loads_again_when_its_check_ends():
-    # Going to the same address but for its #fragment only scrolled: "waiting" stayed on the page.
-    pending = _follow_check("pending_result")
-    assert pending["reloaded"] == 1
-    assert pending["assigned"] == pending["replaced"] == []
-
-
-@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
-@pytest.mark.skipif(NODE is None, reason="node is not installed")
-def test_a_waiting_result_whose_check_is_gone_stops_saying_waiting():
-    # TOW restarted: the address kept ?check_result= and the page kept "waiting" for good.
-    vanished = _follow_check("vanished")
-    assert vanished["history"] == ["/?s=name"]
-    assert vanished["pendingText"] == "js.checks.unconfirmed"  # the catalog key: the fake page has no texts
-    assert vanished["assigned"] == vanished["replaced"] == []
+def test_a_check_is_sent_with_its_kept_action_id_and_followed_where_the_page_is():
+    verdict = _verdict("check_submit.mjs")
+    assert verdict == dict.fromkeys(verdict, True), verdict
+    assert len(verdict) == 3
 
 
 @pytest.mark.allow_system

@@ -1142,7 +1142,6 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
     animation: none; outline: 2px solid var(--acc); outline-offset: 2px;
   }
 }
-.issue-note { margin: 0 0 .8rem; color: var(--fg); background: var(--pill-warn-bg); border: 1px solid var(--warn); }
 /* A link inside a message's sentence is told from the words by more than colour (WCAG 1.4.1). */
 .secret-store a { text-decoration: underline; }
 /* The master-key note: its "Copy the command" stays one 26 px line, beside the text on a wide
@@ -1161,6 +1160,6 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 .check-result-list { list-style: none; padding: 0; }
 .check-result-row { display: flex; flex-wrap: wrap; gap: .3rem .6rem; margin: .5rem 0; overflow-wrap: anywhere; }
 .check-result-row > :last-child { flex: 1 1 20rem; }
-.check-activity { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; padding: .4rem .6rem; }
+.check-activity { flex-wrap: wrap; align-items: center; margin: 0 0 .8rem; }
 .flash:has(> a) { flex-wrap: wrap; }
 .flash > a { text-decoration: underline; }

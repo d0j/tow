@@ -1126,7 +1126,13 @@ def test_check_all_preview_counts_results(monkeypatch, client):
 
     assert _flash(response) == "проверка запущена"
     body = _wait_job(client, response)
-    assert body == {"status": "done", "flash": "предпросмотр: изменится при применении 1, без изменений 1, с ошибкой 1"}
+    assert (body["status"], body["flash"]) == (
+        "done",
+        "предпросмотр: изменится при применении 1, без изменений 1, с ошибкой 1",
+    )
+    # Its one message: "finished", red by its worst row (an unconfirmed failure), with the report.
+    assert body["message"]["kind"] == "err"
+    assert body["message"]["href"].endswith("#check-result")
     assert seen["apply"] is False
 
 
@@ -1154,12 +1160,14 @@ def test_check_all_failure_is_reported_by_status(monkeypatch, client, error, fla
 
     response = client.post("/check", data={"mode": "apply"}, follow_redirects=False)
 
-    assert _wait_job(client, response) == {"status": "failed", "flash": flash}
+    body = _wait_job(client, response)
+    assert (body["status"], body["flash"]) == ("failed", flash)
+    assert body["message"]["kind"] == "err"
 
 
 def test_check_status_of_unknown_job(client):
-    assert client.get("/check/status?job=not-a-job").json() == {"status": "unknown"}
-    assert client.get("/check/status").json() == {"status": "unknown"}
+    assert client.get("/check/status?job=not-a-job").json()["status"] == "unknown"
+    assert client.get("/check/status").json()["status"] == "unknown"
 
 
 # --------------------------------------------------------------------------- site guesses

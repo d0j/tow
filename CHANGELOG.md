@@ -26,6 +26,13 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   or a copied command cannot be confirmed - it says so as a message about that topic, with a link to reload or
   to open the form as a page, instead of grey text that covered the topic's row. A request whose answer was
   lost says the result could not be confirmed (it may have been done) and is never sent again by itself.
+- "Check" (of one topic or of all) no longer opens another page that waits for the result: the check is
+  accepted at once and its result arrives as one message where you are, for every click, on every page of the
+  tab and after a reload, so clicking several topics in a row no longer loses results. "Check all" says it has
+  finished, coloured by its worst result, with a link to its results card. A check whose answer was lost is
+  looked up, never sent again; a result TOW no longer knows says it is unavailable and unconfirmed, with a link
+  to the History. While a check waits or runs, its message says so and is updated in place, and its topic's row
+  shows it. Without scripts the pages work as before.
 - The "Check results" card of a check of all topics closes with its × in place, keeping the page's filters
   and open row (its "Close" link reloaded Home without them), and its heading is no longer hidden under the
   header. Its rows follow the status colours: a site that did not answer is amber, a failure to fix red, new

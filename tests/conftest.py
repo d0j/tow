@@ -195,6 +195,7 @@ def _no_background_check_outlives_its_test():
         with module.LOCK:
             module.JOBS.clear()
             module.PENDING.clear()
+            module.ACTIONS.clear()
     alive = [thread for thread in stray if thread.is_alive()]
     if alive:
         pytest.fail(f"manual check thread still running 10 s after the test: {alive}")

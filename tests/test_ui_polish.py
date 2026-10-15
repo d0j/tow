@@ -376,7 +376,9 @@ def test_the_add_button_shows_a_busy_state_while_the_topic_is_checked(client):
     assert "showBusy(form, b);" in JS[JS.index('document.addEventListener("submit"') :]
     # A failed request gives the button back.
     failure = JS[JS.index("} catch (error) {") : JS.index('document.addEventListener("submit"')]
-    assert 'submitter?.removeAttribute("aria-busy")' in failure
+    assert "restoreForm(form, submitter);" in failure
+    restore = JS[JS.index("const restoreForm") : JS.index("const CHECK_ACTIONS")]
+    assert 'submitter?.removeAttribute("aria-busy")' in restore
     assert "busy-spin" in _rules(CSS).get(".busy-spin", "") or ".busy-spin" in _rules(CSS)
 
 

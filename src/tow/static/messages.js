@@ -153,6 +153,10 @@
       // A page opened again (reload, Back) brings its message from the history, not as news.
       if (known && !replace) return known;
       if (known) items.splice(items.indexOf(known), 1);
+      if (known && quiet) { // an update in place (a check's progress): not news again
+        item.read = known.read;
+        item.announced = known.announced;
+      }
       if (item.undo) items.forEach((other) => { other.undo = ""; }); // one live undo: the newest change's
       items.unshift(item);
       words.set(item.id, { subject: clean(raw?.subject, 200), text: clean(raw?.text, 1000) });
@@ -167,6 +171,8 @@
           active.left = READ_MS[item.kind];
           startTimer();
         }
+      } else if (quiet) {
+        // Updated where it is: a collapsed message stays collapsed, nothing pops up.
       } else if (inUse()) {
         if (!pending.includes(item.id)) pending.push(item.id); // never replaced under the pointer or the focus
       } else {
@@ -201,6 +207,15 @@
         save();
         changed();
       }
+    };
+    // A message that another one replaces (a lost check's placeholder, by its result).
+    const remove = (id) => {
+      if (!find(id)) return;
+      if (active?.id === id) collapse("cleared", false);
+      items = items.filter((item) => item.id !== id);
+      words.delete(id);
+      save();
+      changed();
     };
     const dismiss = (id) => {
       if (active?.id === id) collapse("closed");
@@ -241,6 +256,7 @@
     const unread = () => items.filter((item) => !item.read);
     return {
       show,
+      remove,
       dismiss,
       collapse,
       hold,
@@ -394,7 +410,7 @@
       return;
     }
     const live = center.undoLive(item);
-    const shape = `${id}|${item.kind}|${live}`;
+    const shape = `${id}|${item.kind}|${live}|${center.words(id).text}`;
     if (current?.dataset.shape === shape) return;
     const said = center.words(id);
     const box = element("div", `flash ${CLASSES[item.kind]}`);
@@ -472,7 +488,8 @@
     if (!menu || !toggle) return;
     const unread = center.unread();
     const worst = center.worst();
-    const shown = center.items().length > 0 || Boolean(center.liveUndo());
+    // Shown while there is a message, a live Undo, or a check this tab still follows (checks.js).
+    const shown = center.items().length > 0 || Boolean(center.liveUndo()) || (window.towChecks?.count?.() || 0) > 0;
     if (!shown && menu.contains(document.activeElement)) document.getElementById("log-open")?.focus();
     if (!shown) menu.open = false;
     menu.hidden = !shown;
@@ -621,6 +638,8 @@
       return item;
     },
     dismiss: (id) => center.dismiss(id),
+    remove: (id) => center.remove(id),
+    refresh: () => render(),
     center,
   };
 })();

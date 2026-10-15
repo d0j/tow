@@ -4,10 +4,11 @@ topic says, the same as a check at once (``views.check_feedback``)."""
 
 from __future__ import annotations
 
+import re
 from typing import Any
 from urllib.parse import quote
 
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from tow import i18n
 from tow.log import error_fields, owner_language
@@ -16,7 +17,7 @@ from tow.store import CheckBusyError, SecretStoreError
 from tow.trackers import load_trackers, match_tracker
 from tow.web import _context, check_jobs, services
 from tow.web.messages import flash_redirect
-from tow.web.views import check_feedback, check_report, topic_check_row
+from tow.web.views import check_feedback, check_report, check_status_message, topic_check_row
 
 
 def topic_feedback(tid: str, row: CheckRow | None, *, adopted: bool) -> dict[str, str]:
@@ -52,6 +53,43 @@ def enqueue_check(*, topic_id: str, apply: bool, adopted: bool = False) -> Redir
         "web.check_all.started" if starts_now else "web.check_all.queued",
         "info",
     )
+
+
+def action_of(value: str) -> str:
+    """A page's action id as the script makes it, else "" (then the request is a native one)."""
+    return value if re.fullmatch(r"[A-Za-z0-9_-]{1,64}", value or "") else ""
+
+
+def accept_check(*, topic_id: str, apply: bool, action: str, adopted: bool = False) -> Response:
+    """D10: a Check the page's script sent with its action id. The check is registered under that
+    id before any work - the queue's worker starts it at once when nothing else runs - and the
+    answer is a short acknowledgement, not a page: the page follows the check by its id
+    (``/check/status``) and shows its result where it is. The same id again is the same check.
+    A full queue answers as before (a redirect with its message)."""
+    job, added = check_jobs.submit(
+        topic_id=topic_id,
+        apply=apply,
+        lang=owner_language(),
+        perform=perform_check,
+        adopted=adopted,
+        subject=_context.subject() if topic_id else "",
+        action=action,
+    )
+    if job is None:
+        return flash_redirect("/", "web.check_all.queue_full", "warn")
+    starts_now = added and job["position"] == 1 and job["status"] in {"queued", "running"}
+    message = check_status_message(job)
+    if job["status"] in {"queued", "running"}:
+        message["text"] = i18n.t("web.check_all.started" if starts_now else "web.check_all.queued")
+    body = {
+        "accepted": True,
+        "action": action,
+        "job": job["id"],
+        "status": job["status"],
+        "topic_id": topic_id,
+        "message": message,
+    }
+    return JSONResponse(body, headers={"Cache-Control": "no-store"})
 
 
 def perform_check(job: dict[str, Any]) -> None:

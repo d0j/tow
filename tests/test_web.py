@@ -156,10 +156,8 @@ def test_pages_ok():
     app_js = c.get("/static/app.js")
     assert app_js.status_code == 200
     assert "/health.json" in app_js.text
-    # No page reloads itself, but for one case: a waiting check's result page when the check
-    # has ended (its own address but for the #fragment would only scroll); it does not poll then.
-    assert app_js.text.count("location.reload") == 1
-    assert "next.search === here.search) window.location.reload()" in app_js.text
+    # No page reloads itself: a check's result is a message where the page is (checks.js).
+    assert "location.reload" not in app_js.text
     assert "app.js?v=" in home
     assert "торрент" in c.get("/").text
     assert 'action="/check"' in c.get("/").text
@@ -2116,7 +2114,7 @@ def test_check_all_runs_in_the_background_and_reports_when_done(monkeypatch):
     # Its result's own address, no text in it: Home shows the result from the job.
     assert status["redirect"] == f"/?check_result={job}#check-result"
     assert "Проверка завершена: обновлено 1, с ошибкой 1" in client.get(status["redirect"]).text
-    assert client.get("/check/status?job=other").json() == {"status": "unknown"}
+    assert client.get("/check/status?job=other").json()["status"] == "unknown"
 
 
 def test_forms_posted_by_app_js_get_json_instead_of_a_second_render(monkeypatch):

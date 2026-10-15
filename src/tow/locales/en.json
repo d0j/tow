@@ -1169,7 +1169,9 @@
   },
   "js": {
     "checks": {
-      "unconfirmed": "The check result is unavailable: TOW restarted or the record expired. Review the topic status and run the check again if needed."
+      "unconfirmed": "The check result is unavailable: TOW restarted or the record expired. Review the topic status and run the check again if needed.",
+      "history": "History",
+      "sent": "check sent; its answer was lost, TOW looks up its result"
     },
     "timer": {
       "title": "Personal timer: every {minutes} min",
@@ -2362,7 +2364,10 @@
       "no_changes_reason": "no changes: {reason}",
       "adopted": "adopted into TOW: the torrent has the label tow now; nothing else was changed",
       "failed": "failed",
-      "busy": "another check is running right now; press “Check” again in a minute"
+      "busy": "another check is running right now; press “Check” again in a minute",
+      "result_unavailable": "result unavailable, outcome unconfirmed: TOW restarted or the record of this check expired",
+      "history_link": "History",
+      "sign_in": "Sign in"
     },
     "check_all": {
       "preview": "preview: ",
@@ -2388,7 +2393,6 @@
       "cancel_unknown": "this check is no longer known: TOW restarted or the record expired; nothing was cancelled",
       "queue_full": "the check queue is full; wait for the current jobs to finish, then try again",
       "results": "Results",
-      "waiting": "Check accepted. Waiting for its turn or completion; results will appear automatically. You can check other topics.",
       "unconfirmed": "The result is unavailable: TOW restarted or the record expired. Review topic status and run the check again if needed.",
       "observation": "This is the result of that run, not the current status. Open a topic to see its current status and available actions.",
       "outcome_new": "Updated",
@@ -2401,7 +2405,9 @@
       "not_run": "could not confirm the check result ({error}); review topic status and error history before trying again",
       "internal_error": "the check stopped on an internal TOW error; its result is unknown — review topic status and error history before trying again",
       "report_failed": "the check ran, but TOW could not show its result ({error}); see the topics' status on Home and the History",
-      "started": "check started"
+      "started": "check started",
+      "done_short": "check of all topics finished",
+      "view_results": "View results"
     },
     "login_retry": {
       "no_result": "sign-in to {site} saved, but the check did not return a result",

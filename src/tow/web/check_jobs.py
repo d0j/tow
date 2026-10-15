@@ -21,6 +21,9 @@ from tow.store import CheckBusyError
 LOCK = threading.RLock()
 JOBS: dict[str, dict[str, Any]] = {}
 PENDING: deque[str] = deque()  # the jobs of both lanes that wait or run, oldest first
+# A page's action id -> its job (D10): registered with the job, before any work, so a page that
+# lost the answer finds its check by the id it kept. Forgotten with the job.
+ACTIONS: dict[str, str] = {}
 # The consumer of each lane, by the lane's ``apply``.
 _WORKERS: dict[bool, threading.Thread] = {}
 MAX_PENDING = 32  # per lane
@@ -44,15 +47,21 @@ def submit(
     perform: Callable[[dict[str, Any]], None],
     adopted: bool = False,
     subject: str = "",
+    action: str = "",
 ) -> tuple[dict[str, Any] | None, bool]:
     """Share a request that still waits, enqueue anything else once in its lane, and keep exactly
     one FIFO consumer per lane. The returned job carries its ``position`` in its lane (1: next or
-    running); ``subject`` is what its message names (the topic, as it was when asked for)."""
+    running); ``subject`` is what its message names (the topic, as it was when asked for);
+    ``action``: the page's id of the click (one already registered is the same check again)."""
     with LOCK:
         now = time.monotonic()
         for key, job in list(JOBS.items()):
             if job.get("finished_at", now) + RESULT_TTL < now:
                 del JOBS[key]
+        for known in [key for key, job_id in ACTIONS.items() if job_id not in JOBS]:
+            del ACTIONS[known]
+        if action and action in ACTIONS:
+            return get(ACTIONS[action]), False
         for job in JOBS.values():
             # Only work that has not started is shared: a running check may have read the topic
             # before the change the owner clicks for, so one follow-up waits behind it.
@@ -60,6 +69,8 @@ def submit(
                 job["adopted"] = bool(job.get("adopted")) or adopted
                 # The latest click is the owner's request: what it may re-add (``run_check``).
                 job["requested_at"] = time.time()
+                if action:
+                    ACTIONS[action] = job["id"]
                 return get(job["id"]), False
         if len(_lane(apply)) >= MAX_PENDING:
             return None, False
@@ -84,6 +95,8 @@ def submit(
         }
         JOBS[job["id"]] = job
         PENDING.append(job["id"])
+        if action:
+            ACTIONS[action] = job["id"]
         worker = _WORKERS.get(apply)
         if worker is None or not worker.is_alive():
             try:
@@ -91,6 +104,7 @@ def submit(
             except RuntimeError:
                 PENDING.remove(job["id"])
                 del JOBS[job["id"]]
+                ACTIONS.pop(action, None)
                 raise
         return get(job["id"]), True
 
@@ -172,6 +186,13 @@ def get(job_id: str) -> dict[str, Any] | None:
         lane = _lane(job["apply"]) if job_id in PENDING else []
         result["position"] = lane.index(job_id) + 1 if lane else 0
         return result
+
+
+def by_action(action: str) -> dict[str, Any] | None:
+    """The job a page's action id was registered for (``submit``); None for none or an expired one."""
+    with LOCK:
+        job_id = ACTIONS.get(action) if action else None
+        return get(job_id) if job_id else None
 
 
 def pending_topic(topic_id: str) -> dict[str, Any] | None:
