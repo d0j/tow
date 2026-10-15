@@ -206,9 +206,10 @@ def test_the_edit_panels_last_error_follows_the_dot(client):
             },
         ]
     )
-    assert '<p class="form-error warn" role="note">' in client.get("/topics/t1/edit-panel").text
-    assert '<p class="form-error" role="note">' in client.get("/topics/t2/edit-panel").text
-    assert "color: var(--warn)" in _rules(CSS)[".form-error.warn"]
+    # D6: the full error is the panel's note in the row's colour (it was the field-error style).
+    assert '<p class="notice warn" role="note">' in client.get("/topics/t1/edit-panel").text
+    assert '<p class="notice bad" role="note">' in client.get("/topics/t2/edit-panel").text
+    assert "var(--warn)" in _rules(CSS)[".notice.warn"]
 
 
 # --- A refused new site keeps what was typed ----------------------------------------------------

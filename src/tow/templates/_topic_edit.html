@@ -1,9 +1,11 @@
 {# One topic's edit panel (M2): fetched by app.js when a Home row opens, or shown on
    /topics/<id>/edit without scripts. `standalone` is set on that page. #}
+{% from "_note.html" import note %}
 <div class="edit-panel" data-edit-loaded>
   {% if topic.last_ok_at %}<p class="sub">{{ t('home.topic.last_ok', at=topic.last_ok_at) }}</p>{% endif %}
   {% set error_words = topic.last_error_human or topic.last_error %}
-  {% if topic.last_error %}<p class="form-error{% if topic.torrent_tone == 'warn' %} warn{% endif %}" role="note">{% if topic.last_check %}{{ t('home.topic.last_error_at', at=topic.last_check, error=error_words) }}{% else %}{{ t('home.topic.last_error', error=error_words) }}{% endif %}</p>
+  {#- D6: the row says it short, the open panel in full - one note in the row's colour (AGENTS.md). -#}
+  {% if topic.last_error %}{{ note(t('home.topic.last_error_at', at=topic.last_check, error=error_words) if topic.last_check else t('home.topic.last_error', error=error_words), 'warn' if topic.torrent_tone == 'warn' else 'bad') }}
   {%- if topic.last_error_details or error_words != topic.last_error %}<details class="technical-details raw-error"><summary>{{ t('common.details') }}</summary><code>{{ topic.last_error_details or topic.last_error }}</code></details>{% endif %}{% endif %}
   {% if topic.site_retry_at %}<p class="sub">{{ t('site_access.retry_at', at=topic.site_retry_at) }}</p>{% endif %}
   {% if topic.torrent_tone == 'warn' and topic.last_error and topic.last_error_class != 'frozen' %}<form method="post" action="/topics/{{ topic.id|urlencode }}/check"><button type="submit" data-busy-label="{{ t('common.busy.checking') }}"{{ fix_attrs('check_topic', topic.id) }}>{{ t('site_access.retry_check') }}</button></form>{% endif %}
