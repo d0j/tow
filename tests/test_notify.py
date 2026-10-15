@@ -1,6 +1,6 @@
 import pytest
 
-from tow.notify import NotificationBatch, _episode_text, event_text, ping, send, short_series_title
+from tow.notify import NotificationBatch, _episode_text, event_text, send, short_series_title
 
 
 def test_notification_title_processing_ignores_unbounded_suffix():
@@ -42,9 +42,11 @@ def test_mirror_failure_notification_names_the_topic_and_does_not_repeat_mirrors
     assert message.count("доступ к сайту временно ограничен") == 1
 
 
-def test_ping_no_token():
-    assert ping({}) is False
-    assert ping({"telegram": {}}) is False
+def test_no_messenger_is_no_working_notifications():
+    from tow.notifiers import health
+
+    assert health({}, {}) is not True
+    assert health({"telegram": {}}, {}) is not True
 
 
 def test_notification_batch_keeps_highest_priority_per_topic():
