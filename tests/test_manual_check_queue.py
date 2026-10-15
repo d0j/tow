@@ -12,7 +12,7 @@ from helpers import flash_of, flash_record, manual_check_consumers, wait_for_che
 
 from tow.check_outcomes import counts_of, outcome_of
 from tow.log import format_event
-from tow.store import CheckBusyError, save_state
+from tow.store import CheckBusyError, SecretStoreError, save_state
 from tow.web import app, check_jobs, routes_check
 from tow.web.views import check_report
 
@@ -514,6 +514,28 @@ def test_a_queued_topic_check_says_what_a_check_at_once_says(client, monkeypatch
     consumers[0].run()
     assert _feedback_of(_status(client, job)["redirect"]) == at_once
     assert at_once[0]
+
+
+@pytest.mark.parametrize("error", [None, SecretStoreError("secret gate"), ValueError("bad state")])
+def test_a_manual_preview_writes_nothing_even_when_it_fails(client, monkeypatch, consumers, error):
+    # AGENTS.md: a dry run writes no TOW state, history or log - its failures included.
+    writes = []
+    for name in ("record_check_failure", "log_event", "save_state", "save_secrets"):
+        monkeypatch.setattr(f"tow.web.services.{name}", lambda *a, _name=name, **kw: writes.append(_name))
+
+    def check(**kw):
+        assert kw["apply"] is False
+        if error is not None:
+            raise error
+        return {"results": [{"id": "a", "title": "Show A", "ok": False, "error": "site refused"}]}
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    job = _job(client.post("/check", data={"mode": "dry"}, follow_redirects=False))
+    consumers[0].run()
+    ended = _status(client, job)
+    assert ended["status"] == ("done" if error is None else "failed")
+    assert ended["flash"]  # the page still says what happened
+    assert writes == []
 
 
 class _ThreadStop(BaseException):

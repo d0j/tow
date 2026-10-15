@@ -90,6 +90,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   sign-in prompt when the site asks for it, the link to the topic with a problem, waiting for disk space or for
   the client's file check, adoption, and amber or red as the error deserves. A topic deleted while its check
   waited is reported as not found instead of as skipped.
+- A preview of every topic started on Home that fails no longer writes a failed check to the health record
+  or the log: a preview writes nothing, as documented.
 
 ## [1.30.10] — 2026-10-15
 
