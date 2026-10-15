@@ -518,6 +518,31 @@ def test_owner_changes_prevent_background_confirmation(world, change):
     assert tracker.fetches == 1
 
 
+@pytest.mark.parametrize("scope", [{}, {"progress_only": True}, {"space_only": True}])
+def test_an_unexpected_verification_failure_is_the_topics_result_not_the_runs_end(world, monkeypatch, scope):
+    client, _tracker, _sent = world
+    _run()
+    disk = load_state()
+    other = {**copy.deepcopy(disk["topics"][0]), "id": "other", "url": "https://tracker.example/topic/2"}
+    other.pop("verification_pending")
+    disk["topics"].append(other)
+    save_state(disk)
+    client.torrents[H]["state"] = "downloading"
+
+    def broken(topic, *_args, **_kwargs):
+        raise RuntimeError("synthetic defect")
+
+    monkeypatch.setattr(verification, "withdrawn_meanwhile", broken)
+    results = check.run_check(apply=True, notify=False, how="test", **scope)["results"]
+    row = next(item for item in results if item["id"] == "slow")
+    assert row["ok"] is False
+    assert row["status"] == "failed"
+    assert any(item["id"] == "other" for item in results) or scope.get("space_only")
+    topic = load_state()["topics"][0]
+    assert topic["verification_pending"]["hash"] == H  # the receipt is kept for the next pass
+    assert topic["last_error"]
+
+
 def test_preview_changes_nothing_in_client_state_history_or_marker(world):
     client, tracker, _sent = world
     _run()

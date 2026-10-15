@@ -304,7 +304,29 @@ def _restore_check_times(topic: Topic, previous_check: str | None, previous_ok_a
 
 
 def recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: bool = False) -> bool:
-    """Return True when this pending transaction alone supplied the row (no site traffic)."""
+    """Return True when this pending transaction alone supplied the row (no site traffic).
+
+    An unexpected failure is this topic's result, never the end of the run: the receipt is
+    kept for the next pass and nothing else is asked of the site or the client for it now."""
+    previous_check = topic.get("last_check")
+    previous_ok_at = topic.get("last_ok_at")
+    try:
+        return _recheck(topic, run, row, pass_only=pass_only)
+    except Exception as error:  # noqa: BLE001 - one topic's defect must not abort every other topic
+        before = (topic.get("last_error_code"), topic.get("last_error_params"), topic.get("last_error"))
+        row.update(ok=False, status="failed")
+        set_error(row, error)
+        stamp_result(topic, row)
+        if pass_only:
+            _restore_check_times(topic, previous_check, previous_ok_at)
+        if before != (topic.get("last_error_code"), topic.get("last_error_params"), topic.get("last_error")):
+            run.record("check_fail", topic=topic.get("id"), **error_fields(error), how=run.how)
+        if run.notify:
+            run.queue_notification(topic, kind="error", operation_id=new_operation_id("check-error"), error=error)
+        return True
+
+
+def _recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: bool) -> bool:
     waiting = as_dict(topic.get("verification_pending"))
     if not isinstance(waiting, dict) or not waiting or topic.get("selection_dirty"):
         return False

@@ -112,6 +112,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   The waiting page of a check that has ended says it finished, with the link to its results, instead of “TOW
   restarted or the record expired”, and a results page whose check TOW no longer knows stops saying “waiting”.
 - One damaged saved topic error no longer hides every other topic failure from "Needs attention".
+- An unexpected failure while confirming one torrent's file check no longer ends the whole check run; that topic
+  shows the error and keeps waiting for its client.
 
 ## [1.30.10] — 2026-10-15
 
