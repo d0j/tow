@@ -46,7 +46,10 @@ external service's version and its browser dependencies; a compatible envelope d
 
 On Sites → the site's advanced options, **Automatic** permits the optional layer; **Off** disables it for that site.
 **Sign in through the browser** uses the existing explicit browser-auth flow instead: external providers do not
-replace that session's User-Agent. It is not an unattended browser solver.
+replace that session's User-Agent. It is not an unattended browser solver. A password sign-in sent with verified
+access keeps only the account cookies the site's answer set: the clearance stays in the encrypted access store and
+is never saved with the site's sign-in (one an earlier version saved there is not sent and goes at the next
+successful sign-in). A browser sign-in keeps its cookies as saved.
 
 ## What a check does
 
@@ -56,6 +59,9 @@ An owner-installed FlareSolverr runtime module may supply a private, pinned
 `runtime/services/flaresolverr/manifest.json` (`tow-local-service/v1`). This is not a web-configurable command:
 the manifest binds the loopback API, fixed relative executable, version, SHA-256 and idle interval. TOW does
 not download or install it while checking. Missing modules retain the ordinary external-service path.
+The SHA-256 covers the launcher executable only: it detects a changed launcher, not the integrity of the whole
+module folder or who published it. Settings and service requests reuse its digest while the file's size, time and
+identity stay the same; every start of the module hashes the file again.
 
 Only an actual provider call can launch it: rendering settings, diagnostics, previews, disabled services and
 ordinary successful site requests do not start a process. A small independent broker lazily starts the native
@@ -63,8 +69,9 @@ service, serializes browser calls and shares the caller's deadline with startup.
 anonymous requests. If a cold start exceeds one request, that request ends on time while the owned startup may
 finish within a separate two-minute cap; a later request can reuse it instead of restarting from cold.
 Only cookie requests for audited public paths are accepted. Application tokens and proxy variables are not inherited.
-Its owned Windows process tree is bound to the broker even on a crash. After five idle minutes it stops its own
-service and exits. A listener started manually is reused without ownership or stopping. No OS autostart is needed.
+Its owned Windows process tree is bound to the broker even on a crash. After the manifest's idle interval
+(30 seconds to 15 minutes) it stops its own service and exits. A listener started manually is reused without
+ownership or stopping. No OS autostart is needed.
 
 Settings show **On demand** for a matching installed module. Disabling the connection prevents further launches;
 an already issued request may finish, after which the idle timer stops the module. A damaged manifest/binary
@@ -79,6 +86,10 @@ own API checks that a request is local. Any program on the TOW computer can reac
 short on-demand lifetime. The random port is not a password: binding to loopback, the idle stop, the bound
 process tree and the disposable work folder are the containment. This is a known residual risk; do not install
 the module on a computer shared with untrusted local users.
+
+Only the module's temporary files are redirected into its folder. Its browser may still use the Windows user
+profile folders (`%APPDATA%`, `%LOCALAPPDATA%`, `%USERPROFILE%`) for its own files: a known limitation of the
+portable install, not verified to stay inside it.
 
 ### Request sequence
 
@@ -102,7 +113,9 @@ access. A sign-in probe cannot redirect to the catalog, home page, a query-beari
 Cloudflare's [`cf-mitigated: challenge`](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/)
 header is definitive evidence. Known check-page titles with their challenge status are a fallback; an ordinary
 Cloudflare proxy, embedded script or forum quotation is not. Access bans, rate limits, origin outages, maintenance,
-quota and account sign-in are separate reasons, not instructions to call a solver. Preview and diagnostics never
+quota and account sign-in are separate reasons, not instructions to call a solver. A download answered by a page
+with a real password field (at any length; comments and scripts do not count) is an expired sign-in, and TOW signs
+in again once; a removed-topic message and a daily limit take precedence. Preview and diagnostics never
 invoke one. Cross-origin download redirects use a fresh cookie-free client; parent-domain metadata cannot grant
 cross-origin credential reuse.
 
@@ -114,24 +127,31 @@ earlier answer cannot erase or shorten it. Dedicated sign-in origins have indepe
 
 An encrypted `data/protection.enc` stores verified clearance, matching User-Agent, expiry and durable cooldown leases.
 Defaults: 30 seconds for the recovery chain, at most 2 service calls, 1,800 seconds before another attempt.
-The call limit is shared across all mirrors, counting only service calls actually started. Mirrors with the oldest
+The call limit is shared across all mirrors, counting only service calls actually started. Each later challenged
+mirror that can still be recovered keeps one of those calls: one mirror's last-chance call cannot take another
+mirror's only call. Mirrors with the oldest
 recovery attempt run first, so later mirrors remain reachable even when checks are farther apart than the retry
 interval. Missing/paused services and origins for which no call fits do not start a new cooldown.
 An otherwise successful anonymous service response without a clearance cookie allows one last-chance call to
 that connection, after the other enabled connections. It uses the same reservation and remaining call/time budget,
 including the verification margin; repeated missing cookies never loop. Ambiguous cookies, invalid responses,
 scope/origin mismatches, API pauses and refused resource replays do not authorize this retry.
-The lease is written before calling the service, so a crash does not cause an attempt on every tick. A configuration
+The lease is written before calling the service, so a crash does not cause an attempt on every tick. A local
+module's failed or late start, or its "still starting" answer, asks no site: that call gives the origin's
+reservation back, while the module's own pause stays. A configuration
 change invalidates the old clearance but does not erase cooldowns. Disabling the layer immediately prevents its use
 in subsequent requests; an already issued request cannot be recalled.
 
-Connection failures and API-level busy/protocol responses pause only that service across sites: exponential
+Connection failures, a local module that does not start in time and API-level busy/protocol responses pause only
+that service across sites: exponential
 backoff starts at 30 seconds and caps at 1,800 seconds; a valid `Retry-After` may extend it up to 24 hours. A site's
 refused replay, slow challenge or HTTP 500 is not enough to disable the service globally. Renaming or reordering a
 connection cannot erase this cooldown. Each persisted attempt has its own identity: responses from before a reset
 or a newer reservation cannot repopulate the cache, revoke a new credential or restore an old service cooldown.
 Encrypted format v2 reads v1 without rewriting it on inspection; a new write upgrades only this optional cache.
-Failures older than 24 hours no longer raise the next day's first error to maximum backoff. The solver's share of
+Failures older than 24 hours no longer raise the next day's first error to maximum backoff. If the computer's
+clock was set back, the next recovery moves future reservation and pause times to the current time once, keeping
+each wait's length. The solver's share of
 the chain budget leaves up to 10 seconds (one third for smaller budgets) for independent verification. A transient
 probe transport error or origin outage preserves verified access and does not justify another solve attempt.
 Starting a new reservation retains still-valid verified access for unchanged settings with its own identity;
