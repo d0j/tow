@@ -1171,7 +1171,9 @@
     "checks": {
       "unconfirmed": "The check result is unavailable: TOW restarted or the record expired. Review the topic status and run the check again if needed.",
       "history": "History",
-      "sent": "check sent; its answer was lost, TOW looks up its result"
+      "sent": "check sent; its answer was lost, TOW looks up its result",
+      "signed_out": "you were signed out: the results of the checks you started here are not shown; sign in and see the topics",
+      "sign_in": "Sign in"
     },
     "timer": {
       "title": "Personal timer: every {minutes} min",

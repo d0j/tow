@@ -274,11 +274,14 @@
       worst: () => unread().reduce((worst, item) => (RANK[item.kind] > RANK[worst] ? item.kind : worst), "info"),
       words: (id) => words.get(id) || { subject: find(id)?.subject || "", text: find(id)?.text || "" },
       stored: () => !memoryOnly,
+      // Signed out: this tab's messages go, of every install and sign-in.
       clearStorage: () => {
         items = [];
+        pending.length = 0;
+        if (active) collapse("cleared", false);
         if (!memoryOnly) {
           try {
-            storage.remove(key);
+            for (const name of storage.keys()) if (name && name.startsWith(PREFIX)) storage.remove(name);
           } catch {
             // nothing stored, or nothing to remove
           }
@@ -287,6 +290,7 @@
     };
   };
   window.TowMessageCenter = createCenter;
+  window.TowScrub = scrub; // checks.js stores a pending check's title with the same scrubbing
 
   const host = document.getElementById("msg-host");
   if (!host) return;
@@ -596,7 +600,7 @@
   if (document.hidden) center.hold("hidden");
   // Signing out ends this tab's history with the session.
   document.addEventListener("submit", (event) => {
-    if (event.target?.getAttribute?.("action") === "/logout") center.clearStorage();
+    if (event.target?.getAttribute?.("action") === "/logout") center.clearStorage(); // checks.js stops too
   });
 
   // The page as the server drew it: its message, its undo; then the address no longer names the
@@ -639,6 +643,11 @@
     },
     dismiss: (id) => center.dismiss(id),
     remove: (id) => center.remove(id),
+    // The session ended: this tab's history goes (checks.js stops following its checks too).
+    signOut: () => {
+      center.clearStorage();
+      render();
+    },
     refresh: () => render(),
     center,
   };

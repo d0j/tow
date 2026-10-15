@@ -7,7 +7,11 @@ import vm from "node:vm";
 
 const source = readFileSync(new URL("../../src/tow/static/checks.js", import.meta.url), "utf8");
 const window = {};
-vm.runInNewContext(source, { window, crypto: globalThis.crypto, Math, JSON, Array, Uint8Array, Number, String });
+// messages.js first, as on a page: the scheduler scrubs what it stores with its scrubbing.
+const messages = readFileSync(new URL("../../src/tow/static/messages.js", import.meta.url), "utf8");
+const context = { window, crypto: globalThis.crypto, Math, JSON, Array, Uint8Array, Number, String, URL, document: { getElementById: () => null } };
+vm.runInNewContext(messages, context);
+vm.runInNewContext(source, context);
 const createScheduler = window.TowCheckScheduler;
 
 const flush = async () => { for (let i = 0; i < 10; i += 1) await Promise.resolve(); };
@@ -19,6 +23,7 @@ const harness = ({ answer, storage = null, hiddenNow = () => false } = {}) => {
   const progress = [];
   const terminal = [];
   const repeats = [];
+  const signedOut = [];
   let inFlight = 0;
   let maxInFlight = 0;
   const scheduler = createScheduler({
@@ -37,11 +42,12 @@ const harness = ({ answer, storage = null, hiddenNow = () => false } = {}) => {
       return answer(entry, requests.length);
     },
     progress: (entry, body) => progress.push([entry.action || entry.job, body.status]),
+    signedOut: (entries) => signedOut.push(entries.length),
     // Said results only: a repeat (a job already answered) is recorded apart.
     terminal: (entry, body, same, repeat) => (repeat ? repeats : terminal).push({ key: entry.job || entry.action, body, same: same.length }),
   });
   return {
-    scheduler, requests, progress, terminal, repeats, maxInFlight: () => maxInFlight, now: () => now,
+    scheduler, requests, progress, terminal, repeats, signedOut, maxInFlight: () => maxInFlight, now: () => now,
     async advance(ms) {
       const end = now + ms;
       for (;;) {
@@ -59,7 +65,7 @@ const harness = ({ answer, storage = null, hiddenNow = () => false } = {}) => {
 const ok = (body) => ({ status: 200, body });
 const memory = () => {
   const data = new Map();
-  return { data, get: (key) => data.get(key) ?? null, set: (key, value) => data.set(key, value) };
+  return { data, get: (key) => data.get(key) ?? null, set: (key, value) => data.set(key, value), remove: (key) => data.delete(key), keys: () => [...data.keys()] };
 };
 const verdict = {};
 
@@ -201,19 +207,42 @@ verdict.backoff = true;
 }
 verdict.hiddenPauses = true;
 
-// Signed out: nothing more is asked; every followed check gets its one (unconfirmed) result.
+// Signed out: nothing more is asked, the tab's followed checks go with the session (no message
+// naming their topics); the page is told once.
 {
-  const test = harness({ answer: () => ({ status: 401, body: { error: "sign in again" } }) });
-  test.scheduler.begin({});
-  test.scheduler.begin({});
+  const storage = memory();
+  const test = harness({ storage, answer: () => ({ status: 401, body: { error: "sign in again" } }) });
+  test.scheduler.begin({ subject: "Show" });
+  test.scheduler.begin({ subject: "Other" });
   await test.advance(6000);
-  assert.equal(test.terminal.length, 2);
-  assert.ok(test.terminal.every((item) => item.body === null));
+  assert.equal(test.terminal.length, 0);
+  assert.equal(JSON.stringify(test.signedOut), "[2]");
+  assert.equal(storage.data.size, 0);
+  assert.equal(test.scheduler.count(), 0);
   assert.equal(test.scheduler.begin({}), null);
   await test.advance(60000);
   assert.equal(test.requests.length, 1);
 }
 verdict.signedOutStops = true;
+
+// Another install's or sign-in's followed checks in this tab go; a stored title keeps only plain
+// words (no link with its address, no path).
+{
+  const storage = memory();
+  storage.set("tow.checks.old-session", "{}");
+  storage.set("tow.messages.old-session", "{}");
+  const test = harness({ storage, answer: () => ok({ status: "running" }) });
+  test.scheduler.begin({ subject: "Show https://user:secret@tracker.example/t?id=1 D:\\TV\\Show" });
+  assert.equal(storage.get("tow.checks.old-session"), null);
+  assert.equal(storage.get("tow.messages.old-session"), "{}"); // the messages' own store keeps its keys
+  const stored = storage.get("tow.checks.test");
+  assert.ok(!stored.includes("secret"));
+  assert.ok(!stored.includes("TV"));
+  test.scheduler.stop(); // signing out by hand: the same end
+  assert.equal(storage.get("tow.checks.test"), null);
+  assert.equal(test.scheduler.count(), 0);
+}
+verdict.storeScopedAndScrubbed = true;
 
 // No more than TOW keeps (64): the next one is not taken (the page then opens as before), and
 // none followed is dropped.
