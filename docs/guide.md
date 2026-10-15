@@ -144,15 +144,19 @@ connected.
 ## Checks
 
 Manual checks never change the torrent client concurrently. If another check holds it, a row's check joins
-a FIFO (up to 32 jobs); another click on the same pending topic follows its existing job. The waiting notice
-offers **Cancel waiting**, which does not stop work that already started. Paused/deleted topics are re-read
-when their turn comes. Completed results stay available through **Results** for one hour in this web session;
-a restart does not silently replay manual re-add requests. A missing result is unconfirmed, not success.
+a FIFO (up to 32 jobs); another click on the same waiting topic follows its existing job, and a click while that
+topic's check runs queues one more check after it. Previews wait in a queue of their own and never hold up a
+check. The waiting notice says since when it waits and offers **Cancel waiting**, which does not stop work that
+already started; a check that waits more than 65 minutes ends as not run. Paused/deleted topics are re-read
+when their turn comes, and a torrent you removed from the client after pressing Check is not added back.
+Completed results stay at their own address through **Results** for one hour in this web session; a restart
+does not silently replay manual re-add requests. A missing result is unconfirmed, not success.
 
 **Results** separates updates, unchanged topics, waits, skips and errors, with topic names and links to current
 status and actions. File verification by the client is a wait, not a failure or a confirmed add; Home says
-**Checking files** until read-back confirms it. A run's report is historical: a later successful check can
-already have cleared its error. Diagnostic run totals use the same outcome rules.
+**Checking files** until read-back confirms it. A verification still waiting after 12 hours turns red so you
+can look at the client; TOW still finishes it when the client does. A run's report is historical: a later
+successful check can already have cleared its error. Diagnostic run totals use the same outcome rules.
 
 | Check | When | What it does |
 |---|---|---|
