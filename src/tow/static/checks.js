@@ -54,9 +54,13 @@
       }
     };
     const loaded = load();
+    // Read as stored (an older TOW kept a pending check's title as typed): plain words from now on.
     let entries = Array.isArray(loaded.entries)
-      ? loaded.entries.filter((entry) => entry && (entry.action || entry.job)).map((entry) => ({ aliases: [], ...entry }))
+      ? loaded.entries.filter((entry) => entry && (entry.action || entry.job))
+        .map((entry) => ({ aliases: [], ...entry, subject: scrub(entry.subject || "", 200) }))
       : [];
+    const rewrite = Array.isArray(loaded.entries)
+      && loaded.entries.some((entry, index) => entry?.subject !== undefined && entry.subject !== entries[index]?.subject);
     // The jobs whose result this tab has shown (the last 64): a result is said once per job.
     let delivered = Array.isArray(loaded.delivered) ? loaded.delivered.filter((job) => typeof job === "string").slice(-LIMIT) : [];
     let timer = 0;
@@ -74,6 +78,7 @@
         memoryOnly = true;
       }
     };
+    if (rewrite) save();
     const plan = () => {
       clearTimer(timer);
       timer = 0;
@@ -163,13 +168,21 @@
       entries = [];
       delivered = [];
       changed();
-      if (memoryOnly) return;
+      // Also when a failed write made it keep its checks in memory: what was stored before goes.
+      if (!storage) return;
+      let names = [key];
       try {
-        for (const name of storage.keys?.() || []) if (name && name.startsWith(PREFIX)) storage.remove(name);
-        storage.remove?.(key);
+        names = [...new Set([key, ...(storage.keys?.() || []).filter((name) => name && name.startsWith(PREFIX))])];
       } catch {
-        // nothing stored, or nothing to remove
+        // the list cannot be read: this tab's own key at least
       }
+      names.forEach((name) => {
+        try {
+          storage.remove?.(name);
+        } catch {
+          // nothing stored, or it cannot be removed
+        }
+      });
     };
     const poll = async () => {
       timer = 0;

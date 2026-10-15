@@ -24,7 +24,7 @@ def _verdict(name: str) -> dict:
 def test_recent_messages_time_pause_read_store_and_undo_by_a_fake_clock():
     verdict = _verdict("messages_center.mjs")
     assert verdict == dict.fromkeys(verdict, True), verdict
-    assert len(verdict) == 11
+    assert len(verdict) == 12
 
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
@@ -206,7 +206,7 @@ def test_every_check_this_tab_started_is_followed_within_bounds_to_exactly_one_r
     # for; a finished check opened a second page. One bounded scheduler follows them all instead.
     verdict = _verdict("check_scheduler.mjs")
     assert verdict == dict.fromkeys(verdict, True), verdict
-    assert len(verdict) == 16
+    assert len(verdict) == 17
 
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes

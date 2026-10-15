@@ -355,4 +355,23 @@ verdict.pendingUntilDelivered = true;
 }
 verdict.inFlightMergeKeepsItsAnswer = true;
 
+// What an older TOW stored for a pending check is rewritten with plain words when it is read; and
+// signing out removes the tab's stored checks even after a failed write made it keep them in memory.
+{
+  const storage = memory();
+  storage.set("tow.checks.test", JSON.stringify({ v: 1, entries: [
+    { action: "old1", job: "", subject: "Show https://user:secret@tracker.example/t D:\\TV\\Show", since: 1, due: 1, delay: 5000 },
+  ] }));
+  const test = harness({ storage, answer: () => ok({ status: "running" }) });
+  assert.equal(test.scheduler.count(), 1);
+  assert.ok(!storage.get("tow.checks.test").includes("secret"));
+  assert.ok(!storage.get("tow.checks.test").includes("TV"));
+  storage.set = () => { throw new Error("QuotaExceededError"); }; // from now on writes fail
+  test.scheduler.begin({});
+  assert.equal(test.scheduler.stored(), false);
+  test.scheduler.stop();
+  assert.equal(storage.data.size, 0);
+}
+verdict.oldStoreScrubbedAndRemoved = true;
+
 console.log(JSON.stringify(verdict));
