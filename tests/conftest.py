@@ -664,6 +664,11 @@ def _no_real_system_effects(request, monkeypatch):  # noqa: C901 - one guard, ev
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", deny("httpx request"))
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", deny("httpx async request"))
     monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", deny("requests/qbittorrent-api request"))
+    # httpx2 (a dev dependency, TestClient's) too, should code ever take it for httpx.
+    import httpx2
+
+    monkeypatch.setattr(httpx2.HTTPTransport, "handle_request", deny("httpx2 request"))
+    monkeypatch.setattr(httpx2.AsyncHTTPTransport, "handle_async_request", deny("httpx2 async request"))
 
     # Lower-level process starts: os.spawn*/os.exec*, and on Windows the CreateProcess
     # call under subprocess/multiprocessing. Only multiprocessing's own spawn bootstrap
