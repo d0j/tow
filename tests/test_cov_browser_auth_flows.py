@@ -1,7 +1,7 @@
 """Browser login sessions (tow.browser_auth) with every system seam faked.
 
 No browser is looked up on this machine or started, no socket is opened: the process,
-the DevTools HTTP endpoint (``urlopen``) and the CDP websocket are fakes at the module seams.
+the DevTools HTTP endpoint (``_open_local``) and the CDP websocket are fakes at the module seams.
 """
 
 from __future__ import annotations
@@ -428,18 +428,18 @@ def test_json_endpoint_is_read_and_its_failures_are_plain(monkeypatch):
         urls.append(url)
         return FakeResponse(json.dumps([PAGE_TARGET]).encode())
 
-    monkeypatch.setattr(ba.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(ba, "_open_local", urlopen)
     assert ba._json_get(9222, "/json/list") == [PAGE_TARGET]
     assert urls == ["http://127.0.0.1:9222/json/list"]
 
-    monkeypatch.setattr(ba.urllib.request, "urlopen", lambda *_a, **_k: FakeResponse(b"not json"))
+    monkeypatch.setattr(ba, "_open_local", lambda *_a, **_k: FakeResponse(b"not json"))
     with pytest.raises(ba.BrowserAuthError, match=re.escape(t("browser_auth.cdp_unavailable"))):
         ba._json_get(9222, "/json/list")
 
     def refused(*_a, **_k):
         raise ConnectionRefusedError
 
-    monkeypatch.setattr(ba.urllib.request, "urlopen", refused)
+    monkeypatch.setattr(ba, "_open_local", refused)
     with pytest.raises(ba.BrowserAuthError, match=re.escape(t("browser_auth.cdp_unavailable"))):
         ba._json_get(9222, "/json/list")
 
@@ -699,9 +699,7 @@ def test_a_bad_topic_url_and_a_missing_websockets_library_are_plain_errors(monke
 
 def test_full_session_through_the_devtools_seams(monkeypatch, launched):
     """start() -> browser -> /json/list -> CDP -> cookies -> on_success, with only the seams faked."""
-    monkeypatch.setattr(
-        ba.urllib.request, "urlopen", lambda *_a, **_k: FakeResponse(json.dumps([PAGE_TARGET]).encode())
-    )
+    monkeypatch.setattr(ba, "_open_local", lambda *_a, **_k: FakeResponse(json.dumps([PAGE_TARGET]).encode()))
     import websockets.asyncio.client as ws_client
 
     fake = FakeCdp([_signed_in()])

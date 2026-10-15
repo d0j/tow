@@ -83,7 +83,8 @@ class TransmissionClient(ManagedClient):
         self._url = url
         self._session = ""
         auth = httpx.BasicAuth(username, password) if username or password else None
-        self._http = httpx.Client(timeout=10.0, auth=auth, transport=transport, follow_redirects=False)
+        # trust_env=False: a system or HTTP_PROXY proxy would receive the Authorization header.
+        self._http = httpx.Client(timeout=10.0, auth=auth, transport=transport, follow_redirects=False, trust_env=False)
 
     def _rpc(self, method: str, **arguments: Any) -> dict[str, Any]:
         for _attempt in range(3):

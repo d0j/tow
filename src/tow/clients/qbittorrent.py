@@ -43,6 +43,12 @@ LISTING_SEC = 60.0
 WEB_API_VERSION_SEC = 600.0
 
 
+# The login form and the session cookie go to the client itself: never through a system or
+# HTTP_PROXY proxy (requests would take one even for 127.0.0.1), and never after a redirect
+# (allow_redirects=False above). requests drops a None proxy, so no scheme, "all" included, has one.
+NO_PROXY: Mapping[str, None] = {"http": None, "https": None, "all": None}
+
+
 def _fail(code: str, /, **params: Any) -> ClientError:
     """A qBittorrent failure: ``client.qbittorrent.*`` or the shared ``client.managed.*`` text."""
     return ClientError(code, prefix=NAME, **params)
@@ -69,7 +75,7 @@ class QBittorrentClient(ManagedClient):
             port=port,
             username=username,
             password=password,
-            REQUESTS_ARGS={"timeout": 8},
+            REQUESTS_ARGS={"timeout": 8, "allow_redirects": False, "proxies": dict(NO_PROXY)},
         )
         self._listing: tuple[float, dict[str, list[Any]]] | None = None
         self._web_api: tuple[float, str] | None = None
