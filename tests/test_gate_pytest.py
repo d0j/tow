@@ -148,12 +148,13 @@ def _deadline(tmp_path, deadline, arguments):
 def test_a_hung_test_run_is_stopped_at_its_deadline_with_its_whole_tree(tmp_path):
     script = tmp_path / "tree.py"
     script.write_text(TREE, encoding="utf-8")
-    result = _deadline(tmp_path, 8, [script, "{pids}"])
-    assert result["failure"] == "gate failed: the test run did not finish within 8 s"
+    # 20 s: both Python processes must start before the deadline, also on a slow Windows runner.
+    result = _deadline(tmp_path, 20, [script, "{pids}"])
+    assert result["failure"] == "gate failed: the test run did not finish within 20 s"
     assert result["code"] == 124
     assert result["started"] == 2, "the synthetic run and its worker both started before the deadline"
     assert result["alive"] == [], "the whole tree is stopped"
-    assert 8 <= result["elapsed"] < 60
+    assert 20 <= result["elapsed"] < 75
 
 
 @pytest.mark.allow_system
