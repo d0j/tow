@@ -103,6 +103,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - An update that loses power while it switches the code no longer leaves an install that refuses to start
   ("the update snapshot is damaged") or a broken updater: the copy of the data the update makes first, and
   the updater the start files run, are written to the disk before anything moves.
+- Going back to a version older than 1.30.5 (from the terminal or from Settings) is refused while a torrent
+  client is still checking the files of a topic TOW handed to it, naming the topics: those versions would take
+  the topic for done and never apply its file choice nor start it. Before, only the guide said to wait.
 
 ## [1.31.2] — 2026-10-15
 

@@ -602,7 +602,7 @@ holds back for 30 minutes while it says `in_progress`. Texts come from the catal
 | update an install without git | `<TOW>\Update TOW.cmd` (`latest`, or a tag) | Linux `<TOW>/update-tow`, macOS `<TOW>/Update TOW.command` (the same) |
 | go back to an earlier version (≥ v1.18.0 that reads the data: ≥ v1.23.0 once v1.23 ran) | `deploy.ps1 -Ref v1.23.0` | `<python> <TOW>/app/scripts/update.py --ref v1.23.0` |
 | restore a night copy | `tow.cmd restore-snapshot --path <copy>` (check), then `--apply` | `./tow restore-snapshot --path <copy>`, then `--apply` |
-| before going back below v1.30.5 | let torrents finish their client file checks first (Home: no **Checking files**) | the same |
+| before going back below v1.30.5 | let torrents finish their client file checks first (Home: no **Checking files**); the update refuses until they have | the same |
 | put back an update snapshot by hand | `tow.cmd stop`; copy `<snapshot>\data\*` over `<TOW>\data\` and `<snapshot>\config.yaml` over `<TOW>\config.yaml` | `./tow stop`; `cp -a <snapshot>/data/. <TOW>/data/` and `cp <snapshot>/config.yaml <TOW>/` |
 | Python and environment (after a move, a fresh clone) | `tow.cmd stop`, `tow.cmd setup` | `./tow stop`, `./tow setup` |
 | stop, restart, start | `tow.cmd stop` / `restart` / `run` | `./tow stop` / `restart` / `run` |

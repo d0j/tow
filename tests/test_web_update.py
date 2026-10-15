@@ -103,6 +103,22 @@ def test_current_version_is_not_reinstalled(install, monkeypatch):
         web_update.start("1.22.21")
 
 
+def test_going_below_1_30_5_while_a_client_checks_files_is_refused_before_the_restore_point(install, monkeypatch):
+    """A version older than 1.30.5 takes a topic whose client still checks its files for done:
+    its file choice is never applied. The update from Settings refuses such a target first."""
+    monkeypatch.setattr(web_update, "__version__", "1.31.2")
+    monkeypatch.setattr(web_update, "create_restore_point", lambda: pytest.fail("no restore point for a refusal"))
+    receipt = {"hash": "A" * 40, "phase": "unapplied"}
+    save_state({"topics": [{"id": "a", "title": "Harbour Clock", "verification_pending": receipt}]})
+    with pytest.raises(web_update.WebUpdateError, match=r"releases\.receipt_pending") as refused:
+        web_update.start("1.30.4")
+    assert refused.value.params == {}
+    assert not install[1]
+
+    monkeypatch.setattr(web_update, "create_restore_point", lambda: {"id": "copy"})
+    assert web_update.start("1.30.5")["ok"] is True  # a version that knows the check
+
+
 def test_backup_failure_never_launches_an_updater(install, monkeypatch):
     def failed():
         raise RestorePointError("synthetic backup failure")

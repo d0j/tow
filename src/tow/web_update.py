@@ -25,6 +25,9 @@ from tow.restore_points import CREATE_FAILED, MASTER_KEY, RestorePointError, cre
 from tow.store import StoreCorruptionError, atomic_write_bytes, decode_json_bytes, persistence_lock
 
 MINIMUM_WEB_VERSION = (1, 22, 21)
+# Older versions take a topic whose torrent client still checks its files for done
+# (``verification_pending``, scripts/update.py RECEIPTS_SINCE).
+RECEIPTS_SINCE = (1, 30, 5)
 # Folders of earlier web updates (their copied updater and update.log) kept besides the current
 # job's; older ones are removed when the next update starts.
 JOB_FOLDERS_KEPT = 3
@@ -316,6 +319,14 @@ def _without_install_path(text: str) -> str:
     return text
 
 
+def _receipt_pending() -> bool:
+    """A torrent client still checks the files of a topic TOW handed to it."""
+    from tow.records import topics_of
+    from tow.store import load_state
+
+    return any(topic.get("verification_pending") for topic in topics_of(load_state()))
+
+
 def start(version: str) -> dict[str, Any]:
     app = _runtime_app()
     parsed = releases.version_parts(version)
@@ -339,6 +350,8 @@ def start(version: str) -> dict[str, Any]:
         python = Path(getattr(sys, "_base_executable", sys.executable)).resolve()
         if not python.is_file() or python.is_relative_to(app / ".venv"):
             raise WebUpdateError("releases.no_python")
+        if parsed < RECEIPTS_SINCE and _receipt_pending():
+            raise WebUpdateError("releases.receipt_pending")
         _prune_job_folders(str(old.get("id") or ""))
         # Archive creation is serialized with store writes and verified by export_bundle.
         try:

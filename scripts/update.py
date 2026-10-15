@@ -124,6 +124,9 @@ TEST_CUT_SWITCH = "TOW_TEST_CUT_SWITCH_AFTER"
 # The first version that reads each state.json format (``STATE_SCHEMA_VERSION`` of tow.store;
 # tests/test_update_archive.py keeps the last one in step with it): what a refusal to go back names.
 STATE_FORMAT_SINCE = {1: "v1.18.0", 2: "v1.23.0"}
+# The first version that knows a torrent client's file check (a topic's ``verification_pending``):
+# an older one takes such a topic for done, never applies its file choice and never starts it.
+RECEIPTS_SINCE = (1, 30, 5)
 # The Windows bundle's start files in <TOW> (scripts/root_files.py writes them).
 ROOT_FILE_NAMES = ("Start TOW.cmd", "Stop TOW.cmd", "Update TOW.cmd")
 TEST_CUT_EXIT = 97
@@ -189,6 +192,11 @@ TEXTS = {
     "data_newer_since": (
         "{ref} cannot read this install's data (state.json format {found}; it reads up to {known}): go back no"
         " further than {since}, the first version that reads it; nothing was updated"
+    ),
+    "receipt_pending": (
+        "{ref} does not know that a torrent client is still checking the files of {topics}: it would never"
+        " apply their file choice nor start them. Let the client finish checking (Home shows these topics)"
+        " and update then, or choose {since} or newer; nothing was updated"
     ),
     "data_unverified": (
         "this install's data/state.json cannot be read ({error}), so it is not known whether {ref} can read it;"
@@ -1791,6 +1799,30 @@ class Update:
                 raise UpdateError(self.text("data_newer_since", ref=self.ref, found=found, known=known, since=since))
             raise UpdateError(self.text("data_newer", ref=self.ref, found=found, known=known))
 
+    def refuse_pending_receipts(self, target: str) -> None:
+        """A target older than v1.30.5 is refused while a torrent client still checks a topic's files
+        (before TOW stops): that version would take the topic for done."""
+        found = re.search(r'(?m)^version\s*=\s*"([^"]+)"', self.code.target_text(target, "pyproject.toml") or "")
+        version = version_tuple(found[1]) if found else None
+        if version is None or version >= RECEIPTS_SINCE:
+            return
+        try:
+            state = json.loads((self.root / "data" / "state.json").read_bytes().decode("utf-8"))
+        except FileNotFoundError:
+            return
+        except (OSError, ValueError, RecursionError) as exc:
+            raise UpdateError(self.text("data_unverified", ref=self.ref, error=exc)) from exc
+        topics = state.get("topics") if isinstance(state, dict) else None
+        waiting = [
+            str(topic.get("title") or topic.get("id") or "?")
+            for topic in (topics if isinstance(topics, list) else [])
+            if isinstance(topic, dict) and topic.get("verification_pending")
+        ]
+        if waiting:
+            since = "v" + ".".join(str(part) for part in RECEIPTS_SINCE)
+            shown = ", ".join(waiting[:5]) + (f" (+{len(waiting) - 5})" if len(waiting) > 5 else "")
+            raise UpdateError(self.text("receipt_pending", ref=self.ref, topics=shown, since=since))
+
     def run(self) -> int:
         try:
             self.check_install()
@@ -1803,6 +1835,7 @@ class Update:
                 target = code.prepare(self.ref)  # fetch, or download and unpack: TOW still runs
                 if target is not None:
                     self.refuse_unreadable_data(target)
+                    self.refuse_pending_receipts(target)
             except BaseException:
                 code.discard()
                 raise

@@ -70,8 +70,9 @@ flowchart TD
   add whose first check still runs after a 5 s grace (`INITIAL_CHECK_GRACE_SEC`; a shorter one finishes the add
   at once) (receipt phase `awaiting_initial_check`, saved as `unapplied_receipt`, never as
   `receipt`: 1.30.5-1.30.10 block it before any client change instead of reading it as an applied selection;
-  versions before 1.30.5 know no receipts, so a rollback below 1.30.5 during that first check can take a "once"
-  topic for done while its torrent stays stopped) and applies the selection,
+  versions before 1.30.5 know no receipts and would take a "once" topic for done while its torrent stays
+  stopped, so `update.py` and the web update refuse a target below 1.30.5 while any topic has a
+  `verification_pending`) and applies the selection,
   stopped and read back, when it ends. The receipt keeps its first `since`; after 12 hours it shows a red
   `check.verification_overdue` (notified once) and is still finished later. Meanwhile the site is asked
   read-only on the normal schedule (revision probe or page magnet, never a `.torrent`), and a newer revision is

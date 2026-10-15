@@ -304,6 +304,52 @@ def test_going_back_to_a_version_that_cannot_read_the_data_is_refused_before_tow
     assert not (install["root"] / "update-state.json").exists()
 
 
+def _waiting_for_its_client(install) -> None:
+    """state.json with a torrent handed to its client that is still checking its files."""
+    receipt = {"hash": "A" * 40, "phase": "unapplied", "since": "2026-10-01T00:00:00+00:00"}
+    topics = [
+        {"id": "a", "title": "Harbour Clock", "verification_pending": receipt},
+        {"id": "b", "title": "Quiet Topic", "verification_pending": {}},
+    ]
+    (install["root"] / "data" / "state.json").write_text(
+        json.dumps({"schema_version": 2, "topics": topics}), encoding="utf-8"
+    )
+
+
+def test_going_below_1_30_5_while_a_client_checks_files_is_refused_before_tow_stops(install, github):
+    """A version older than 1.30.5 knows no client file check: it takes the topic for done,
+    never applies its file choice and never starts it (started by hand, every file downloads).
+    The docs said to let the checks finish first; nothing enforced it."""
+    _waiting_for_its_client(install)
+    github.release("v1.30.4", tarball("1.30.4", extra={"src/tow/store.py": b"STATE_SCHEMA_VERSION = 2\n"}))
+    machine = Machine(install["app"], github)
+
+    code, lines = run(machine, "v1.30.4")
+
+    assert code == 2
+    assert machine.calls == []  # TOW was never stopped
+    assert "v1.30.4" in lines[-1]
+    assert "v1.30.5" in lines[-1]
+    assert "Harbour Clock" in lines[-1]
+    assert "Quiet Topic" not in lines[-1]
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+    assert leftovers(install) == []
+
+
+@pytest.mark.parametrize(("version", "pending", "refused"), [("1.30.4", True, True), ("1.30.5", True, False)])
+def test_a_client_file_check_refuses_only_a_target_that_does_not_know_it(install, version, pending, refused):
+    if pending:
+        _waiting_for_its_client(install)
+    work = _target(install, b"STATE_SCHEMA_VERSION = 2\n", version)
+    if refused:
+        with pytest.raises(updater.UpdateError, match="Harbour Clock"):
+            work.refuse_pending_receipts(f"v{version}")
+    else:
+        work.refuse_pending_receipts(f"v{version}")
+    (install["root"] / "data" / "state.json").write_text('{"schema_version": 2, "topics": []}', encoding="utf-8")
+    work.refuse_pending_receipts(f"v{version}")  # nothing waits: any version
+
+
 def test_every_state_format_names_the_first_version_that_reads_it():
     from tow.store import STATE_SCHEMA_VERSION
 
