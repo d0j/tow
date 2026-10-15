@@ -40,6 +40,11 @@ S01E01_02 = ["episode:s01e01", "episode:s01e02"]
         ("Show.S01E01-E02.4K.mkv", S01E01_02),
         ("Show.S01E01-E02.2019.mkv", S01E01_02),
         ("Show.S01E01E02.10bit.mkv", S01E01_02),
+        # An audio layout right after the episode is no fractional special.
+        ("Show.S01E05.5.1.mkv", ["episode:s01e05"]),
+        ("Show.S01E05.2.0.mkv", ["episode:s01e05"]),
+        ("Show.S01E05.7.1.Atmos.mkv", ["episode:s01e05"]),
+        ("Show.S01E01-E02.5.1.mkv", S01E01_02),
         # Controls: a fraction, an audio channel count or a codec after the number stays out.
         ("Show.S01E01-E02.mkv", S01E01_02),
         ("Show.S01E05.720p.WEB-DL.mkv", ["episode:s01e05"]),
