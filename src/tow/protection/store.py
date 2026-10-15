@@ -318,7 +318,8 @@ def note_attempt(attempt: AttemptProof, provider_id: str) -> bool:
 
 @dataclass(frozen=True, repr=False)
 class PendingAttempt:
-    """A reversible reservation only until the first external call begins."""
+    """A reversible reservation until an external call may have asked the site (a local
+    module's startup failure or warming answer has not)."""
 
     proof: AttemptProof
     previous: dict[str, Any] | None

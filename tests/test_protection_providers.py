@@ -989,3 +989,121 @@ def test_a_site_solving_timeout_does_not_pause_the_service(safe_dns, monkeypatch
     monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": solving})
     assert list(chain.candidates("sample", ORIGIN, settings())) == []
     assert store.service_states(settings()["providers"], now=time.time())["first"]["status"] == "unknown"
+
+
+# --- a warming local module does not cost the site its retry interval --------------------------
+
+
+def _warming():
+    from tow.protection.spec import ProviderUnavailableError
+
+    return ProviderUnavailableError("busy", retry_after=5, phase="startup")
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    now = [time.time()]
+    monkeypatch.setattr(chain.time, "time", lambda: now[0])
+    return now
+
+
+def test_warming_gives_the_site_its_reservation_back(safe_dns, monkeypatch, clock):
+    calls = []
+
+    def solve(provider, origin, timeout):
+        calls.append(provider["id"])
+        if len(calls) == 1:
+            raise _warming()
+        return clearance()
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": solve})
+    configured = settings(min_interval_sec=1800)
+    assert list(chain.candidates("sample", ORIGIN, configured)) == []
+    state = store.service_states(configured["providers"], now=clock[0])["first"]
+    assert state["status"] == "busy"  # the module's own backoff stays
+    assert list(chain.candidates("sample", ORIGIN, configured)) == []  # ... and is not retried at once
+    assert calls == ["first"]
+    clock[0] = state["retry_at"] + 1  # warm now: no 1800-second wait for the site
+    assert [c.provider for c in chain.candidates("sample", ORIGIN, configured)] == ["first"]
+    assert calls == ["first", "first"]
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        lambda: __import__("tow.protection.spec", fromlist=["x"]).ProviderUnavailableError("busy", retry_after=5),
+        lambda: AccessFailure("timeout", "service", "synthetic"),
+        lambda: httpx.ReadTimeout("synthetic"),
+    ],
+    ids=["service_busy", "solve_timeout", "read_timeout"],
+)
+def test_a_call_that_may_have_asked_the_site_keeps_the_reservation(safe_dns, monkeypatch, clock, failure):
+    calls = []
+
+    def solve(provider, origin, timeout):
+        calls.append(provider["id"])
+        raise failure()
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": solve})
+    configured = settings(min_interval_sec=1800)
+    assert list(chain.candidates("sample", ORIGIN, configured)) == []
+    clock[0] += 1799
+    assert list(chain.candidates("sample", ORIGIN, configured)) == []
+    assert calls == ["first"]
+
+
+def test_warming_after_another_service_tried_the_site_keeps_the_reservation(safe_dns, monkeypatch, clock):
+    calls = []
+
+    def refused(provider, origin, timeout):
+        calls.append(provider["id"])
+        raise AccessFailure("refused", "service", "synthetic")
+
+    def warming(provider, origin, timeout):
+        calls.append(provider["id"])
+        raise _warming()
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"byparr": refused, "flaresolverr": warming})
+    configured = settings(min_interval_sec=1800, providers=[*reversed(settings()["providers"])])
+    assert list(chain.candidates("sample", ORIGIN, configured)) == []
+    assert calls == ["second", "first"]
+    clock[0] += 600
+    assert list(chain.candidates("sample", ORIGIN, configured)) == []
+    assert calls == ["second", "first"]
+
+
+def test_warming_never_removes_a_newer_reservation(safe_dns, monkeypatch, clock):
+    newer = []
+
+    def solve(provider, origin, timeout):
+        (data_dir() / "protection.enc").unlink()  # an explicit reset during the call ...
+        newer.append(store.reserve_attempt("sample", ORIGIN, settings(), now=clock[0]))  # ... and a new run
+        raise _warming()
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": solve})
+    assert list(chain.candidates("sample", ORIGIN, settings())) == []
+    assert newer[0] is not None
+    assert store.reserve_attempt("sample", ORIGIN, settings(), now=clock[0] + 60) is None
+
+
+@pytest.mark.parametrize(("local", "phase"), [(True, "startup"), (False, "service")])
+def test_only_the_local_module_can_say_it_is_warming(monkeypatch, local, phase):
+    from tow.protection import local_service
+    from tow.protection.spec import ProviderUnavailableError
+
+    real_client = httpx.Client
+
+    def client(**kwargs):
+        kwargs["transport"].close()
+        kwargs["transport"] = httpx.MockTransport(
+            lambda request: httpx.Response(
+                503, json={"status": "error"}, headers={"Retry-After": "5", "X-TOW-Module-State": "warming"}
+            )
+        )
+        return real_client(**kwargs)
+
+    monkeypatch.setattr(providers.httpx, "Client", client)
+    monkeypatch.setattr(local_service, "ensure", lambda *a: local)
+    with pytest.raises(ProviderUnavailableError) as caught:
+        providers.cookie_api(settings()["providers"][0], ORIGIN, 15)
+    assert (caught.value.reason, caught.value.phase) == ("busy", phase)
