@@ -16,17 +16,10 @@ from tow.folders import recent_save_roots
 from tow.records import shown_title
 from tow.topic_form import TopicForm
 from tow.web import _context, services, topic_actions
+from tow.web.messages import flash_redirect, home_redirect, request_flash
 from tow.web.templating import TEMPLATES
 from tow.web.text import t
-from tow.web.views import (
-    event_output,
-    flash_redirect,
-    home_redirect,
-    request_flash,
-    topic_progress_summary,
-    topic_rows,
-    ui_time,
-)
+from tow.web.views import event_output, topic_progress_summary, topic_rows, ui_time
 
 router = APIRouter()
 

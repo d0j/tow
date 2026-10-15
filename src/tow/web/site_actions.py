@@ -20,6 +20,7 @@ from tow.log import error_class
 from tow.store_transaction import StoreTransaction
 from tow.undo.snapshots import site_snapshot
 from tow.web import services
+from tow.web.messages import flash_location, flash_redirect, use_subject
 from tow.web.site_form import (
     FieldRefused,
     NewSite,
@@ -33,7 +34,7 @@ from tow.web.site_form import (
 )
 from tow.web.site_store import commit_site_stores, save_together, with_login
 from tow.web.text import t
-from tow.web.views import add_refused_redirect, flash_location, flash_redirect, use_subject
+from tow.web.views import add_refused_redirect
 
 
 def save_site(config: dict[str, Any] | None = None, secrets: dict[str, Any] | None = None) -> RedirectResponse | None:

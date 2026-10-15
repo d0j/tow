@@ -9,8 +9,8 @@ from fastapi.responses import JSONResponse, Response
 
 from tow.config import as_bool
 from tow.web import services
+from tow.web.messages import flash_redirect
 from tow.web.text import t
-from tow.web.views import flash_redirect
 
 router = APIRouter()
 

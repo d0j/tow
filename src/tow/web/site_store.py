@@ -14,7 +14,7 @@ from tow import store_transaction, undo
 from tow.log import error_class
 from tow.store_transaction import StoreTransaction
 from tow.web import _context, services
-from tow.web.views import flash_redirect
+from tow.web.messages import flash_redirect
 
 _LOG = logging.getLogger("tow.web")
 

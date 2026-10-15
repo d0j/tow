@@ -21,9 +21,10 @@ from tow.store import CheckBusyError, SecretStoreError
 from tow.trackers import GenericHttpTracker, load_trackers, match_tracker
 from tow.web import check_jobs, services
 from tow.web.check_actions import enqueue_check
+from tow.web.messages import home_redirect
 from tow.web.site_store import restore_unverified_password, save_tracker_login
 from tow.web.text import t
-from tow.web.views import home_redirect, row_class, topic_check_row
+from tow.web.views import row_class, topic_check_row
 
 router = APIRouter()
 

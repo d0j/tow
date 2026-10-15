@@ -30,8 +30,9 @@ from tow.jsonish import as_dict
 from tow.log import check_error_label
 from tow.status import site_check_tone
 from tow.web import _context, services
+from tow.web.messages import message_text
 from tow.web.text import t, tm
-from tow.web.views import attention_view, message_text, stored_ui_time
+from tow.web.views import attention_view, stored_ui_time
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = PACKAGE_DIR / "static"

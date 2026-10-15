@@ -182,14 +182,14 @@ HELPER_ALLOWED: dict[str, set[str]] = {
     },
     # format_size took the place of format_decimal: the size text is one shared formatter now.
     "text": {"tow.i18n.fill", "tow.i18n.format_size"},
+    # Moved here from views with the message helpers (not new names).
+    "messages": {"tow.errors.Msg", "tow.i18n.has"},
     "views": {
         "tow.adopt.unmarked_hash",
         "tow.check.PREVIOUS_REVISION_ACTIVE",
         "tow.episodes.expected_for_topic",
-        "tow.errors.Msg",
         "tow.errors.render_stored",
         "tow.i18n.datetime_pattern",
-        "tow.i18n.has",
         "tow.log.CLS_RU",
         "tow.net_errors.humanize",
         "tow.progress.progress_summary",

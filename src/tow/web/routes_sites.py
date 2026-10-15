@@ -12,12 +12,13 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from tow.guess import GuessError
 from tow.web import _context, services
+from tow.web.messages import flash_redirect, request_flash
 from tow.web.site_actions import add_site, delete_site, edit_site, save_site
 from tow.web.site_form import NewSite, SiteEdit
 from tow.web.site_store import with_login
 from tow.web.templating import TEMPLATES, site_tones
 from tow.web.text import t
-from tow.web.views import add_draft, flash_redirect, issue_notes, request_flash, site_title_of
+from tow.web.views import add_draft, issue_notes, site_title_of
 
 router = APIRouter()
 

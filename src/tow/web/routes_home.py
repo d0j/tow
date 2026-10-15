@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from tow import access
 from tow.folders import recent_save_roots
 from tow.web import _context, check_jobs
+from tow.web.messages import request_flash
 from tow.web.middleware import is_browser_navigation
 from tow.web.templating import TEMPLATES, header_health
 from tow.web.text import t
@@ -21,7 +22,6 @@ from tow.web.views import (
     check_result_flash,
     credential_prompt,
     first_run,
-    request_flash,
     topic_rows,
     ui_time,
 )

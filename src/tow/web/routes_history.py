@@ -6,9 +6,10 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from tow.web import _context, services
+from tow.web.messages import request_flash
 from tow.web.templating import TEMPLATES
 from tow.web.text import t
-from tow.web.views import issue_notes, request_flash
+from tow.web.views import issue_notes
 
 router = APIRouter()
 

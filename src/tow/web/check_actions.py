@@ -15,7 +15,8 @@ from tow.records import CheckRow
 from tow.store import CheckBusyError, SecretStoreError
 from tow.trackers import load_trackers, match_tracker
 from tow.web import _context, check_jobs, services
-from tow.web.views import check_feedback, check_report, flash_redirect, topic_check_row
+from tow.web.messages import flash_redirect
+from tow.web.views import check_feedback, check_report, topic_check_row
 
 
 def topic_feedback(tid: str, row: CheckRow | None, *, adopted: bool) -> dict[str, str]:

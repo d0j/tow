@@ -9,7 +9,7 @@ from tow import access
 from tow.auth import AuthConfigurationError
 from tow.store import SecretStoreError
 from tow.web import services
-from tow.web.views import flash_redirect
+from tow.web.messages import flash_redirect
 
 router = APIRouter()
 

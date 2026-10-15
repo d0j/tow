@@ -1,18 +1,17 @@
-"""Shared view helpers: messages after an action (flash) and redirects, the add form's draft, the
-topic rows of Home with their status and attention lines, the messages of a manual check, whether
-the first-start page is due, and the service and backup cards of Settings."""
+"""Shared view helpers: the add form's draft, the topic rows of Home with their status and
+attention lines, the messages of a manual check, whether the first-start page is due, and the
+service and backup cards of Settings. Messages after an action are ``tow.web.messages``'s (its
+names stay importable from here)."""
 
 from __future__ import annotations
 
 import re
-import secrets
-import threading
 import time
 from collections.abc import Mapping
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import parse_qs, quote, unquote, urlsplit
+from urllib.parse import quote
 
 from fastapi import Request
 from fastapi.responses import RedirectResponse
@@ -23,7 +22,7 @@ from tow.check import PREVIOUS_REVISION_ACTIVE, blocked_by_previous_revision
 from tow.clock import format_ui_timestamp
 from tow.config import as_bool, flash_ttl, interval_sec_of
 from tow.episodes import expected_for_topic
-from tow.errors import Msg, TowError, render_stored
+from tow.errors import render_stored
 from tow.issues import Issue, Snapshot, fingerprint, worst
 from tow.jsonish import as_dict
 from tow.log import error_class, owner_language
@@ -33,6 +32,22 @@ from tow.records import CheckRow, shown_title
 from tow.status import TRACKER_WARNING_CLASSES, project_home_status
 from tow.trackers import GenericHttpTracker, load_trackers, match_tracker
 from tow.web import _context, services
+from tow.web.messages import (  # noqa: F401 - the message helpers, importable from here as before
+    FLASH_KINDS,
+    flash_at,
+    flash_location,
+    flash_redirect,
+    flash_text,
+    home_redirect,
+    message_text,
+    record,
+    request_flash,
+    resolve_subject,
+    topic_subject,
+    use_subject,
+)
+from tow.web.messages import FLASHES as _FLASHES  # noqa: F401 - read by tests as views._FLASHES
+from tow.web.messages import TokenStore as _TokenStore
 from tow.web.text import format_bytes, t
 
 
@@ -52,174 +67,11 @@ def first_run(cfg: dict[str, Any]) -> bool:
     return secrets is not None and not access.password_is_set(secrets)
 
 
-class _TokenStore:
-    """Short-lived records a redirect points at by a random token (``?add=<token>``,
-    ``?flash=<token>``). The next page shows only what this server stored: a crafted link can
-    neither plant text on a TOW page nor a link or folder in the owner's form. Bounded: the
-    oldest record goes first; a record lives ``ttl`` seconds."""
-
-    def __init__(self, ttl: float, limit: int) -> None:
-        self.ttl = ttl
-        self.limit = limit
-        self._records: dict[str, tuple[float, dict[str, str]]] = {}
-        self._lock = threading.Lock()
-
-    def put(self, record: dict[str, str]) -> str:
-        token = secrets.token_urlsafe(16)
-        now = time.monotonic()
-        with self._lock:
-            for old in [key for key, (at, _) in self._records.items() if now - at > self.ttl]:
-                del self._records[old]
-            while len(self._records) >= self.limit:
-                del self._records[min(self._records, key=lambda key: self._records[key][0])]
-            self._records[token] = (now, dict(record))
-        return token
-
-    def get(self, token: str) -> dict[str, str] | None:
-        with self._lock:
-            entry = self._records.get(token)
-        if entry is None or time.monotonic() - entry[0] > self.ttl:
-            return None
-        return dict(entry[1])
-
-    def clear(self) -> None:
-        with self._lock:
-            self._records.clear()
-
-
-# A refused add's draft and reason (D2/H2); a message shown once after an action (typed flash).
-# Both live in the memory of the web process only, on purpose: they matter for the next page,
-# a few seconds after the action. A restart of the web server (an update, the supervisor bringing
-# it back) forgets them - the page after it simply shows no message and an empty add form, the
-# action itself is saved or refused as before. Nothing of the owner's input touches the disk.
+# A refused add's draft and reason (D2/H2): in the memory of the web process only, like a message
+# after an action (tow.web.messages) - it matters for the next page, a few seconds later. A
+# restart forgets it: the page then opens an empty add form. Nothing of the owner's input touches
+# the disk.
 _ADD_DRAFTS = _TokenStore(ttl=600, limit=64)
-_FLASHES = _TokenStore(ttl=600, limit=256)
-# ok: done; info: accepted, queued, skipped or awaiting confirmation; warn: transport trouble or a
-# real caution; err: an actionable failure (the status-colour contract).
-FLASH_KINDS = ("ok", "info", "warn", "err")
-
-
-def request_flash(request: Request) -> dict[str, str] | None:
-    """The message a redirect left for this page: ``{"text", "kind"}``; None for no, an unknown
-    or an expired token - and for a ``?flash=<text>`` link of an older TOW (never shown)."""
-    token = request.query_params.get("flash") or ""
-    return _FLASHES.get(token) if token else None
-
-
-def flash_at(location: str) -> dict[str, str] | None:
-    """The message a redirect to ``location`` leaves (as ``request_flash`` reads it there)."""
-    try:
-        token = (parse_qs(urlsplit(location).query).get("flash") or [""])[0]
-    except ValueError:
-        return None
-    return _FLASHES.get(token) if token else None
-
-
-def flash_text(message: Any, /, **params: Any) -> str:
-    """``message`` as text in the page's language: a catalog key (filled with ``params``), a
-    ``Msg`` or a typed error, or a text already composed from catalog texts."""
-    if isinstance(message, (Msg, TowError)):
-        return message.text()
-    text = str(message or "")
-    return t(text, **params) if text and i18n.has(text) else text
-
-
-def use_subject(value: str) -> None:
-    """What this request's messages are about from now on: the topic a route has just added, the
-    client it checks. Topic and site routes get theirs before they change anything
-    (``resolve_subject``)."""
-    _context.use_subject(" ".join(str(value or "").split())[:200])
-
-
-def topic_subject(title: object) -> str:
-    """A topic as a message names it: the short series title ("Harbour Clock", not the whole
-    "Harbour Clock / Часовая гавань [2024]")."""
-    return services.short_series_title(str(title or ""), owner_language()) if str(title or "").strip() else ""
-
-
-def resolve_subject(request: Request) -> None:
-    """The app's dependency for every route: a route of one topic (``/topics/<id>/...``) or one
-    site (``/sites/<name>...``) names it for its messages before it changes anything, so a
-    deleted or renamed one is named as it was. Every other route says no subject."""
-    params = request.path_params
-    path = request.url.path
-    if path.startswith("/topics/") and "tid" in params:
-        tid = str(params["tid"])
-        topic = next((item for item in _context.state().get("topics") or [] if str(item.get("id")) == tid), None)
-        use_subject(topic_subject(shown_title(topic)) if isinstance(topic, dict) else "")
-    elif path.startswith("/sites/") and "name" in params:
-        name = str(params["name"])
-        use_subject(site_title_of(name) if name in (_context.config().get("trackers") or {}) else "")
-
-
-def message_text(record: Mapping[str, Any] | None) -> str:
-    """A message as the page says it: "{subject} — {result}" for one about a topic, a site or a
-    client, the result alone (as a sentence) for a global one; never the subject twice."""
-    record = record or {}
-    text = str(record.get("text") or "").strip()
-    subject = str(record.get("subject") or "").strip()
-    if not subject or text.casefold().startswith(f"{subject} — ".casefold()):
-        return text[:1].upper() + text[1:]
-    return t("web.message.subject_result", subject=subject, result=text)
-
-
-def flash_location(url: str, message: Any, kind: str = "ok", /, *, subject: str | None = None, **params: Any) -> str:
-    """``url`` with ``flash=<token>`` of a message kept on the server (see ``flash_redirect``).
-    ``subject``: what it is about; None takes the request's (``resolve_subject``), "" is none."""
-    text = flash_text(message, **params)
-    if not text:
-        return url
-    record = {
-        # Its identity in the page's message history: not the token, which only this server reads.
-        "id": secrets.token_urlsafe(9),
-        "text": text,
-        "kind": kind if kind in FLASH_KINDS else "ok",
-        "subject": _context.subject() if subject is None else " ".join(subject.split())[:200],
-        "at": str(int(time.time())),
-    }
-    # The undo this action made goes with its message: a check right after a save says
-    # "Connected" without an "Undo" that would put the save back.
-    if stamped := services.undo_stamped_here():
-        record["undo"] = stamped
-    token = _FLASHES.put(record)
-    path, hash_mark, fragment = url.partition("#")
-    joined = f"{path}{'&' if '?' in path else '?'}flash={token}"
-    return joined + hash_mark + fragment
-
-
-def flash_redirect(url: str, message: Any, kind: str = "ok", /, **params: Any) -> RedirectResponse:
-    """A 303 to ``url`` that shows ``message`` once, as ``kind``: ``ok`` (done), ``warn`` (done
-    in part, or wait and retry) or ``err`` (nothing done). The kind comes from the route, never
-    from the words; ``subject=`` names what it is about (default: the request's)."""
-    decoded = unquote(url)
-    if (
-        not decoded.startswith("/")
-        or decoded.startswith("//")
-        or "\\" in decoded
-        or any(ord(ch) < 32 for ch in decoded)
-    ):
-        url = "/"
-    return RedirectResponse(flash_location(url, message, kind, **params), status_code=303)
-
-
-def home_redirect(
-    message: Any = "",
-    kind: str = "ok",
-    /,
-    *,
-    credential_topic: str | None = None,
-    browser_auth_id: str | None = None,
-    **params: Any,
-) -> RedirectResponse:
-    location = "/"
-    query = []
-    if credential_topic:
-        query.append("credential_topic=" + quote(str(credential_topic)))
-    if browser_auth_id:
-        query.append("browser_auth_id=" + quote(str(browser_auth_id)))
-    if query:
-        location += "?" + "&".join(query)
-    return flash_redirect(location, message, kind, **params)
 
 
 def add_refused_redirect(problem: str, draft: dict[str, str], *, kind: str = "", page: str = "/") -> RedirectResponse:
@@ -470,17 +322,16 @@ def check_result_flash(job: Mapping[str, Any]) -> dict[str, str] | None:
     feedback = job.get("feedback")
     said = feedback if isinstance(feedback, Mapping) and feedback.get("text") else {}
     stopped = job.get("cancelled") or job.get("lock_timeout")
-    return {
-        # One identity per job: the result page opened again is not a new message.
-        "id": "check-" + str(job.get("id") or ""),
-        "text": str(said.get("text") or check_job_message(job)),
-        "kind": str(
-            said.get("kind") or job.get("kind") or ("info" if job.get("cancelled") else "warn" if stopped else "err")
-        ),
+    ended = job.get("ended_at")
+    return record(
+        str(said.get("text") or check_job_message(job)),
+        str(said.get("kind") or job.get("kind") or ("info" if job.get("cancelled") else "warn" if stopped else "err")),
         # Named when it was asked for: a topic deleted meanwhile keeps its name.
-        "subject": str(job.get("subject") or ""),
-        "at": str(int(job["ended_at"])) if isinstance(job.get("ended_at"), (int, float)) else "",
-    }
+        subject=str(job.get("subject") or ""),
+        # One identity per job: the result page opened again is not a new message.
+        message_id="check-" + str(job.get("id") or ""),
+        at=ended if isinstance(ended, (int, float)) else None,
+    )
 
 
 def check_job_message(job: Mapping[str, Any]) -> str:
