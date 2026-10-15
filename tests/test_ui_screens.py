@@ -144,6 +144,36 @@ def test_the_regex_placeholders_show_single_backslashes(client):
         assert field["placeholder"] == r"download\.php\?id=(\d+)"
 
 
+def test_an_empty_history_search_offers_the_way_back_and_no_storage_note(client):
+    """History said "Nothing found." in the log's monospace with no way back, and every visit
+    explained the log's file sizes."""
+    from tow.log import log_event
+
+    log_event("topic_pause", topic="t1", title="Show", paused=True, how="manual")
+    page = BeautifulSoup(client.get("/history?q=zzzz").text, "html.parser")
+    empty = page.select_one(".history-box .history-empty")
+    assert empty.get_text(" ", strip=True) == "Ничего не найдено. Показать всё"
+    assert empty.select_one("a")["href"] == "/history"
+    shown = BeautifulSoup(client.get("/history").text, "html.parser")
+    assert shown.select(".history-box .log-line")
+    assert "5 МБ" not in shown.get_text()
+    assert "последние" not in shown.get_text()  # said only when the list stops at its limit
+    assert "w-m" in shown.select_one("#history-q")["class"]
+
+
+def test_history_says_its_limit_only_when_it_is_reached(client, monkeypatch):
+    from tow.web import routes_history
+
+    monkeypatch.setattr(routes_history, "HISTORY_LIMIT", 1)
+    from tow.log import log_event
+
+    log_event("topic_pause", topic="t1", title="Show", paused=True, how="manual")
+    log_event("topic_pause", topic="t1", title="Show", paused=False, how="manual")
+    page = client.get("/history").text
+    assert page.count('class="log-line"') == 1
+    assert "Показано только последнее 1 событие." in page
+
+
 def test_a_cleared_follow_box_is_saved_as_once_on_edit(client, monkeypatch):
     assert _add(client, monkeypatch).status_code == 303
     topic = load_state()["topics"][0]

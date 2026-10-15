@@ -13,6 +13,9 @@ from tow.web.views import issue_notes
 
 router = APIRouter()
 
+# The newest events History shows; the page says so only when the list stops there.
+HISTORY_LIMIT = 300
+
 
 @router.get("/history", response_class=HTMLResponse)
 def history_page(request: Request, group: str = "", q: str = "") -> Response:
@@ -24,8 +27,9 @@ def history_page(request: Request, group: str = "", q: str = "") -> Response:
     site_titles = index_site_titles(_context.config())
     rows = []
     seen: set[str] = set()
-    for event in services.history_events(group=group, text=q, title_index=title_index):
+    for event in services.history_events(group=group, text=q, limit=HISTORY_LIMIT, title_index=title_index):
         row = format_event(event, title_index=title_index, site_titles=site_titles)
+        row["at_iso"] = str(event.get("created_at") or event.get("ts") or "")  # for the short time
         # The newest line of each kind has an address ("Needs attention" links to the newest
         # failed check: #latest-check_blocked).
         kind = str(event.get("kind") or "")
@@ -41,6 +45,7 @@ def history_page(request: Request, group: str = "", q: str = "") -> Response:
             "rows": rows,
             "group": group,
             "q": q,
+            "history_limit": HISTORY_LIMIT,
             "flash": request_flash(request),
             # What needs the owner and is explained here, in a note of its own.
             "notes": issue_notes(state, _context.config(), "history"),

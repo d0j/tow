@@ -1027,7 +1027,11 @@
     "search_label": "Search the history",
     "search_placeholder": "topic, site, file…",
     "empty": "Nothing found.",
-    "note": "Shows up to 300 latest events from the log (5 files of 5 MB).",
+    "show_all": "Show all",
+    "note": {
+      "one": "Only the latest {n} event is shown.",
+      "other": "Only the latest {n} events are shown."
+    },
     "no_events": "No downloads, errors, changes or notifications yet. Routine events — site checks, starts — are in the Log."
   },
   "issues": {
