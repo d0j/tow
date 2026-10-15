@@ -14,7 +14,16 @@ from tow.web import _context, check_jobs
 from tow.web.middleware import is_browser_navigation
 from tow.web.templating import TEMPLATES, header_health
 from tow.web.text import t
-from tow.web.views import add_draft, credential_prompt, first_run, request_flash, topic_rows, ui_time
+from tow.web.views import (
+    add_draft,
+    check_job_message,
+    check_progress,
+    credential_prompt,
+    first_run,
+    request_flash,
+    topic_rows,
+    ui_time,
+)
 
 router = APIRouter()
 
@@ -78,8 +87,12 @@ def index(request: Request) -> Response:
             "flash": request_flash(request),
             "check_result": result,
             "check_result_at": ui_time(datetime.fromtimestamp(result["started_at"], UTC).isoformat()) if result else "",
+            "check_result_message": check_job_message(result) if result else "",
             "check_result_requested": bool(result_id),
             "check_activity": active,
+            "check_activity_text": check_progress(active)
+            if active and active["status"] in {"queued", "running"}
+            else t("web.check_all.unconfirmed"),
             "check_activity_title": next(
                 (row["series"] for row in rows if active and str(row["id"]) == active["topic_id"]),
                 t("base.check_all.title"),

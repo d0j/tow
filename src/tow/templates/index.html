@@ -3,7 +3,7 @@
 {% block body %}
 <h1 id="page-title" class="sr-only">{{ t('home.title') }}</h1>
 {% if check_activity_requested %}
-<div class="issue-note check-activity" id="check-activity" role="status"><span>{{ check_activity_title }} — <span data-check-status>{{ t('web.check_all.waiting') if check_activity and check_activity.status in ['queued', 'running'] else t('web.check_all.unconfirmed') }}</span></span> <a href="/?check_result={{ request.query_params.get('check_job', '')|urlencode }}#check-result">{{ t('web.check_all.results') }}</a>{% if check_activity and check_activity.status == 'queued' %}<form method="post" action="/check/{{ check_activity.id|urlencode }}/cancel"><button type="submit" class="ghost">{{ t('web.check_all.cancel') }}</button></form>{% endif %}</div>
+<div class="issue-note check-activity" id="check-activity" role="status"><span>{{ check_activity_title }} — <span data-check-status>{{ check_activity_text }}</span></span> <a href="/?check_result={{ request.query_params.get('check_job', '')|urlencode }}#check-result">{{ t('web.check_all.results') }}</a>{% if check_activity and check_activity.status == 'queued' %}<form method="post" action="/check/{{ check_activity.id|urlencode }}/cancel"><button type="submit" class="ghost">{{ t('web.check_all.cancel') }}</button></form>{% endif %}</div>
 {% endif %}
 {% if check_result_requested %}
 <section class="card check-results" id="check-result" aria-labelledby="check-result-title">
@@ -21,8 +21,7 @@
   </ul>
   {% if check_result.report.total > check_result.report.rows|length %}<p class="sub">{{ t('web.check_all.more', n=check_result.report.total) }}</p>{% endif %}
   {% elif check_result and check_result.status in ['running', 'queued'] %}<p data-check-result-pending>{{ t('web.check_all.waiting') }}</p>
-  {% elif check_result and check_result.cancelled %}<p>{{ t('web.check_all.cancelled')|sentence }}</p>
-  {% elif check_result and check_result.flash %}<p>{{ check_result.flash|sentence }}</p>
+  {% elif check_result %}<p>{{ check_result_message|sentence }}</p>
   {% else %}<p>{{ t('web.check_all.unconfirmed') }}</p>{% endif %}
   <p><a href="/history?group=errors">{{ t('web.check_all.history') }}</a> · <a href="/">{{ t('base.close') }}</a></p>
 </section>

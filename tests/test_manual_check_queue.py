@@ -160,7 +160,42 @@ def test_a_waiting_preview_never_delays_an_applying_check(client, monkeypatch, c
     assert calls == [(True, ["b"]), (True, ["c"]), (True, ["c"]), (False, None)]
 
 
-def test_scheduled_lock_busy_is_retried_without_recording_a_failure(client, monkeypatch):
+class _Clock:
+    """The queue's time: a monotonic clock the test moves, and a wall clock that is put back."""
+
+    def __init__(self):
+        self.mono, self.wall = 1000.0, 1_791_000_000.0
+
+    def monotonic(self):
+        return self.mono
+
+    def time(self):
+        return self.wall
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    fake = _Clock()
+    monkeypatch.setattr(check_jobs, "time", fake)
+    return fake
+
+
+def _pauses(monkeypatch, clock, step, during=None):
+    """Each wait for the check lock moves the clocks: ``step`` seconds on, the wall clock an hour back."""
+    pauses = []
+
+    def pause(seconds):
+        pauses.append(seconds)
+        clock.mono += step
+        clock.wall -= 3600
+        if during:
+            during(len(pauses))
+
+    monkeypatch.setattr(check_jobs, "_pause", pause)
+    return pauses
+
+
+def test_scheduled_lock_busy_is_retried_without_recording_a_failure(client, monkeypatch, consumers, clock):
     attempts = []
 
     def check(**kw):
@@ -172,11 +207,88 @@ def test_scheduled_lock_busy_is_retried_without_recording_a_failure(client, monk
     monkeypatch.setattr("tow.web.services.run_check", check)
     failures = []
     monkeypatch.setattr("tow.web.services.record_check_failure", lambda *a, **kw: failures.append(a))
+    pauses = _pauses(monkeypatch, clock, 1)
     job = _job(client.post("/topics/b/check", follow_redirects=False))
-    assert wait_for_check_job(client, job)["status"] == "done"
+    consumers[0].run()
+    assert _status(client, job)["status"] == "done"
     assert len(attempts) == 3
     assert all(call["wait"] is False and call["ids"] == ["b"] for call in attempts)
+    assert pauses == [1.0]  # once a second, never a busy loop
     assert failures == []
+
+
+def test_a_check_waiting_too_long_for_the_lock_ends_as_not_run(client, monkeypatch, consumers, clock):
+    attempts, failures, seen = [], [], []
+
+    def check(**kw):
+        attempts.append(kw["ids"])
+        if kw["ids"] == ["b"]:
+            raise CheckBusyError("a scheduled check holds the lock")
+        return {"results": [{"id": "c", "title": "Show C", "ok": True}]}
+
+    def during(count):
+        if count in {1, 7}:
+            seen.append((_status(client, job), client.get(f"/?check_job={job}").text))
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    monkeypatch.setattr("tow.web.services.record_check_failure", lambda *a, **kw: failures.append(a))
+    monkeypatch.setattr("tow.web.services.log_event", lambda *a, **kw: failures.append(a))
+    pauses = _pauses(monkeypatch, clock, 600, during)
+    job = _job(client.post("/topics/b/check", follow_redirects=False))
+    behind = _job(client.post("/topics/c/check", follow_redirects=False))
+    consumers[0].run()
+    # Refused at 0, 10, ..., 60 minutes of waiting; at 70 minutes (over 3900 s) it gives up.
+    assert len(pauses) == 7
+    assert attempts == [["b"]] * 9 + [["c"]]
+    first, last = seen
+    assert first[0]["status"] == "queued"
+    assert first[0]["progress"].startswith("Ждёт завершения другой проверки (с ")
+    assert last[0]["progress"] == first[0]["progress"]  # the wall clock was put back: the start stays
+    assert first[0]["progress"] in first[1]
+    ended = _status(client, job)
+    assert ended["status"] == "failed"
+    assert "не запущена" in ended["flash"]
+    assert failures == []  # waiting is not a site or topic failure
+    assert _status(client, behind)["status"] == "done"  # the queue moved on
+
+
+def test_a_check_that_gets_the_lock_just_in_time_runs(client, monkeypatch, consumers, clock):
+    start = clock.mono
+
+    def check(**_kw):
+        if clock.mono - start < check_jobs.LOCK_WAIT_SEC - 1:
+            raise CheckBusyError("busy")
+        return {"results": [{"id": "b", "title": "Show B", "ok": True}]}
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    pauses = _pauses(monkeypatch, clock, 1299.9)
+    job = _job(client.post("/topics/b/check", follow_redirects=False))
+    consumers[0].run()
+    assert len(pauses) == 3
+    assert _status(client, job)["status"] == "done"
+
+
+def test_a_check_waiting_for_the_lock_can_be_cancelled(client, monkeypatch, consumers, clock):
+    attempts, seen = [], {}
+
+    def check(**kw):
+        attempts.append(kw["ids"])
+        raise CheckBusyError("busy")
+
+    def during(_count):
+        if "cancelled" not in seen:
+            seen["cancelled"] = flash_of(
+                client.post(f"/check/{job}/cancel", follow_redirects=False).headers["location"]
+            )
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    _pauses(monkeypatch, clock, 1, during)
+    job = _job(client.post("/topics/b/check", follow_redirects=False))
+    consumers[0].run()
+    assert "удалена из очереди" in seen["cancelled"]
+    assert attempts == [["b"], ["b"]]  # the click, then the queue's one attempt before the cancel
+    assert _status(client, job)["status"] == "failed"
+    assert not check_jobs.has_pending(apply=True)
 
 
 def test_cancel_only_removes_queued_work(client, monkeypatch, consumers):

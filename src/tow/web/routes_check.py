@@ -16,7 +16,15 @@ from tow.store import CheckBusyError, SecretStoreError
 from tow.trackers import load_trackers, match_tracker
 from tow.web import check_jobs, services
 from tow.web.text import t
-from tow.web.views import check_report, flash_location, flash_redirect, manual_check_flash, topic_check_row
+from tow.web.views import (
+    check_job_message,
+    check_progress,
+    check_report,
+    flash_location,
+    flash_redirect,
+    manual_check_flash,
+    topic_check_row,
+)
 
 router = APIRouter()
 
@@ -188,18 +196,16 @@ def check_status(job: str = "") -> Response:
     current = check_jobs.get(job)
     if current is None:
         return JSONResponse({"status": "unknown"})
-    body = {"status": current["status"], "flash": current.get("flash") or ""}
+    waiting = current["status"] in {"queued", "running"}
+    body = {"status": current["status"], "flash": "" if waiting else check_job_message(current)}
+    if waiting:
+        body["progress"] = check_progress(current)
     if current["status"] == "queued":
         body["position"] = current["position"]
     if current.get("redirect"):
         body["redirect"] = current["redirect"]
     elif current["status"] == "failed":
-        body["redirect"] = flash_location(
-            "/",
-            "web.check_all.cancelled" if current.get("cancelled") else "web.check_all.unconfirmed",
-            "warn",
-            result_job=job,
-        )
+        body["redirect"] = flash_location("/", check_job_message(current), "warn", result_job=job)
     return JSONResponse(body)
 
 

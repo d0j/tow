@@ -214,7 +214,8 @@ if (checkJob) {
       const data = await response.json();
       const progress = document.querySelector("#check-activity [data-check-status]");
       if (progress && (data.status === "queued" || data.status === "running")) {
-        progress.textContent = data.status === "queued" ? t("js.checks.queued", { position: data.position }) : t("js.checks.running");
+        // The server words it: the place in the queue, or since when it waits for another check.
+        if (data.progress) progress.textContent = data.progress;
         const cancel = document.querySelector('#check-activity form');
         if (cancel) cancel.hidden = data.status !== "queued";
       }

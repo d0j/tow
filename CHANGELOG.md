@@ -83,6 +83,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   the waiting check, and an adoption asked for meanwhile is kept.
 - A preview of every topic no longer holds up a topic check: previews and applying checks wait in separate
   queues, and applying checks still never run at the same time.
+- A topic check waiting for another check (a scheduled one, or one from the command line) says since when it
+  waits instead of “position 1” forever. After 65 minutes it ends as not run, without marking the topic or its
+  site as failed.
 
 ## [1.30.10] — 2026-10-15
 
