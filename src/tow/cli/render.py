@@ -32,13 +32,11 @@ def human(data: Any) -> str:
         lines = ["  ".join(head)] if head else []
         for row in data["results"]:
             # The outcomes the web and the log use: waiting for disk space or for the client's
-            # file check is neither ok nor a failure.
-            mark = {"pending": "…  ", "fail": "ERR"}.get(outcome_of(row), "ok ")
+            # file check is neither ok nor a failure, and a skipped or unsaved row is no success.
+            outcome = outcome_of(row)
+            mark = _MARKS[outcome]
             state = (
-                row.get("error")
-                or row.get("skipped")
-                or row.get("status")
-                or (t("web.check.changed") if row.get("changed") else "")
+                row.get("error") or row.get("skipped") or _check_state(row, outcome, preview=bool(data.get("preview")))
             )
             lines.append(f"{mark} {str(row.get('title') or row.get('id'))[:70]}" + (f" — {state}" if state else ""))
             if row.get("note"):
@@ -57,6 +55,28 @@ def human(data: Any) -> str:
     if isinstance(data, (dict, list)):
         return str(yaml.safe_dump(data, allow_unicode=True, sort_keys=False, default_flow_style=False)).rstrip()
     return str(data)
+
+
+# A check row's mark by its outcome (tow.check_outcomes): signs, the same in every language.
+_MARKS = {"new": "ok ", "same": "ok ", "pending": "…  ", "skipped": "–  ", "fail": "ERR"}
+
+
+def _check_state(row: dict[str, Any], outcome: str, *, preview: bool) -> str:
+    """What a check row without its own error or reason says, in words (never a status code)."""
+    from tow.i18n import t
+
+    if outcome == "new":
+        if preview:
+            return t("cli.check.would_change")
+        for flag, key in (("selection_updated", "web.check.selection_updated"), ("started", "web.check.started")):
+            if row.get(flag):
+                return t(key)
+        return t("web.check.added") if row.get("added") else t("web.check.changed")
+    if outcome == "pending" and row.get("status") == "verification_pending":
+        return t("web.check.verifying")
+    if outcome == "fail":
+        return t("web.check.not_confirmed")
+    return ""  # unchanged, or skipped with its note on the next line
 
 
 # --- what a command says to a person (its --json keeps every field) -------------------------

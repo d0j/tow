@@ -687,8 +687,9 @@ def test_human_output_of_a_scalar_is_the_text_itself():
 
 
 def test_human_output_of_a_check_shows_a_row_note():
+    # The row's result was not saved (the topic changed meanwhile): skipped, not "ok".
     out = render.human({"qbit": "ok", "results": [{"ok": True, "title": "Show", "note": "ссылка изменилась"}]})
-    assert out.splitlines()[1:3] == ["ok  Show", "    ссылка изменилась"]
+    assert out.splitlines()[1:3] == ["–   Show", "    ссылка изменилась"]
 
 
 def test_secrets_status_generate_key_and_refusal_to_overwrite(capsys, tmp_path):

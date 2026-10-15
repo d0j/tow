@@ -198,6 +198,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   countdown or the watchdog's "last scheduled check" (which could hide a stopped `tow run`), and it is not held
   back by a mirror's pause. `--progress-only` or `--space-only` with another scope flag is refused before anything
   is recorded.
+- `tow check` marks a skipped topic, or one whose result was not saved, with `–` instead of `ok`, and says each
+  result in words instead of an internal code (`succeeded`, `preview`).
 
 ## [1.31.2] — 2026-10-15
 

@@ -470,6 +470,7 @@
     "check": {
       "client": "клиент: {value}",
       "preview": "(предпросмотр, ничего не изменено)",
+      "would_change": "изменит торрент-клиент",
       "total": "итого: {n}, с ошибкой: {failed}",
       "total_waiting": "итого: {n}, в ожидании: {waiting}, с ошибкой: {failed}",
       "scope_refused": "--progress-only и --space-only спрашивают только торрент-клиент: их нельзя сочетать с --global-only, --timer-only и --site-retry-only."
