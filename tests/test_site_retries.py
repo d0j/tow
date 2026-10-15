@@ -318,3 +318,13 @@ def test_dead_clock_anchors_do_not_accumulate():
     schedule.site_retries = {}
     schedule.site_retry_due(T0 - 3600)
     assert not any(key.startswith("site_retry:") for key in schedule._corrected)
+
+
+def test_retry_floor_reads_clamped_deadlines_of_hosts_written_with_a_slash():
+    # The configured "https://demo.example/" missed the saved "https://demo.example" pause, and a
+    # deadline a clock jump left ten days ahead held the retry for ten days.
+    cfg = {"trackers": {"demo": {"fetch_hosts": ["https://demo.example/"]}}, "protection": {"min_interval_sec": 1800}}
+    state = {"topics": [failed()], "mirrors": {"demo": {"cool": {"https://demo.example": T0 + 600}}}}
+    assert site_retries.policies(state, cfg, now=T0)["a"]["floor"] == T0 + 600
+    state["mirrors"]["demo"] = {"rate_cool": {"https://demo.example": T0 + 10 * 86400}}
+    assert site_retries.policies(state, cfg, now=T0)["a"]["floor"] == T0 + 86400

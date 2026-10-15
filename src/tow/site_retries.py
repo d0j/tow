@@ -4,17 +4,22 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
 from tow.diagnostic_json import epoch
 from tow.errors import codes_in
+from tow.mirrors import cooldown_of, pause_floor
 from tow.topic_timers import retry_reservation as reservation
 
 
-def policies(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+def policies(
+    state: Mapping[str, Any], cfg: Mapping[str, Any], *, now: float | None = None
+) -> dict[str, dict[str, Any]]:
     """Saved evidence only: no requests, writes or automatic retries of owner-action errors."""
+    clock = time.time() if now is None else now
     result: dict[str, dict[str, Any]] = {}
     # Saved values are read defensively: one damaged record leaves its topic out, never the others.
     saved_mirrors, saved_sites = state.get("mirrors"), cfg.get("trackers")
@@ -47,11 +52,8 @@ def policies(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str, dict
             continue
         cloudflare = "mirrors.cloudflare" in kinds or topic.get("last_error_class") == "cloudflare"
         delay = max(1800, int((cfg.get("protection") or {}).get("min_interval_sec", 1800))) if cloudflare else 300
-        hosts = spec.get("fetch_hosts") or []
-        floors = [
-            max(epoch((bucket.get("rate_cool") or {}).get(host)) or 0, epoch((bucket.get("cool") or {}).get(host)) or 0)
-            for host in hosts
-        ]
+        # The deadlines as a check reads them: clamped after a clock jump, hosts without a "/".
+        floor = pause_floor(bucket, list(spec.get("fetch_hosts") or []), now=clock, cooldown_sec=cooldown_of(spec))
         binding = {
             key: topic.get(key)
             for key in (
@@ -76,7 +78,7 @@ def policies(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str, dict
             "revision": revision,
             "observed_at": observed,
             "delay": delay,
-            "floor": min(floors) if floors else 0,
+            "floor": floor,
             "jitter": jitter,
             "site": site,
         }

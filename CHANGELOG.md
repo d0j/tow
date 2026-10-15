@@ -58,6 +58,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   a site's retry interval and a service's pause are counted from the corrected time, saved once.
 - A mirror's failures are counted from what is saved, also when several checks run at once: an earlier answer
   arriving late no longer resets a later failure, and two failures no longer count as one. Ended pauses are removed.
+- A mirror pause saved before the computer's clock went back no longer lasts for days: a server's limit is kept
+  for at most a day and an ordinary pause for at most the site's cooldown. Site retries read the same pauses.
 
 ## [1.30.10] — 2026-10-15
 
