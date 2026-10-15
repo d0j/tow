@@ -1242,8 +1242,8 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 /* Settings only; the shared field sizes (.w-*, .form-grid, .field-row, .secret) are above. */
 /* Language and theme: two small forms, side by side when there is room. */
 .settings-panel.appearance { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .6rem 2.5rem; }
-.settings-page .appearance > form { min-width: 0; margin: 0; padding-top: 0; }
-.inline-save { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.settings-page .appearance > form { flex: 0 1 auto; min-width: 0; max-width: 100%; margin: 0; padding-top: 0; }
+.inline-save { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-width: 0; }
 .inline-save > select { flex: 1 1 12rem; width: auto; min-width: 0; }
 .theme-field { display: grid; gap: .16rem; min-width: 0; margin: 0; padding: 0; border: 0; }
 .theme-field > legend { margin: 0 0 .16rem; padding: 0; color: var(--mut); font-size: 12px; }
@@ -1255,6 +1255,8 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 .settings-page-compact .form-grid { gap: .55rem; }
 .settings-page-compact .form-grid .field + .field,
 .settings-page-compact .form-grid .field-grid + .field { margin-top: 0; }
+/* An intro line above the cards keeps clear of the first one. */
+.settings-panel > p:not(:last-child) { margin-bottom: .5rem; }
 /* Hints and notes outside a form keep a readable line too. */
 .settings-panel :is(.field-hint, .action-hint, .section-note, .support-note, .check-field p, .notifier-steps ol) { max-width: 68ch; }
 .settings-panel .notice { max-width: 46rem; }

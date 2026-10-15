@@ -45,9 +45,10 @@
               <h2>{{ c.title }}{% if c.host or c.used_by %} <span class="card-meta">{{ c.host }}{% if c.host and c.used_by %} · {% endif %}{% if c.used_by %}{{ t('settings.clients.topics', n=c.used_by) }}{% endif %}</span>{% endif %}</h2>
               <span class="integration-pills">
                 {#- "Main" is a role, not a health: grey. A working client needs no pill (the
-                    section's names it); one that does not answer says so beside its note (D5). #}
+                    section's names it), nor does the only client still to set up (the section's
+                    says so); one that does not answer says so beside its note (D5). #}
                 {% if c.multi and c.default %}<span class="pill mut">{{ t('settings.clients.main') }}</span>{% endif %}
-                {% if c.id in clients_down %}<span class="pill bad">{{ t('settings.clients.pill_not_answering') }}</span>{% elif not c.host %}<span class="pill warn">{{ t('settings.clients.not_configured') }}</span>{% endif %}
+                {% if c.id in clients_down %}<span class="pill bad">{{ t('settings.clients.pill_not_answering') }}</span>{% elif not c.host and c.multi %}<span class="pill warn">{{ t('settings.clients.not_configured') }}</span>{% endif %}
               </span>
             </summary>
             {% if c.id in clients_down %}{{ note(t('settings.clients.not_answering'), clients_down[c.id].severity, issue=clients_down[c.id].issue) }}{% endif %}
@@ -192,7 +193,7 @@
                   <label for="{{ field_id }}">{{ f.label }}{% if not f.required %} {{ t('settings.common.optional') }}{% endif %}</label>
                   {% if f.kind == 'secret' %}
                   {#- A token, a webhook or a key: not a password to remember or to generate. #}
-                  <span class="secret"><input id="{{ field_id }}" name="{{ f.name }}" type="password"{% if f.width %} class="w-{{ f.width }}"{% endif %} value="{{ f.suggestion }}" placeholder="{{ f.placeholder }}" autocomplete="off" spellcheck="false" autocapitalize="off"{% if f.saved %} aria-describedby="{{ field_id }}-saved"{% endif %}>{{ reveal(field_id, f.label) }}</span>
+                  <span class="secret"><input id="{{ field_id }}" name="{{ f.name }}" type="password"{% if f.width %} class="w-{{ f.width }}"{% endif %} value="{{ f.suggestion }}"{% if f.saved %} aria-describedby="{{ field_id }}-saved"{% else %} placeholder="{{ f.placeholder }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off">{{ reveal(field_id, f.label) }}</span>
                   {% if f.saved %}{{ saved_hint(field_id ~ '-saved') }}{% endif %}
                   {% else %}
                   <input id="{{ field_id }}" name="{{ f.name }}"{% if f.width %} class="w-{{ f.width }}"{% endif %} value="{{ f.value or f.suggestion }}" placeholder="{{ f.placeholder }}" autocomplete="off" spellcheck="false" autocapitalize="off">

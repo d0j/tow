@@ -462,3 +462,9 @@ def test_a_client_just_saved_checked_or_targeted_stays_open(legacy_qbit, monkeyp
     targeted = c.get("/settings?open=clients&spot=client-default").text
     assert " open" in _client_card(targeted, "default")
     assert " open" not in _client_card(c.get("/settings").text, "default")
+
+
+def test_the_only_client_still_to_set_up_is_said_once():
+    page = _client().get("/settings").text
+    clients = page.split('id="acc-clients"', 1)[1].split('id="acc-bots"', 1)[0]
+    assert clients.count(">Не настроен</span>") == 1  # the section's pill, not the card's too
