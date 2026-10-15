@@ -16,9 +16,10 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
+from tow import trackers
 from tow.issues.model import Fix, Issue, Message, Snapshot, Target
 from tow.status import error_tone
-from tow.trackers import GenericHttpTracker, load_trackers, match_tracker
+from tow.trackers import GenericHttpTracker
 
 KIND = "site_needs_login"
 ORDER = 60
@@ -115,12 +116,14 @@ def _issue(
 
 
 def collect(snapshot: Snapshot) -> list[Issue]:
-    trackers = load_trackers(snapshot.config)
+    # The sites through their module on each call: this kind is loaded when it is first needed,
+    # and a name copied then would keep whatever stood there at that moment.
+    sites = trackers.load_trackers(snapshot.config)
     found: list[tuple[tuple[bool, str], Issue]] = []
     for topic in snapshot.topics:
         if topic.get("paused") or topic.get("last_error_class") != CLASS or not topic.get("last_error"):
             continue
-        tracker = match_tracker(trackers, str(topic.get("url") or ""))
+        tracker = trackers.match_tracker(sites, str(topic.get("url") or ""))
         order = (tracker is None, _title(snapshot.config, tracker.name).casefold() if tracker else "")
         at = _signed_in_at(snapshot.state, tracker.name) if tracker else None
         signed_in = at is not None and _checked_before(topic, at)
