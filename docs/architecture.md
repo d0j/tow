@@ -116,16 +116,19 @@ flowchart TD
   it. SIGTERM, SIGHUP (its terminal closed), Ctrl+C and, on Windows, Ctrl+Break stop it the same way.
 - **Checks** hold `check_run_lock` for their whole run (one applying check at a time across processes) and take
   the data lock only to read and to commit, so the UI never waits for tracker or client network time.
-  A web topic check that cannot take this lock joins one bounded FIFO consumer (`tow.web.check_jobs`) instead of
-  failing busy.
-  Pending requests for the same scope/mode share a job; up to 32 jobs wait, and only queued work can be
-  cancelled. The consumer uses nonblocking attempts, so scheduled/CLI checks keep the same lock contract.
-  Up to 64 transient results (100 prioritized rows each, full totals) live for one hour in this web process;
-  a restart explicitly leaves the result unconfirmed and never replays a manual re-add. Waiting client
-  verification, disk-space waits, skipped/unsaved results and real failures have distinct shared outcomes
-  (`tow.check_outcomes`: one of new, same, pending, skipped or fail per row, for the web results and the run
-  totals alike).
-
+  A web topic check (also a new topic's first one and the one after a sign-in) that cannot take this lock,
+  or would pass applying work already waiting, joins a bounded FIFO (`tow.web.check_jobs`, run by
+  `tow.web.check_actions`) instead of failing busy; previews wait in a lane of their own, so they never delay
+  applying checks. Requests equal to a job that has not started share it; one equal to a running job gets one
+  follow-up. Up to 32 jobs wait per lane, and only queued work can be cancelled. Each lane's consumer uses
+  nonblocking attempts once a second, so scheduled/CLI checks keep the same lock contract; after 3900 s of
+  waiting (a scheduled check's maximum plus cleanup) the job ends as not run. A running job is never timed out
+  (that could overlap client writes); the page says since when it runs. Up to 64 transient results (100
+  prioritized rows each, full totals) live for one hour in this web process at `/?check_result=<id>`, rendered
+  from the job; a restart explicitly leaves the result unconfirmed and never replays a manual re-add. Waiting
+  client verification, disk-space waits, skipped/unsaved results and real failures have distinct shared
+  outcomes (`tow.check_outcomes`: one of new, same, pending, skipped or fail per row, for the web results, the
+  run totals and `tow check` alike).
 ## Modules
 
 | Package / module | Role |
