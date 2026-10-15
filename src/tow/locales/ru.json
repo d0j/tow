@@ -442,7 +442,8 @@
     "check": {
       "client": "клиент: {value}",
       "preview": "(предпросмотр, ничего не изменено)",
-      "total": "итого: {n}, с ошибкой: {failed}"
+      "total": "итого: {n}, с ошибкой: {failed}",
+      "total_waiting": "итого: {n}, в ожидании: {waiting}, с ошибкой: {failed}"
     },
     "serve_blocked": "TOW не запущен: {error}",
     "run": {

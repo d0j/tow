@@ -92,6 +92,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   waited is reported as not found instead of as skipped.
 - A new version that the torrent client already had is counted as updated in check results and in the log,
   not as skipped.
+- `tow check` marks a torrent waiting for disk space or for its client's file check as waiting, not as an error,
+  counts it as waiting, and no longer exits with code 2 (“done in part”) because of it — as Home and the log say.
 - The first check of a topic you add, and the check after you sign in to a site, wait in the same queue when
   another check is running, instead of asking you to press “Check” again in a minute.
 - A preview of every topic started on Home that fails no longer writes a failed check to the health record
