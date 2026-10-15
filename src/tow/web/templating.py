@@ -102,14 +102,11 @@ def _site_tones() -> tuple[dict[str, str], list[str]]:
     for name, mirrors in as_dict(state.get("mirrors")).items():
         if name not in trackers:
             continue
-        for host, observation in as_dict(as_dict(mirrors).get("observed")).items():
-            if host not in (trackers[name].get("fetch_hosts") or []) or not isinstance(observation, dict):
-                continue
-            at = observation.get("at")
-            if isinstance(at, bool) or not isinstance(at, (int, float)):
-                continue
+        # A mirror's transport answers, and a sign-in or the day's limit (amber); never a
+        # topic's own failure (services.mirror_observations).
+        for observation in services.mirror_observations(mirrors, trackers[name].get("fetch_hosts") or []).values():
             try:
-                observed_when = datetime.fromtimestamp(at, UTC)
+                observed_when = datetime.fromtimestamp(observation["at"], UTC)
             except ValueError, OverflowError, OSError:
                 continue
             if name not in checked or _later(observed_when, checked[name][0]):

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import math
 from datetime import datetime
 from typing import Annotated, Any
 from urllib.parse import urlparse
@@ -41,15 +40,10 @@ def sites(request: Request) -> Response:
     for name, mirror in (state.get("mirrors") or {}).items():
         if not isinstance(mirror, dict) or name not in trackers:
             continue
-        observations = mirror.get("observed")
-        if not isinstance(observations, dict):
-            continue
-        for host, observation in observations.items():
-            if host not in (trackers[name].get("fetch_hosts") or []) or not isinstance(observation, dict):
-                continue
-            at = observation.get("at")
-            if not isinstance(at, (int, float)) or isinstance(at, bool) or not math.isfinite(at) or at < 0:
-                continue
+        # The mirror's transport answers, and a sign-in or the day's limit beside them; never
+        # a topic's own failure (services.mirror_observations).
+        for host, observation in services.mirror_observations(mirror, trackers[name].get("fetch_hosts") or []).items():
+            at = observation["at"]
             previous = by_host.get((name, host))
             try:
                 probe_at = datetime.fromisoformat(str((previous or {}).get("at") or "")).timestamp()
@@ -60,8 +54,9 @@ def sites(request: Request) -> Response:
             row = {
                 "tracker": name,
                 "host": host,
-                "ok": observation.get("failure") == "ok",
-                "error": observation.get("failure"),
+                "ok": observation["failure"] == "ok",
+                "error": observation["failure"],
+                "status": observation["status"],
             }
             by_host[name, host] = row
     probes = list(by_host.values())

@@ -318,7 +318,9 @@ def test_topic_error_after_verified_root_keeps_access_and_actual_reason(
         )
         == 1
     )
-    assert load_state()["mirrors"]["demo"]["observed"][SPEC["fetch_hosts"][0]]["failure"] == failure
+    # A topic's own failure says nothing of the mirror: its health keeps the challenge it showed.
+    health = load_state()["mirrors"]["demo"]["observed"][SPEC["fetch_hosts"][0]]["failure"]
+    assert health == (failure if failure in {"maintenance", "rate_limited"} else "cloudflare")
 
 
 def test_topic_transport_error_after_verified_root_keeps_access(monkeypatch):
