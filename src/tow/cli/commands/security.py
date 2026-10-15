@@ -5,6 +5,7 @@ passwords and tokens and their master key (``permissions``, ``access``, ``secret
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -45,7 +46,17 @@ def _permissions(args: argparse.Namespace) -> int:
 PERMISSIONS = Command("permissions", _add_permissions, _permissions, protects_folders=False)
 
 
-def _ask_password() -> dict[str, Any]:
+def _ask(prompt: str, *, quiet_stdout: bool) -> str:
+    """A line typed after ``prompt``; with ``quiet_stdout`` (--json) the prompt goes to stderr, so
+    standard output holds the JSON alone."""
+    if not quiet_stdout:
+        return input(prompt)
+    sys.stderr.write(prompt)
+    sys.stderr.flush()
+    return input()
+
+
+def _ask_password(*, quiet_stdout: bool = False) -> dict[str, Any]:
     """A new password typed twice, then its reminder, stored as the first-start page does it. A
     mistyped or too short password is refused before the reminder: no point typing one for it."""
     from getpass import getpass
@@ -59,7 +70,7 @@ def _ask_password() -> dict[str, Any]:
     if first != second:
         raise AuthConfigurationError("web.password.differ")
     require_password_length(first)
-    return access.set_password(first, second, input(t("cli.password.hint_prompt")))
+    return access.set_password(first, second, _ask(t("cli.password.hint_prompt"), quiet_stdout=quiet_stdout))
 
 
 def _add_access(sub: Subcommands) -> None:
@@ -98,7 +109,7 @@ def _access(args: argparse.Namespace) -> int:
         if enabled and (args.password or not access.password_is_set(load_secrets())):
             # Checked, stored and every device signed out, as `tow password` does it - before the
             # network opens: never a network without its password.
-            record = _ask_password()
+            record = _ask_password(quiet_stdout=args.json)
             log_event("settings_password", changed="password", hint=bool(record.get("hint")), where="cli", how="manual")
         with persistence_lock():
             cfg = copy.deepcopy(load_config())
@@ -169,9 +180,10 @@ def _secrets(args: argparse.Namespace) -> int:
 SECRETS = Command("secrets", _add_secrets, _secrets)
 
 
-def first_run_key() -> Path | None:
+def first_run_key(*, quiet_stdout: bool = False) -> Path | None:
     """First start: no master key anywhere and no secrets yet - create keys/master.key (through
-    the store's own key writer) and say once, on the console and in the log, to back it up.
+    the store's own key writer) and say once, on the console and in the log, to back it up
+    (on stderr with ``quiet_stdout``: --json keeps standard output for the JSON).
     None when a key is in use already, or when secrets exist (their key must be brought back,
     never replaced: the command that needs it says how)."""
     from tow.i18n import t
@@ -184,7 +196,7 @@ def first_run_key() -> Path | None:
         path = generate_master_key()
     except SecretStoreError:
         return None
-    print(t("cli.keys.first_run", path=path))
+    print(t("cli.keys.first_run", path=path), file=sys.stderr if quiet_stdout else sys.stdout)
     log_event("master_key_created", how="auto")
     return path
 
@@ -207,7 +219,7 @@ def _keys(args: argparse.Namespace) -> int:
     from tow.store import SecretStoreError, adopt_master_key, master_key_file, secret_store_status
 
     if args.keys_action == "ensure":
-        created = first_run_key()
+        created = first_run_key(quiet_stdout=args.json)
         if created is None and secret_store_status()["key_source"] == "missing":
             from tow.store import MissingMasterKeyError
 

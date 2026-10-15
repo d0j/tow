@@ -304,3 +304,14 @@ def test_status_says_the_client_does_not_answer_when_the_header_says_so(monkeypa
     save_state({"topics": [], "health": {}})
     assert cli.main(["status", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["client_ok"] is None
+
+
+def test_access_on_json_prints_only_json_while_it_asks(monkeypatch, capsys):
+    # The reminder's prompt went to standard output before the JSON: no valid JSON for a script.
+    answers = iter(["correct horse battery", "correct horse battery"])
+    monkeypatch.setattr("getpass.getpass", lambda _prompt: next(answers))
+    monkeypatch.setattr("builtins.input", lambda prompt="": print(prompt, end="") or "")
+    assert cli.main(["access", "on", "--json"]) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["network"] is True
+    assert captured.err  # the question was still asked
