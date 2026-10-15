@@ -139,9 +139,12 @@ def _retry_after(value: str | None) -> float:
     return retry_after_seconds(value, now=time.time())
 
 
-def _service_status(response: httpx.Response) -> None:
+def _service_status(response: httpx.Response, *, local: bool = False) -> None:
+    """``local``: TOW's own on-demand module answers; only its warming answer is believed (it
+    comes before the module's browser opened any site)."""
     if response.status_code in {429, 503}:
-        phase = "startup" if response.headers.get("x-tow-module-state") == "warming" else "service"
+        warming = local and response.headers.get("x-tow-module-state") == "warming"
+        phase = "startup" if warming else "service"
         raise ProviderUnavailableError(
             "busy", retry_after=_retry_after(response.headers.get("retry-after")), phase=phase
         )
@@ -200,7 +203,7 @@ def cookie_api(
         ) as client,
         client.stream("POST", endpoint, json=payload, headers={"Accept": "application/json"}) as response,
     ):
-        _service_status(response)
+        _service_status(response, local=locally_managed)
         if response.headers.get("content-encoding", "identity").strip().lower() not in {"", "identity"}:
             raise AccessFailure("invalid_response", "validation", "compressed clearance response refused")
         length = response.headers.get("content-length")

@@ -105,7 +105,15 @@ def _recovery_budget(configured: float, limit: float | None) -> float | None:
     return configured if configured >= 1 else None
 
 
+def _no_site_request(error: Exception) -> bool:
+    """The local module failed to start or answered that it is still warming: refused before
+    its browser opened the site, so the call asked the site nothing."""
+    return isinstance(error, ProviderUnavailableError) and error.phase == "startup"
+
+
 def _finish_reservation(pending: store.PendingAttempt, last_called: str | None) -> None:
+    """``last_called``: the last provider whose call may have asked the site; None gives the
+    origin's reservation back (the provider's own backoff stays)."""
     try:
         if last_called is None:
             store.cancel_unused_attempt(pending)
@@ -205,12 +213,15 @@ def _run_candidates(
     call_budget: RecoveryBudget,
 ) -> Iterator[Clearance]:
     attempt = pending.proof
+    # The last provider whose call may have asked the site. While there is none, the origin's
+    # reservation is given back: a warming local module does not cost the site its interval.
     last_called = None
     queue = list(enabled)
     retried: set[str] = set()
     try:
         for index, provider in enumerate(queue):
             started = time.monotonic()
+            called, before = False, last_called
             try:
                 solve = available.get(provider["kind"])
                 if solve is None:
@@ -235,7 +246,7 @@ def _run_candidates(
                     continue
                 if not call_budget.consume():
                     return
-                last_called = provider["id"]  # a crash or ambiguous response retains the cooldown
+                called, last_called = True, provider["id"]  # a crash or ambiguous response retains the cooldown
                 clearance = solve({**provider, "_probe_path": probe_path}, origin, timeout)
                 if time.monotonic() >= deadline:
                     record_event("protection_failed", site, provider["id"], "failed", reason="timeout", phase="service")
@@ -258,6 +269,8 @@ def _run_candidates(
                 yield validated
             except Exception as error:  # noqa: BLE001 - one optional provider must never disable the next
                 _failed_service(provider, error, attempt)
+                if called and _no_site_request(error):
+                    last_called = before
                 reason, phase = failure_details(error)
                 record_event(
                     "protection_failed",

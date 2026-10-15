@@ -42,6 +42,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   site-access service call before one mirror gets its last-chance call. The shared call and time limits stay.
 - An installed site-access module that does not start in time is paused like an unavailable service (from
   30 seconds up to 30 minutes) instead of being started again for the next site; other services still run.
+- A "module still starting" answer of the installed site-access module no longer makes the site wait its full
+  retry interval (30 minutes by default): the site is tried again once the module's short pause is over.
 
 ## [1.30.10] — 2026-10-15
 
