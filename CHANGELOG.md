@@ -148,6 +148,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A file holding several episodes followed by a quality tag (`Show.S01E01-E02.1080p.mkv`, also `.10bit`, `.4K`
   or a year) now counts every episode, not only the first: progress and episode rules no longer wait for an
   episode that is already there.
+- A file named with the season before its word (`1 сезон 01 серия.mkv`) now keeps its season: a pack of
+  several seasons named so no longer counts every season's first episode as one.
 
 ## [1.31.2] — 2026-10-15
 

@@ -50,3 +50,21 @@ S01E01_02 = ["episode:s01e01", "episode:s01e02"]
 )
 def test_a_multi_episode_marker_before_a_quality_tag(name, keys):
     assert _keys(name) == keys
+
+
+@pytest.mark.parametrize(
+    ("name", "keys"),
+    [
+        # "1 сезон 01 серия": the season named before the episode belongs to it.
+        ("1 сезон 01 серия.mkv", ["episode:s01e01"]),
+        ("2 сезон 03 серия.mkv", ["episode:s02e03"]),
+        ("Show 2 сезон 3 серия.mkv", ["episode:s02e03"]),
+        ("Show 0 сезон 01 серия.mkv", []),
+        # Controls: the word order that already worked, and a season range names no season.
+        ("Сезон 1 Серия 5.mkv", ["episode:s01e05"]),
+        ("5 серия.mkv", ["episode:e05"]),
+        ("Show 1-2 сезон 05 серия.mkv", ["episode:e05"]),
+    ],
+)
+def test_a_season_number_before_its_word(name, keys):
+    assert _keys(name) == keys
