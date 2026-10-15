@@ -60,14 +60,20 @@ def submit(
         JOBS[job["id"]] = job
         PENDING.append(job["id"])
         if _worker is None or not _worker.is_alive():
-            _worker = threading.Thread(target=_consume, args=(perform,), name="tow-check-all", daemon=True)
             try:
-                _worker.start()
+                _worker = _start("tow-check-all", _consume, perform)
             except RuntimeError:
                 PENDING.remove(job["id"])
                 del JOBS[job["id"]]
                 raise
         return copy.deepcopy(job), True
+
+
+def _start(name: str, target: Callable[..., None], *args: Any) -> threading.Thread:
+    """Start a consumer thread: the seam tests replace to run the consumer in their own thread."""
+    worker = threading.Thread(target=target, args=args, name=name, daemon=True)
+    worker.start()
+    return worker
 
 
 def _consume(perform: Callable[[dict[str, Any]], None]) -> None:

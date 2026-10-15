@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import threading
 import time
 from urllib.parse import parse_qs, urlsplit
 
@@ -25,6 +24,41 @@ def client():
 
 def _job(response):
     return parse_qs(urlsplit(response.headers["location"]).query)["check_job"][0]
+
+
+class _Consumer:
+    """A queue consumer the test runs itself, in its own thread: what happens "while a check
+    runs" happens inside the fake check, in order - no second thread, no timing."""
+
+    def __init__(self, target, args):
+        self.target, self.args, self.alive = target, args, True
+
+    def is_alive(self):
+        return self.alive
+
+    def run(self):
+        try:
+            self.target(*self.args)
+        finally:
+            self.alive = False
+
+
+@pytest.fixture
+def consumers(monkeypatch):
+    """The consumers the queue started, not running until the test calls ``run()``."""
+    started: list[_Consumer] = []
+
+    def start(_name, target, *args):
+        started.append(_Consumer(target, args))
+        return started[-1]
+
+    monkeypatch.setattr(check_jobs, "_start", start)
+    monkeypatch.setattr(check_jobs, "_worker", None)  # restored after the test: no fake outlives it
+    return started
+
+
+def _status(client, job):
+    return client.get(f"/check/status?job={job}").json()
 
 
 @pytest.mark.parametrize(
@@ -70,36 +104,31 @@ def test_pending_verification_is_not_a_failure_or_a_confirmed_add(client, monkey
     assert not result.select_one("[data-check-result-pending]")
 
 
-def test_busy_topics_wait_fifo_and_duplicate_clicks_share_the_job(client, monkeypatch):
-    started, release = threading.Event(), threading.Event()
-    calls = []
+def test_busy_topics_wait_fifo_and_duplicate_clicks_share_the_job(client, monkeypatch, consumers):
+    calls, seen = [], {}
 
     def check(**kw):
         ids = kw.get("ids")
-        if ids and not release.is_set():
-            raise CheckBusyError("busy")
         calls.append(ids)
-        if ids is None:
-            started.set()
-            assert release.wait(5)
+        if ids is None:  # while the check of every topic runs, rows are clicked
+            seen["second"] = _job(client.post("/topics/b/check", follow_redirects=False))
+            seen["third"] = _job(client.post("/topics/c/check", follow_redirects=False))
+            seen["duplicate"] = _job(client.post("/topics/c/check", follow_redirects=False))
+            seen["second_status"] = _status(client, seen["second"])["status"]
+            seen["third_position"] = _status(client, seen["third"])["position"]
+            seen["calls"] = list(calls)
+            seen["page"] = client.get(f"/?check_job={seen['third']}").status_code
         return {"results": [{"id": (ids or ["a"])[0], "title": "Show A", "ok": True}]}
 
     monkeypatch.setattr("tow.web.services.run_check", check)
     first = _job(client.post("/check", data={"mode": "apply"}, follow_redirects=False))
-    try:
-        assert started.wait(2)
-        second = _job(client.post("/topics/b/check", follow_redirects=False))
-        third = _job(client.post("/topics/c/check", follow_redirects=False))
-        duplicate = _job(client.post("/topics/c/check", follow_redirects=False))
-        assert duplicate == third
-        assert client.get(f"/check/status?job={second}").json()["status"] == "queued"
-        assert client.get(f"/check/status?job={third}").json()["position"] == 3
-        assert calls == [None]
-        assert client.get(f"/?check_job={third}").status_code == 200
-    finally:
-        release.set()
-    for job in (first, second, third):
-        assert wait_for_check_job(client, job)["status"] == "done"
+    assert len(consumers) == 1
+    consumers[0].run()
+    assert seen["duplicate"] == seen["third"]
+    assert (seen["second_status"], seen["third_position"], seen["calls"], seen["page"]) == ("queued", 3, [None], 200)
+    assert len(consumers) == 1  # one consumer served the whole queue
+    for job in (first, seen["second"], seen["third"]):
+        assert _status(client, job)["status"] == "done"
     assert calls == [None, ["b"], ["c"]]
 
 
@@ -122,32 +151,29 @@ def test_scheduled_lock_busy_is_retried_without_recording_a_failure(client, monk
     assert failures == []
 
 
-def test_cancel_only_removes_queued_work(client, monkeypatch):
-    started, release = threading.Event(), threading.Event()
-    calls = []
+def test_cancel_only_removes_queued_work(client, monkeypatch, consumers):
+    calls, seen = [], {}
 
     def check(**kw):
-        if kw.get("ids"):
-            raise CheckBusyError("busy")
-        calls.append(None)
-        started.set()
-        assert release.wait(5)
+        calls.append(kw.get("ids"))
+        if kw.get("ids") is None:  # while it runs, a row is clicked and its wait cancelled
+            seen["queued"] = queued = _job(client.post("/topics/b/check", follow_redirects=False))
+            cancelled = client.post(f"/check/{queued}/cancel", follow_redirects=False)
+            seen["cancelled"] = flash_of(cancelled.headers["location"])
+            seen["queued_status"] = _status(client, queued)["status"]
+            refused = client.post(f"/check/{first}/cancel", follow_redirects=False)
+            seen["refused"] = flash_of(refused.headers["location"])
+            seen["page"] = client.get(f"/?check_job={first}").text
         return {"results": []}
 
     monkeypatch.setattr("tow.web.services.run_check", check)
     first = _job(client.post("/check", data={"mode": "apply"}, follow_redirects=False))
-    try:
-        assert started.wait(2)
-        queued = _job(client.post("/topics/b/check", follow_redirects=False))
-        result = client.post(f"/check/{queued}/cancel", follow_redirects=False)
-        assert "удалена из очереди" in flash_of(result.headers["location"])
-        assert client.get(f"/check/status?job={queued}").json()["status"] == "failed"
-        refused = client.post(f"/check/{first}/cancel", follow_redirects=False)
-        assert "уже началась" in flash_of(refused.headers["location"])
-        assert "Отменить ожидание" not in client.get(f"/?check_job={first}").text
-    finally:
-        release.set()
-    assert wait_for_check_job(client, first)["status"] == "done"
+    consumers[0].run()
+    assert "удалена из очереди" in seen["cancelled"]
+    assert seen["queued_status"] == "failed"
+    assert "уже началась" in seen["refused"]
+    assert "Отменить ожидание" not in seen["page"]
+    assert _status(client, first)["status"] == "done"
     assert calls == [None]
 
 
@@ -219,19 +245,7 @@ def test_log_distinguishes_waiting_from_errors():
     assert "ошибки: 1" in result["detail"]
 
 
-def test_queue_and_result_memory_are_bounded(monkeypatch):
-    class InertThread:
-        def __init__(self, **_kw):
-            pass
-
-        def start(self):
-            pass
-
-        def is_alive(self):
-            return True
-
-    monkeypatch.setattr(check_jobs.threading, "Thread", InertThread)
-    monkeypatch.setattr(check_jobs, "_worker", None)
+def test_queue_and_result_memory_are_bounded(consumers):
     for index in range(check_jobs.MAX_PENDING):
         job, added = check_jobs.submit(topic_id=str(index), apply=True, lang="ru", perform=lambda _: None)
         assert job
