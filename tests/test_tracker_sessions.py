@@ -639,3 +639,19 @@ def test_removed_needs_every_mirror_whatever_the_order(monkeypatch, hosts):
     with pytest.raises(MirrorFetchError) as gone:
         pick_and_get("demo", ["https://b.example", "https://c.example"], "/download/5", persist=False)
     assert error_class(gone.value) == "gone"
+
+
+def test_a_login_that_sent_no_password_is_not_remembered_as_tried(site, monkeypatch):
+    # Every login mirror paused: no password was sent, yet the site counted as just logged in,
+    # and the next check used the stale session instead of signing in.
+    from tow.trackers import generic
+
+    _configured()
+    monkeypatch.setattr(generic, "has_available_host", lambda *_a, **_kw: False)
+    _tracker()._login(SECRETS, "ua", persist=True)
+    assert site.count("/login.php") == 0
+    assert mirrors.login_recent("demo") is False
+    monkeypatch.setattr(generic, "has_available_host", lambda *_a, **_kw: True)
+    _tracker()._login(SECRETS, "ua", persist=True)
+    assert site.count("/login.php") == 1
+    assert mirrors.login_recent("demo") is True

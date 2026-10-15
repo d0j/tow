@@ -442,17 +442,21 @@ class GenericHttpTracker:
             # Tried a moment ago (by this check or an earlier one): what that saved is used and
             # the password is not sent again. A check the owner starts (ignore_cool) logs in.
             return self._cookie_jar(load_secrets())
-        if persist:
-            self._login_attempted = self._login_attempted or ignore_cool
-            note_login(self.name)
         form = login_form_data(self.spec, user, pw)
         pw_field = str((self.spec.get("login_form") or {}).get("pw_field") or "password")
         scoped = {}
+        noted = False
         for host in hosts:
             if fresh_clearances and host not in fresh_clearances:
                 continue  # only a newly verified clearance permits one additional login
             if persist and not has_available_host(self.name, [host], ignore_cool=ignore_cool):
                 continue
+            if persist and not noted:
+                # Remembered as tried only when a password is about to be sent: with every login
+                # mirror paused nothing was tried, and the next check signs in.
+                self._login_attempted = self._login_attempted or ignore_cool
+                note_login(self.name)
+                noted = True
             try:
                 login_ua, clearance_cookies = cached_request_credentials(
                     self.name, host, self._protection_settings(), ua, {}
