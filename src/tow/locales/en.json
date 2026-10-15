@@ -467,7 +467,8 @@
       "client": "client: {value}",
       "preview": "(preview, nothing changed)",
       "total": "total: {n}, failed: {failed}",
-      "total_waiting": "total: {n}, waiting: {waiting}, failed: {failed}"
+      "total_waiting": "total: {n}, waiting: {waiting}, failed: {failed}",
+      "scope_refused": "--progress-only and --space-only ask the torrent client alone: they do not go with --global-only, --timer-only or --site-retry-only."
     },
     "serve_blocked": "TOW was not started: {error}",
     "run": {
