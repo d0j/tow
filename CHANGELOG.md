@@ -169,6 +169,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   settings, and a `kinozal.tv` link gets its title from one of the site's mirrors.
 - A few topics whose pages redirect to another site (a removed topic sent elsewhere) no longer pause the mirror
   for every other topic while the site's front page answers.
+- A check with several messages for a messenger that does not answer no longer retries that messenger once per
+  message (minutes, with the next check waiting): the queue is sent once and every message is still logged.
 
 ## [1.31.2] — 2026-10-15
 

@@ -765,7 +765,7 @@ def test_check_aggregates_file_notifications_per_topic(monkeypatch):
     monkeypatch.setattr(
         check_notices,
         "_audited_send",
-        lambda secrets, *, text, operation_id, topic=None, how="auto": sent.append(text.split("\n")[0]) or True,
+        lambda secrets, *, text, operation_id, topic=None, how="auto", **_kw: sent.append(text.split("\n")[0]) or True,
     )
 
     out = check.run_check(apply=True, notify=True, how="test")

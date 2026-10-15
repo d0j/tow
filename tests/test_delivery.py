@@ -209,3 +209,25 @@ def test_no_digest_without_its_setting():
 
     assert delivery.maybe_digest(cfg={}, send=send) is False
     assert sent == []
+
+
+def test_a_check_with_several_messages_delivers_the_queue_once(monkeypatch):
+    # dispatch() calls send() per record: each delivered the whole queue again, so five messages
+    # to three dead chats retried each chat fifteen times (minutes, under the check lock).
+    from tow.check import notices
+
+    deliveries = []
+    monkeypatch.setattr("tow.notifiers.connected", lambda _s: [("telegram", None, None)])
+    monkeypatch.setattr(
+        "tow.notifiers.deliver_queued", lambda _s: deliveries.append(1) or {"telegram": (False, "chat gone")}
+    )
+    state = load_state()
+    delivery.stage(state, [_error(str(n), f"Show {n}", tracker=f"site{n}") for n in range(5)], cfg={})
+    save_state(state)
+
+    notices.flush_notifications({}, {}, how="auto", notify=False)
+
+    assert len(deliveries) == 1
+    kinds = [json.loads(line)["kind"] for line in log_path().read_text(encoding="utf-8").splitlines()]
+    assert kinds.count("bot_delivery_started") == 5  # every message is still audited
+    assert kinds.count("bot_delivery_failed") == 5

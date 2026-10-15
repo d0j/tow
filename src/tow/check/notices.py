@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -20,8 +21,10 @@ def _audited_send(
     operation_id: str,
     topic: Topic | None = None,
     how: str = "auto",
+    deliver: Callable[[dict[str, Any]], dict[str, tuple[bool, str]]] | None = None,
 ) -> bool:
-    """Deliver a message ``delivery.dispatch`` has already put into the messengers' queue, and log it."""
+    """Deliver a message ``delivery.dispatch`` has already put into the messengers' queue, and log
+    it. ``deliver`` sends the queue (``notifiers.deliver_queued`` when not given)."""
     from tow.notifiers import connected, deliver_queued
 
     topic_id = (topic or {}).get("id")
@@ -38,7 +41,7 @@ def _audited_send(
         # "sending to bot" / "bot delivery error" pair after every check meant nothing).
         return False
     log_event("bot_delivery_started", **fields, integration_id=",".join(channels))
-    results = deliver_queued(secrets)
+    results = (deliver or deliver_queued)(secrets)
     for kind, (ok, reason) in results.items():
         log_event(
             "bot_delivery_succeeded" if ok else "bot_delivery_failed",
@@ -49,6 +52,27 @@ def _audited_send(
             error=reason or None,
         )
     return bool(results) and all(ok for ok, _ in results.values())
+
+
+def _sender(secrets: dict[str, Any], *, how: str) -> Callable[..., bool]:
+    """The ``send`` of one ``delivery.dispatch``: the queue is delivered once, at its first record
+    (which sends every record handed over, combined), and each record is audited from that one
+    result. Delivering again per record repeated every failing recipient's retries - five
+    messages to three dead chats took minutes - while the check lock was held."""
+    delivered: dict[str, tuple[bool, str]] | None = None
+
+    def deliver(current: dict[str, Any]) -> dict[str, tuple[bool, str]]:
+        nonlocal delivered
+        if delivered is None:
+            from tow.notifiers import deliver_queued
+
+            delivered = deliver_queued(current)
+        return delivered
+
+    def send(*, text: str, operation_id: str, topic: Topic | None) -> bool:
+        return _audited_send(secrets, text=text, operation_id=operation_id, topic=topic, how=how, deliver=deliver)
+
+    return send
 
 
 def queue_recoveries(state: dict[str, Any], results: list[dict[str, Any]], run: CheckRun) -> None:
@@ -140,12 +164,10 @@ def flush_notifications(cfg: dict[str, Any], secrets: dict[str, Any], *, how: st
     messages were staged in the commit; here they are handed to the messengers."""
     from tow import delivery
 
-    def send(*, text: str, operation_id: str, topic: Topic | None) -> bool:
-        return _audited_send(secrets, text=text, operation_id=operation_id, topic=topic, how=how)
-
-    delivery.dispatch(send)
+    delivery.dispatch(_sender(secrets, how=how))
     if notify:
-        delivery.maybe_digest(cfg=cfg, send=send)
+        # A sender of its own: the digest is queued after the messages above were delivered.
+        delivery.maybe_digest(cfg=cfg, send=_sender(secrets, how=how))
 
 
 def notify_topic_error(topic: dict[str, Any], error: Any, *, tracker: str = "", how: str) -> None:
@@ -156,9 +178,5 @@ def notify_topic_error(topic: dict[str, Any], error: Any, *, tracker: str = "", 
     from tow.store import load_secrets
 
     secrets = load_secrets()
-
-    def send(*, text: str, operation_id: str, topic: Topic | None) -> bool:
-        return _audited_send(secrets, text=text, operation_id=operation_id, topic=topic, how=how)
-
     item = PendingNotification("error", new_operation_id("add-check"), cast(Topic, topic), tracker, error)
-    delivery.deliver([item], cfg=load_config(), send=send)
+    delivery.deliver([item], cfg=load_config(), send=_sender(secrets, how=how))
