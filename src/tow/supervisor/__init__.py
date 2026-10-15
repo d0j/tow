@@ -122,6 +122,7 @@ def _facts() -> dict[str, Any]:
         "topic_timers": active_policies(state),
         "timer_policies": all_policies(state),
         "site_retries": policies(state, load_config()),
+        "topic_ids": {str(topic.get("id")) for topic in topics_of(state) if topic.get("id")},
         # A revision waits in its client for disk space (tow.check.space): the space pass runs.
         # Not for a file selection changed in TOW meanwhile: the pass leaves it to the next check,
         # and ran every 5 minutes for nothing but a client ping and a line in the log.
