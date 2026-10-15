@@ -193,6 +193,36 @@ verdict.oneEntryPoint = true;
 }
 verdict.progressPatchesInPlace = true;
 
+// The open panel follows a message updated in place: its words, colour and link change where the
+// entry is; a focused control of the entry keeps the focus when it stays; the changed entry is
+// read again only when it is shown.
+{
+  const live = page({ storage: memoryStorage() });
+  const show = (record, options) => live.window.towMessages.showMessage(record, options);
+  show({ id: "check-J", kind: "info", subject: "Show", text: "queued", href: "/history", link: "History" });
+  live.menu.open = true;
+  live.timers.advance(300);
+  const row = live.$('[data-messages-list] li[data-message-id="check-J"]');
+  const anchor = row.querySelector("a");
+  anchor.focus();
+  show({ id: "check-J", kind: "info", subject: "Show", text: "running since 12:00", href: "/history", link: "History" }, { replace: true, quiet: true });
+  assert.equal(live.$('[data-messages-list] li[data-message-id="check-J"]'), row);
+  assert.equal(row.querySelector(".msg-entry-text").textContent, "Show — running since 12:00");
+  assert.equal(live.document.activeElement, anchor);
+  show({ id: "check-J", kind: "err", subject: "Show", text: "failed", href: "/?credential_topic=a", link: "Sign in" }, { replace: true });
+  const now = live.$('[data-messages-list] li[data-message-id="check-J"]');
+  assert.ok(now.classList.contains("err"));
+  assert.equal(now.querySelector(".msg-entry-kind").textContent, "Error");
+  assert.equal(now.querySelector(".msg-entry-text").textContent, "Show — failed");
+  assert.equal(now.querySelector("a").getAttribute("href"), "/?credential_topic=a");
+  assert.equal(now.querySelector("a").textContent, "Sign in");
+  assert.ok(now.classList.contains("unread"));
+  now.rect = { top: 150, bottom: 190, height: 40 }; // in the panel's view
+  live.timers.advance(300); // shown in the open panel: read
+  assert.ok(!now.classList.contains("unread"));
+}
+verdict.panelFollowsUpdates = true;
+
 // Signing out: this tab's message history goes, of every install and sign-in, and nothing of it
 // is shown any more.
 {
