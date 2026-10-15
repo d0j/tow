@@ -226,6 +226,12 @@ def undo_left_sec() -> int:
     return undo.undo_left_sec(_context.state())
 
 
+def undo_stamp() -> str:
+    """The live undo's stamp ("" for none): an "Undo" form sends it, and /undo refuses it once a
+    newer change has replaced that undo."""
+    return undo.stamp_of(_context.state())
+
+
 def login_help() -> dict[str, str]:
     """What the sign-in page says under "Forgot your password?"."""
     record = (_context.secrets_or_none() or {}).get(access.RECORD_KEY)
@@ -356,6 +362,7 @@ def configure(templates: Jinja2Templates = TEMPLATES) -> None:
     env["undo_just_made"] = undo_just_made
     env["undo_in_message"] = undo_in_message
     env["undo_left_sec"] = undo_left_sec
+    env["undo_stamp"] = undo_stamp
     env["flash_ttl_sec"] = flash_ttl_sec
     env["message_text"] = message_text
     env["login_help"] = login_help

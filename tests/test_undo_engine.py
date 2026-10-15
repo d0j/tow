@@ -193,6 +193,49 @@ def test_a_deleted_topic_comes_back_at_its_place(client):
     assert [t["id"] for t in load_state()["topics"]] == ["t1", "t2", "t3"]
 
 
+def test_an_older_messages_undo_never_undoes_a_newer_change(client):
+    # Undo lives in each message's entry of the page's history now: an entry of change A must
+    # not put back change B made after it. The stamp is checked under the same lock as the undo.
+    save_state({"topics": [_topic("t1", 1), _topic("t2", 2)], "mirrors": {}})
+    client.post("/topics/t1/delete")
+    stamp_a = undo.stamp_of()
+    client.post("/topics/t2/delete")
+    stamp_b = undo.stamp_of()
+    assert stamp_a
+    assert stamp_b != stamp_a
+
+    stale = client.post("/undo", data={"stamp": stamp_a}, follow_redirects=False)
+
+    assert flash_kind(stale.headers["location"]) == "warn"
+    assert flash_of(stale.headers["location"]) == i18n.t("web.undo.stale", "ru")
+    assert load_state()["topics"] == []
+    assert undo.stamp_of() == stamp_b  # B's undo stays
+
+    done = client.post("/undo", data={"stamp": stamp_b}, follow_redirects=False)
+
+    assert flash_kind(done.headers["location"]) == "ok"
+    assert [t["id"] for t in load_state()["topics"]] == ["t2"]
+
+
+def test_every_undo_form_sends_the_stamp_of_its_change(client):
+    from bs4 import BeautifulSoup
+
+    save_state({"topics": [_topic("t1", 1)], "mirrors": {}})
+    location = client.post("/topics/t1/delete", follow_redirects=False).headers["location"]
+    for page in (client.get(location).text, client.get("/settings").text):  # in its message; in the header
+        forms = BeautifulSoup(page, "html.parser").select('form[action="/undo"]')
+        assert [form.select_one('input[name="stamp"]')["value"] for form in forms] == [undo.stamp_of()]
+
+
+def test_an_undo_already_used_or_replaced_by_none_says_nothing_to_undo(client):
+    save_state({"topics": [_topic("t1", 1)], "mirrors": {}})
+    client.post("/topics/t1/delete")
+    stamp = undo.stamp_of()
+    client.post("/undo", data={"stamp": stamp})
+    again = client.post("/undo", data={"stamp": stamp}, follow_redirects=False)
+    assert flash_of(again.headers["location"]) == i18n.t("web.undo.nothing", "ru")
+
+
 # --------------------------------------------------------------------------- a crash in the middle
 
 

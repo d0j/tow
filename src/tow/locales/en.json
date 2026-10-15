@@ -2299,6 +2299,7 @@
       "apply_failed": "could not undo the change",
       "settings_done": "settings restored",
       "nothing": "nothing to undo",
+      "stale": "this Undo belongs to an earlier change: a newer change was made since, and nothing was undone",
       "password_failed": "could not restore the password",
       "access_failed": "the access change was not undone",
       "access_done": "access restored",

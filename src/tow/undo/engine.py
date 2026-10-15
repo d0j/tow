@@ -362,13 +362,20 @@ def _nothing(state: dict[str, Any], record: object, target: str = "/") -> Outcom
     return Outcome("web.undo.nothing", "warn", target)
 
 
-def apply(*, local: bool = True) -> Outcome:
-    """Put the last change back (``local``: the request comes from the computer running TOW)."""
+def apply(*, local: bool = True, expected: str = "") -> Outcome:
+    """Put the last change back (``local``: the request comes from the computer running TOW).
+
+    ``expected``: the stamp of the change the owner's "Undo" belongs to (each message keeps its
+    own). Checked under the same lock as the undo: a newer change made since is never put back
+    by an older message's "Undo" - it is refused and stays. "" undoes the last change (a form of
+    an older TOW)."""
     with store.persistence_lock():
         state = store.load_state()
         record = state.get("undo")
         if not isinstance(record, dict) or not record:
             return _nothing(state, record)
+        if expected and str(record.get("ts") or "") != expected:
+            return Outcome("web.undo.stale", "warn")  # nothing written: the newer undo stays
         if not is_live(record):
             return _expired(state, record)
         log_event("undo", how="manual")
