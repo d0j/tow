@@ -8,6 +8,7 @@ The record comes from ``tow.topic_form``; every store, client, site and check is
 from __future__ import annotations
 
 import copy
+from collections.abc import Callable
 from typing import Any, NamedTuple
 
 from fastapi.responses import RedirectResponse
@@ -40,7 +41,7 @@ from tow.web import check_jobs, services
 from tow.web.check_actions import enqueue_check
 from tow.web.messages import flash_redirect, topic_subject, use_subject
 from tow.web.text import t
-from tow.web.views import add_refused_redirect, manual_check_flash, topic_check_row
+from tow.web.views import add_refused_redirect, failed_check_feedback, feedback_redirect, topic_check_row
 
 
 class Refused(Exception):
@@ -185,43 +186,59 @@ def _save_new_topic(new: dict[str, Any]) -> None:
 
 def _first_check(new: dict[str, Any], tracker: GenericHttpTracker) -> RedirectResponse:
     """The new topic's first check, and what Home says about it: the topic stays saved whatever
-    the check found. Another applying check runs or waits: the first check waits in the queue."""
+    the check found. Another applying check runs or waits: the first check waits in the queue,
+    and its result is said as here ("added to TOW, ...", a failure logged and notified)."""
+    follow_up = _first_check_follow_up(new, tracker)
     if check_jobs.has_pending(apply=True):
-        return enqueue_check(topic_id=new["id"], apply=True)
+        return enqueue_check(topic_id=new["id"], apply=True, follow_up=follow_up)
     try:
         out = services.run_check(apply=True, notify=True, ids=[new["id"]], ignore_cool=True, how="manual", wait=False)
-        row = topic_check_row(new["id"], out)
-        if row is None:
-            return flash_redirect("/", "web.topics.added_no_result", "warn")
-        if row and not row.get("ok"):
-            refused = manual_check_flash(
-                row,
-                topic_id=new["id"],
-                tracker_name=tracker.name if tracker.spec.get("login_path") else "",
-                new_topic=True,
-            )
-            if refused is not None:  # always, for a row that is not ok
-                return refused
     except CheckBusyError:
         # Waiting here held this request - and every page behind it - for the whole other check.
-        return enqueue_check(topic_id=new["id"], apply=True)
+        return enqueue_check(topic_id=new["id"], apply=True, follow_up=follow_up)
     except SecretStoreError as e:
         services.record_check_failure(e, how="manual")
-        services.log_event(
-            "add_check_blocked",
-            topic=new["id"],
-            title=new["title"],
-            url=new["url"],
-            path=new["save_path"],
-            error="secrets_migration_required",
-            cls="secret_gate",
-            how="manual",
-        )
-        return flash_redirect("/", "web.topics.added_blocked", "warn")
+        return feedback_redirect(follow_up(None, e))
     except Exception as e:  # noqa: BLE001 - the topic is saved; its first check's failure is logged and notified
-        _first_check_failed(new, e, tracker.name)
-        return flash_redirect("/", "web.topics.added_check_failed", "warn")
-    return flash_redirect("/", "web.topics.added_confirmed" if row.get("added") else "web.topics.added_nothing_new")
+        return feedback_redirect(follow_up(None, e))
+    return feedback_redirect(follow_up(out, None))
+
+
+def _first_check_follow_up(
+    new: dict[str, Any], tracker: GenericHttpTracker
+) -> Callable[[dict[str, Any] | None, BaseException | None], dict[str, str]]:
+    """What the new topic's first check says (``check_jobs.FOLLOW_UPS``), at once or queued."""
+
+    def said(key: str, kind: str = "ok") -> dict[str, str]:
+        return {"text": t(key), "kind": kind, "credential_topic": ""}
+
+    def follow_up(out: dict[str, Any] | None, error: BaseException | None) -> dict[str, str]:
+        if isinstance(error, SecretStoreError):
+            services.log_event(
+                "add_check_blocked",
+                topic=new["id"],
+                title=new["title"],
+                url=new["url"],
+                path=new["save_path"],
+                error="secrets_migration_required",
+                cls="secret_gate",
+                how="manual",
+            )
+            return said("web.topics.added_blocked", "warn")
+        if error is not None or out is None:
+            _first_check_failed(new, error if isinstance(error, Exception) else RuntimeError("no result"), tracker.name)
+            return said("web.topics.added_check_failed", "warn")
+        row = topic_check_row(new["id"], out)
+        if row is None:
+            return said("web.topics.added_no_result", "warn")
+        tracker_name = tracker.name if tracker.spec.get("login_path") else ""
+        if (
+            failed := failed_check_feedback(row, topic_id=new["id"], tracker_name=tracker_name, new_topic=True)
+        ) is not None:
+            return failed
+        return said("web.topics.added_confirmed" if row.get("added") else "web.topics.added_nothing_new")
+
+    return follow_up
 
 
 def _first_check_failed(new: dict[str, Any], error: Exception, tracker: str) -> None:
