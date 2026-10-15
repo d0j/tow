@@ -375,6 +375,7 @@
     "waiting_space": "waiting for disk space: {missing} GB short (needs {needed} GB, {free} GB free in {path}); TOW starts it by itself when there is room",
     "progress_only": "progress in the client only",
     "verifying_files": "Checking files",
+    "verification_not_listed": "the torrent client does not list the torrent right now; TOW looks again before it reports it removed",
     "daily_limit": "daily download limit reached",
     "preview_skips_limited": "preview does not download a .torrent from a site with a daily limit",
     "existing_unconfirmed": "torrent client: the torrent already there was not confirmed by reading it back",

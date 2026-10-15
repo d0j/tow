@@ -120,6 +120,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A new torrent whose files the client found complete, then left stopped after checking them, is started once (it
   seeds within the client's limits) instead of being reported as added while it stays stopped; the same for a
   torrent whose check ends while TOW applies its file selection again.
+- A torrent whose file check TOW waits for and that the client does not list for a moment (while the client starts,
+  for example) is no longer blocked as removed at once: TOW reports it only when two answers of the client at least
+  ten minutes apart do not list it, and never adds it again by itself.
 
 ## [1.30.10] — 2026-10-15
 

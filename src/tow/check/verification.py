@@ -15,7 +15,7 @@ from tow.check.rows import client_marks, set_error, stamp_result, withdrawn_mean
 from tow.clients import files
 from tow.clients.managed import ClientVerificationPending
 from tow.clients.spec import TorrentClientAdapter
-from tow.clock import iso_now
+from tow.clock import iso_now, machine_now, parse_timestamp
 from tow.errors import TowError
 from tow.events import new_operation_id
 from tow.i18n import t
@@ -39,6 +39,13 @@ TERMINAL_CODES = OWNER_REPAIR_CODES | {
     "client.managed.error_state",
     "client.managed.start_unconfirmed",
 }
+# A torrent its client does not list counts as removed only after two answers of the client at
+# least this far apart: a client still loading its torrents after a restart lists some late.
+MISSING_CONFIRM_SEC = 600
+
+
+class _NotListedYet(Exception):
+    """The client answered without the torrent; its removal is not confirmed yet."""
 
 
 def waiting_topics(state: dict[str, Any]) -> list[Topic]:
@@ -260,6 +267,29 @@ def _defer(work: TopicCheck, error: ClientVerificationPending, metadata: Any, pl
     return h
 
 
+def _observe_presence(waiting: dict[str, Any], info: dict[str, Any] | None) -> None:
+    """Count the client's answers without the torrent (``missing_since``, ``missing_seen`` on
+    the receipt); any answer with it clears them. Raises ``_NotListedYet`` until two answers at
+    least MISSING_CONFIRM_SEC apart did not list it - a client that did not answer is no answer."""
+    if info is not None:
+        waiting.pop("missing_since", None)
+        waiting.pop("missing_seen", None)
+        return
+    now = machine_now()
+    seen = waiting.get("missing_seen")
+    seen = seen if type(seen) is int and seen > 0 else 0
+    try:
+        elapsed = (now - parse_timestamp(str(waiting.get("missing_since") or ""))).total_seconds()
+    except TypeError, ValueError, OverflowError:
+        elapsed = -1.0
+    if not seen or elapsed < 0:  # its first answer without it, or the clock was set back since
+        waiting["missing_since"] = now.isoformat(timespec="seconds")
+        seen, elapsed = 0, 0.0
+    waiting["missing_seen"] = seen + 1
+    if waiting["missing_seen"] < 2 or elapsed < MISSING_CONFIRM_SEC:
+        raise _NotListedYet
+
+
 def _confirm(
     topic: Topic,
     run: CheckRun,
@@ -273,6 +303,7 @@ def _confirm(
     info = client.inspect_torrent(h)
     if run.readd_removed and (info is None or str(waiting.get("blocked") or "") in OWNER_REPAIR_CODES):
         return False  # only the owner's explicit row check may re-add or repair altered evidence
+    _observe_presence(waiting, info)  # never re-added here: a confirmed absence blocks the receipt
     # Retry a dropped start once, only for an unfinished TOW add; a later explicit check
     # may retry it again. Never resume an ordinary torrent paused in the client by its owner.
     stopped = str((info or {}).get("state") or "").casefold().startswith(("stopped", "paused"))
@@ -359,6 +390,9 @@ def _recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: boo
         if not _confirm(topic, run, waiting, client, client_id, h):
             row["verification_repair"] = True  # request-local intent, not a persisted selection edit
             return False
+    except _NotListedYet:
+        pending_row(row, h)
+        row["skipped"] = t("check.verification_not_listed", owner_language())
     except ClientVerificationPending as error:
         if not error.receipt:
             row.update(ok=False, status="failed")
@@ -368,46 +402,63 @@ def _recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: boo
             waiting.pop("blocked_params", None)
             pending_row(row, h)
     except Exception as error:  # noqa: BLE001 - one failed confirmation never ends the batch
-        code = getattr(error, "code", None)
-        if code in TERMINAL_CODES:
-            waiting["blocked"] = str(code)  # retain reason independently of reconcile errors
-            waiting["blocked_params"] = error_fields(error).get("error_params") or {}
-        row.update(ok=False, status="failed")
-        set_error(row, error)
-        stamp_result(topic, row)
-        if before_error != (topic.get("last_error_code"), topic.get("last_error_params"), topic.get("last_error")):
-            run.record("check_fail", topic=topic.get("id"), **error_fields(error), how=run.how)
-        if run.notify:
-            run.queue_notification(topic, kind="error", operation_id=new_operation_id("check-error"), error=error)
+        _failed(topic, run, row, waiting, error, before_error)
     else:
-        topic.pop("verification_pending", None)
-        if str(topic.get("tracking_mode") or "watch") == "once":
-            topic["once_done"] = True
-        row.update(ok=True, status="succeeded", added=not waiting.get("selection_update"), verification_pending=False)
-        row.pop("skipped", None)
-        for key in ("error", "error_record", "error_class"):
-            row.pop(key, None)
-        run.record(
-            str(
-                waiting.get("completion_event")
-                or ("client_selection_updated" if waiting.get("selection_update") else "client_added")
-            ),
-            operation_id=new_operation_id("client-confirm"),
-            component="client",
-            integration_id=client_id,
-            client_id=client_id,
-            topic_id=topic.get("id"),
-            topic=topic.get("id"),
-            hash=h,
-            status="succeeded",
-            reason="verification_finished",
-            how=run.how,
-        )
-        if run.notify and not waiting.get("selection_update"):
-            run.queue_notification(
-                topic, kind=str(waiting.get("kind") or "added"), operation_id=new_operation_id("bot")
-            )
+        _finished(topic, run, row, waiting, client_id, h)
     stamp_result(topic, row)
     if pass_only:
         _restore_check_times(topic, previous_check, previous_ok_at)
     return True
+
+
+def _failed(
+    topic: Topic,
+    run: CheckRun,
+    row: dict[str, Any],
+    waiting: dict[str, Any],
+    error: Exception,
+    before_error: tuple[Any, ...],
+) -> None:
+    """The confirmation failed: a terminal reason blocks the receipt; logged and told once."""
+    code = getattr(error, "code", None)
+    if code in TERMINAL_CODES:
+        waiting["blocked"] = str(code)  # retain reason independently of reconcile errors
+        waiting["blocked_params"] = error_fields(error).get("error_params") or {}
+    row.update(ok=False, status="failed")
+    set_error(row, error)
+    stamp_result(topic, row)
+    if before_error != (topic.get("last_error_code"), topic.get("last_error_params"), topic.get("last_error")):
+        run.record("check_fail", topic=topic.get("id"), **error_fields(error), how=run.how)
+    if run.notify:
+        run.queue_notification(topic, kind="error", operation_id=new_operation_id("check-error"), error=error)
+
+
+def _finished(
+    topic: Topic, run: CheckRun, row: dict[str, Any], waiting: dict[str, Any], client_id: str, h: str
+) -> None:
+    """The client confirmed the transaction: the receipt is done, History and the owner hear it."""
+    topic.pop("verification_pending", None)
+    if str(topic.get("tracking_mode") or "watch") == "once":
+        topic["once_done"] = True
+    row.update(ok=True, status="succeeded", added=not waiting.get("selection_update"), verification_pending=False)
+    row.pop("skipped", None)
+    for key in ("error", "error_record", "error_class"):
+        row.pop(key, None)
+    run.record(
+        str(
+            waiting.get("completion_event")
+            or ("client_selection_updated" if waiting.get("selection_update") else "client_added")
+        ),
+        operation_id=new_operation_id("client-confirm"),
+        component="client",
+        integration_id=client_id,
+        client_id=client_id,
+        topic_id=topic.get("id"),
+        topic=topic.get("id"),
+        hash=h,
+        status="succeeded",
+        reason="verification_finished",
+        how=run.how,
+    )
+    if run.notify and not waiting.get("selection_update"):
+        run.queue_notification(topic, kind=str(waiting.get("kind") or "added"), operation_id=new_operation_id("bot"))
