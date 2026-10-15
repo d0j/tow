@@ -602,6 +602,70 @@ def test_an_add_checked_before_its_selection_is_finished_by_the_passes(world, mo
     assert tracker.fetches == 1
 
 
+@pytest.mark.parametrize("owner_paused", [False, True])
+def test_a_lost_answer_after_the_initial_check_start_never_replays_it(world, monkeypatch, owner_paused):
+    """The pass that applied the selection of an add handed over during Transmission's check and
+    started it loses the client's answer right after the start: the saved receipt is the applied
+    one and its one start is spent - the next pass neither stops, reselects nor starts it again,
+    and a pause the owner gave meanwhile stands."""
+    client, _tracker, _sent = world
+    client.initial_check, client.checking = True, False
+    assert _run()["status"] == "verification_pending"
+    client.torrents[H]["state"] = "stoppedDL"  # Transmission's check ended
+    real_inspect, real_start = client.inspect_torrent, client._start
+    started = {"done": False}
+
+    def start(infohash):
+        real_start(infohash)
+        started["done"] = True
+
+    def inspect(infohash):
+        if started["done"]:
+            raise ClientError("client.transmission.no_connection", prefix="Fake")
+        return real_inspect(infohash)
+
+    monkeypatch.setattr(client, "_start", start)
+    monkeypatch.setattr(client, "inspect_torrent", inspect)
+    assert _run(space_only=True)["status"] == "failed"
+    pending = load_state()["topics"][0]["verification_pending"]
+    assert pending["resume_attempted"] is True
+    assert "phase" not in pending["receipt"]  # applied: a lost answer does not rewind it
+    assert not pending.get("blocked")
+    monkeypatch.setattr(client, "_start", real_start)
+    monkeypatch.setattr(client, "inspect_torrent", real_inspect)
+    assert client.torrents[H]["state"] == "downloading"
+    if owner_paused:
+        client.torrents[H]["state"] = "stoppedDL"
+    client.calls.clear()
+    row = _run(space_only=True)
+    assert not {"stop", "set_wanted", "start"} & {call[0] for call in client.calls}
+    assert client.wanted_torrent_indices() == {E01}
+    if owner_paused:
+        assert not row["ok"]
+        assert client.torrents[H]["state"] == "stoppedDL"
+    else:
+        assert row["ok"]
+        assert [call[0] for call in client.calls] == ["labels"]
+
+
+def test_a_spent_initial_check_start_saved_before_its_receipt_was_applied_is_not_replayed(world):
+    """A receipt saved with its initial-check phase although its one start was given (an earlier
+    pass failed right after it): the next pass finishes it as applied, without a new start."""
+    client, _tracker, _sent = world
+    client.initial_check, client.checking = True, False
+    _run()
+    disk = load_state()
+    disk["topics"][0]["verification_pending"]["resume_attempted"] = True
+    save_state(disk)
+    client.torrents[H]["state"] = "stoppedDL"
+    client._set_wanted(H, {client.client_id_of(E01)}, [0, 1, 2])  # applied before that start
+    client.calls.clear()
+    row = _run(space_only=True)
+    assert not row["ok"]
+    assert client.calls == []  # never stopped, reselected or started again
+    assert client.torrents[H]["state"] == "stoppedDL"
+
+
 def test_preflight_transport_failure_does_not_consume_the_resume_attempt(world, monkeypatch):
     client, _tracker, _sent = world
     _run()

@@ -149,6 +149,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The same holds when that check repairs a torrent whose file selection or folder had changed in the client, and
   when you chose other files of a topic whose torrent you removed: TOW reports the torrent as removed instead of
   adding it back, also in a scheduled check. Pressing Check again adds it back.
+- Transmission: when the connection to Transmission broke right after TOW started a new torrent whose file check
+  had ended, the next check no longer stops it, chooses its files and starts it again, and no longer starts it
+  after you paused it.
 
 ## [1.30.10] — 2026-10-15
 

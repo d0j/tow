@@ -404,6 +404,8 @@ def _confirm(
     ):
         return None  # only the owner's explicit row check may re-add or repair altered evidence
     _observe_presence(waiting, info)  # never re-added here: a confirmed absence blocks the receipt
+    if waiting.get("resume_attempted"):
+        _start_given(waiting)  # an earlier pass gave the start and failed right after it
     # Retry a dropped start once, only for an unfinished TOW add; a later explicit check
     # may retry it again. Never resume an ordinary torrent paused in the client by its owner.
     stopped = str((info or {}).get("state") or "").casefold().startswith(("stopped", "paused"))
@@ -420,9 +422,20 @@ def _confirm(
         str(waiting.get("path") or ""),
         waiting.get("receipt") or {},
         start_stopped=retry,
-        on_start=lambda: waiting.__setitem__("resume_attempted", True),
+        on_start=lambda: _start_given(waiting),
     )
     return confirmed if isinstance(confirmed, dict) else {}
+
+
+def _start_given(waiting: dict[str, Any]) -> None:
+    """The receipt's one start is given (or was, by a pass that failed right after it), saved
+    before the client answers. An add handed over during its client's own check gets its start
+    only once its selection is applied and read back: from then on its receipt is the applied
+    one, so a lost answer never makes a later pass stop, select or start it again."""
+    waiting["resume_attempted"] = True
+    receipt = as_dict(waiting.get("receipt"))
+    if receipt.get("phase") == AWAITING_INITIAL_CHECK and receipt.get("start") is True:
+        _adopt_receipt(waiting, {key: value for key, value in receipt.items() if key not in {"phase", "start"}})
 
 
 def _restore_check_times(topic: Topic, previous_check: str | None, previous_ok_at: str | None) -> None:
