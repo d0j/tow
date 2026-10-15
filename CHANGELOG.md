@@ -203,6 +203,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A check on the web whose every topic was skipped or not saved ends in a neutral message, not a green success.
 - `tow keys ensure --json` and `tow access on --json` print only JSON on standard output: the advice to back up a
   new key and the reminder's question go to standard error.
+- A sign-in typed on Home whose check had to wait for another check is now confirmed like one checked at once:
+  the site's other topics stop asking for a sign-in, and a password the site refused is put back.
 
 ## [1.31.2] — 2026-10-15
 

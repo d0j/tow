@@ -24,6 +24,13 @@ PENDING: deque[str] = deque()  # the jobs of both lanes that wait or run, oldest
 # A page's action id -> its job (D10): registered with the job, before any work, so a page that
 # lost the answer finds its check by the id it kept. Forgotten with the job.
 ACTIONS: dict[str, str] = {}
+# What a job's caller does with its check's result, by job id: a sign-in confirms or restores the
+# password, a new topic's first check says "added to TOW, ...". Kept beside the job, never in it:
+# a job is deep-copied for every page that asks about it, and a follow-up may hold a password.
+# ``follow_up(result, error)`` gets the check's result or the error that ended it and returns the
+# job's feedback (``views.check_feedback``'s shape), or None to keep the check's own words.
+type FollowUp = Callable[[dict[str, Any] | None, BaseException | None], dict[str, str] | None]
+FOLLOW_UPS: dict[str, FollowUp] = {}
 # The consumer of each lane, by the lane's ``apply``.
 _WORKERS: dict[bool, threading.Thread] = {}
 MAX_PENDING = 32  # per lane
@@ -48,16 +55,19 @@ def submit(
     adopted: bool = False,
     subject: str = "",
     action: str = "",
+    follow_up: FollowUp | None = None,
 ) -> tuple[dict[str, Any] | None, bool]:
     """Share a request that still waits, enqueue anything else once in its lane, and keep exactly
     one FIFO consumer per lane. The returned job carries its ``position`` in its lane (1: next or
     running); ``subject`` is what its message names (the topic, as it was when asked for);
-    ``action``: the page's id of the click (one already registered is the same check again)."""
+    ``action``: the page's id of the click (one already registered is the same check again);
+    ``follow_up``: what the caller does with the result (``FOLLOW_UPS``; the latest click's wins)."""
     with LOCK:
         now = time.monotonic()
         for key, job in list(JOBS.items()):
             if job.get("finished_at", now) + RESULT_TTL < now:
                 del JOBS[key]
+                FOLLOW_UPS.pop(key, None)
         for known in [key for key, job_id in ACTIONS.items() if job_id not in JOBS]:
             del ACTIONS[known]
         if action and action in ACTIONS:
@@ -71,6 +81,8 @@ def submit(
                 job["requested_at"] = time.time()
                 if action:
                     ACTIONS[action] = job["id"]
+                if follow_up is not None:
+                    FOLLOW_UPS[job["id"]] = follow_up
                 return get(job["id"]), False
         if len(_lane(apply)) >= MAX_PENDING:
             return None, False
@@ -83,6 +95,7 @@ def submit(
             if finished is None:
                 return None, False
             del JOBS[finished]
+            FOLLOW_UPS.pop(finished, None)
         job = {
             "id": uuid.uuid4().hex[:16],
             "topic_id": topic_id,
@@ -97,6 +110,8 @@ def submit(
         PENDING.append(job["id"])
         if action:
             ACTIONS[action] = job["id"]
+        if follow_up is not None:
+            FOLLOW_UPS[job["id"]] = follow_up
         worker = _WORKERS.get(apply)
         if worker is None or not worker.is_alive():
             try:
@@ -105,6 +120,7 @@ def submit(
                 PENDING.remove(job["id"])
                 del JOBS[job["id"]]
                 ACTIONS.pop(action, None)
+                FOLLOW_UPS.pop(job["id"], None)
                 raise
         return get(job["id"]), True
 
@@ -168,8 +184,15 @@ def _pause(seconds: float) -> None:
     threading.Event().wait(seconds)
 
 
+def take_follow_up(job_id: str) -> FollowUp | None:
+    """The job's follow-up, once (its check has run and ended): None when it has none."""
+    with LOCK:
+        return FOLLOW_UPS.pop(job_id, None)
+
+
 def _finish(job: dict[str, Any]) -> None:
     with LOCK:
+        FOLLOW_UPS.pop(job["id"], None)  # a job that ended without its check keeps no password
         if job["status"] not in {"done", "failed"}:
             job["status"] = "failed"
         # finished_at times the record's hour; the result page is dated by ended_at.
@@ -213,5 +236,6 @@ def cancel(job_id: str) -> bool:
         if job is None or job["status"] != "queued":
             return False
         PENDING.remove(job_id)
+        FOLLOW_UPS.pop(job_id, None)
         job.update(status="failed", finished_at=time.monotonic(), ended_at=time.time(), cancelled=True)
         return True
