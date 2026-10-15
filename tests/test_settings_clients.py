@@ -41,7 +41,7 @@ def test_adding_a_client_converts_the_single_client_config(legacy_qbit):
     page = c.get("/settings").text
     assert 'id="client-transmission"' in page
     assert "Включите «Разрешить удалённое управление»" in page
-    assert '<span class="pill ok">Основной</span>' in page
+    assert '<span class="pill mut">Основной</span>' in page  # a role, not a health colour
 
     saved = c.post(
         "/settings/client",

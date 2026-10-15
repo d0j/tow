@@ -812,7 +812,7 @@ def service_view() -> dict[str, Any]:
     problem = services.watchdog_problem()
     problem_at = epoch(problem.get("at")) if problem else None
     service["watchdog_problem"] = (
-        {"at": clock(problem_at) if problem_at else "—", "lines": str(problem["text"]).splitlines()}
+        {"at": clock(problem_at) if problem_at else "—", "when": problem_at, "lines": str(problem["text"]).splitlines()}
         if problem
         else None
     )
@@ -835,6 +835,8 @@ def service_view() -> dict[str, Any]:
         service["running_since"] = format_ui_timestamp(str(up_since)) if up_since else None
     except TypeError, ValueError:
         service["running_since"] = None
+    # As stored, for the page's one time rule (short_time); the written form stays for the rest.
+    service["running_since_at"] = up_since if service["running_since"] else None
     restart = service.get("restart")
     if not isinstance(restart, dict):
         service["restart_view"] = None
@@ -860,6 +862,7 @@ def service_view() -> dict[str, Any]:
         at = t("web.service.date_unknown")
     service["restart_view"] = {
         "at": at,
+        "when": created_at if at != t("web.service.date_unknown") else None,
         "reason": reason,
         "state": state,
         "failed": status == "failed",
@@ -894,7 +897,12 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
     st = services.snapshot_status()
     copies = services.list_snapshots(limit=None)
     snapshots = [
-        {"name": row["name"], "at": format_ui_timestamp(str(row["created_at"])), "size": format_bytes(row["bytes"])}
+        {
+            "name": row["name"],
+            "at": format_ui_timestamp(str(row["created_at"])),
+            "created_at": row["created_at"],
+            "size": format_bytes(row["bytes"]),
+        }
         for row in copies
     ]
     last_ok = st.get("last_ok_at")
@@ -912,10 +920,13 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
         "last_ok": _epoch_time(last_ok)
         if isinstance(last_ok, (int, float))
         else (snapshots[0]["at"] if snapshots else ""),
+        # The same moment as stored, for the section's pill (short_time: "20:31", "15 Oct, 20:31").
+        "last_ok_at": last_ok if isinstance(last_ok, (int, float)) else (copies[0]["created_at"] if copies else None),
         "failed": status_failed(st),
         "read_error": st.get("read_error") is True,
         "error": str(st.get("last_error") or ""),
         "error_at": _epoch_time(failed_at) if isinstance(failed_at, (int, float)) else "",
+        "error_when": failed_at if isinstance(failed_at, (int, float)) else None,
         "cleanup_pending": night_cleanup["pending"] is True,
         "cleanup_read_error": night_cleanup["read_error"],
         "cleanup_unrecorded": night_cleanup["pending"] is None,

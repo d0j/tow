@@ -484,3 +484,71 @@ def test_settings_say_each_thing_once_and_the_guide_keeps_the_long_texts():
     for key in ("guide_hint", "sequence", "guide_step_install", "guide_step_address", "guide_step_enable"):
         assert str(escape(translate(f"protection_ui.{key}", "en"))) in guide, key
     assert "TOW does not install services for you." in guide
+
+
+def test_settings_pills_say_each_state_once_and_main_is_a_role(monkeypatch):
+    """A state was said two or three times (section pill, card pill, note) and "Main" was green
+    beside a red "Not answering". Card pills now name a role (Main, grey) or what the card cannot
+    show itself (Not set up); the section pill summarises."""
+    cfg = {
+        "trackers": {},
+        "clients": [
+            {"id": "main", "kind": "qbittorrent", "default": True},
+            {"id": "backup", "kind": "qbittorrent"},
+            {"id": "spare", "kind": "transmission"},
+        ],
+        "interval_sec": 3600,
+        "language": "ru",
+    }
+    secrets = {"clients": {"main": {"host": "main-host"}, "backup": {"host": "backup-host"}}}
+    monkeypatch.setattr("tow.web.services.load_config", lambda: cfg)
+    monkeypatch.setattr("tow.web.services.load_secrets", lambda: secrets)
+    page = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text
+    clients = page.split('id="acc-clients"', 1)[1].split('id="acc-bots"', 1)[0]
+    assert '<span class="pill mut">Основной</span>' in clients
+    assert '<span class="pill ok">Основной</span>' not in clients
+    assert ">Настроен<" not in clients  # the filled fields and the section's pill say it
+    spare = clients.split('id="client-spare"', 1)[1].split("</summary>", 1)[0]
+    assert '<span class="pill warn">Не настроен</span>' in spare
+    access = page.split('id="acc-access"', 1)[1].split('id="acc-transfer"', 1)[0]
+    network = access.split('id="network-card"', 1)[1]
+    assert 'class="pill' not in network.split("</div>", 1)[0]  # the section's pill says it
+
+
+def test_the_messengers_pill_names_them_and_is_green_only_once_each_worked():
+    from tow.store import load_state, save_secrets, save_state
+
+    save_secrets({"telegram": {"token": "123456:fake-token", "chat_ids": ["1001"]}})
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+
+    def pill() -> str:
+        page = client.get("/settings").text
+        return re.search(r'id="acc-bots".*?(<span class="pill [^"]+">[^<]*</span>)', page, re.DOTALL).group(1)
+
+    assert pill() == '<span class="pill mut">Telegram</span>'  # connected, not tried yet
+    state = load_state()
+    state["notify_status"] = {"telegram:1001": {"ok": False, "error": "synthetic", "at": 1}}
+    save_state(state)
+    assert pill() == '<span class="pill bad">Telegram — нет связи</span>'
+    state["notify_status"] = {"telegram:1001": {"ok": True, "at": 2}}
+    save_state(state)
+    assert pill() == '<span class="pill ok">Telegram</span>'
+
+
+def test_the_backups_pill_writes_its_time_by_the_one_rule(monkeypatch):
+    """ "Nightly backup 2026-10-15 22:29:52 CET UTC+01:00" wrapped into two lines on a phone: the
+    time is short ("20:31", "15 Oct, 20:31"), the full one is its tooltip."""
+    monkeypatch.setattr("tow.web.services.snapshot_status", lambda: {"last_ok_at": 1790000000})
+    monkeypatch.setattr(
+        "tow.web.services.list_restore_points",
+        lambda: [{"id": "rp-1", "created_at": "2026-09-24T09:15:24+00:00", "bytes": 4096}],
+    )
+    for name in ("restore_point_cleanup_status", "night_cleanup_status"):
+        monkeypatch.setattr(f"tow.web.services.{name}", lambda **_kwargs: {"pending": False, "read_error": False})
+    page = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text
+    summary = page.split('id="acc-transfer"', 1)[1].split("</summary>", 1)[0]
+    assert re.search(r'<span class="pill ok">Ночная копия <time datetime="[^"]+" title="[^"]+" data-short>', summary)
+    manual = page.split('id="backup-manual"', 1)[1].split("</article>", 1)[0]
+    head = manual.split("</div>", 2)[1]
+    assert "Сохранено: 1</span>" not in head  # the list's own summary counts them
+    assert '<time datetime="2026-09-24T' in manual
