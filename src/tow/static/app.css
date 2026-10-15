@@ -218,6 +218,7 @@ main > .card + .card, main > .card + form { margin-top: 1rem; }
 .pill.bad { background: var(--pill-bad-bg); color: var(--bad); }
 .pill.warn { background: var(--pill-warn-bg); color: var(--warn); }
 .pill.mut { background: var(--panel2); color: var(--mut); }
+.pill.new { background: var(--new-row); color: var(--acc); } /* new data observed: an event, blue */
 label { display: block; margin: .55rem 0 .2rem; color: var(--mut); font-size: 12px; }
 input, textarea, select {
   width: 100%; box-sizing: border-box; background: var(--panel2); color: var(--fg);
@@ -1153,7 +1154,9 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
   display: inline-flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: .4rem; margin-left: .4rem;
 }
 .secret-store-copy > button { white-space: nowrap; }
-.check-results { padding: .8rem; margin-bottom: .6rem; }
+/* Check all's report: below the sticky header when its link lands on it; closed by its x. */
+.check-results { padding: .8rem; margin-bottom: .6rem; scroll-margin-top: 5.5rem; }
+.check-results-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .6rem; }
 .check-results h2 { margin-top: 0; }
 .check-result-list { list-style: none; padding: 0; }
 .check-result-row { display: flex; flex-wrap: wrap; gap: .3rem .6rem; margin: .5rem 0; overflow-wrap: anywhere; }

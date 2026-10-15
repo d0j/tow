@@ -273,6 +273,18 @@ if (checkJob) {
   window.setTimeout(follow, delay);
 }
 
+// Check all's report closes in place: only its own
+// parameter leaves the address (the filters and the open row stay); without a script the close
+// is a link to the same address.
+document.addEventListener("click", (event) => {
+  const close = event.target.closest?.("[data-check-result-close]");
+  if (!close) return;
+  event.preventDefault();
+  close.closest("#check-result")?.remove();
+  history.replaceState(history.state, "", close.getAttribute("href"));
+  document.getElementById("main")?.focus?.();
+});
+
 // D5: the credential prompt is a real modal (focus stays in it, Esc closes it).
 document.querySelectorAll("dialog.credential-prompt[open]").forEach((dialog) => {
   const topic = new URL(location.href).searchParams.get("credential_topic") || "";

@@ -61,6 +61,15 @@ def _activity_text(job: dict[str, Any] | None) -> str:
     return t("web.check_all.finished")
 
 
+def _without(request: Request, name: str) -> str:
+    """This page's address without the parameter ``name`` (and without a fragment): what closing
+    the card it opened leaves - the filters and the open row stay."""
+    from urllib.parse import urlencode
+
+    query = [(key, value) for key, value in request.query_params.multi_items() if key not in {name, "flash"}]
+    return request.url.path + ("?" + urlencode(query) if query else "")
+
+
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request) -> Response:
     from tow.clients.factory import client_configurations, default_client_id
@@ -109,6 +118,7 @@ def index(request: Request) -> Response:
             else "",
             "check_result_message": check_job_message(result) if result and not said else "",
             "check_result_requested": bool(result_id) and not topic_result,
+            "check_result_close": _without(request, "check_result"),
             "check_activity": active,
             "check_activity_id": active_id,
             # The page follows a topic's result that is not ready yet (app.js polls for it).
