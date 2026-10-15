@@ -5,6 +5,17 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.30.10] — 2026-10-15
+
+### Fixed
+
+- Manual check totals distinguish deferred client file verification, disk-space waits, skipped topics and
+  actual failures. Results name topics, explain their outcomes and link to current status and available actions;
+  Home explicitly labels pending file verification instead of leaving an unexplained grey dot.
+- A topic check requested while another check is applying waits in a bounded FIFO instead of being refused.
+  Repeated pending clicks share a job; waiting work can be cancelled without stopping a running client operation.
+  Expired or restarted web jobs are explicitly unconfirmed, never replayed as manual re-adds.
+
 ## [1.30.9] — 2026-10-14
 
 ### Improved

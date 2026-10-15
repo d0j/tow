@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import threading
-import time
-import uuid
 from typing import Any
 from urllib.parse import quote
 
@@ -13,13 +10,13 @@ from fastapi.responses import JSONResponse, Response
 
 from tow import i18n
 from tow.check import blocked_by_previous_revision
-from tow.log import owner_language
+from tow.log import error_fields, owner_language
 from tow.records import shown_title
 from tow.store import CheckBusyError, SecretStoreError
 from tow.trackers import load_trackers, match_tracker
-from tow.web import services
+from tow.web import check_jobs, services
 from tow.web.text import t
-from tow.web.views import flash_location, flash_redirect, manual_check_flash, topic_check_row
+from tow.web.views import check_report, flash_location, flash_redirect, manual_check_flash, topic_check_row
 
 router = APIRouter()
 
@@ -83,10 +80,12 @@ def topics_check(tid: str) -> Response:
 def _check_topic(tid: str, *, adopted: bool = False) -> Response:
     """Check one topic now and say what it found; ``adopted``: the owner has just adopted its
     torrent into TOW, which a check that changes nothing else confirms."""
+    if check_jobs.has_pending():
+        return _enqueue(topic_id=tid, apply=True, adopted=adopted)
     try:
         out = services.run_check(apply=True, notify=True, ids=[tid], ignore_cool=True, how="manual", wait=False)
     except CheckBusyError:
-        return flash_redirect("/", "web.check.busy", "warn")
+        return _enqueue(topic_id=tid, apply=True, adopted=adopted)
     except SecretStoreError as exc:
         services.record_check_failure(exc, how="manual")
         return flash_redirect("/", "web.check.blocked", "err")
@@ -122,58 +121,87 @@ def _check_topic(tid: str, *, adopted: bool = False) -> Response:
     return flash_redirect("/", "web.check.failed", "err")
 
 
-# "Обновить все" runs in the background (D1): the request used to wait the whole check
-# (half a minute and more) while holding the persistence lock for every other page.
-_CHECK_JOB_LOCK = threading.Lock()
-_check_job: dict[str, Any] = {}
-
-
-def _check_all(job: dict[str, Any], apply: bool) -> None:
+def _perform_check(job: dict[str, Any]) -> None:
     # A plain thread does not inherit the request's language: the job carries it.
     lang = str(job.get("lang") or owner_language())
+    i18n.use(lang)
+    topic_id = str(job.get("topic_id") or "")
     try:
-        out = services.run_check(apply=apply, notify=True, ignore_cool=True, how="manual")
-        n = sum(1 for r in out["results"] if r.get("ok"))
-        new = sum(1 for r in out["results"] if r.get("changed"))
-        fail = sum(1 for r in out["results"] if not r.get("ok"))
-        prefix = i18n.t("web.check_all.preview", lang) if not apply else i18n.t("web.check_all.applied", lang)
-        summary = i18n.t("web.check_all.summary", lang, new=new, same=n - new, fail=fail)
-        flash, status, kind = prefix + summary, "done", "warn" if fail else "ok"
+        out = services.run_check(
+            apply=job["apply"],
+            notify=True,
+            ignore_cool=True,
+            how="manual",
+            wait=False,
+            ids=[topic_id] if topic_id else None,
+        )
+        if topic_id and not topic_check_row(topic_id, out):
+            out = {"results": [{"id": topic_id, "ok": True, "status": "skipped", "skipped": t("web.topics.not_found")}]}
+        report = check_report(out, apply=job["apply"])
+        flash, status, kind = (
+            report["summary"],
+            "done",
+            "warn" if report["counts"]["fail"] or report["counts"]["pending"] else "ok",
+        )
+        with check_jobs.LOCK:
+            job["report"] = report
+        if topic_id and report["rows"] and report["rows"][0]["title"]:
+            flash = t(
+                "web.check.topic_result",
+                title=services.short_series_title(report["rows"][0]["title"], lang),
+                result=flash,
+            )
+    except CheckBusyError:
+        raise  # the FIFO retries the head without duplicating work or consuming a failure
     except SecretStoreError as exc:
         services.record_check_failure(exc, how="manual")
         flash, status, kind = i18n.t("web.check.blocked", lang), "failed", "err"
     except Exception as exc:  # noqa: BLE001 - the background job's boundary: the page polls for its result
+        services.log_event("check_blocked", how="manual", reason="result_unconfirmed", **error_fields(exc))
         flash, status, kind = i18n.t("web.check_all.not_run", lang, error=type(exc).__name__), "failed", "err"
     # The page follows the job and then opens Home with its result (a message kept on the server).
-    redirect = flash_location("/", flash, kind)
-    with _CHECK_JOB_LOCK:
-        job.update({"status": status, "flash": flash, "redirect": redirect, "finished_at": time.time()})
+    redirect = flash_location("/", flash, kind, result_job=job["id"])
+    with check_jobs.LOCK:
+        job.update({"status": status, "flash": flash, "redirect": redirect})
 
 
 @router.post("/check")
 def check(mode: str = Form("dry")) -> Response:
-    with _CHECK_JOB_LOCK:
-        if _check_job.get("status") == "running":
-            return flash_redirect("/?check_job=" + quote(str(_check_job["id"])), "web.check_all.running", "warn")
-        job: dict[str, Any] = {
-            "id": uuid.uuid4().hex[:12],
-            "status": "running",
-            "started_at": time.time(),
-            "lang": owner_language(),
-        }
-        _check_job.clear()
-        _check_job.update(job)
-    threading.Thread(target=_check_all, args=(_check_job, mode == "apply"), name="tow-check-all", daemon=True).start()
-    return flash_redirect("/?check_job=" + job["id"], "web.check_all.started")
+    return _enqueue(topic_id="", apply=mode == "apply")
+
+
+def _enqueue(*, topic_id: str, apply: bool, adopted: bool = False) -> Response:
+    job, added = check_jobs.submit(
+        topic_id=topic_id, apply=apply, lang=owner_language(), perform=_perform_check, adopted=adopted
+    )
+    if job is None:
+        return flash_redirect("/", "web.check_all.queue_full", "warn")
+    message = "web.check_all.queued" if topic_id else "web.check_all.started" if added else "web.check_all.running"
+    return flash_redirect("/?check_job=" + quote(job["id"]), message)
 
 
 @router.get("/check/status")
 def check_status(job: str = "") -> Response:
-    with _CHECK_JOB_LOCK:
-        current = dict(_check_job)
-    if not job or current.get("id") != job:
+    current = check_jobs.get(job)
+    if current is None:
         return JSONResponse({"status": "unknown"})
     body = {"status": current["status"], "flash": current.get("flash") or ""}
+    if current["status"] == "queued":
+        body["position"] = current["position"]
     if current.get("redirect"):
         body["redirect"] = current["redirect"]
+    elif current["status"] == "failed":
+        body["redirect"] = flash_location(
+            "/",
+            "web.check_all.cancelled" if current.get("cancelled") else "web.check_all.unconfirmed",
+            "warn",
+            result_job=job,
+        )
     return JSONResponse(body)
+
+
+@router.post("/check/{job}/cancel")
+def cancel_check(job: str) -> Response:
+    if check_jobs.cancel(job):
+        return flash_redirect("/", "web.check_all.cancelled")
+    return flash_redirect("/", "web.check_all.cannot_cancel", "warn")

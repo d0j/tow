@@ -2106,9 +2106,9 @@ def test_check_all_runs_in_the_background_and_reports_when_done(monkeypatch):
     release.set()
     status = wait_for_check_job(client, job)
     assert status["status"] == "done"
-    assert status["flash"] == "применено: новое 1, без изменений 0, сбой 1"
+    assert status["flash"] == "проверка завершена: обновлено 1, с ошибкой 1"
     assert flash_of(status["redirect"]) == status["flash"]  # Home shows it; the address holds a token
-    assert "применено" not in status["redirect"]
+    assert "проверка завершена" not in status["redirect"]
     assert client.get("/check/status?job=other").json() == {"status": "unknown"}
 
 

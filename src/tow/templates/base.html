@@ -85,7 +85,8 @@
 <main id="main"{% if request.url.path == '/' %} class="home-page"{% endif %} aria-labelledby="page-title">
   {% if request.url.path == '/' %}<a class="release-notice" href="/settings?open=updates#acc-updates" data-release-notice aria-live="polite" hidden></a>{% endif %}
   {#- Persisted topic failures live in the current-problems icon, not a second message strip. -#}
-  {% if flash and not compact_problem %}<div class="flash{% if flash.kind == 'err' %} error{% elif flash.kind == 'warn' %} warn{% endif %}" id="flash" role="{{ 'alert' if flash.kind == 'err' else 'status' }}"{% if flash.kind == 'ok' %} data-ttl="{{ undo_left_sec() if undo_in_flash else flash_ttl_sec() }}"{% endif %}><span>{{ flash.text|sentence }}</span>
+  {% if flash and not compact_problem and not check_activity_requested|default(false) %}<div class="flash{% if flash.kind == 'err' %} error{% elif flash.kind == 'warn' %} warn{% endif %}" id="flash" role="{{ 'alert' if flash.kind == 'err' else 'status' }}"{% if flash.kind == 'ok' %} data-ttl="{{ undo_left_sec() if undo_in_flash else flash_ttl_sec() }}"{% endif %}><span>{{ flash.text|sentence }}</span>
+  {%- if flash.result_job %}<a href="/?check_result={{ flash.result_job|urlencode }}#check-result">{{ t('web.check_all.results') }}</a>{% endif -%}
   {%- if undo_in_flash %}<form method="post" action="/undo" class="flash-undo" id="undo-form" data-ttl="{{ undo_left_sec() }}"><button class="ghost sm" type="submit" data-keep title="{{ t('base.undo.title', what=undo_label()) }}">{{ t('base.undo.button') }} <span class="undo-left" data-undo-left aria-hidden="true"></span></button></form>{% endif -%}
   <button type="button" class="flash-x" aria-label="{{ t('base.close') }}">{{ icon('close', 'sm') }}</button></div>{% endif %}
   {% if compact_problem and flash.problem_topic in h.attention.subjects %}<span class="sr-only" data-problem-result="{{ flash.kind }}">{{ flash.text|sentence }}</span>{% endif %}

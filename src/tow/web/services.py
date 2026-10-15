@@ -30,6 +30,8 @@ from tow.browser_auth import browser_auth
 from tow.check import await_relocation, client_owned_by_tow, record_check_failure, run_check
 from tow.check.notices import notify_topic_error
 from tow.check.space import folder_free
+from tow.check_outcomes import counts_of as check_outcome_counts
+from tow.check_outcomes import outcome_of as check_outcome
 from tow.clients.factory import from_secrets as client_from_secrets
 from tow.config import load_config
 from tow.config import save_config as _save_config
@@ -112,6 +114,8 @@ __all__ = [
     "apply_undo",
     "await_relocation",
     "browser_auth",
+    "check_outcome",
+    "check_outcome_counts",
     "check_portable_bundle",
     "check_restore_point",
     "check_snapshot",

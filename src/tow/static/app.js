@@ -198,7 +198,8 @@ document.addEventListener("submit", (e) => {
 });
 
 // "Обновить все" runs in the background (D1): follow it, then show its result.
-const checkJob = new URL(location.href).searchParams.get("check_job");
+const resultPending = document.querySelector("[data-check-result-pending]");
+const checkJob = new URL(location.href).searchParams.get("check_job") || (resultPending ? new URL(location.href).searchParams.get("check_result") : null);
 if (checkJob) {
   let delay = 2000;
   const follow = async () => {
@@ -208,16 +209,26 @@ if (checkJob) {
     }
     try {
       const response = await fetch(`/check/status?job=${encodeURIComponent(checkJob)}`, { cache: "no-store" });
+      if (response.status === 401) { window.location.assign("/"); return; }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
+      const progress = document.querySelector("#check-activity [data-check-status]");
+      if (progress && (data.status === "queued" || data.status === "running")) {
+        progress.textContent = data.status === "queued" ? t("js.checks.queued", { position: data.position }) : t("js.checks.running");
+        const cancel = document.querySelector('#check-activity form');
+        if (cancel) cancel.hidden = data.status !== "queued";
+      }
       if (data.status === "done" || data.status === "failed") {
         // The server keeps the result and gives an address with its token: no text in the URL.
-        const next = new URL(data.redirect || "/", location.href);
+        const next = new URL(resultPending ? `/?check_result=${encodeURIComponent(checkJob)}#check-result` : data.redirect || "/", location.href);
         const checkForm = document.querySelector?.('header.app form[action="/check"]');
         if (checkForm?.contains(document.activeElement)) rememberFocus(checkForm, next);
         window.location.assign(next);
         return;
       }
-      if (data.status !== "running") {
+      if (data.status !== "running" && data.status !== "queued") {
+        const note = document.getElementById("check-activity");
+        if (note) note.textContent = t("js.checks.unconfirmed");
         const u = new URL(location.href);
         u.searchParams.delete("check_job");
         history.replaceState({}, "", u.pathname + u.search);
@@ -229,7 +240,6 @@ if (checkJob) {
     delay = Math.min(delay + 1000, 5000);
     window.setTimeout(follow, delay);
   };
-  document.querySelectorAll('form[action="/check"] button').forEach((b) => b.classList.add("spinning"));
   window.setTimeout(follow, delay);
 }
 

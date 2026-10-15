@@ -834,6 +834,15 @@ def _access_diagnostics(rec: Mapping[str, Any], lang: str) -> list[str]:
     return bits
 
 
+def _check_outcome_detail(rec: Mapping[str, Any], lang: str) -> str:
+    outcomes = rec.get("outcomes")
+    if isinstance(outcomes, dict) and all(
+        type(outcomes.get(key)) is int and outcomes[key] >= 0 for key in ("new", "same", "pending", "skipped", "fail")
+    ):
+        return t("log.check_outcomes", lang, **outcomes)
+    return t("log.check_result", lang, ok=rec.get("ok"), n=rec.get("n"))
+
+
 def format_event(
     rec: Mapping[str, Any],
     *,
@@ -897,7 +906,7 @@ def format_event(
     elif kind == "check" and rec.get("n") is not None and _client_pass(rec):
         bits.append(t("log.client_pass_result", lang, n=rec.get("n")))  # no site was asked
     elif kind == "check" and rec.get("n") is not None:
-        bits.append(t("log.check_result", lang, ok=rec.get("ok"), n=rec.get("n")))
+        bits.append(_check_outcome_detail(rec, lang))
         if rec.get("apply") is False:
             bits.append(t("log.check_preview", lang))
     alerts = rec.get("alerts")

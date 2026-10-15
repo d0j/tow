@@ -74,6 +74,7 @@ ROUTES = frozenset(
         ("POST", "/topics/{tid}/check"),
         ("POST", "/check"),
         ("GET", "/check/status"),
+        ("POST", "/check/{job}/cancel"),
         ("GET", "/sites"),
         ("POST", "/topics/guess-title"),
         ("POST", "/sites/guess"),

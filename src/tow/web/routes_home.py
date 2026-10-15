@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -9,11 +10,11 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from tow import access
 from tow.folders import recent_save_roots
-from tow.web import _context
+from tow.web import _context, check_jobs
 from tow.web.middleware import is_browser_navigation
 from tow.web.templating import TEMPLATES, header_health
 from tow.web.text import t
-from tow.web.views import add_draft, credential_prompt, first_run, request_flash, topic_rows
+from tow.web.views import add_draft, credential_prompt, first_run, request_flash, topic_rows, ui_time
 
 router = APIRouter()
 
@@ -49,6 +50,8 @@ def index(request: Request) -> Response:
         return RedirectResponse("/setup", status_code=303)
     state = _context.state()
     rows = topic_rows(state)
+    for row in rows:
+        row["manual_job"] = check_jobs.pending_topic(str(row["id"]))
     # YAML accepts scalar keys; HTML/URL filter values are always text. Preserve
     # these legacy names without sorting mixed types or duplicating the All choice.
     tracker_options = sorted(
@@ -56,6 +59,10 @@ def index(request: Request) -> Response:
         | {str(row["tracker"]) for row in rows if row.get("tracker")}
     )
     client_options = [row for row in client_configurations(cfg) if row.get("enabled", True)]
+    result_id = str(request.query_params.get("check_result") or "")
+    result = check_jobs.get(result_id) if result_id else None
+    active_id = str(request.query_params.get("check_job") or "")
+    active = check_jobs.get(active_id) if active_id else None
     return TEMPLATES.TemplateResponse(
         request,
         "index.html",
@@ -69,6 +76,15 @@ def index(request: Request) -> Response:
             "credential_prompt": credential_prompt(request),
             "add_draft": add_draft(request),
             "flash": request_flash(request),
+            "check_result": result,
+            "check_result_at": ui_time(datetime.fromtimestamp(result["started_at"], UTC).isoformat()) if result else "",
+            "check_result_requested": bool(result_id),
+            "check_activity": active,
+            "check_activity_title": next(
+                (row["series"] for row in rows if active and str(row["id"]) == active["topic_id"]),
+                t("base.check_all.title"),
+            ),
+            "check_activity_requested": bool(active_id),
             # A "Needs attention" link opens this topic's row (?open=<id>).
             "landing_topic": str(request.query_params.get("open") or ""),
             "first_steps": None if state.get("topics") else _first_steps(cfg, state),
