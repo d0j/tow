@@ -45,6 +45,8 @@ def _status(client, job):
         ({"ok": False, "status": "verification_pending", "changed": True}, "pending"),
         ({"ok": False, "status": "waiting_space", "error": "disk"}, "pending"),
         ({"ok": True, "status": "skipped"}, "skipped"),
+        # A new version the client already had: nothing to add, but the topic changed.
+        ({"ok": True, "status": "skipped", "skipped": "already in the client", "changed": True}, "new"),
         ({"ok": True, "added": True, "note": "changed meanwhile"}, "skipped"),
         ({"ok": False, "status": "skipped", "error": "site refused"}, "fail"),
         ({"ok": True, "selection_updated": True}, "new"),

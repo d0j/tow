@@ -13,10 +13,11 @@ def outcome_of(row: Mapping[str, Any]) -> str:
         return "pending"
     if not row.get("ok"):
         return "fail"
-    if row.get("status") == "skipped" or row.get("skipped"):
-        return "skipped"
+    # Before "skipped": a new version the client already had skips the add, not the update.
     if any(row.get(key) for key in ("changed", "added", "started", "selection_updated")):
         return "new"
+    if row.get("status") == "skipped" or row.get("skipped"):
+        return "skipped"
     return "same"
 
 
