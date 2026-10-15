@@ -11,30 +11,36 @@ from fastapi.responses import RedirectResponse
 
 from tow import i18n
 from tow.log import error_fields, owner_language
-from tow.records import CheckRow, shown_title
+from tow.records import CheckRow
 from tow.store import CheckBusyError, SecretStoreError
 from tow.trackers import load_trackers, match_tracker
-from tow.web import check_jobs, services
+from tow.web import _context, check_jobs, services
 from tow.web.views import check_feedback, check_report, flash_redirect, topic_check_row
 
 
 def topic_feedback(tid: str, row: CheckRow | None, *, adopted: bool) -> dict[str, str]:
     """``check_feedback`` with what a failed row needs: the topic's title, and its site when the
     site signs in (its sign-in prompt)."""
-    tracker_name = title = ""
+    tracker_name = ""
     if row is not None and not row.get("ok") and not row.get("note"):
         state = services.load_state()
         topic = next((item for item in state.get("topics") or [] if str(item.get("id")) == str(tid)), None)
         tracker = match_tracker(load_trackers(services.load_config()), str((topic or {}).get("url") or ""))
         tracker_name = tracker.name if tracker and tracker.spec.get("login_path") else ""
-        title = shown_title(topic or {})
-    return check_feedback(row, topic_id=tid, adopted=adopted, tracker_name=tracker_name, topic_title=title)
+    return check_feedback(row, topic_id=tid, adopted=adopted, tracker_name=tracker_name)
 
 
 def enqueue_check(*, topic_id: str, apply: bool, adopted: bool = False) -> RedirectResponse:
-    """Queue a manual check (``topic_id`` "": every topic) and open the page that follows it."""
+    """Queue a manual check (``topic_id`` "": every topic) and open the page that follows it.
+    The job keeps what its message is about as the request named it (a topic deleted while the
+    check waits is still named)."""
     job, added = check_jobs.submit(
-        topic_id=topic_id, apply=apply, lang=owner_language(), perform=perform_check, adopted=adopted
+        topic_id=topic_id,
+        apply=apply,
+        lang=owner_language(),
+        perform=perform_check,
+        adopted=adopted,
+        subject=_context.subject() if topic_id else "",
     )
     if job is None:
         return flash_redirect("/", "web.check_all.queue_full", "warn")

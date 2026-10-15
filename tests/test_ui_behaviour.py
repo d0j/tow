@@ -14,13 +14,13 @@ def _page_with(text: str, kind: str) -> str:
 
 def test_an_error_is_an_alert_that_stays():
     page = _page_with("не удалось проверить", "err")
-    assert '<div class="flash error" id="flash" role="alert">' in page
+    assert '<div class="flash error" id="flash" role="alert"' in page
     assert "Не удалось проверить" in page
 
 
 def test_an_action_warning_stays_and_a_success_fades():
     warn = _page_with("сохранено, но не проверено", "warn")
-    assert '<div class="flash warn" id="flash" role="status">' in warn
+    assert '<div class="flash warn" id="flash" role="status"' in warn
     ok = _page_with("сохранено", "ok")
     assert 'class="flash" id="flash" role="status" data-ttl=' in ok
 

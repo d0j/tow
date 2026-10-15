@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from html import escape
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -47,7 +47,7 @@ from tow.web import (
     templating,
 )
 from tow.web.text import t
-from tow.web.views import flash_redirect
+from tow.web.views import flash_redirect, resolve_subject
 from tow.yaml_guard import YamlLimitError
 
 # The order routes are matched in: a fixed path before a parameterised one that would match
@@ -203,7 +203,15 @@ async def _local_only(_request: Request, exc: access.LocalOnly) -> Response:
 
 def create_app() -> FastAPI:
     """A new TOW web app."""
-    app = FastAPI(title="TOW", docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan)
+    app = FastAPI(
+        title="TOW",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        lifespan=_lifespan,
+        # A topic's or a site's route names it for its messages before it changes anything.
+        dependencies=[Depends(resolve_subject)],
+    )
     # Pages compress about ten times (a long topic list is around a megabyte of HTML). Added
     # first, so it sits inside the security middleware, which sees every response.
     app.add_middleware(GZipMiddleware, minimum_size=1024)

@@ -54,6 +54,7 @@ PURE: dict[str, set[str]] = {
         "add_client",
         "client_configuration",
         "client_configurations",
+        "client_name",  # a client's name from its configuration (a message names the client)
         "client_secret_block",
         "default_client_id",
         "ready",
@@ -165,7 +166,6 @@ HELPER_ALLOWED: dict[str, set[str]] = {
     "site_store": {"tow.store_transaction.transaction", "tow.undo.cleanup_needed"},
     "templating": {
         "tow.auth.SESSION_COOKIE",
-        "tow.clients.factory.client_name",
         "tow.clock.parse_timestamp",
         "tow.config.port_of",
         "tow.i18n.datetime_pattern",

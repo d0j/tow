@@ -21,7 +21,7 @@ from tow.store_transaction import StoreTransaction
 from tow.web import services
 from tow.web.site_store import save_secrets_with_undo, save_together
 from tow.web.text import t
-from tow.web.views import flash_redirect
+from tow.web.views import flash_redirect, use_subject
 
 router = APIRouter()
 
@@ -117,6 +117,7 @@ def settings_client(
     from tow.clients.factory import client_configuration, client_secret_block
     from tow.clients.spec import get as client_get
 
+    _name_client(client_id)
     cfg = services.load_config()
     try:
         configuration = client_configuration(cfg, client_id or None)
@@ -185,8 +186,19 @@ def _client_host_ok(value: str) -> bool:
     return True
 
 
+def _name_client(client_id: str) -> None:
+    """The messages of a client's own action name that client ("qBittorrent — Saved")."""
+    from tow.clients.factory import client_configuration, client_name
+
+    try:
+        use_subject(client_name(client_configuration(services.load_config(), client_id or None)))
+    except RuntimeError, ValueError, KeyError, TypeError:
+        use_subject("")  # no such client: its refusal says so, about nothing in particular
+
+
 @router.post("/settings/client/ping")
 def settings_client_ping(client_id: str = Form("")) -> Response:
+    _name_client(client_id)
     try:
         # One quick try first: nothing listening fails in seconds, not after the library's retries.
         if not services.client_answers(client_id or None):

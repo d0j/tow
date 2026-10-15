@@ -31,7 +31,7 @@ from tow.log import check_error_label
 from tow.status import site_check_tone
 from tow.web import _context, services
 from tow.web.text import t, tm
-from tow.web.views import attention_view, flash_ttl_sec, stored_ui_time
+from tow.web.views import attention_view, flash_ttl_sec, message_text, stored_ui_time
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = PACKAGE_DIR / "static"
@@ -375,6 +375,7 @@ def configure(templates: Jinja2Templates = TEMPLATES) -> None:
     env["undo_left_sec"] = undo_left_sec
     env["flash_ttl_sec"] = flash_ttl_sec
     env["problem_flash_hidden"] = problem_flash_hidden
+    env["message_text"] = message_text
     env["login_help"] = login_help
     env["network_session"] = network_session
     env["site_title"] = site_title

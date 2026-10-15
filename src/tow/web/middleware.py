@@ -131,8 +131,9 @@ def _redirect_for_fetch(request: Request, response: Response) -> Response:
 
     fetch() follows a 303 itself, so the server rendered the next page once for the
     fetch and once more for the location change. Cookies set on the redirect stay. The message
-    the redirect leaves goes with it ({"flash": {"kind", "text"}}): a save in the background
-    (the theme) that opens no page tells a refusal from "saved" by its kind.
+    the redirect leaves goes with it, the whole record ({"flash": {"id", "kind", "subject",
+    "text", ...}}): a save in the background (the theme) that opens no page tells a refusal from
+    "saved" by its kind, and shows it as the page shows any message.
     """
     if request.headers.get("x-tow-fetch") != "1" or response.status_code not in (302, 303):
         return response
@@ -141,7 +142,7 @@ def _redirect_for_fetch(request: Request, response: Response) -> Response:
         return response
     body: dict[str, Any] = {"redirect": location}
     if flash := flash_at(location):
-        body["flash"] = {"kind": flash.get("kind", "ok"), "text": flash.get("text", "")}
+        body["flash"] = {"kind": "ok", "text": "", "subject": "", **flash}
     converted = JSONResponse(body, headers={"Cache-Control": "no-store"})
     for cookie in response.headers.getlist("set-cookie"):
         converted.headers.append("set-cookie", cookie)

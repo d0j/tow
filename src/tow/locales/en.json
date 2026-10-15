@@ -2321,6 +2321,9 @@
       "wrong_key": "Wrong access key",
       "again": "Your sign-in on this device has ended (it expired or every device was signed out). Sign in again."
     },
+    "message": {
+      "subject_result": "{subject} — {result}"
+    },
     "check": {
       "not_confirmed": "check not confirmed",
       "verifying": "The client is checking existing files. TOW will confirm the start automatically.",
@@ -2329,7 +2332,6 @@
       "added_check_failed": "added to TOW, the check failed: {error}",
       "client_refused": "the torrent client did not confirm: {error}",
       "check_failed": "the check failed: {error}",
-      "topic_result": "{title} — {result}",
       "blocked": "check blocked: saved passwords and tokens cannot be opened — see Settings",
       "added": "added to the torrent client",
       "selection_updated": "file selection updated",
@@ -2576,7 +2578,7 @@
       "login_host_not_mirror": "the sign-in address must be one of the mirrors",
       "name_taken": "name taken",
       "password_again": "new sign-in address — enter the site password again",
-      "probe": "{site}: {answering} of {total} mirrors answer",
+      "probe": "{answering} of {total} mirrors answer",
       "preferred": "main mirror",
       "no_mirror": "no such mirror",
       "not_saved": "the site change was not saved; everything is as it was",

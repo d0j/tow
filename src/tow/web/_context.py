@@ -23,13 +23,15 @@ from tow.web import services
 
 
 class RequestContext:
-    """Values read once per request, by name."""
+    """Values read once per request, by name; and what the request's messages are about (its
+    ``subject``: kept apart from the values, which a write during the request drops)."""
 
-    __slots__ = ("_generation", "_values")
+    __slots__ = ("_generation", "_values", "subject")
 
     def __init__(self) -> None:
         self._generation = services.write_generation()
         self._values: dict[str, tuple[bool, Any]] = {}
+        self.subject = ""
 
     def get(self, name: str, load: Callable[[], Any], *, keep_errors: tuple[type[BaseException], ...] = ()) -> Any:
         generation = services.write_generation()
@@ -59,6 +61,20 @@ def begin() -> RequestContext:
 
 def current() -> RequestContext | None:
     return _CURRENT.get()
+
+
+def use_subject(value: str) -> None:
+    """Name what this request's messages are about (a topic, a site, a client); "" for none.
+    Outside a request nothing is kept: a background job carries its own subject."""
+    context = _CURRENT.get()
+    if context is not None:
+        context.subject = value
+
+
+def subject() -> str:
+    """What this request's messages are about ("" for none, or outside a request)."""
+    context = _CURRENT.get()
+    return context.subject if context is not None else ""
 
 
 def memo[T](name: str, load: Callable[[], T], *, keep_errors: tuple[type[BaseException], ...] = ()) -> T:

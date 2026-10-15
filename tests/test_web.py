@@ -6,7 +6,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import flash_of, manual_check_consumers, open_network, shown, wait_for_check_job
+from helpers import flash_of, flash_record, manual_check_consumers, open_network, shown, wait_for_check_job
 
 from tow.check import reconcile as check_reconcile
 from tow.check import rows as check_rows
@@ -2384,9 +2384,11 @@ def test_site_probe_reports_how_many_mirrors_answer(monkeypatch):
     )
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
 
-    location = shown(client.post(f"/sites/{name}/probe", follow_redirects=False).headers["location"])
+    location = client.post(f"/sites/{name}/probe", follow_redirects=False).headers["location"]
 
-    assert f"{spec['title']}: отвечающих зеркал — 1 из 2" in location  # the title, as Sites names it
+    # The site is the message's subject, by the title Sites names it; the words do not repeat it.
+    assert flash_of(location) == "отвечающих зеркал: 1 из 2"
+    assert flash_record(location)["subject"] == spec["title"]
 
 
 def test_rows_and_the_edit_panel_show_the_error_in_words():
@@ -2449,25 +2451,37 @@ def test_failed_manual_check_names_the_topic_without_claiming_download_failure()
         "error_record": error.record(),
     }
     text = flash_of(manual_check_flash(row, topic_id="t1").headers["location"])
-    assert text.startswith("Show A — проверка не прошла:")
+    # The topic is the message's subject (named by its route), never a part of its words.
+    assert text.startswith("проверка не прошла:")
+    assert "Show A" not in text
     assert "Alternative name" not in text
     assert "не запущено" not in text
     assert "частоту запросов" in text
 
 
-def test_manual_failure_uses_the_displayed_owner_name_and_shared_shortening():
-    from tow.web.views import manual_check_flash
+def test_manual_failure_uses_the_displayed_owner_name_and_shared_shortening(monkeypatch):
+    from tow.web.views import topic_subject
 
-    row = {
-        "title": "Old title",
-        "tracker_title": "Site title",
-        "ok": False,
-        "error": "timeout",
-        "error_class": "tracker",
-    }
-    response = manual_check_flash(row, topic_id="t1", topic_title="Owner name (2026) [S01E01 of 10]")
-    assert flash_of(response.headers["location"]).startswith("Owner name — ")
-    assert flash_of(manual_check_flash(row, topic_id="t1").headers["location"]).startswith("Site title — ")
+    assert topic_subject("Owner name (2026) [S01E01 of 10]") == "Owner name"
+    # The route names the topic as Home shows it: the owner's own name once set.
+    save_state(
+        {
+            "topics": [
+                {
+                    "id": "t1",
+                    "title": "Owner name (2026) [S01E01 of 10]",
+                    "title_set": True,
+                    "tracker_title": "Site title",
+                    "url": "http://rutor.info/torrent/1/x",
+                }
+            ]
+        }
+    )
+    row = {"id": "t1", "ok": False, "error": "timeout", "error_class": "tracker"}
+    monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: {"results": [row]})
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    location = client.post("/topics/t1/check", follow_redirects=False).headers["location"]
+    assert flash_record(location)["subject"] == "Owner name"
 
 
 @pytest.mark.parametrize("kind", ["ok", "warn", "err"])
