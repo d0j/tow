@@ -240,6 +240,8 @@ def _defer(work: TopicCheck, error: ClientVerificationPending, metadata: Any, pl
         for key in ("completion_event", "resume_after_check"):
             if key in previous:
                 work.topic["verification_pending"][key] = previous[key]
+    if error.start_attempted:
+        work.topic["verification_pending"]["resume_attempted"] = True  # the receipt's one start was given
     if work.topic.get("tracking_mode") == "once":
         work.topic["once_done"] = False
     pending_row(work.row, h)

@@ -117,6 +117,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - qBittorrent: a new torrent that first reserves its disk space is no longer stopped and handed over again at every
   check; TOW waits for it as for a file check. Deluge: a new torrent that waits in Deluge's queue for its file check
   is no longer reported as added before Deluge starts it.
+- A new torrent whose files the client found complete, then left stopped after checking them, is started once (it
+  seeds within the client's limits) instead of being reported as added while it stays stopped; the same for a
+  torrent whose check ends while TOW applies its file selection again.
 
 ## [1.30.10] — 2026-10-15
 

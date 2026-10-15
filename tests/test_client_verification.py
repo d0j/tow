@@ -130,6 +130,50 @@ def test_qbittorrent_allocating_after_the_start_is_deferred_without_cleanup():
     assert [call[0] for call in client.calls] == ["labels"]
 
 
+@pytest.mark.parametrize("seeding_limit", [False, True])
+def test_a_complete_torrent_left_stopped_by_its_check_gets_one_start_before_release(seeding_limit):
+    client = VerifyingClient()
+    receipt = _pending(client)
+    client.end_check(found=1.0, dropped_start=True)  # the client dropped the start given while it checked
+    client.start_works = not seeding_limit  # a reached seeding limit keeps a complete torrent stopped
+    client.calls.clear()
+    info = client.finish_verification(H, "D:/tv", receipt, start_stopped=True)
+    assert [call[0] for call in client.calls] == ["start", "labels"]
+    assert info["state"] == ("stoppedUP" if seeding_limit else "uploading")
+    assert info["tags"] == ["tow"]
+
+
+def test_a_check_ending_during_a_pending_selection_retry_still_gets_its_start(monkeypatch):
+    client = VerifyingClient()
+    _pending(client)
+    real_inspect = client.inspect_torrent
+    first = {"read": True}
+
+    def inspect(infohash):
+        info = real_inspect(infohash)
+        if first["read"]:  # checking when the retry looked; stopped right after, its start dropped
+            first["read"] = False
+            client.end_check(found=0.3, dropped_start=True)
+        return info
+
+    monkeypatch.setattr(client, "inspect_torrent", inspect)
+    client.calls.clear()
+    info = client.configure_torrent_selection(TORRENT, H, [E01], ensure_started=True)
+    assert [call[0] for call in client.calls] == ["start", "labels"]
+    assert info["state"] == "downloading"
+    assert info["tags"] == ["tow"]
+
+
+def test_keep_stopped_never_finishes_a_pending_check_with_a_start():
+    client = VerifyingClient()
+    _pending(client)
+    client.calls.clear()
+    client.checking = False
+    client.configure_torrent_selection(TORRENT, H, [E01], keep_stopped=True)
+    assert "start" not in [call[0] for call in client.calls]
+    assert client.torrents[H]["state"] == "stoppedDL"
+
+
 @pytest.mark.parametrize(
     "malformed",
     ["bad", [1], True, {"files": [None], "wanted": [0]}, {"files": [], "wanted": [0]}, {"files": [], "wanted": [True]}],
@@ -381,6 +425,38 @@ def test_stopped_after_check_is_retried_once_not_forever(world):
     assert tracker.fetches == 1
 
 
+@pytest.mark.parametrize("seeding_limit", [False, True])
+def test_pass_starts_a_complete_add_its_client_left_stopped_once(world, seeding_limit):
+    client, tracker, sent = world
+    _run()
+    client.end_check(found=1.0, dropped_start=True)
+    client.start_works = not seeding_limit
+    client.calls.clear()
+    row = _run(space_only=True)
+    assert row["ok"]
+    assert [call[0] for call in client.calls] == ["start", "labels"]
+    assert client.torrents[H]["state"] == ("stoppedUP" if seeding_limit else "uploading")
+    assert "verification_pending" not in load_state()["topics"][0]
+    client.calls.clear()
+    check.run_check(apply=True, notify=True, how="test", space_only=True)
+    check.run_check(apply=True, notify=True, how="test", progress_only=True)
+    assert client.calls == []
+    assert tracker.fetches == 1
+    assert sent == ["updated"]
+
+
+def test_an_owner_paused_complete_torrent_is_not_started_by_a_pass(world):
+    client, _tracker, _sent = world
+    _run()
+    client.end_check(found=1.0, dropped_start=True)
+    client.torrents[H]["tags"] = ["tow"]  # no unfinished add of TOW's any more: the owner's pause stands
+    client.calls.clear()
+    row = _run(space_only=True)
+    assert row["ok"]
+    assert client.calls == []
+    assert client.torrents[H]["state"] == "stoppedUP"
+
+
 def test_allocating_add_is_deferred_and_finished_without_stops_or_repeated_starts(world, monkeypatch):
     client, tracker, sent = world
     client.checking = False
@@ -404,6 +480,33 @@ def test_allocating_add_is_deferred_and_finished_without_stops_or_repeated_start
     assert len(client.torrents) == 1
     assert tracker.fetches == 1
     assert sent == ["updated"]
+
+
+def test_a_start_given_by_a_selection_retry_counts_as_the_receipts_one_start(world, monkeypatch):
+    """A check finds TOW's unfinished add checking; the check ends before the finalization, which
+    starts it once, and the client checks again: the persisted receipt knows its start was given."""
+    client, _tracker, _sent = world
+    disk = load_state()
+    topic = disk["topics"][0]
+    topic.update(hash=H, selection_hash=H, selection_verified=True)
+    save_state(disk)
+    client.seed(tags=["tow", "tow-pending"], state="checkingDL", wanted={E01}, path=topic["save_path"])
+    real_finish = client.finish_verification
+
+    def finish(*args, **kwargs):
+        client.end_check(found=0.3, dropped_start=True)
+        client.checking = True  # the start makes it check its files again
+        return real_finish(*args, **kwargs)
+
+    monkeypatch.setattr(client, "finish_verification", finish)
+    assert _run()["status"] == "verification_pending"
+    assert [call[0] for call in client.calls] == ["start"]
+    assert load_state()["topics"][0]["verification_pending"]["resume_attempted"] is True
+    monkeypatch.setattr(client, "finish_verification", real_finish)
+    client.end_check(found=0.3, dropped_start=True)
+    client.calls.clear()
+    assert not _run(space_only=True)["ok"]
+    assert client.calls == []
 
 
 def test_preflight_transport_failure_does_not_consume_the_resume_attempt(world, monkeypatch):
