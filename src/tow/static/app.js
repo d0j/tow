@@ -232,10 +232,14 @@ if (checkJob) {
         return;
       }
       if (data.status !== "running" && data.status !== "queued") {
+        // TOW restarted or the record expired: neither the note nor a waiting result goes on
+        // saying "waiting", and the address no longer asks for the job.
         const note = document.getElementById("check-activity");
         if (note) note.textContent = t("js.checks.unconfirmed");
+        if (resultPending) resultPending.textContent = t("js.checks.unconfirmed");
         const u = new URL(location.href);
         u.searchParams.delete("check_job");
+        u.searchParams.delete("check_result");
         history.replaceState({}, "", u.pathname + u.search);
         return;
       }

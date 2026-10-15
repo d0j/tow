@@ -199,6 +199,16 @@ def test_a_waiting_result_page_loads_again_when_its_check_ends():
     assert pending["assigned"] == pending["replaced"] == []
 
 
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_a_waiting_result_whose_check_is_gone_stops_saying_waiting():
+    # TOW restarted: the address kept ?check_result= and the page kept "waiting" for good.
+    vanished = _follow_check("vanished")
+    assert vanished["history"] == ["/?s=name"]
+    assert vanished["pendingText"] == "js.checks.unconfirmed"  # the catalog key: the fake page has no texts
+    assert vanished["assigned"] == vanished["replaced"] == []
+
+
 @pytest.mark.allow_system
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_one_broken_health_reader_cannot_stall_or_spin_other_readers():
