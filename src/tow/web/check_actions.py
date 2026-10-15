@@ -115,7 +115,7 @@ def perform_check(job: dict[str, Any]) -> None:
         raise  # the FIFO retries the head without duplicating work or consuming a failure
     except SecretStoreError as exc:
         if job["apply"]:  # a preview writes nothing, its failures included (AGENTS.md)
-            services.record_check_failure(exc, how="manual")
+            services.record_check_failure(exc, how="manual", whole=not topic_id)
         flash, status, kind = i18n.t("web.check.blocked", lang), "failed", "err"
     except Exception as exc:  # noqa: BLE001 - the background job's boundary: the page polls for its result
         if job["apply"]:

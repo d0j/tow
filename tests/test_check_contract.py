@@ -2532,3 +2532,26 @@ def test_preview_does_not_spend_a_daily_download_limit():
     assert not _skip_row({"url": "u"}, {}, kinozal, old="H", quota=set(), state={}, how="auto", apply=True)
     assert _download_limited(SimpleNamespace(name="rutor", spec={"download_limit": True}))
     assert not _download_limited(SimpleNamespace(name="kinozal", spec={"download_limit": False}))
+
+
+def test_a_failed_partial_run_keeps_what_the_last_whole_check_said():
+    # A crashed progress pass (or one topic's check) said "The last scheduled check did not
+    # complete" until the next scheduled check, and dropped the week's history note, Settings'
+    # client marks and the empty-client counts.
+    kept = {"history_rebuilt_at": 1000, "ping_failed": {"tr": 900}, "clients_empty": {"nas": 1}}
+    save_state({"topics": [], "health": {"check_ok": True, "qbit_ok": True, **kept}})
+    for how in ("progress", "timer", "retry", "manual"):
+        health = check.record_check_failure(RuntimeError("synthetic"), how=how)
+        assert health.get("check_ok") is True, how
+        assert "check_error" not in health
+        assert {key: health.get(key) for key in kept} == kept
+    health = check.record_check_failure(RuntimeError("synthetic"), how="manual", whole=True)  # Check all
+    assert (health["check_ok"], health["check_error"]) == (False, "error")
+    save_state({"topics": [], "health": {"check_ok": True}})
+    health = check.record_check_failure(RuntimeError("synthetic"), how="auto")
+    assert health["check_ok"] is False
+    save_state({"topics": [], "health": {"check_ok": True}})
+    from tow.store import SecretStoreError
+
+    health = check.record_check_failure(SecretStoreError("store.no_master_key"), how="progress")
+    assert (health["check_ok"], health["check_error"]) == (False, "secrets_migration_required")  # blocks every check
