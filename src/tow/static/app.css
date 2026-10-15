@@ -1036,7 +1036,14 @@ header.app .attention-menu.bad > summary.ico { color: var(--bad); }
   border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel);
   box-shadow: var(--shadow); font-size: 13px;
 }
-.attention-panel strong { color: var(--warn); }
+/* The heading is neutral (the icon says how bad the worst one is); each entry marks its own
+   severity with a dot in the row dots' colours before its words, which say what is wrong. */
+.attention-panel strong { color: var(--fg); }
+.attention-link::before {
+  content: ""; flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: var(--mut);
+}
+.attention-link.warn::before { background: var(--dot-warn); }
+.attention-link.bad::before { background: var(--bad); }
 /* Each item is a link to the problem: the whole line is the target (at least 32 px high), with
    a chevron saying it goes somewhere. */
 .attention-list { margin: .25rem 0 0; padding: 0; list-style: none; }

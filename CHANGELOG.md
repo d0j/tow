@@ -47,6 +47,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   others, red or amber by what they are; a failed night backup and a lost data folder stay two separate notes.
 - An open topic shows its full last error as a note in the same colour as its row (amber for a site that could
   not be reached, red otherwise), styled like the other notes instead of like a refused form field.
+- The Needs attention heading is no longer always amber: it is neutral, and each entry has a dot in its own
+  colour, red or amber, like the topic rows.
 
 ## [1.30.11] — 2026-10-15
 
