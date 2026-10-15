@@ -5,6 +5,17 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.30.11] — 2026-10-15
+
+### Security
+
+- A password sign-in made with a verified site-access clearance no longer saves Cloudflare's clearance cookie
+  as part of the site's sign-in, where it outlived its expiry and a site-access reset. An answer that sets only
+  such cookies no longer replaces a working sign-in. A clearance an earlier version saved there is not sent and
+  is removed at the next successful sign-in; sign-ins made in a browser window are kept as they are.
+- The installed site-access module is stopped with Windows' own `taskkill` from the system folder, never with
+  a program of that name found in the module's folder or on `PATH`.
+
 ### Fixed
 
 - Settings no longer shows a restart left over from TOW before 1.21, or an unfinished one more than a day old, as
@@ -29,17 +40,6 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   Needs attention still shows one entry for the site with Check access now.
 - A message about one site failing or working again for several topics links the site instead of the first
   of those topics.
-### Security
-
-- A password sign-in made with a verified site-access clearance no longer saves Cloudflare's clearance cookie
-  as part of the site's sign-in, where it outlived its expiry and a site-access reset. An answer that sets only
-  such cookies no longer replaces a working sign-in. A clearance an earlier version saved there is not sent and
-  is removed at the next successful sign-in; sign-ins made in a browser window are kept as they are.
-- The installed site-access module is stopped with Windows' own `taskkill` from the system folder, never with
-  a program of that name found in the module's folder or on `PATH`.
-
-### Fixed
-
 - When several mirrors of a site show a Cloudflare check, each mirror that can still be recovered gets a
   site-access service call before one mirror gets its last-chance call. The shared call and time limits stay.
 - An installed site-access module that does not start in time is paused like an unavailable service (from
