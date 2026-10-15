@@ -1255,3 +1255,15 @@ def test_the_note_of_dropped_messages_survives_a_failed_attempt(http):
     notifiers.flush_outbox(DISCORD)
     (request,) = seen
     assert "3 старых сообщения не поместились" in json.loads(request.content)["content"]
+
+
+def test_a_refusal_after_part_of_a_message_arrived_sends_nothing_twice(http):
+    # Part 1 of a combined message arrived, part 2 was refused: the one-by-one search sent the
+    # messages of part 1 again.
+    set_handler, seen, _ = http
+    set_handler(lambda r: httpx.Response(400 if "b" in json.loads(r.content)["content"] else 204))
+    _queued("a" * 800, "b" * 800)
+    notifiers.flush_outbox(DISCORD)
+    contents = [json.loads(r.content)["content"] for r in seen]
+    assert [text.strip()[:1] for text in contents] == ["a", "b"]
+    assert "notify_outbox" not in load_state()

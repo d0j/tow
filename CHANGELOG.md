@@ -174,6 +174,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Several messages of one check sent together no longer arrive under "Not delivered earlier:" (only messages that
   failed before do), and the note about messages dropped from a full queue is no longer lost when a delivery
   fails once.
+- A long message the messenger refused after its first part had arrived is no longer sent again piece by piece
+  (the owner got that first part twice); the rest of it is dropped with the reason in the Log.
 
 ## [1.31.2] — 2026-10-15
 
