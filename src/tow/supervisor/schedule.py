@@ -125,10 +125,12 @@ class Schedule:
                 self._corrected.pop(source)
         result = {}
         for tid, item in self.site_retries.items():
-            saved = retry_reservation(item, self.site_retry_attempts.get(tid))
+            attempt = self.site_retry_attempts.get(tid)
+            saved = retry_reservation(item, attempt)
             at = max(item["observed_at"], saved.get("started_at", 0))
             anchor = self._clamp(at, now, source=f"site_retry:{tid}:{item['revision']}")
-            if (target := retry_deadline(item, saved, anchor=anchor)) is not None:
+            # The record as saved: a damaged one of this revision ends the budget, never restarts it.
+            if (target := retry_deadline(item, attempt, anchor=anchor)) is not None:
                 result[tid] = target
         # One site's failures share a batch instead of launching one child per topic.
         sites: dict[str, list[str]] = {}
