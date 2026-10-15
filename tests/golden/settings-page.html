@@ -116,8 +116,8 @@
             <summary class="integration-head">
               <h2>Living room <span class="card-meta">192.0.2.10 · 2 topics</span></h2>
               <span class="integration-pills">
-                <span class="pill ok">Main</span>
-                <span class="pill mut">Set up</span>
+                <span class="pill mut">Main</span>
+
               </span>
             </summary>
 
@@ -185,7 +185,7 @@
               <h2>Transmission <span class="card-meta">http://nas.example:9091/transmission · 1 topic</span></h2>
               <span class="integration-pills">
 
-                <span class="pill mut">Set up</span>
+
               </span>
             </summary>
 
@@ -276,7 +276,8 @@
     <details class="settings-section settings-accordion acc" id="acc-bots" data-q="bots tg notifications channels messengers telegram discord whatsapp ntfy (phone notifications)">
       <summary>
         <span id="settings-bots-title" class="settings-summary-title">Notifications</span>
-        <span class="pill ok">Connected</span>
+
+        <span class="pill mut">Telegram</span>
       </summary>
       <div class="settings-panel">
         <p class="support-note">Messages go to every connected messenger; if one is down, they are sent later.</p>
@@ -286,7 +287,7 @@
             <summary class="integration-head">
               <h2>Telegram</h2>
 
-              <span class="pill warn">Not checked</span>
+              <span class="pill mut">Not checked</span>
 
             </summary>
 
@@ -556,7 +557,6 @@
           <article class="integration-card access-card" id="network-card">
             <div class="integration-head">
               <h2>Access from other devices</h2>
-              <span class="integration-pills"><span class="pill mut">This computer only</span></span>
             </div>
 
             <form method="post" action="/settings/access" class="settings-form form-grid" data-return-target="acc-access">
@@ -645,7 +645,7 @@
           <article class="integration-card backup-card" id="backup-manual" aria-labelledby="backup-manual-title">
             <div class="integration-head">
               <div><h2 id="backup-manual-title">Backups made by hand</h2><p>The last 10 are kept. Restoring keeps the network settings as they are.</p></div>
-              <span class="pill ok">Saved: 1</span>
+
             </div>
 
 
@@ -658,7 +658,7 @@
             <div class="restore-point-list" aria-label="Saved backups">
 
               <div class="restore-point-row">
-                <div><b><time></b><span>2.0 KB</span></div>
+                <div><b><short-time></b><span>2.0 KB</span></div>
                 <div class="settings-actions backup-copy-actions">
                   <form method="post" action="/settings/restore-points/rp-1/check" data-return-target="acc-transfer">
                     <button class="ghost" type="submit" data-busy-label="Checking…">Check</button>
@@ -798,12 +798,12 @@
 
         </div>
 
-        <p class="restart-result" role="note">Last requested restart: <b><time></b> · from settings · being checked.</p>
+        <p class="restart-result" role="note">Last requested restart: <b><short-time></b> · from settings · being checked.</p>
 
         <details class="technical-details">
           <summary>Technical details</summary>
           <dl>
-            <div><dt>Web page running since</dt><dd><time></dd></div>
+            <div><dt>Web page running since</dt><dd><short-time></dd></div>
             <div><dt>PID</dt><dd><code>4321</code></dd></div>
             <div><dt>Autostart</dt><dd><code>—</code></dd></div>
             <div><dt>Web server</dt><dd><code>—</code></dd></div>
@@ -942,9 +942,9 @@
       <div class="settings-panel settings-log-body">
         <div class="log-box" id="log-settings-body" role="region" aria-labelledby="settings-log-title" tabindex="0">
 
-          <div class="log-line"><span class="mut"><time></span> · <b>Torrent client added</b> · manual</div>
+          <div class="log-line"><span class="mut"><short-time></span> · <b>Torrent client added</b> · manual</div>
 
-          <div class="log-line"><span class="mut"><time></span> · <b>Check</b> · checked: 3, without errors: 3</div>
+          <div class="log-line"><span class="mut"><short-time></span> · <b>Check</b> · checked: 3, without errors: 3</div>
 
         </div>
       </div>

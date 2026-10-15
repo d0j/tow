@@ -29,6 +29,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   steps only until a connection is saved and each connection's last answer as a pill (“Service responded” does
   not mean the site is reachable); the full explanation stays in the Guide. What network access, the password
   reminder, restoring and the master key need is still said.
+- Settings pills say each state once: the Notifications pill names the connected messengers and is green only
+  once each has delivered (it said “Connected” while every card said “Not checked”), “Main” is grey (a role, not
+  a health), and the pills that repeated the section's (“Set up”, “This computer only”, “Saved: 1”) are gone.
+  Times in Settings follow the short rule: the Backups pill says “Nightly backup 20:31” instead of
+  “2026-10-15 22:29:52 CET UTC+01:00”.
 
 ### Fixed
 

@@ -15,7 +15,6 @@ from tow import access, i18n, store_transaction, undo
 from tow.auth import MAX_HINT_LENGTH, password_hint
 from tow.bind import network_bind
 from tow.clients.view import cards as client_cards
-from tow.clock import format_ui_timestamp
 from tow.config import (
     INTERVAL_MAX_MINUTES,
     INTERVAL_MIN_MINUTES,
@@ -61,7 +60,6 @@ def settings_page(request: Request) -> Response:
         restore_points = []
         restore_points_error = True
     for point in restore_points:
-        point["created_label"] = format_ui_timestamp(str(point["created_at"]))
         point["size_label"] = format_bytes(point["bytes"])
     return TEMPLATES.TemplateResponse(
         request,

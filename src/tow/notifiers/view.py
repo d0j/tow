@@ -94,6 +94,8 @@ def cards(secrets: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]
             {
                 "kind": kind,
                 "title": title(module, lang),
+                # The product's own name, as the section's pill lists the connected ones.
+                "name": title(module, lang).split(" ")[0],
                 "steps": [text(step, lang) for step in module.STEPS],
                 "note": text(str(getattr(module, "NOTE", "")), lang),
                 "fields": fields,
