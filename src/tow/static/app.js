@@ -78,6 +78,18 @@ const restoreFocus = () => {
   target.focus({ preventScroll: true });
 };
 
+// A message about what the page could not do goes where every message goes (messages.js), named
+// by the topic or site of its row (data-subject); never into the form, where it covered the row.
+const showMessage = (record, options) => window.towMessages?.showMessage(record, options);
+const subjectOf = (element) => element?.closest?.("[data-subject]")?.dataset.subject || "";
+// The answer to a change was lost (the connection dropped, an error page): the change may have
+// been made. Said as not confirmed, with the page to look at - never sent again by itself.
+const unconfirmed = (element) => showMessage({
+  kind: "err", subject: subjectOf(element), text: t("js.messages.unconfirmed"),
+  href: location.pathname + location.search, link: t("js.messages.reload"),
+});
+class Refused extends Error {}
+
 const submitPostForm = async (form, submitter, preparedBody = null) => {
   if (form.dataset.submitting === "1") return;
   form.dataset.submitting = "1";
@@ -92,10 +104,24 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
       headers: { Accept: "text/html", "X-TOW-Fetch": "1" },
     });
     if (!response.ok) {
-      let detail = (await response.text()).trim();
-      try { detail = JSON.parse(detail).detail || detail; } catch { /* HTML or plain text */ }
-      detail = String(detail).replace(/\s+/g, " ").slice(0, 240);
-      throw new Error(detail || `HTTP ${response.status}`);
+      // TOW's own refusal says why, in words (JSON, or a plain text before any page); an error
+      // page's HTML is never shown - then nobody knows what was done.
+      const type = response.headers.get("content-type") || "";
+      const body = (await response.text()).trim();
+      let detail = "";
+      if (type.includes("application/json")) {
+        try {
+          const data = JSON.parse(body);
+          detail = data.error || data.detail || "";
+        } catch {
+          detail = "";
+        }
+      } else if (type.includes("text/plain") && response.status < 500) {
+        detail = body;
+      }
+      detail = typeof detail === "string" ? detail.replace(/\s+/g, " ").slice(0, 240) : "";
+      if (!detail) throw new Error(`HTTP ${response.status}`);
+      throw new Refused(detail);
     }
     let nextUrl = null;
     if ((response.headers.get("content-type") || "").includes("application/json")) {
@@ -125,16 +151,11 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
     submitter?.removeAttribute("aria-busy");
     form.removeAttribute("aria-busy");
     form.querySelectorAll("[data-busy-note]").forEach((note) => { note.hidden = true; });
-    const errorHost = form.hidden && submitter ? submitter.closest(".edit-actions") || submitter.parentElement : form;
-    let message = errorHost.querySelector("[data-form-error]");
-    if (!message) {
-      message = document.createElement("p");
-      message.className = "sub";
-      message.dataset.formError = "";
-      message.setAttribute("role", "alert");
-      errorHost.append(message);
+    if (error instanceof Refused) {
+      showMessage({ kind: "err", subject: subjectOf(form), text: t("js.submit.failed", { error: error.message }) });
+    } else {
+      unconfirmed(form);
     }
-    message.textContent = t("js.submit.failed", { error: error.message || t("js.submit.unknown_error") });
   }
 };
 
@@ -750,7 +771,6 @@ if (settingsPage) {
   // last of quick moves is the one saved.
   settingsPage.querySelectorAll("[data-theme-form]").forEach((form) => {
     const pill = form.closest("details")?.querySelector(":scope > summary .pill");
-    const status = form.querySelector("[data-theme-status]");
     let sequence = 0;
     let timer = 0;
     let pending = null;
@@ -764,12 +784,14 @@ if (settingsPage) {
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         // A refusal (the data file busy, a theme TOW does not have) is a redirect too: its
-        // message's kind tells it from "saved".
+        // message's kind tells it from "saved", and it is shown as the server worded it.
         const data = (response.headers.get("content-type") || "").includes("application/json") ? await response.json() : {};
-        if (data.flash && data.flash.kind !== "ok") throw new Error(data.flash.text || t("js.submit.unknown_error"));
-        if (mine === sequence && status) status.textContent = t("js.settings.theme_saved", { theme: label });
-      } catch (error) {
-        if (mine === sequence && status) status.textContent = t("js.submit.failed", { error: error.message || t("js.submit.unknown_error") });
+        if (mine !== sequence) return;
+        if (data.flash && data.flash.kind !== "ok") showMessage(data.flash);
+        // One message for the theme: quick moves update it, they do not pile up.
+        else showMessage({ id: "theme-saved", kind: "ok", text: t("js.settings.theme_saved", { theme: label }) }, { replace: true });
+      } catch {
+        if (mine === sequence) unconfirmed(form);
       }
     };
     form.addEventListener("change", (event) => {
@@ -806,7 +828,6 @@ if (settingsPage) {
     });
   }
 
-  const copyStatus = document.getElementById("copy-command-status");
   const copyText = async (value) => {
     if (navigator.clipboard?.writeText) {
       try {
@@ -822,14 +843,22 @@ if (settingsPage) {
     fallback.className = "sr-only";
     document.body.append(fallback);
     fallback.select();
-    const copied = document.execCommand("copy");
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } catch {
+      copied = false;
+    }
     fallback.remove();
     return copied;
   };
+  // Copied, or not: a message as any other (the command stays on the page to copy by hand).
   settingsPage.querySelectorAll("[data-copy-text]").forEach((button) => {
     button.addEventListener("click", async () => {
       const copied = await copyText(button.dataset.copyText || "");
-      if (copyStatus) copyStatus.textContent = copied ? t("js.settings.copied") : t("js.settings.copy_failed");
+      showMessage(copied
+        ? { id: "copy-command", kind: "ok", text: t("js.settings.copied") }
+        : { id: "copy-command", kind: "err", text: t("js.settings.copy_failed") }, { replace: true });
     });
   });
 }
@@ -1285,7 +1314,6 @@ document.addEventListener("click", (event) => {
   const details = button.closest("details");
   if (!details) return;
   details.querySelectorAll("form").forEach((form) => form.reset());
-  details.querySelectorAll("[data-form-error]").forEach((message) => message.remove());
   details.open = false;
   details.querySelector("summary")?.focus();
 });
@@ -1412,15 +1440,16 @@ const loadEditPanel = async (details) => {
     slot.replaceWith(panel);
     initSaveFolders(panel);
   } catch (error) {
+    // Opening the row again tries again; the message offers the panel as a page of its own.
     delete slot.dataset.loading;
     slot.removeAttribute("aria-busy");
-    const message = Object.assign(document.createElement("p"), {
-      className: "sub",
-      textContent: t("js.edit.load_failed", { error: error.message || t("js.submit.unknown_error") }),
+    showMessage({
+      kind: "err",
+      subject: subjectOf(details),
+      text: t("js.edit.load_failed", { error: error.message || t("js.submit.unknown_error") }),
+      href: slot.querySelector("a[href]")?.getAttribute("href") || "",
+      link: t("js.messages.open_page"),
     });
-    message.setAttribute("role", "alert");
-    slot.querySelector("[role=alert]")?.remove();
-    slot.prepend(message);
   }
 };
 document.addEventListener("toggle", (event) => {

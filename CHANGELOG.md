@@ -22,6 +22,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   a reload. "Undo" sits in its message and in that list with the time it has left; the separate "Undo" button
   in the header is gone (it stays for a browser without scripts). How long a message stays no longer depends on
   the "Show Undo" setting, and a result in Settings is no longer moved into the card it is about.
+- When the page cannot do something - a button's request fails, a topic's edit form does not open, the theme
+  or a copied command cannot be confirmed - it says so as a message about that topic, with a link to reload or
+  to open the form as a page, instead of grey text that covered the topic's row. A request whose answer was
+  lost says the result could not be confirmed (it may have been done) and is never sent again by itself.
 - "Undo" puts back only the change its own message is about: an "Undo" from an earlier message, pressed after
   a newer change, is refused with a clear message instead of undoing that newer change.
 

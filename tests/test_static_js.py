@@ -35,6 +35,15 @@ def test_the_page_shows_a_message_once_then_keeps_it_in_the_header_history():
     assert len(verdict) == 9
 
 
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_a_failed_action_is_a_message_about_its_topic_not_a_paragraph_over_its_row():
+    # 31-js-submit-failed-row: the error paragraph went into the row's icon form and covered the row.
+    verdict = _verdict("action_failures.mjs")
+    assert verdict == dict.fromkeys(verdict, True), verdict
+    assert len(verdict) == 4
+
+
 @pytest.mark.allow_system
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_content_picker_boundaries_and_async_selection():
