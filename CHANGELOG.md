@@ -86,6 +86,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A topic check waiting for another check (a scheduled one, or one from the command line) says since when it
   waits instead of “position 1” forever. After 65 minutes it ends as not run, without marking the topic or its
   site as failed. A running check says since when it runs, so one that takes unusually long is visible.
+- A topic check that had to wait in the queue now ends with the same message as one that ran at once: the
+  sign-in prompt when the site asks for it, the link to the topic with a problem, waiting for disk space or for
+  the client's file check, adoption, and amber or red as the error deserves. A topic deleted while its check
+  waited is reported as not found instead of as skipped.
 
 ## [1.30.10] — 2026-10-15
 
