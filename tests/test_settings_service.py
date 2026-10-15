@@ -19,32 +19,42 @@ def _post(path: str, data: dict) -> str:
     return shown(response.headers["location"])  # the address and the message it shows
 
 
+def _service_card(page: str) -> str:
+    return page.split('id="acc-service"', 1)[1].split('id="acc-language"', 1)[0]
+
+
 def test_the_service_card_shows_one_service_and_its_autostart():
     page = _page()
-    assert "TOW работает как единый сервис" in page
-    assert "Запускать TOW при входе в систему на этом компьютере" in page
+    card = _service_card(page)
+    # 1.32: the card names the service and offers its autostart; what the service runs (the
+    # page, checks, copies, watchdog) is architecture, not a setting, and was taken out.
+    assert ">Сервис TOW<" in card
+    assert 'action="/settings/service/autostart"' in card
+    assert ">Запускать TOW при входе в систему<" in card
     # 1.21: the five Windows tasks and the switch from them are gone.
     assert 'action="/settings/service/migrate"' not in page
     assert "пятью задачами" not in page
     assert "задачами Windows" not in page
-    assert "сам сторож TOW не перезапускает" in page
+    # The watchdog only reports; nothing but the service restarts TOW.
+    assert "Сторож сообщает о простое в мессенджеры; сам TOW он не перезапускает." in card
 
 
 @pytest.mark.parametrize(
-    ("language", "description", "incorrect"),
+    ("language", "title", "removed", "incorrect"),
     [
-        ("en", "TOW runs as one service", "TOW runs as one process"),
-        ("ru", "TOW работает как единый сервис", "TOW работает одним процессом"),
+        ("en", "TOW service", "TOW runs as one service", "TOW runs as one process"),
+        ("ru", "Сервис TOW", "TOW работает как единый сервис", "TOW работает одним процессом"),
     ],
 )
-def test_service_card_describes_the_service_not_a_single_pid(language, description, incorrect):
+def test_service_card_names_the_service_not_a_single_process(language, title, removed, incorrect):
     from tow.config import load_config, save_config
 
     config = load_config()
     config["language"] = language
     save_config(config)
     page = _page()
-    assert description in page
+    assert f">{title}<" in _service_card(page)
+    assert removed not in page  # the architecture sentence is gone (Settings say each thing once)
     assert incorrect not in page
 
 
