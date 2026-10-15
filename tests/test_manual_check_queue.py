@@ -774,3 +774,15 @@ def test_a_missing_queued_topic_is_not_found_not_changed_into_check_all(client, 
     assert attempts == [["deleted"], ["deleted"]]
     assert result["flash"] == "раздача не найдена"
     assert "report" not in check_jobs.get(job)
+
+
+def test_a_check_of_only_skipped_or_unsaved_rows_is_no_success():
+    # A check whose every row was skipped (paused) or not saved (changed meanwhile) ended in a
+    # green "done" as if it confirmed something.
+    rows = [
+        {"id": "a", "title": "Show A", "ok": True, "status": "skipped", "skipped": "paused"},
+        {"id": "b", "title": "Show B", "ok": True, "note": "changed meanwhile"},
+    ]
+    assert check_report({"results": rows}, apply=True)["kind"] == "info"
+    assert check_report({"results": [*rows, {"id": "c", "title": "Show C", "ok": True}]}, apply=True)["kind"] == "ok"
+    assert check_report({"results": []}, apply=True)["kind"] == "info"
