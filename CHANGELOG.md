@@ -78,6 +78,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A site answer stopped by a shorter time limit names that limit instead of always saying 120 seconds.
 - A site that compresses its answer in a way TOW cannot read is reported as such, no longer as "no connection", and
   no longer pauses the mirror.
+- Pressing “Check” while that same check is already running queues one more check after it instead of
+  silently joining the running one, which may have read the topic before your change. Further clicks share
+  the waiting check, and an adoption asked for meanwhile is kept.
 
 ## [1.30.10] — 2026-10-15
 

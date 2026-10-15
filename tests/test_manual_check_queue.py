@@ -8,12 +8,12 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
-from helpers import flash_of, wait_for_check_job
+from helpers import flash_of, manual_check_consumers, wait_for_check_job
 
 from tow.check_outcomes import counts_of, outcome_of
 from tow.log import format_event
 from tow.store import CheckBusyError, save_state
-from tow.web import app, check_jobs
+from tow.web import app, check_jobs, routes_check
 from tow.web.views import check_report
 
 
@@ -26,35 +26,9 @@ def _job(response):
     return parse_qs(urlsplit(response.headers["location"]).query)["check_job"][0]
 
 
-class _Consumer:
-    """A queue consumer the test runs itself, in its own thread: what happens "while a check
-    runs" happens inside the fake check, in order - no second thread, no timing."""
-
-    def __init__(self, target, args):
-        self.target, self.args, self.alive = target, args, True
-
-    def is_alive(self):
-        return self.alive
-
-    def run(self):
-        try:
-            self.target(*self.args)
-        finally:
-            self.alive = False
-
-
 @pytest.fixture
 def consumers(monkeypatch):
-    """The consumers the queue started, not running until the test calls ``run()``."""
-    started: list[_Consumer] = []
-
-    def start(_name, target, *args):
-        started.append(_Consumer(target, args))
-        return started[-1]
-
-    monkeypatch.setattr(check_jobs, "_start", start)
-    monkeypatch.setattr(check_jobs, "_worker", None)  # restored after the test: no fake outlives it
-    return started
+    return manual_check_consumers(monkeypatch)
 
 
 def _status(client, job):
@@ -130,6 +104,30 @@ def test_busy_topics_wait_fifo_and_duplicate_clicks_share_the_job(client, monkey
     for job in (first, seen["second"], seen["third"]):
         assert _status(client, job)["status"] == "done"
     assert calls == [None, ["b"], ["c"]]
+
+
+def test_a_click_during_a_running_check_gets_one_follow_up_check(client, monkeypatch, consumers):
+    # The running check may have read the topic before the change the owner clicks for: a click
+    # then needs a check of its own, but further clicks share that one waiting follow-up.
+    calls, seen = [], {}
+
+    def check(**kw):
+        calls.append(kw.get("ids"))
+        if len(calls) == 1:
+            seen["follow_up"] = _job(client.post("/topics/b/check", follow_redirects=False))
+            seen["again"] = _job(client.post("/topics/b/adopt", follow_redirects=False))
+            seen["message"] = flash_of(client.post("/topics/b/check", follow_redirects=False).headers["location"])
+        return {"results": [{"id": "b", "title": "Show B", "ok": True}]}
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    monkeypatch.setattr("tow.web.services.adopt_topic", lambda *_a, **_kw: None)
+    first = check_jobs.submit(topic_id="b", apply=True, lang="ru", perform=routes_check._perform_check)[0]
+    consumers[0].run()
+    assert seen["follow_up"] != first["id"]
+    assert seen["again"] == seen["follow_up"]
+    assert "в очередь" in seen["message"]
+    assert calls == [["b"], ["b"]]  # exactly one later check, never two at once
+    assert check_jobs.get(seen["follow_up"])["adopted"] is True  # the shared request kept the adoption
 
 
 def test_scheduled_lock_busy_is_retried_without_recording_a_failure(client, monkeypatch):

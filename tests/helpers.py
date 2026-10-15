@@ -129,6 +129,38 @@ def add_unready_client(monkeypatch: Any, kind: str = "draft") -> None:
     monkeypatch.setattr(spec, "_discover", lambda: (*found, (kind, draft)))
 
 
+class ManualCheckConsumer:
+    """A manual-check queue consumer the test runs itself (``run()``), in its own thread: what
+    happens "while a check runs" happens inside the fake check, in order - no timing waits."""
+
+    def __init__(self, target: Any, args: tuple[Any, ...]) -> None:
+        self.target, self.args, self.alive = target, args, True
+
+    def is_alive(self) -> bool:
+        return self.alive
+
+    def run(self) -> None:
+        try:
+            self.target(*self.args)
+        finally:
+            self.alive = False
+
+
+def manual_check_consumers(monkeypatch: Any) -> list[ManualCheckConsumer]:
+    """The consumers the manual-check queue starts from now on, idle until the test runs them."""
+    from tow.web import check_jobs
+
+    started: list[ManualCheckConsumer] = []
+
+    def start(_name: str, target: Any, *args: Any) -> ManualCheckConsumer:
+        started.append(ManualCheckConsumer(target, args))
+        return started[-1]
+
+    monkeypatch.setattr(check_jobs, "_start", start)
+    monkeypatch.setattr(check_jobs, "_worker", None)  # restored after the test: no fake outlives it
+    return started
+
+
 def wait_for_check_job(client: Any, job: str, *, timeout: float = 10.0) -> dict[str, Any]:
     """Poll /check/status until the background check ``job`` ends; fail the test if it never does."""
     import time

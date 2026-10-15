@@ -6,7 +6,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import flash_of, open_network, shown, wait_for_check_job
+from helpers import flash_of, manual_check_consumers, open_network, shown, wait_for_check_job
 
 from tow.check import reconcile as check_reconcile
 from tow.check import rows as check_rows
@@ -2085,25 +2085,28 @@ def test_undo_of_topic_edit_keeps_status_written_after_the_edit(monkeypatch):
 
 def test_check_all_runs_in_the_background_and_reports_when_done(monkeypatch):
     # D1: the request used to wait for the whole check while holding the HTTP lock.
-    import threading
-
-    release = threading.Event()
+    consumers = manual_check_consumers(monkeypatch)
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    seen = {}
 
     def slow_check(**_kw):
-        release.wait(5)
+        if not seen:  # while it runs: the job says so, and another click waits for one more check
+            seen["status"] = client.get(f"/check/status?job={job}").json()["status"]
+            again = client.post("/check", data={"mode": "apply"}, follow_redirects=False)
+            seen["again"] = parse_qs(urlparse(again.headers["location"]).query)["check_job"][0]
+            seen["again_says"] = shown(again.headers["location"])
         return {"qbit": "ok", "results": [{"ok": True, "changed": True}, {"ok": False}]}
 
     monkeypatch.setattr("tow.web.services.run_check", slow_check)
-    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
 
     started = client.post("/check", data={"mode": "apply"}, follow_redirects=False)
     job = parse_qs(urlparse(started.headers["location"]).query)["check_job"][0]
     assert "проверка запущена" in shown(started.headers["location"])
-    assert client.get(f"/check/status?job={job}").json()["status"] == "running"
-    again = client.post("/check", data={"mode": "apply"}, follow_redirects=False)
-    assert "проверка уже идёт" in shown(again.headers["location"])
-
-    release.set()
+    consumers[0].run()
+    assert seen["status"] == "running"
+    assert seen["again"] != job
+    assert "поставлена в очередь" in seen["again_says"]
+    assert wait_for_check_job(client, seen["again"])["status"] == "done"
     status = wait_for_check_job(client, job)
     assert status["status"] == "done"
     assert status["flash"] == "проверка завершена: обновлено 1, с ошибкой 1"
