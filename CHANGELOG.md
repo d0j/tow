@@ -97,6 +97,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A site whose name looks like a password field (a site on my-token.example is named "my_token", one on
   pass.example "pass") or a downloaded file so named no longer stops every restore point and update from
   Settings: such names are now told apart from real password fields.
+- Restoring a nightly backup no longer takes itself for failed and puts the old data back when only its
+  leftover lock file could not be removed (an antivirus holding it), and a putting-back that is cut off
+  half-way is finished before TOW writes anything again, instead of being taken for a finished restore.
 
 ## [1.31.2] — 2026-10-15
 

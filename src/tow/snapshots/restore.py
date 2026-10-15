@@ -341,9 +341,12 @@ def _remove_unjournaled(folder: Path) -> bool:
 
 
 def _finish(safety: Path, status: str) -> None:
-    """Record the outcome first, then drop the marker: a marker left behind is harmless."""
+    """Record the outcome first, then drop the marker: a marker left behind is harmless (the next
+    writer removes one whose journal is no longer ``prepared``), so failing to drop it is not a
+    failure of the restore."""
     _write_journal(safety, _read_journal(safety), status)
-    (data_dir() / _MARKER).unlink(missing_ok=True)
+    with contextlib.suppress(OSError):  # held by an antivirus or an indexer
+        (data_dir() / _MARKER).unlink(missing_ok=True)
 
 
 def _marked_safety() -> str | None:
@@ -434,6 +437,8 @@ def _apply_restore(plan: list[tuple[str, Path, bytes | None]], *, snapshot: str,
             atomic_write_bytes(target, content)
             if target.read_bytes() != content:
                 raise SnapshotError(t("backup.snapshot.read_back_failed", owner_language(), name=name))
+        # A failure here may come after the journal says "committed": the rollback first sets it
+        # back to "prepared", so a rollback cut off is done again, never taken as a restore.
         _finish(safety, "committed")
     except Exception as failure:  # every transaction failure is rolled back before the lock is released
         try:
@@ -458,8 +463,16 @@ def _roll_back(safety: Path) -> None:
 def _roll_back_files(safety: Path) -> None:
     """Put back every file the journal saved (config.yaml first: it says where restore points live)."""
     try:
-        _journal_bytes(_read_journal(safety), "rolled_back")  # legacy final metadata fits before any live write
+        journal = _read_journal(safety)
+        _journal_bytes(journal, "rolled_back")  # legacy final metadata fits before any live write
         plan = _rollback_plan(safety)
+        if journal["status"] != "prepared" or not (data_dir() / _MARKER).is_file():
+            # Already "committed" (a failure after the journal was written): until every file is
+            # back, the journal says "prepared" and the marker names it, so a rollback cut off
+            # half-way is finished by the next writer instead of accepted as a restore.
+            _write_journal(safety, journal, "prepared")
+            marker = _restore_record_bytes({"safety": safety.name}, limit=MAX_RESTORE_MARKER_BYTES)
+            atomic_write_bytes(data_dir() / _MARKER, marker)
     except (OSError, ValueError, TypeError, RecursionError, yaml.YAMLError) as exc:
         raise SnapshotError(t("backup.snapshot.restore_failed", owner_language(), reason=reason(exc))) from exc
     # A restore of 1.23.11 or earlier also replaced the event log: no append while it goes back.

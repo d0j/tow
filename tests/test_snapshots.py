@@ -832,6 +832,79 @@ def test_a_failed_put_back_is_said_and_retried(backup, monkeypatch):
     assert not (data_dir() / ".tow-night-restore.json").exists()
 
 
+def test_a_marker_that_cannot_be_removed_after_the_restore_keeps_the_restore(backup, monkeypatch):
+    """The restore is done once its journal says so; a marker an antivirus holds is harmless (the
+    next writer removes it). It was taken for a failure, and the restored data was put back."""
+    from tow.store import persistence_lock
+
+    made = create_snapshot()
+    _changed_after(made)
+    real = Path.unlink
+    held = {"left": 1}
+
+    def unlink(self, *args, **kwargs):
+        if self.name == ".tow-night-restore.json" and held["left"]:
+            held["left"] -= 1
+            raise PermissionError(13, "The process cannot access the file")
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+
+    restore_snapshot(Path(made["snapshot"]), apply=True)
+
+    assert load_state()["topics"] != [{"id": "after"}]
+    assert load_secrets()["telegram"]["token"] != "t-after"
+    with persistence_lock():  # the next writer drops the leftover marker, and nothing else
+        pass
+    assert not (data_dir() / ".tow-night-restore.json").exists()
+    assert load_secrets()["telegram"]["token"] != "t-after"
+
+
+def test_a_rollback_cut_off_after_the_journal_said_committed_is_finished_by_the_next_writer(backup, monkeypatch):
+    """A failure after the journal was written as committed rolls the restore back; a rollback
+    the process died in must be done again by the next writer, never taken as a finished
+    restore with half of the files put back."""
+    import tow.snapshots
+    from tow.store import encrypted_secrets_path, persistence_lock
+
+    snapshot = _changed_after(create_snapshot())
+    real_journal = tow.snapshots.restore._write_journal
+
+    def journal(safety, record, status):
+        real_journal(safety, record, status)
+        if status == "committed":
+            raise OSError(5, "I/O error")  # written, then the folder's flush failed
+
+    class Crash(BaseException):  # the process dies: no except clause runs
+        pass
+
+    real_write = tow.snapshots.restore.atomic_write_bytes
+    writes = {"secrets": 0}
+
+    def write(path, content):
+        if Path(path) == encrypted_secrets_path():
+            writes["secrets"] += 1
+            if writes["secrets"] == 2:  # the restore's write went through; its put-back dies
+                raise Crash()
+        real_write(path, content)
+
+    monkeypatch.setattr(tow.snapshots.restore, "_write_journal", journal)
+    monkeypatch.setattr(tow.snapshots.restore, "atomic_write_bytes", write)
+    with pytest.raises(Crash):
+        restore_snapshot(snapshot, apply=True)
+    monkeypatch.setattr(tow.snapshots.restore, "_write_journal", real_journal)
+    monkeypatch.setattr(tow.snapshots.restore, "atomic_write_bytes", real_write)
+
+    with persistence_lock():  # the next process
+        pass
+
+    assert load_state()["topics"] == [{"id": "after"}]
+    assert load_secrets()["telegram"]["token"] == "t-after"
+    assert not (data_dir() / ".tow-night-restore.json").exists()
+    journal_file = next(data_dir().glob("before-restore-*/RESTORE.json"))
+    assert json.loads(journal_file.read_text(encoding="utf-8"))["status"] == "rolled_back"
+
+
 def _crashed_restore(backup, monkeypatch) -> Path:
     """A restore the process died in half-way; returns its before-restore folder."""
     from tow.store import encrypted_secrets_path
