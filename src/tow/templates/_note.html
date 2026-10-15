@@ -1,0 +1,12 @@
+{#- One persistent note: a state shown while it lasts (a problem of a card, a row, a page), never
+    the result of the click just made (that is a message). Neutral, or amber ("warn") and red ("bad")
+    in the messages' colours with the attention icon. A note, not a live region: it is not said again
+    on every visit. ``issue`` names the issue it says (tow.issues), ``id`` the spot a link lands on
+    (focusable there); a call block adds controls after the text (the master key's Copy). -#}
+{% from "_icons.html" import icon %}
+{% macro note(text, tone='', id='', issue='', cls='', tag='p') -%}
+{%- set tone = tone if tone in ('warn', 'bad') else '' -%}
+<{{ tag }} class="notice{{ ' ' ~ tone if tone }}{{ ' ' ~ cls if cls }}"{% if id %} id="{{ id }}" tabindex="-1"{% endif %}{% if issue %} data-issue-id="{{ issue }}"{% endif %} role="note">
+{%- if tone %}{{ icon('alert', 'sm') }}{% endif %}<span class="notice-text">{{ text }}</span>
+{%- if caller is defined %}{{ caller() }}{% endif %}</{{ tag }}>
+{%- endmacro %}

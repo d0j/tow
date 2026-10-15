@@ -1,5 +1,7 @@
 {#- What needs the owner, said inside the spot a "Needs attention" link lands on, when that spot
-    does not say it by itself (tow.issues: Target.note; views.issue_notes). -#}
+    does not say it by itself (tow.issues: Target.note; views.issue_notes): one note in the
+    issue's colour, named by its issue. -#}
+{% from "_note.html" import note %}
 {% macro issue_notes_at(notes, at) -%}
-{%- for note in notes or [] if note.at == at %}<p class="notice issue-note" role="status">{{ note.text }}</p>{% endfor -%}
+{%- for item in notes or [] if item.at == at %}{{ note(item.text, item.severity, id=item.id if not at else '', issue=item.issue) }}{% endfor -%}
 {%- endmacro %}

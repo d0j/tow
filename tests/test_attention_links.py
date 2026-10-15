@@ -155,7 +155,7 @@ def test_a_site_without_a_sign_in_opens_its_row_on_sites_at_the_user_name(client
     assert page.count(" autofocus") == 1
     other = page.split('id="site-row-faketwo"', 1)[1]
     assert re.search(r'<details class="row-edit sites">', other)  # the other site stays closed
-    assert "issue-note" not in other
+    assert "data-issue-id" not in other
 
 
 KZ = "https://kinozal.guru/details.php?id="
@@ -254,7 +254,7 @@ def test_late_checks_open_the_service_card_with_restart(client):
     # The card says what is wrong: the service card alone does not.
     card = page.split('id="acc-service"', 1)[1].split("</details>", 1)[0]
     assert html.escape(entry["text"], quote=False) in card
-    assert card.count('class="notice issue-note"') == 1
+    assert card.count('data-issue-id="check_stale"') == 1  # one note, named by its issue
 
 
 def test_a_check_blocked_by_the_master_key_lands_on_its_explanation_with_the_command(client):
@@ -355,7 +355,7 @@ def test_every_kind_has_a_landing_test():
 
 def test_a_card_says_nothing_of_a_problem_that_is_gone(client):
     _home_state(_topic("z", 9))
-    assert 'class="notice issue-note"' not in client.get("/settings").text
+    assert "data-issue-id" not in client.get("/settings").text
 
 
 def test_the_links_open_nothing_else_without_a_fix(client):

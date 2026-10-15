@@ -34,8 +34,6 @@
   --notice-fg: light-dark(#2b3444, #c8d1df);
   --notice-bg: light-dark(#eef2f8, #101722);
   --notice-line: light-dark(#c9d3e2, #2e3a4e);
-  --notice-err-bg: light-dark(#fdecec, #281717);
-  --notice-err-line: light-dark(#e3a5a5, #593030);
   --new-row: light-dark(rgba(31,95,191,.07), rgba(126,176,255,.07));
   --open-row: light-dark(rgba(31,95,191,.05), rgba(126,176,255,.045));
   --dot-warn: light-dark(#b07d00, #f0b429);
@@ -618,11 +616,24 @@ label.check-field { margin: 0; color: var(--fg); font-size: 12.5px; cursor: poin
 .check-field input:disabled + label { color: var(--mut); cursor: not-allowed; }
 .check-field.nested, .nested-field { margin-left: 1.75rem; }
 .nested-field { margin-top: .55rem; }
+/* One persistent note (_note.html): a state shown while it lasts, in the messages' colours - neutral
+   by default, amber (warn) as a .flash.warn, red (bad) as a .flash.error: one red for a failure,
+   said now or kept. The text wraps beside the icon; controls after it (Copy) go under it on a phone. */
 .notice {
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: .35rem .5rem;
   margin: 0; padding: .65rem .75rem; border-radius: 8px;
-  font-size: 13px; line-height: 1.45;
+  font-size: 13px; line-height: 1.45; overflow-wrap: anywhere;
+  color: var(--notice-fg); background: var(--notice-bg); border: 1px solid var(--notice-line);
 }
-.notice.neutral { color: var(--notice-fg); background: var(--notice-bg); border: 1px solid var(--notice-line); }
+.notice > svg.i { flex: 0 0 auto; margin-top: .1rem; }
+.notice > .notice-text { flex: 1 1 0; min-width: 0; }
+.notice.warn { color: var(--fg); background: var(--pill-warn-bg); border-color: var(--warn); }
+.notice.warn > svg.i { color: var(--warn); }
+.notice.bad { color: var(--fg); background: var(--flash-err-bg); border-color: var(--flash-err-line); }
+.notice.bad > svg.i { color: var(--bad); }
+/* A note inside a card or a panel keeps clear of what follows it, and of the card's head. */
+:is(.settings-panel, .integration-card, .edit-panel) > .notice { margin-bottom: .6rem; }
+.integration-head + .notice { margin-top: .6rem; }
 .input-unit { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .45rem; }
 .input-unit span { color: var(--mut); font-size: 12px; }
 .service-restart {
@@ -817,7 +828,6 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 }
 .settings-page-compact .technical-details { margin-top: .5rem; }
 .settings-page-compact .notice { padding: .48rem .58rem; }
-.notice.error { color: var(--bad); background: var(--notice-err-bg); border: 1px solid var(--notice-err-line); }
 .support-note {
   margin: .5rem 0 0; color: var(--mut); font-size: 12px; line-height: 1.4;
 }
@@ -1106,7 +1116,7 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 
 /* Where a "Needs attention" link lands (#anchor, or ?spot= marked .landed by app.js): the spot
    lights up for a moment, below the sticky header; under reduced motion a still outline instead. */
-:is(.row-wrap, .integration-card, .settings-accordion, .flash, .log-line, .issue-note):is(:target, .landed) {
+:is(.row-wrap, .integration-card, .settings-accordion, .flash, .log-line, .notice):is(:target, .landed) {
   scroll-margin-top: 5.5rem; border-radius: 8px; animation: landing 2.6s ease-out 1;
 }
 @keyframes landing {
@@ -1114,7 +1124,7 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
   100% { box-shadow: 0 0 0 2px transparent, 0 0 0 7px transparent; }
 }
 @media (prefers-reduced-motion: reduce) {
-  :is(.row-wrap, .integration-card, .settings-accordion, .flash, .log-line, .issue-note):is(:target, .landed) {
+  :is(.row-wrap, .integration-card, .settings-accordion, .flash, .log-line, .notice):is(:target, .landed) {
     animation: none; outline: 2px solid var(--acc); outline-offset: 2px;
   }
 }

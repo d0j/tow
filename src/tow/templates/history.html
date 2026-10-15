@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% from "_issue_notes.html" import issue_notes_at %}
 {% block body %}
 <h1 id="page-title">{{ t('history.title') }}</h1>
-{% for note in notes if not note.at %}<p class="notice issue-note" id="{{ note.id }}" tabindex="-1">{{ note.text }}</p>{% endfor %}
+{{ issue_notes_at(notes, '') }}
 <div class="history-filter">
   <div class="chips" role="group" aria-label="{{ t('history.filter') }}">
     {% for value, label in [('', t('history.group.all')), ('downloads', t('history.group.downloads')), ('errors', t('history.group.errors')), ('changes', t('history.group.changes')), ('notifications', t('history.group.notifications'))] %}

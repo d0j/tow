@@ -28,6 +28,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   lost says the result could not be confirmed (it may have been done) and is never sent again by itself.
 - "Undo" puts back only the change its own message is about: an "Undo" from an earlier message, pressed after
   a newer change, is refused with a clear message instead of undoing that newer change.
+- Notes about a lasting problem on Settings, Sites and History are one kind of note in the problem's own colour:
+  a red problem (a lost data folder, a site that asks for a sign-in TOW cannot make) is red, no longer amber,
+  and messages and notes share one red instead of two slightly different ones. Screen readers treat these notes
+  as part of the page instead of announcing them again on every visit.
 
 ## [1.30.11] — 2026-10-15
 

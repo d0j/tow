@@ -497,9 +497,16 @@ def attention_view(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str
 def issue_notes(state: Mapping[str, Any], cfg: Mapping[str, Any], page: str) -> list[dict[str, str]]:
     """The issues ``page`` says in words: those whose link lands on their own note (a Target
     without an anchor: ``at`` is "", ``id`` the note's) and those whose spot does not say what is
-    wrong by itself (``Target.note``: ``at`` is that spot's id, the note goes inside it)."""
+    wrong by itself (``Target.note``: ``at`` is that spot's id, the note goes inside it). Each
+    note keeps its issue's ``severity`` (its colour) and id (``issue``, stable while it lasts)."""
     return [
-        {"id": issue_note_id(issue), "at": issue.target.anchor, "text": issue_text(issue)}
+        {
+            "id": issue_note_id(issue),
+            "issue": issue.id,
+            "severity": issue.severity,
+            "at": issue.target.anchor,
+            "text": issue_text(issue),
+        }
         for issue in issues_now(state, cfg)
         if issue.target.page == page and (issue.target.note or not issue.target.anchor)
     ]
