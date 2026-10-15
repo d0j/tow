@@ -188,6 +188,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   over is no longer counted as a problem.
 - A torrent client turned off in Settings no longer stays "unavailable" in Needs attention for ever, and a removed
   client's last state is no longer kept.
+- `tow status` says the torrent client does not answer when Settings' "Check" found it so, as the header does; it
+  said the client answered.
 
 ## [1.31.2] — 2026-10-15
 
