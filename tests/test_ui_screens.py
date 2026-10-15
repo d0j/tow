@@ -129,6 +129,22 @@ def test_the_site_card_starts_with_the_sign_in(client):
     assert not row.select_one("#site-pass-rutor").has_attr("placeholder")
 
 
+@pytest.mark.parametrize("stored", [True, False])
+def test_the_site_password_says_it_is_saved_only_when_it_is(client, stored):
+    """The page gets whether a site's password is saved (never its value) as ``password_saved``:
+    the field is then linked to the "leave empty to keep" hint; with none saved there is no hint."""
+    from tow.store import load_secrets, save_secrets
+
+    secrets = load_secrets()
+    secrets.setdefault("trackers", {})["rutor"] = {"username": "fixture-user", **({"password": "x"} if stored else {})}
+    save_secrets(secrets)
+    row = BeautifulSoup(client.get("/sites?open=rutor").text, "html.parser").select_one("#ed-site-rutor")
+    field = row.select_one("#site-pass-rutor")
+    assert field.get("value") is None
+    assert (row.select_one("#site-pass-saved-rutor") is not None) is stored
+    assert field.get("aria-describedby") == ("site-pass-saved-rutor" if stored else None)
+
+
 def test_a_sign_in_target_on_a_site_without_a_sign_in_page_opens_advanced(client):
     """The "site asks to sign in" link of a site without a sign-in path focuses its user name; the
     sign-in path it also needs is under Advanced, which opens for it."""

@@ -117,7 +117,7 @@ def sites(request: Request) -> Response:
                     "user": (v or {}).get("username") or "",
                     "set": bool((v or {}).get("username") or (v or {}).get("password") or (v or {}).get("uid")),
                     # A saved password (never its value): the field says an empty one keeps it.
-                    "password": bool((v or {}).get("password")),
+                    "password_saved": bool((v or {}).get("password")),
                 }
                 for k, v in (_context.secrets().get("trackers") or {}).items()
             },
