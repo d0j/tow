@@ -13,16 +13,18 @@
   <form method="get" action="/history" role="search">
     {% if group %}<input type="hidden" name="group" value="{{ group }}">{% endif %}
     <label class="sr-only" for="history-q">{{ t('history.search_label') }}</label>
-    <input id="history-q" name="q" type="search" value="{{ q }}" placeholder="{{ t('history.search_placeholder') }}">
+    <input id="history-q" class="w-m" name="q" type="search" value="{{ q }}" placeholder="{{ t('history.search_placeholder') }}">
   </form>
 </div>
 <div class="card log-box history-box">
   {% for e in rows %}
-  <div class="log-line"{% if e.anchor %} id="{{ e.anchor }}"{% endif %}><span class="mut">{{ e.at }}</span> · <b>{{ e.label }}</b>{% if e.detail %} · {{ e.detail }}{% endif %}{% if e.raw %} <details class="raw-error"><summary>{{ t('common.details') }}</summary><code>{{ e.raw }}</code></details>{% endif %}</div>
+  {#- The short time (today "20:31"); the full one is its tooltip. -#}
+  <div class="log-line"{% if e.anchor %} id="{{ e.anchor }}"{% endif %}><span class="mut">{{ short_time(e.at_iso) if short_time is defined and e.at_iso else e.at }}</span> · <b>{{ e.label }}</b>{% if e.detail %} · {{ e.detail }}{% endif %}{% if e.raw %} <details class="raw-error"><summary>{{ t('common.details') }}</summary><code>{{ e.raw }}</code></details>{% endif %}</div>
   {% else %}
-  {#- "Nothing found" only when a search or a group narrowed it; an empty log says so. -#}
-  <div class="mut">{{ t('history.empty') if (q or group) else t('history.no_events') }}</div>
+  {#- "Nothing found" only when a search or a group narrowed it, with the way back; an empty log says so. -#}
+  {% if q or group %}<p class="history-empty">{{ t('history.empty') }} <a href="/history">{{ t('history.show_all') }}</a></p>{% else %}<p class="history-empty">{{ t('history.no_events') }}</p>{% endif %}
   {% endfor %}
 </div>
-<p class="sub">{{ t('history.note') }}</p>
+{#- Said only when the list stops at its limit. -#}
+{% if rows|length >= history_limit %}<p class="sub">{{ t('history.note', n=history_limit) }}</p>{% endif %}
 {% endblock %}

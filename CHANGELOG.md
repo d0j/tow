@@ -50,6 +50,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   sign-in, which now hides the password fields and keeps what is saved. The mirrors follow; the name,
   patterns and paths a preset fills in wait under “Advanced”. The add-site help is two sentences, and filling
   the patterns in by hand is explained under “Advanced” next to them.
+- History no longer explains the log's file sizes on every visit (it says only that the list stops at its
+  latest 300 events, when it does), its search box is as wide as a search, and a search that finds nothing
+  offers “Show all”.
 
 ### Fixed
 
