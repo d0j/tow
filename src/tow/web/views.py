@@ -161,9 +161,7 @@ def message_text(record: Mapping[str, Any] | None) -> str:
     return t("web.message.subject_result", subject=subject, result=text)
 
 
-def flash_location(
-    url: str, message: Any, kind: str = "ok", /, *, subject: str | None = None, problem_topic: str = "", **params: Any
-) -> str:
+def flash_location(url: str, message: Any, kind: str = "ok", /, *, subject: str | None = None, **params: Any) -> str:
     """``url`` with ``flash=<token>`` of a message kept on the server (see ``flash_redirect``).
     ``subject``: what it is about; None takes the request's (``resolve_subject``), "" is none."""
     text = flash_text(message, **params)
@@ -177,8 +175,6 @@ def flash_location(
         "subject": _context.subject() if subject is None else " ".join(subject.split())[:200],
         "at": str(int(time.time())),
     }
-    if problem_topic:
-        record["problem_topic"] = problem_topic
     # The undo this action made goes with its message: a check right after a save says
     # "Connected" without an "Undo" that would put the save back.
     if stamped := services.undo_stamped_here():
@@ -287,28 +283,25 @@ def _row_error(row: CheckRow) -> str:
     return render_stored(record["code"], params, text).strip() or text
 
 
-def _feedback(text: str, kind: str = "ok", *, problem_topic: str = "", credential_topic: str = "") -> dict[str, str]:
-    return {"text": text, "kind": kind, "problem_topic": problem_topic, "credential_topic": credential_topic}
+def _feedback(text: str, kind: str = "ok", *, credential_topic: str = "") -> dict[str, str]:
+    return {"text": text, "kind": kind, "credential_topic": credential_topic}
 
 
 def feedback_redirect(feedback: Mapping[str, str]) -> RedirectResponse:
     """Home with what a manual check said (``check_feedback``): its message, and the sign-in
-    prompt when the site asked for one. The message names the request's topic."""
-    return home_redirect(
-        feedback["text"],
-        feedback["kind"],
-        problem_topic=feedback["problem_topic"],
-        credential_topic=feedback["credential_topic"] or None,
-    )
+    prompt when the site asked for one. The message names the request's topic; a failure is
+    shown as any message is, also while "Needs attention" lists the topic (the message is the
+    click's result, the triangle what is still wrong)."""
+    return home_redirect(feedback["text"], feedback["kind"], credential_topic=feedback["credential_topic"] or None)
 
 
 def check_feedback(
     row: CheckRow | None, *, topic_id: str, adopted: bool = False, tracker_name: str = ""
 ) -> dict[str, str]:
-    """What a manual check of one topic says, as data - ``text``, its ``kind``, the
-    ``problem_topic`` it is about and the ``credential_topic`` whose sign-in to ask for ("" for
-    none) - the same for a check run at once and a queued one. The words never name the topic:
-    the message's subject does. ``row``: the topic's result, None for a topic that is gone;
+    """What a manual check of one topic says, as data - ``text``, its ``kind`` and the
+    ``credential_topic`` whose sign-in to ask for ("" for none) - the same for a check run at
+    once and a queued one. The words never name the topic: the message's subject does.
+    ``row``: the topic's result, None for a topic that is gone;
     ``adopted``: the owner has just adopted its torrent into TOW, which a check that changes
     nothing else confirms; ``tracker_name``: its site when it signs in."""
     if row is None:
@@ -356,11 +349,7 @@ def failed_check_feedback(
     if row.get("status") == "waiting_space":
         # Not a failed check: the torrent is in the client, stopped, and TOW starts it once its
         # files fit (the error says so). Just added now, or still waiting from an earlier check.
-        return _feedback(
-            t("web.check.added_waiting_space", error=error) if row.get("added") else error,
-            "warn",
-            problem_topic=topic_id,
-        )
+        return _feedback(t("web.check.added_waiting_space", error=error) if row.get("added") else error, "warn")
     cls = row_class(row)
     record = row.get("error_record")
     code = str(record.get("code") or "") if isinstance(record, Mapping) else ""
@@ -372,12 +361,7 @@ def failed_check_feedback(
         flash = t("web.check.added_check_failed" if new_topic else "web.check.check_failed", error=error)
     # The status-colour contract (AGENTS.md): a site that does not answer is amber, not an error.
     kind = "warn" if cls in TRACKER_WARNING_CLASSES else "err"
-    return _feedback(
-        flash,
-        kind,
-        problem_topic=topic_id,
-        credential_topic=topic_id if cls == "tracker_auth" and tracker_name else "",
-    )
+    return _feedback(flash, kind, credential_topic=topic_id if cls == "tracker_auth" and tracker_name else "")
 
 
 def topic_check_row(topic_id: str, out: dict[str, Any]) -> CheckRow | None:
@@ -470,27 +454,29 @@ def result_location(job: Mapping[str, Any]) -> str:
     query = "check_result=" + quote(str(job["id"]))
     if credential:
         query += "&credential_topic=" + quote(str(credential))
-    return f"/?{query}#check-result"
+    # A topic's check ends in one message, not a result card to scroll to.
+    return f"/?{query}" if job.get("topic_id") else f"/?{query}#check-result"
 
 
 def check_result_flash(job: Mapping[str, Any]) -> dict[str, str] | None:
-    """The message a topic's check said (``check_feedback``), shown on its result's page as a
-    check at once shows it; None for a check of every topic (its result says it all)."""
-    feedback = job.get("feedback")
-    if not isinstance(feedback, Mapping) or not feedback.get("text"):
+    """The one message a finished check of a topic ends in, shown on its result's page as a
+    check at once shows it (``check_feedback``) - also when it ended without words of its own
+    (cancelled, never given the check lock, stopped by an error of TOW). None for a check of
+    every topic (its report is the page's card) and for one that still waits or runs."""
+    if not job.get("topic_id") or job.get("status") not in {"done", "failed"}:
         return None
-    flash = {
+    feedback = job.get("feedback")
+    said = feedback if isinstance(feedback, Mapping) and feedback.get("text") else {}
+    stopped = job.get("cancelled") or job.get("lock_timeout")
+    return {
         # One identity per job: the result page opened again is not a new message.
         "id": "check-" + str(job.get("id") or ""),
-        "text": str(feedback["text"]),
-        "kind": str(feedback.get("kind") or "ok"),
+        "text": str(said.get("text") or check_job_message(job)),
+        "kind": str(said.get("kind") or job.get("kind") or ("warn" if stopped else "err")),
         # Named when it was asked for: a topic deleted meanwhile keeps its name.
         "subject": str(job.get("subject") or ""),
         "at": str(int(job["ended_at"])) if isinstance(job.get("ended_at"), (int, float)) else "",
     }
-    if feedback.get("problem_topic"):
-        flash["problem_topic"] = str(feedback["problem_topic"])
-    return flash
 
 
 def check_job_message(job: Mapping[str, Any]) -> str:

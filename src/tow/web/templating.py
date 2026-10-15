@@ -226,23 +226,6 @@ def undo_left_sec() -> int:
     return undo.undo_left_sec(_context.state())
 
 
-def problem_flash_hidden(flash: Mapping[str, Any] | None) -> bool:
-    """Persisted active failures use the triangle; keep feedback if that topic is not represented.
-
-    A recovered topic must not resurrect an old flash when its redirect is opened again.
-    Paused topics do not contribute current issues, so their failed action stays visible.
-    """
-    identity = str((flash or {}).get("problem_topic") or "")
-    if not identity:
-        return False
-    topic = next((item for item in _context.state().get("topics") or [] if str(item.get("id")) == identity), None)
-    if topic is None:
-        return False
-    if not topic.get("last_error"):
-        return True
-    return any(identity in issue["subjects"] for issue in _header_health_once()["attention"]["entries"])
-
-
 def login_help() -> dict[str, str]:
     """What the sign-in page says under "Forgot your password?"."""
     record = (_context.secrets_or_none() or {}).get(access.RECORD_KEY)
@@ -374,7 +357,6 @@ def configure(templates: Jinja2Templates = TEMPLATES) -> None:
     env["undo_in_message"] = undo_in_message
     env["undo_left_sec"] = undo_left_sec
     env["flash_ttl_sec"] = flash_ttl_sec
-    env["problem_flash_hidden"] = problem_flash_hidden
     env["message_text"] = message_text
     env["login_help"] = login_help
     env["network_session"] = network_session

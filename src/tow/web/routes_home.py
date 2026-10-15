@@ -83,8 +83,11 @@ def index(request: Request) -> Response:
     result = check_jobs.get(result_id) if result_id else None
     active_id = str(request.query_params.get("check_job") or "")
     active = check_jobs.get(active_id) if active_id else None
-    # A topic's check says on its result's page what a check at once says on Home; the result
-    # itself does not repeat it.
+    # A topic's check ends in one message, as a check at once does - never a result card. One
+    # that still waits or runs is followed as on the page that follows it.
+    topic_result = bool(result and result.get("topic_id"))
+    if topic_result and result and result["status"] in {"queued", "running"} and not active_id:
+        active_id, active = result_id, result
     said = check_result_flash(result) if result else None
     return TEMPLATES.TemplateResponse(
         request,
@@ -105,8 +108,11 @@ def index(request: Request) -> Response:
             if result and result.get("ended_at")
             else "",
             "check_result_message": check_job_message(result) if result and not said else "",
-            "check_result_requested": bool(result_id),
+            "check_result_requested": bool(result_id) and not topic_result,
             "check_activity": active,
+            "check_activity_id": active_id,
+            # The page follows a topic's result that is not ready yet (app.js polls for it).
+            "check_activity_result": topic_result and active_id == result_id,
             "check_activity_text": _activity_text(active),
             "check_activity_title": next(
                 (row["series"] for row in rows if active and str(row["id"]) == active["topic_id"]),

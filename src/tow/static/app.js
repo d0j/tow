@@ -315,11 +315,6 @@ if (flash) {
     window.setTimeout(() => { live.textContent = words; }, 400);
   }
 }
-const problemResult = document.querySelector("[data-problem-result]");
-if (problemResult) {
-  const live = document.getElementById(problemResult.dataset.problemResult === "err" ? "announce-alert" : "announce");
-  if (live) window.setTimeout(() => { live.textContent = problemResult.textContent.trim(); }, 400);
-}
 const undoForm = document.getElementById("undo-form");
 if (undoForm) {
   // The undo lasts a while (Settings → Checks): the button counts it down, then goes away.
