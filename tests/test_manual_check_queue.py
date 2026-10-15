@@ -377,6 +377,18 @@ def test_result_rows_are_bounded_but_all_outcomes_are_counted():
     assert report["rows"][0]["topic_id"] == "last"
 
 
+def test_a_long_result_does_not_send_the_rest_to_history(client, monkeypatch, consumers):
+    # Unchanged topics never appear in History: "the rest is in History" sent the owner nowhere.
+    rows = [{"id": f"t{index}", "title": "Show", "ok": True} for index in range(150)]
+    monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: {"results": rows})
+    job = _job(client.post("/check", data={"mode": "apply"}, follow_redirects=False))
+    consumers[0].run()
+    card = BeautifulSoup(client.get(f"/?check_result={job}").text, "html.parser").select_one("#check-result")
+    assert len(card.select(".check-result-row")) == 100
+    assert "Всего результатов: 150; показаны первые 100, сначала проблемы" in card.get_text()
+    assert "в истории" not in card.get_text()
+
+
 def test_preview_never_claims_that_changes_were_applied():
     report = check_report({"results": [{"ok": True, "changed": True}]}, apply=False)
     assert "изменится при применении 1" in report["summary"]
