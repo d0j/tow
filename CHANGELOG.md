@@ -178,6 +178,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   (the owner got that first part twice); the rest of it is dropped with the reason in the Log.
 - A daily digest whose hour falls in the evening part of the quiet hours (`daily_digest_hour: 23` with
   `quiet_hours: "22-7"`) is sent when the quiet hours end; it was never sent.
+- Messages waiting for a recipient that is no longer in the settings (a removed Telegram chat, a group that moved
+  to a new id, a removed messenger) are forgotten instead of waiting for ever.
 
 ## [1.31.2] — 2026-10-15
 

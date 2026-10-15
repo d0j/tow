@@ -1267,3 +1267,28 @@ def test_a_refusal_after_part_of_a_message_arrived_sends_nothing_twice(http):
     contents = [json.loads(r.content)["content"] for r in seen]
     assert [text.strip()[:1] for text in contents] == ["a", "b"]
     assert "notify_outbox" not in load_state()
+
+
+def test_the_queue_of_a_removed_recipient_is_forgotten(http):
+    # A chat removed from the settings (or a group that moved to a new id) kept its queue for ever:
+    # never sent, never cleaned, counted on the settings page.
+    from tow.store import save_state
+
+    set_handler, seen, _ = http
+    set_handler(lambda _r: httpx.Response(200, json={"ok": True}))
+    secrets = {"telegram": {"token": TG_TOKEN, "chat_ids": ["222"]}, **DISCORD}
+    save_state(
+        {
+            "notify_outbox": {
+                "telegram:111": {"items": [{"id": "a", "text": "old"}]},
+                "telegram:222": {"items": [{"id": "b", "text": "серия 1"}]},
+                "whatsapp": {"items": [{"id": "c", "text": "old"}]},
+            },
+            "notify_status": {"telegram:111": {"ok": False, "at": 1, "error": "chat moved"}},
+        }
+    )
+    notifiers.flush_outbox(secrets)
+    state = load_state()
+    assert "notify_outbox" not in state  # 222 delivered, 111 and the removed WhatsApp forgotten
+    assert "telegram:111" not in state.get("notify_status", {})
+    assert len(seen) == 1  # only the chat that is still in the settings
