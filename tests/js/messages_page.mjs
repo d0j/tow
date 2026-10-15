@@ -109,11 +109,14 @@ verdict.closeReads = true;
 // shows is read, Escape closes it and gives the focus back.
 const attention = third.$("[data-attention]");
 attention.open = true;
+// The entry's time is app.js's (towTime: the one time rule, in TOW's zone).
+third.window.towTime = { element: (at) => Object.assign(third.document.createElement("time"), { textContent: `rule:${at}` }) };
 third.menu.open = true;
 assert.equal(attention.open, false);
 const rows = third.document.root.querySelectorAll("[data-messages-list] li");
 assert.equal(rows.length, 2);
 assert.equal(rows[0].querySelector(".msg-entry-text").textContent, "Show — no changes");
+assert.equal(rows[1].querySelector("time").textContent, "rule:1800000000000");
 assert.equal(rows[1].querySelector(".msg-entry-kind").textContent, "Error");
 rows[1].rect = { top: 400, bottom: 440, height: 40 }; // below the panel's fold
 third.timers.advance(300);

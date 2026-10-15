@@ -867,7 +867,8 @@ def format_event(
     title_index: Mapping[str, str] | None = None,
     site_titles: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
-    """One line of the log for History and the Log: when, what (``label``) and its details.
+    """One line of the log for History and the Log: when (``at`` written out, ``iso`` as stored),
+    what (``label``) and its details.
     ``title_index`` names topics (``index_event_titles``), ``site_titles`` sites
     (``index_site_titles``) as they are named now."""
     rec = _with_site_title(rec, site_titles)
@@ -940,4 +941,5 @@ def format_event(
     if u and not u.startswith(("***",)):
         bits.append(u[:90])
     detail = " · ".join(dict.fromkeys(bits))
-    return {"at": at, "label": label, "detail": detail, "kind": kind, "raw": raw}
+    # "iso": the stored time itself, for a page that writes it by the one time rule (short_time).
+    return {"at": at, "iso": ts, "label": label, "detail": detail, "kind": kind, "raw": raw}

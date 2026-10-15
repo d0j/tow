@@ -9,6 +9,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - Fields are smaller: 36 px high with 14 px text on a computer (they were 40 px with 15 px text), and 44 px
   with 16 px text on a phone or a touch screen. Placeholders are as easy to read as the hints below fields.
+- Times are short and written one way: "20:31" for today, "15 Oct, 20:31" for another day of this year,
+  "15 Oct 2025, 20:31" for another year, always with the date for a time still to come. They are in the
+  time zone of the computer running TOW, also in Recent messages; the full time with seconds and the UTC
+  offset is the tooltip. Recent messages, the Log and a topic's episode list use it now.
 
 ### Fixed
 
