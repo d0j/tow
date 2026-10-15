@@ -217,6 +217,7 @@
   "RESTART_OPERATION_ATTEMPTS": "value int",
   "RESTART_REPEAT_COUNT": "value int",
   "RESTART_WINDOW_SEC": "value int",
+  "SITE_RETRY_KEEP_SEC": "value int",
   "STABLE_SEC": "value float",
   "START_GRACE_SEC": "value float",
   "STOP_JOB_WAIT_SEC": "value int",
