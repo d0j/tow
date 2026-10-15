@@ -6,7 +6,6 @@ import html
 import re
 from collections.abc import Mapping, Sequence
 from enum import StrEnum
-from html.parser import HTMLParser
 
 
 class Verdict(StrEnum):
@@ -36,34 +35,56 @@ _AUTH_MESSAGES = (
 _MAINTENANCE = ("technical works in progress", "under maintenance", "ведутся технические работы", "технические работы")
 
 
-class _PasswordField(HTMLParser):
-    """Finds a real ``<input type=password>`` as a browser reads the page: comments and the text
-    of scripts are not markup, and a quoted attribute may hold a ``>``. One linear pass; a
-    regex re-read the rest of the page from every unended ``<input``."""
+_SCAN_BYTES = 65536
+_TAG_WINDOW = 8192  # one tag's attributes; a longer tag is not a form field TOW needs to see
+_MARKUP = re.compile(r"<(?:!--|script\b|style\b|input\b)", re.IGNORECASE)
+_TYPE_PASSWORD = re.compile(r"""(?:^|\s)type\s*=\s*(?:"\s*password\s*"|'\s*password\s*'|password(?=[\s/>]|$))""")
 
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=False)
-        self.found = False
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag == "input" and any(
-            name == "type" and (value or "").strip().casefold() == "password" for name, value in attrs
-        ):
-            self.found = True
-
-    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        self.handle_starttag(tag, attrs)
+def _tag_end(page: str, start: int, limit: int) -> tuple[int, int]:
+    """(the ``>`` closing the tag at ``start``, or -1; where reading stopped). A quoted value may
+    hold a ``>``. Reading never goes back, so the whole page is read once."""
+    at = start
+    while at < limit:
+        close = page.find(">", at, limit)
+        if close < 0:
+            return -1, limit
+        quotes = [found for found in (page.find('"', at, close), page.find("'", at, close)) if found >= 0]
+        if not quotes:
+            return close, close + 1
+        opened = min(quotes)
+        ended = page.find(page[opened], opened + 1, limit)
+        if ended < 0:
+            return -1, limit
+        at = ended + 1
+    return -1, limit
 
 
 def _has_password_field(page: str) -> bool:
-    """Whether the bounded page (its first 64 KiB) has a password field."""
-    reader = _PasswordField()
-    try:
-        reader.feed(page[:65536])
-        reader.close()
-    except AssertionError, ValueError:  # markup the parser gives up on: what it read so far counts
-        pass
-    return reader.found
+    """Whether the bounded page (its first 64 KiB) has a real ``<input type=password>``, read as a
+    browser reads it: comments and the text of scripts and styles are not markup, and a quoted
+    attribute may hold a ``>``. One forward pass (an HTML parser re-read an unended tag on every
+    ``<input`` of a hostile page: quadratic)."""
+    page = page[:_SCAN_BYTES]
+    lower = page.lower()
+    at = 0
+    while (found := _MARKUP.search(lower, at)) is not None:
+        start, opener = found.start(), found.group()
+        if opener == "<!--":
+            end = lower.find("-->", start + 4)
+            if end < 0:
+                return False  # the rest of the page is a comment
+            at = end + 3
+        elif opener in {"<script", "<style"}:
+            end = lower.find("</" + opener[1:], found.end())
+            if end < 0:
+                return False  # the rest of the page is script or style text
+            at = end + 2
+        else:
+            end, at = _tag_end(page, found.end(), min(len(page), found.end() + _TAG_WINDOW))
+            if end >= 0 and _TYPE_PASSWORD.search(lower, found.end(), end):
+                return True
+    return False
 
 
 def classify(
@@ -104,7 +125,7 @@ def classify(
         return Verdict.INTERACTIVE
     # Titles and posts can describe a film about maintenance. Require a short
     # standalone page, and do not treat a phrase inside a longer topic title as proof.
-    plain = " ".join(html.unescape(re.sub(r"<[^>]*>", " ", body)).split()).casefold()
+    plain = " ".join(html.unescape(re.sub(r"<[^<>]*>", " ", body)).split()).casefold()
     markers = (*_MAINTENANCE, *maintenance_markers)
     if (
         len(body) < 8192

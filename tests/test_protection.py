@@ -107,13 +107,26 @@ def test_no_real_password_field_on_a_long_download_answer_is_not_a_sign_in(decoy
     assert classify(200, "<title>Tracker</title>" + NEWS + decoy, torrent_wanted=True) == Verdict.UNEXPECTED
 
 
-@pytest.mark.parametrize("fragment", ["<input ", "<input type=", "<input type='", "<input\t\n"])
-def test_repeated_broken_input_fragments_are_read_quickly(fragment):
-    """A regex re-read the rest of the page from every unended ``<input`` (quadratic in 64 KiB)."""
-    page = fragment * (65536 // len(fragment))
-    started = time.perf_counter()
-    assert classify(200, page, torrent_wanted=True) in {Verdict.UNEXPECTED, Verdict.LOGIN_NEEDED}
-    assert time.perf_counter() - started < 1.0
+@pytest.mark.parametrize(
+    "fragment", ["<input ", "<input type=", "<input type='", "<input\t\n", "<", "<!--", "<script>", "<b "]
+)
+def test_repeated_broken_markup_is_read_in_one_pass(fragment):
+    """An unended ``<input`` (or any unended tag) was read again to the end of the page from every
+    one of them, by a regex and then by an HTML parser: quadratic in 64 KiB.
+
+    Timed by growth, not by a wall-clock limit a slow runner misses: four times the page takes
+    about four times as long when reading is linear, sixteen times when it is quadratic."""
+
+    def seconds(size: int) -> float:
+        page = fragment * (size // len(fragment))
+        best = float("inf")
+        for _ in range(3):  # the fastest of three runs: a busy machine slows one, not the shape
+            started = time.perf_counter()
+            assert classify(200, page, torrent_wanted=True) in {Verdict.UNEXPECTED, Verdict.LOGIN_NEEDED}
+            best = min(best, time.perf_counter() - started)
+        return best
+
+    assert seconds(65536) < 8 * seconds(16384) + 0.01
 
 
 def test_removed_topic_and_daily_limit_keep_precedence_over_a_long_sign_in_page(monkeypatch):
