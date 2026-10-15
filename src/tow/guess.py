@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
 
 from tow.i18n import t
+from tow.title import looks_like_download_url
 from tow.trackers import presets
 from tow.trackers.presets import UrlParts
 
@@ -109,56 +110,67 @@ def _forum_guess(parts: UrlParts) -> dict[str, Any] | None:
     if re.search(r"viewtopic\.php$", path, re.IGNORECASE) and query.get("t"):
         return parts.phpbb(prefix, dl=f"{prefix}/download.php?id={{id}}", page=True)
     if re.search(r"details\.php$", path, re.IGNORECASE) and query.get("id"):
+        # A tracker in a folder (/tracker/details.php) keeps its folder.
         return parts.spec(
-            url_regex=parts.rx(r"/details\.php\?id=(\d+)"),
-            download_path="/download.php?id={id}",
-            login_path="/takelogin.php",
+            url_regex=parts.rx(rf"{re.escape(prefix)}/details\.php{presets.query_param('id')}"),
+            download_path=f"{prefix}/download.php?id={{id}}",
+            login_path=f"{prefix}/takelogin.php",
             need_login=True,
         )
     return None
 
 
 def _path_guess(parts: UrlParts) -> dict[str, Any] | None:
-    """Sites with the topic number in the path: /download/torrent/<id>, /torrent/<id>."""
-    if re.search(r"/download/torrent/(\d+)(?:/|$)", parts.path, re.IGNORECASE):
+    """Sites with the topic number in the path: /download/torrent/<id>, /torrent/<id> - under
+    the folders the link names before it (/torrents/torrent/<id>)."""
+    if found := re.search(r"/download/torrent/(\d+)(?:/|$)", parts.path, re.IGNORECASE):
         return parts.spec(
-            url_regex=parts.rx(r"/download/torrent/(\d+)(?:/.*)?"),
+            url_regex=parts.rx(re.escape(parts.path[: found.start()]) + r"/download/torrent/(\d+)(?:/.*)?"),
             download_path="/download/torrent/{id}",
         )
-    if re.search(r"/torrent/(\d+)", parts.path):
-        return parts.spec(url_regex=parts.rx(r"/torrent/(\d+)(?:/.*)?"), download_path="/download/{id}")
+    if found := re.search(r"/torrent/(\d+)", parts.path):
+        return parts.spec(
+            url_regex=parts.rx(re.escape(parts.path[: found.start()]) + r"/torrent/(\d+)(?:/.*)?"),
+            download_path="/download/{id}",
+        )
     return None
 
 
-def _last_replaced(text: str, value: str) -> tuple[str, str]:
-    """``text`` with the last ``value`` as ``{id}``, and the regex matching it."""
-    head, _, tail = text.rpartition(value)
+def _replaced(text: str, span: tuple[int, int]) -> tuple[str, str]:
+    """``text`` with the number at ``span`` as ``{id}``, and the regex matching it."""
+    head, tail = text[: span[0]], text[span[1] :]
     return head + "{id}" + tail, re.escape(head) + r"(\d+)" + re.escape(tail)
 
 
 def _number_guess(parts: UrlParts) -> dict[str, Any]:
     """N10: an explicit id parameter wins; otherwise the LAST number of the path (the first
-    one was often a year or a category: /2024/serial-12345.html)."""
+    one was often a year or a category: /2024/serial-12345.html). The number is replaced where
+    it stands (``?id=12&x=5123``: the id, not the same digits in another value)."""
     path, raw_query = parts.path, parts.raw_query
     query_id = next(
-        (values[0] for key in ("id", "t", "topic", "tid") if (values := parts.query.get(key)) and values[0].isdigit()),
-        "",
+        (
+            found
+            for key in ("id", "t", "topic", "tid")
+            if (found := re.search(rf"(?:^|&){key}=(\d+)(?=&|$)", raw_query)) is not None
+        ),
+        None,
     )
     path_numbers = list(re.finditer(r"\d{3,}", path))
-    if query_id:
-        where, num = "query", query_id
+    query_numbers = list(re.finditer(r"\d{3,}", raw_query))
+    if query_id is not None:
+        where, span = "query", query_id.span(1)
     elif path_numbers:
-        where, num = "path", path_numbers[-1].group(0)
-    elif query_numbers := list(re.finditer(r"\d{3,}", raw_query)):
-        where, num = "query", query_numbers[-1].group(0)
+        where, span = "path", path_numbers[-1].span()
+    elif query_numbers:
+        where, span = "query", query_numbers[-1].span()
     else:
         raise GuessError("guess.no_topic_number")
     if where == "path":
-        templ, path_rx = _last_replaced(path, num)
+        templ, path_rx = _replaced(path, span)
         query_templ, query_rx = raw_query, re.escape(raw_query)
     else:
         templ, path_rx = path, re.escape(path)
-        query_templ, query_rx = _last_replaced(raw_query, num)
+        query_templ, query_rx = _replaced(raw_query, span)
     if raw_query:
         templ += "?" + query_templ
         path_rx += r"\?" + query_rx
@@ -231,11 +243,24 @@ def guess_site(url: str) -> dict[str, Any]:
     return guessed
 
 
+def _matches(guessed: dict[str, Any], url: str) -> bool:
+    try:
+        return re.match(str(guessed.get("url_regex") or ""), url.strip()) is not None
+    except re.error:
+        return False
+
+
 def guess_from_url(url: str) -> dict[str, Any]:
     """Settings for a new site from one of its topic links (raises ValueError, in words)."""
     try:
         parts = _url_parts(url)
-        return presets.guess(parts) or _forum_guess(parts) or _path_guess(parts) or _number_guess(parts)
+        guessed = presets.guess(parts) or _forum_guess(parts) or _path_guess(parts)
+        # A topic link the guessed rules would not recognise gives a site that never matches its
+        # own topics: then the number in the link is the rule. A download link (a forum's
+        # download.php) is not a topic link and may well not match.
+        if guessed is not None and (_matches(guessed, url) or looks_like_download_url(url)):
+            return guessed
+        return _number_guess(parts)
     except GuessError:
         raise
     except ValueError as exc:

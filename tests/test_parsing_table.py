@@ -4,6 +4,8 @@ count, a codec, a numbered film, a season pack)."""
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from tow.episodes import parse_episode_coverage, parse_season_hint, resolve_episode_coverages
@@ -154,3 +156,48 @@ def test_an_episode_titled_with_a_special_word(name, keys):
 )
 def test_season_hint_of_a_title(title, season):
     assert parse_season_hint(title) == season
+
+
+def _id(guessed: dict, url: str) -> str | None:
+    found = re.match(guessed["url_regex"], url)
+    return found.group(1) if found else None
+
+
+@pytest.mark.parametrize(
+    ("url", "topic_id", "download_path"),
+    [
+        # phpBB3 writes the forum first; the guess matched only "?t=" right after the page.
+        ("https://forum.example.org/viewtopic.php?f=3&t=55", "55", "/download.php?id={id}"),
+        ("https://forum.example.org/phpbb/viewtopic.php?f=3&t=55#p9", "55", "/phpbb/download.php?id={id}"),
+        # A tracker in a folder keeps the folder.
+        ("https://site.example.org/tracker/details.php?id=5", "5", "/tracker/download.php?id={id}"),
+        # The topic number in a deeper path is found where it is.
+        ("https://site.example.org/torrents/torrent/55", "55", "/download/{id}"),
+        # The id parameter is the one replaced, not the same digits elsewhere.
+        ("https://x.example.org/view.php?id=12&x=5123", "12", "/view.php?id={id}&x=5123"),
+        ("https://x.example.org/view?cat=500&id=98765", "98765", "/view?cat=500&id={id}"),
+        # Controls.
+        ("https://forum.example.org/forum/viewtopic.php?t=7", "7", "/forum/download.php?id={id}"),
+        ("https://rutracker.org/forum/viewtopic.php?t=7654321", "7654321", "/forum/dl.php?t={id}"),
+        ("http://rutor.info/torrent/1234567/x", "1234567", "/download/{id}"),
+        ("https://serials.example.org/2024/serial-12345.html", "12345", "/2024/serial-{id}.html"),
+    ],
+)
+def test_a_guessed_site_matches_the_link_it_was_guessed_from(url, topic_id, download_path):
+    from tow.guess import guess_from_url
+
+    guessed = guess_from_url(url)
+    assert _id(guessed, url) == topic_id
+    assert guessed["download_path"] == download_path
+
+
+def test_a_guess_that_misses_its_own_link_falls_back_to_the_number(monkeypatch):
+    from tow import guess
+
+    def wrong(parts):
+        return parts.spec(url_regex=parts.rx(r"/elsewhere/(\d+)"), download_path="/x/{id}")
+
+    monkeypatch.setattr(guess, "_path_guess", wrong)
+    guessed = guess.guess_from_url("https://site.example.org/item/12345")
+    assert _id(guessed, "https://site.example.org/item/12345") == "12345"
+    assert guessed["download_path"] == "/item/{id}"

@@ -157,6 +157,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A topic title with one season and its episode range (`Шоу (3 сезон: 1-8 серии из 10)`,
   `Сезон 1 / 12 серий из 12`) is no longer taken for several seasons, so its progress counts that season only; a
   possessive like `Ocean's 11` is no longer season 11.
+- A site added from a pasted topic link now recognises that link and its other topics: a phpBB3 link
+  (`viewtopic.php?f=3&t=55`), a tracker in a folder (`/tracker/details.php?id=5`), a deeper path
+  (`/torrents/torrent/55`) and a link with the same digits in another parameter were guessed wrong. A guess that
+  still misses its own link falls back to the number in it.
 
 ## [1.31.2] — 2026-10-15
 
