@@ -410,5 +410,8 @@ class ClientPool:
         return {**kept, **self.empty}
 
     def health(self) -> dict[str, bool]:
-        """Every client's state for the header: the earlier ones, then what this run saw."""
-        return {**self.previous_clients_ok, self.default_id: self.default_ok, **self.ok}
+        """Every client's state for the header: the earlier ones of the clients still configured,
+        then what this run saw (a removed client's last word is not kept for ever)."""
+        configured = {str(row["id"]) for row in client_factory.client_configurations(self.cfg)}
+        earlier = {key: value for key, value in self.previous_clients_ok.items() if key in configured}
+        return {**earlier, self.default_id: self.default_ok, **self.ok}

@@ -425,3 +425,35 @@ def test_a_broken_kind_module_is_skipped():
 def test_an_unknown_severity_is_refused():
     with pytest.raises(ValueError, match="severity"):
         Issue("x", "x", "red", Message("k"), Target("home"))
+
+
+def test_a_client_turned_off_is_not_down():
+    # A client turned off in Settings is never asked again: its last "no answer" stayed for ever.
+    off = {**TWO_CLIENTS, "clients": {**TWO_CLIENTS["clients"], "tr": {"kind": "transmission", "enabled": False}}}
+    snapshot = Snapshot(
+        state={"topics": [], "health": {"qbit_ok": True, "clients_ok": {"tr": False}, "ping_failed": {"tr": 1}}},
+        config=off,
+        now=NOW,
+    )
+    assert collect(snapshot) == []
+    # With only one client left on, the main one's issue does not name it among several.
+    snapshot = Snapshot(state={"topics": [], "health": {"qbit_ok": False}}, config=off, now=NOW)
+    assert [issue.message for issue in collect(snapshot)] == [Message("issues.client_down")]
+
+
+def test_a_check_keeps_no_word_of_a_client_no_longer_configured():
+    from tow.check.client_ops import ClientPool
+    from tow.notify import NotificationBatch
+
+    pool = ClientPool(
+        cfg=TWO_CLIENTS,
+        apply=True,
+        notify=False,
+        how="auto",
+        record=lambda *_a, **_k: None,
+        batch=NotificationBatch(),
+        default_id="nas",
+        previous_qbit_ok=True,
+        previous_clients_ok={"tr": True, "gone": False},
+    )
+    assert pool.health() == {"tr": True, "nas": True}

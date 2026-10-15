@@ -186,6 +186,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   so ("works again"); nothing closed that message before.
 - `tow status` counts what needs attention exactly as Home does: the note that the download history was started
   over is no longer counted as a problem.
+- A torrent client turned off in Settings no longer stays "unavailable" in Needs attention for ever, and a removed
+  client's last state is no longer kept.
 
 ## [1.31.2] — 2026-10-15
 
