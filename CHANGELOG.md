@@ -10,6 +10,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Fields are smaller: 36 px high with 14 px text on a computer (they were 40 px with 15 px text), and 44 px
   with 16 px text on a phone or a touch screen. Placeholders are as easy to read as the hints below fields.
 
+### Fixed
+
+- A field that was refused (a wrong link, a bad site name) now has a red border, not only the red message at
+  the top of the form.
+
 ## [1.31.2] — 2026-10-15
 
 ### Fixed

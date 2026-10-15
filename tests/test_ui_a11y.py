@@ -327,6 +327,15 @@ def test_links_inside_running_text_are_underlined(client):
     assert note is not None, "the Backups note keeps its link inside the sentence"
 
 
+def test_a_refused_field_has_a_red_border_not_only_the_focus_ring():
+    """A refused field (aria-invalid, the refusal describes it) looked like any focused field: only
+    the message at the top of the form was red. Its border is red now, focused or not; the words
+    stay in the message the field is described by."""
+    rule = _desktop_rules()[':is(input, select, textarea)[aria-invalid="true"]']
+    assert "border-color: var(--bad)" in rule
+    assert "box-shadow: 0 0 0 1px var(--bad)" in rule
+
+
 def test_a_long_topic_name_wraps_on_a_phone():
     """A14: a phone cut long topic names with "…" though it wraps the folder and the error."""
     phone = CSS[CSS.index("  /* A phone has the width for one value per line") :]
