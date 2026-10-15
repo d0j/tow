@@ -164,7 +164,10 @@ def candidates(
     This function belongs only to applying challenge recovery, never preview, diagnostics,
     torrent downloads or authentication. Services are externally operated, not installed.
     """
-    del public_only  # even a private tracker policy cannot grant a browser service LAN targets
+    # Even a site allowed private addresses (``public_only=False``) is never sent to a service as a
+    # LAN entry address. Only that entry address is checked: the service's browser resolves names
+    # and follows redirects itself, outside TOW's network guard (docs/PROTECTION.md).
+    del public_only
     try:
         settings = validate_settings(settings)
         if not settings["enabled"]:
@@ -185,6 +188,7 @@ def candidates(
         probe_path = public_probe_path(site)
         parts = urlsplit(origin)
         assert parts.hostname is not None
+        # The entry address must resolve to public addresses now; not a guarantee for the browser.
         public_addresses(parts.hostname, parts.port or (443 if parts.scheme == "https" else 80))
         cached = None if skip_cached else store.read(site, origin, settings, now=time.time())
         if cached is not None:

@@ -70,7 +70,15 @@ Settings show **On demand** for a matching installed module. Disabling the conne
 an already issued request may finish, after which the idle timer stops the module. A damaged manifest/binary
 refuses automatic startup. Native demand management currently supports the Windows package; Linux/macOS keep
 the existing independently managed external API. As for every external browser service, browser egress is outside
-TOW's socket sandbox and should be isolated from private destinations.
+TOW's socket sandbox and should be isolated from private destinations. TOW checks only the entry address it sends:
+it must resolve to public addresses, even for a site allowed private addresses. The browser resolves names and
+follows redirects itself.
+
+While it runs, the native service listens on a random `127.0.0.1` port without authentication; only the broker's
+own API checks that a request is local. Any program on the TOW computer can reach that port during the module's
+short on-demand lifetime. The random port is not a password: binding to loopback, the idle stop, the bound
+process tree and the disposable work folder are the containment. This is a known residual risk; do not install
+the module on a computer shared with untrusted local users.
 
 ### Request sequence
 
@@ -81,7 +89,9 @@ TOW's socket sandbox and should be isolated from private destinations.
    configuration URLs and query strings are not accepted.
 4. Validate the bounded response and replay that page from TOW using the returned clearance and matching User-Agent.
    Redirects stay within the deadline and audited anonymous paths; a path-specific probe cannot redirect to
-   an open home page and pass. No probe follows a topic, download or query-bearing redirect.
+   an open home page and pass. No probe follows a topic, download or query-bearing redirect. A passed replay means
+   *probe access verified*: the public page answered without a challenge. It does not prove that the requested
+   page's challenge was solved or that a download works; the resource's own answer in step 5 decides the check.
 5. Fetch the requested resource through TOW's existing guarded HTTP, with normal account sign-in if needed.
 
 Kinozal's catalog sends anonymous visitors to `/login.php?m=5`. Its trusted probe uses the sign-in page directly,
