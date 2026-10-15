@@ -264,6 +264,7 @@ _CODE_REASONS = {
     "gone": "mirrors.topic_removed",
     "local": "doctor.reason.local",
     "too_large": "mirrors.too_large",
+    "encoding": "mirrors.bad_encoding",
     "paused": "doctor.reason.paused",
     "frozen": "doctor.reason.paused",
     "redirect_policy": "doctor.reason.redirect",

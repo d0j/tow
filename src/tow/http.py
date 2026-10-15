@@ -69,6 +69,11 @@ class ResponseTooSlowError(RuntimeError):
     """Raised when a response body does not arrive within MAX_RESPONSE_SECONDS."""
 
 
+class UnsupportedEncodingError(httpx.DecodingError):
+    """The server compressed its answer in a way TOW did not ask for and cannot read (``br``,
+    ``zstd``...): an answer TOW cannot read, not a connection that failed."""
+
+
 UA_DEFAULT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 )
@@ -279,7 +284,7 @@ def _response_encodings(response: httpx.Response) -> list[str]:
     value = response.headers.get("content-encoding", "identity")
     names = [name.strip().lower() for name in value.split(",")]
     if len(names) > 3 or any(name not in {"gzip", "deflate", "identity"} for name in names):
-        raise httpx.DecodingError("unsupported response content encoding")
+        raise UnsupportedEncodingError("unsupported response content encoding")
     return [name for name in reversed(names) if name != "identity"]
 
 

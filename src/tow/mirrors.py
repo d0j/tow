@@ -38,6 +38,7 @@ _FAILURE_CLASSES = {
     "origin_down": "tracker",
     "maintenance": "tracker",
     "unexpected": "not_torrent",
+    "encoding": "tracker",
 }
 # The longest pause a server's answer can set (Retry-After is bounded the same, tow.http): a
 # saved deadline further ahead was written by a clock that has gone back since.
@@ -89,7 +90,7 @@ def _rebuild_fetch_error(
 
 # Failures that describe the requested topic, not the mirror's health; nor does TOW's own
 # failure on an answer it got (``local``): neither counts towards the mirror cooldown.
-_NOT_HOST_HEALTH_CODES = frozenset({"auth", "http_topic", "too_large", "gone", "local", "unexpected"})
+_NOT_HOST_HEALTH_CODES = frozenset({"auth", "http_topic", "too_large", "gone", "local", "unexpected", "encoding"})
 # Failures that say how the site treats this account (a sign-in, the day's limit), not whether
 # the mirror answers: kept apart from its health (``access``), amber on Sites (AGENTS.md).
 _ACCESS_CODES = frozenset({"auth", "quota"})
@@ -805,6 +806,8 @@ def _failure_code(error: Exception) -> str:
         return error.failure
     if isinstance(error, thttp.ResponseTooLargeError):
         return "too_large"
+    if isinstance(error, thttp.UnsupportedEncodingError):
+        return "encoding"  # the host answered, in a compression TOW did not ask for
     if isinstance(error, _TRANSPORT_ERRORS):
         return "transport"
     return "local"
@@ -1393,6 +1396,8 @@ def _failure_text(error: Exception) -> Any:
         return error
     if isinstance(error, thttp.ResponseTooLargeError):
         return Msg("mirrors.too_large")
+    if isinstance(error, thttp.UnsupportedEncodingError):
+        return Msg("mirrors.bad_encoding")
     return Msg("mirrors.transport", error=str(error)[:160] or type(error).__name__)
 
 
