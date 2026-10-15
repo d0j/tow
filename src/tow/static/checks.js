@@ -32,6 +32,9 @@
     key = `${PREFIX}local`,
     hidden = () => false,
     progress = () => {}, // (entry, body): still waiting or running
+    signedOut = () => {}, // (entries): the session ended; nothing more can be asked
+    // A pending check's title as it may be stored: plain words (messages.js's scrubbing).
+    scrub = typeof window !== "undefined" && window.TowScrub ? window.TowScrub : (value) => String(value ?? "").slice(0, 200),
     // (entry, body | null, same, repeat): its one result (null: TOW cannot say any more); ``same``:
     // the clicks it answers; ``repeat``: a job whose result this tab has already shown (a click
     // whose answer was lost turned out to be that job) - nothing is said again.
@@ -42,6 +45,8 @@
     const load = () => {
       if (memoryOnly) return {};
       try {
+        // Another install's or sign-in's checks in this tab go.
+        for (const name of storage.keys?.() || []) if (name && name.startsWith(PREFIX) && name !== key) storage.remove(name);
         return JSON.parse(storage.get(key) || "null") || {};
       } catch {
         memoryOnly = true;
@@ -108,10 +113,11 @@
       if (!entries.includes(entry)) return; // forgotten meanwhile
       const at = now();
       if (answer?.status === 401) {
-        // Signed out: nothing more can be asked; each check says its result is not confirmed.
-        stopped = true;
-        [...entries].forEach((other) => { if (entries.includes(other)) finish(other, null); });
-        save();
+        // Signed out: nothing more can be asked; the followed checks go with the session (their
+        // titles are not kept in a message), and the page is told once.
+        const ended = entries;
+        stop();
+        signedOut(ended);
         return;
       }
       const body = answer && answer.status >= 200 && answer.status < 300 ? answer.body : null;
@@ -145,6 +151,22 @@
       }
       save();
     };
+    // Stop for good and forget every followed check of this tab (signing out, a session ended).
+    const stop = () => {
+      stopped = true;
+      clearTimer(timer);
+      timer = 0;
+      entries = [];
+      delivered = [];
+      changed();
+      if (memoryOnly) return;
+      try {
+        for (const name of storage.keys?.() || []) if (name && name.startsWith(PREFIX)) storage.remove(name);
+        storage.remove?.(key);
+      } catch {
+        // nothing stored, or nothing to remove
+      }
+    };
     const poll = async () => {
       timer = 0;
       if (stopped || inFlight || hidden()) return;
@@ -162,6 +184,7 @@
         answer = null;
       }
       inFlight = false;
+      if (stopped) return; // signed out while it was on its way: its answer is not used
       handle(entry, answer);
       plan();
     };
@@ -170,7 +193,7 @@
       begin: (meta = {}) => {
         if (stopped || entries.length >= LIMIT) return null;
         const at = now();
-        const entry = { action: newId(), job: "", aliases: [], subject: String(meta.subject || ""), topic: String(meta.topic || ""), since: at, due: at + STATUS_MS, delay: STATUS_MS };
+        const entry = { action: newId(), job: "", aliases: [], subject: scrub(meta.subject || "", 200), topic: String(meta.topic || ""), since: at, due: at + STATUS_MS, delay: STATUS_MS };
         entries.push(entry);
         save();
         plan();
@@ -180,7 +203,7 @@
       adopt: (job, meta = {}) => {
         if (stopped || !job || entries.some((entry) => entry.job === job) || entries.length >= LIMIT) return false;
         const at = now();
-        entries.push({ action: "", job: String(job), aliases: [], subject: String(meta.subject || ""), topic: String(meta.topic || ""), since: at, due: at + Math.min(STATUS_MS, meta.first ?? STATUS_MS), delay: STATUS_MS });
+        entries.push({ action: "", job: String(job), aliases: [], subject: scrub(meta.subject || "", 200), topic: String(meta.topic || ""), since: at, due: at + Math.min(STATUS_MS, meta.first ?? STATUS_MS), delay: STATUS_MS });
         save();
         plan();
         return true;
@@ -200,6 +223,7 @@
         plan();
       },
       wake: () => plan(),
+      stop,
       entries: () => entries.map((entry) => ({ ...entry })),
       count: () => entries.length,
       stored: () => !memoryOnly,
@@ -305,7 +329,12 @@
   const storage = (() => {
     try {
       const store = window.sessionStorage;
-      return { get: (name) => store.getItem(name), set: (name, value) => store.setItem(name, value) };
+      return {
+        get: (name) => store.getItem(name),
+        set: (name, value) => store.setItem(name, value),
+        remove: (name) => store.removeItem(name),
+        keys: () => Array.from({ length: store.length }, (_, index) => store.key(index)),
+      };
     } catch {
       return null;
     }
@@ -419,7 +448,18 @@
       // What the check found, in its row(s) too: Check all's in every row as it comes into sight.
       if (body && (body.status === "done" || body.status === "failed")) refreshRows(body.topic_id || entry.topic || "");
     },
+    // The session ended while checks were followed: the tab's messages go too, and one message
+    // without a title says their results are not shown.
+    signedOut: () => {
+      window.towMessages?.signOut?.();
+      show({ id: "checks-signed-out", kind: "warn", text: t("js.checks.signed_out"), href: "/login", link: t("js.checks.sign_in") });
+    },
     changed: () => window.towMessages?.refresh?.(),
+  });
+  // Signing out by hand: nothing more is followed and the tab's checks go (messages.js clears
+  // its history on the same submit).
+  document.addEventListener("submit", (event) => {
+    if (event.target?.getAttribute?.("action") === "/logout") scheduler.stop();
   });
   document.addEventListener("visibilitychange", () => scheduler.wake());
 

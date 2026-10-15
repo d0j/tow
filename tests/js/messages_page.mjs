@@ -159,4 +159,20 @@ offline.window.towMessages.showMessage({ kind: "err", subject: "Show", text: "co
 assert.equal(offline.$("#flash .msg-text").textContent, "Show — could not confirm the result");
 verdict.oneEntryPoint = true;
 
+// Signing out: this tab's message history goes, of every install and sign-in, and nothing of it
+// is shown any more.
+{
+  const store = memoryStorage();
+  store.setItem("tow.messages.other-session", "{}");
+  const out = page({ storage: store, served: { id: "m7", kind: "ok", subject: "Show", text: "no changes" } });
+  assert.ok(store.data.size >= 1);
+  const form = build(out.document, ["form", { method: "post", action: "/logout" }]);
+  out.document.body.append(form);
+  out.document.dispatch(form, "submit");
+  assert.equal([...store.data.keys()].filter((key) => key.startsWith("tow.messages.")).length, 0);
+  assert.equal(out.$("#msg-host #flash"), null);
+  assert.equal(out.menu.hidden, true);
+}
+verdict.signOutClears = true;
+
 console.log(JSON.stringify(verdict));
