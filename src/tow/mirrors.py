@@ -75,6 +75,7 @@ class MirrorFetchError(TowError, RuntimeError):
         super().__init__(code, cls=cls or _FAILURE_CLASSES.get(failure), **params)
         self.failure = failure
         self.host_failure = host_failure  # request-scoped evidence, not a persisted diagnostic or catalog value
+        self.retry_after = 0.0  # request-scoped: a 503's Retry-After (a 429's is the retry_after param)
 
     def __reduce__(self) -> tuple[Any, ...]:
         return (_rebuild_fetch_error, (self.code, self.failure, self.error_class, self.params, self.host_failure))
@@ -245,8 +246,14 @@ def _note_failure(
     bucket["failed_at"][host] = max(token, float(bucket["failed_at"].get(host) or 0))
     if failure == "rate_limited":
         _pause_rate_limited(bucket, host, retry_after)
-    elif failures >= fail_threshold:
-        bucket["cool"][host] = max(float(bucket["cool"].get(host) or 0), _now() + cooldown_sec)
+        return
+    rest: float = cooldown_sec if failures >= fail_threshold else 0
+    if retry_after > 0:
+        # An unavailable server's Retry-After: scheduled checks wait for it, at most a cooldown
+        # (an ordinary pause - a check the owner starts may still ask, unlike a rate limit).
+        rest = max(rest, min(retry_after, cooldown_sec))
+    if rest:
+        bucket["cool"][host] = max(float(bucket["cool"].get(host) or 0), _now() + rest)
 
 
 def _note_success(bucket: dict[str, Any], host: str, *, status: int | None, token: float) -> None:
@@ -552,6 +559,16 @@ def refuse_verdict(verdict: Verdict, status: int) -> None:
 
 
 def _raise_for_status(r: Any) -> None:
+    try:
+        _refuse_status(r)
+    except MirrorFetchError as error:
+        if r.status_code == 503 and error.failure in {"http", "origin_down", "maintenance"}:
+            # The server says when it expects to answer again (bounded where it is noted).
+            error.retry_after = thttp.retry_after_from(r.headers, now=_now())
+        raise
+
+
+def _refuse_status(r: Any) -> None:
     if r.status_code < 400:
         return
     verdict = response_verdict(r)
@@ -888,7 +905,7 @@ def pick_and_get(
                 counts=host_failed,
                 fail_threshold=fail_threshold,
                 cooldown_sec=cooldown_sec,
-                retry_after=float(getattr(e, "params", {}).get("retry_after") or 0),
+                retry_after=float(getattr(e, "params", {}).get("retry_after") or getattr(e, "retry_after", 0) or 0),
             )
     if persist and challenged and not (isinstance(last_err, MirrorFetchError) and last_err.failure == "quota"):
         resource_failures: dict[str, Exception] = {}

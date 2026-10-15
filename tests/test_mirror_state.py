@@ -188,3 +188,18 @@ def test_a_dated_rate_limit_is_counted_from_the_servers_clock(monkeypatch, login
         with pytest.raises(MirrorFetchError):
             pick_and_get("demo", SPEC["fetch_hosts"], "/topic/1")
     assert load_state()["mirrors"]["demo"]["rate_cool"][HOST] == 1_000_000.0 - 7200 + 600
+
+
+@pytest.mark.parametrize(("hint", "rests_until"), [("300", 1300.0), ("99999", 1600.0), (None, None), ("bad", None)])
+def test_a_503_with_retry_after_rests_the_mirror_for_scheduled_checks(monkeypatch, hint, rests_until):
+    from tow.mirrors import has_available_host
+
+    monkeypatch.setattr("tow.mirrors._now", lambda: 1000.0)
+    headers = {"retry-after": hint} if hint else {}
+    install(monkeypatch, lambda r: httpx.Response(503, text="down for a moment", headers=headers))
+    with pytest.raises(MirrorFetchError):
+        pick_and_get("demo", SPEC["fetch_hosts"], "/topic/1", fail_threshold=3, cooldown_sec=600)
+    bucket = load_state()["mirrors"]["demo"]
+    assert bucket["cool"].get(HOST) == rests_until  # at most the site's own cooldown
+    assert not bucket["rate_cool"]
+    assert has_available_host("demo", SPEC["fetch_hosts"], ignore_cool=True)  # a manual check still asks
