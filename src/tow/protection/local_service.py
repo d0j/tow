@@ -2,18 +2,36 @@
 
 from __future__ import annotations
 
+import functools
 import socket
 import sys
 import time
 from importlib.resources import files
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
 from tow.paths import runtime_dir
 from tow.platform import current, plain_kind
-from tow.platform._local_service_worker import read_manifest, safe_environment
+from tow.platform._local_service_worker import file_sha256, read_manifest, safe_environment
 from tow.protection.spec import service_url
 from tow.store import atomic_write_bytes
+
+
+@functools.lru_cache(maxsize=8)
+def _digest_of(path: str, size: int, mtime_ns: int, inode: int, device: int) -> str:
+    del size, mtime_ns, inode, device  # the cache key: the file as it was when hashed
+    return file_sha256(Path(path))
+
+
+def _known_digest(binary: Path) -> str:
+    """The launcher's digest, hashed again only when its size, time or identity changed.
+
+    For identifying the module (Settings, choosing to ask it): starting the module itself
+    always hashes the file again (the worker's ``read_manifest``), never trusts this cache.
+    """
+    info = binary.stat()
+    return _digest_of(str(binary), info.st_size, info.st_mtime_ns, info.st_ino, info.st_dev)
 
 
 def managed(provider: dict[str, Any]) -> bool:
@@ -26,7 +44,7 @@ def managed(provider: dict[str, Any]) -> bool:
         raise ValueError("redirected local service installation")
     if plain_kind(folder / "manifest.json", missing_ok=True) is None:
         return False
-    return bool(read_manifest(folder)["url"] == service_url(provider["url"]))
+    return bool(read_manifest(folder, _known_digest)["url"] == service_url(provider["url"]))
 
 
 def listening(port: int, timeout: float) -> bool:
