@@ -176,8 +176,11 @@ def _enqueue(*, topic_id: str, apply: bool, adopted: bool = False) -> Response:
     )
     if job is None:
         return flash_redirect("/", "web.check_all.queue_full", "warn")
-    message = "web.check_all.queued" if topic_id else "web.check_all.started" if added else "web.check_all.running"
-    return flash_redirect("/?check_job=" + quote(job["id"]), message)
+    # A topic's check comes here only when it has to wait; one of every topic may start at once.
+    starts_now = added and not topic_id and job["position"] == 1
+    return flash_redirect(
+        "/?check_job=" + quote(job["id"]), "web.check_all.started" if starts_now else "web.check_all.queued"
+    )
 
 
 @router.get("/check/status")

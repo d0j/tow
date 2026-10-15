@@ -27,7 +27,8 @@ RESULT_TTL = 3600
 def submit(
     *, topic_id: str, apply: bool, lang: str, perform: Callable[[dict[str, Any]], None], adopted: bool = False
 ) -> tuple[dict[str, Any] | None, bool]:
-    """Deduplicate pending requests, enqueue once, and keep exactly one FIFO consumer."""
+    """Share a request that still waits, enqueue anything else once, and keep exactly one FIFO
+    consumer. The returned job carries its ``position`` in the queue (1: next or running)."""
     global _worker
     with LOCK:
         now = time.monotonic()
@@ -35,8 +36,11 @@ def submit(
             if job.get("finished_at", now) + RESULT_TTL < now:
                 del JOBS[key]
         for job in JOBS.values():
-            if job["status"] in {"queued", "running"} and job["topic_id"] == topic_id and job["apply"] == apply:
-                return copy.deepcopy(job), False
+            # Only work that has not started is shared: a running check may have read the topic
+            # before the change the owner clicks for, so one follow-up waits behind it.
+            if job["status"] == "queued" and job["topic_id"] == topic_id and job["apply"] == apply:
+                job["adopted"] = bool(job.get("adopted")) or adopted
+                return get(job["id"]), False
         if len(PENDING) >= MAX_PENDING:
             return None, False
         # Bound completed records independently of the pending-work limit.
@@ -66,7 +70,7 @@ def submit(
                 PENDING.remove(job["id"])
                 del JOBS[job["id"]]
                 raise
-        return copy.deepcopy(job), True
+        return get(job["id"]), True
 
 
 def _start(name: str, target: Callable[..., None], *args: Any) -> threading.Thread:
