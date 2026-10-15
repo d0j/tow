@@ -1001,6 +1001,57 @@ def test_a_torrent_absent_from_two_answers_ten_minutes_apart_is_blocked(world, c
     assert client.calls == []  # never added again by a pass
 
 
+def test_a_torrent_gone_from_the_finishing_read_waits_for_the_same_confirmation(world, clock, monkeypatch):
+    """The pass's first look lists the torrent, the client's own read while finishing it does not
+    (a client restarting meanwhile): that absence counts as one answer without it, as every other
+    one - not blocked before two answers ten minutes apart."""
+    client, _tracker, _sent = world
+    _run()
+    client.torrents[H].update(state="downloading", progress=0.4)
+    kept = client.torrents[H]
+    real_inspect = client.inspect_torrent
+    reads = {"count": 0}
+
+    def flaky(infohash):
+        reads["count"] += 1
+        return real_inspect(infohash) if reads["count"] == 1 else None  # gone after the first look
+
+    monkeypatch.setattr(client, "inspect_torrent", flaky)
+    client.calls.clear()
+    row = _run(space_only=True)
+    assert row["status"] == "verification_pending"
+    assert not row.get("error")
+    assert not _blocked()
+    assert load_state()["topics"][0]["verification_pending"]["missing_seen"] == 1
+    monkeypatch.setattr(client, "inspect_torrent", real_inspect)
+    clock["minutes"] = 5
+    client.torrents[H] = kept  # listed again
+    assert _run(space_only=True)["ok"]
+    assert client.calls == [("labels", ("tow",))]
+
+
+def test_a_finishing_read_without_the_torrent_blocks_after_ten_minutes(world, clock, monkeypatch):
+    client, _tracker, _sent = world
+    _run()
+    client.torrents[H].update(state="downloading", progress=0.4)
+    real_inspect = client.inspect_torrent
+    reads = {"count": 0}
+
+    def flaky(infohash):
+        reads["count"] += 1
+        return real_inspect(infohash) if reads["count"] == 1 else None
+
+    monkeypatch.setattr(client, "inspect_torrent", flaky)
+    assert _run(space_only=True)["status"] == "verification_pending"
+    monkeypatch.setattr(client, "inspect_torrent", real_inspect)
+    client.torrents.clear()
+    clock["minutes"] = 9
+    assert _run(space_only=True)["status"] == "verification_pending"
+    clock["minutes"] = 10
+    assert _run(space_only=True)["status"] == "failed"
+    assert _blocked() == "client.managed.missing"
+
+
 def test_a_client_that_does_not_answer_does_not_count_as_an_absence(world, clock, monkeypatch):
     client, _tracker, _sent = world
     _run()

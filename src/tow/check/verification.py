@@ -436,13 +436,20 @@ def _confirm(
     finish = getattr(client, "finish_verification", None)
     if not callable(finish):
         raise TowError("check.selection_unconfirmed")
-    confirmed = finish(
-        h,
-        str(waiting.get("path") or ""),
-        receipt_of(waiting) or {},
-        start_stopped=retry,
-        on_start=lambda: _start_given(waiting),
-    )
+    try:
+        confirmed = finish(
+            h,
+            str(waiting.get("path") or ""),
+            receipt_of(waiting) or {},
+            start_stopped=retry,
+            on_start=lambda: _start_given(waiting),
+        )
+    except TowError as error:
+        if error.code == "client.managed.missing":
+            # The client's own read while finishing it did not list it: one answer without it,
+            # as the look above - blocked only once that absence is confirmed.
+            _observe_presence(waiting, None)
+        raise
     return confirmed if isinstance(confirmed, dict) else {}
 
 
