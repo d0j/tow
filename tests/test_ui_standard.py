@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).parents[1]
 CSS = (ROOT / "src" / "tow" / "static" / "app.css").read_text(encoding="utf-8")
 # Phones and touch screens: fields grow to a 44 px touch target with 16 px text.
@@ -72,6 +74,41 @@ def test_fields_are_36px_on_a_desktop_and_44px_on_phones_and_touch_screens():
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     assert "Inputs and selects are 36 px with 14 px text, 44 px with 16 px text on phones and touch" in agents
     assert "stay 40 px" not in agents
+
+
+@pytest.mark.parametrize(
+    ("name", "width"), [("w-xs", "6.5rem"), ("w-s", "12rem"), ("w-m", "18rem"), ("w-l", "26rem"), ("w-xl", "36rem")]
+)
+def test_a_field_is_as_wide_as_what_it_holds_at_most(name, width):
+    """A port, a password and a webhook were all 1354 px wide at 1440 px. A width class is a
+    maximum: the field still shrinks with its form; a secret field's wrapper takes its field's class."""
+    assert _first(f".{name}").strip() == f"max-width: {width};"
+    assert f"max-width: {width}" in _first(f".secret:has(> .{name})")
+
+
+def test_one_form_layout_with_rows_that_wrap_by_the_forms_own_width():
+    """One form system: at most 46 rem wide, a label 3 px above its field, 8-10 px between groups,
+    help text at most 68 characters a line. A row of fields stands on one line once its form (not
+    the window) is 38 rem wide: two cards side by side stack their fields on their own."""
+    grid = _first(".form-grid")
+    for declaration in ("display: grid", "max-width: 46rem", "container-type: inline-size"):
+        assert declaration in grid
+    gap = re.search(r"(?<![\w-])gap: \.(\d+)rem", grid)
+    assert gap
+    assert 8 <= 16 * float("." + gap.group(1)) <= 10
+    assert "gap: .1875rem" in _first(".form-grid .field")  # 3 px
+    assert "max-width: 68ch" in _first(
+        ".form-grid :is(.field-hint, .action-hint, .section-note, .support-note, .check-field p)"
+    )
+    assert "flex-direction: column" in _first(".field-row")
+    wide = _block("@container (min-width: 38rem) {")
+    assert "flex-direction: row" in _first(".field-row", wide)
+    assert "flex: 0 1 6.5rem" in _first(".field-row > :is(.w-xs, :has(.w-xs))", wide)
+    # An address and its port stay paired on a phone while the address keeps 12 rem.
+    keep = _first(".field-row.keep")
+    assert "flex-direction: row" in keep
+    assert "flex-wrap: wrap" in keep
+    assert "flex: 1 1 12rem" in _first(".field-row.keep > *")
 
 
 def test_placeholders_are_as_readable_as_hints():
