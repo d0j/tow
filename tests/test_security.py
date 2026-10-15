@@ -7,7 +7,7 @@ import socket
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import flash_kind, flash_of
+from helpers import PUBLIC_IPV4, PUBLIC_IPV4_C, PUBLIC_IPV6, flash_kind, flash_of
 
 from tow.folders import save_path_policy_problem
 from tow.web import app
@@ -33,8 +33,8 @@ def lan_config(monkeypatch):
         ("192.168.1.5:8787", True),
         ("100.64.1.1:8787", True),  # Tailscale (CGNAT range)
         ("[fe80::1]:8787", True),
-        ("85.64.1.2:8787", False),  # a public address: the request came from the internet
-        ("8.8.8.8", False),
+        (f"{PUBLIC_IPV4}:8787", False),  # a public address: the request came from the internet
+        (PUBLIC_IPV4_C, False),
         ("evil.example:8787", False),  # DNS rebinding
     ],
 )
@@ -68,10 +68,10 @@ def test_this_computer_asks_by_localhost_or_a_loopback_address_only(host, allowe
         ("100.64.1.1", True),  # Tailscale (CGNAT range) is not the internet
         ("fd7a:115c:a1e0::1", True),  # Tailscale over IPv6 (ULA)
         ("fe80::1", True),
-        ("85.64.1.2", False),  # an internet client with a home-network Host header
-        ("8.8.8.8", False),
-        ("2a00:1450:4001::1", False),
-        ("::ffff:85.64.1.2", False),  # the same IPv4 client on a dual-stack socket
+        (PUBLIC_IPV4, False),  # an internet client with a home-network Host header
+        (PUBLIC_IPV4_C, False),
+        (PUBLIC_IPV6, False),
+        (f"::ffff:{PUBLIC_IPV4}", False),  # the same IPv4 client on a dual-stack socket
     ],
 )
 def test_internet_peers_are_refused_whatever_the_host_header_says(lan_config, peer, allowed):
@@ -157,7 +157,7 @@ def _remembered() -> str | None:
     [
         (LAN, {}),  # not signed in: sent to the sign-in page
         (LAN, {"tow_session": "forged.123.abcdefghijklmnopqrstuvwxyz"}),
-        (("85.64.1.2", 50000), {}),  # refused: an internet peer
+        ((PUBLIC_IPV4, 50000), {}),  # refused: an internet peer
     ],
 )
 def test_a_refused_or_anonymous_request_does_not_change_the_owners_language(lan_auto_language, peer, cookies):
@@ -351,7 +351,7 @@ def test_names_resolving_to_internal_addresses_count_as_internal(monkeypatch):
     monkeypatch.setattr(
         site_form,
         "_resolve_addresses",
-        lambda name: {"127.0.0.1.nip.io": ["127.0.0.1"], "rutor.info": ["104.21.1.1"]}.get(name, []),
+        lambda name: {"127.0.0.1.nip.io": ["127.0.0.1"], "rutor.info": [PUBLIC_IPV4]}.get(name, []),
     )
     assert site_form.internal_host("127.0.0.1.nip.io") is True
     assert site_form.internal_host("rutor.info") is False

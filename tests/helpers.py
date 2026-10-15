@@ -6,6 +6,16 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
+# Test data uses private-range or documentation addresses (192.168.1.x, 192.0.2.x, 2001:db8::).
+# A test of the public-address guards (tow.net_guard.is_public, the web's peer check) needs an
+# address TOW counts as public, and documentation ranges are not: it uses one of these well-known
+# literals by name. The test guard refuses the network, so nothing ever connects to them.
+PUBLIC_IPV4 = "93.184.216.34"
+PUBLIC_IPV4_B = "1.1.1.1"
+PUBLIC_IPV4_C = "8.8.8.8"
+PUBLIC_IPV6 = "2606:4700::1111"
+PUBLIC_ADDRESSES = frozenset({PUBLIC_IPV4, PUBLIC_IPV4_B, PUBLIC_IPV4_C, PUBLIC_IPV6})
+
 
 def bencode(value: Any) -> bytes:
     """Canonical bencode (sorted dict keys); str is encoded as UTF-8."""

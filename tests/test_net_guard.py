@@ -8,6 +8,7 @@ import time
 import httpcore
 import httpx
 import pytest
+from helpers import PUBLIC_IPV4, PUBLIC_IPV4_B, PUBLIC_IPV6
 
 from tow.net_guard import PublicOnlyBackend, PublicOnlyTransport, is_public, public_addresses
 
@@ -26,7 +27,7 @@ def test_public_only_backend_connects_to_a_checked_numeric_ip(monkeypatch):
 
     def resolve(host, port, **_kwargs):
         looked_up.append((host, port))
-        return _answers("93.184.216.34")
+        return _answers(PUBLIC_IPV4)
 
     def connect(_self, host, port, *_args):
         connected.append((host, port))
@@ -37,7 +38,7 @@ def test_public_only_backend_connects_to_a_checked_numeric_ip(monkeypatch):
 
     assert PublicOnlyBackend().connect_tcp("tracker.example", 443) is stream
     assert looked_up == [("tracker.example", 443)]
-    assert connected == [("93.184.216.34", 443)]
+    assert connected == [(PUBLIC_IPV4, 443)]
 
 
 @pytest.mark.parametrize("failure", [httpcore.ConnectError, httpcore.ConnectTimeout])
@@ -47,15 +48,15 @@ def test_pinned_connect_tries_each_checked_address_in_turn(monkeypatch, failure)
 
     def connect(_self, host, port, *_args):
         connected.append(host)
-        if host == "93.184.216.34":
+        if host == PUBLIC_IPV4:
             raise failure("unreachable")
         return stream
 
-    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers("93.184.216.34", "2606:4700::1111"))
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers(PUBLIC_IPV4, PUBLIC_IPV6))
     monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", connect)
 
     assert PublicOnlyBackend().connect_tcp("tracker.example", 443) is stream
-    assert connected == ["93.184.216.34", "2606:4700::1111"]  # numbers only, never the name again
+    assert connected == [PUBLIC_IPV4, PUBLIC_IPV6]  # numbers only, never the name again
 
 
 def test_pinned_connect_reports_the_last_failure_when_no_address_answers(monkeypatch):
@@ -65,19 +66,19 @@ def test_pinned_connect_reports_the_last_failure_when_no_address_answers(monkeyp
         connected.append(host)
         raise httpcore.ConnectError(f"refused by {host}")
 
-    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers("93.184.216.34", "2606:4700::1111"))
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers(PUBLIC_IPV4, PUBLIC_IPV6))
     monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", connect)
 
-    with pytest.raises(httpcore.ConnectError, match="refused by 2606:4700::1111"):
+    with pytest.raises(httpcore.ConnectError, match=f"refused by {PUBLIC_IPV6}"):
         PublicOnlyBackend().connect_tcp("tracker.example", 443)
-    assert connected == ["93.184.216.34", "2606:4700::1111"]
+    assert connected == [PUBLIC_IPV4, PUBLIC_IPV6]
 
 
 @pytest.mark.parametrize("count", [2, 3])
 def test_checked_addresses_share_one_connect_timeout(monkeypatch, count):
     clock = [10.0]
     connected = []
-    addresses = ["93.184.216.34", "2606:4700::1111", "1.1.1.1"][:count]
+    addresses = [PUBLIC_IPV4, PUBLIC_IPV6, PUBLIC_IPV4_B][:count]
     monkeypatch.setattr(time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **kw: _answers(*addresses))
 
@@ -97,7 +98,7 @@ def test_alternative_checked_addresses_get_only_the_remaining_time(monkeypatch):
     clock = [10.0]
     connected = []
     stream = object()
-    addresses = ["93.184.216.34", "2606:4700::1111", "1.1.1.1"]
+    addresses = [PUBLIC_IPV4, PUBLIC_IPV6, PUBLIC_IPV4_B]
     monkeypatch.setattr(time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **kw: _answers(*addresses))
 
@@ -125,7 +126,7 @@ def test_dns_time_is_deducted_before_the_first_connection(monkeypatch, dns_secon
 
     def resolve(*args, **kwargs):
         clock[0] += dns_seconds
-        return _answers("93.184.216.34")
+        return _answers(PUBLIC_IPV4)
 
     def connect(self, host, port, timeout=None, *args):
         connected.append((host, timeout))
@@ -135,7 +136,7 @@ def test_dns_time_is_deducted_before_the_first_connection(monkeypatch, dns_secon
     monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", connect)
     if dns_seconds < 10:
         assert PublicOnlyBackend().connect_tcp("tracker.example", 443, timeout=10) is stream
-        assert connected == [("93.184.216.34", 10 - dns_seconds)]
+        assert connected == [(PUBLIC_IPV4, 10 - dns_seconds)]
     else:
         with pytest.raises(httpcore.ConnectTimeout, match="connection time budget"):
             PublicOnlyBackend().connect_tcp("tracker.example", 443, timeout=10)
@@ -145,24 +146,24 @@ def test_dns_time_is_deducted_before_the_first_connection(monkeypatch, dns_secon
 def test_immediate_failure_still_retries_an_alternative_without_timeout(monkeypatch):
     connected = []
     stream = object()
-    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **kw: _answers("93.184.216.34", "1.1.1.1"))
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **kw: _answers(PUBLIC_IPV4, PUBLIC_IPV4_B))
 
     def connect(self, host, port, timeout=None, *args):
         connected.append((host, timeout))
-        if host == "93.184.216.34":
+        if host == PUBLIC_IPV4:
             raise httpcore.ConnectError("synthetic refused")
         return stream
 
     monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", connect)
     assert PublicOnlyBackend().connect_tcp("tracker.example", 443, timeout=None) is stream
-    assert connected == [("93.184.216.34", None), ("1.1.1.1", None)]
+    assert connected == [(PUBLIC_IPV4, None), (PUBLIC_IPV4_B, None)]
 
 
 def test_pinned_connect_never_opens_a_socket_for_a_refused_answer(monkeypatch):
     def connect(*_args, **_kwargs):
         raise AssertionError("a socket was opened to a checked-out address")
 
-    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers("93.184.216.34", "192.168.1.20"))
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers(PUBLIC_IPV4, "192.168.1.20"))
     monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", connect)
 
     with pytest.raises(httpcore.ConnectError, match="non-public"):
@@ -188,12 +189,12 @@ def test_the_transport_refuses_to_run_without_the_checked_backend(monkeypatch):
 @pytest.mark.parametrize(
     ("url", "answers", "allowed"),
     [
-        ("https://tracker.example/announce", ("93.184.216.34",), True),
-        ("udp://tracker.example:6969/announce", ("93.184.216.34",), True),
+        ("https://tracker.example/announce", (PUBLIC_IPV4,), True),
+        ("udp://tracker.example:6969/announce", (PUBLIC_IPV4,), True),
         ("http://tracker.example/announce", ("192.168.1.20",), False),
-        ("ftp://tracker.example/announce", ("93.184.216.34",), False),
-        ("https:///announce", ("93.184.216.34",), False),
-        ("https://tracker.example:99999/announce", ("93.184.216.34",), False),
+        ("ftp://tracker.example/announce", (PUBLIC_IPV4,), False),
+        ("https:///announce", (PUBLIC_IPV4,), False),
+        ("https://tracker.example:99999/announce", (PUBLIC_IPV4,), False),
     ],
 )
 def test_tracker_addresses_follow_the_same_public_only_rule(monkeypatch, url, answers, allowed):
@@ -207,7 +208,7 @@ def test_tracker_addresses_follow_the_same_public_only_rule(monkeypatch, url, an
 
 @pytest.mark.parametrize(
     "addresses",
-    [(), ("127.0.0.1",), ("93.184.216.34", "10.0.0.2"), ("::1", "93.184.216.34")],
+    [(), ("127.0.0.1",), (PUBLIC_IPV4, "10.0.0.2"), ("::1", PUBLIC_IPV4)],
 )
 def test_missing_private_and_mixed_answers_fail_closed(monkeypatch, addresses):
     monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers(*addresses))
@@ -238,9 +239,7 @@ def test_ipv6_forms_of_a_private_ipv4_address_fail_closed(monkeypatch, address):
         public_addresses("tracker.example", 443)
 
 
-@pytest.mark.parametrize(
-    "address", ["93.184.216.34", "64:ff9b::93.184.216.34", "::ffff:0:93.184.216.34", "2606:4700::1111"]
-)
+@pytest.mark.parametrize("address", [PUBLIC_IPV4, f"64:ff9b::{PUBLIC_IPV4}", f"::ffff:0:{PUBLIC_IPV4}", PUBLIC_IPV6])
 def test_public_addresses_stay_public_in_every_form(address):
     assert is_public(address) is True
 
@@ -316,7 +315,7 @@ def test_a_zoned_link_local_or_loopback_address_is_not_public(address):
 
 
 def test_a_zoned_public_address_is_judged_without_its_zone():
-    assert is_public("2606:4700::1111%eth0") is True
+    assert is_public(f"{PUBLIC_IPV6}%eth0") is True
 
 
 @pytest.mark.parametrize("address", ["fec0::1", "fec0::1%eth0", "feff:ffff::1"])
@@ -333,7 +332,7 @@ def test_deprecated_site_local_ipv6_is_not_public(monkeypatch, address):
 
 
 def test_site_local_ipv6_in_a_mixed_dns_answer_refuses_every_connection(monkeypatch):
-    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers("2606:4700::1111", "fec0::1"))
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: _answers(PUBLIC_IPV6, "fec0::1"))
     with pytest.raises(httpcore.ConnectError):
         public_addresses("tracker.example", 443)
 
