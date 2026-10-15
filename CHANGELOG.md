@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.31.0] — 2026-10-15
+
 ### Fixed
 
 - A message about a topic, a site or a torrent client now starts with its name ("Harbour Clock — no
