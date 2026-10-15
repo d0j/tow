@@ -24,6 +24,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Password, token, webhook and key fields in Settings have an eye that shows what was typed or pasted. A
   messenger's token, webhook or key and a torrent client's password no longer make the browser offer to
   generate a new password.
+- Settings say less: repeated instructions (“press Save, then Check”), descriptions of how TOW works inside
+  and notes about what has not happened are gone, and the remaining hints are short. Site access shows its
+  steps only until a connection is saved and each connection's last answer as a pill (“Service responded” does
+  not mean the site is reachable); the full explanation stays in the Guide. What network access, the password
+  reminder, restoring and the master key need is still said.
 
 ### Fixed
 

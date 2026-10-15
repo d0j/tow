@@ -644,8 +644,8 @@ def test_check_interval_and_undo_time_are_separate_fields_with_hints(client):
     ]
     assert 'class="field-grid"' not in form
     assert 'aria-describedby="interval-hint"' in form
-    assert 'aria-describedby="undo-hint"' in form
-    assert "Активные раздачи без личного таймера проверяются раз в 12 ч." in form
+    assert "Раздачи с личным таймером проверяются по нему." in form
+    assert 'id="undo-hint"' not in form  # "Show “Undo” for" says it; the hint repeated the label
 
 
 # --- Sentence case: labels, chips, column heads and messages start with a capital -----------------

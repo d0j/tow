@@ -20,7 +20,6 @@ STEPS = (
     "notifier.telegram.step_bot",
     "notifier.telegram.step_start",
     "notifier.telegram.step_id",
-    "notifier.telegram.step_save",
 )
 NOTE = "notifier.telegram.note"
 FIELDS = (

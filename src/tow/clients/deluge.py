@@ -33,7 +33,6 @@ FIELDS = (
 STEPS = (
     "client.deluge.step_enable",
     "client.deluge.step_password",
-    "client.deluge.step_save",
 )
 NOTE = "client.deluge.note"
 

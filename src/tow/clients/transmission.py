@@ -29,7 +29,6 @@ STEPS = (
     "client.transmission.step_open",
     "client.transmission.step_enable",
     "client.transmission.step_whitelist",
-    "client.transmission.step_save",
 )
 NOTE = "client.transmission.note"
 DEFAULT_PATH = "/transmission/rpc"

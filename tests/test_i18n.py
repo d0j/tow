@@ -1220,13 +1220,13 @@ def test_qa10_wording_says_what_it_means():
     History was made "вручную" beside "авто", an autostart entry is named as such (not "this
     account (TOW)"), and the Diagnostics, backup and password notes say data, not state."""
     t = i18n.t
-    assert [t("settings.clients.used_by", "ru", n=n) for n in (1, 2, 5, 21)] == [
-        "Используется в 1 раздаче.",
-        "Используется в 2 раздачах.",
-        "Используется в 5 раздачах.",
-        "Используется в 21 раздаче.",
+    assert [t("settings.clients.topics", "ru", n=n) for n in (1, 2, 5, 21)] == [
+        "1 раздача",
+        "2 раздачи",
+        "5 раздач",
+        "21 раздача",
     ]
-    assert [t("settings.clients.used_by", "en", n=n) for n in (1, 2)] == ["Used by 1 topic.", "Used by 2 topics."]
+    assert [t("settings.clients.topics", "en", n=n) for n in (1, 2)] == ["1 topic", "2 topics"]
     assert (t("log.how.manual", "ru"), t("log.how.auto", "ru")) == ("вручную", "авто")
     for key in ("doctor.autostart_foreign", "doctor.autostart_stale", "doctor_report.autostart_stale"):
         assert "записи (TOW)" not in t(key, "ru", where="TOW")

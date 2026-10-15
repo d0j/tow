@@ -45,6 +45,7 @@ def test_default_card_closed_off_and_no_contacts(monkeypatch):
     opening = re.search(r'<details[^>]+id="acc-protection"[^>]*>', page).group()
     assert " open" not in opening
     section = card(page)
+    assert re.search(r'<details[^>]+id="protection-guide"[^>]* open>', section)  # nothing saved yet: the steps
     assert 'name="enabled" value="1" checked' not in section
     assert 'class="pill mut">Выключено' in section
     assert 'name="provider_kind"' in section
@@ -237,7 +238,7 @@ def test_service_observation_is_read_only_and_not_site_success(monkeypatch, stat
     section = card(client().get("/settings?open=protection").text)
     assert 'class="pill ok"' not in section
     if status == "succeeded":
-        assert "доступ к сайту проверяется отдельно" in section
+        assert ">Сервис ответил</span>" in section  # what the service said, not that the site is reachable
     elif status in {"busy", "unavailable", "protocol"}:
         assert "Пауза сервиса: ещё 60 с" in section
     assert [p.read_bytes() if p.exists() else None for p in paths] == before
@@ -290,12 +291,12 @@ def test_site_access_help_is_open_and_control_hints_are_bound(monkeypatch, langu
     page = BeautifulSoup(client().get("/settings?open=protection").text, "html.parser")
     section = page.find(id="acc-protection")
     guide = section.find(id="protection-guide")
-    assert guide.has_attr("open")
+    assert not guide.has_attr("open")  # open only until a connection is saved
     assert len(guide.find_all("li")) == 4
     assert guide.find("a")["href"] == "/settings/help#site-access"
     assert not section.find(class_="protection-limits").has_attr("open")
     fields = section.find_all(attrs={"aria-describedby": True})
-    assert len(fields) == 12  # switch, existing/new cards, three limits and reset action
+    assert len(fields) == 8  # switch, the address of each card, three limits and reset action
     for control in fields:
         for ident in control["aria-describedby"].split():
             hints = page.find_all(id=ident)
@@ -345,7 +346,7 @@ def test_network_view_explains_read_only_before_setup_and_keeps_controls_disable
     assert response.status_code == 200
     section = BeautifulSoup(response.text, "html.parser").find(id="acc-protection")
     words = section.get_text()
-    assert words.index("только для просмотра") < words.index("Как работает и как подключить")
+    assert words.index("только для просмотра") < words.index("Как подключить")
     assert section.find("fieldset").has_attr("disabled")
     assert section.find(id="protection-reset-hint") is None
 

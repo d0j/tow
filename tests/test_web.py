@@ -168,7 +168,7 @@ def test_pages_ok():
     assert 'name="allow_lan"' in settings
     assert 'id="lan-password"' in settings
     assert 'name="lan_password"' in settings
-    assert "На этом компьютере TOW открывается без пароля. С других устройств" in settings
+    assert "Другие устройства (телефон, ноутбук, Tailscale) входят по паролю" in settings
     hz = c.get("/healthz")
     assert hz.status_code == 200
     assert hz.json()["ok"] is True

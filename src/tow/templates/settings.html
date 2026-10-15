@@ -42,7 +42,7 @@
           {% for c in clients %}
           <details class="integration-card client-card" id="client-{{ c.id }}"{% if not c.host or c.id in clients_down or open_card == c.id or spot == 'client-' ~ c.id %} open{% else %}{{ fix_open('check_client', c.id) }}{% endif %}>
             <summary class="integration-head">
-              <h2>{{ c.title }}{% if c.host %} <span class="card-meta">{{ c.host }}</span>{% endif %}</h2>
+              <h2>{{ c.title }}{% if c.host or c.used_by %} <span class="card-meta">{{ c.host }}{% if c.host and c.used_by %} · {% endif %}{% if c.used_by %}{{ t('settings.clients.topics', n=c.used_by) }}{% endif %}</span>{% endif %}</h2>
               <span class="integration-pills">
                 {% if c.multi and c.default %}<span class="pill ok">{{ t('settings.clients.main') }}</span>{% endif %}
                 {% if c.id in clients_down %}<span class="pill bad">{{ t('settings.clients.pill_not_answering') }}</span>{% else %}<span class="pill {{ 'mut' if c.host else 'warn' }}">{{ t('settings.clients.configured') if c.host else t('settings.clients.not_configured') }}</span>{% endif %}{# the card's state: one pill and, while it does not answer, one note (its client_down issue) #}
@@ -98,8 +98,7 @@
                 <button class="ghost danger" type="submit" form="remove-{{ c.form_id }}">{{ t('settings.common.remove') }}</button>
                 {% endif %}
               </div>
-              <p class="action-hint">{{ t('settings.clients.checks_saved') }}{% if c.multi and c.default %} {{ t('settings.clients.main_note') }}{% endif %}</p>
-              {% if c.used_by %}<p class="action-hint">{{ t('settings.clients.used_by', n=c.used_by) }}</p>{% endif %}
+              {% if c.multi and c.default %}<p class="action-hint">{{ t('settings.clients.main_note') }}</p>{% endif %}
               <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved_save_first') }}</p>
             </form>
             <form id="ping-{{ c.form_id }}" method="post" action="/settings/client/ping" data-return-target="client-{{ c.id }}">
@@ -135,7 +134,6 @@
               <button type="submit">{{ t('settings.clients.add') }}</button>
             </div>
           </div>
-          <p class="support-note">{{ t('settings.clients.supported', names=client_types|map(attribute='title')|join(', ')) }}</p>
         </form>
       </div>
     </details>
@@ -204,7 +202,7 @@
                 <button class="ghost danger" type="submit" form="notifier-remove-{{ n.kind }}">{{ t('settings.notify.disconnect') }}</button>
                 {% endif %}
               </div>
-              <p class="action-hint">{% if n.connected %}{{ t('settings.notify.check_hint_connected') }}{% else %}{{ t('settings.notify.check_hint_new') }}{% endif %}</p>
+              {% if n.connected %}<p class="action-hint">{{ t('settings.notify.check_hint_connected') }}</p>{% endif %}
               <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved_save_first') }}</p>
             </form>
             {% if n.connected %}
@@ -229,12 +227,11 @@
           <div class="field">
             <label for="interval_min">{{ t('settings.intervals.check_topics') }}</label>
             <div class="input-unit"><input id="interval_min" name="interval_min" value="{{ interval_min }}" class="w-xs" type="number" min="1" step="1" inputmode="numeric" aria-describedby="interval-hint"><span>{{ t('settings.common.min') }}</span></div>
-            <p class="field-hint" id="interval-hint">{{ t('settings.intervals.check_hint', interval=interval_label) }}</p>
+            <p class="field-hint" id="interval-hint">{{ t('settings.intervals.check_hint') }}</p>
           </div>
           <div class="field">
             <label for="flash_ttl_min">{{ t('settings.intervals.show_undo') }}</label>
-            <div class="input-unit"><input id="flash_ttl_min" name="flash_ttl_min" value="{{ flash_ttl_min }}" class="w-xs" type="number" min="1" step="1" inputmode="numeric" aria-describedby="undo-hint"><span>{{ t('settings.common.min') }}</span></div>
-            <p class="field-hint" id="undo-hint">{{ t('settings.intervals.undo_hint') }}</p>
+            <div class="input-unit"><input id="flash_ttl_min" name="flash_ttl_min" value="{{ flash_ttl_min }}" class="w-xs" type="number" min="1" step="1" inputmode="numeric"><span>{{ t('settings.common.min') }}</span></div>
           </div>
           <div class="settings-actions"><button type="submit">{{ t('settings.common.save') }}</button></div>
           <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved') }}</p>
@@ -276,7 +273,7 @@
                 {% endif %}
                 <div class="field-row">
                 <div class="field">
-                  {% set new_label = t('settings.access.new_password') if lan_password_set else t('settings.access.password') %}
+                  {% set new_label = t('settings.access.new_password') %}
                   <label for="lan-password">{{ new_label }}</label>
                   <span class="secret"><input id="lan-password" name="lan_password" type="password" class="w-m" autocomplete="new-password" minlength="8" aria-describedby="{% if lan_password_set %}lan-password-saved {% endif %}lan-password-hint">{{ reveal('lan-password', new_label) }}</span>
                   {% if lan_password_set %}{{ saved_hint('lan-password-saved') }}{% endif %}
@@ -300,7 +297,7 @@
             {% if lan_password_set %}
             <form method="post" action="/settings/sessions/sign-out" class="settings-form compact-form" data-return-target="acc-access">
               <p class="action-hint">{{ t('settings.access.sign_out_hint') }}</p>
-              <div class="settings-actions"><button type="submit">{{ t('settings.access.sign_out_all') }}</button></div>
+              <div class="settings-actions"><button type="submit" class="ghost">{{ t('settings.access.sign_out_all') }}</button></div>
             </form>
             {% endif %}
           </article>
@@ -347,7 +344,7 @@
         <form method="post" action="/settings/backup/location" class="settings-form form-grid backup-folder" data-return-target="acc-transfer">
           <input type="hidden" name="kind" value="{{ f.kind }}">
           <div class="field">
-            <label for="backup-path-{{ f.kind }}">{{ t('settings.backups.folder', title=f.title) }} {% if f.is_default %}<span class="pill mut">{{ t('settings.backups.default_pill') }}</span>{% endif %}</label>
+            <label for="backup-path-{{ f.kind }}" class="sr-only">{{ t('settings.backups.folder', title=f.title) }}</label>
             <input id="backup-path-{{ f.kind }}" name="path" value="{{ f.value }}" class="w-xl" placeholder="{{ f.default_path }}" autocomplete="off" spellcheck="false">
             {% set shown_path = f.value and f.path != f.value %}
             {% if shown_path or f.free or hint %}<p class="field-hint">{% if shown_path %}{{ t('settings.backups.now', path=f.path) }}{% endif %}{% if shown_path and f.free %} · {% endif %}{% if f.free %}{{ t('settings.backups.free', free=f.free) }}{% endif %}{% if hint %}{% if shown_path or f.free %} · {% endif %}{{ hint }}{% endif %}</p>{% endif %}
@@ -412,7 +409,7 @@
             </details>
             {% endif %}
             <details class="backup-location">
-              <summary>{{ t('settings.backups.folder', title=backups.folders.night.title) }}</summary>
+              <summary>{{ t('settings.backups.folder_short') }}{% if backups.folders.night.is_default %} <span class="pill mut">{{ t('settings.backups.default_pill') }}</span>{% endif %}</summary>
               {{ folder_form(backups.folders.night, t('settings.backups.folders_hint')) }}
             </details>
           </article>
@@ -451,7 +448,7 @@
             </details>
             {% endif %}
             <details class="backup-location">
-              <summary>{{ t('settings.backups.folder', title=backups.folders.manual.title) }}</summary>
+              <summary>{{ t('settings.backups.folder_short') }}{% if backups.folders.manual.is_default %} <span class="pill mut">{{ t('settings.backups.default_pill') }}</span>{% endif %}</summary>
               {{ folder_form(backups.folders.manual, '') }}
             </details>
           </article>
@@ -479,12 +476,11 @@
 
     <details class="settings-section settings-accordion acc" id="acc-updates"{% if open_section == 'updates' %} open{% endif %} data-q="{{ t('releases.search') }}">
       <summary>
-        <span class="settings-summary-title">{{ t('releases.title') }}</span>
+        <span id="settings-updates-title" class="settings-summary-title">{{ t('releases.title') }}</span>
         <span class="pill mut">{{ hh.ver }}</span>
       </summary>
       <div class="settings-panel">
-        <section id="updates" class="release-panel" aria-labelledby="release-title">
-          <p id="release-title">{{ t('releases.current', version=hh.ver) }}</p>
+        <section id="updates" class="release-panel" aria-labelledby="settings-updates-title">
           <form method="post" action="/settings/updates" class="compact-form immediate-form" data-return-target="acc-updates" data-auto-submit>
             <input type="hidden" name="enabled" value="0">
             <div class="check-field">
@@ -538,14 +534,13 @@
         <span class="pill {{ 'ok' if service.autostart else 'mut' }}">{{ t('settings.service.autostart_on') if service.autostart else t('settings.service.autostart_off') }}</span>
       </summary>
       <div class="settings-panel">{{ issue_notes_at(notes, 'acc-service') }}
-        <p class="action-hint">{{ t('settings.service.mode_supervisor') }}</p>
         <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
           <input type="hidden" name="enabled" value="0">
           <input type="hidden" name="without_login" value="{{ '1' if service.without_login else '0' }}">
           <div class="check-field">
             <input id="service-autostart" name="enabled" value="1" type="checkbox"{% if service.autostart %} checked{% endif %} aria-describedby="service-autostart-hint" data-auto-submit-control>
             <label for="service-autostart">{{ t('settings.service.autostart') }}</label>
-            <p id="service-autostart-hint" data-auto-submit-status>{{ t('settings.service.autostart_hint_any') }}</p>
+            <p id="service-autostart-hint" data-auto-submit-status></p>
           </div>
           <noscript><button type="submit">{{ t('settings.service.apply') }}</button></noscript>
         </form>
@@ -567,7 +562,6 @@
           <form method="post" action="/settings/service/restart" data-return-target="acc-service" data-confirm="{{ t('settings.service.restart_confirm') }}">
             <button type="submit"{{ fix_attrs('restart_service') }}>{{ t('settings.service.restart') }}</button>
           </form>
-          <p>{{ t('settings.service.restart_note') }}</p>
         </div>
         <div class="watchdog-note">
           <p class="action-hint">{{ t('settings.service.watchdog') }}</p>
@@ -576,17 +570,13 @@
           <ul class="watchdog-lines">{% for line in service.watchdog_problem.lines %}<li>{{ line }}</li>{% endfor %}</ul>
           {% endif %}
         </div>
-        {% if service.running_since %}
-        <p class="restart-result">{{ t('settings.service.running_since') }} <b>{{ service.running_since }}</b>.</p>
-        {% endif %}
         {% if service.restart_view %}
         <p class="restart-result{% if service.restart_view.failed %} error{% endif %}" role="note">{{ t('settings.service.last_restart') }} <b>{{ service.restart_view.at }}</b> · {{ service.restart_view.reason }} · {{ service.restart_view.state }}.</p>
-        {% else %}
-        <p class="restart-result" role="note">{{ t('settings.service.no_restarts') }}</p>
         {% endif %}
         <details class="technical-details">
           <summary>{{ t('settings.common.technical') }}</summary>
           <dl>
+            {% if service.running_since %}<div><dt>{{ t('settings.service.running_since') }}</dt><dd>{{ service.running_since }}</dd></div>{% endif %}
             <div><dt>PID</dt><dd><code>{{ service.pid }}</code></dd></div>
             <div><dt>{{ t('settings.service.autostart_where') }}</dt><dd><code>{{ (service.autostart_detail or {}).get('where') or '—' }}</code></dd></div>
             {% if service.supervisor %}{% set server_state = service.supervisor.get('server', {}).get('state') %}{% set state_key = {'up': 'settings.service.server_state.up', 'starting': 'settings.service.server_state.starting', 'waiting': 'settings.service.server_state.waiting', 'not_answering': 'settings.service.server_state.not_answering', 'stopped': 'settings.service.server_state.stopped'}.get(server_state) %}<div><dt>{{ t('settings.service.web_server') }}</dt><dd>{% if state_key %}{{ t(state_key) }}{% else %}<code>{{ server_state or '—' }}</code>{% endif %}</dd></div>{% endif %}

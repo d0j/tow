@@ -21,7 +21,6 @@ STEPS = (
     "notifier.ntfy.step_app",
     "notifier.ntfy.step_topic",
     "notifier.ntfy.step_subscribe",
-    "notifier.ntfy.step_save",
 )
 NOTE = "notifier.ntfy.note"
 FIELDS = (
