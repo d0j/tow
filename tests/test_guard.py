@@ -149,6 +149,34 @@ def test_a_real_system_test_runs_only_with_its_variable_and_then_unguarded(neste
     result.stdout.fnmatch_lines(["*test guard violations*process*"])
 
 
+def test_a_name_copied_while_a_test_replaced_it_fails_that_test(nested):
+    """A module first imported during a test copies that test's replacement (here the pinned
+    zone of conftest): the test fails at teardown, and the real object is put back."""
+    result = nested(
+        """
+import importlib.util, sys
+
+import tow.clock
+
+
+def test_imports_a_module_first(tmp_path):
+    source = tmp_path / "zz_probe.py"
+    source.write_text("from tow.clock import local_zone\\n", encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("tow.zz_probe", source)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    assert module.local_zone is tow.clock.local_zone  # the pinned zone, copied
+
+
+def test_after_it():
+    assert sys.modules["tow.zz_probe"].local_zone.__qualname__ == "local_zone"  # the real one again
+""",
+    )
+    result.assert_outcomes(passed=2, errors=1)
+    result.stdout.fnmatch_lines(["*copied at import kept this test's replacement: tow.zz_probe.local_zone*"])
+
+
 def test_read_only_task_query_is_stubbed(nested):
     result = nested(
         """
