@@ -5,6 +5,7 @@ ownership and relocation checks too."""
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -131,19 +132,24 @@ def _active_revision_overlap(client: TorrentClientAdapter, old_hash: str, new_fi
             continue
         raw_actual = str(row.get("name") or "")
         actual = windows_path_key(raw_actual)
-        # A client that could not decode a legacy (non-UTF-8) name shows it as `_`/`?`/U+FFFD;
-        # such a name cannot be compared, so fail closed. Readable names compare exactly.
-        actual_lost_text = "�" in raw_actual or not any(ord(ch) > 127 for ch in raw_actual)
         for path in wanted:
-            if actual == path or actual.endswith("/" + path):
-                return raw_actual or path
-            if (
-                actual_lost_text
-                and any(ord(character) > 127 for character in path)
-                and len(actual.split("/")) in {len(path.split("/")), len(path.split("/")) + 1}
-            ):
+            if actual == path or actual.endswith("/" + path) or _lost_text_of(raw_actual, actual, path):
                 return raw_actual or path
     return ""
+
+
+def _lost_text_of(raw_actual: str, actual: str, path: str) -> bool:
+    """``actual`` may be ``path`` as a client shows a legacy (non-UTF-8) name it could not decode:
+    such a name cannot be compared, so it fails closed. That is a name with U+FFFD at the same
+    depth, or ``path`` itself with each non-ASCII character shown as ``?``/``_``/U+FFFD (under the
+    torrent's own folder or not). A readable name - plain ASCII included - compares exactly: an
+    ASCII file of the old version does not overlap a Cyrillic one of the new."""
+    if not any(ord(character) > 127 for character in path):
+        return False
+    if "�" in raw_actual and len(actual.split("/")) in {len(path.split("/")), len(path.split("/")) + 1}:
+        return True
+    shown = "".join("[?_�]{1,4}" if ord(character) > 127 else re.escape(character) for character in path)
+    return re.fullmatch(f"(?:[^/]*/)?{shown}", actual) is not None
 
 
 def _conflicting_topic_claim(

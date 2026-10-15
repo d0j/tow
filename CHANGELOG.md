@@ -207,6 +207,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   the site's other topics stop asking for a sign-in, and a password the site refused is put back.
 - The first check of a newly added topic that had to wait for another check says "topic added; ..." as one
   checked at once does, and its failure is logged and sent to the messengers as well.
+- A new version with Cyrillic file names (Russian subtitles, a renamed series) is no longer refused with "the
+  previous version is still active" because the running old version has plain Latin file names; only a name the
+  client shows garbled is still taken for a possible overlap.
 
 ## [1.31.2] — 2026-10-15
 
