@@ -191,7 +191,7 @@
   {%- set tracker_tone, tracker_label = topic.tracker_tone, topic.tracker_label %}
   {%- set ds = topic.download_summary or {} %}
   {%- set pause_label = t('home.topic.resume') if topic.paused else t('home.topic.pause') %}
-  <div class="row-wrap{% if topic.paused %} is-paused{% endif %}" id="row-{{ topic.id }}" data-tracker="{{ topic.tracker }}" data-name="{{ topic.series|lower }}" data-event="{{ topic.last_event_iso or '' }}" data-q="{{ [topic.title, topic.tracker_title, topic.tracker, topic.url, topic.save_path] | select | map('lower') | unique | join(' ') }}">
+  <div class="row-wrap{% if topic.paused %} is-paused{% endif %}" id="row-{{ topic.id }}" data-subject="{{ topic_subject(topic.name) }}" data-tracker="{{ topic.tracker }}" data-name="{{ topic.series|lower }}" data-event="{{ topic.last_event_iso or '' }}" data-q="{{ [topic.title, topic.tracker_title, topic.tracker, topic.url, topic.save_path] | select | map('lower') | unique | join(' ') }}">
   {#- A "Needs attention" link opens its topic (?open=<id>): the row comes open with its panel
       drawn here (no script needed), the full error shown and the fix focused (fix_attrs). -#}
   {%- set landing = landing_topic and topic.id|string == landing_topic %}

@@ -83,6 +83,11 @@ export class FakeElement {
   set name(value) { this.attributes.name = String(value); }
   get value() { return this.attributes.value || ""; }
   set value(value) { this.attributes.value = String(value); }
+  get method() { return this.attributes.method || ""; }
+  get action() { return this.attributes.action || ""; }
+  get disabled() { return "disabled" in this.attributes; }
+  set disabled(value) { if (value) this.attributes.disabled = ""; else delete this.attributes.disabled; }
+  getClientRects() { return [this.rect]; }
   get firstChild() { return this.children[0] || null; }
   get textContent() { return this.text + this.children.map((child) => (typeof child === "string" ? child : child.textContent)).join(""); }
   set textContent(value) { this.children.forEach((child) => { if (child instanceof FakeElement) child.parent = null; }); this.children = []; this.text = String(value); }

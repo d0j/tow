@@ -1294,7 +1294,10 @@
       "kind_ok": "Done",
       "kind_info": "Note",
       "kind_warn": "Warning",
-      "kind_err": "Error"
+      "kind_err": "Error",
+      "unconfirmed": "could not confirm the result: the answer did not arrive, and it may have been done. Reload the page to see before you try again",
+      "reload": "Reload the page",
+      "open_page": "Open as a page"
     }
   },
   "locations": {

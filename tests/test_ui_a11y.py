@@ -238,18 +238,19 @@ def test_an_actions_message_is_announced_and_stays_while_in_use(client):
 def test_a_theme_choice_is_saved_in_the_background_without_a_reload(client):
     """A6: arrow keys move between the theme options and every move submitted the form: the page
     reloaded at each step and the focus was lost (WCAG 3.2.2). The choice is applied at once and
-    saved with fetch; the pill names it and a hidden status says it was saved."""
+    saved with fetch; the pill names it and a message says it was saved (messages.js: said once,
+    in the page's live region; quick moves update one message)."""
     from tow.config import load_config
 
     page = client.get("/settings").text
     theme = page[page.index('id="acc-theme"') : page.index('id="acc-clients"')]
-    assert '<span class="sr-only" data-theme-status role="status"></span>' in theme
+    assert "data-theme-status" not in theme  # its outcome is a message like any other
     assert '<noscript><div class="settings-actions"><button type="submit">' in theme  # without scripts: Save
     block = JS[JS.index("// Settings → Theme:") : JS.index('window.addEventListener("beforeunload"')]
     assert "requestSubmit" not in block
     assert '"X-TOW-Fetch": "1"' in block
     assert "keepalive: true" in block
-    assert 'status.textContent = t("js.settings.theme_saved"' in block
+    assert 'showMessage({ id: "theme-saved", kind: "ok", text: t("js.settings.theme_saved"' in block
     assert "pill.textContent = label;" in block
     # What the background save gets: JSON, not a page to open; the choice is saved.
     saved = client.post("/settings/theme", data={"theme": "dark"}, headers={"X-TOW-Fetch": "1"})
@@ -283,7 +284,7 @@ def test_a_theme_save_that_failed_is_not_announced_as_saved(client, monkeypatch,
     saved = client.post("/settings/theme", data={"theme": "light"}, headers={"X-TOW-Fetch": "1"})
     assert saved.json()["flash"]["kind"] == "ok"
     block = JS[JS.index("// Settings → Theme:") : JS.index('window.addEventListener("beforeunload"')]
-    refusal = block.index('if (data.flash && data.flash.kind !== "ok") throw new Error(')
+    refusal = block.index('if (data.flash && data.flash.kind !== "ok") showMessage(data.flash);')
     assert refusal < block.index('t("js.settings.theme_saved"')
 
 
