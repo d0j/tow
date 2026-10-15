@@ -970,6 +970,52 @@ def test_space_wait_start_can_defer_verification_without_false_disk_error(world,
     assert "updated" in sent
 
 
+@pytest.mark.parametrize("drift", ["selection", "folder"])
+def test_drift_during_a_space_wait_start_is_stopped_and_stays_red(world, monkeypatch, drift):
+    client, _tracker, _sent = world
+    folder = load_state()["topics"][0]["save_path"]
+    full = space.Shortfall(needed=1024**3, free=0, path=folder)
+    monkeypatch.setattr(apply_step, "free_space_problem", lambda *args, **kwargs: full)
+    assert _run()["status"] == "waiting_space"
+    monkeypatch.setattr(space, "_measured", lambda *args, **kwargs: (True, None))
+    start = client._start
+
+    def drifting(infohash):
+        start(infohash)
+        if drift == "selection":
+            client.torrents[H]["files"][0]["priority"] = 1 - client.torrents[H]["files"][0]["priority"]
+        else:
+            client.torrents[H]["save_path"] = "E:/elsewhere"
+
+    monkeypatch.setattr(client, "_start", drifting)
+    client.calls.clear()
+    row = _run(space_only=True)
+    topic = load_state()["topics"][0]
+    assert row["status"] == "failed"
+    assert client.calls[-1] == ("stop",)  # stopped, never left downloading
+    assert not topic.get("waiting_space")
+    pending = topic["verification_pending"]
+    assert pending["blocked"]
+    assert pending["hash"] == H
+    assert topic["last_error"]
+    monkeypatch.setattr(client, "_start", start)
+    client.calls.clear()
+    for scope in ({}, {"space_only": True}, {"progress_only": True}):
+        check.run_check(apply=True, notify=False, how="test", **scope)
+        topic = load_state()["topics"][0]
+        assert topic["last_error"]  # never green
+        assert not topic["last_ok"]
+    assert "start" not in [call[0] for call in client.calls]  # never started again by itself
+    if drift == "selection":
+        monkeypatch.setattr(apply_step, "free_space_problem", lambda *args, **kwargs: None)
+        client.checking = False
+        row = check.run_check(apply=True, notify=False, how="manual", ids=["slow"])["results"][0]
+        assert row["ok"]
+        assert client.torrents[H]["state"] == "downloading"
+        assert client.wanted_torrent_indices() == {E01}
+        assert "verification_pending" not in load_state()["topics"][0]
+
+
 @pytest.mark.parametrize("change", ["paused", "selection_dirty", "selection", "save_path", "client_id"])
 def test_owner_changes_prevent_background_confirmation(world, change):
     client, tracker, _sent = world

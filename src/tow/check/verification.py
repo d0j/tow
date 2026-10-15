@@ -135,10 +135,65 @@ def defer_start(
         _defer_start(
             topic, run, row, client, h=h, client_id=client_id, destination=destination, before=before, kind=kind
         )
-    except Exception:
+    except Exception as error:
         _stop_rejected(client, h)
-        topic.pop("waiting_space", None)  # a refused selection must not trigger a start/stop loop
+        _block_start_handover(topic, error, h=h, client_id=client_id, destination=destination, before=before, kind=kind)
+        topic.pop("waiting_space", None)  # never an automatically runnable wait again: no start/stop loop
         raise
+
+
+def _start_receipt(h: str, before: dict[str, Any]) -> dict[str, Any] | None:
+    """The receipt of the selection validated before the start (None: it cannot be built)."""
+    rows = list(before.get("files") or [])
+    try:
+        priorities = files.priorities(rows, fail=lambda: TowError("check.selection_unconfirmed"))
+    except TowError:
+        return None
+    wanted = {index for index, priority in priorities.items() if priority > 0}
+    if not rows or not wanted:
+        return None
+    return {
+        "hash": h,
+        "wanted": sorted(wanted),
+        "ignored": [],
+        "files": [{key: item.get(key) for key in ("index", "name", "size", "priority")} for item in rows],
+    }
+
+
+def _block_start_handover(
+    topic: Topic,
+    error: Exception,
+    *,
+    h: str,
+    client_id: str,
+    destination: str,
+    before: dict[str, Any],
+    kind: str,
+) -> None:
+    """The start of a torrent that waited for disk space failed its validation (D5g): the
+    handover stays on record, bound to its hash, client, owner settings, folder and the selection
+    validated before the start, blocked with the original failure. No pass finishes or restarts
+    it (``repair_only``): a check started by hand reconstructs the evidence."""
+    code = getattr(error, "code", None)
+    record: dict[str, Any] = {
+        "hash": h,
+        "client": client_id,
+        "path": destination,
+        "owner": list(client_marks(topic)),
+        "since": _stamp(),
+        "kind": kind,
+        "selection_update": False,
+        "completion_event": "client_started",
+        "resume_after_check": True,
+        "repair_only": True,
+        "blocked": str(code) if isinstance(code, str) and code else "check.start_unconfirmed",
+        "blocked_params": (error_fields(error).get("error_params") or {}) if code else {},
+    }
+    if (receipt := _start_receipt(h, before)) is not None:
+        record["receipt"] = receipt
+    topic["verification_pending"] = record
+    if topic.get("tracking_mode") == "once":
+        topic["once_done"] = False  # not done: a one-time topic is checked again until it is
 
 
 def _defer_start(
@@ -157,16 +212,14 @@ def _defer_start(
     after = client.inspect_torrent(h)
     if not info_confirms(after, h, destination, require_tow_ownership=True):
         raise TowError("check.start_unconfirmed")
-    rows = list(before.get("files") or [])
-    wanted = {
-        index
-        for index, priority in files.priorities(rows, fail=lambda: TowError("check.selection_unconfirmed")).items()
-        if priority > 0
-    }
-    if not rows or not wanted:
+    receipt = _start_receipt(h, before)
+    if receipt is None:
         raise TowError("check.selection_unconfirmed")
     files.verify_selection(
-        rows, list((after or {}).get("files") or []), wanted, fail=lambda: TowError("check.selection_unconfirmed")
+        receipt["files"],
+        list((after or {}).get("files") or []),
+        set(receipt["wanted"]),
+        fail=lambda: TowError("check.selection_unconfirmed"),
     )
     topic["verification_pending"] = {
         "hash": h,
@@ -178,12 +231,7 @@ def _defer_start(
         "selection_update": False,
         "completion_event": "client_started",
         "resume_after_check": True,
-        "receipt": {
-            "hash": h,
-            "wanted": sorted(wanted),
-            "ignored": [],
-            "files": [{key: item.get(key) for key in ("index", "name", "size", "priority")} for item in rows],
-        },
+        "receipt": receipt,
     }
     if topic.get("tracking_mode") == "once":
         topic["once_done"] = False
@@ -343,7 +391,9 @@ def _confirm(
     if client is None:
         raise client_unreachable(run, client_id)
     info = client.inspect_torrent(h)
-    if run.readd_removed and (info is None or str(waiting.get("blocked") or "") in OWNER_REPAIR_CODES):
+    if run.readd_removed and (
+        info is None or str(waiting.get("blocked") or "") in OWNER_REPAIR_CODES or waiting.get("repair_only")
+    ):
         return False  # only the owner's explicit row check may re-add or repair altered evidence
     _observe_presence(waiting, info)  # never re-added here: a confirmed absence blocks the receipt
     # Retry a dropped start once, only for an unfinished TOW add; a later explicit check

@@ -132,6 +132,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A torrent whose handover the client failed no longer makes every check download its .torrent again: the site is
   asked whether that version is still current (its revision page or the topic page's magnet link), and a site with a
   daily download limit that cannot say so is left alone until you check the topic by hand.
+- A torrent that waited for disk space and whose file selection or folder changed while TOW started it is stopped
+  and keeps a red error until you check the topic by hand; later checks no longer show it green while it stays
+  stopped.
 
 ## [1.30.10] — 2026-10-15
 
