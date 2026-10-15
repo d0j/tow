@@ -96,6 +96,41 @@ def raises_code(code: str, kind: type[BaseException] = Exception) -> Iterator[An
     assert getattr(caught.value, "code", None) == code, (code, caught.value)
 
 
+def finish_handover(
+    client: Any, infohash: str, destination: str, pending: Any, *, seconds: float, pause: float = 0.5
+) -> dict[str, Any]:
+    """What TOW's next passes (``tow.check.verification``) do with an add its adapter handed over
+    while the client checked the data it found (``pending``, a ``ClientVerificationPending``):
+    the same finalization, ``finish_verification``, until the client is done - a pass while it
+    still checks changes nothing - with the one start only for TOW's own stopped, unfinished add.
+    Bounded: fails after ``seconds`` with what the client last showed. Returns the read-back."""
+    import time
+
+    from tow.clients.managed import AWAITING_INITIAL_CHECK, ClientVerificationPending
+
+    receipt = dict(pending.receipt or {})
+    attempted = {"start": False}
+    deadline = time.monotonic() + seconds
+    while True:
+        info = client.inspect_torrent(infohash) or {}
+        marks = {str(tag).strip().casefold() for tag in info.get("tags") or []}
+        stopped = str(info.get("state") or "").casefold().startswith(("stopped", "paused"))
+        try:
+            return client.finish_verification(
+                infohash,
+                destination,
+                receipt,
+                start_stopped=stopped and "tow-pending" in marks and not attempted["start"],
+                on_start=lambda: attempted.__setitem__("start", True),
+            )
+        except ClientVerificationPending as again:
+            if again.receipt and receipt.get("phase") == AWAITING_INITIAL_CHECK and "phase" not in again.receipt:
+                receipt = dict(again.receipt)  # applied and read back: the receipt from now on
+        if time.monotonic() > deadline:
+            raise AssertionError(f"the client's check of {infohash} did not end within {seconds} s: {info!r}")
+        time.sleep(pause)
+
+
 @contextmanager
 def reaped(*processes: Any, timeout: float = 10) -> Iterator[None]:
     """Child processes never outlive the test, even when an assertion fails mid-way.
