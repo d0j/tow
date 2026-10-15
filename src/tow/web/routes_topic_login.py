@@ -19,7 +19,8 @@ from tow.mirrors import origin_key
 from tow.records import CheckRow
 from tow.store import CheckBusyError, SecretStoreError
 from tow.trackers import GenericHttpTracker, load_trackers, match_tracker
-from tow.web import services
+from tow.web import check_jobs, services
+from tow.web.check_actions import enqueue_check
 from tow.web.site_store import restore_unverified_password, save_tracker_login
 from tow.web.text import t
 from tow.web.views import home_redirect, row_class, topic_check_row
@@ -76,10 +77,14 @@ def topics_tracker_login(tid: str, username: str = Form(""), password: str = For
         return home_redirect("web.topics.login_not_saved", "err", credential_topic=tid)
     old_entry = copy.deepcopy((old_secrets.get("trackers") or {}).get(tracker.name))
     services.log_event("site_login", tracker=tracker.name, status="saved", how="manual")
+    # Another applying check runs or waits: the check that confirms the sign-in waits in the
+    # queue (its result asks for the sign-in again when the site still refuses it).
+    if check_jobs.has_pending(apply=True):
+        return enqueue_check(topic_id=str(tid), apply=True)
     try:
         out = services.run_check(apply=True, notify=True, ids=[str(tid)], ignore_cool=True, how="manual", wait=False)
     except CheckBusyError:
-        return home_redirect("web.topics.login_check_busy", "warn")
+        return enqueue_check(topic_id=str(tid), apply=True)
     except SecretStoreError as exc:
         services.record_check_failure(exc, how="manual")
         try:

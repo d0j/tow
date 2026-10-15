@@ -70,7 +70,9 @@ def test_a_manual_check_does_not_wait_for_a_running_check(monkeypatch):
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
     release, held = threading.Event(), threading.Event()
     holder = _hold_check_lock(release, held)
-    monkeypatch.setattr("tow.check.run._run_check", lambda **_kw: {"results": [{"id": "t", "ok": True}]})
+    monkeypatch.setattr(
+        "tow.check.run._run_check", lambda **kw: {"results": [{"id": kw["ids"][0], "ok": True, "added": True}]}
+    )
     try:
         response = client.post("/topics/t/check", follow_redirects=False)
         assert held.is_set(), "the request only answered after the other check ended"
@@ -82,13 +84,15 @@ def test_a_manual_check_does_not_wait_for_a_running_check(monkeypatch):
             follow_redirects=False,
         )
         assert held.is_set()
-        assert "раздача сохранена; сейчас идёт другая проверка" in shown(added.headers["location"])
         assert len(load_state()["topics"]) == 2  # the new watch is saved all the same
     finally:
         release.set()
         holder.join()
     job = parse_qs(urlsplit(response.headers["location"]).query)["check_job"][0]
+    # Its first check waited in the queue too - not "press Check in a minute".
+    first = parse_qs(urlsplit(added.headers["location"]).query)["check_job"][0]
     assert wait_for_check_job(client, job)["status"] == "done"
+    assert wait_for_check_job(client, first)["status"] == "done"
 
 
 def test_check_lock_without_waiting_refuses_a_held_lock_across_handles():

@@ -2472,9 +2472,7 @@
       "replace_failed": "the previous torrent was not stopped: {error}",
       "adopt_failed": "the torrent was not adopted into TOW: {error}",
       "not_owned": "torrent client: the torrent has no tow tag — TOW does not touch it",
-      "move_back_unconfirmed": "torrent client: the check after the move did not confirm that the folder is back",
-      "added_check_busy": "topic saved; another check is running right now, so this one was not checked yet — press “Check” in a minute or wait for the next scheduled check",
-      "login_check_busy": "sign-in saved but not confirmed yet: another check is running right now — press “Check” on the topic in a minute"
+      "move_back_unconfirmed": "torrent client: the check after the move did not confirm that the folder is back"
     },
     "backup": {
       "unknown_folder": "unknown folder",

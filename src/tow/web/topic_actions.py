@@ -36,7 +36,8 @@ from tow.topic_form import (
 from tow.topic_timers import parse_interval, set_interval
 from tow.torrent import TorrentMetadata, parse_torrent_metadata
 from tow.trackers import GenericHttpTracker, load_trackers, match_tracker
-from tow.web import services
+from tow.web import check_jobs, services
+from tow.web.check_actions import enqueue_check
 from tow.web.text import t
 from tow.web.views import add_refused_redirect, flash_redirect, manual_check_flash, topic_check_row
 
@@ -182,7 +183,9 @@ def _save_new_topic(new: dict[str, Any]) -> None:
 
 def _first_check(new: dict[str, Any], tracker: GenericHttpTracker) -> RedirectResponse:
     """The new topic's first check, and what Home says about it: the topic stays saved whatever
-    the check found."""
+    the check found. Another applying check runs or waits: the first check waits in the queue."""
+    if check_jobs.has_pending(apply=True):
+        return enqueue_check(topic_id=new["id"], apply=True)
     try:
         out = services.run_check(apply=True, notify=True, ids=[new["id"]], ignore_cool=True, how="manual", wait=False)
         row = topic_check_row(new["id"], out)
@@ -200,7 +203,7 @@ def _first_check(new: dict[str, Any], tracker: GenericHttpTracker) -> RedirectRe
                 return refused
     except CheckBusyError:
         # Waiting here held this request - and every page behind it - for the whole other check.
-        return flash_redirect("/", "web.topics.added_check_busy", "warn")
+        return enqueue_check(topic_id=new["id"], apply=True)
     except SecretStoreError as e:
         services.record_check_failure(e, how="manual")
         services.log_event(
