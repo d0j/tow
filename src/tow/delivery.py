@@ -9,7 +9,8 @@ once: a TOW stopped between a messenger's answer and the queue's write repeats t
 
 - Grouping: when one tracker fails the same way for several topics in one run, the
   owner gets one message for the tracker instead of one per topic.
-- Links: a topic message carries the topic URL.
+- Links: a topic message carries the topic URL, a message about several topics of one site the
+  site's address.
 - Quiet hours (``quiet_hours: "23-8"`` in config.yaml): messages are queued in
   state.json and sent together by the first run after the quiet hours end.
 - Daily digest (``daily_digest_hour: 9``): the first run after that hour each day
@@ -24,6 +25,7 @@ import uuid
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 from typing import Any, Protocol
+from urllib.parse import urlsplit
 
 from tow import i18n
 from tow.clock import local_zone
@@ -55,6 +57,13 @@ def quiet_now(cfg: dict[str, Any], now: datetime | None = None) -> bool:
     if start == end:
         return False
     return start <= hour < end if start < end else (hour >= start or hour < end)
+
+
+def _site_link(topic_url: str) -> str:
+    """The site of a topic link (its scheme and host): a message about several topics of one site
+    links the site, not the first topic as if it alone were affected."""
+    parts = urlsplit(topic_url)
+    return f"{parts.scheme}://{parts.netloc}/" if parts.scheme in {"http", "https"} and parts.netloc else ""
 
 
 def compose(items: Iterable[PendingNotification]) -> list[tuple[str, str, Topic | None]]:
@@ -93,9 +102,8 @@ def compose(items: Iterable[PendingNotification]) -> list[tuple[str, str, Topic 
                 n=len(members),
                 topics=listed,
             )
-        url = str(members[0].topic.get("url") or "")
-        if url:
-            text += "\n" + url
+        if site := _site_link(str(members[0].topic.get("url") or "")):
+            text += "\n" + site
         messages.append((text, members[0].operation_id, None))
     for item in items:
         if id(item) in grouped:

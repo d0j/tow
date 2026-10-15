@@ -47,6 +47,28 @@ def test_one_message_for_a_tracker_failing_for_several_topics():
     assert sent[1].endswith("\nhttps://nnmclub.to/forum/viewtopic.php?t=x")
 
 
+@pytest.mark.parametrize("kind", ["error", "recovered"])
+def test_a_site_message_links_the_site_not_one_of_its_topics(kind):
+    # One message for several topics linked the first topic's page, as if it alone were affected.
+    sent, send = _sender()
+    items = [
+        PendingNotification(
+            kind,
+            f"op-{n}",
+            {"id": str(n), "title": f"Show {n}", "url": f"https://site-a.example/topic?t={n}"},
+            "site-a",
+            "site-a: all hosts failed: http 503" if kind == "error" else "",
+        )
+        for n in range(3)
+    ]
+
+    delivery.deliver(items, cfg={}, send=send)
+
+    (text,) = sent
+    assert text.endswith("\nhttps://site-a.example/")
+    assert "topic?t=" not in text
+
+
 def test_topic_messages_carry_the_link_but_client_messages_do_not():
     sent, send = _sender()
     topic = {"id": "t", "title": "Show", "url": "http://rutor.info/torrent/1"}
