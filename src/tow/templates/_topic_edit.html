@@ -4,18 +4,18 @@
 <div class="edit-panel" data-edit-loaded>
   {#- The panel's top line: when it last worked, and the topic on its site. -#}
   {% if topic.last_ok_at or topic.search_href %}<p class="sub panel-top">
-    {%- if topic.last_ok_at %}{{ tm('home.topic.last_ok', at=(short_time(topic.last_ok_iso) if short_time is defined and topic.last_ok_iso else topic.last_ok_at)) }}{% endif %}
+    {%- if topic.last_ok_at %}{{ tm('home.topic.last_ok', at=topic.last_ok_raw|short_time) }}{% endif %}
     {%- if topic.search_href %}{% if topic.last_ok_at %} · {% endif %}<a href="{{ topic.search_href }}" target="_blank" rel="noopener">{{ t('home.topic.search_on', site=site_title(topic.tracker)) }}</a>{% if topic.next_season_href %} · <a href="{{ topic.next_season_href }}" target="_blank" rel="noopener">{{ t('home.topic.next_season') }}</a>{% endif %}{% endif %}</p>{% endif %}
   {% set error_words = topic.last_error_human or topic.last_error %}
   {#- D6: the row says it short, the open panel in full - one note in the row's colour (AGENTS.md). -#}
-  {% set error_at = (short_time(topic.last_check_iso) if short_time is defined and topic.last_check_iso else topic.last_check) %}
+  {% set error_at = topic.last_check_raw|short_time %}
   {% if topic.last_error %}{{ note(tm('home.topic.last_error_at', at=error_at, error=error_words) if topic.last_check else t('home.topic.last_error', error=error_words), 'warn' if topic.torrent_tone == 'warn' else 'bad') }}
   {%- if topic.last_error_details or error_words != topic.last_error %}<details class="technical-details raw-error"><summary>{{ t('common.details') }}</summary><code>{{ topic.last_error_details or topic.last_error }}</code></details>{% endif %}
   {#- The next step of a failure that has one elsewhere: the site's row (all mirrors paused), the
       torrent client's settings. -#}
   {%- if topic.last_error_class == 'frozen' and topic.tracker %}<p class="sub"><a href="/sites?open={{ topic.tracker|urlencode }}#site-row-{{ topic.tracker|urlencode }}">{{ t('home.topic.open_site', site=site_title(topic.tracker)) }}</a></p>
   {%- elif topic.last_error_class == 'qbit' %}<p class="sub"><a href="/settings?open=clients">{{ t('home.topic.client_settings') }}</a></p>{% endif %}{% endif %}
-  {% if topic.site_retry_at %}<p class="sub">{{ t('site_access.retry_at', at=topic.site_retry_at) }}</p>{% endif %}
+  {% if topic.site_retry_at %}<p class="sub">{{ tm('site_access.retry_at', at=topic.site_retry_raw|short_time) }}</p>{% endif %}
   {% if topic.torrent_tone == 'warn' and topic.last_error and topic.last_error_class != 'frozen' %}<form method="post" action="/topics/{{ topic.id|urlencode }}/check"><button type="submit" data-busy-label="{{ t('common.busy.checking') }}"{{ fix_attrs('check_topic', topic.id) }}>{{ t('site_access.retry_check') }}</button></form>{% endif %}
   {% if topic.sign_in_href %}<p><a class="btn" href="{{ topic.sign_in_href }}"{{ fix_attrs('sign_in', topic.id) }}>{{ t('home.topic.sign_in') }}</a></p>{% endif %}
   {% if topic.replaces_revision %}

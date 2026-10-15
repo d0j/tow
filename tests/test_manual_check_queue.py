@@ -684,10 +684,10 @@ def test_the_following_page_of_a_finished_check_says_it_finished(client, monkeyp
 def test_a_result_is_dated_when_its_check_ended_not_when_it_was_asked_for(client, monkeypatch, consumers, clock):
     from datetime import UTC, datetime
 
-    from tow.clock import format_ui_timestamp
+    from tow.web.text import short_time
 
-    def at(seconds):
-        return format_ui_timestamp(datetime.fromtimestamp(seconds, UTC).isoformat())
+    def at(seconds):  # the one time rule (1.32): the short form shown, the full time its tooltip
+        return short_time(datetime.fromtimestamp(seconds, UTC)).striptags()
 
     asked = clock.wall
 

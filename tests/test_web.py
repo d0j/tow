@@ -445,7 +445,11 @@ def test_home_uses_canonical_episode_progress_and_separates_event_time():
     assert "Сериал Г" in home
     assert "22/24" in home
     assert "43/24" not in home
-    assert 'S04E22</b> <small class="mut event-at">13.09.2026 19:05:25 IDT UTC+03:00</small>' in home
+    from tow.web.text import short_time
+
+    # The event's time by the one time rule (1.32): short, the full time its tooltip.
+    assert f'S04E22</b> <small class="mut event-at">{short_time("2026-09-13T19:05:25+03:00")}</small>' in home
+    assert 'title="13.09.2026 19:05:25' in home
     assert "[04x01-22 из 24]" in home
     details = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/topics/mr-16/downloads.json")
     assert details.status_code == 200
