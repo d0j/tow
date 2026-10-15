@@ -85,6 +85,42 @@ def uptime() -> tuple[float, float] | None:
     return since_boot, awake
 
 
+# GetCompressedFileSizeW returns this low DWORD on failure, and for some large files as well.
+_INVALID_FILE_SIZE = 0xFFFFFFFF
+
+
+def file_allocation(low: int, high: int, last_error: int) -> int | None:
+    """GetCompressedFileSizeW's answer as one number of bytes: both DWORDs combined. A low DWORD
+    of all ones is a failure only when the call set an error (a file of 4 GiB - 1 bytes, or that
+    plus any multiple of 4 GiB, legitimately has it); None then."""
+    if low == _INVALID_FILE_SIZE and last_error != 0:
+        return None
+    return (high << 32) | low
+
+
+def compressed_file_size(path: Path) -> int | None:
+    """Bytes ``path`` takes on disk as NTFS says it (GetCompressedFileSizeW): the allocated
+    ranges of a sparse file, the compressed size of a compressed one, else its size. None when
+    the call fails or the system has no such call."""
+    # A library that keeps the call's last error (windll does not): Windows only.
+    library = getattr(ctypes, "WinDLL", None)
+    set_error, get_error = getattr(ctypes, "set_last_error", None), getattr(ctypes, "get_last_error", None)
+    if library is None or set_error is None or get_error is None:
+        return None
+    try:
+        from ctypes import wintypes
+
+        call = library("kernel32", use_last_error=True).GetCompressedFileSizeW
+        call.argtypes = (wintypes.LPCWSTR, ctypes.POINTER(wintypes.DWORD))
+        call.restype = wintypes.DWORD
+        high = wintypes.DWORD(0)
+        set_error(0)
+        low = int(call(str(path), ctypes.byref(high)))
+        return file_allocation(low, int(high.value), int(get_error()))
+    except AttributeError, OSError, ValueError:
+        return None
+
+
 def ui_language() -> str | None:
     """The language of this user's Windows display ("ru-RU"), or None."""
     try:
@@ -829,6 +865,9 @@ class WindowsBackend:
 
     def make_private(self, path: Path, *, created: bool = False) -> bool:
         return make_private(path, created=created)
+
+    def allocated_bytes(self, path: Path) -> int | None:
+        return compressed_file_size(path)
 
     def elevated(self) -> bool:
         return elevated()

@@ -93,12 +93,9 @@ def _on_disk(candidates: Iterable[Path], size: int) -> int:
     """How many bytes one candidate already reserves; sparse logical length is no proof."""
     allocated = 0
     for candidate in candidates:
-        try:
-            known = platform.allocated_file_bytes(candidate.lstat())
-            if known is not None:
-                allocated = max(allocated, min(known, size))
-        except OSError, ValueError:
-            continue
+        known = platform.allocated_file_bytes(candidate)
+        if known is not None:
+            allocated = max(allocated, min(known, size))
     return allocated
 
 
