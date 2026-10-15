@@ -18,6 +18,7 @@ from tow.web.views import (
     add_draft,
     check_job_message,
     check_progress,
+    check_result_flash,
     credential_prompt,
     first_run,
     request_flash,
@@ -72,6 +73,9 @@ def index(request: Request) -> Response:
     result = check_jobs.get(result_id) if result_id else None
     active_id = str(request.query_params.get("check_job") or "")
     active = check_jobs.get(active_id) if active_id else None
+    # A topic's check says on its result's page what a check at once says on Home; the result
+    # itself does not repeat it.
+    said = check_result_flash(result) if result else None
     return TEMPLATES.TemplateResponse(
         request,
         "index.html",
@@ -84,10 +88,10 @@ def index(request: Request) -> Response:
             "default_client_id": default_client_id(cfg),
             "credential_prompt": credential_prompt(request),
             "add_draft": add_draft(request),
-            "flash": request_flash(request),
+            "flash": request_flash(request) or said,
             "check_result": result,
             "check_result_at": ui_time(datetime.fromtimestamp(result["started_at"], UTC).isoformat()) if result else "",
-            "check_result_message": check_job_message(result) if result else "",
+            "check_result_message": check_job_message(result) if result and not said else "",
             "check_result_requested": bool(result_id),
             "check_activity": active,
             "check_activity_text": check_progress(active)

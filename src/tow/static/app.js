@@ -220,11 +220,15 @@ if (checkJob) {
         if (cancel) cancel.hidden = data.status !== "queued";
       }
       if (data.status === "done" || data.status === "failed") {
-        // The server keeps the result and gives an address with its token: no text in the URL.
-        const next = new URL(resultPending ? `/?check_result=${encodeURIComponent(checkJob)}#check-result` : data.redirect || "/", location.href);
+        // The result's own address (the server shows it from the job): it takes this page's
+        // place, so Back does not return to a page that follows a finished check. The same
+        // address but for its #fragment would only scroll: that page is loaded again.
+        const next = new URL(data.redirect || `/?check_result=${encodeURIComponent(checkJob)}#check-result`, location.href);
+        const here = new URL(location.href);
         const checkForm = document.querySelector?.('header.app form[action="/check"]');
         if (checkForm?.contains(document.activeElement)) rememberFocus(checkForm, next);
-        window.location.assign(next);
+        if (next.pathname === here.pathname && next.search === here.search) window.location.reload();
+        else window.location.replace(next);
         return;
       }
       if (data.status !== "running" && data.status !== "queued") {

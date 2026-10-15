@@ -15,6 +15,7 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
 from helpers import flash_kind, flash_of, open_network, wait_for_check_job
 
@@ -1100,10 +1101,13 @@ def test_a_torrent_waiting_for_disk_space_is_not_called_a_failed_check(monkeypat
 
 
 def _wait_job(client, response) -> dict:
-    """The job's end as the page sees it; its message also waits on the server for Home."""
-    body = wait_for_check_job(client, _query(response)["check_job"])
+    """The job's end as the page sees it; its result's own page says its message too."""
+    job = _query(response)["check_job"]
+    body = wait_for_check_job(client, job)
     redirect = body.pop("redirect")
-    assert flash_of(redirect) == body["flash"]
+    assert redirect == f"/?check_result={job}#check-result"
+    result = BeautifulSoup(client.get(redirect).text, "html.parser").select_one("#check-result")
+    assert body["flash"][1:] in " ".join(result.stripped_strings)  # a sentence there: a capital first letter
     return body
 
 

@@ -122,9 +122,7 @@ def flash_text(message: Any, /, **params: Any) -> str:
     return t(text, **params) if text and i18n.has(text) else text
 
 
-def flash_location(
-    url: str, message: Any, kind: str = "ok", /, *, problem_topic: str = "", result_job: str = "", **params: Any
-) -> str:
+def flash_location(url: str, message: Any, kind: str = "ok", /, *, problem_topic: str = "", **params: Any) -> str:
     """``url`` with ``flash=<token>`` of a message kept on the server (see ``flash_redirect``)."""
     text = flash_text(message, **params)
     if not text:
@@ -132,8 +130,6 @@ def flash_location(
     record = {"text": text, "kind": kind if kind in FLASH_KINDS else "ok"}
     if problem_topic:
         record["problem_topic"] = problem_topic
-    if result_job:
-        record["result_job"] = result_job
     # The undo this action made goes with its message: a check right after a save says
     # "Connected" without an "Undo" that would put the save back.
     if stamped := services.undo_stamped_here():
@@ -418,6 +414,30 @@ def check_progress(job: Mapping[str, Any]) -> str:
     if isinstance(job.get("waiting_since"), (int, float)):
         return t("web.check_all.progress_waiting", at=_epoch_time(job["waiting_since"]))
     return t("web.check_all.progress_queued", position=job.get("position") or 1)
+
+
+def result_location(job: Mapping[str, Any]) -> str:
+    """The one address of a manual check's result, shown from the job whenever it opens (for
+    the job's hour - longer than a message token lives), with the sign-in prompt the check
+    asked for."""
+    feedback = job.get("feedback")
+    credential = feedback.get("credential_topic") if isinstance(feedback, Mapping) else ""
+    query = "check_result=" + quote(str(job["id"]))
+    if credential:
+        query += "&credential_topic=" + quote(str(credential))
+    return f"/?{query}#check-result"
+
+
+def check_result_flash(job: Mapping[str, Any]) -> dict[str, str] | None:
+    """The message a topic's check said (``check_feedback``), shown on its result's page as a
+    check at once shows it; None for a check of every topic (its result says it all)."""
+    feedback = job.get("feedback")
+    if not isinstance(feedback, Mapping) or not feedback.get("text"):
+        return None
+    flash = {"text": str(feedback["text"]), "kind": str(feedback.get("kind") or "ok")}
+    if feedback.get("problem_topic"):
+        flash["problem_topic"] = str(feedback["problem_topic"])
+    return flash
 
 
 def check_job_message(job: Mapping[str, Any]) -> str:

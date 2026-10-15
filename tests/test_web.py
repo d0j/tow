@@ -156,7 +156,10 @@ def test_pages_ok():
     app_js = c.get("/static/app.js")
     assert app_js.status_code == 200
     assert "/health.json" in app_js.text
-    assert "location.reload" not in app_js.text
+    # No page reloads itself, but for one case: a waiting check's result page when the check
+    # has ended (its own address but for the #fragment would only scroll); it does not poll then.
+    assert app_js.text.count("location.reload") == 1
+    assert "next.search === here.search) window.location.reload()" in app_js.text
     assert "app.js?v=" in home
     assert "торрент" in c.get("/").text
     assert 'action="/check"' in c.get("/").text
@@ -2110,8 +2113,9 @@ def test_check_all_runs_in_the_background_and_reports_when_done(monkeypatch):
     status = wait_for_check_job(client, job)
     assert status["status"] == "done"
     assert status["flash"] == "проверка завершена: обновлено 1, с ошибкой 1"
-    assert flash_of(status["redirect"]) == status["flash"]  # Home shows it; the address holds a token
-    assert "проверка завершена" not in status["redirect"]
+    # Its result's own address, no text in it: Home shows the result from the job.
+    assert status["redirect"] == f"/?check_result={job}#check-result"
+    assert "Проверка завершена: обновлено 1, с ошибкой 1" in client.get(status["redirect"]).text
     assert client.get("/check/status?job=other").json() == {"status": "unknown"}
 
 
