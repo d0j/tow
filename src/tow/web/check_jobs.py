@@ -97,11 +97,20 @@ def _consume(perform: Callable[[dict[str, Any]], None]) -> None:
         except Exception:  # noqa: BLE001 - never strand the FIFO if result rendering itself fails
             with LOCK:
                 job["status"] = "failed"
-        with LOCK:
-            if job["status"] not in {"done", "failed"}:
-                job["status"] = "failed"
-            job["finished_at"] = time.monotonic()
-            PENDING.popleft()
+        except BaseException:
+            # The thread ends (SystemExit, KeyboardInterrupt): the head never stays "running",
+            # and the next consumer never runs it - a manual re-add - again.
+            _finish(job)
+            raise
+        _finish(job)
+
+
+def _finish(job: dict[str, Any]) -> None:
+    with LOCK:
+        if job["status"] not in {"done", "failed"}:
+            job["status"] = "failed"
+        job["finished_at"] = time.monotonic()
+        PENDING.remove(job["id"])
 
 
 def get(job_id: str) -> dict[str, Any] | None:
