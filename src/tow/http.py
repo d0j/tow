@@ -344,7 +344,8 @@ def request_limited(
                 raise ResponseTooLargeError(f"response body exceeds {max_bytes} bytes")
         chunks: list[bytes] = []
         size = 0
-        body_deadline = time.monotonic() + MAX_RESPONSE_SECONDS
+        body_started = time.monotonic()
+        body_deadline = body_started + MAX_RESPONSE_SECONDS
         if deadline is not None:
             body_deadline = min(body_deadline, deadline)
         for chunk in _decoded_chunks(
@@ -354,7 +355,9 @@ def request_limited(
             has_body=method != "HEAD" and response.status_code not in {204, 304},
         ):
             if time.monotonic() > body_deadline:
-                raise ResponseTooSlowError(f"response body took longer than {MAX_RESPONSE_SECONDS:.0f} s")
+                # The time it had: a caller's shorter deadline (a recovery's) may have cut it.
+                budget = max(0.0, body_deadline - body_started)
+                raise ResponseTooSlowError(f"response body took longer than {budget:.0f} s")
             size += len(chunk)
             if size > max_bytes:
                 raise ResponseTooLargeError(f"response body exceeds {max_bytes} bytes")
