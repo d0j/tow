@@ -265,9 +265,8 @@ def sites_probe(name: str) -> Response:
     # D3: every mirror answering is ok; a mirror that does not answer is transport trouble -
     # amber (the status-colour contract), as the site's row shows it; no site checked is an error.
     kind = "ok" if probes and answering == len(probes) else "warn" if probes else "err"
-    return flash_redirect(
-        "/sites", "web.sites.probe", kind, site=site_title_of(name), answering=answering, total=len(probes)
-    )
+    # The site is the message's subject ("NNM-Club — 2 of 3 mirrors answer").
+    return flash_redirect("/sites", "web.sites.probe", kind, answering=answering, total=len(probes))
 
 
 @router.post("/sites/{name}/prefer")

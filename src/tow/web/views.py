@@ -122,12 +122,61 @@ def flash_text(message: Any, /, **params: Any) -> str:
     return t(text, **params) if text and i18n.has(text) else text
 
 
-def flash_location(url: str, message: Any, kind: str = "ok", /, *, problem_topic: str = "", **params: Any) -> str:
-    """``url`` with ``flash=<token>`` of a message kept on the server (see ``flash_redirect``)."""
+def use_subject(value: str) -> None:
+    """What this request's messages are about from now on: the topic a route has just added, the
+    client it checks. Topic and site routes get theirs before they change anything
+    (``resolve_subject``)."""
+    _context.use_subject(" ".join(str(value or "").split())[:200])
+
+
+def topic_subject(title: object) -> str:
+    """A topic as a message names it: the short series title ("Harbour Clock", not the whole
+    "Harbour Clock / Часовая гавань [2024]")."""
+    return services.short_series_title(str(title or ""), owner_language()) if str(title or "").strip() else ""
+
+
+def resolve_subject(request: Request) -> None:
+    """The app's dependency for every route: a route of one topic (``/topics/<id>/...``) or one
+    site (``/sites/<name>...``) names it for its messages before it changes anything, so a
+    deleted or renamed one is named as it was. Every other route says no subject."""
+    params = request.path_params
+    path = request.url.path
+    if path.startswith("/topics/") and "tid" in params:
+        tid = str(params["tid"])
+        topic = next((item for item in _context.state().get("topics") or [] if str(item.get("id")) == tid), None)
+        use_subject(topic_subject(shown_title(topic)) if isinstance(topic, dict) else "")
+    elif path.startswith("/sites/") and "name" in params:
+        name = str(params["name"])
+        use_subject(site_title_of(name) if name in (_context.config().get("trackers") or {}) else "")
+
+
+def message_text(record: Mapping[str, Any] | None) -> str:
+    """A message as the page says it: "{subject} — {result}" for one about a topic, a site or a
+    client, the result alone (as a sentence) for a global one; never the subject twice."""
+    record = record or {}
+    text = str(record.get("text") or "").strip()
+    subject = str(record.get("subject") or "").strip()
+    if not subject or text.casefold().startswith(f"{subject} — ".casefold()):
+        return text[:1].upper() + text[1:]
+    return t("web.message.subject_result", subject=subject, result=text)
+
+
+def flash_location(
+    url: str, message: Any, kind: str = "ok", /, *, subject: str | None = None, problem_topic: str = "", **params: Any
+) -> str:
+    """``url`` with ``flash=<token>`` of a message kept on the server (see ``flash_redirect``).
+    ``subject``: what it is about; None takes the request's (``resolve_subject``), "" is none."""
     text = flash_text(message, **params)
     if not text:
         return url
-    record = {"text": text, "kind": kind if kind in FLASH_KINDS else "ok"}
+    record = {
+        # Its identity in the page's message history: not the token, which only this server reads.
+        "id": secrets.token_urlsafe(9),
+        "text": text,
+        "kind": kind if kind in FLASH_KINDS else "ok",
+        "subject": _context.subject() if subject is None else " ".join(subject.split())[:200],
+        "at": str(int(time.time())),
+    }
     if problem_topic:
         record["problem_topic"] = problem_topic
     # The undo this action made goes with its message: a check right after a save says
@@ -141,9 +190,9 @@ def flash_location(url: str, message: Any, kind: str = "ok", /, *, problem_topic
 
 
 def flash_redirect(url: str, message: Any, kind: str = "ok", /, **params: Any) -> RedirectResponse:
-    """A 303 to ``url`` that shows ``message`` once, as ``kind``: ``ok`` (done; it fades),
-    ``warn`` (done in part, or wait and retry; it folds) or ``err`` (nothing done; an alert that
-    stays). The kind comes from the route, never from the words."""
+    """A 303 to ``url`` that shows ``message`` once, as ``kind``: ``ok`` (done), ``warn`` (done
+    in part, or wait and retry) or ``err`` (nothing done). The kind comes from the route, never
+    from the words; ``subject=`` names what it is about (default: the request's)."""
     decoded = unquote(url)
     if (
         not decoded.startswith("/")
@@ -244,7 +293,7 @@ def _feedback(text: str, kind: str = "ok", *, problem_topic: str = "", credentia
 
 def feedback_redirect(feedback: Mapping[str, str]) -> RedirectResponse:
     """Home with what a manual check said (``check_feedback``): its message, and the sign-in
-    prompt when the site asked for one."""
+    prompt when the site asked for one. The message names the request's topic."""
     return home_redirect(
         feedback["text"],
         feedback["kind"],
@@ -254,18 +303,19 @@ def feedback_redirect(feedback: Mapping[str, str]) -> RedirectResponse:
 
 
 def check_feedback(
-    row: CheckRow | None, *, topic_id: str, adopted: bool = False, tracker_name: str = "", topic_title: str = ""
+    row: CheckRow | None, *, topic_id: str, adopted: bool = False, tracker_name: str = ""
 ) -> dict[str, str]:
     """What a manual check of one topic says, as data - ``text``, its ``kind``, the
     ``problem_topic`` it is about and the ``credential_topic`` whose sign-in to ask for ("" for
-    none) - the same for a check run at once and a queued one. ``row``: the topic's result, None
-    for a topic that is gone; ``adopted``: the owner has just adopted its torrent into TOW, which
-    a check that changes nothing else confirms; ``tracker_name``: its site when it signs in."""
+    none) - the same for a check run at once and a queued one. The words never name the topic:
+    the message's subject does. ``row``: the topic's result, None for a topic that is gone;
+    ``adopted``: the owner has just adopted its torrent into TOW, which a check that changes
+    nothing else confirms; ``tracker_name``: its site when it signs in."""
     if row is None:
         return _feedback(t("web.topics.not_found"), "err")
     if row.get("note"):  # its link or client changed meanwhile: nothing of this check was saved
         return _feedback(t("web.check.no_changes_reason", reason=row["note"]), "warn")
-    failed = failed_check_feedback(row, topic_id=topic_id, tracker_name=tracker_name, topic_title=topic_title)
+    failed = failed_check_feedback(row, topic_id=topic_id, tracker_name=tracker_name)
     if failed is not None:
         return failed
     if not row.get("ok"):  # an empty row: nothing says the check worked
@@ -286,17 +336,15 @@ def check_feedback(
 
 
 def manual_check_flash(
-    row: CheckRow | None, *, topic_id: str, tracker_name: str = "", new_topic: bool = False, topic_title: str = ""
+    row: CheckRow | None, *, topic_id: str, tracker_name: str = "", new_topic: bool = False
 ) -> RedirectResponse | None:
     """Home after a failed check by hand (``failed_check_feedback``); None for a row that is ok."""
-    feedback = failed_check_feedback(
-        row, topic_id=topic_id, tracker_name=tracker_name, new_topic=new_topic, topic_title=topic_title
-    )
+    feedback = failed_check_feedback(row, topic_id=topic_id, tracker_name=tracker_name, new_topic=new_topic)
     return feedback_redirect(feedback) if feedback is not None else None
 
 
 def failed_check_feedback(
-    row: CheckRow | None, *, topic_id: str, tracker_name: str = "", new_topic: bool = False, topic_title: str = ""
+    row: CheckRow | None, *, topic_id: str, tracker_name: str = "", new_topic: bool = False
 ) -> dict[str, str] | None:
     """A failed check by hand, in words: "added to TOW, ..." only for the first check of a
     topic just added (``new_topic``); a check of a topic TOW already had says the check failed."""
@@ -322,9 +370,6 @@ def failed_check_feedback(
         flash = t("web.check.added_client_refused" if new_topic else "web.check.client_refused", error=error)
     else:
         flash = t("web.check.added_check_failed" if new_topic else "web.check.check_failed", error=error)
-    title = topic_title or shown_title(row)
-    if title.strip():
-        flash = t("web.check.topic_result", title=services.short_series_title(title, owner_language()), result=flash)
     # The status-colour contract (AGENTS.md): a site that does not answer is amber, not an error.
     kind = "warn" if cls in TRACKER_WARNING_CLASSES else "err"
     return _feedback(
@@ -434,7 +479,15 @@ def check_result_flash(job: Mapping[str, Any]) -> dict[str, str] | None:
     feedback = job.get("feedback")
     if not isinstance(feedback, Mapping) or not feedback.get("text"):
         return None
-    flash = {"text": str(feedback["text"]), "kind": str(feedback.get("kind") or "ok")}
+    flash = {
+        # One identity per job: the result page opened again is not a new message.
+        "id": "check-" + str(job.get("id") or ""),
+        "text": str(feedback["text"]),
+        "kind": str(feedback.get("kind") or "ok"),
+        # Named when it was asked for: a topic deleted meanwhile keeps its name.
+        "subject": str(job.get("subject") or ""),
+        "at": str(int(job["ended_at"])) if isinstance(job.get("ended_at"), (int, float)) else "",
+    }
     if feedback.get("problem_topic"):
         flash["problem_topic"] = str(feedback["problem_topic"])
     return flash

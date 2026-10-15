@@ -37,11 +37,17 @@ def _lane(apply: bool) -> list[str]:
 
 
 def submit(
-    *, topic_id: str, apply: bool, lang: str, perform: Callable[[dict[str, Any]], None], adopted: bool = False
+    *,
+    topic_id: str,
+    apply: bool,
+    lang: str,
+    perform: Callable[[dict[str, Any]], None],
+    adopted: bool = False,
+    subject: str = "",
 ) -> tuple[dict[str, Any] | None, bool]:
     """Share a request that still waits, enqueue anything else once in its lane, and keep exactly
     one FIFO consumer per lane. The returned job carries its ``position`` in its lane (1: next or
-    running)."""
+    running); ``subject`` is what its message names (the topic, as it was when asked for)."""
     with LOCK:
         now = time.monotonic()
         for key, job in list(JOBS.items()):
@@ -71,6 +77,7 @@ def submit(
             "topic_id": topic_id,
             "apply": apply,
             "adopted": adopted,
+            "subject": subject,
             "lang": lang,
             "status": "queued",
             "requested_at": time.time(),

@@ -33,7 +33,7 @@ from tow.web.site_form import (
 )
 from tow.web.site_store import commit_site_stores, save_together, with_login
 from tow.web.text import t
-from tow.web.views import add_refused_redirect, flash_location, flash_redirect
+from tow.web.views import add_refused_redirect, flash_location, flash_redirect, use_subject
 
 
 def save_site(config: dict[str, Any] | None = None, secrets: dict[str, Any] | None = None) -> RedirectResponse | None:
@@ -111,6 +111,7 @@ def add_site(form: NewSite) -> RedirectResponse:
     if not_saved := save_site(config=cfg, secrets=secrets):
         return not_saved
     services.log_event("site_add", tracker=key, how="manual")
+    use_subject(str(spec.get("title") or key))  # the message is about the site just added
     return RedirectResponse(
         _saved_location("web.sites.added", hosts),
         status_code=303,

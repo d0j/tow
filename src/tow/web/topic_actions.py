@@ -39,7 +39,14 @@ from tow.trackers import GenericHttpTracker, load_trackers, match_tracker
 from tow.web import check_jobs, services
 from tow.web.check_actions import enqueue_check
 from tow.web.text import t
-from tow.web.views import add_refused_redirect, flash_redirect, manual_check_flash, topic_check_row
+from tow.web.views import (
+    add_refused_redirect,
+    flash_redirect,
+    manual_check_flash,
+    topic_check_row,
+    topic_subject,
+    use_subject,
+)
 
 
 class Refused(Exception):
@@ -82,6 +89,7 @@ def add_topic(form: TopicForm) -> RedirectResponse:
     except Refused as refusal:
         return refusal.response(form)
     new, policy = added.topic, added.policy
+    use_subject(topic_subject(shown_title(new)))  # the messages from here on are about it
     services.log_event(
         "topic_add",
         topic=new["id"],
@@ -197,7 +205,6 @@ def _first_check(new: dict[str, Any], tracker: GenericHttpTracker) -> RedirectRe
                 topic_id=new["id"],
                 tracker_name=tracker.name if tracker.spec.get("login_path") else "",
                 new_topic=True,
-                topic_title=shown_title(new),
             )
             if refused is not None:  # always, for a row that is not ok
                 return refused

@@ -5,6 +5,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- A message about a topic, a site or a torrent client now starts with its name ("Harbour Clock — no
+  changes"), after a success as well as a failure, so after several clicks each result says which topic it is
+  about. A queued check is named as its topic was when the check was asked for, and no message names it twice.
+
 ## [1.30.11] — 2026-10-15
 
 ### Security
