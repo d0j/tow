@@ -18,6 +18,7 @@ const harness = ({ answer, storage = null, hiddenNow = () => false } = {}) => {
   const requests = [];
   const progress = [];
   const terminal = [];
+  const repeats = [];
   let inFlight = 0;
   let maxInFlight = 0;
   const scheduler = createScheduler({
@@ -36,10 +37,11 @@ const harness = ({ answer, storage = null, hiddenNow = () => false } = {}) => {
       return answer(entry, requests.length);
     },
     progress: (entry, body) => progress.push([entry.action || entry.job, body.status]),
-    terminal: (entry, body, same) => terminal.push({ key: entry.job || entry.action, body, same: same.length }),
+    // Said results only: a repeat (a job already answered) is recorded apart.
+    terminal: (entry, body, same, repeat) => (repeat ? repeats : terminal).push({ key: entry.job || entry.action, body, same: same.length }),
   });
   return {
-    scheduler, requests, progress, terminal, maxInFlight: () => maxInFlight, now: () => now,
+    scheduler, requests, progress, terminal, repeats, maxInFlight: () => maxInFlight, now: () => now,
     async advance(ms) {
       const end = now + ms;
       for (;;) {
@@ -237,5 +239,42 @@ verdict.bounded = true;
   assert.ok(test.requests.every((request) => request.action !== gone));
 }
 verdict.progressThenOneResult = true;
+
+// Two clicks TOW took as one waiting job: followed as one (one deadline, never two requests for
+// the job 500 ms apart), one result for both.
+{
+  const test = harness({ answer: (entry) => ok({ status: test.requests.length < 3 ? "queued" : "done", job: "SAME" }) });
+  const one = test.scheduler.begin({});
+  const two = test.scheduler.begin({});
+  test.scheduler.acknowledge(one, { job: "SAME" });
+  test.scheduler.acknowledge(two, { job: "SAME" });
+  assert.equal(test.scheduler.count(), 1);
+  await test.advance(60000);
+  const at = test.requests.map((request) => request.at);
+  assert.ok(at.every((value, index) => index === 0 || value - at[index - 1] >= 5000));
+  assert.equal(test.terminal.length, 1);
+  assert.equal(test.terminal[0].same, 2);
+}
+verdict.coalescedFollowedAsOne = true;
+
+// A click whose answer was lost turns out to be a job another click already followed to its
+// result: nothing is said again (one terminal entry, one announcement per job).
+{
+  let known = false;
+  const test = harness({ answer: (entry) => ok(entry.job === "JOB" || known ? { status: "done", job: "JOB" } : { status: "unknown" }) });
+  const lost = test.scheduler.begin({}); // its answer never came
+  const seen = test.scheduler.begin({});
+  test.scheduler.acknowledge(seen, { job: "JOB" });
+  await test.advance(5000);
+  await test.advance(1000);
+  assert.equal(test.terminal.length, 1);
+  known = true; // the lost click's id now resolves to the same, finished job
+  await test.advance(30000);
+  assert.equal(test.terminal.length, 1);
+  assert.equal(test.repeats.length, 1);
+  assert.equal(test.scheduler.count(), 0);
+  assert.ok(lost);
+}
+verdict.repeatResultSuppressed = true;
 
 console.log(JSON.stringify(verdict));
