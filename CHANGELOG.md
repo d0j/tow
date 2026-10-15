@@ -115,6 +115,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   records of topics no longer watched, then the oldest files of older versions, whatever their age; if the
   current files alone are still too many, the history of the topic with the most files starts over and Needs
   attention says so (never single files, which would be announced as new again).
+### Security
+
+- A download folder written without a drive letter, such as `/Windows/System32` or
+  `/Users/<name>/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup`, is refused like the same folder
+  with `C:`: a torrent client on a Windows PC opens such a path on its own drive, so a file could have landed in
+  a system or Startup folder. Folders of a client on Linux or in a container (`/downloads`) are still accepted.
 
 ## [1.31.2] — 2026-10-15
 
