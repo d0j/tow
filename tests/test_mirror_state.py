@@ -169,3 +169,22 @@ def test_a_preview_clamps_in_its_own_view_and_writes_nothing(monkeypatch):
         pick_and_get("demo", SPEC["fetch_hosts"], "/topic/1", persist=False)
     assert state_path().read_bytes() == before
     assert calls == []
+
+
+@pytest.mark.parametrize("login", [False, True])
+def test_a_dated_rate_limit_is_counted_from_the_servers_clock(monkeypatch, login):
+    # This computer's clock is two hours behind the server's: "retry at server time + 10 min"
+    # paused the mirror for two hours and ten minutes.
+    from test_http_limits import _http_date
+
+    from tow.mirrors import note_rate_limit
+
+    monkeypatch.setattr("tow.mirrors._now", lambda: 1_000_000.0 - 7200)
+    headers = {"retry-after": _http_date(1_000_600), "date": _http_date(1_000_000)}
+    install(monkeypatch, lambda r: httpx.Response(429, headers=headers))
+    if login:
+        assert note_rate_limit("demo", HOST, httpx.Response(429, headers=headers), persist=True)
+    else:
+        with pytest.raises(MirrorFetchError):
+            pick_and_get("demo", SPEC["fetch_hosts"], "/topic/1")
+    assert load_state()["mirrors"]["demo"]["rate_cool"][HOST] == 1_000_000.0 - 7200 + 600

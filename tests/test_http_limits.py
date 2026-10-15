@@ -329,3 +329,56 @@ def test_the_fuzzed_pages_decode_without_an_error_or_a_lone_surrogate():
     assert thttp.html_text(_response(undefined, "text/html")) == "<meta charset=undefined><a href=dl.php?t=1>П</a>"
     escapes = rb'<meta charset="unicode_escape"><h1>Show \udfff</h1>'  # the six characters, not a code point
     assert thttp.html_text(_response(escapes, "text/html")) == escapes.decode("ascii")
+
+
+def _http_date(epoch: float) -> str:
+    from datetime import UTC, datetime
+    from email.utils import format_datetime
+
+    return format_datetime(datetime.fromtimestamp(epoch, UTC), usegmt=True)
+
+
+@pytest.mark.parametrize("skew", [-7200, 0, 7200])
+def test_an_http_date_retry_after_is_read_against_the_servers_own_clock(skew):
+    # The server says "retry at 10:10" and its Date says 10:00: ten minutes, whatever this
+    # computer's clock says (two hours behind, right or two hours ahead).
+    server_now = 1_000_000.0
+    value = _http_date(server_now + 600)
+    assert thttp.retry_after_seconds(value, now=server_now + skew, date=_http_date(server_now)) == 600
+
+
+def test_a_cached_answer_subtracts_its_age():
+    value = _http_date(1_000_600)
+    assert thttp.retry_after_seconds(value, now=0, date=_http_date(1_000_000), age="200") == 400
+    assert thttp.retry_after_seconds(value, now=0, date=_http_date(1_000_000), age="900") == 0
+
+
+@pytest.mark.parametrize(("date", "age"), [("not a date", None), (None, "-1"), ("", "1.5"), ("x" * 200, "9" * 40)])
+def test_unusable_date_or_age_falls_back_to_the_local_clock(date, age):
+    value = _http_date(1_000_600)
+    assert thttp.retry_after_seconds(value, now=1_000_000, date=date, age=age) == 600
+
+
+@pytest.mark.parametrize(
+    ("retry_at", "server_now", "expected"),
+    [(10**10, 0, 86400), (0, 10**9, 0), (1_086_400, 1_000_000, 86400), (1_086_401, 1_000_000, 86400)],
+)
+def test_a_server_date_cannot_make_an_unbounded_pause(retry_at, server_now, expected):
+    value = _http_date(retry_at)
+    assert thttp.retry_after_seconds(value, now=5, date=_http_date(server_now)) == expected
+
+
+def test_delta_seconds_ignore_the_date():
+    assert thttp.retry_after_seconds("120", now=0, date=_http_date(10**9), age="50") == 120
+
+
+def test_retry_after_from_headers_reads_date_and_age():
+    headers = httpx.Headers({"retry-after": _http_date(1_000_600), "date": _http_date(1_000_000), "age": "100"})
+    assert thttp.retry_after_from(headers, now=0) == 500
+    assert thttp.retry_after_from(httpx.Headers({}), now=0) == 0
+
+
+def test_a_services_dated_retry_after_uses_its_date():
+    from tow.protection import providers
+
+    assert providers._retry_after(_http_date(10**9 + 120), _http_date(10**9)) == 120

@@ -319,7 +319,7 @@ def note_rate_limit(tracker: str, host: str, response: httpx.Response, *, persis
     if persist:
         token = _now()
         host = host.rstrip("/")
-        retry_after = thttp.retry_after_seconds(response.headers.get("retry-after"), now=token)
+        retry_after = thttp.retry_after_from(response.headers, now=token)
         _record(
             tracker,
             host,
@@ -560,7 +560,7 @@ def _raise_for_status(r: Any) -> None:
             "mirrors.rate_limited",
             failure="rate_limited",
             status=r.status_code,
-            retry_after=thttp.retry_after_seconds(r.headers.get("retry-after"), now=_now()),
+            retry_after=thttp.retry_after_from(r.headers, now=_now()),
         )
     refuse_verdict(verdict, r.status_code)
     preview = thttp.html_text(r)[:800]
