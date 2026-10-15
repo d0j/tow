@@ -70,7 +70,15 @@ def test_site_host_keeps_custom_port_and_rejects_duplicates():
         valid_site_hosts(["https://example.org", "https://example.org/"])
 
 
-@pytest.mark.parametrize("name", ["new", "guess", "../../x", "a-b"])
-def test_reserved_or_unsafe_site_name_rejected(name):
-    with pytest.raises(ValueError, match="Имя:"):
+@pytest.mark.parametrize(
+    ("name", "reason"),
+    [
+        ("new", "Код сайта: «new» использует сам TOW"),  # the Sites page's own addresses
+        ("guess", "Код сайта: «guess» использует сам TOW"),
+        ("../../x", "Код сайта: строчные латинские буквы"),
+        ("a-b", "Код сайта: строчные латинские буквы"),
+    ],
+)
+def test_reserved_or_unsafe_site_name_rejected(name, reason):
+    with pytest.raises(ValueError, match=reason):
         valid_site_name(name)
