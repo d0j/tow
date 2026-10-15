@@ -27,6 +27,9 @@
   --nav-fg-hi: light-dark(#0b0d12, #fff);
   --trk-mut: light-dark(#5f6878, #8b93a3);
   --line-soft: light-dark(#dde2ea, #252c3b);
+  /* The one red of a failure, shared by the message strip (.flash.error) and a note (.notice.bad). */
+  --flash-err-bg: light-dark(#fdecec, #3a1c1f);
+  --flash-err-line: light-dark(#e3a5a5, #8a3a3f);
   --pill-ok-bg: light-dark(#dcf3e7, #163526);
   --pill-bad-bg: light-dark(#fbe2e2, #3a1717);
   --pill-warn-bg: light-dark(#fbefd6, #3b2c12);
@@ -631,6 +634,11 @@ label.check-field { margin: 0; color: var(--fg); font-size: 12.5px; cursor: poin
 .notice.warn > svg.i { color: var(--warn); }
 .notice.bad { color: var(--fg); background: var(--flash-err-bg); border-color: var(--flash-err-line); }
 .notice.bad > svg.i { color: var(--bad); }
+/* A message after an action (_message.html, messages.js) in the same colours: ok green, info neutral
+   (the .flash above), warn amber, err red. */
+.flash.ok { background: var(--pill-ok-bg); border-color: var(--ok); }
+.flash.warn { background: var(--pill-warn-bg); border-color: var(--warn); }
+.flash.error { background: var(--flash-err-bg); border-color: var(--flash-err-line); }
 /* A note inside a card or a panel keeps clear of what follows it, and of the card's head. */
 :is(.settings-panel, .integration-card, .edit-panel) > .notice { margin-bottom: .6rem; }
 .integration-head + .notice { margin-top: .6rem; }
@@ -725,7 +733,6 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .settings-panel { padding: .85rem .9rem 1rem; border-top: 1px solid var(--line); }
 .settings-accordion .integration-head { align-items: center; }
 .settings-accordion .integration-head h2 { margin: 0; font-size: .98rem; }
-.settings-result { margin: 0 0 .75rem; }
 .unsaved-state { margin: -.35rem 0 0; color: var(--warn); font-size: 12px; }
 .settings-accordion.settings-log > summary {
   display: grid; grid-template-columns: 1rem minmax(0, 1fr) auto;
@@ -887,7 +894,6 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
   cursor: pointer; font: inherit;
 }
 .portable-import-form .settings-actions { margin-top: 0; }
-.copy-status { min-height: 1.1rem; margin: .32rem 0 0; color: var(--ok); font-size: 12px; }
 @media (max-width: 720px) {
   .settings-page-compact .settings-section { padding: 0; }
   .settings-page-compact .settings-accordion > summary,

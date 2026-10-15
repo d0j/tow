@@ -1,12 +1,9 @@
 /* Recent messages (messages.js): the one strip at the top of <main> (.flash, _message.html), the
    header's message icon and its panel. The kinds keep the status colours: ok green (a confirmed
    action), info neutral (accepted, queued, skipped), warn amber (transport trouble or a real
-   caution), err red (an actionable failure) - one red, the status contract's. */
+   caution), err red (an actionable failure). Their colours are app.css's, shared with the notes. */
 /* In sight under the sticky header while shown (messages.js measures the header). */
 .msg-host { position: sticky; top: var(--msg-top, 0px); z-index: 9; }
-.flash.ok { background: var(--pill-ok-bg); border-color: var(--ok); }
-.flash.warn { background: var(--pill-warn-bg); border-color: var(--warn); }
-.flash.error { background: var(--pill-bad-bg); border-color: var(--bad); }
 .flash > .msg-ico { display: inline-flex; flex: 0 0 auto; color: var(--mut); }
 .flash.ok > .msg-ico { color: var(--ok); }
 .flash.warn > .msg-ico { color: var(--warn); }
