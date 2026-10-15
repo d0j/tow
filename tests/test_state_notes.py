@@ -131,7 +131,7 @@ def test_the_master_key_problem_is_one_red_note_with_its_command(client):
     assert note.select_one("a[href='/settings/help#export-import']") is not None  # its instructions
     copy = note.select_one("button[data-copy-text]")
     assert copy["data-copy-text"].endswith(" keys status")
-    assert note.select_one("#copy-command-status") is not None
+    assert note.select_one("#copy-command-status") is None  # copied or not: a message (messages.js)
     # Needs attention still names it, and lands on this note.
     [entry] = attention_view(load_state(), load_config())["entries"]
     assert (entry["kind"], entry["severity"]) == ("check_blocked", "bad")
@@ -213,8 +213,7 @@ def test_lasting_states_are_notes_not_alerts_or_field_errors(name):
     static_status = [
         line.strip()[:80]
         for line in source.splitlines()
-        if 'role="status"' in line
-        and not any(live in line for live in ("data-", "unsaved-state", "copy-command-status", "sr-only"))
+        if 'role="status"' in line and not any(live in line for live in ("data-", "unsaved-state", "sr-only"))
     ]
     assert static_status == []  # a live region only where a script changes the words
 

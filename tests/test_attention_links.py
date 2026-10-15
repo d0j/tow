@@ -264,7 +264,7 @@ def test_a_check_blocked_by_the_master_key_lands_on_its_explanation_with_the_com
 
     page, tag = _land(client, entry, anchor="secret-store", fix="copy_keys_status", label="Скопировать команду")
     assert re.search(r'data-copy-text="[^"]* keys status"', tag)
-    assert 'id="copy-command-status"' in page
+    assert 'id="copy-command-status"' not in page  # its outcome is a message
     note = page.split('id="secret-store"', 1)[1].split("</div>", 1)[0]
     assert "keys status" in note
 
