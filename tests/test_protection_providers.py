@@ -929,3 +929,63 @@ def test_cookie_scope_refuses_invalid_dns_labels(domain):
     raw["solution"]["cookies"][0]["domain"] = domain
     with pytest.raises(ValueError, match="scope mismatch"):
         providers._solution(raw, "https://www.example.org", "first")
+
+
+# --- a local module that misses its startup deadline -------------------------------------------
+
+
+@pytest.mark.parametrize("where", ["launch", "after_launch"])
+def test_local_startup_deadline_is_a_service_outage(monkeypatch, where):
+    from tow.protection import local_service
+    from tow.protection.spec import ProviderUnavailableError
+
+    if where == "launch":
+        monkeypatch.setattr(local_service, "ensure", lambda *a: (_ for _ in ()).throw(TimeoutError("synthetic")))
+    else:
+        clock = [100.0]
+        monkeypatch.setattr(providers.time, "monotonic", lambda: clock[0])
+
+        def started(*args):
+            clock[0] += 14.5  # the module came up, leaving no time for its request
+            return True
+
+        monkeypatch.setattr(local_service, "ensure", started)
+    monkeypatch.setattr(providers, "_transport", lambda *a: pytest.fail("no request after a missed startup"))
+    with pytest.raises(ProviderUnavailableError) as caught:
+        providers.cookie_api(settings()["providers"][0], ORIGIN, 15)
+    assert (caught.value.reason, caught.value.phase) == ("unavailable", "startup")
+    assert chain.failure_details(caught.value) == ("unavailable", "startup")
+
+
+def test_startup_timeout_pauses_that_service_for_every_site(safe_dns, monkeypatch):
+    from tow.protection import local_service
+
+    calls = []
+    monkeypatch.setattr(local_service, "ensure", lambda *a: (_ for _ in ()).throw(TimeoutError("synthetic")))
+
+    def other(provider, origin, timeout):
+        calls.append(("second", origin))
+        return clearance("second")
+
+    def local(provider, origin, timeout):
+        calls.append(("first", origin))
+        return providers.cookie_api(provider, origin, timeout)
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": local, "byparr": other})
+    assert [c.provider for c in chain.candidates("sample", ORIGIN, settings())] == ["second"]
+    states = store.service_states(settings()["providers"], now=time.time())
+    assert states["first"]["status"] == "unavailable"
+    assert states["first"]["retry_at"] > time.time()
+    assert states["second"]["status"] == "succeeded"
+    # Another site: the paused module is not started again, the other service still runs.
+    assert [c.provider for c in chain.candidates("other", "https://other.example", settings())] == ["second"]
+    assert calls == [("first", ORIGIN), ("second", ORIGIN), ("second", "https://other.example")]
+
+
+def test_a_site_solving_timeout_does_not_pause_the_service(safe_dns, monkeypatch):
+    def solving(provider, origin, timeout):
+        raise AccessFailure("timeout", "service", "synthetic")
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": solving})
+    assert list(chain.candidates("sample", ORIGIN, settings())) == []
+    assert store.service_states(settings()["providers"], now=time.time())["first"]["status"] == "unknown"

@@ -170,18 +170,18 @@ def cookie_api(
     deadline = time.monotonic() + timeout
     from tow.protection.local_service import ensure
 
+    # A module that misses its startup deadline is out of service, like one that cannot start:
+    # its backoff pauses it for every site (no site was asked yet), other services still run.
     try:
         locally_managed = ensure(provider, deadline)
-    except TimeoutError as exc:
-        raise AccessFailure("timeout", "startup", "local module startup deadline exceeded") from exc
-    except OSError as exc:
+    except (TimeoutError, OSError) as exc:
         raise ProviderUnavailableError("unavailable", phase="startup") from exc
     except ValueError as exc:
         raise ProviderUnavailableError("protocol", phase="startup") from exc
     if locally_managed:
         timeout = deadline - time.monotonic()
         if timeout < 1:
-            raise AccessFailure("timeout", "startup", "clearance time budget exhausted during local startup")
+            raise ProviderUnavailableError("unavailable", phase="startup")
     # Leave time for the service to serialize and return after its browser timeout.
     # Keep at least 1000 ms: Byparr interprets smaller maxTimeout values as seconds.
     browser_ms = int((timeout - 1 if timeout >= 2 else timeout) * 1000)
