@@ -40,7 +40,8 @@ def test_cross_host_redirect_is_rejected_before_cookie_bearing_request(monkeypat
 
     with pytest.raises(RuntimeError, match="перенаправление на другой адрес"):
         pick_and_get("x", ["https://trusted.example"], "/start", cookies={"uid": "secret"})
-    assert calls == ["https://trusted.example/start"]
+    # Never the redirect target; the trusted host's front page is asked whether the host answers.
+    assert calls == ["https://trusted.example/start", "https://trusted.example/"]
 
 
 def test_cross_origin_redirect_is_rejected_before_cookie_bearing_request(monkeypatch, tmp_path):
@@ -68,7 +69,8 @@ def test_cross_origin_redirect_is_rejected_before_cookie_bearing_request(monkeyp
 
     with pytest.raises(RuntimeError, match="перенаправление на другой адрес"):
         pick_and_get("x", ["https://trusted.example"], "/start", cookies={"uid": "secret"})
-    assert calls == ["https://trusted.example/start"]
+    # Never the redirect target; the trusted host's front page is asked whether the host answers.
+    assert calls == ["https://trusted.example/start", "https://trusted.example/"]
 
 
 def test_allowlisted_download_redirect_uses_fresh_cookie_free_client(monkeypatch, tmp_path):
@@ -564,3 +566,21 @@ def test_a_confirmed_sign_in_is_noted_for_a_configured_site_only(monkeypatch):
     assert buckets["kinozal"]["signed_in_at"] == 1234.5
     assert buckets["kinozal"]["login_at"] == 5.0  # the rest of the site's entry is kept
     assert "gone" not in buckets
+
+
+@pytest.mark.parametrize("failure", ["redirect_policy", "redirect_loop"])
+def test_a_topic_redirected_off_site_does_not_pause_a_mirror_whose_front_page_answers(monkeypatch, failure):
+    # Three topics that redirect to another host (a removed topic sent to an ad page) paused the
+    # mirror for every other topic, as if the host were down.
+    from tow import mirrors
+
+    asked = []
+    monkeypatch.setattr(mirrors, "_host_answers", lambda host, **_kw: asked.append(host) or True)
+    error = MirrorFetchError("mirrors.redirect_cross_origin", failure=failure)
+    options = {"cookies": None, "ua": None, "public_only": True, "persist": True}
+    assert mirrors._counts_against_host(error, "https://a.example", "/topic?t=1", **options) is False
+    assert asked == ["https://a.example"]
+    monkeypatch.setattr(mirrors, "_host_answers", lambda host, **_kw: False)
+    assert mirrors._counts_against_host(error, "https://a.example", "/topic?t=1", **options) is True
+    # The front page itself redirecting off the site says the host.
+    assert mirrors._counts_against_host(error, "https://a.example", "/", **options) is True

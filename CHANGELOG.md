@@ -167,6 +167,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   keeps words that merely contain a site's name (`Rutorrent`), and keeps a `%25` of the page as it is.
 - Kinozal topic links with `www.`, more parameters or a `#comments` anchor are recognised by the built-in Kinozal
   settings, and a `kinozal.tv` link gets its title from one of the site's mirrors.
+- A few topics whose pages redirect to another site (a removed topic sent elsewhere) no longer pause the mirror
+  for every other topic while the site's front page answers.
 
 ## [1.31.2] — 2026-10-15
 

@@ -831,10 +831,11 @@ _SLOW_ANSWER_ERRORS: tuple[type[BaseException], ...] = (
 
 def _may_be_page_only(error: Exception) -> bool:
     """A failure that may belong to the one page asked for, not to its host: a Cloudflare check
-    on that page, or a page the host was too slow to give. A refused or reset connection, a
-    name or TLS failure, a connect timeout and a 5xx always say the host."""
+    on that page, a page the host was too slow to give, or a page that redirects off the site
+    (a removed topic sent elsewhere, a redirect loop of one page). A refused or reset connection,
+    a name or TLS failure, a connect timeout and a 5xx always say the host."""
     if isinstance(error, MirrorFetchError):
-        return error.failure in {"cloudflare", "maintenance"}
+        return error.failure in {"cloudflare", "maintenance", "redirect_policy", "redirect_loop"}
     return isinstance(error, _SLOW_ANSWER_ERRORS)
 
 
