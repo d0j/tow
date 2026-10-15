@@ -69,3 +69,11 @@ def test_a_missing_key_names_the_command_that_fixes_it(no_key):
 def test_keys_ensure_with_a_key_in_use_changes_nothing(capsys):
     assert cli.main(["keys", "ensure", "--json"]) == 0
     assert json.loads(capsys.readouterr().out) == {"ok": True, "key_file_created": False}
+
+
+def test_keys_ensure_json_creating_the_key_prints_only_json(no_key, capsys):
+    # "Back up the new key" was printed before the JSON: standard output was no valid JSON.
+    assert cli.main(["keys", "ensure", "--json"]) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {"ok": True, "key_file_created": True}
+    assert str(key_file()) in captured.err  # the advice is still given

@@ -201,6 +201,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - `tow check` marks a skipped topic, or one whose result was not saved, with `–` instead of `ok`, and says each
   result in words instead of an internal code (`succeeded`, `preview`).
 - A check on the web whose every topic was skipped or not saved ends in a neutral message, not a green success.
+- `tow keys ensure --json` and `tow access on --json` print only JSON on standard output: the advice to back up a
+  new key and the reminder's question go to standard error.
 
 ## [1.31.2] — 2026-10-15
 
