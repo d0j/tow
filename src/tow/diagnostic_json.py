@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from tow.clock import local_zone
+from tow import clock
 from tow.store import decode_json_bytes
 
 MAX_BYTES = 1024 * 1024
@@ -49,7 +49,7 @@ def epoch(value: Any) -> float | None:
     if not math.isfinite(number) or not 0 <= number <= MAX_EPOCH:
         return None
     try:
-        datetime.fromtimestamp(number, UTC).astimezone(local_zone())
+        datetime.fromtimestamp(number, UTC).astimezone(clock.local_zone())
     except OSError, OverflowError, ValueError:
         return None
     return number
