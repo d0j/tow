@@ -14,6 +14,7 @@ Everything lives in ``tow.paths.run_dir()`` (``data/run/``):
 
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from contextlib import suppress
@@ -377,10 +378,20 @@ def topic_timer_status(state: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return result
 
 
-def site_retry_status(state: dict[str, Any], cfg: dict[str, Any]) -> dict[str, str]:
+def site_retry_policies(state: dict[str, Any], cfg: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """``tow.site_retries.policies``, or none when a saved value cannot be read (logged): the
+    supervisor's other facts and Home go on, only without the automatic retries."""
     from tow.site_retries import policies
 
-    active = policies(state, cfg)
+    try:
+        return policies(state, cfg)
+    except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as exc:
+        logging.getLogger("tow.supervisor").warning("site retries not planned: %s", type(exc).__name__)
+        return {}
+
+
+def site_retry_status(state: dict[str, Any], cfg: dict[str, Any]) -> dict[str, str]:
+    active = site_retry_policies(state, cfg)
     if not active:
         return {}
     report = status()

@@ -177,3 +177,74 @@ def test_a_deleted_topic_or_a_week_out_of_the_queue_forgets_its_budget():
     assert service.dispatch("b")
     attempts = layout.read_json(layout.schedule_path())["site_retry_attempts"]
     assert set(attempts) == {"b"}
+
+
+# --- one bad saved value never stops the supervisor's facts or Home -----------------------------
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        {"last_error_params": ["demo"]},
+        {"last_error_params": "demo"},
+        {"last_error_params": None},
+    ],
+)
+def test_a_damaged_topic_is_left_out_of_the_retries_of_the_others(damage):
+    topics = [{**failed("a"), **damage}, failed("b")]
+    assert set(site_retries.policies({"topics": topics, "mirrors": {}}, config())) == {"b"}
+
+
+@pytest.mark.parametrize("mirrors", [{"demo": ["x"]}, {"demo": "x"}])
+def test_a_damaged_mirror_record_is_read_as_none(mirrors):
+    assert set(site_retries.policies({"topics": [failed()], "mirrors": mirrors}, config())) == {"a"}
+
+
+def test_damaged_site_settings_mean_no_retries():
+    assert site_retries.policies({"topics": [failed()], "mirrors": {}}, {"trackers": ["demo"]}) == {}
+
+
+def _unreadable_retry_state() -> dict[str, Any]:
+    from tow.store import save_state
+
+    # A value no reader expects (a cooldown that is not a host map) in the saved site record.
+    state = {"topics": [failed()], "mirrors": {"demo": {"cool": ["https://demo.example"]}}}
+    save_state(state)
+    return state
+
+
+def test_supervisor_facts_survive_an_unreadable_retry_record(monkeypatch, caplog):
+    from tow import config as config_module
+    from tow.supervisor import _facts
+
+    monkeypatch.setattr(config_module, "load_config", config)
+    _unreadable_retry_state()
+    facts = _facts()
+    assert facts["site_retries"] == {}
+    assert facts["topic_ids"] == {"a"}  # the other facts are still read
+    assert "site retries not planned" in caplog.text
+
+
+def test_home_shows_topics_with_an_unreadable_retry_record():
+    from fastapi.testclient import TestClient
+
+    from tow.config import save_config
+    from tow.store import save_secrets
+    from tow.web import app
+
+    cfg = load_config()
+    cfg["trackers"] = {
+        "demo": {
+            "title": "Site A",
+            "fetch_hosts": ["https://demo.example"],
+            "url_regex": r"^https://demo\.example/topic/([a-z]+)$",
+            "download_path": "/download/{id}",
+        }
+    }
+    save_config(cfg)
+    save_secrets({"init_done": True})
+    state = _unreadable_retry_state()
+    assert layout.site_retry_status(state, cfg) == {}
+    page = TestClient(app).get("/")
+    assert page.status_code == 200
+    assert "Show A" in page.text
