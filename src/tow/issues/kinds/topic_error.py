@@ -8,6 +8,7 @@ from typing import Any
 from tow import i18n
 from tow.clients.factory import default_client_id
 from tow.errors import as_value, summary_record
+from tow.issues import clients
 from tow.issues.model import Fix, Issue, Message, Snapshot, Target
 from tow.log import error_class
 from tow.records import shown_title
@@ -36,6 +37,7 @@ def _error(topic: Mapping[str, Any], config: Mapping[str, Any]) -> Any:
 
 def collect(snapshot: Snapshot) -> list[Issue]:
     default = default_client_id(dict(snapshot.config))
+    clients_down = set(clients.down(snapshot))  # their failed topics are counted in client_down
     found = []
     for topic in snapshot.topics:
         identity = str(topic.get("id") or "")
@@ -44,11 +46,7 @@ def collect(snapshot: Snapshot) -> list[Issue]:
         cls = str(topic.get("last_error_class") or error_class(str(topic["last_error"]), topic.get("last_error_code")))
         if topic.get("last_error_class") == "tracker_auth":
             continue
-        if (
-            cls == "qbit"
-            and snapshot.health.get("qbit_ok") is False
-            and str(topic.get("client_id") or default) == default
-        ):
+        if cls == "qbit" and str(topic.get("client_id") or default) in clients_down:
             continue
         # Saved state and config are read as they are: one malformed record must not hide the others.
         raw = topic.get("last_error_params")

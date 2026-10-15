@@ -382,3 +382,37 @@ def test_a_client_password_is_saved_as_typed(legacy_qbit):
         "/settings/client", data={"host": "127.0.0.1", "port": "8080", "username": "admin", "password": "  "}
     )
     assert load_secrets()["qbittorrent"]["password"] == " pass word "  # blank: kept as it is
+
+
+def test_a_failed_check_is_in_needs_attention_as_in_the_header(legacy_qbit, monkeypatch):
+    """D5: the header turned the client red after a failed "Check", Needs attention said nothing.
+    Both read the same evidence now; a second client is its own entry, the main one is not listed
+    twice."""
+    from tow.web.templating import header_health
+    from tow.web.views import attention_view
+
+    class Broken:
+        def ping(self):
+            from tow.clients.managed import ClientError
+
+            raise ClientError("qBittorrent: неверный логин или пароль")
+
+    c = _client()
+    c.post("/settings/client/add", data={"kind": "transmission"})
+    save_state({"topics": [], "health": {"qbit_ok": True, "clients_ok": {"default": True}, "check_ok": True}})
+    monkeypatch.setattr("tow.web.services.client_answers", lambda _client_id: True)
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a: Broken())
+
+    def entries() -> list[tuple[str, str]]:
+        return [(e["id"], e["fix"]) for e in attention_view(load_state(), load_config())["entries"]]
+
+    c.post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
+    assert header_health()["qbit_tone"] == "bad"
+    assert entries() == [("client_down", "check_client:default")]
+    c.post("/settings/client/ping", data={"client_id": "transmission"}, follow_redirects=False)
+    assert header_health()["qbit_tone"] == "bad"  # the header is the main client's
+    assert entries() == [
+        ("client_down", "check_client:default"),
+        ("client_down:transmission", "check_client:transmission"),
+    ]
+    assert load_state()["health"]["clients_ok"] == {"default": True}  # the check's own word is left as it was
