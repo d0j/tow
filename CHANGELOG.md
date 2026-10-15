@@ -214,6 +214,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   voice-over studio named `(2x2)` is no longer "S02E02", and `Сезон: 2 / Серии: 1-12 из 12` gives "S02E01–12 of 12".
 - A topic's Check in a browser without scripts that fails inside TOW (a store or journal error) shows "the check
   was not run" and logs it, as a queued check does, instead of an error page.
+- A spare mirror that failed a couple of times long ago is no longer paused for an hour by its next single failure:
+  failures older than the cooldown no longer count towards it.
 
 ## [1.31.2] — 2026-10-15
 
