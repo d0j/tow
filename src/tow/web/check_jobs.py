@@ -101,7 +101,9 @@ def _consume(apply: bool, perform: Callable[[dict[str, Any]], None]) -> None:
                 _WORKERS.pop(apply, None)
                 return
             job = JOBS[lane[0]]
-            job["status"] = "running"
+            # Nothing stops a check that hangs (a second one would overlap its client writes):
+            # the page says since when it runs instead, and the lane waits for it.
+            job.update(status="running", running_since=time.time())
         try:
             perform(job)
         except CheckBusyError:
