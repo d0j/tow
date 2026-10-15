@@ -283,9 +283,11 @@ def _progress(
         inflight = box.get("inflight") or {}
         if refused:
             # The messenger refused this message: a single one is dropped (the reason stays in
-            # the status); a combined one is retried one by one to find the message it refuses.
+            # the status); a combined one is retried one by one to find the message it refuses -
+            # unless a part of it already arrived: then sending its messages again would repeat
+            # that part, and the rest is dropped too.
             ids = set(inflight.get("ids") or [])
-            if len(ids) == 1:
+            if len(ids) == 1 or int(done or 0) > 0:
                 box["items"] = [item for item in box["items"] if item.get("id") not in ids]
             else:
                 box["one_by_one"] = True
@@ -375,7 +377,7 @@ def _send_inflight(
         except DeliveryError as exc:
             if exc.drop:
                 if _progress(key, token, done=index, reason=exc.detail, refused=True):
-                    _log_refused(key, exc.reason, len(inflight.get("ids") or []))
+                    _log_refused(key, exc.reason, 1 if index else len(inflight.get("ids") or []))
                 return "refused", exc.reason
             permanent = not exc.transient
             _progress(key, token, done=index, reason=exc.detail, block_fp=fingerprint(settings) if permanent else None)
