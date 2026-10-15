@@ -43,6 +43,10 @@ MAX_URL_REGEX_SECONDS = 0.5
 MAX_PAGE_REGEX_SECONDS = 2.0
 _COOKIE_NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
 _SECRET_METADATA_KEYS = {"username", "password", "cookies_by_origin", "browser_user_agent"}
+# Cloudflare's site-access cookies. A verified clearance lives in the site-access store, bound to
+# its origin, expiry and settings, and to the browser that earned it: a password login started
+# with one never makes it (or the bot-score cookie beside it) part of the account's session.
+_CLEARANCE_COOKIES = frozenset({"cf_clearance", "__cf_bm"})
 # What a topic page shown to a guest (no session) has: a sign-in form, link or request.
 _GUEST_MARKS = re.compile(
     r"""type\s*=\s*["']?password|login\.php|войдите|авторизуйтесь|зарегистрируйтесь|sign in|log in""",
@@ -221,6 +225,20 @@ def login_form_data(spec: dict[str, Any], user: str, pw: str) -> dict[str, str]:
     return data
 
 
+def _account_cookies(cookies: Any, seeded: Mapping[str, str]) -> dict[str, str]:
+    """The cookies a login's answer set: neither the clearance the login was sent with nor any
+    site-access cookie. The jar is read cookie by cookie: a name set again by the answer for the
+    site's domain beside the one sent with the request is two cookies, not an error."""
+    jar = getattr(cookies, "jar", None)
+    pairs = [(cookie.name, cookie.value) for cookie in jar] if jar is not None else list(cookies.items())
+    excluded = _CLEARANCE_COOKIES | set(seeded)
+    return {
+        name: value
+        for name, value in pairs
+        if isinstance(name, str) and isinstance(value, str) and value and name not in excluded
+    }
+
+
 def login_form_came_back(response: Any, pw_field: str) -> bool:
     """True when the login POST answered with a page that still asks for the password."""
     if getattr(response, "status_code", 0) != 200:
@@ -342,9 +360,19 @@ class GenericHttpTracker:
             raise TrackerSettingError("tracker.regex_timeout", what=Msg("tracker.regex_label_url")) from exc
         return m.group(1) if m else None
 
+    def _browser_session(self, entry: Mapping[str, Any]) -> bool:
+        """Whether the saved cookies come from a sign-in in a browser window (``tow.browser_auth``,
+        which alone saves the browser's user agent beside them): they are that browser's, its
+        clearance included, and are used as saved. Any other saved session is a password login's."""
+        agent = entry.get("browser_user_agent")
+        return bool(self.spec.get("browser_auth")) or (isinstance(agent, str) and bool(agent.strip()))
+
     def _cookie_jar(self, secrets: dict[str, Any]) -> dict[str, dict[str, str]]:
         raw = (secrets.get("trackers") or {}).get(self.name) or {}
         names = list(self.spec.get("cookie_names") or [])
+        # A password session saved by an older TOW may hold a clearance: it is not sent (the
+        # store's verified one is), and the next successful login saves the session without it.
+        refused = set() if self._browser_session(raw) else _CLEARANCE_COOKIES
 
         def allowed(values: dict[str, Any]) -> dict[str, str]:
             out = {}
@@ -355,6 +383,7 @@ class GenericHttpTracker:
                     or not _COOKIE_NAME.fullmatch(key)
                     or not isinstance(value, str)
                     or not value
+                    or key in refused
                 ):
                     continue
                 if not names or key in names or key in ("uid", "pass", "cf_clearance"):
@@ -446,31 +475,48 @@ class GenericHttpTracker:
                         # A login page shown again means the credentials were refused; its
                         # cookies are guest cookies and must not replace working ones.
                         continue
-                    jar = {k: v for k, v in c.cookies.items() if v}
+                    jar = _account_cookies(c.cookies, clearance_cookies)
             except Exception as exc:  # noqa: BLE001 - one host failing to log in: the next one is tried
                 # Only the error's type: its text may carry the login URL's query.
                 _LOG.warning("%s: login at %s failed: %s", self.name, origin_key(host), type(exc).__name__)
                 continue
             names = list(self.spec.get("cookie_names") or [])
+            # No account cookie from the answer (a clearance alone): not a login, and the saved
+            # session stays.
             got = jar if not names else {n: jar[n] for n in names if jar.get(n)}
             origin = origin_key(host)
             if not got or not origin:
                 continue
             scoped[origin] = got
         if persist and scoped:
-            with persistence_lock():
-                if self.name not in (load_config().get("trackers") or {}):
-                    return {**self._cookie_jar(secrets), **scoped}
-                s = load_secrets()
-                tracker = (s.get("trackers") or {}).get(self.name)
-                if not isinstance(tracker, dict) or tracker.get("username") != user or tracker.get("password") != pw:
-                    return {**self._cookie_jar(secrets), **scoped}
-                tracker.setdefault("cookies_by_origin", {}).update(scoped)
-                for key in names:
-                    tracker.pop(key, None)
-                save_secrets(s)
-                return self._cookie_jar(s)
+            return self._save_login(secrets, scoped, user, pw)
         return {**self._cookie_jar(secrets), **scoped}
+
+    def _save_login(
+        self, secrets: dict[str, Any], scoped: dict[str, dict[str, str]], user: Any, pw: Any
+    ) -> dict[str, dict[str, str]]:
+        """Save a password login's session - only for the site and the password it was made with."""
+        with persistence_lock():
+            if self.name not in (load_config().get("trackers") or {}):
+                return {**self._cookie_jar(secrets), **scoped}
+            s = load_secrets()
+            tracker = (s.get("trackers") or {}).get(self.name)
+            if not isinstance(tracker, dict) or tracker.get("username") != user or tracker.get("password") != pw:
+                return {**self._cookie_jar(secrets), **scoped}
+            saved = tracker.setdefault("cookies_by_origin", {})
+            saved.update(scoped)
+            if not self._browser_session(tracker):
+                # A clearance an older TOW saved into this password session goes now.
+                for origin in [key for key, value in saved.items() if isinstance(value, dict)]:
+                    kept = {key: value for key, value in saved[origin].items() if key not in _CLEARANCE_COOKIES}
+                    if kept:
+                        saved[origin] = kept
+                    else:
+                        del saved[origin]
+            for key in self.spec.get("cookie_names") or []:
+                tracker.pop(key, None)
+            save_secrets(s)
+            return self._cookie_jar(s)
 
     def _page_download_id(self, html: str) -> str | None:
         """The topic's own .torrent id: from its download block (``link_text``), never from a
