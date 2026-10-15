@@ -32,21 +32,28 @@
     key = `${PREFIX}local`,
     hidden = () => false,
     progress = () => {}, // (entry, body): still waiting or running
-    terminal = () => {}, // (entry, body | null): its one result (null: TOW cannot say any more)
+    // (entry, body | null, same, repeat): its one result (null: TOW cannot say any more); ``same``:
+    // the clicks it answers; ``repeat``: a job whose result this tab has already shown (a click
+    // whose answer was lost turned out to be that job) - nothing is said again.
+    terminal = () => {},
     changed = () => {},
   } = {}) => {
     let memoryOnly = !storage;
     const load = () => {
-      if (memoryOnly) return [];
+      if (memoryOnly) return {};
       try {
-        const data = JSON.parse(storage.get(key) || "null");
-        return Array.isArray(data?.entries) ? data.entries.filter((entry) => entry && (entry.action || entry.job)) : [];
+        return JSON.parse(storage.get(key) || "null") || {};
       } catch {
         memoryOnly = true;
-        return [];
+        return {};
       }
     };
-    let entries = load();
+    const loaded = load();
+    let entries = Array.isArray(loaded.entries)
+      ? loaded.entries.filter((entry) => entry && (entry.action || entry.job)).map((entry) => ({ aliases: [], ...entry }))
+      : [];
+    // The jobs whose result this tab has shown (the last 64): a result is said once per job.
+    let delivered = Array.isArray(loaded.delivered) ? loaded.delivered.filter((job) => typeof job === "string").slice(-LIMIT) : [];
     let timer = 0;
     let inFlight = false;
     let last = -Infinity;
@@ -56,7 +63,7 @@
       changed();
       if (memoryOnly) return;
       try {
-        storage.set(key, JSON.stringify({ v: 1, entries }));
+        storage.set(key, JSON.stringify({ v: 1, entries, delivered }));
       } catch {
         memoryOnly = true;
       }
@@ -80,11 +87,22 @@
       }
       return null;
     };
+    // Two clicks TOW took as one job (a waiting check of one topic) are followed as one: one
+    // deadline, one request at a time for the job, one result. The other click's id stays an alias.
+    const merge = (entry) => {
+      const other = entry.job ? entries.find((item) => item !== entry && item.job === entry.job) : null;
+      if (!other) return entry;
+      other.aliases = [...(other.aliases || []), ...(entry.action ? [entry.action] : []), ...(entry.aliases || [])];
+      entries = entries.filter((item) => item !== entry);
+      return other;
+    };
+    const clicksOf = (entry) => [entry, ...(entry.aliases || []).map((action) => ({ action, job: entry.job, aliases: [] }))];
     const finish = (entry, body) => {
-      // A job two clicks share (a waiting check of one topic) has one result.
-      const same = entries.filter((other) => other === entry || (entry.job && other.job === entry.job));
-      entries = entries.filter((other) => !same.includes(other));
-      terminal(entry, body, same);
+      const same = clicksOf(entry);
+      entries = entries.filter((other) => other !== entry);
+      const repeat = Boolean(entry.job) && delivered.includes(entry.job);
+      if (entry.job && !repeat) delivered = [...delivered, entry.job].slice(-LIMIT);
+      terminal(entry, body, same, repeat);
     };
     const handle = (entry, answer) => {
       if (!entries.includes(entry)) return; // forgotten meanwhile
@@ -104,6 +122,16 @@
         return;
       }
       if (typeof body.job === "string" && body.job) entry.job = body.job;
+      if (entry.job && delivered.includes(entry.job)) {
+        finish(entry, body); // a lost click that turned out to be a job already answered: once
+        save();
+        return;
+      }
+      const followed = merge(entry);
+      if (followed !== entry) {
+        save(); // the job is followed by the click that knew it first, on its own deadline
+        return;
+      }
       entry.delay = STATUS_MS;
       if (body.status === "queued" || body.status === "running") {
         entry.due = at + STATUS_MS;
@@ -142,7 +170,7 @@
       begin: (meta = {}) => {
         if (stopped || entries.length >= LIMIT) return null;
         const at = now();
-        const entry = { action: newId(), job: "", subject: String(meta.subject || ""), topic: String(meta.topic || ""), since: at, due: at + STATUS_MS, delay: STATUS_MS };
+        const entry = { action: newId(), job: "", aliases: [], subject: String(meta.subject || ""), topic: String(meta.topic || ""), since: at, due: at + STATUS_MS, delay: STATUS_MS };
         entries.push(entry);
         save();
         plan();
@@ -152,7 +180,7 @@
       adopt: (job, meta = {}) => {
         if (stopped || !job || entries.some((entry) => entry.job === job) || entries.length >= LIMIT) return false;
         const at = now();
-        entries.push({ action: "", job: String(job), subject: String(meta.subject || ""), topic: String(meta.topic || ""), since: at, due: at + Math.min(STATUS_MS, meta.first ?? STATUS_MS), delay: STATUS_MS });
+        entries.push({ action: "", job: String(job), aliases: [], subject: String(meta.subject || ""), topic: String(meta.topic || ""), since: at, due: at + Math.min(STATUS_MS, meta.first ?? STATUS_MS), delay: STATUS_MS });
         save();
         plan();
         return true;
@@ -161,7 +189,9 @@
         const entry = entries.find((item) => item.action === action);
         if (entry && ack?.job) {
           entry.job = String(ack.job);
+          merge(entry);
           save();
+          plan();
         }
       },
       forget: (action) => {
@@ -380,10 +410,11 @@
       if (body.message) show(body.message, { replace: true, quiet: true });
     },
     // Its result: the same message, now with the result, said once.
-    terminal: (entry, body, same) => {
+    terminal: (entry, body, same, repeat) => {
+      same.forEach((item) => { if (item.action) window.towMessages?.remove?.(`check-${item.action}`); });
+      if (repeat) return; // this job's result is shown already: not again
       markRow(body?.topic_id || entry.topic, "");
       const record = body?.message || { kind: "warn", subject: entry.subject, text: t("js.checks.unconfirmed"), href: "/history", link: t("js.checks.history") };
-      same.forEach((item) => { if (item.action) window.towMessages?.remove?.(`check-${item.action}`); });
       show(record, { replace: true });
       // What the check found, in its row(s) too: Check all's in every row as it comes into sight.
       if (body && (body.status === "done" || body.status === "failed")) refreshRows(body.topic_id || entry.topic || "");
