@@ -395,6 +395,26 @@ def test_check_text_output_is_one_line_per_topic(monkeypatch, capsys):
     assert out[3] == t("cli.check.total", n=2, failed=1)
 
 
+def test_check_text_and_exit_code_call_waiting_waiting_as_the_web_does(monkeypatch, capsys):
+    # A torrent waiting for disk space or for the client's file check is not a failed topic:
+    # the web and the log say "waiting"; "ERR" and exit code 2 ("done in part") said failed.
+    from tow import check
+
+    results = [
+        {"title": "Show A", "ok": False, "status": "waiting_space", "error": "waiting for disk space"},
+        {"title": "Show B", "ok": False, "status": "verification_pending", "skipped": "Checking files"},
+        {"title": "Show C", "ok": True},
+    ]
+    monkeypatch.setattr(check, "run_check", lambda **_kw: {"results": results})
+
+    assert cli.main(["check"]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out[0] == "…   Show A — waiting for disk space"
+    assert out[1] == "…   Show B — Checking files"
+    assert out[2] == "ok  Show C"
+    assert out[3] == t("cli.check.total_waiting", n=3, waiting=2, failed=0)
+
+
 def test_export_refuses_a_short_passphrase(monkeypatch, capsys, tmp_path):
     import json
 

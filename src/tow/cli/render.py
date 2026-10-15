@@ -22,6 +22,7 @@ def human(data: Any) -> str:
     """Readable text for a person (not a Python dict repr); --json stays machine output."""
     import yaml
 
+    from tow.check_outcomes import counts_of, outcome_of
     from tow.i18n import t
 
     if isinstance(data, dict) and isinstance(data.get("results"), list):
@@ -30,7 +31,9 @@ def human(data: Any) -> str:
             head.append(t("cli.check.preview"))
         lines = ["  ".join(head)] if head else []
         for row in data["results"]:
-            mark = "…  " if row.get("status") == "verification_pending" else "ok " if row.get("ok") else "ERR"
+            # The outcomes the web and the log use: waiting for disk space or for the client's
+            # file check is neither ok nor a failure.
+            mark = {"pending": "…  ", "fail": "ERR"}.get(outcome_of(row), "ok ")
             state = (
                 row.get("error")
                 or row.get("skipped")
@@ -40,8 +43,12 @@ def human(data: Any) -> str:
             lines.append(f"{mark} {str(row.get('title') or row.get('id'))[:70]}" + (f" — {state}" if state else ""))
             if row.get("note"):
                 lines.append(f"    {row['note']}")
-        failed = sum(1 for row in data["results"] if not row.get("ok") and row.get("status") != "verification_pending")
-        lines.append(t("cli.check.total", n=len(data["results"]), failed=failed))
+        counts = counts_of(data["results"])
+        total = {"n": len(data["results"]), "failed": counts["fail"]}
+        if counts["pending"]:
+            lines.append(t("cli.check.total_waiting", waiting=counts["pending"], **total))
+        else:
+            lines.append(t("cli.check.total", **total))
         return "\n".join(lines)
     if isinstance(data, dict) and data.get("ok") is False and data.get("error"):
         return str(data["error"])  # the refusal itself; its technical detail is in --json

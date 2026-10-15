@@ -187,8 +187,11 @@ def _check(args: argparse.Namespace) -> int:
         render.show({"ok": False, "error": t("cli.command_failed")}, args.json)
         return EXIT_CANNOT_RUN
     render.show(out, args.json)
-    fails = [r for r in out["results"] if not r.get("ok")]
-    return 2 if fails else 0
+    # "Done in part" only for a real failure: a torrent waiting for disk space or for its
+    # client's file check is waiting, as the web and the log say (tow.check_outcomes).
+    from tow.check_outcomes import counts_of
+
+    return 2 if counts_of(out["results"])["fail"] else 0
 
 
 CHECK = Command("check", _add_check, _check, background=True)
