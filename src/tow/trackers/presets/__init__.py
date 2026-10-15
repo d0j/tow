@@ -28,6 +28,12 @@ _LOG = logging.getLogger("tow.trackers")
 SKIPPED: list[tuple[str, str]] = []
 
 
+def query_param(name: str) -> str:
+    """A regex of a link's query with the number of parameter ``name`` as group 1, wherever the
+    parameter stands among the others (``?t=5``, ``?f=3&t=5``, ``?t=5&start=20#p1``)."""
+    return rf"\?(?:[^#]*&)?{re.escape(name)}=(\d+)(?=&|#|$)"
+
+
 @dataclass(frozen=True)
 class UrlParts:
     """A pasted topic link, split for the site rules (``SitePreset.guess``)."""
@@ -67,15 +73,16 @@ class UrlParts:
 
     def phpbb(self, prefix: str, *, dl: str, page: bool) -> dict[str, Any]:
         """Settings of a phpBB/TorrentPier forum under ``prefix``: topics at viewtopic.php, the
-        .torrent at ``dl`` (straight, or found on the topic page when ``page``)."""
+        .torrent at ``dl`` (straight, or found on the topic page when ``page``). The topic number
+        is the ``t`` parameter wherever it stands (phpBB3 writes ``?f=3&t=55``)."""
         pre = prefix or ""
         login = f"{pre}/login.php" if pre else "/login.php"
         topic = f"{pre}/viewtopic.php?t={{id}}" if pre else "/viewtopic.php?t={id}"
         return self.spec(
             url_regex=self.rx(
-                rf"{re.escape(pre)}/(?:viewtopic\.php|dl\.php)\?t=(\d+)"
+                rf"{re.escape(pre)}/(?:viewtopic\.php|dl\.php){query_param('t')}"
                 if not page
-                else rf"{re.escape(pre)}/viewtopic\.php\?t=(\d+)"
+                else rf"{re.escape(pre)}/viewtopic\.php{query_param('t')}"
             ),
             download_path=dl,
             login_path=login,
