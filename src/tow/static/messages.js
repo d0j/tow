@@ -400,7 +400,38 @@
     return anchor;
   };
 
+  // A message's links and buttons (Details, Undo), in one place the strip and the history share.
+  const actionShape = (item) => `${item.href}|${item.link}|${center.undoLive(item)}`;
+  const actionsOf = (item) => {
+    const box = element("span", "msg-actions");
+    box.dataset.shape = actionShape(item);
+    if (item.href) box.append(link(item));
+    if (center.undoLive(item)) box.append(undoForm(item));
+    return box;
+  };
+
   const strip = () => host.querySelector("#flash");
+  // The strip's words, colour and actions for ``item``: a message updated in place (a check's
+  // progress, then its result) keeps its element and its focus; a control that goes while it
+  // has the focus hands it to the strip's x.
+  const fillStrip = (box, item) => {
+    const said = center.words(item.id);
+    box.className = `flash ${CLASSES[item.kind]}`;
+    box.dataset.kind = item.kind;
+    const kind = box.querySelector(".msg-ico");
+    kind.setAttribute("aria-label", KIND_WORDS[item.kind]);
+    kind.replaceChildren(icon(ICONS[item.kind]));
+    const words = format(pattern, said.subject, said.text);
+    const text = box.querySelector(".msg-text");
+    if (text.textContent !== words) text.textContent = words;
+    const old = box.querySelector(":scope > .msg-actions");
+    if (old?.dataset.shape === actionShape(item)) return;
+    const focused = old?.contains(document.activeElement);
+    const fresh = actionsOf(item);
+    if (old) old.replaceWith(fresh);
+    else box.querySelector(".flash-x").before(fresh);
+    if (focused) box.querySelector(".flash-x").focus();
+  };
   const drawStrip = () => {
     const id = center.active();
     const current = strip();
@@ -413,22 +444,17 @@
       }
       return;
     }
-    const live = center.undoLive(item);
-    const shape = `${id}|${item.kind}|${live}|${center.words(id).text}`;
-    if (current?.dataset.shape === shape) return;
-    const said = center.words(id);
-    const box = element("div", `flash ${CLASSES[item.kind]}`);
+    if (current?.dataset.messageId === id) {
+      fillStrip(current, item);
+      // A focus that is no longer in the strip no longer holds its time.
+      if (!current.contains(document.activeElement)) center.release("focus");
+      return;
+    }
+    const box = element("div", "flash");
     box.id = "flash";
     box.dataset.messageId = id;
-    box.dataset.kind = item.kind;
-    box.dataset.shape = shape;
     const kind = element("span", "msg-ico");
     kind.setAttribute("role", "img");
-    kind.setAttribute("aria-label", KIND_WORDS[item.kind]);
-    kind.append(icon(ICONS[item.kind]));
-    box.append(kind, element("span", "msg-text", format(pattern, said.subject, said.text)));
-    if (item.href) box.append(link(item));
-    if (live) box.append(undoForm(item));
     const close = element("button", "flash-x");
     close.type = "button";
     close.setAttribute("aria-label", t("js.messages.collapse"));
@@ -441,7 +467,8 @@
     box.addEventListener("focusout", (event) => {
       if (!box.contains(event.relatedTarget)) center.release("focus");
     });
-    box.append(close);
+    box.append(kind, element("span", "msg-text"), close);
+    fillStrip(box, item);
     if (current) current.replaceWith(box);
     else host.prepend(box);
   };
