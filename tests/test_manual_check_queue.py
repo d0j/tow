@@ -68,9 +68,8 @@ def test_pending_verification_is_not_a_failure_or_a_confirmed_add(client, monkey
     finished = wait_for_check_job(client, job)
     assert "ожидают подтверждения 1" in finished["flash"]
     assert "с ошибкой 1" in finished["flash"]
-    page = BeautifulSoup(client.get(finished["redirect"]).text, "html.parser")
-    assert page.select_one(f'a[href="/?check_result={job}#check-result"]')
-    result = BeautifulSoup(client.get(f"/?check_result={job}").text, "html.parser")
+    assert finished["redirect"] == f"/?check_result={job}#check-result"
+    result = BeautifulSoup(client.get(finished["redirect"]).text, "html.parser")
     assert len(result.select(".check-result-row")) == 4
     assert "Клиент проверяет существующие файлы" in result.get_text()
     assert "Это результат данного запуска" in result.get_text()
@@ -471,16 +470,17 @@ NNM = {
 WAITING_SPACE = "ждёт места на диске: не хватает 40,5 ГБ; TOW запустит раздачу сам, когда место появится"
 
 
-def _feedback_of(location):
-    """What the owner meets after a check: the message, its kind, its topic and the sign-in prompt."""
-    record = flash_record(location) or {}
+def _shown(client, location):
+    """What the owner meets after a check: the message with its kind - as a message, or folded
+    into "Needs attention" when that already shows the topic - and the sign-in prompt."""
+    page = BeautifulSoup(client.get(location).text, "html.parser")
     query = parse_qs(urlsplit(location).query)
-    return (
-        record.get("text"),
-        record.get("kind"),
-        record.get("problem_topic", ""),
-        (query.get("credential_topic") or [""])[0],
-    )
+    if (flash := page.select_one("#flash")) is not None:
+        message = (flash.get_text(" ", strip=True), " ".join(flash.get("class")))
+    else:
+        folded = page.select_one("[data-problem-result]")
+        message = (folded.get_text(" ", strip=True), "folded " + folded["data-problem-result"])
+    return message, (query.get("credential_topic") or [""])[0]
 
 
 @pytest.mark.parametrize(
@@ -503,7 +503,10 @@ def _feedback_of(location):
 def test_a_queued_topic_check_says_what_a_check_at_once_says(client, monkeypatch, consumers, route, row):
     monkeypatch.setattr("tow.web.services.load_config", lambda: {"trackers": {"nnmclub": NNM}})
     monkeypatch.setattr("tow.web.services.adopt_topic", lambda *_a, **_kw: None)
-    save_state({"topics": [{"id": "t1", "title": "Show A", "url": "https://nnmclub.to/forum/viewtopic.php?t=1234567"}]})
+    topic = {"id": "t1", "title": "Show A", "url": "https://nnmclub.to/forum/viewtopic.php?t=1234567"}
+    if row and row.get("error"):  # what the failed check saved
+        topic.update(last_ok=False, last_error=row["error"], last_error_class=row["error_class"])
+    save_state({"topics": [topic]})
     busy = [False]
 
     def check(**_kw):
@@ -513,12 +516,15 @@ def test_a_queued_topic_check_says_what_a_check_at_once_says(client, monkeypatch
         return {"results": [{"id": "t1", "title": "Show A", **row}] if row is not None else []}
 
     monkeypatch.setattr("tow.web.services.run_check", check)
-    at_once = _feedback_of(client.post(f"/topics/t1/{route}", follow_redirects=False).headers["location"])
+    location = client.post(f"/topics/t1/{route}", follow_redirects=False).headers["location"]
+    at_once = _shown(client, location)
     busy[0] = True
     job = _job(client.post(f"/topics/t1/{route}", follow_redirects=False))
     consumers[0].run()
-    assert _feedback_of(_status(client, job)["redirect"]) == at_once
-    assert at_once[0]
+    assert _shown(client, _status(client, job)["redirect"]) == at_once
+    assert at_once[0][0]
+    # The topic it is about (Home folds a message about a topic already under "Needs attention").
+    assert check_jobs.get(job)["feedback"]["problem_topic"] == flash_record(location).get("problem_topic", "")
 
 
 @pytest.mark.parametrize("error", [None, SecretStoreError("secret gate"), ValueError("bad state")])
@@ -561,6 +567,55 @@ def test_a_check_that_ran_but_whose_result_cannot_be_shown_says_so(client, monke
     assert ended["status"] == "done"
     assert ended["flash"].startswith("проверка прошла, но TOW не смог показать её результат (KeyError)")
     assert [kind for kind, _ in events] == ["check_report_failed"]
+
+
+def test_a_result_has_one_address_rendered_from_its_job(client, monkeypatch, consumers):
+    # The address the page goes to holds no message token (those last 600 s, the job an hour):
+    # it shows the result from the job each time it opens, and following the job writes nothing.
+    from tow.web import views
+
+    save_state(
+        {
+            "topics": [
+                {
+                    "id": "t1",
+                    "title": "Show A",
+                    "url": "https://rutor.info/torrent/1234567/show-a",
+                    "last_ok": False,
+                    "last_error": "refused",
+                    "last_error_class": "qbit",
+                }
+            ]
+        }
+    )
+    busy = [True]
+
+    def check(**kw):
+        if kw.get("ids") == ["t1"] and busy[0]:
+            busy[0] = False
+            raise CheckBusyError("busy")
+        if kw.get("ids") == ["t2"]:
+            raise CheckBusyError("busy")
+        return {"results": [{"id": "t1", "title": "Show A", "ok": False, "error": "refused", "error_class": "qbit"}]}
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    job = _job(client.post("/topics/t1/check", follow_redirects=False))
+    cancelled = _job(client.post("/topics/t2/check", follow_redirects=False))
+    client.post(f"/check/{cancelled}/cancel", follow_redirects=False)
+    consumers[0].run()
+    before = len(views._FLASHES._records)
+    for _ in range(3):
+        done, gone = _status(client, job), _status(client, cancelled)
+    assert len(views._FLASHES._records) == before
+    assert done["redirect"] == f"/?check_result={job}#check-result"
+    assert gone["redirect"] == f"/?check_result={cancelled}#check-result"
+    views._FLASHES.clear()  # every message token has expired meanwhile
+    page = BeautifulSoup(client.get(done["redirect"]).text, "html.parser")
+    # Folded into "Needs attention", which shows the topic's error, as after a check at once.
+    assert done["flash"][1:] in page.select_one('[data-problem-result="err"]').get_text()
+    assert page.select_one("#check-result .check-result-row a[href='/?open=t1&spot=row-t1#row-t1']")
+    other = BeautifulSoup(client.get(gone["redirect"]).text, "html.parser")
+    assert "удалена из очереди" in other.select_one("#check-result").get_text()
 
 
 class _ThreadStop(BaseException):

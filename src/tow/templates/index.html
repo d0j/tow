@@ -21,7 +21,7 @@
   </ul>
   {% if check_result.report.total > check_result.report.rows|length %}<p class="sub">{{ t('web.check_all.more', n=check_result.report.total) }}</p>{% endif %}
   {% elif check_result and check_result.status in ['running', 'queued'] %}<p data-check-result-pending>{{ t('web.check_all.waiting') }}</p>
-  {% elif check_result %}<p>{{ check_result_message|sentence }}</p>
+  {% elif check_result %}{% if check_result_message %}<p>{{ check_result_message|sentence }}</p>{% endif %}
   {% else %}<p>{{ t('web.check_all.unconfirmed') }}</p>{% endif %}
   <p><a href="/history?group=errors">{{ t('web.check_all.history') }}</a> · <a href="/">{{ t('base.close') }}</a></p>
 </section>

@@ -22,8 +22,8 @@ from tow.web.views import (
     check_progress,
     check_report,
     feedback_redirect,
-    flash_location,
     flash_redirect,
+    result_location,
     topic_check_row,
 )
 
@@ -146,17 +146,9 @@ def _perform_check(job: dict[str, Any]) -> None:
             if job["apply"]:
                 services.log_event("check_report_failed", how="manual", **error_fields(exc))
             flash, status, kind = i18n.t("web.check_all.report_failed", lang, error=type(exc).__name__), "done", "warn"
-    # The page follows the job and then opens Home with its result (a message kept on the server).
-    credential = feedback.get("credential_topic")
-    redirect = flash_location(
-        "/?credential_topic=" + quote(credential) if credential else "/",
-        flash,
-        kind,
-        problem_topic=feedback.get("problem_topic", ""),
-        result_job=job["id"],
-    )
+    # The page follows the job, then opens its result (result_location), shown from the job.
     with check_jobs.LOCK:
-        job.update({"status": status, "flash": flash, "kind": kind, "feedback": feedback, "redirect": redirect})
+        job.update({"status": status, "flash": flash, "kind": kind, "feedback": feedback})
 
 
 def _job_result(job: dict[str, Any], out: dict[str, Any]) -> tuple[str, str, str, dict[str, str]]:
@@ -208,10 +200,8 @@ def check_status(job: str = "") -> Response:
         body["progress"] = check_progress(current)
     if current["status"] == "queued":
         body["position"] = current["position"]
-    if current.get("redirect"):
-        body["redirect"] = current["redirect"]
-    elif current["status"] == "failed":
-        body["redirect"] = flash_location("/", check_job_message(current), "warn", result_job=job)
+    if not waiting:  # an address, not a message: polling writes nothing
+        body["redirect"] = result_location(current)
     return JSONResponse(body)
 
 

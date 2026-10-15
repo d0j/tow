@@ -96,6 +96,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   and History said the check did not complete. It now says the check ran and its result could not be shown,
   with its own History entry. A manual check stopped by an internal TOW error says so instead of “TOW
   restarted or the record expired”.
+- A manual check's results open at their own address, which shows them for the hour TOW keeps them (its
+  message used to vanish after ten minutes). A results page still waiting for its check now shows the results
+  when the check ends instead of staying on “waiting”, and Back no longer returns to the waiting page.
 
 ## [1.30.10] — 2026-10-15
 
