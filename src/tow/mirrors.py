@@ -314,6 +314,16 @@ def has_available_host(tracker: str, hosts: list[str], *, ignore_cool: bool = Fa
     return any(not _host_paused(bucket, host.rstrip("/"), ignore_cool=ignore_cool) for host in hosts)
 
 
+def rate_deadline(state: object, tracker: str, host: str, *, now: float) -> float:
+    """Until when ``host``'s server asked to be left alone (0: it did not, or that has passed),
+    from a loaded state; a check, a manual one too, and a probe wait for it."""
+    mirrors = state.get("mirrors") if isinstance(state, dict) else None
+    saved = mirrors.get(tracker) if isinstance(mirrors, dict) else None
+    bucket = _bucket({"mirrors": {"site": copy.deepcopy(saved)}}, "site")
+    until = min(float(bucket["rate_cool"].get(host.rstrip("/")) or 0), now + MAX_RATE_PAUSE_SEC)
+    return until if until > now else 0
+
+
 def _host_paused(bucket: dict[str, Any], host: str, *, ignore_cool: bool) -> bool:
     if float(bucket["rate_cool"].get(host) or 0) > _now():
         return True
