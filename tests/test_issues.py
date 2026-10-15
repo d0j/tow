@@ -322,6 +322,21 @@ def test_sign_ins_are_one_issue_per_site_counted_over_topics_not_paused():
     assert {issue.severity for issue in found} == {"bad"}
 
 
+def test_sign_ins_read_the_sites_through_the_trackers_module_on_each_call(monkeypatch):
+    """site_needs_login copied load_trackers and match_tracker at import. The kinds are loaded
+    when Needs attention is first listed: a test that replaced them then would have left its
+    replacement there for the rest of the run (topic_error's failure in 1.31.2)."""
+    from tow import trackers
+
+    issues.known_kinds()  # loaded before the replacement, as in a full run
+    asked = []
+    monkeypatch.setattr(trackers, "load_trackers", lambda config: asked.append("sites") or {})
+    monkeypatch.setattr(trackers, "match_tracker", lambda found, url: asked.append(url) and None)
+    [issue] = collect(_snapshot([_auth("a", NNM + "1")]))
+    assert issue.id == "site_needs_login:"  # no site matched: the replacements answered
+    assert asked == ["sites", NNM + "1"]
+
+
 def test_after_a_sign_in_the_topics_refused_before_it_wait_for_their_next_check():
     before = "2027-01-15T08:00:00+00:00"  # NOW is 2027-01-15T08:00:00Z
     after = "2027-01-15T08:05:00+00:00"
