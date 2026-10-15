@@ -17,6 +17,7 @@ from typing import Any
 from tow.content import selection as content_selection
 from tow.errors import TowError
 from tow.folders import paths_equal, save_path_policy_problem, save_path_problem
+from tow.records import CONTENT_REF_FIELDS
 from tow.selection import normalize_policy, stored_policy
 from tow.topic_timers import set_interval
 from tow.torrent import TorrentMetadata
@@ -108,7 +109,7 @@ def new_topic(
         "tracking_mode": policy["tracking_mode"],
     }
     if prepared is not None:
-        topic["content_token"] = form.content_token
+        topic["content_ref"] = form.content_token
         topic["content_hash"] = prepared.infohash
     set_interval(topic, interval)
     return topic
@@ -130,10 +131,12 @@ def bind_content(
     if topic.get("hash"):
         return
     if prepared is not None:
-        candidate["content_token"] = token
+        candidate.pop("content_token", None)  # the name 1.31.2 and older stored it under
+        candidate["content_ref"] = token
         candidate["content_hash"] = prepared.infohash
     elif changed:
-        candidate.pop("content_token", None)
+        for key in CONTENT_REF_FIELDS:
+            candidate.pop(key, None)
         candidate.pop("content_hash", None)
 
 

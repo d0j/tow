@@ -32,7 +32,7 @@ from tow.i18n import t
 from tow.jsonish import as_dict
 from tow.log import error_class, error_fields, is_daily_limit, log_event, owner_language
 from tow.mirrors import MirrorFetchError
-from tow.records import CheckRow, Topic, mirror_of
+from tow.records import CheckRow, Topic, content_ref, mirror_of
 from tow.selection import SelectionPendingError, policy_from_topic, resolve_selection
 from tow.store import (
     FileStamp,
@@ -693,7 +693,7 @@ def _readds_removed(work: TopicCheck, *, h: str, needs_selection_update: bool) -
 def _fetch_revision(work: TopicCheck, policy: dict[str, Any]) -> Fetched | None:
     """The topic's .torrent; None when the tracker's magnet confirmed the saved revision."""
     run = work.run
-    token = work.topic.get("content_token")
+    token = content_ref(work.topic)
     if not work.old and token:
         from tow.content import site_revision
 

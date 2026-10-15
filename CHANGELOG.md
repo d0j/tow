@@ -87,6 +87,13 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A torrent client with no saved password no longer says “Empty — keep as is” in its password field: there
   was nothing to keep. A saved password, token or webhook is said under its field (“Saved · leave empty to
   keep”) instead of by a green “Saved” beside its label.
+### Fixed
+
+- Restore points, and so updates from Settings and every restore, no longer fail while a topic added with the
+  file picker waits for its first add (for example while its torrent client is offline): TOW kept the prepared
+  torrent's id under a name the backup check takes for a password. It now has another name, and what older
+  versions saved is accepted. If such a topic waits now, update to this version from the terminal once
+  (Settings → Updates → How to update).
 
 ## [1.31.2] — 2026-10-15
 
