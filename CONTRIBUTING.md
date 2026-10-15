@@ -135,16 +135,14 @@ with its tests and its lines under `## [Unreleased]` in both changelogs, and end
 `release: vX.Y.Z - <summary>` that changes nothing but the version (`pyproject.toml`, `uv.lock`) and turns
 `[Unreleased]` into the dated section of that version in `CHANGELOG.md` and `CHANGELOG.ru.md`. Code never goes
 into the release commit.
-Pull requests that touch the installers, the updater or the dependencies also run the `installers`
-workflow: the Windows bundle and `install.ps1`, and the update of the latest release to the pull request
-(`scripts/update-smoke.py`: a broken copy must roll back, then the real update) on Windows, Linux and
-macOS.
+Pull requests that touch the installers, the updater or the dependencies also run the `installers` workflow: the
+Windows bundle and `install.ps1`, and the update of the latest release to the pull request
+(`scripts/update-smoke.py`: a broken copy must roll back, then the real update) on Windows, Linux and macOS.
 
 Merge the pull request with **Rebase and merge** once it is up to date with `main` (its last `ci` run then
 covers the merge; otherwise wait for `ci` on `main`): `main` gets every commit as it is, with no merge commit,
 and the release commit is its tip. GitHub cannot rebase-merge more than 100 commits; split a longer branch.
-The repository deletes the merged head branch (`--delete-branch-on-merge`); delete a merged local branch
-yourself. Fetch `origin/main` and create an annotated tag on the release commit with the message `TOW X.Y.Z`
+Whoever merges deletes the merged head branch on GitHub and locally. Fetch `origin/main` and create an annotated tag on the release commit with the message `TOW X.Y.Z`
 (`git tag -a vX.Y.Z -m "TOW X.Y.Z" origin/main`). Publish it with:
 
 ```sh
@@ -158,11 +156,11 @@ them back. Only then is the tag sent to `origin`; existing remote history is nev
 post-commit mirror alone is not enough: it cannot copy a later GitHub merge or a tag created after the
 commit. Git's full pre-push gate still applies.
 
-The release workflow does not run the gate again: it requires the tag on `origin/main` and a passed `ci`
-run of its content (on its commit or any commit with the same tree, such as the head of the merged pull
-request: the run of the same content on `main` is not waited for), builds and tests the bundle and the installers, updates the latest release to the tag,
-then uploads everything to a draft release, reads it back and only then publishes it. Wait for it to
-finish before updating a runtime installation.
+The release workflow does not run the gate again: it requires the tag on `origin/main` and a passed `ci` run of
+its content (on its commit or any commit with the same tree, such as the head of the merged pull request: the
+run of the same content on `main` is not waited for), builds and tests the bundle and the installers, updates
+the latest release to the tag, then uploads everything to a draft release, reads it back and only then
+publishes it. Wait for it to finish before updating a runtime installation.
 
 Before a public-history audit, scan a separate complete clone holding only the public refs
 (`uv run --frozen python scripts/history-scan.py --repo /path/to/public-clone`); exit 0 is a complete
