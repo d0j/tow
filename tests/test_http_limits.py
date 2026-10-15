@@ -4,10 +4,14 @@ import gzip
 import re
 import zlib
 
+import httpcore
 import httpx
 import pytest
 
 from tow import http as thttp
+
+# The real transport (the test guard refuses it): the trickle tests fake the network below it.
+_REAL_HANDLE_REQUEST = httpx.HTTPTransport.handle_request
 
 
 def _client(body: bytes) -> httpx.Client:
@@ -397,3 +401,107 @@ def test_a_body_cut_by_a_shorter_deadline_says_that_deadline(monkeypatch):
     with _client(b"x" * 10) as c, pytest.raises(thttp.ResponseTooSlowError) as slow:
         thttp.get_limited(c, "https://t.example/x", max_bytes=1024, deadline=1030.0)
     assert str(slow.value) == "response body took longer than 30 s"
+
+
+# --- one deadline for the whole request: connect, TLS, headers and body ---------------------
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+
+class _TrickleStream(httpcore.NetworkStream):
+    """A mirror that sends one byte of its headers every 19 s, under the 20 s read timeout.
+
+    Each read waits as long as that would (on the fake clock), or times out like a socket
+    when it is given less. After ``give_up`` bytes it closes the connection, so a test of
+    code that has no overall deadline ends too (with a protocol error instead)."""
+
+    def __init__(self, clock: _Clock, *, every: float = 19.0, give_up: int = 3000) -> None:
+        self.clock, self.every, self.give_up = clock, every, give_up
+        self.sent = 0
+        self.wire = b"HTTP/1.1 200 OK\r\nX-Slow: " + b"a" * (give_up + 100)
+
+    def read(self, max_bytes: int, timeout: float | None = None) -> bytes:
+        if timeout is not None and timeout < self.every:
+            self.clock.now += timeout
+            raise httpcore.ReadTimeout("timed out")
+        self.clock.now += self.every
+        if self.sent >= self.give_up:
+            return b""
+        self.sent += 1
+        return self.wire[self.sent - 1 : self.sent]
+
+    def write(self, buffer: bytes, timeout: float | None = None) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+    def start_tls(self, ssl_context, server_hostname=None, timeout=None):
+        return self
+
+    def get_extra_info(self, info: str):
+        return None
+
+
+@pytest.fixture
+def trickling_mirror(monkeypatch):
+    from types import SimpleNamespace
+
+    from tow import net_guard
+
+    clock = _Clock()
+    streams: list[_TrickleStream] = []
+
+    def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
+        streams.append(_TrickleStream(clock))
+        return streams[-1]
+
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", connect_tcp)
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", _REAL_HANDLE_REQUEST)
+    monkeypatch.setattr(net_guard, "public_addresses", lambda host, port: ["203.0.113.7"])
+    monkeypatch.setattr(thttp, "time", SimpleNamespace(monotonic=clock.monotonic))
+    return clock, streams
+
+
+@pytest.mark.parametrize("public_only", [True, False])
+def test_a_mirror_trickling_its_headers_is_cut_at_the_request_deadline(trickling_mirror, public_only):
+    clock, streams = trickling_mirror
+    started = clock.now
+    with thttp.client(follow_redirects=False, public_only=public_only) as c, pytest.raises(thttp.ResponseTooSlowError):
+        thttp.get_limited(c, "http://mirror.example/topic", max_bytes=thttp.MAX_HTML_RESPONSE_BYTES)
+    assert clock.now - started <= 151  # MAX_RESPONSE_SECONDS + 30, not hours
+    assert streams[0].sent < 50
+
+
+def test_a_callers_shorter_deadline_also_cuts_the_headers(trickling_mirror):
+    clock, _streams = trickling_mirror
+    started = clock.now
+    with thttp.client(follow_redirects=False) as c, pytest.raises(thttp.ResponseTooSlowError):
+        thttp.request_limited(c, "POST", "http://mirror.example/login", max_bytes=1024, deadline=started + 30)
+    assert clock.now - started <= 31
+
+
+def test_every_request_gets_its_own_deadline(trickling_mirror, monkeypatch):
+    clock, streams = trickling_mirror
+
+    def answer(self, max_bytes, timeout=None):
+        self.clock.now += 1
+        if self.sent:
+            return b""
+        self.sent = 1
+        return b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
+
+    monkeypatch.setattr(_TrickleStream, "read", answer)
+    with thttp.client(follow_redirects=False) as c:
+        for _ in range(3):
+            clock.now += thttp.MAX_REQUEST_SECONDS  # far past the previous request's deadline
+            assert thttp.get_limited(c, "http://mirror.example/topic", max_bytes=1024).content == b"ok"
+    assert len(streams) == 3

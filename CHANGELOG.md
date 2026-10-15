@@ -125,6 +125,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   no longer go through a proxy set in Windows or in `HTTP_PROXY`: TOW talks to the torrent client and to the
   sign-in browser directly, and qBittorrent's answers are no longer followed to another address. (Requests to
   trackers already ignored such a proxy.)
+- A tracker mirror that sends its answer a byte at a time can no longer hold a check for hours (and with it
+  every other check waiting for it): each request to a site now ends within two and a half minutes, connecting
+  and the answer's headers included; before, only the body of the answer had a time limit.
 
 ## [1.31.2] — 2026-10-15
 

@@ -5,18 +5,23 @@ import math
 import re
 import time
 import zlib
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
+from contextvars import ContextVar
 from datetime import UTC
 from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlsplit
 
+import httpcore
 import httpx
 
 MAX_HTML_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_TORRENT_RESPONSE_BYTES = 16 * 1024 * 1024
 # Per-read timeouts do not bound a mirror that trickles bytes; this bounds the whole body.
 MAX_RESPONSE_SECONDS = 120.0
+# And this the whole request - connect, TLS, headers and body: a mirror that sends one header
+# byte every 19 s (under the 20 s read timeout) would otherwise hold the check for hours.
+MAX_REQUEST_SECONDS = MAX_RESPONSE_SECONDS + 30.0
 
 
 def _http_date(value: object) -> float | None:
@@ -164,6 +169,85 @@ def is_cloudflare(status: int, text: str, headers: Any = None) -> bool:
     return title is not None and " ".join(title.group(1).split()).casefold() in _CLOUDFLARE_TITLES
 
 
+# The deadline of the request this thread is making (request_limited sets it); None: none.
+_REQUEST_DEADLINE: ContextVar[float | None] = ContextVar("tow_request_deadline", default=None)
+
+
+def _budget(timeout: float | None, expired: type[Exception]) -> float | None:
+    """A socket operation's timeout cut to what is left of the request's deadline."""
+    deadline = _REQUEST_DEADLINE.get()
+    if deadline is None:
+        return timeout
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise expired("request time budget exhausted")
+    return left if timeout is None else min(left, timeout)
+
+
+class _DeadlineStream(httpcore.NetworkStream):
+    """A connection whose every read, write and TLS handshake ends by the deadline of the
+    request using it - also when the pool hands the connection to a later request."""
+
+    def __init__(self, wrapped: httpcore.NetworkStream) -> None:
+        self.wrapped = wrapped
+
+    def read(self, max_bytes: int, timeout: float | None = None) -> bytes:
+        return self.wrapped.read(max_bytes, timeout=_budget(timeout, httpcore.ReadTimeout))
+
+    def write(self, buffer: bytes, timeout: float | None = None) -> None:
+        self.wrapped.write(buffer, timeout=_budget(timeout, httpcore.WriteTimeout))
+
+    def close(self) -> None:
+        self.wrapped.close()
+
+    def start_tls(
+        self, ssl_context: Any, server_hostname: str | None = None, timeout: float | None = None
+    ) -> httpcore.NetworkStream:
+        tls = self.wrapped.start_tls(ssl_context, server_hostname, timeout=_budget(timeout, httpcore.ConnectTimeout))
+        return _DeadlineStream(tls)
+
+    def get_extra_info(self, info: str) -> Any:
+        return self.wrapped.get_extra_info(info)
+
+
+class RequestDeadlineBackend(httpcore.SyncBackend):
+    """The pool's own backend (the public-only one, or httpcore's), with every connection it
+    makes held to the deadline of the request using it."""
+
+    def __init__(self, wrapped: httpcore.NetworkBackend) -> None:
+        self.wrapped = wrapped
+
+    def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options: Iterable[Any] | None = None,
+    ) -> httpcore.NetworkStream:
+        timeout = _budget(timeout, httpcore.ConnectTimeout)
+        return _DeadlineStream(self.wrapped.connect_tcp(host, port, timeout, local_address, socket_options))
+
+    def connect_unix_socket(
+        self, path: str, timeout: float | None = None, socket_options: Iterable[Any] | None = None
+    ) -> httpcore.NetworkStream:
+        timeout = _budget(timeout, httpcore.ConnectTimeout)
+        return _DeadlineStream(self.wrapped.connect_unix_socket(path, timeout, socket_options))
+
+    def sleep(self, seconds: float) -> None:
+        self.wrapped.sleep(seconds)
+
+
+def _hold_to_request_deadlines(c: httpx.Client) -> httpx.Client:
+    """Put RequestDeadlineBackend under every connection pool of ``c`` (also a proxy's)."""
+    for transport in [c._transport, *c._mounts.values()]:
+        pool = getattr(transport, "_pool", None)
+        backend = getattr(pool, "_network_backend", None)
+        if isinstance(pool, httpcore.ConnectionPool) and backend is not None:
+            pool._network_backend = RequestDeadlineBackend(backend)
+    return c
+
+
 def client(
     ua: str | None = None,
     cookies: dict[str, str] | None = None,
@@ -177,13 +261,15 @@ def client(
         transport = PublicOnlyTransport()
     else:
         transport = None
-    return httpx.Client(
-        headers={"User-Agent": ua or UA_DEFAULT, "Accept-Encoding": "gzip, deflate, identity"},
-        cookies=cookies or {},
-        follow_redirects=follow_redirects,
-        timeout=httpx.Timeout(20.0, connect=5.0),
-        transport=transport,
-        trust_env=not public_only,
+    return _hold_to_request_deadlines(
+        httpx.Client(
+            headers={"User-Agent": ua or UA_DEFAULT, "Accept-Encoding": "gzip, deflate, identity"},
+            cookies=cookies or {},
+            follow_redirects=follow_redirects,
+            timeout=httpx.Timeout(20.0, connect=5.0),
+            transport=transport,
+            trust_env=not public_only,
+        )
     )
 
 
@@ -313,13 +399,32 @@ def _decoded_chunks(response: httpx.Response, *, limit: int, deadline: float, ha
 def request_limited(
     c: httpx.Client, method: str, url: str, *, max_bytes: int, deadline: float | None = None, **kwargs: Any
 ) -> httpx.Response:
-    """``c.request(method, url, **kwargs)`` with the body streamed into a bounded response."""
+    """``c.request(method, url, **kwargs)`` with the body streamed into a bounded response.
+
+    The whole request ends by ``deadline``, and at the latest MAX_REQUEST_SECONDS after it
+    started: connect, TLS and headers too on a client of ``client()``."""
     if max_bytes <= 0:
         raise ValueError("max_bytes must be positive")
     if deadline is not None and (isinstance(deadline, bool) or not math.isfinite(deadline)):
         raise ValueError("invalid response deadline")
     if deadline is not None and time.monotonic() >= deadline:
         raise ResponseTooSlowError("response time budget exhausted")
+    whole = time.monotonic() + MAX_REQUEST_SECONDS
+    request_deadline = whole if deadline is None else min(deadline, whole)
+    token = _REQUEST_DEADLINE.set(request_deadline)
+    try:
+        return _request_limited(c, method, url, max_bytes=max_bytes, deadline=deadline, **kwargs)
+    except httpx.TimeoutException as exc:
+        if time.monotonic() >= request_deadline:
+            raise ResponseTooSlowError("request time budget exhausted") from exc
+        raise
+    finally:
+        _REQUEST_DEADLINE.reset(token)
+
+
+def _request_limited(
+    c: httpx.Client, method: str, url: str, *, max_bytes: int, deadline: float | None, **kwargs: Any
+) -> httpx.Response:
     # A few adapter tests use a deliberately tiny client double. Real httpx
     # clients always take the streaming branch below.
     if not hasattr(c, "stream"):
