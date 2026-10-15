@@ -13,7 +13,7 @@ from helpers import flash_of, flash_record, manual_check_consumers, wait_for_che
 from tow.check_outcomes import counts_of, outcome_of
 from tow.log import format_event
 from tow.store import CheckBusyError, SecretStoreError, save_state
-from tow.web import app, check_jobs, routes_check
+from tow.web import app, check_actions, check_jobs
 from tow.web.views import check_report
 
 
@@ -120,7 +120,7 @@ def test_a_click_during_a_running_check_gets_one_follow_up_check(client, monkeyp
 
     monkeypatch.setattr("tow.web.services.run_check", check)
     monkeypatch.setattr("tow.web.services.adopt_topic", lambda *_a, **_kw: None)
-    first = check_jobs.submit(topic_id="b", apply=True, lang="ru", perform=routes_check._perform_check)[0]
+    first = check_jobs.submit(topic_id="b", apply=True, lang="ru", perform=check_actions.perform_check)[0]
     consumers[0].run()
     assert seen["follow_up"] != first["id"]
     assert seen["again"] == seen["follow_up"]
@@ -270,7 +270,7 @@ def test_a_long_running_check_says_since_when_and_keeps_its_lane(client, monkeyp
         return {"results": [{"id": kw["ids"][0], "title": "Show", "ok": True}]}
 
     monkeypatch.setattr("tow.web.services.run_check", check)
-    job = check_jobs.submit(topic_id="b", apply=True, lang="ru", perform=routes_check._perform_check)[0]["id"]
+    job = check_jobs.submit(topic_id="b", apply=True, lang="ru", perform=check_actions.perform_check)[0]["id"]
     consumers[0].run()
     assert seen["status"]["progress"].startswith(f"Идёт проверка с {began}.")
     assert seen["status"]["progress"] in seen["page"]
@@ -579,8 +579,8 @@ def test_a_check_that_ran_but_whose_result_cannot_be_shown_says_so(client, monke
     def broken_report(*_a, **_kw):
         raise KeyError("synthetic report failure")
 
-    monkeypatch.setattr("tow.web.routes_check.check_report", broken_report)
-    job = check_jobs.submit(topic_id=topic_id, apply=True, lang="ru", perform=routes_check._perform_check)[0]
+    monkeypatch.setattr("tow.web.check_actions.check_report", broken_report)
+    job = check_jobs.submit(topic_id=topic_id, apply=True, lang="ru", perform=check_actions.perform_check)[0]
     consumers[0].run()
     ended = _status(client, job["id"])
     assert ended["status"] == "done"
