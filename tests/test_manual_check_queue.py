@@ -132,6 +132,25 @@ def test_a_click_during_a_running_check_gets_one_follow_up_check(client, monkeyp
     assert check_jobs.get(seen["follow_up"])["adopted"] is True  # the shared request kept the adoption
 
 
+def test_a_queued_topic_check_re_adds_only_what_was_gone_by_the_last_click(client, monkeypatch, consumers, clock):
+    # A row check that waited must not add back a torrent the owner removed after clicking: the
+    # check gets the time of the request it serves (the latest click on a shared job).
+    seen = []
+    monkeypatch.setattr(
+        "tow.web.services.run_check",
+        lambda **kw: seen.append(kw.get("readd_since")) or {"results": [{"id": "b", "title": "Show B", "ok": True}]},
+    )
+    first_click = clock.wall
+    first = check_jobs.submit(topic_id="b", apply=True, lang="en", perform=check_actions.perform_check)[0]
+    clock.wall += 60
+    shared = check_jobs.submit(topic_id="b", apply=True, lang="en", perform=check_actions.perform_check)[0]
+    every = check_jobs.submit(topic_id="", apply=True, lang="en", perform=check_actions.perform_check)[0]
+    assert shared["id"] == first["id"]
+    consumers[0].run()
+    assert seen == [first_click + 60, None]  # the latest click; checking every topic re-adds nothing by request
+    assert every["id"] != first["id"]
+
+
 def test_a_waiting_preview_never_delays_an_applying_check(client, monkeypatch, consumers):
     # A preview never takes the check lock, so it waits in a lane of its own.
     calls = []

@@ -142,6 +142,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   for a minute and turns red; TOW hands it over at once and applies its file selection, then starts it (or lets it
   wait for disk space), once Transmission's check ends - never with all files and without downloading the .torrent
   again.
+- A topic check that waited in the queue no longer adds back a torrent you removed from the client after
+  pressing Check; one a check had already found missing before you pressed it is still added back.
 
 ## [1.30.10] — 2026-10-15
 
