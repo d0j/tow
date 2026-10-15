@@ -39,6 +39,9 @@ _FAILURE_CLASSES = {
     "maintenance": "tracker",
     "unexpected": "not_torrent",
 }
+# The longest pause a server's answer can set (Retry-After is bounded the same, tow.http): a
+# saved deadline further ahead was written by a clock that has gone back since.
+MAX_RATE_PAUSE_SEC = 86400
 # A password login is not repeated by scheduled checks within this time: a site that answers
 # every download with a page (a removed topic, a check page) must not get the password each time.
 LOGIN_PAUSE_SEC = 600
@@ -140,8 +143,9 @@ def _configured_hosts(spec: object) -> set[str]:
     return {str(item).rstrip("/") for item in [*(spec.get("fetch_hosts") or []), *(spec.get("login_hosts") or [])]}
 
 
-def _record(tracker: str, host: str, change: Callable[[dict[str, Any]], None]) -> None:
-    """Apply one answer of ``host`` to the site's entry as it is saved now, under the lock.
+def _record(tracker: str, host: str | None, change: Callable[[dict[str, Any]], object]) -> None:
+    """Apply one answer of ``host`` (None: the whole site) to the site's entry as it is saved
+    now, under the lock.
 
     Counts and deadlines change from the saved values, never from a copy this request read
     before it went out: overlapping checks (a web action beside a scheduled check) lose
@@ -149,10 +153,9 @@ def _record(tracker: str, host: str, change: Callable[[dict[str, Any]], None]) -
     """
     from tow.config import load_config
 
-    host = host.rstrip("/")
     with persistence_lock():
         configured = _configured_hosts((load_config().get("trackers") or {}).get(tracker))
-        if host not in configured:
+        if not configured or (host is not None and host.rstrip("/") not in configured):
             return
         st = load_state()
         current = _bucket(st, tracker)
@@ -162,6 +165,44 @@ def _record(tracker: str, host: str, change: Callable[[dict[str, Any]], None]) -
         # A healthy fetch from the active mirror changes nothing: no state rewrite + fsync.
         if current != before:
             save_state(st)
+
+
+def cooldown_of(spec: object) -> float:
+    """A site's cooldown in seconds (``cooldown_sec``, default an hour)."""
+    value = spec.get("cooldown_sec") if isinstance(spec, dict) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+        return 3600.0
+    return float(value)
+
+
+def _clamp(bucket: dict[str, Any], *, now: float, cooldown_sec: float) -> bool:
+    """Bring back deadlines a clock that went back left too far ahead: a server's rate deadline
+    to ``MAX_RATE_PAUSE_SEC``, a cooldown to the site's own (or to its longer rate deadline).
+    True when something changed: an applying check saves that once (``pick_and_get``); a
+    value corrected only on reading would move ahead with the clock for ever."""
+    changed = False
+    for host, until in bucket["rate_cool"].items():
+        if until > now + MAX_RATE_PAUSE_SEC:
+            bucket["rate_cool"][host] = now + MAX_RATE_PAUSE_SEC
+            changed = True
+    for host, until in bucket["cool"].items():
+        limit = max(now + cooldown_sec, float(bucket["rate_cool"].get(host) or 0))
+        if until > limit:
+            bucket["cool"][host] = limit
+            changed = True
+    return changed
+
+
+def pause_floor(bucket: object, hosts: list[Any], *, now: float, cooldown_sec: float = 3600) -> float:
+    """When the first of ``hosts`` may be asked again (0: no pause), read from a saved site entry
+    as a check reads it: deadlines clamped (``_clamp``), hosts compared without a trailing "/"."""
+    view = _bucket({"mirrors": {"site": copy.deepcopy(bucket)}}, "site")
+    _clamp(view, now=now, cooldown_sec=cooldown_sec)
+    floors = [
+        max(float(view["rate_cool"].get(host) or 0), float(view["cool"].get(host) or 0))
+        for host in {str(item).rstrip("/") for item in hosts}
+    ]
+    return min(floors) if floors else 0
 
 
 def _prune(bucket: dict[str, Any], configured: set[str]) -> None:
@@ -766,6 +807,8 @@ def pick_and_get(
         raise MirrorFetchError("mirrors.no_hosts", failure="config", cls="error", tracker=tracker)
     state = load_state()
     b = _bucket(state, tracker)
+    if _clamp(b, now=_now(), cooldown_sec=cooldown_sec) and persist:
+        _record(tracker, None, lambda saved: _clamp(saved, now=_now(), cooldown_sec=cooldown_sec))
     if b.get("frozen"):
         raise MirrorFetchError("mirrors.frozen", failure="frozen", tracker=tracker)
     last_err = None

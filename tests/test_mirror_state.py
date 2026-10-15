@@ -110,3 +110,62 @@ def test_a_late_answer_cannot_recreate_a_deleted_site(monkeypatch):
     with pytest.raises(MirrorFetchError):
         pick_and_get("demo", SPEC["fetch_hosts"], "/topic/1")
     assert "demo" not in load_state().get("mirrors", {})
+
+
+DAY = 86400
+
+
+def _saved(**bucket):
+    from tow.store import save_state
+
+    state = load_state()
+    state["mirrors"] = {"demo": bucket}
+    save_state(state)
+
+
+def test_a_deadline_a_clock_jump_left_far_ahead_is_clamped_once(monkeypatch):
+    # The clock went back ten days after a pause was written: it held the mirror for ten days.
+    now = [1000.0]
+    monkeypatch.setattr("tow.mirrors._now", lambda: now[0])
+    calls, _ = install(monkeypatch, lambda r: httpx.Response(200, text="page"))
+    _saved(cool={HOST: 1000.0 + 10 * DAY}, rate_cool={HOST: 1000.0 + 10 * DAY}, fail={HOST: 3})
+    with pytest.raises(MirrorFetchError):
+        pick_and_get("demo", SPEC["fetch_hosts"], "/topic/1", ignore_cool=True)
+    bucket = load_state()["mirrors"]["demo"]
+    assert bucket["rate_cool"][HOST] == 1000.0 + DAY
+    assert bucket["cool"][HOST] == 1000.0 + DAY
+    now[0] = 5000.0  # read again later: the corrected deadline stays where it was put
+    with pytest.raises(MirrorFetchError):
+        pick_and_get("demo", SPEC["fetch_hosts"], "/topic/1", ignore_cool=True)
+    assert load_state()["mirrors"]["demo"]["rate_cool"][HOST] == 1000.0 + DAY
+    now[0] = 1001.0 + DAY
+    pick_and_get("demo", SPEC["fetch_hosts"], "/topic/1")
+    assert len(calls) == 1
+
+
+def test_a_cooldown_longer_than_the_sites_own_is_clamped_and_a_real_day_long_limit_is_kept(monkeypatch):
+    monkeypatch.setattr("tow.mirrors._now", lambda: 1000.0)
+    install(monkeypatch, lambda r: httpx.Response(200, text="page"), hosts=[HOST, "https://free.example"])
+    _saved(
+        cool={HOST: 1000.0 + 5 * DAY, "https://free.example": 1000.0 + DAY},
+        rate_cool={"https://free.example": 1000.0 + DAY},
+    )
+    with pytest.raises(MirrorFetchError):
+        pick_and_get("demo", [HOST, "https://free.example"], "/topic/1", cooldown_sec=600)
+    bucket = load_state()["mirrors"]["demo"]
+    assert bucket["cool"][HOST] == 1600.0  # the configured cooldown, e.g. after it was shortened
+    assert bucket["cool"]["https://free.example"] == 1000.0 + DAY  # a server's 24-hour Retry-After
+    assert bucket["rate_cool"]["https://free.example"] == 1000.0 + DAY
+
+
+def test_a_preview_clamps_in_its_own_view_and_writes_nothing(monkeypatch):
+    from tow.paths import state_path
+
+    monkeypatch.setattr("tow.mirrors._now", lambda: 1000.0)
+    calls, _ = install(monkeypatch, lambda r: httpx.Response(200, text="page"))
+    _saved(cool={HOST: 1000.0 + 10 * DAY}, fail={HOST: 3})
+    before = state_path().read_bytes()
+    with pytest.raises(MirrorFetchError):
+        pick_and_get("demo", SPEC["fetch_hosts"], "/topic/1", persist=False)
+    assert state_path().read_bytes() == before
+    assert calls == []
