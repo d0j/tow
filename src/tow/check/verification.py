@@ -45,6 +45,11 @@ MISSING_CONFIRM_SEC = 600
 # A verification still waiting after this long is the owner's to look at (a red client error),
 # not a reason to drop, replace or finish the receipt: it is still confirmed when the client is done.
 OVERDUE_SEC = 12 * 3600
+# Where a receipt whose selection is not applied yet (``AWAITING_INITIAL_CHECK``) is saved: never
+# as ``receipt``, which TOW 1.30.10 and older read as an applied, read-back selection - an add of
+# all files would pass that, and they would start it without measuring disk space. Without a
+# ``receipt`` they refuse it (a selection they cannot confirm) before asking anything of the client.
+UNAPPLIED_RECEIPT = "unapplied_receipt"
 
 
 class _NotListedYet(Exception):
@@ -64,6 +69,20 @@ def waiting_topics(state: dict[str, Any]) -> list[Topic]:
 
 def _stamp() -> str:
     return machine_now().isoformat(timespec="seconds")
+
+
+def receipt_of(waiting: dict[str, Any]) -> Any:
+    """The receipt a pass confirms: the applied one, else the one handed over before its
+    selection was applied (``UNAPPLIED_RECEIPT``)."""
+    return waiting.get("receipt") if "receipt" in waiting else waiting.get(UNAPPLIED_RECEIPT)
+
+
+def _keep_receipt(waiting: dict[str, Any], receipt: dict[str, Any]) -> None:
+    """Save ``receipt`` under the one key its phase belongs to (``UNAPPLIED_RECEIPT``)."""
+    waiting.pop("receipt", None)
+    waiting.pop(UNAPPLIED_RECEIPT, None)
+    unapplied = receipt.get("phase") == AWAITING_INITIAL_CHECK
+    waiting[UNAPPLIED_RECEIPT if unapplied else "receipt"] = copy.deepcopy(receipt)
 
 
 def _anchor(previous: dict[str, Any]) -> str:
@@ -319,7 +338,6 @@ def _defer(work: TopicCheck, error: ClientVerificationPending, metadata: Any, pl
         "client": work.client_id,
         "path": dest,
         "owner": list(client_marks(work.topic)),
-        "receipt": copy.deepcopy(receipt),
         "since": _anchor(previous) if same_transaction else _stamp(),
         "kind": str(waiting_space.get("kind") or "added")
         if waited_for_space
@@ -332,6 +350,7 @@ def _defer(work: TopicCheck, error: ClientVerificationPending, metadata: Any, pl
         and not work.row.get("readd_removed")
         and "tow-pending" not in {str(tag).strip().casefold() for tag in info.get("tags") or []},
     }
+    _keep_receipt(work.topic["verification_pending"], receipt)
     if waited_for_space:
         work.topic["verification_pending"].update(completion_event="client_started", resume_after_check=True)
     elif retries_same:
@@ -420,7 +439,7 @@ def _confirm(
     confirmed = finish(
         h,
         str(waiting.get("path") or ""),
-        waiting.get("receipt") or {},
+        receipt_of(waiting) or {},
         start_stopped=retry,
         on_start=lambda: _start_given(waiting),
     )
@@ -433,7 +452,7 @@ def _start_given(waiting: dict[str, Any]) -> None:
     only once its selection is applied and read back: from then on its receipt is the applied
     one, so a lost answer never makes a later pass stop, select or start it again."""
     waiting["resume_attempted"] = True
-    receipt = as_dict(waiting.get("receipt"))
+    receipt = as_dict(receipt_of(waiting))
     if receipt.get("phase") == AWAITING_INITIAL_CHECK and receipt.get("start") is True:
         _adopt_receipt(waiting, {key: value for key, value in receipt.items() if key not in {"phase", "start"}})
 
@@ -572,7 +591,7 @@ def _adopt_receipt(waiting: dict[str, Any], receipt: dict[str, Any]) -> None:
     """The adapter applied a selection handed over before it (the client's own check ended) and
     the start is not confirmed yet: the same hash and selection, now read back, is the receipt
     the next pass confirms."""
-    current = as_dict(waiting.get("receipt"))
+    current = as_dict(receipt_of(waiting))
     if (
         current.get("phase") == AWAITING_INITIAL_CHECK
         and receipt.get("phase") is None
@@ -580,7 +599,7 @@ def _adopt_receipt(waiting: dict[str, Any], receipt: dict[str, Any]) -> None:
         and receipt.get("wanted") == current.get("wanted")
         and receipt.get("ignored", []) == current.get("ignored", [])
     ):
-        waiting["receipt"] = copy.deepcopy(receipt)
+        _keep_receipt(waiting, receipt)
 
 
 def _finished(
@@ -596,7 +615,7 @@ def _finished(
 ) -> None:
     """The client confirmed the transaction: the receipt is done, History and the owner hear it.
     An add handed over before its selection that did not fit stays stopped and waits for room."""
-    receipt = as_dict(waiting.get("receipt"))
+    receipt = as_dict(receipt_of(waiting))
     if receipt.get("phase") == AWAITING_INITIAL_CHECK and receipt.get("start") is False:
         _wait_for_room(topic, run, row, waiting, client_id, h, client=client, info=info or {})
         return

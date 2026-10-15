@@ -152,6 +152,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Transmission: when the connection to Transmission broke right after TOW started a new torrent whose file check
   had ended, the next check no longer stops it, chooses its files and starts it again, and no longer starts it
   after you paused it.
+- Transmission: going back to TOW 1.30.10 or older while Transmission still checks such a new torrent no longer
+  lets the older version start it while it waits for disk space; the older version shows an error for it until you
+  check the topic by hand.
 
 ## [1.30.10] — 2026-10-15
 

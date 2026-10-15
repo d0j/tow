@@ -14,9 +14,10 @@ from tow.check import apply as apply_step
 from tow.check import run as check_run
 from tow.check import space, verification
 from tow.check import topic as topic_step
-from tow.clients import factory
+from tow.clients import factory, files
 from tow.clients.managed import ClientError, ClientVerificationPending, completed_progress
 from tow.errors import TowError
+from tow.folders import paths_equal
 from tow.notify import NotificationBatch
 from tow.progress import reconcile_topic
 from tow.progress.summary import progress_summary
@@ -572,7 +573,7 @@ def test_an_add_checked_before_its_selection_is_finished_by_the_passes(world, mo
     first = _run()
     assert first["status"] == "verification_pending"
     assert not first.get("error")
-    receipt = load_state()["topics"][0]["verification_pending"]["receipt"]
+    receipt = load_state()["topics"][0]["verification_pending"]["unapplied_receipt"]  # never read as applied
     assert (receipt["phase"], receipt["start"]) == ("awaiting_initial_check", fits)
     assert [call[0] for call in client.calls] == ["add"]
     assert client.wanted_torrent_indices() == {0, 1, 2}  # not applied, never running like this
@@ -600,6 +601,117 @@ def test_an_add_checked_before_its_selection_is_finished_by_the_passes(world, mo
         assert client.torrents[H]["state"] == "downloading"
         assert sent == ["error", "updated", "recovered"]  # as for every reported wait for disk space
     assert tracker.fetches == 1
+
+
+class Reader13010(VerifyingClient):
+    """How TOW 1.30.10 finishes a saved receipt, as released up to its start: the client part of
+    ``tow.check.verification._confirm``, ``_verify_receipt`` and the beginning of
+    ``_finish_verification`` of ``tow.clients.managed`` (git show v1.30.10:<file>). It knows no
+    receipt phase and reads ``receipt`` as an applied, read-back selection."""
+
+    def confirm(self, waiting):
+        info = self.inspect_torrent(H)
+        stopped = str((info or {}).get("state") or "").casefold().startswith(("stopped", "paused"))
+        pending_mark = "tow-pending" in {str(tag).casefold().strip() for tag in (info or {}).get("tags") or []}
+        retry = stopped and (
+            (pending_mark or waiting.get("resume_after_check")) and not waiting.get("resume_attempted")
+        )
+        return self.finish_13010(
+            H,
+            str(waiting.get("path") or ""),
+            waiting.get("receipt") or {},
+            start_stopped=retry,
+            on_start=lambda: waiting.__setitem__("resume_attempted", True),
+        )
+
+    def verify_13010(self, infohash, destination, receipt, *, require_pending):
+        if not isinstance(receipt, dict):
+            raise self._fail("client.managed.wrong_selection")
+        rows, wanted, ignored = receipt.get("files"), receipt.get("wanted"), receipt.get("ignored", [])
+        if (
+            not isinstance(rows, list)
+            or not rows
+            or any(not isinstance(row, dict) for row in rows)
+            or not isinstance(wanted, list)
+            or not wanted
+            or not isinstance(ignored, list)
+            or any(type(index) is not int or index < 0 for index in [*wanted, *ignored])
+        ):
+            raise self._fail("client.managed.wrong_selection")
+        priorities = files.priorities(rows, fail=lambda: self._fail("client.managed.wrong_selection"))
+        padding = {row["index"] for row in rows if self._padding_like(row.get("name"))}
+        if (
+            not set(ignored).issubset(padding)
+            or set(wanted).intersection(ignored)
+            or not set(wanted).issubset(priorities)
+        ):
+            raise self._fail("client.managed.wrong_selection")
+        info = self.inspect_torrent(infohash)
+        if info is None:
+            raise self._fail("client.managed.missing")
+        identities = {str(info.get(key) or "").upper() for key in ("hash", "infohash_v1", "infohash_v2")}
+        identities.update(value[:40] for value in list(identities) if len(value) == 64)
+        if infohash.upper() not in identities or str(receipt.get("hash") or "").upper() != infohash.upper():
+            raise self._fail("client.managed.hash_changed_selection")
+        if "tow" not in self._tags(info) or (require_pending and "tow-pending" not in self._tags(info)):
+            raise self._fail("client.managed.not_owned")
+        if not destination or not paths_equal(str(info.get("save_path") or ""), destination):
+            raise self._fail("client.managed.wrong_folder")
+        self._check_state(info)
+        files.verify_selection(
+            rows,
+            list(info.get("files") or []),
+            set(wanted),
+            ignored=set(ignored),
+            fail=lambda: self._fail("client.managed.wrong_selection"),
+        )
+        return info
+
+    def finish_13010(self, infohash, destination, receipt, *, start_stopped, on_start):
+        info = self.verify_13010(infohash, destination, receipt, require_pending=False)
+        if str(info.get("state") or "").casefold().startswith("checking"):
+            raise ClientVerificationPending(infohash, prefix=self.title, receipt=receipt)
+        if self._stopped(info) and not completed_progress(info.get("progress")) and start_stopped:
+            self._require_owned(infohash)
+            on_start()
+            self._start(infohash)
+        return info
+
+
+def test_a_rollback_to_1_30_10_never_starts_an_add_held_back_for_room(world, monkeypatch):
+    """Transmission checks an add of all files that does not fit: it is handed over before its
+    selection, to be released stopped. TOW 1.30.10 reads ``receipt`` as an applied selection - an
+    add of all files passes it - and would start the torrent without measuring disk space. The
+    receipt is saved where 1.30.10 does not look: it refuses the receipt before asking the client
+    for anything (a red error the owner repairs with a check by hand, which measures the space)."""
+    client, _tracker, _sent = world
+    disk = load_state()
+    disk["topics"][0]["selection"] = {"mode": "all", "value": ""}
+    save_state(disk)
+    client.initial_check, client.checking = True, False
+    folder = disk["topics"][0]["save_path"]
+    full = space.Shortfall(needed=1024**3, free=0, path=folder)
+    monkeypatch.setattr(apply_step, "free_space_problem", lambda *args, **kwargs: full)
+    monkeypatch.setattr(space, "_measured", lambda *args, **kwargs: (True, full))
+    assert _run()["status"] == "verification_pending"
+    waiting = load_state()["topics"][0]["verification_pending"]
+    old = Reader13010()
+    old.torrents = client.torrents
+    old.torrents[H]["state"] = "stoppedDL"  # Transmission's check ended
+    with pytest.raises(ClientError) as error:
+        old.confirm(waiting)
+    assert error.value.code == "client.managed.wrong_selection"  # blocked by 1.30.10, nothing started
+    assert old.calls == []
+    assert old.torrents[H]["state"] == "stoppedDL"
+    assert not waiting.get("resume_attempted")
+    assert "receipt" not in waiting  # the only key 1.30.10 reads
+    assert (waiting["unapplied_receipt"]["phase"], waiting["unapplied_receipt"]["start"]) == (
+        "awaiting_initial_check",
+        False,
+    )
+    row = _run(space_only=True)  # this version still finishes it: released stopped, waiting for room
+    assert row["status"] == "waiting_space"
+    assert "start" not in [call[0] for call in client.calls]
 
 
 @pytest.mark.parametrize("owner_paused", [False, True])
