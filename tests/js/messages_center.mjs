@@ -263,4 +263,18 @@ verdict.undo = true;
 }
 verdict.progressInPlace = true;
 
+// Signing out removes the tab's stored messages even after a failed write made the history keep
+// them in memory only.
+{
+  const store = memoryStore();
+  const first = make({ storage: store, key: "tow.messages.n1" });
+  first.center.show({ id: "a", kind: "ok", subject: "Show", text: "x" });
+  store.set = () => { throw new Error("QuotaExceededError"); };
+  first.center.show({ id: "b", kind: "ok", text: "y" });
+  assert.equal(first.center.stored(), false);
+  first.center.clearStorage();
+  assert.equal(store.get("tow.messages.n1"), null);
+}
+verdict.signOutRemovesAfterFallback = true;
+
 console.log(JSON.stringify(verdict));

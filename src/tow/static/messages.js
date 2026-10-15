@@ -280,13 +280,21 @@
         items = [];
         pending.length = 0;
         if (active) collapse("cleared", false);
-        if (!memoryOnly) {
-          try {
-            for (const name of storage.keys()) if (name && name.startsWith(PREFIX)) storage.remove(name);
-          } catch {
-            // nothing stored, or nothing to remove
-          }
+        // Also when a failed write made the history keep its messages in memory only.
+        if (!storage) return;
+        let names = [key];
+        try {
+          names = [...new Set([key, ...storage.keys().filter((name) => name && name.startsWith(PREFIX))])];
+        } catch {
+          // the list cannot be read: this tab's own key at least
         }
+        names.forEach((name) => {
+          try {
+            storage.remove(name);
+          } catch {
+            // nothing stored, or it cannot be removed
+          }
+        });
       },
     };
   };
