@@ -206,7 +206,7 @@ def test_every_check_this_tab_started_is_followed_within_bounds_to_exactly_one_r
     # for; a finished check opened a second page. One bounded scheduler follows them all instead.
     verdict = _verdict("check_scheduler.mjs")
     assert verdict == dict.fromkeys(verdict, True), verdict
-    assert len(verdict) == 14
+    assert len(verdict) == 15
 
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
@@ -231,7 +231,7 @@ def test_a_row_whose_check_ended_is_drawn_again_but_never_under_the_owners_hands
 def test_a_check_is_sent_with_its_kept_action_id_and_followed_where_the_page_is():
     verdict = _verdict("check_submit.mjs")
     assert verdict == dict.fromkeys(verdict, True), verdict
-    assert len(verdict) == 7
+    assert len(verdict) == 8
 
 
 @pytest.mark.allow_system

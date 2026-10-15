@@ -224,6 +224,8 @@
       },
       wake: () => plan(),
       stop,
+      // Still followed (by its own id or as an alias of a click TOW took as the same job).
+      pending: (action) => Boolean(action) && entries.some((entry) => entry.action === action || (entry.aliases || []).includes(action)),
       entries: () => entries.map((entry) => ({ ...entry })),
       count: () => entries.length,
       stored: () => !memoryOnly,
@@ -490,6 +492,7 @@
     begin: (meta) => scheduler.begin(meta),
     acknowledge: (action, ack) => scheduler.acknowledge(action, ack),
     forget: (action) => scheduler.forget(action),
+    pending: (action) => scheduler.pending(action),
     count: () => scheduler.count(),
     scheduler,
   };
