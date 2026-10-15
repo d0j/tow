@@ -212,8 +212,9 @@ The web package (`src/tow/web/`):
   restore points and night copies, diagnostics, browser sign-in, the log; also `login_throttle`,
   `locked_state_mutation` and `write_generation` (what `_context.py` drops its reads by). The helper modules use
   it too: `tests/test_web_boundary.py` holds what each still reads directly (`HELPER_ALLOWED`, which only shrinks).
-- Helpers: `_context.py` (what a request reads once), `views.py` (flash messages, Home rows, whether the
-  first-start page is due, the service and backup cards of Settings), `text.py`,
+- Helpers: `_context.py` (what a request reads once), `messages.py` (the message after an action: its record,
+  its subject and its redirect), `views.py` (Home rows, whether the first-start page is due, the service and backup
+  cards of Settings), `check_jobs.py` and `check_actions.py` (the manual check queue), `text.py`,
   `templating.py`, `site_form.py` (what the site forms accept, and the site's configuration from them),
   `site_store.py` (several stores in one transaction), `site_actions.py` and `topic_actions.py` (what the site
   and topic forms do; a topic's record itself comes from `tow.topic_form`). Anything another module uses has a
@@ -230,8 +231,10 @@ The web package (`src/tow/web/`):
    a `*_actions.py` module) imports only the pure helpers `tests/test_web_boundary.py` lists; a new way out goes
    into `services`. A form with more than a few checks is handed to an action module, so the route only reads
    the form and answers.
-3. Answer an action with `flash_redirect(url, "text.key", "ok" | "warn" | "err")`: the text stays on the server,
-   only a token goes into the URL. A page is a template in `src/tow/templates/` rendered with
+3. Answer an action with `flash_redirect(url, "text.key", "ok" | "info" | "warn" | "err")` from `tow.web.messages`:
+   the text stays on the server, only a token goes into the URL. A topic, site or client route gets its subject
+   ("Harbour Clock — …") by itself; a background job passes `subject=`. In the page, `window.towMessages.showMessage`,
+   from `static/messages.js`, shows a message the same way; a lasting problem is a note (`_note.html`), not a message. A page is a template in `src/tow/templates/` rendered with
    `TEMPLATES.TemplateResponse(request, "name.html", {...})`; its texts are catalog keys.
 4. A new module goes into `ROUTERS` in `app.py`. Order is matching order: a fixed path before a parameterized one
    that would also match it (`/sites/new` before `/sites/{name}`), GET before POST for the same path.

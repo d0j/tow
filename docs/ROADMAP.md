@@ -24,10 +24,10 @@ These hold in every release:
 | Safety | One-step undo of any change; journaled multi-file writes recovered by any process; night copies (signed), restore points, `.towx` transfer; data version guard. |
 | Access | Loopback without password; network only with password, sessions, CSRF and CSP; local-only access switches; the install folder closed to the computer's other accounts (`tow permissions`, `tow permissions fix`). |
 | Runtime | One portable folder, one supervised service (`tow run`), autostart for Windows, Linux and macOS, version/release display and explicit web update with verified archive, snapshot, health check and rollback (terminal for service-managed POSIX). |
-| Interface | Theme as the system, light or dark; Home sorting remembered per device; keyboard and screen-reader access to the header, rows and messages. |
+| Interface | Theme as the system, light or dark; Home sorting remembered per device; one message per action, named by its topic, folding into Recent messages with the tab's history; manual checks that stay on the page and update their rows; keyboard and screen-reader access to the header, rows and messages. |
 | Languages | English and Russian; a new language is one JSON file. |
 | Structure | The check as a package of steps (`tow.check`: run, topic, apply, client operations, reconcile, space, verification, notices, rows); thin web routes over `tow.web.services`; one crash journal for multi-file writes (`tow.journal`). |
-| Quality | Over 8,800 tests in random order on every core with a guard against network, processes and writes outside the temp folder, and a 30-minute limit on the whole run; branch coverage ≥ 93%; strict mypy; ruff with a complexity cap. Blocking CI on Windows, Ubuntu 24.04/26.04 and macOS. |
+| Quality | Over 9,200 tests in random order on every core with a guard against network, processes and writes outside the temp folder, and a 30-minute limit on the whole run; branch coverage ≥ 93%; strict mypy; ruff with a complexity cap. Blocking CI on Windows, Ubuntu 24.04/26.04 and macOS. |
 
 ## Next
 
