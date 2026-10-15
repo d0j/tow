@@ -285,6 +285,31 @@ def test_a_broken_result_handler_does_not_strand_the_queue(client, crash):
     assert "Результат недоступен" in client.get(f"/?check_result={job['id']}").text
 
 
+class _ThreadStop(BaseException):
+    """Not an Exception: what ends a thread (SystemExit, KeyboardInterrupt) in the middle of a check."""
+
+
+def test_a_consumer_ended_mid_check_never_leaves_its_job_running_or_replays_it(client, consumers):
+    performed = []
+
+    def ended(job):
+        performed.append(job["topic_id"])
+        if job["topic_id"] == "a":
+            raise _ThreadStop
+
+    first, _ = check_jobs.submit(topic_id="a", apply=True, lang="ru", perform=ended)
+    with pytest.raises(_ThreadStop):
+        consumers[0].run()
+    assert _status(client, first["id"])["status"] == "failed"
+    assert not check_jobs.has_pending()
+    # The next request gets a new consumer, which never runs the ended job (a re-add) again.
+    second, _ = check_jobs.submit(topic_id="b", apply=True, lang="ru", perform=ended)
+    assert len(consumers) == 2
+    consumers[1].run()
+    assert performed == ["a", "b"]
+    assert check_jobs.get(second["id"])["status"] == "failed"  # ended() never reported a result
+
+
 def test_a_missing_queued_topic_is_skipped_not_changed_into_check_all(client, monkeypatch):
     attempts = []
 
