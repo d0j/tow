@@ -712,9 +712,10 @@ class GenericHttpTracker:
 
         These sites show an expired session the page as to a guest - 200, without the download
         link - so that page counts as a refused session: the saved password logs in once more.
-        Nothing on a guest page is believed (a post may link another topic's torrent or say
-        "not found"); a member's page without the topic's own link has a layout TOW does not
-        know."""
+        Nothing users wrote on a guest page is believed (a post may link another topic's torrent
+        or say "not found"); the site's own word that the topic is gone is, before its sign-in
+        widget (a login would change nothing). A member's page without the topic's own link has
+        a layout TOW does not know."""
         topic_path = str(self.spec.get("topic_path") or "/forum/viewtopic.php?t={id}").format(id=tid)
         for attempt in range(2):
             page, _host = self._get(
@@ -725,6 +726,8 @@ class GenericHttpTracker:
                 cookies = self._cookie_jar(load_secrets()) or cookies
             page_html = thttp.html_text(page)
             self._keep_page(tid, page_html)
+            if says_topic_removed(site_text(page_html)):
+                raise MirrorFetchError("mirrors.topic_removed", failure="gone")
             if guest_page(page_html):
                 refreshed = (
                     None if attempt else self._relogin(secrets, ua, cookies, ignore_cool=ignore_cool, persist=persist)
@@ -733,8 +736,6 @@ class GenericHttpTracker:
                     break
                 cookies = refreshed
                 continue
-            if says_topic_removed(site_text(page_html)):
-                raise MirrorFetchError("mirrors.topic_removed", failure="gone")
             dlid = self._page_download_id(page_html)
             if dlid:
                 return dlid, cookies

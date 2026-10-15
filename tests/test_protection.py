@@ -127,6 +127,38 @@ def test_removed_topic_and_daily_limit_keep_precedence_over_a_long_sign_in_page(
     assert gone.value.failure == "gone"
 
 
+@pytest.mark.parametrize("wanted", [True, False], ids=["download", "topic_page"])
+@pytest.mark.parametrize("filler", ["", NEWS], ids=["short", "long"])
+def test_a_removed_topic_page_with_a_password_widget_is_not_a_sign_in(filler, wanted):
+    """The site's sign-in widget on its "topic not found" page: neither password-form rule
+    makes it a sign-in page; the day's limit still comes first."""
+    form = '<form action="login.php"><input type="password" name="password"></form>'
+    removed = "<title>Tracker</title>" + form + "<h1>Тема не найдена</h1>" + filler
+    expected = Verdict.UNEXPECTED if wanted else Verdict.OK
+    assert classify(200, removed, torrent_wanted=wanted, topic_removed=True) == expected
+    assert classify(200, removed, torrent_wanted=wanted, topic_removed=True, daily_limit=True) == Verdict.DAILY_LIMIT
+
+
+def test_a_short_sign_in_page_stays_a_sign_in():
+    form = '<form action="login.php"><input type="password" name="password"></form>'
+    assert classify(200, "<title>Tracker</title>" + form, torrent_wanted=True) == Verdict.LOGIN_NEEDED
+    assert classify(200, "<title>Вход</title>" + form, torrent_wanted=True) == Verdict.LOGIN_NEEDED
+    assert classify(200, "<title>Вход</title>" + form) == Verdict.LOGIN_NEEDED
+    # The site's own sign-in title or message is more than a password widget: it still counts.
+    assert classify(200, "<title>Вход</title>" + form, torrent_wanted=True, topic_removed=True) == Verdict.LOGIN_NEEDED
+    assert classify(200, "Please sign in. Topic not found", torrent_wanted=True, topic_removed=True) == (
+        Verdict.LOGIN_NEEDED
+    )
+
+
+def test_a_short_removed_download_answer_with_a_password_widget_is_gone(monkeypatch):
+    form = '<input type="password" name="password">'
+    install(monkeypatch, lambda request: httpx.Response(200, text="<h1>Тема не найдена</h1>" + form))
+    with pytest.raises(MirrorFetchError) as gone:
+        pick_and_get("demo", SPEC["fetch_hosts"], "/download/1", ok=lambda r: False, persist=False)
+    assert gone.value.failure == "gone"
+
+
 def install(monkeypatch, handler, *, protection=None, hosts=None):
     cfg = load_config()
     spec = {**SPEC, "fetch_hosts": hosts or SPEC["fetch_hosts"]}

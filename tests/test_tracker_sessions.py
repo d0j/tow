@@ -359,6 +359,70 @@ def test_removed_topic_answer_is_gone_and_sends_no_password(site):
     assert site.count("/login.php") == 0
 
 
+SIGN_IN_WIDGET = (
+    "<form action='login.php' method=post><input name=login_username><input type=password name=login_password></form>"
+)
+REMOVED_HEAD = f"<html><head><title>Demo tracker</title></head><body>{SIGN_IN_WIDGET}<h1>Тема не найдена</h1>"
+REMOVED_PAGES = {
+    "short": REMOVED_HEAD + "</body></html>",
+    "long": REMOVED_HEAD + "<div class=news>Новые раздачи за неделю. </div>" * 150 + "</body></html>",
+}
+
+
+@pytest.mark.parametrize("length", sorted(REMOVED_PAGES))
+def test_removed_topic_answer_with_the_sites_sign_in_widget_is_gone_without_a_login(site, length):
+    """The site's header sign-in form on its "topic not found" page is not a sign-in page:
+    red "topic removed", not amber "sign in", and the password is not sent."""
+    _configured(download_path="/dl.php?t={id}")
+    site.pages["/dl.php?t=5"] = REMOVED_PAGES[length]
+    tracker = _tracker(download_path="/dl.php?t={id}")
+    with pytest.raises(MirrorFetchError) as info:
+        tracker.fetch_torrent("https://demo.example/viewtopic.php?t=5", SECRETS, "ua", ignore_cool=True)
+    assert error_class(info.value) == "gone"
+    assert site.count("/login.php") == 0
+
+
+@pytest.mark.parametrize("length", sorted(REMOVED_PAGES))
+def test_removed_topic_page_with_the_sites_sign_in_widget_is_gone_without_a_login(site, length):
+    _configured_page_site()
+    site.pages["/viewtopic.php?t=5"] = REMOVED_PAGES[length]
+    with pytest.raises(MirrorFetchError) as info:
+        _tracker(**PAGE_SPEC).fetch_torrent("https://demo.example/viewtopic.php?t=5", SECRETS, "ua", ignore_cool=True)
+    assert error_class(info.value) == "gone"
+    assert site.count("/login.php") == 0
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        f"<html><head><title>Вход</title></head><body>{SIGN_IN_WIDGET}</body></html>",
+        f"<html><head><title>Demo tracker</title></head><body>{SIGN_IN_WIDGET}</body></html>",
+    ],
+    ids=["sign_in_title", "form_alone"],
+)
+def test_a_short_sign_in_page_answering_a_download_is_still_a_sign_in(site, page):
+    _configured(download_path="/dl.php?t={id}")
+    site.pages["/dl.php?t=5"] = page
+    tracker = _tracker(download_path="/dl.php?t={id}")
+    with pytest.raises(MirrorFetchError) as info:
+        tracker.fetch_torrent("https://demo.example/viewtopic.php?t=5", SECRETS, "ua", ignore_cool=True)
+    assert error_class(info.value) == "tracker_auth"
+    assert site.count("/login.php") == 1
+
+
+def test_the_daily_limit_wins_over_removed_words_and_a_sign_in_widget(site):
+    _configured(download_path="/dl.php?t={id}", download_limit=True)
+    site.pages["/dl.php?t=5"] = (
+        f"<html><body>{SIGN_IN_WIDGET}<p>Тема не найдена?</p>"
+        "<p>Вам недоступен торрент-файл для скачивания. Вы скачали сегодня ( 20 ).</p></body></html>"
+    )
+    tracker = _tracker(download_path="/dl.php?t={id}", download_limit=True)
+    with pytest.raises(MirrorFetchError) as info:
+        tracker.fetch_torrent("https://demo.example/viewtopic.php?t=5", SECRETS, "ua", ignore_cool=True)
+    assert error_class(info.value) == "quota"
+    assert site.count("/login.php") == 0
+
+
 def _cf(status: int = 403, **headers: str) -> httpx.Response:
     return httpx.Response(status, text=CF_PAGE, headers={"content-type": "text/html", **headers})
 
