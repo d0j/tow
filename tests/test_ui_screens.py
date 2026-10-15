@@ -221,6 +221,30 @@ def test_first_start_asks_about_other_devices_first(client):
     assert "lan_auth" not in load_secrets()
 
 
+def test_the_sign_in_page_has_the_eye_and_still_posts_a_form():
+    """The sign-in page offers the shared eye; it loads app.js only for it, so its form keeps
+    being sent as a form (data-native-submit), and the script finds its icons and texts."""
+    from tow.auth import lan_password_record
+    from tow.config import load_config, save_config
+    from tow.store import load_secrets, save_secrets
+
+    secrets = load_secrets()
+    secrets["lan_auth"] = lan_password_record("old-horse-battery", "")
+    save_secrets(secrets)
+    cfg = load_config()
+    cfg.update(allow_lan=True, bind="0.0.0.0")
+    save_config(cfg)
+    lan = TestClient(app, client=("192.168.1.7", 50000), headers=ORIGIN)
+    page = BeautifulSoup(lan.get("/login").text, "html.parser")
+    assert page.select_one("form.auth-form").has_attr("data-native-submit")
+    assert page.select_one('.secret > button.reveal[data-reveal="lan-password"]') is not None
+    assert page.select_one("svg.sprite symbol#i-eye") is not None
+    assert page.select_one('script[src^="/static/app.js"]') is not None
+    assert "web.secret.show" in page.select_one("script#tow-i18n").get_text()
+    wrong = BeautifulSoup(lan.post("/login", data={"password": "nope-nope-1"}).text, "html.parser")
+    assert wrong.select_one("#lan-password")["aria-invalid"] == "true"
+
+
 def test_a_cleared_follow_box_is_saved_as_once_on_edit(client, monkeypatch):
     assert _add(client, monkeypatch).status_code == 303
     topic = load_state()["topics"][0]
