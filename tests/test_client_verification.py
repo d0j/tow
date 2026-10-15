@@ -6,6 +6,7 @@ import copy
 from types import SimpleNamespace
 
 import pytest
+from helpers import make_torrent
 from test_cov_managed_selection import E01, TORRENT, FakeClient, H
 
 from tow import check
@@ -15,10 +16,12 @@ from tow.check import space, verification
 from tow.check import topic as topic_step
 from tow.clients import factory
 from tow.clients.managed import ClientError, ClientVerificationPending, completed_progress
+from tow.errors import TowError
 from tow.notify import NotificationBatch
 from tow.progress import reconcile_topic
 from tow.progress.summary import progress_summary
 from tow.store import load_download_history, load_state, save_download_history, save_state
+from tow.torrent import parse_torrent_metadata
 from tow.web.views import topic_progress_summary
 
 
@@ -301,18 +304,52 @@ def test_readback_change_at_timeout_is_a_real_failure_not_a_pending_receipt(monk
     assert client.calls[-1] == ("stop",)
 
 
+NEW_TORRENT = make_torrent(
+    {
+        b"name": "Show S01 v2",
+        b"piece length": 16384,
+        b"pieces": b"\1" * 20 * 5,
+        b"files": [{b"length": 40000, b"path": [b"e01.mkv"]}, {b"length": 30000, b"path": [b"e02.mkv"]}],
+    }
+)
+NEW_H = parse_torrent_metadata(NEW_TORRENT).client_hash.upper()
+
+
 class Tracker:
+    """A site: its .torrent (``content``), and - when set - its revision probe (``spec`` with
+    ``infohash_path``, answering ``site_hash``) and its topic page's magnet (``magnet``)."""
+
     name = "fake"
 
     def __init__(self):
         self.fetches = 0
+        self.content = TORRENT
+        self.spec: dict = {}
+        self.site_hash: str | None = None
+        self.magnet: str | None = None
+        self.asked = 0  # probe and topic page requests: nothing downloaded
+        self.fail: Exception | None = None
 
     def fetch_torrent(self, *args, **kwargs):
         self.fetches += 1
-        return TORRENT
+        return self.content
 
     def fetch_title(self, *args, **kwargs):
         return "Show S01"
+
+    def fetch_revision_hash(self, *args, **kwargs):
+        self.asked += 1
+        if self.fail:
+            raise self.fail
+        return self.site_hash
+
+    def fetch_magnet(self, *args, **kwargs):
+        self.asked += 1
+        if self.fail:
+            raise self.fail
+        if self.magnet is None:
+            raise TowError("tracker.no_magnet")
+        return f"magnet:?xt=urn:btih:{self.magnet}", self.magnet
 
 
 @pytest.fixture
@@ -721,6 +758,53 @@ def test_a_redeferred_transaction_keeps_its_first_anchor(world, clock):
     row = check.run_check(apply=True, notify=False, how="manual", ids=["slow"])["results"][0]
     assert row["status"] == "verification_pending"
     assert load_state()["topics"][0]["verification_pending"]["since"] == since
+
+
+@pytest.mark.parametrize("evidence", ["magnet", "probe"])
+def test_a_waiting_receipt_asks_the_site_on_its_cadence_without_any_client_write(world, evidence):
+    client, tracker, sent = world
+    _run()
+    receipt = copy.deepcopy(load_state()["topics"][0]["verification_pending"])
+    if evidence == "probe":
+        tracker.spec = {"infohash_path": "/details?id={id}"}
+        tracker.site_hash = NEW_H
+    else:
+        tracker.magnet = NEW_H
+    client.calls.clear()
+    row = _run()
+    topic = load_state()["topics"][0]
+    assert row["status"] == "verification_pending"
+    assert topic["verification_pending"]["observed_hash"] == NEW_H  # kept apart from the transaction
+    assert {key: value for key, value in topic["verification_pending"].items() if key != "observed_hash"} == receipt
+    assert topic["hash"] == H
+    assert topic["site_ok_at"] == topic["last_check"]
+    assert client.calls == []
+    assert tracker.fetches == 1  # no .torrent downloaded
+    assert sent == []
+    asked = tracker.asked
+    check.run_check(apply=True, notify=True, how="test", space_only=True)
+    check.run_check(apply=True, notify=True, how="test", progress_only=True)
+    assert tracker.asked == asked  # the five-minute passes never ask the site
+    tracker.magnet = tracker.site_hash = H
+    _run()
+    assert "observed_hash" not in load_state()["topics"][0]["verification_pending"]
+
+
+def test_a_site_failure_while_the_client_verifies_leaves_the_receipt_alone(world):
+    client, tracker, _sent = world
+    _run()
+    receipt = copy.deepcopy(load_state()["topics"][0]["verification_pending"])
+    tracker.fail = TowError("mirrors.transport", error="ConnectTimeout")
+    client.calls.clear()
+    row = _run()
+    topic = load_state()["topics"][0]
+    assert row["status"] == "failed"
+    assert topic["last_error_class"] == "tracker"
+    assert topic["verification_pending"] == receipt
+    assert client.calls == []
+    tracker.fail = None
+    client.end_check(found=0.4, dropped_start=False)
+    assert _run(space_only=True)["ok"]
 
 
 def test_terminal_failure_is_not_scheduled_every_five_minutes(world):

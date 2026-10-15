@@ -126,6 +126,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A torrent whose file check in the client does not end, or that the client does not start, within 12 hours now
   shows a red torrent-client error and is reported once; TOW keeps waiting and still confirms it when the client is
   done. Checking the topic again no longer restarts these 12 hours.
+- While the torrent client still checks a torrent's files, a scheduled check now asks the site which version is
+  current (its revision page or the topic page's magnet link, never a .torrent download) and changes nothing in the
+  client; the site's icon shows that answer, and a newer version is handled once the client is done.
 
 ## [1.30.10] — 2026-10-15
 
