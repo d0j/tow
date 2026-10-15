@@ -18,6 +18,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   or a check of one topic no longer clears it.
 - A topic that leaves the automatic site retries for a while (paused, its site paused, another error) keeps
   the retries already used for the same outage instead of getting three new ones.
+- One damaged saved value about a topic's last error or a site's mirrors no longer makes Home fail to open or
+  stops the service from planning personal timers and other jobs; such a topic is only left out of the
+  automatic site retries.
 
 ## [1.30.10] — 2026-10-15
 

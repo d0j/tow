@@ -16,19 +16,22 @@ from tow.topic_timers import retry_reservation as reservation
 def policies(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     """Saved evidence only: no requests, writes or automatic retries of owner-action errors."""
     result: dict[str, dict[str, Any]] = {}
-    mirrors = state.get("mirrors") or {}
-    sites = cfg.get("trackers") or {}
+    # Saved values are read defensively: one damaged record leaves its topic out, never the others.
+    saved_mirrors, saved_sites = state.get("mirrors"), cfg.get("trackers")
+    mirrors: Mapping[str, Any] = saved_mirrors if isinstance(saved_mirrors, Mapping) else {}
+    sites: Mapping[str, Any] = saved_sites if isinstance(saved_sites, Mapping) else {}
     for topic in state.get("topics") or []:
         if topic.get("paused") or topic.get("once_done") or not topic.get("last_error"):
             continue
         if topic.get("last_error_class") not in {"tracker", "cloudflare"}:
             continue
-        params = topic.get("last_error_params") or {}
-        site = params.get("tracker")
+        params = topic.get("last_error_params")
+        site = params.get("tracker") if isinstance(params, Mapping) else None
         spec = sites.get(site) if isinstance(site, str) else None
         if not isinstance(site, str) or not isinstance(spec, Mapping) or not topic.get("id"):
             continue
-        bucket = mirrors.get(site) or {}
+        saved_bucket = mirrors.get(site)
+        bucket: Mapping[str, Any] = saved_bucket if isinstance(saved_bucket, Mapping) else {}
         if bucket.get("frozen"):
             continue
         try:
