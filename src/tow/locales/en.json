@@ -1296,7 +1296,8 @@
     "how": {
       "timer": "personal timer",
       "manual": "manual",
-      "auto": "auto"
+      "auto": "auto",
+      "retry": "automatic retry"
     },
     "kind": {
       "protection_attempt": "Trying an optional site-access service",
