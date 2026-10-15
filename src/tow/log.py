@@ -843,6 +843,15 @@ def _check_outcome_detail(rec: Mapping[str, Any], lang: str) -> str:
     return t("log.check_result", lang, ok=rec.get("ok"), n=rec.get("n"))
 
 
+# Who started a check ("progress" passes are named by their own label instead).
+_HOW_KEYS = {
+    "manual": "log.how.manual",
+    "auto": "log.how.auto",
+    "timer": "log.how.timer",
+    "retry": "log.how.retry",
+}
+
+
 def format_event(
     rec: Mapping[str, Any],
     *,
@@ -864,12 +873,9 @@ def format_event(
     title = event_title(rec, title_index)[:100]
     bits: list[str] = []
     how = rec.get("how")
-    if how == "manual":
-        bits.append(t("log.how.manual", lang))
-    elif how == "auto":
-        bits.append(t("log.how.auto", lang))
-    elif how == "timer":
-        bits.append(t("log.how.timer", lang))
+    how_key = _HOW_KEYS.get(how) if isinstance(how, str) else None
+    if how_key:
+        bits.append(t(how_key, lang))
     if kind == "backup_cleanup_pending" or kind.startswith("settings_backup_"):
         cleanup_key = {
             "night": "log.cleanup.night",

@@ -21,6 +21,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - One damaged saved value about a topic's last error or a site's mirrors no longer makes Home fail to open or
   stops the service from planning personal timers and other jobs; such a topic is only left out of the
   automatic site retries.
+- History and the Log name the automatic retries after a site failure ("automatic retry") like the other
+  kinds of checks.
 
 ## [1.30.10] — 2026-10-15
 

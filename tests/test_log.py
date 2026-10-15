@@ -83,6 +83,21 @@ def test_the_log_names_a_pass_that_asks_only_the_client(event, label, detail):
     assert (row["label"], row["detail"]) == (label, detail)
 
 
+@pytest.mark.parametrize(
+    ("lang", "detail"),
+    [
+        ("ru", "автоматический повтор · проверено: 2, без ошибок: 1"),
+        ("en", "automatic retry · checked: 2, without errors: 1"),
+    ],
+)
+def test_the_log_names_an_automatic_site_retry(lang, detail):
+    # The supervisor's early retry of a site outage read like a check of unknown origin.
+    from tow import i18n
+
+    i18n.use(lang)
+    assert format_event({"kind": "check", "how": "retry", "ok": 1, "n": 2})["detail"] == detail
+
+
 def test_a_line_names_the_site_by_its_title_as_home_does():
     """Qa10: History and the Log said "fakeone", the site's settings key, where Home says its title."""
     from tow.log import index_site_titles
