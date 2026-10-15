@@ -14,6 +14,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   only a screen reader heard it and nothing on the screen confirmed the click. A check of one topic, run at
   once or from the queue, ends in exactly one message and no longer opens a "Check results" card that
   repeated it.
+- "Undo" puts back only the change its own message is about: an "Undo" from an earlier message, pressed after
+  a newer change, is refused with a clear message instead of undoing that newer change.
 
 ## [1.30.11] — 2026-10-15
 
