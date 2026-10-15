@@ -30,7 +30,7 @@ _SECRET_FIELD_NAMES = frozenset(
 )
 _SECRET_FIELD_SUFFIXES = ("_password", "_passwd", "_token", "_cookies", "_api_key")
 
-# The one field of that shape TOW itself writes that is not a credential: a messenger delivery's
+# A field of that shape TOW itself writes that is not a credential: a messenger delivery's
 # claim in state.json (``notify_lease.<recipient>.token``, "<pid>:<thread>:<12 hex>"), as TOW
 # 1.28 and older named it (now ``owner``). Exempt only there and only in that exact form: a
 # lease left by an older version blocked every restore point, and so the web update, while a
@@ -45,6 +45,21 @@ def _legacy_lease_owner(path: list[str | int], key: str, item: Any) -> bool:
         and key == "token"
         and isinstance(item, str)
         and _LEGACY_LEASE_OWNER.fullmatch(item) is not None
+    )
+
+
+def _legacy_mirror_order(path: list[str | int], key: str, item: Any) -> bool:
+    """When a request a mirror's saved answer came from started (a time in seconds), as TOW
+    1.31.0 and 1.31.1 named it in state.json (``mirrors.<site>.observed|access.<host>.token``;
+    now ``seq``). Exempt only there and only as a number: it blocked every restore point, and so
+    the web update, until each mirror answered again."""
+    return (
+        len(path) == 4
+        and path[0] == "mirrors"
+        and path[2] in {"observed", "access"}
+        and key == "token"
+        and isinstance(item, (int, float))
+        and not isinstance(item, bool)
     )
 
 
@@ -87,6 +102,7 @@ def _secret_segments(value: Any, seen: set[int], *, state: bool = False) -> list
                 is_secret_name
                 and item not in (None, "", False, True)
                 and not (state and _legacy_lease_owner(path, str(key), item))
+                and not (state and _legacy_mirror_order(path, str(key), item))
             ):
                 return [*path, segment]
         if isinstance(item, (dict, list)) and id(item) not in seen:

@@ -223,6 +223,12 @@ def _prune(bucket: dict[str, Any], configured: set[str]) -> None:
         bucket[key] = {host: row for host, row in bucket[key].items() if host in configured}
 
 
+def _seq(row: dict[str, Any]) -> object:
+    """When the request a saved answer came from started: ``seq``, or ``token`` as 1.31.0 and
+    1.31.1 named it (a name the backup check reads as a credential, so it is no longer written)."""
+    return row.get("seq", row.get("token"))
+
+
 def _later(saved: object, token: float) -> bool:
     """``saved`` (when a recorded request started) is later than ``token`` (when this one did).
     A saved time ahead of the clock says the clock went back since: it orders nothing."""
@@ -720,10 +726,10 @@ def _observe(
     for key in ("observed", "access"):
         if not isinstance(bucket.get(key), dict):
             bucket[key] = {}
-    row = {"failure": failure, "at": _now(), "status": status, "token": token}
+    row = {"failure": failure, "at": _now(), "status": status, "seq": token}
     if failure in _ACCESS_CODES:
         old = bucket["access"].get(host)
-        if not (isinstance(old, dict) and _later(old.get("token"), token)):
+        if not (isinstance(old, dict) and _later(_seq(old), token)):
             bucket["access"][host] = {**row, "download": download}
         return
     if failure in _NOT_HOST_HEALTH_CODES:
@@ -733,12 +739,12 @@ def _observe(
         failure == "ok"
         and isinstance(access, dict)
         and (download or not access.get("download"))
-        and not _later(access.get("token"), token)
+        and not _later(_seq(access), token)
     ):
         del bucket["access"][host]
     old = bucket["observed"].get(host)
     if isinstance(old, dict):
-        if _later(old.get("token"), token):
+        if _later(_seq(old), token):
             return  # a request that started later already said how the mirror is
         # A routine success does not rewrite/fsync state for every page; it renews its time
         # now and then. An error (or a transition back to success) is fresh evidence at once.

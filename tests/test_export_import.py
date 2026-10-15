@@ -165,9 +165,40 @@ def test_a_restore_point_is_made_while_a_messenger_delivery_holds_its_lease(tmp_
     assert outbox._lease_held_by_other(state["notify_lease"]["ntfy"], outbox._new_token(), 0.0) is True
 
 
+def test_a_restore_point_is_made_after_a_mirror_answered(tmp_path, monkeypatch):
+    """1.31.0 saved when the request behind a mirror's answer started as ``token``: every restore
+    point, and so the web update, was refused as a plaintext credential."""
+    import time
+
+    from tow import mirrors, restore_points
+
+    _seed_source(monkeypatch, tmp_path / "source")
+    bucket: dict = {}
+    mirrors._observe(bucket, "https://demo.example", "transport", 503, token=time.time())
+    mirrors._observe(bucket, "https://other.example", "auth", 200, token=time.time())
+    save_state({**load_state(), "mirrors": {"demo": bucket}})
+    assert "token" not in bucket["observed"]["https://demo.example"]
+
+    live = restore_points.create_restore_point()
+    assert import_bundle(restore_points.point_path(live["id"]), restore_points._passphrase(), apply=False)
+
+    # What 1.31.0 and 1.31.1 left in state.json passes too, until each mirror answers again.
+    state = load_state()
+    state["mirrors"]["demo"]["observed"]["https://demo.example"] = {"failure": "ok", "token": 1792000000.5}
+    state["mirrors"]["demo"]["access"]["https://other.example"] = {"failure": "auth", "token": 1792000001}
+    save_state(state)
+    legacy = restore_points.create_restore_point()
+    assert import_bundle(restore_points.point_path(legacy["id"]), restore_points._passphrase(), apply=False)
+    assert mirrors._seq(state["mirrors"]["demo"]["observed"]["https://demo.example"]) == 1792000000.5
+
+
 @pytest.mark.parametrize(
     ("label", "data"),
     [
+        ("state.json", {"mirrors": {"demo": {"observed": {"https://demo.example": {"token": "synthetic-access"}}}}}),
+        ("state.json", {"mirrors": {"demo": {"rate": {"https://demo.example": {"token": 1792000000}}}}}),
+        ("state.json", {"mirrors": {"demo": {"observed": {"https://demo.example": {"x": {"token": 1792000000}}}}}}),
+        ("config.yaml", {"mirrors": {"demo": {"observed": {"https://demo.example": {"token": 1792000000}}}}}),
         ("state.json", {"notify_lease": {"ntfy": {"token": "synthetic-ntfy-access-token"}}}),
         ("state.json", {"notify_lease": {"ntfy": {"nested": {"token": "4242:17:0123456789ab"}}}}),
         ("state.json", {"telegram": {"token": "4242:17:0123456789ab"}}),
