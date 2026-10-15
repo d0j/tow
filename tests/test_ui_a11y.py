@@ -302,7 +302,11 @@ def test_home_search_and_sort_touch_only_what_changes():
     assert "if (el.hidden === visible) el.hidden = !visible;" in block
     assert 'if ((markedWith.get(target) ?? "") === want) return;' in block
     assert "dataset.qFolded =" not in block  # the folded words live in a Map, not 2000 attributes
-    assert 'querySelectorAll("[data-hl]")' not in block[block.index("const announce") :]
+    # Per keystroke nothing is queried; a row drawn again (checks.js) is read once, by its hook.
+    assert (
+        'querySelectorAll("[data-hl]")'
+        not in block[block.index("const announce") : block.index("window.towRows.replaced")]
+    )
     # The remembered order (localStorage) still decides the first sort.
     assert 'const mode = params.get("s") ?? storedSort() ?? "";' in block
     # content-visibility on the rows cost ~2000 style recalculations at load (13 s): not used.

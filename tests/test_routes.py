@@ -55,6 +55,7 @@ ROUTES = frozenset(
         ("GET", "/favicon.ico"),
         ("GET", "/"),
         ("GET", "/topics/{tid}/edit-panel"),
+        ("GET", "/topics/{tid}/row"),
         ("GET", "/topics/{tid}/edit"),
         ("POST", "/topics/add"),
         ("POST", "/content/resolve"),

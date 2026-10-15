@@ -5,10 +5,11 @@ const camel = (name) => name.replace(/-([a-z])/g, (_, letter) => letter.toUpperC
 const kebab = (name) => name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 
 const parseCompound = (text) => {
-  const part = { tag: "", id: "", classes: [], attrs: [] };
+  const part = { tag: "", id: "", classes: [], attrs: [], hover: /:hover\b/.test(text) };
   const re = /([a-zA-Z][\w-]*)|#([\w-]+)|\.([\w-]+)|\[([\w-]+)(?:="?([^"\]]*)"?)?\]/g;
   let match;
-  while ((match = re.exec(text))) {
+  const plain = text.replace(/:hover\b/g, "");
+  while ((match = re.exec(plain))) {
     if (match[1]) part.tag = match[1].toLowerCase();
     else if (match[2]) part.id = match[2];
     else if (match[3]) part.classes.push(match[3]);
@@ -20,6 +21,7 @@ const matchesCompound = (node, part) => {
   if (!(node instanceof FakeElement)) return false;
   if (part.tag && node.tagName.toLowerCase() !== part.tag) return false;
   if (part.id && node.id !== part.id) return false;
+  if (part.hover && !node.hovered) return false; // :hover - an element the test puts the pointer on
   if (part.classes.some((name) => !node.classList.contains(name))) return false;
   return part.attrs.every(([name, value]) => {
     const actual = node.getAttribute(name);

@@ -33,6 +33,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   looked up, never sent again; a result TOW no longer knows says it is unavailable and unconfirmed, with a link
   to the History. While a check waits or runs, its message says so and is updated in place, and its topic's row
   shows it. Without scripts the pages work as before.
+- When a topic's check ends, its row on Home shows what the check found at once - status dot, site icon,
+  event or error line and progress - without a reload (after "Check all", every row as it comes into sight).
+  A row you are working in (its edit panel open, a field in focus or changed, the pointer on its buttons) is
+  updated when you are done; the search and filters still apply to it, and "Needs attention" follows.
 - The "Check results" card of a check of all topics closes with its × in place, keeping the page's filters
   and open row (its "Close" link reloaded Home without them), and its heading is no longer hidden under the
   header. Its rows follow the status colours: a site that did not answer is amber, a failure to fix red, new
