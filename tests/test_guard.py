@@ -1,8 +1,10 @@
 """The test guard must fail a test even when the code under test swallows the error."""
 
+import itertools
 import shutil
 import sys
 import tempfile
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -13,16 +15,34 @@ pytestmark = pytest.mark.allow_system
 CONFTEST = Path(__file__).with_name("conftest.py")
 
 
-def _inner(pytester, body: str):
-    shutil.copy(CONFTEST, pytester.path / "conftest.py")
-    shutil.copy(Path(__file__).parents[1] / "config.example.yaml", pytester.path.parent / "config.example.yaml")
-    pytester.makepyfile(test_inner=body)
-    return pytester.runpytest_subprocess("-q", "-p", "no:cacheprovider")
+@pytest.fixture
+def nested(pytester, monkeypatch):
+    """Runs a nested pytest session under the guard's conftest; returns its result.
+
+    Everything a nested run writes stays in this test's own folder: the template the conftest
+    reads one level above it (before: the worker's temp folder, shared by every pytester test),
+    TMP/TEMP/TMPDIR (its session home), and a --basetemp that does not exist yet. pytest
+    deletes and re-creates an existing one, and Windows can refuse that while an antivirus
+    still holds the deleted folder."""
+    tests = pytester.mkdir("tests")
+    shutil.copy(CONFTEST, tests / "conftest.py")
+    shutil.copy(Path(__file__).parents[1] / "config.example.yaml", pytester.path / "config.example.yaml")
+    runs = itertools.count(1)
+
+    def run(body: str):
+        number = next(runs)
+        (tests / "test_inner.py").write_text(textwrap.dedent(body), encoding="utf-8")
+        temp = pytester.mkdir(f"temp-{number}")
+        for name in ("TMP", "TEMP", "TMPDIR"):
+            monkeypatch.setenv(name, str(temp))
+        base = temp / "base"  # inside the temp folder: the nested guard lets tmp_path be written
+        return pytester.runpytest_subprocess("-q", "-p", "no:cacheprovider", f"--basetemp={base}", "tests", timeout=120)
+
+    return run
 
 
-def test_swallowed_real_http_still_fails_the_test(pytester):
-    result = _inner(
-        pytester,
+def test_swallowed_real_http_still_fails_the_test(nested):
+    result = nested(
         """
 import httpx
 
@@ -37,9 +57,8 @@ def test_inner():
     result.stdout.fnmatch_lines(["*test guard violations*httpx request*"])
 
 
-def test_loopback_fixture_retries_service_ports_without_weakening_guard(pytester):
-    result = _inner(
-        pytester,
+def test_loopback_fixture_retries_service_ports_without_weakening_guard(nested):
+    result = nested(
         """
 import http.server
 import pytest
@@ -74,9 +93,8 @@ def test_bounded(monkeypatch, loopback_http_server):
     result.assert_outcomes(passed=2)
 
 
-def test_swallowed_system_command_still_fails_the_test(pytester):
-    result = _inner(
-        pytester,
+def test_swallowed_system_command_still_fails_the_test(nested):
+    result = nested(
         """
 import subprocess
 
@@ -115,7 +133,7 @@ def test_unmarked():
 """
 
 
-def test_a_real_system_test_runs_only_with_its_variable_and_then_unguarded(pytester, monkeypatch):
+def test_a_real_system_test_runs_only_with_its_variable_and_then_unguarded(nested, monkeypatch):
     """tests/integration: skipped on a development machine; with its TOW_REAL_* variable at 1 (the
     real.yml runners) it runs without the guard, and every other test stays guarded."""
     for name in ("TOW_REAL_PROBE", "TOW_REAL_OTHER"):
@@ -123,17 +141,16 @@ def test_a_real_system_test_runs_only_with_its_variable_and_then_unguarded(pytes
     monkeypatch.setenv("NOT_TOW_REAL", "1")
     monkeypatch.setenv("TOW_REAL_OTHER", "yes")  # only exactly 1 counts
 
-    _inner(pytester, _REAL_SYSTEM_TESTS).assert_outcomes(passed=1, skipped=3, errors=1)
+    nested(_REAL_SYSTEM_TESTS).assert_outcomes(passed=1, skipped=3, errors=1)
 
     monkeypatch.setenv("TOW_REAL_PROBE", "1")
-    result = _inner(pytester, _REAL_SYSTEM_TESTS)
+    result = nested(_REAL_SYSTEM_TESTS)
     result.assert_outcomes(passed=2, skipped=2, errors=1)
     result.stdout.fnmatch_lines(["*test guard violations*process*"])
 
 
-def test_read_only_task_query_is_stubbed(pytester):
-    result = _inner(
-        pytester,
+def test_read_only_task_query_is_stubbed(nested):
+    result = nested(
         """
 import subprocess, pytest
 
@@ -145,12 +162,11 @@ def test_inner():
     result.assert_outcomes(passed=1)
 
 
-def test_a_write_outside_the_temp_folder_fails_the_test(pytester):
+def test_a_write_outside_the_temp_folder_fails_the_test(nested):
     # Outside the temp folder wherever the checkout is (the drive root), and in a folder that does
     # not exist, so nothing is written even if the guard were gone.
     target = Path(Path(tempfile.gettempdir()).anchor) / "__tow_never_created__" / "probe.txt"
-    result = _inner(
-        pytester,
+    result = nested(
         f"""
 import os
 
@@ -178,11 +194,10 @@ def test_writing_in_tmp_path_is_fine(tmp_path):
     assert not target.parent.exists()
 
 
-def test_socketpair_on_a_service_port_is_not_a_violation(pytester):
+def test_socketpair_on_a_service_port_is_not_a_violation(nested):
     """Windows socketpair() (asyncio's self-pipe) connects to its own ephemeral port; with a
     dynamic range from 1024 that can be 8788 or 8080, and it must not fail the test."""
-    result = _inner(
-        pytester,
+    result = nested(
         """
 import asyncio, socket
 import pytest
@@ -214,10 +229,9 @@ def test_inner():
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="os.kill(pid, 0) is CTRL_C_EVENT on Windows")
-def test_only_an_existence_probe_of_this_process_is_let_through(pytester):
+def test_only_an_existence_probe_of_this_process_is_let_through(nested):
     """Signal 0 to its own pid (process_alive of this process) is harmless; any other is refused."""
-    result = _inner(
-        pytester,
+    result = nested(
         """
 import os
 
@@ -235,10 +249,9 @@ def test_another_process():
     result.stdout.fnmatch_lines(["*test guard violations*os.kill 1*"])
 
 
-def test_lower_level_bypasses_are_caught(pytester):
+def test_lower_level_bypasses_are_caught(nested):
     """connect_ex, asyncio connections, os.spawn/exec and CreateProcess all go through the guard."""
-    result = _inner(
-        pytester,
+    result = nested(
         """
 import asyncio, os, socket, sys
 import pytest
