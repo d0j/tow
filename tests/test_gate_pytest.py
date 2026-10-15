@@ -77,3 +77,125 @@ def test_ci_never_skips_coverage_silently(variables):
 def test_a_developer_machine_without_pytest_cov_runs_the_tests_and_says_so():
     result = _run(COVERAGE_HARNESS, CI="false")
     assert result == {"failure": None, "steps": ["pytest (parallel, random order)"], "skipped": ["coverage"]}
+
+
+# The gate's own Invoke-WithDeadline, run on a synthetic program tree that never ends by itself.
+DEADLINE_HARNESS = r"""
+$ErrorActionPreference = 'Stop'
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $env:TOW_TEST_GATE, [ref]$null, [ref]$parseErrors)
+if ($parseErrors) { throw 'gate parse failed' }
+$names = 'Get-StartTime', 'Add-ProcessTree', 'Stop-ProcessTree', 'Invoke-WithDeadline'
+$functions = @($ast.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -in $names
+}, $true))
+if ($functions.Count -ne $names.Count) { throw 'the deadline functions are required' }
+$functions | ForEach-Object { . ([scriptblock]::Create($_.Extent.Text)) }
+$arguments = @($env:TOW_TEST_ARGS | ConvertFrom-Json)
+$global:LASTEXITCODE = 0
+$failure = $null
+Set-Location -LiteralPath $env:TOW_TEST_PIDS  # the gate runs from its checkout, set by Set-Location
+$clock = [System.Diagnostics.Stopwatch]::StartNew()
+try { Invoke-WithDeadline ([int]$env:TOW_TEST_DEADLINE) $env:TOW_TEST_PYTHON $arguments *> $null }
+catch { $failure = $_.Exception.Message }
+$elapsed = $clock.Elapsed.TotalSeconds
+$code = $LASTEXITCODE
+$ids = @(Get-ChildItem -LiteralPath $env:TOW_TEST_PIDS -Filter '*.pid' |
+    ForEach-Object { [int](Get-Content -Raw $_.FullName) })
+$alive = @()
+$until = [DateTime]::UtcNow.AddSeconds(15)
+do {
+    $alive = @($ids | Where-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
+    if ($alive.Count -eq 0) { break }
+    Start-Sleep -Milliseconds 200
+} while ([DateTime]::UtcNow -lt $until)
+$alive | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }  # never leave a hung tree
+@{failure=$failure; code=$code; elapsed=$elapsed; started=$ids.Count; alive=@($alive)} | ConvertTo-Json -Compress
+"""
+# A test run that hangs with a worker: it records its pid, starts a child that records its own,
+# and both sleep far past the deadline.
+TREE = """
+import os, subprocess, sys, time
+from pathlib import Path
+
+folder = Path(sys.argv[1])
+if len(sys.argv) > 2:
+    (folder / "worker.pid").write_text(str(os.getpid()))
+else:
+    subprocess.Popen([sys.executable, __file__, str(folder), "worker"])
+    (folder / "main.pid").write_text(str(os.getpid()))
+time.sleep(300)
+"""
+
+
+def _deadline(tmp_path, deadline, arguments):
+    import sys
+
+    pids = tmp_path / "pids"
+    pids.mkdir()
+    return _run(
+        DEADLINE_HARNESS,
+        TOW_TEST_DEADLINE=str(deadline),
+        TOW_TEST_PYTHON=sys.executable,
+        TOW_TEST_PIDS=str(pids),
+        TOW_TEST_ARGS=json.dumps([str(argument) if argument != "{pids}" else str(pids) for argument in arguments]),
+    )
+
+
+@pytest.mark.allow_system
+def test_a_hung_test_run_is_stopped_at_its_deadline_with_its_whole_tree(tmp_path):
+    script = tmp_path / "tree.py"
+    script.write_text(TREE, encoding="utf-8")
+    result = _deadline(tmp_path, 8, [script, "{pids}"])
+    assert result["failure"] == "gate failed: the test run did not finish within 8 s"
+    assert result["code"] == 124
+    assert result["started"] == 2, "the synthetic run and its worker both started before the deadline"
+    assert result["alive"] == [], "the whole tree is stopped"
+    assert 8 <= result["elapsed"] < 60
+
+
+@pytest.mark.allow_system
+def test_a_finished_test_run_keeps_its_exit_code_and_the_gates_location(tmp_path):
+    record = "import os; open('cwd.txt', 'w').write(os.getcwd()); raise SystemExit(3)"
+    result = _deadline(tmp_path, 60, ["-c", record])
+    assert (result["failure"], result["code"], result["alive"]) == (None, 3, [])
+    assert result["elapsed"] < 60
+    assert Path((tmp_path / "pids" / "cwd.txt").read_text(encoding="utf-8")) == tmp_path / "pids"
+
+
+# Every full test run of the gate goes through the deadline, and the passed tree is recorded
+# only after them, inside the same try: a deadline failure throws past it.
+SHAPE_HARNESS = r"""
+$ErrorActionPreference = 'Stop'
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $env:TOW_TEST_GATE, [ref]$null, [ref]$parseErrors)
+if ($parseErrors) { throw 'gate parse failed' }
+$runs = @($ast.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.CommandAst] -and
+    @($node.CommandElements | Where-Object { $_.Extent.Text -eq 'pytest' }).Count -gt 0
+}, $true) | ForEach-Object {
+    @{name=$_.GetCommandName(); collect=$_.Extent.Text.Contains('--collect-only'); at=$_.Extent.StartOffset}
+})
+$stamps = @($ast.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Save-PassedTree'
+}, $true))
+$try = $stamps[0].Parent
+while ($try -and $try -isnot [System.Management.Automation.Language.TryStatementAst]) { $try = $try.Parent }
+@{runs=@($runs); stamps=$stamps.Count; stamp_at=$stamps[0].Extent.StartOffset;
+  try_from=$try.Body.Extent.StartOffset; try_to=$try.Body.Extent.EndOffset} | ConvertTo-Json -Compress -Depth 4
+"""
+
+
+@pytest.mark.allow_system
+def test_every_full_test_run_has_the_deadline_and_the_pass_is_recorded_after_it():
+    result = _run(SHAPE_HARNESS)
+    full = [run for run in result["runs"] if not run["collect"]]
+    assert len(full) == 2, result  # with and without coverage
+    assert {run["name"] for run in full} == {"Invoke-ToolWithDeadline"}
+    assert result["stamps"] == 1
+    assert all(result["try_from"] <= run["at"] < result["stamp_at"] < result["try_to"] for run in full)
