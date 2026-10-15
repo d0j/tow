@@ -54,6 +54,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   compressed it because TOW's request allowed that was refused.
 - History also names the reason when a site refused a page after its site-access check passed because of a
   redirect elsewhere, maintenance, a removed topic, another page or an HTTP error.
+- After the computer's clock was set back, site access no longer stays paused until the old time comes again:
+  a site's retry interval and a service's pause are counted from the corrected time, saved once.
 
 ## [1.30.10] — 2026-10-15
 
