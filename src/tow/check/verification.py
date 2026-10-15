@@ -92,6 +92,12 @@ def pending_row(row: dict[str, Any], h: str) -> None:
         row.pop(key, None)
 
 
+def awaits_client(topic: Topic, row: dict[str, Any]) -> bool:
+    """The receipt still waits for its client after this look: not finished, blocked or withdrawn."""
+    waiting = as_dict(topic.get("verification_pending"))
+    return bool(waiting) and not waiting.get("blocked") and not row.get("ok")
+
+
 def blocked_row(topic: Topic, row: dict[str, Any], h: str) -> None:
     waiting = as_dict(topic.get("verification_pending"))
     error = TowError(

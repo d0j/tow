@@ -380,6 +380,8 @@ def check_topic(topic: Topic, run: CheckRun) -> CheckRow:
     }
     old = str(topic.get("hash") or "").upper()
     if not topic.get("paused") and verification.recheck(topic, run, row):
+        if tr is not None and verification.awaits_client(topic, row):
+            _observe_while_verifying(topic, run, row, tr, str(url))
         return row
     # Its torrent waits in the client for disk space: the client is asked (``_waits_for_space``)
     # even while its site is not - a paused site or one at its daily limit kept overwriting the
@@ -419,6 +421,88 @@ def check_topic(topic: Topic, run: CheckRun) -> CheckRow:
     if row.get("skip") != "withdrawn":
         stamp_result(topic, row)
     return row
+
+
+class SiteRevision(NamedTuple):
+    """The site's current revision as a check sees it without downloading its .torrent."""
+
+    hash: str  # as a client lists it
+    identities: frozenset[str]  # every hash that names it
+
+
+def _site_revision(work: TopicCheck) -> SiteRevision | None:
+    """The site's current revision, read-only: its revision probe (``infohash_path``), else the
+    topic page's magnet - never a .torrent download. None: the site cannot say it this way. A
+    site that does not answer raises, as a download would."""
+    run, tracker = work.run, work.tracker
+    probe = getattr(tracker, "fetch_revision_hash", None)
+    if callable(probe) and (getattr(tracker, "spec", {}) or {}).get("infohash_path"):
+        current = str(probe(work.url, run.secrets, run.ua, ignore_cool=run.ignore_cool, persist=run.apply) or "")
+        if current:
+            return SiteRevision(current.upper(), frozenset({current.upper()}))
+    fetch_magnet = getattr(tracker, "fetch_magnet", None)
+    if not callable(fetch_magnet):
+        return None
+    try:
+        magnet, _hash = fetch_magnet(work.url, run.secrets, run.ua, ignore_cool=run.ignore_cool, persist=run.apply)
+    except TowError as exc:
+        if exc.code in {"tracker.no_magnet", "tracker.magnet_ambiguous"}:
+            return None
+        raise
+    hashes = parse_magnet_hashes(str(magnet or ""))
+    if hashes is None:
+        return None
+    btih, btmh = hashes
+    identities = frozenset({*btih, *btmh, *(value[:40] for value in btmh)})
+    return SiteRevision(next(iter(btih)) if btih else next(iter(btmh))[:40], identities)
+
+
+def _observe_while_verifying(topic: Topic, run: CheckRun, row: CheckRow, tr: Any, url: str) -> None:
+    """Its client still verifies the current revision: on the normal check cadence the site is
+    only asked which revision is current - nothing is downloaded, added, selected or changed in
+    the client, and the receipt stays as it is. A newer revision is kept beside it
+    (``observed_hash``) for the check after the client is done. A site that does not answer is
+    the row's error, unless the client's own error (the overdue wait) already is."""
+    mirror_state = mirror_of(run.state, tr.name)
+    if not run.apply or (mirror_state is not None and mirror_state.get("frozen") is True):
+        return
+    row["tracker"] = tr.name
+    old = str(topic.get("hash") or "").upper()
+    work = TopicCheck(topic, run, tr, url, row, old, str(row.get("client_id") or ""), None)
+    _reread_secrets(run)
+    try:
+        revision = _site_revision(work)
+    except Exception as error:  # noqa: BLE001 - the site's failure is this topic's result, never the run's end
+        _fail_log(topic, url, error, tr, how=run.how, persist=run.apply, site_skips=run.site_skips)
+        if not row.get("error"):
+            row.update(ok=False, status="failed")
+            set_error(row, error)
+            stamp_result(topic, row)
+            if run.notify:
+                operation_id = new_operation_id("check-error")
+                run.queue_notification(topic, kind="error", operation_id=operation_id, tracker=tr.name, error=error)
+        return
+    if revision is None:
+        return
+    waiting = as_dict(topic.get("verification_pending"))
+    if old in revision.identities:
+        waiting.pop("observed_hash", None)
+    else:
+        waiting["observed_hash"] = revision.hash
+    row["site_answered"] = True
+    if checked := topic.get("last_check"):
+        topic["site_ok_at"] = checked  # this check's own time: the site answered it
+    run.record(
+        "tracker_checked",
+        component="tracker",
+        integration_id=tr.name,
+        topic_id=topic.get("id"),
+        topic=topic.get("id"),
+        tracker=tr.name,
+        hash=revision.hash,
+        status="succeeded",
+        how=run.how,
+    )
 
 
 def _site_skipped_after_wait(work: TopicCheck) -> bool:
