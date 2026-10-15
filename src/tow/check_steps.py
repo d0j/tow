@@ -7,7 +7,7 @@ tested in isolation.
 from __future__ import annotations
 
 from collections.abc import Collection, Iterable, Mapping
-from typing import Any
+from typing import Any, cast
 
 from tow import errors
 from tow.clients.spec import TorrentClientAdapter
@@ -135,7 +135,8 @@ _CHECK_CLEARABLE_FIELDS = (
     "error_streak",
     "last_error_code",
     "last_error_params",
-    "content_token",
+    "content_ref",
+    "content_token",  # read and dropped, no longer written (records.CONTENT_REF_FIELDS)
     "content_hash",
     "waiting_space",
     "verification_pending",
@@ -161,6 +162,7 @@ OWNER_FIELDS = (
     "selection_dirty",
     "once_done",
     "move_pending",
+    "content_ref",
     "content_token",
     "content_hash",
 )
@@ -264,8 +266,9 @@ def store_revision(
         if files is not None:
             store_file_aliases(topic, h, files, mode=plan.mode)
     topic["selection_dirty"] = False
-    topic.pop("content_token", None)
+    topic.pop("content_ref", None)
     topic.pop("content_hash", None)
+    cast(dict[str, Any], topic).pop("content_token", None)  # the name 1.31.2 and older wrote
     if once:
         topic["once_done"] = True
 

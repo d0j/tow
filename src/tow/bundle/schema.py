@@ -146,6 +146,7 @@ def _validate_state_topic(index: int, topic: Any) -> None:
         "tracker_title",
         "tracking_mode",
         "selection_hash",
+        "content_ref",
         "content_token",
         "content_hash",
     ):

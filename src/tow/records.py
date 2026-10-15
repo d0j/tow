@@ -41,7 +41,10 @@ class Topic(TypedDict, total=False):
     save_path: str
     client_id: str
     selection: Selection
-    content_token: str
+    # A topic added with a prepared torrent (the file picker), until its first add: the
+    # preparation's id and the torrent's info hash. 1.23.0-1.31.2 named the id
+    # ``content_token`` (read by ``content_ref``, never written: CONTENT_REF_FIELDS).
+    content_ref: str
     content_hash: str
     tracking_mode: str  # watch | once
     check_interval_min: int | None
@@ -208,6 +211,20 @@ def shown_title(topic: Mapping[str, Any]) -> str:
     if topic.get("title_set") is True and title.strip():
         return title
     return str(topic.get("tracker_title") or title)
+
+
+# The field of a topic's prepared torrent id, and the name TOW 1.23.0-1.31.2 stored it under:
+# the backup check reads ``*_token`` as a credential, so every restore point (and the update
+# from Settings) failed while such a topic waited for its first add. Both are read and dropped.
+CONTENT_REF_FIELDS = ("content_ref", "content_token")
+
+
+def content_ref(topic: Mapping[str, Any]) -> str:
+    """The id of the topic's prepared torrent ("" when it has none)."""
+    for key in CONTENT_REF_FIELDS:
+        if value := topic.get(key):
+            return str(value)
+    return ""
 
 
 def health_of(state: Mapping[str, Any]) -> Health:

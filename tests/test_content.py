@@ -239,8 +239,10 @@ def test_preparation_write_failure_cannot_create_watch(monkeypatch):
     assert load_state()["topics"] == []
 
 
+@pytest.mark.parametrize("field", ["content_ref", "content_token"])
 @pytest.mark.parametrize("apply", [True, False])
-def test_manual_prepared_add_uses_existing_verified_client_pipeline(monkeypatch, apply):
+def test_manual_prepared_add_uses_existing_verified_client_pipeline(monkeypatch, apply, field):
+    """``content_token``: the name 1.31.2 and older stored the prepared torrent's id under."""
     from test_check_contract import FakeClient, _wire_fake_check
 
     from tow import check
@@ -275,7 +277,7 @@ def test_manual_prepared_add_uses_existing_verified_client_pipeline(monkeypatch,
         "save_path": r"M:\TV",
         "client_id": "main",
         "selection": stored_policy(content.selection(parse_torrent_metadata(blob()), [0], "watch")),
-        "content_token": snapshot["token"],
+        field: snapshot["token"],
         "hash": None,
     }
     save_state({"topics": [topic]})
@@ -292,10 +294,11 @@ def test_manual_prepared_add_uses_existing_verified_client_pipeline(monkeypatch,
         assert client.selected_indices == (0,)
         assert saved["hash"] == snapshot["hash"]
         assert saved["selection_verified"] is True
+        assert "content_ref" not in saved
         assert "content_token" not in saved
     else:
         assert saved["hash"] is None
-        assert saved["content_token"] == snapshot["token"]
+        assert saved[field] == snapshot["token"]
 
 
 def _other_topic_blob():
@@ -323,7 +326,7 @@ def test_local_file_is_only_a_preview_never_the_first_revision(monkeypatch, matc
     assert torrent_cache.read(URL) is None, "a local file is not saved as the topic's metadata"
     assert content.site_revision(snapshot["token"], URL, "main") is None
     state = load_state()
-    state["topics"][0].update(content_token=snapshot["token"], content_hash=snapshot["hash"])
+    state["topics"][0].update(content_ref=snapshot["token"], content_hash=snapshot["hash"])
     save_state(state)
     row = check.run_check(apply=True, notify=False, how="test")["results"][0]
     assert torrent_cache.read(URL) == site, "only the site's own bytes are saved"
@@ -393,7 +396,7 @@ def test_expired_preparation_refetch_cannot_add_changed_revision(monkeypatch, mo
                     "client_id": "main",
                     "hash": None,
                     "selection": stored_policy(policy),
-                    "content_token": "a" * 32,
+                    "content_ref": "a" * 32,
                     "content_hash": HASH,
                 }
             ]
@@ -431,7 +434,7 @@ def test_expired_preparation_cannot_materialize_magnet_before_identity_check(mon
                     "client_id": "main",
                     "hash": None,
                     "selection": stored_policy(exact()),
-                    "content_token": "a" * 32,
+                    "content_ref": "a" * 32,
                     "content_hash": HASH,
                 }
             ]
@@ -665,6 +668,47 @@ def test_add_and_edit_read_the_prepared_torrent_once(monkeypatch):
     client.post(f"/topics/{saved['id']}/edit", data={**form, "content_token": token, "selection_indices": "[0]"})
     assert load_state()["topics"][0]["selection"]["files"] == [{"path": FILES[0].path, "size": 100}]
     assert len(reads) == 2, "one decryption per submitted form"
+
+
+def test_a_restore_point_is_made_while_a_picker_added_topic_waits_for_its_first_add(monkeypatch):
+    """A topic added with the file picker keeps the prepared torrent's id until its first add.
+    Stored as ``content_token`` (1.23.0-1.31.2), the backup check took it for a credential: every
+    restore point, and so the update from Settings and every restore, failed meanwhile."""
+    from tow import restore_points
+    from tow.bundle import import_bundle
+    from tow.clients.factory import client_configuration
+    from tow.config import load_config
+    from tow.guess import canon_watch_url
+
+    url = canon_watch_url("http://rutor.info/torrent/1234567/show-a")
+    client_id = str(client_configuration(load_config(), None)["id"])
+    monkeypatch.setattr(services, "run_check", lambda **_kwargs: {"results": []})
+    monkeypatch.setattr("tow.web.services.guess_topic_title", lambda *_args, **_kwargs: "Show")
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    token = content.prepare(blob(), url, client_id)["token"]
+    form = {"url": url, "title": "Show", "save_path": "D:/TV", "selection_mode": "exact", "selection_indices": "[1]"}
+    client.post("/topics/add", data={**form, "content_token": token}, follow_redirects=False)
+    assert load_state()["topics"][0]["hash"] is None
+
+    live = restore_points.create_restore_point()
+    assert import_bundle(restore_points.point_path(live["id"]), restore_points._passphrase(), apply=False)
+    saved = load_state()["topics"][0]
+    assert saved["content_ref"] == token
+    assert "content_token" not in saved
+
+    # What 1.23.0-1.31.2 saved passes too, until the topic's first add drops it.
+    state = load_state()
+    state["topics"][0]["content_token"] = state["topics"][0].pop("content_ref")
+    save_state(state)
+    legacy = restore_points.create_restore_point()
+    assert import_bundle(restore_points.point_path(legacy["id"]), restore_points._passphrase(), apply=False)
+
+    # Such a topic deleted (or edited) by 1.31.2 left it in its undo record too.
+    state = load_state()
+    state["undo"] = {"kind": "topic", "ts": "2026-10-15T20:00:00+00:00", "item": state["topics"].pop(0), "index": 0}
+    save_state(state)
+    deleted = restore_points.create_restore_point()
+    assert import_bundle(restore_points.point_path(deleted["id"]), restore_points._passphrase(), apply=False)
 
 
 @pytest.mark.parametrize(("configured", "sent"), [(None, None), ("Agent/1.0", "Agent/1.0")])

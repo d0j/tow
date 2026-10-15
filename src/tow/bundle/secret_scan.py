@@ -63,6 +63,24 @@ def _legacy_mirror_order(path: list[str | int], key: str, item: Any) -> bool:
     )
 
 
+_PREPARED_CONTENT_ID = re.compile(r"[0-9a-f]{32}")
+
+
+def _legacy_content_ref(path: list[str | int], key: str, item: Any) -> bool:
+    """The id of a topic's prepared torrent (``tow.content.prepare``, 32 hex digits) while the
+    topic waits for its first add, as TOW 1.23.0-1.31.2 named it in state.json
+    (``topics[<n>].content_token``, and ``undo.item.content_token`` once such a topic was
+    deleted or edited; now ``content_ref``). Exempt only there and only in that form: it blocked
+    every restore point, and so the web update and every restore, until the topic's first add."""
+    return (
+        len(path) == 2
+        and ((path[0] == "topics" and isinstance(path[1], int)) or path == ["undo", "item"])
+        and key == "content_token"
+        and isinstance(item, str)
+        and _PREPARED_CONTENT_ID.fullmatch(item) is not None
+    )
+
+
 def _secret_key_path(value: Any, path: str = "", *, state: bool = False) -> str | None:
     """Path of the first credential-named field in ``value``, or None (``state``: state.json,
     where an old messenger lease's claim is not one)."""
@@ -103,6 +121,7 @@ def _secret_segments(value: Any, seen: set[int], *, state: bool = False) -> list
                 and item not in (None, "", False, True)
                 and not (state and _legacy_lease_owner(path, str(key), item))
                 and not (state and _legacy_mirror_order(path, str(key), item))
+                and not (state and _legacy_content_ref(path, str(key), item))
             ):
                 return [*path, segment]
         if isinstance(item, (dict, list)) and id(item) not in seen:

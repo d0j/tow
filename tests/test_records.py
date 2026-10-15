@@ -12,7 +12,9 @@ def _fields(kind: type) -> set[str]:
 
 
 def test_check_and_owner_fields_are_topic_fields():
-    topic = _fields(records.Topic)
+    # content_token: read and dropped, never written any more (records.CONTENT_REF_FIELDS).
+    assert "content_token" not in _fields(records.Topic)
+    topic = _fields(records.Topic) | set(records.CONTENT_REF_FIELDS)
     assert set(check_steps._CHECK_OWNED_FIELDS) <= topic
     assert set(check_steps._CHECK_CLEARABLE_FIELDS) <= topic
     assert set(check_steps.OWNER_FIELDS) <= topic
