@@ -64,7 +64,16 @@ flowchart TD
   "Checking files". The next check, progress pass or `space` pass (which also runs while a receipt waits)
   finishes it from the client alone: no tracker request, re-add, stop, move or priority reset. A receipt the client
   contradicts (another owner, folder or selection, an error state) is blocked with a red error until the owner
-  repairs it; a row's check may try it again.
+  repairs it; a row's check may try it again. Allocation (qBittorrent) and a check waiting in Deluge's queue
+  defer like a file check. A torrent the client does not list blocks only after two client answers at least
+  600 s apart. A deferred add gets exactly one start, also when it is complete. Transmission hands over a paused
+  add while its first check runs (receipt phase `awaiting_initial_check`) and applies the selection, stopped and
+  read back, when it ends. The receipt keeps its first `since`; after 12 hours it shows a red
+  `check.verification_overdue` (notified once) and is still finished later. Meanwhile the site is asked
+  read-only on the normal schedule (revision probe or page magnet, never a `.torrent`), and a newer revision is
+  kept as `observed_hash`. A blocked receipt of an unchanged revision downloads no `.torrent`; a failed start
+  after a disk-space wait stays a blocked, repair-only handover. A queued row check passes the click's time
+  (`readd_since`): a torrent removed after it is not added back.
 - Personal tracker timers override the global cadence for their topic (`check_interval_min`,
   empty/null inherits; 1–10080 minutes). Changing the interval starts a new policy revision
   from save time; unrelated edits, manual checks and progress passes do not shift it.
@@ -91,6 +100,10 @@ flowchart TD
   request without a durable reservation. The child (`tow check --site-retry-only`) re-reads the batch after taking
   the check lock (`site_retries.batch_ids`): deleted, paused, edited or recovered topics never run. `status.json`
   publishes the planned times, and a topic's panel on Home shows its own (`layout.site_retry_status`).
+  A failed retry neither lengthens the streak after which a site outage is reported nor starts that message; a
+  successful one ends the outage (and reports the recovery of a reported one). Spent retries are kept while
+  the topic exists and expire a week after its last retry; a damaged record ends the budget. A partial run
+  (retry, timer, one topic) never clears a failed scheduled check; a manual check of every topic may.
 - Small diagnostic JSON records are bounded to 1 MiB and the store's nesting limit before
   use. Dates must be finite, non-negative and displayable. Reading does not rewrite or quarantine
   them; an unreadable backup/watchdog record is an observation error, not success or an outage.
@@ -138,7 +151,7 @@ flowchart TD
 | `tow.web` | FastAPI app built by `create_app()`: one `APIRouter` per `routes_*.py`, the request middleware, templates. Everything outside the package is called through `tow.web.services`. `check_jobs` is the bounded FIFO of manual checks and their results, kept in this web process only. |
 | `tow.check`, `check_steps`, `check_transaction` | A check run: fetch, decide, hand to the client, record — with a journal for the commit. The package exports `run_check` and the checks the web pages share; inside it `run` is the run, its commit and health record, `topic` one topic's check, `apply` what that check does in the client, `client_ops` hash identity, ownership, read-back and relocation, `reconcile` progress and the history commit, `space` the wait for disk space, `verification` the deferred client file verification, `notices` the messages, `rows` a topic's result row. `tow.check_outcomes` sorts a result row into one outcome. |
 | `tow.progress` | The progress pass: a topic's torrent in its client and its files on disk, recorded in the download history. The package exports `reconcile_topic`, `progress_summary` and the disk confirmation (`filesystem_confirmation`, `safe_relative_path`, `CONFIRMATION_REUSE_SEC`); inside it `confirmation` is the disk confirmation, `labels` the events and their wording, `presence` the torrent gone from its client or back and superseded revisions, `expected` the selected files and the episodes expected (selection, episodes, file rules, aliases), `history` the history index and item identity, `reconcile` the pass itself, `summary` the completion summary. |
-| `tow.trackers` | `generic.GenericHttpTracker` reads any configured site; `presets/<site>.py` adds what TOW knows about a particular site. `tow.mirrors` picks mirrors, cooldowns, redirects. |
+| `tow.trackers` | `generic.GenericHttpTracker` reads any configured site; `presets/<site>.py` adds what TOW knows about a particular site. `tow.mirrors` picks mirrors, cooldowns, redirects; a run's `MirrorSession` keeps pauses and observations across its requests (a preview saves nothing), and answers are recorded as operations on the saved state under the persistence lock (each with its request's start, so a late success cannot undo a newer failure). `observed` holds host health only; sign-in and daily-limit refusals are kept apart as `access`; pauses a clock jump left far ahead are clamped and saved once. |
 | `tow.protection` | Optional site-access layer: pure bounded verdicts (`detect`), validated settings/contracts (`spec`), independent adapter discovery and bounded service HTTP (`providers`, `solvers`), ordered finite fallback (`chain`), encrypted origin/expiry/config-bound clearance and durable leases (`store`), absolute deadline over the existing pinned network backend (`transport`). `local_service` launches an owner-installed Windows module on demand (`runtime/services/flaresolverr/`, a pinned manifest), only from an applying provider call; it copies the standalone broker `tow.platform._local_service_worker` beside the manifest and starts it with the install's base Python. That broker imports nothing from TOW (standard library, Python 3.11 syntax), listens on loopback only, starts the native service lazily inside a Windows job object, serializes its calls and stops it after the manifest's idle time. Mirrors remain first; account sign-in stays in the native tracker. See [PROTECTION.md](PROTECTION.md). |
 | `tow.clients` | Torrent adapters behind `TorrentClientAdapter`; qBittorrent, Transmission and Deluge all use the read-back contract of `managed.ManagedClient`; qBittorrent overrides its add, a full selection and the rollback's priority levels. The helper modules (`HELPERS`): `spec` (the contract and discovery), `factory` (the configured clients), `managed`, `files`, `address` (a client's Web UI address, shared by Transmission, Deluge and the web's reachability check), and `view` (the settings cards, as `notifiers.view` makes the messengers'). |
 | `tow.adopt` | Adopt into TOW: on the owner's request only, the `tow` mark on a torrent already in the client (added by hand or by another program), read back and logged; nothing else about the torrent changes. |
