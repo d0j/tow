@@ -104,7 +104,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   message used to vanish after ten minutes). A results page still waiting for its check now shows the results
   when the check ends instead of staying on “waiting”, and Back no longer returns to the waiting page.
   The waiting page of a check that has ended says it finished, with the link to its results, instead of “TOW
-  restarted or the record expired”.
+  restarted or the record expired”, and a results page whose check TOW no longer knows stops saying “waiting”.
 
 ## [1.30.10] — 2026-10-15
 
