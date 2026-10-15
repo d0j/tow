@@ -456,6 +456,7 @@ def response_verdict(
         maintenance_markers=maintenance_markers or (),
         torrent_wanted=wanted,
         daily_limit=download_limit and isinstance(content, (bytes, bytearray)) and is_download_limit(bytes(content)),
+        topic_removed=wanted and isinstance(content, (bytes, bytearray)) and says_topic_removed(bytes(content)),
     )
 
 

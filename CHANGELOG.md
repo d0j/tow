@@ -44,6 +44,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   30 seconds up to 30 minutes) instead of being started again for the next site; other services still run.
 - A "module still starting" answer of the installed site-access module no longer makes the site wait its full
   retry interval (30 minutes by default): the site is tried again once the module's short pause is over.
+- A download answered by a full site page with a sign-in form is recognised as an expired sign-in: TOW signs
+  in again once instead of reporting "not a torrent file". A removed topic and the daily limit still win.
 
 ## [1.30.10] — 2026-10-15
 

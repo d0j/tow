@@ -73,6 +73,60 @@ def test_quota_evidence_is_distinct_and_a_long_post_does_not_declare_maintenance
     assert classify(200, "<title>Site work</title>", maintenance_markers=["site work"]) == Verdict.MAINTENANCE
 
 
+NEWS = "<div class=news>" + "Новые раздачи за неделю. " * 200 + "</div>"  # a long page: > 2000 characters
+
+
+@pytest.mark.parametrize(
+    "form",
+    [
+        '<form action="login.php"><input name="password" type="password"></form>',
+        "<form><INPUT\n  type = 'PASSWORD' name=pass></form>",
+        '<input data-hint="a > b" type="password">',  # a quoted ">" does not end the tag
+        '<input value="' + "x" * 2000 + '" type=password />',
+    ],
+    ids=["plain", "case_and_spaces", "quoted_gt", "long_attribute"],
+)
+def test_a_long_page_with_a_password_field_answering_a_download_asks_to_sign_in(form):
+    page = "<title>Tracker</title>" + NEWS + form
+    assert classify(200, page, torrent_wanted=True) == Verdict.LOGIN_NEEDED
+    assert classify(200, page) == Verdict.OK  # a topic page keeps the stricter short-page rule
+
+
+@pytest.mark.parametrize(
+    "decoy",
+    [
+        "<!-- <input type=password> -->",
+        "<script>var form = '<input type=\"password\">';</script>",
+        "<p>type=password</p>",
+        '<input type="text" name="password">',
+        "<p>" + "x" * 70000 + "</p><input type=password>",  # beyond the bounded scan
+    ],
+    ids=["comment", "script", "text", "text_input", "beyond_scan"],
+)
+def test_no_real_password_field_on_a_long_download_answer_is_not_a_sign_in(decoy):
+    assert classify(200, "<title>Tracker</title>" + NEWS + decoy, torrent_wanted=True) == Verdict.UNEXPECTED
+
+
+@pytest.mark.parametrize("fragment", ["<input ", "<input type=", "<input type='", "<input\t\n"])
+def test_repeated_broken_input_fragments_are_read_quickly(fragment):
+    """A regex re-read the rest of the page from every unended ``<input`` (quadratic in 64 KiB)."""
+    page = fragment * (65536 // len(fragment))
+    started = time.perf_counter()
+    assert classify(200, page, torrent_wanted=True) in {Verdict.UNEXPECTED, Verdict.LOGIN_NEEDED}
+    assert time.perf_counter() - started < 1.0
+
+
+def test_removed_topic_and_daily_limit_keep_precedence_over_a_long_sign_in_page(monkeypatch):
+    form = '<input type="password" name="password">'
+    removed = "<title>Tracker</title>" + NEWS + "<h1>Тема не найдена</h1>" + form
+    assert classify(200, removed, torrent_wanted=True, topic_removed=True) == Verdict.UNEXPECTED
+    assert classify(200, NEWS + form, torrent_wanted=True, daily_limit=True) == Verdict.DAILY_LIMIT
+    install(monkeypatch, lambda request: httpx.Response(200, text=removed))
+    with pytest.raises(MirrorFetchError) as gone:
+        pick_and_get("demo", SPEC["fetch_hosts"], "/download/1", ok=lambda r: False, persist=False)
+    assert gone.value.failure == "gone"
+
+
 def install(monkeypatch, handler, *, protection=None, hosts=None):
     cfg = load_config()
     spec = {**SPEC, "fetch_hosts": hosts or SPEC["fetch_hosts"]}

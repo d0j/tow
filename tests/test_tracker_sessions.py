@@ -452,6 +452,37 @@ def test_scheduled_checks_send_the_password_once_per_pause(site):
     assert site.count("/login.php") == 2
 
 
+LONG_SIGN_IN = (
+    "<html><head><title>Demo tracker</title></head><body>"
+    "<form action='login.php' method=post><input name=login_username><input type=password name=login_password></form>"
+    + "<div class=news>Новые раздачи за неделю. </div>" * 150
+    + "</body></html>"
+)
+
+
+def test_a_long_sign_in_page_answering_a_download_signs_in_once(site):
+    """A full site page with its sign-in form instead of the torrent: the session expired."""
+    _configured(download_path="/dl.php?t={id}")
+    site.pages["/dl.php?t=5"] = lambda request: (
+        TORRENT if "bb_session=fresh" in request.headers.get("cookie", "") else LONG_SIGN_IN
+    )
+    tracker = _tracker(download_path="/dl.php?t={id}")
+    assert tracker.fetch_torrent("https://demo.example/viewtopic.php?t=5", SECRETS, "ua") == TORRENT
+    assert site.count("/login.php") == 1
+
+
+def test_a_sign_in_form_that_stays_after_signing_in_is_reported_once(site):
+    """A header sign-in widget on every page: one refresh and replay, then a sign-in problem."""
+    _configured(download_path="/dl.php?t={id}")
+    site.pages["/dl.php?t=5"] = LONG_SIGN_IN
+    tracker = _tracker(download_path="/dl.php?t={id}")
+    with pytest.raises(MirrorFetchError) as info:
+        tracker.fetch_torrent("https://demo.example/viewtopic.php?t=5", SECRETS, "ua", ignore_cool=True)
+    assert error_class(info.value) == "tracker_auth"
+    assert site.count("/login.php") == 1
+    assert site.count("/dl.php?t=5") == 2
+
+
 def test_login_pause_ends(site, monkeypatch):
     _configured(download_path="/dl.php?t={id}")
     site.pages["/dl.php?t=5"] = "<html><body>Пожалуйста, войдите</body></html>"
