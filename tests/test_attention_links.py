@@ -244,6 +244,21 @@ def test_client_down_reads_the_current_client_factory_on_each_call(client, monke
     assert _entries(client)["client_down"]["fix"] == "check_client:default"
 
 
+def test_a_down_clients_topics_fold_by_the_current_client_factory(client, monkeypatch):
+    # topic_error read the main client through a function captured at import, issues.clients
+    # through the module: after a test changed the main client while the kinds were first loaded,
+    # a dead client's failed topic was listed beside "client not answering" again.
+    from tow.clients import factory
+
+    topic = {**_topic("z", 9), "last_error": "client refused", "last_error_class": "qbit"}
+    topic.pop("client_id", None)
+    _home_state(topic, qbit_ok=False)
+    with monkeypatch.context() as change:
+        change.setattr(factory, "default_client_id", lambda cfg: "main")
+        assert set(_entries(client)) == {"client_down"}
+    assert set(_entries(client)) == {"client_down"}
+
+
 def test_late_checks_open_the_service_card_with_restart(client):
     _home_state(_topic("z", 9), auto_at_ts=int(time.time()) - 10 * 24 * 3600)
     entry = _entries(client)["check_stale"]
