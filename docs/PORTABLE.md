@@ -863,7 +863,9 @@ Built so far (this workstream):
   all 45 large file-selection scenarios of `tests/selection_work_probe.py`
   (`TOW_SELECTION_WORK=all`); the gate measures the costliest of each kind.
 - Real systems (`.github/workflows/real.yml`): on pull requests that touch the clients, autostart,
-  the check or the supervisor, weekly and by hand. An Ubuntu runner installs qBittorrent,
+  the check, the supervisor or what these tests run through (the OS layer, storage, the CLI, the
+  installers and launchers, the test helpers, the locked dependencies), when such a change reaches
+  `main`, weekly and by hand. An Ubuntu runner installs qBittorrent,
   Transmission and Deluge from apt, starts each on its own port with a login of that run, and
   `tests/integration/test_real_clients.py` drives TOW's own adapters (built by the client factory
   from settings) on torrents whose data is already there: added stopped with a file selection,
