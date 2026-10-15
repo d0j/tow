@@ -2369,6 +2369,7 @@
       "more": "{n} results in total. The first 100 are shown here; see History for the rest.",
       "history": "Error history",
       "not_run": "could not confirm the check result ({error}); review topic status and error history before trying again",
+      "internal_error": "the check stopped on an internal TOW error; its result is unknown — review topic status and error history before trying again",
       "report_failed": "the check ran, but TOW could not show its result ({error}); see the topics' status on Home and the History",
       "started": "check started"
     },

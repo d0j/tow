@@ -422,14 +422,14 @@ def check_progress(job: Mapping[str, Any]) -> str:
 
 def check_job_message(job: Mapping[str, Any]) -> str:
     """What a finished manual check says; for one that ended without a word of its own
-    (cancelled, never given the check lock), why."""
+    (cancelled, never given the check lock, stopped by an error of TOW itself), why."""
     if job.get("flash"):
         return str(job["flash"])
     if job.get("cancelled"):
         return t("web.check_all.cancelled")
     if job.get("lock_timeout"):
         return t("web.check_all.lock_timeout")
-    return t("web.check_all.unconfirmed")
+    return t("web.check_all.internal_error")
 
 
 def ui_time(value: str | None) -> str:
