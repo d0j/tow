@@ -9,6 +9,7 @@
   },
   "site_access": {
     "row_limited": "Site access limited",
+    "row_no_connection": "No connection to the site",
     "reason": {
       "invalid_module": "Installed module is damaged or invalid",
       "timeout": "Time limit reached",
@@ -995,6 +996,7 @@
   },
   "issues": {
     "site_access": "{site}: site access is limited (topics: {count})",
+    "site_connection": "{site}: no connection to the site (topics: {count})",
     "topic_error": "{title} — {error}",
     "data_lost": "TOW's data folder ({folder}) was deleted or replaced while TOW was running: the topics, history and settings kept there are gone from TOW, which goes on empty. Restore a nightly backup: the copies are kept outside the data folder.",
     "check_stale": "Scheduled checks have not run since {at}.",
@@ -1515,6 +1517,7 @@
     "frozen": "{tracker}: the site is paused",
     "all_failed": "{tracker}: {error}",
     "access_retry": "{tracker}: site access is temporarily limited",
+    "connection_retry": "{tracker}: no connection to the site",
     "transport": "no connection ({error})",
     "local": "{tracker}: TOW could not read the site's answer ({error})",
     "too_large": "the answer is too large"

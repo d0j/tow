@@ -15,6 +15,8 @@ from tow.status import TRACKER_WARNING_CLASSES, error_tone
 
 KIND = "topic_error"
 ORDER = 70
+# The short site incidents of ``tow.errors.summary_record``: one entry per site, in their own words.
+_SITE_MESSAGES = {"mirrors.access_retry": "issues.site_access", "mirrors.connection_retry": "issues.site_connection"}
 
 
 def _error(topic: Mapping[str, Any], config: Mapping[str, Any]) -> Any:
@@ -56,7 +58,7 @@ def collect(snapshot: Snapshot) -> list[Issue]:
             and isinstance(site, str)
             and site in sites
             and normalized
-            and normalized.get("code") == "mirrors.access_retry"
+            and normalized.get("code") in _SITE_MESSAGES
         ):
             title = sites[site].get("title") or site
             target = Target("home", open=identity, anchor=f"row-{identity}")
@@ -65,7 +67,9 @@ def collect(snapshot: Snapshot) -> list[Issue]:
                     kind=KIND,
                     id=f"{KIND}:site:{site}",
                     severity="warn",
-                    message=Message("issues.site_access", {"site": title, "count": 1}),
+                    # No connection or limited access: one entry per site (the first topic decides
+                    # the words when its topics differ).
+                    message=Message(_SITE_MESSAGES[normalized["code"]], {"site": title, "count": 1}),
                     subjects=(identity,),
                     target=target,
                     target_many=Target(

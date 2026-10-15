@@ -399,3 +399,71 @@ def test_check_access_now_is_not_offered_for_a_site_the_owner_paused(cls, offere
     page = TestClient(app).get("/topics/a/edit")
     assert page.status_code == 200
     assert ("Проверить доступ сейчас" in page.text) is offered
+
+
+# --- a site no mirror of which could be reached is one site incident, in its own words -----------
+
+
+def _issues(*topics: dict[str, Any]) -> list[Any]:
+    from tow.issues import Snapshot, collect
+
+    return collect(Snapshot(state={"topics": list(topics), "health": {}}, config=config(), now=T0))
+
+
+def _said(issue: Any, lang: str) -> str:
+    from tow import i18n
+    from tow.errors import render_stored
+
+    i18n.use(lang)
+    return render_stored(issue.message.key, dict(issue.message.params), "")
+
+
+@pytest.mark.parametrize(("lang", "words"), [("en", "no connection to the site"), ("ru", "нет связи с сайтом")])
+def test_a_site_out_of_reach_is_one_entry_for_all_its_topics(lang, words):
+    [issue] = _issues(failed("a"), failed("b"), failed("c"))
+    assert (issue.kind, issue.id, issue.severity, issue.count) == ("topic_error", "topic_error:site:demo", "warn", 3)
+    assert issue.message.key == "issues.site_connection"
+    assert words in _said(issue, lang)
+    assert issue.fix is not None
+    assert issue.fix.label == "site_access.retry_check"
+
+
+def test_a_limited_site_keeps_its_own_entry_and_words():
+    [issue] = _issues(failed("a", "mirrors.rate_limited"), failed("b", "mirrors.cloudflare"))
+    assert (issue.id, issue.severity, issue.count) == ("topic_error:site:demo", "warn", 2)
+    assert issue.message.key == "issues.site_access"
+    assert "доступ к сайту ограничен" in _said(issue, "ru")
+
+
+def test_one_site_is_one_entry_whatever_its_mirrors_said():
+    [issue] = _issues(failed("a"), failed("b", "mirrors.rate_limited"))
+    assert (issue.id, issue.count) == ("topic_error:site:demo", 2)
+
+
+@pytest.mark.parametrize(
+    ("reason", "row"),
+    [("mirrors.transport", "Нет связи с сайтом"), ("mirrors.rate_limited", "Доступ к сайту ограничен")],
+)
+def test_home_row_says_what_kind_of_site_incident_it_is(reason, row):
+    from fastapi.testclient import TestClient
+
+    from tow.config import save_config
+    from tow.store import save_secrets, save_state
+    from tow.web import app
+
+    cfg = load_config()
+    cfg["trackers"] = {
+        "demo": {
+            "title": "Site A",
+            "fetch_hosts": ["https://demo.example"],
+            "url_regex": r"^https://demo\.example/topic/([a-z]+)$",
+            "download_path": "/download/{id}",
+        }
+    }
+    save_config(cfg)
+    save_secrets({"init_done": True})
+    save_state({"topics": [failed("a", reason)], "mirrors": {}})
+    page = TestClient(app).get("/")
+    assert page.status_code == 200
+    assert 'class="row-error warn"' in page.text
+    assert row in page.text

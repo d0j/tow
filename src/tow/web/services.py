@@ -186,6 +186,7 @@ __all__ = [
     "sign_out",
     "sign_out_everywhere",
     "site_error_summary",
+    "site_incident",
     "site_retry_status",
     "snapshot_delete_view",
     "snapshot_path",
@@ -207,6 +208,12 @@ __all__ = [
 
 def site_error_summary(record: Mapping[str, Any], fallback: str = "") -> str:
     return _render_error(_summary_record(record), fallback=fallback)
+
+
+def site_incident(record: Mapping[str, Any]) -> str:
+    """The short site incident a stored error is shown as (its code), "" for a topic's own error."""
+    summary = _summary_record(record)
+    return str(summary.get("code") or "") if summary is not None and summary != record else ""
 
 
 def diagnostic_details(record: Mapping[str, Any] | None, lang: str | None = None) -> str:
