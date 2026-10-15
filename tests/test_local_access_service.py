@@ -514,3 +514,59 @@ def test_settings_identify_module_without_launch_and_report_damage(installed, mo
     assert view["cards"][0]["on_demand"] is False
     assert view["cards"][0]["local_runtime_refused"] is True
     assert not (installed[0] / "worker.py").exists()
+
+
+# --- the launcher digest: cached for display, always fresh before the module runs ---------------
+
+
+@pytest.fixture
+def hashes(monkeypatch):
+    import hashlib
+
+    count = [0]
+    real = hashlib.file_digest
+
+    def counted(*args, **kwargs):
+        count[0] += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(hashlib, "file_digest", counted)
+    return count
+
+
+def test_settings_and_provider_calls_do_not_rehash_an_unchanged_module(installed, monkeypatch, hashes):
+    from tow.web import services
+
+    cfg = {"protection": {"providers": [dict(PROVIDER, id="local-test")]}}
+    for _ in range(3):
+        assert services.protection_settings_view(cfg)["cards"][0]["on_demand"] is True
+    monkeypatch.setattr(local_service, "listening", lambda *a: True)
+    for _ in range(2):
+        assert local_service.ensure(PROVIDER, local_service.time.monotonic() + 1) is True
+    assert hashes[0] == 1
+
+
+def test_a_replaced_module_is_hashed_again_and_refused(installed, hashes):
+    folder, _manifest = installed
+    assert local_service.managed(PROVIDER) is True
+    (folder / "bin" / "flaresolverr.exe").write_bytes(b"replaced-service-binary")
+    with pytest.raises(ValueError, match="changed"):
+        local_service.managed(PROVIDER)
+    assert hashes[0] == 2
+
+
+def test_a_cached_digest_never_lets_a_changed_module_run(installed, monkeypatch):
+    import os
+
+    folder, manifest = installed
+    binary = folder / "bin" / "flaresolverr.exe"
+    assert local_service.managed(PROVIDER) is True
+    before = binary.stat()
+    binary.write_bytes(b"synthetic-servicf")  # same size ...
+    os.utime(binary, ns=(before.st_atime_ns, before.st_mtime_ns))  # ... and time: the display cache matches
+    assert local_service.managed(PROVIDER) is True
+    with pytest.raises(ValueError, match="changed"):
+        worker.read_manifest(folder)
+    monkeypatch.setattr(worker.subprocess, "Popen", lambda *a, **k: pytest.fail("changed module started"))
+    with pytest.raises(ValueError, match="changed"):
+        worker.NativeService(folder, manifest).launch(worker.time.monotonic() + 10)

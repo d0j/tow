@@ -20,6 +20,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -86,7 +87,18 @@ def plain(path: Path, *, directory: bool = False) -> bool:
     return appropriate and not getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
 
 
-def read_manifest(folder: Path) -> dict[str, Any]:
+def file_sha256(path: Path) -> str:
+    with path.open("rb") as source:
+        return hashlib.file_digest(source, "sha256").hexdigest()
+
+
+def read_manifest(folder: Path, digest: Callable[[Path], str] = file_sha256) -> dict[str, Any]:
+    """The validated manifest of an installed module, its launcher's SHA-256 included.
+
+    The digest detects a changed launcher executable; it is not integrity of the whole module
+    folder nor proof of its publisher. ``digest`` lets a display reuse a digest of unchanged
+    file metadata; every start of the module hashes the file again (the default).
+    """
     if not plain(folder, directory=True):
         raise ValueError("redirected local service folder")
     path = folder / "manifest.json"
@@ -134,9 +146,8 @@ def read_manifest(folder: Path) -> dict[str, Any]:
     binary = folder / name
     if not plain(binary.parent, directory=True) or not plain(binary) or binary.stat().st_size > 512 * MAX_BODY:
         raise ValueError("invalid local service binary")
-    with binary.open("rb") as source:
-        if hashlib.file_digest(source, "sha256").hexdigest() != value["sha256"]:
-            raise ValueError("local service binary changed")
+    if digest(binary) != value["sha256"]:
+        raise ValueError("local service binary changed")
     return value
 
 

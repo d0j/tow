@@ -46,6 +46,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   retry interval (30 minutes by default): the site is tried again once the module's short pause is over.
 - A download answered by a full site page with a sign-in form is recognised as an expired sign-in: TOW signs
   in again once instead of reporting "not a torrent file". A removed topic and the daily limit still win.
+- Settings and each site-access request no longer read the installed module's whole program file to check it:
+  it is checked again when the file changes, and always right before the module starts.
 
 ## [1.30.10] — 2026-10-15
 
