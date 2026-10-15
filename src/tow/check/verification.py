@@ -15,7 +15,7 @@ from tow.check.rows import client_marks, set_error, stamp_result, withdrawn_mean
 from tow.clients import files
 from tow.clients.managed import ClientVerificationPending
 from tow.clients.spec import TorrentClientAdapter
-from tow.clock import iso_now, machine_now, parse_timestamp
+from tow.clock import machine_now, parse_timestamp
 from tow.errors import TowError
 from tow.events import new_operation_id
 from tow.i18n import t
@@ -42,6 +42,9 @@ TERMINAL_CODES = OWNER_REPAIR_CODES | {
 # A torrent its client does not list counts as removed only after two answers of the client at
 # least this far apart: a client still loading its torrents after a restart lists some late.
 MISSING_CONFIRM_SEC = 600
+# A verification still waiting after this long is the owner's to look at (a red client error),
+# not a reason to drop, replace or finish the receipt: it is still confirmed when the client is done.
+OVERDUE_SEC = 12 * 3600
 
 
 class _NotListedYet(Exception):
@@ -57,6 +60,28 @@ def waiting_topics(state: dict[str, Any]) -> list[Topic]:
         and not topic.get("paused")
         and not topic.get("selection_dirty")
     ]
+
+
+def _stamp() -> str:
+    return machine_now().isoformat(timespec="seconds")
+
+
+def _anchor(previous: dict[str, Any]) -> str:
+    """When this transaction's verification began: kept across its re-deferrals, so a check
+    that never ends cannot postpone the overdue alert. A missing, unreadable or future value
+    (a clock set back) starts from now."""
+    try:
+        since = parse_timestamp(str(previous.get("since") or ""))
+    except TypeError, ValueError, OverflowError:
+        return _stamp()
+    return str(previous["since"]) if since <= machine_now() else _stamp()
+
+
+def _overdue(waiting: dict[str, Any]) -> bool:
+    """The client has been checking (or not starting) this transaction for OVERDUE_SEC."""
+    since = _anchor(waiting)
+    waiting["since"] = since
+    return (machine_now() - parse_timestamp(since)).total_seconds() >= OVERDUE_SEC
 
 
 def pending_row(row: dict[str, Any], h: str) -> None:
@@ -137,7 +162,7 @@ def _defer_start(
         "client": client_id,
         "path": destination,
         "owner": list(client_marks(topic)),
-        "since": iso_now(),
+        "since": _stamp(),
         "kind": kind,
         "selection_update": False,
         "completion_event": "client_started",
@@ -219,13 +244,19 @@ def _defer(work: TopicCheck, error: ClientVerificationPending, metadata: Any, pl
         and str(previous.get("hash") or "").upper() == h
         and not work.row.get("readd_removed")
     )
+    same_transaction = (
+        str(previous.get("hash") or "").upper() == h
+        and previous.get("client") == work.client_id
+        and previous.get("owner") == list(client_marks(work.topic))
+        and not work.row.get("readd_removed")
+    )
     work.topic["verification_pending"] = {
         "hash": h,
         "client": work.client_id,
         "path": dest,
         "owner": list(client_marks(work.topic)),
         "receipt": copy.deepcopy(receipt),
-        "since": iso_now(),
+        "since": _anchor(previous) if same_transaction else _stamp(),
         "kind": str(waiting_space.get("kind") or "added")
         if waited_for_space
         else "updated"
@@ -391,8 +422,7 @@ def _recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: boo
             row["verification_repair"] = True  # request-local intent, not a persisted selection edit
             return False
     except _NotListedYet:
-        pending_row(row, h)
-        row["skipped"] = t("check.verification_not_listed", owner_language())
+        _still_waiting(topic, run, row, waiting, h, before_error, note="check.verification_not_listed")
     except ClientVerificationPending as error:
         if not error.receipt:
             row.update(ok=False, status="failed")
@@ -400,7 +430,7 @@ def _recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: boo
         else:
             waiting.pop("blocked", None)
             waiting.pop("blocked_params", None)
-            pending_row(row, h)
+            _still_waiting(topic, run, row, waiting, h, before_error)
     except Exception as error:  # noqa: BLE001 - one failed confirmation never ends the batch
         _failed(topic, run, row, waiting, error, before_error)
     else:
@@ -409,6 +439,27 @@ def _recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: boo
     if pass_only:
         _restore_check_times(topic, previous_check, previous_ok_at)
     return True
+
+
+def _still_waiting(
+    topic: Topic,
+    run: CheckRun,
+    row: dict[str, Any],
+    waiting: dict[str, Any],
+    h: str,
+    before_error: tuple[Any, ...],
+    *,
+    note: str = "",
+) -> None:
+    """The client is not done yet: unconfirmed, no failure - until OVERDUE_SEC after the
+    transaction's first deferral, then a red client error the owner hears once. The receipt is
+    neither blocked nor changed: a later pass still confirms it."""
+    pending_row(row, h)
+    if note:
+        row["skipped"] = t(note, owner_language())
+    if _overdue(waiting):
+        row.pop("skipped", None)
+        _failed(topic, run, row, waiting, TowError("check.verification_overdue", cls="qbit"), before_error)
 
 
 def _failed(

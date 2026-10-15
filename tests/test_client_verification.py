@@ -669,6 +669,60 @@ def test_a_clock_set_back_does_not_confirm_an_absence_early(world, clock):
     assert not _blocked()
 
 
+def test_a_verification_waiting_twelve_hours_is_a_red_client_error_not_an_end(world, clock):
+    from tow.status import project_home_status
+
+    client, tracker, sent = world
+    _run()
+    before = load_state()["topics"][0]
+    clock["minutes"] = 12 * 60 - 1
+    assert _run(space_only=True)["status"] == "verification_pending"
+    assert not load_state()["topics"][0]["last_error"]
+    clock["minutes"] = 12 * 60
+    row = _run(space_only=True)
+    topic = load_state()["topics"][0]
+    assert row["status"] == "failed"
+    assert topic["last_error_code"] == "check.verification_overdue"
+    assert topic["last_error_class"] == "qbit"
+    status = project_home_status(topic, {})
+    assert (status.torrent_tone, status.tracker_tone) == ("bad", "ok")  # the site answered; not its fault
+    pending = topic["verification_pending"]
+    assert not pending.get("blocked")
+    assert (pending["hash"], pending["receipt"], pending["since"]) == (
+        H,
+        before["verification_pending"]["receipt"],
+        before["verification_pending"]["since"],
+    )
+    assert topic["hash"] == H
+    assert sent == ["error"]
+    _run(space_only=True)
+    assert sent == ["error"]  # told once
+    client.calls.clear()
+    client.end_check(found=0.4, dropped_start=False)
+    assert _run(space_only=True)["ok"]
+    assert not load_state()["topics"][0]["last_error"]
+    assert [call[0] for call in client.calls] == ["labels"]
+    assert tracker.fetches == 1
+
+
+def test_a_redeferred_transaction_keeps_its_first_anchor(world, clock):
+    client, _tracker, _sent = world
+    _run()
+    since = "2026-10-14T11:00:00+00:00"  # an hour before the clock's start: its first deferral
+    disk = load_state()
+    disk["topics"][0]["verification_pending"]["since"] = since
+    save_state(disk)
+    client.torrents[H].update(state="downloading", progress=0.5)
+    client.torrents[H]["files"][0]["priority"] = 0
+    clock["minutes"] = 30
+    _run(space_only=True)
+    client.checking = True
+    clock["minutes"] = 60
+    row = check.run_check(apply=True, notify=False, how="manual", ids=["slow"])["results"][0]
+    assert row["status"] == "verification_pending"
+    assert load_state()["topics"][0]["verification_pending"]["since"] == since
+
+
 def test_terminal_failure_is_not_scheduled_every_five_minutes(world):
     client, _tracker, _sent = world
     _run()

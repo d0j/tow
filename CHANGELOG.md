@@ -123,6 +123,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A torrent whose file check TOW waits for and that the client does not list for a moment (while the client starts,
   for example) is no longer blocked as removed at once: TOW reports it only when two answers of the client at least
   ten minutes apart do not list it, and never adds it again by itself.
+- A torrent whose file check in the client does not end, or that the client does not start, within 12 hours now
+  shows a red torrent-client error and is reported once; TOW keeps waiting and still confirms it when the client is
+  done. Checking the topic again no longer restarts these 12 hours.
 
 ## [1.30.10] — 2026-10-15
 

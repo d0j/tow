@@ -376,6 +376,7 @@
     "progress_only": "progress in the client only",
     "verifying_files": "Checking files",
     "verification_not_listed": "the torrent client does not list the torrent right now; TOW looks again before it reports it removed",
+    "verification_overdue": "the torrent client has been checking the files (or has not started the torrent) for more than 12 hours; TOW keeps waiting for it — look at the torrent in the client",
     "daily_limit": "daily download limit reached",
     "preview_skips_limited": "preview does not download a .torrent from a site with a daily limit",
     "existing_unconfirmed": "torrent client: the torrent already there was not confirmed by reading it back",
