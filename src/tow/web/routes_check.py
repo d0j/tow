@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Form
+from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse, Response
 
 from tow.check import blocked_by_previous_revision
 from tow.store import CheckBusyError, SecretStoreError
 from tow.web import check_jobs, services
 from tow.web.check_actions import accept_check, action_of, enqueue_check, topic_feedback
-from tow.web.messages import flash_redirect
+from tow.web.messages import flash_redirect, record
 from tow.web.text import t
 from tow.web.views import (
     check_job_message,
@@ -131,7 +131,22 @@ def check_status(job: str = "", action: str = "") -> Response:
 
 
 @router.post("/check/{job}/cancel")
-def cancel_check(job: str) -> Response:
+def cancel_check(request: Request, job: str) -> Response:
+    """Cancel a check that still waits. From the page's script (the Cancel of a check's message)
+    the answer stays where the page is, and a cancelled check says nothing of its own: its own
+    message ("removed from the queue", info) is its one record. Without the script (a native
+    POST, no followed check) the redirect says it."""
+    if request.headers.get("x-tow-fetch") == "1":
+        cancelled = check_jobs.cancel(job)
+        if cancelled:
+            message = None
+        elif check_jobs.get(job) is None:
+            message = record(t("web.check_all.cancel_unknown"), "warn", subject="")
+        else:
+            message = record(t("web.check_all.cannot_cancel"), "warn", subject="")
+        return JSONResponse(
+            {"cancelled": cancelled, "job": job, "message": message}, headers={"Cache-Control": "no-store"}
+        )
     if check_jobs.cancel(job):
         return flash_redirect("/", "web.check_all.cancelled")
     if check_jobs.get(job) is None:  # never started here, or its record is gone: nothing to say it did

@@ -173,6 +173,14 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
     let nextUrl = null;
     if ((response.headers.get("content-type") || "").includes("application/json")) {
       const data = await response.json();
+      if (typeof data.cancelled === "boolean") {
+        // A waiting check's Cancel from its message: the check's own entry (removed from the
+        // queue) says it; only a Cancel that came too late has words of its own. No page opens.
+        definite = true;
+        if (data.message) showMessage(data.message);
+        restoreForm(form, submitter);
+        return;
+      }
       if (action && data.accepted) {
         // Accepted: this tab follows it; the page stays.
         window.towChecks.acknowledge(action, data);
