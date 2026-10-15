@@ -18,6 +18,12 @@ the gate: [CONTRIBUTING.md](../CONTRIBUTING.md).
 | [Command](#command) | `src/tow/cli/commands/<group>.py` | `Command` (`cli/command.py`), `COMMANDS` | `test_golden_help.py`, `test_cli.py` |
 | [Issue](#issue) | `src/tow/issues/kinds/<kind>.py` | `KIND`, `ORDER`, `collect(snapshot)` (`issues/model.py`) | `test_issues.py`, `test_attention_links.py` |
 
+**Read shared names through their module.** A discovered module is imported when it is first needed, which in the
+tests can be while a test has replaced a function of another module. A top-level `from tow.trackers import
+load_trackers` keeps the object that stood there then, for the rest of the run. Import the module and call through
+it each time: `from tow import trackers` … `trackers.load_trackers(config)`, `from tow import clock` …
+`clock.local_zone()`. The suite fails the test that leaves its replacement in such a copy (`tests/conftest.py`).
+
 ## Torrent client
 
 **Today:** qBittorrent, Transmission 3.0+, Deluge 2.x, all `READY = True`. A module with `READY = False` is found

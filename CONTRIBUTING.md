@@ -55,7 +55,9 @@ the `installers` workflow on 24.04). The legacy
   carry `@pytest.mark.xdist_group(...)` so that one worker runs them all.
 - The guard in `tests/conftest.py` refuses real network, processes, signals and writes outside the test's temp
   folder. Each test gets a throwaway master key and its own `TOW_ROOT`. `@pytest.mark.allow_git` lets only `git`
-  through, on a throwaway repository.
+  through, on a throwaway repository. After each test it also fails a test whose replacement stayed in a name
+  another module copied at import (`from tow.x import name` in a module first imported during that test): read
+  such names through their module ([docs/EXTENDING.md](docs/EXTENDING.md)).
 - `tests/integration/` tests real torrent clients and the OS autostart. They are marked
   `@pytest.mark.real_system("TOW_REAL_...")` and skipped unless that variable is 1, which only
   `.github/workflows/real.yml` sets on a CI runner: never run them on your machine.

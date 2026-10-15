@@ -134,6 +134,88 @@ def pytest_unconfigure(config):
         shutil.rmtree(_session_home, ignore_errors=True)
 
 
+# A module-level `from tow.x import name` keeps the object that stood at tow.x.name when the module
+# was first imported. A module first imported during a test (issue kinds, plugins, or any module in
+# a run of a few files) keeps that test's replacement for the rest of the run, and later tests pass
+# or fail by order (1.31.2). After every test, with its patches undone, each such copy in a loaded
+# tow module must be its source's object again; copies that differ at collection are left alone.
+_COPIES: dict[str, tuple[tuple[str, str, str], ...]] = {}
+_DIFFERENT_AT_COLLECTION: set[tuple[str, str]] = set()
+
+
+def _module_copies(name: str, module) -> tuple[tuple[str, str, str], ...]:
+    """(local name, source module, source name) of the module's top-level from-imports of tow."""
+    if name in _COPIES:
+        return _COPIES[name]
+    import ast
+
+    found: list[tuple[str, str, str]] = []
+    path = getattr(module, "__file__", None) or ""
+    try:
+        tree = ast.parse(Path(path).read_text(encoding="utf-8")) if path.endswith(".py") else None
+    except OSError, SyntaxError, ValueError:
+        tree = None
+    package = name if path.endswith("__init__.py") else name.rpartition(".")[0]
+    statements = list(tree.body) if tree is not None else []
+    while statements:
+        node = statements.pop()
+        if isinstance(node, (ast.If, ast.Try, ast.ExceptHandler)):  # TYPE_CHECKING, optional imports
+            statements.extend(ast.iter_child_nodes(node))
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        source = node.module or ""
+        if node.level:
+            parts = package.split(".")[: len(package.split(".")) - node.level + 1]
+            source = ".".join([*parts, source] if source else parts)
+        if source == "tow" or source.startswith("tow."):
+            found.extend((alias.asname or alias.name, source, alias.name) for alias in node.names if alias.name != "*")
+    _COPIES[name] = tuple(found)
+    return _COPIES[name]
+
+
+def _replaced_copies() -> dict[tuple[str, str], tuple[str, str]]:
+    """{(module, local name): (source module, source name)} of copies that are not their source."""
+    missing = object()
+    replaced = {}
+    for name, module in list(sys.modules.items()):
+        if module is None or not (name == "tow" or name.startswith("tow.")):
+            continue
+        for local, source_name, original in _module_copies(name, module):
+            source = sys.modules.get(source_name)
+            if source is None or f"{source_name}.{original}" in sys.modules:
+                continue  # its source is not loaded, or it imports a submodule
+            copy, current = getattr(module, local, missing), getattr(source, original, missing)
+            if copy is not missing and current is not missing and copy is not current:
+                replaced[(name, local)] = (source_name, original)
+    return replaced
+
+
+def pytest_collection_finish(session):
+    _DIFFERENT_AT_COLLECTION.update(_replaced_copies())
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_teardown(item, nextitem):
+    """Fails the test that left a replacement in a copied name (after its own teardown), and puts
+    the real object back so the tests after it are not affected."""
+    result = yield
+    left = {key: value for key, value in _replaced_copies().items() if key not in _DIFFERENT_AT_COLLECTION}
+    for (name, local), (source_name, original) in left.items():
+        setattr(sys.modules[name], local, getattr(sys.modules[source_name], original))
+    if left:
+        named = ", ".join(
+            f"{name}.{local} (from {source_name} import {original})"
+            for (name, local), (source_name, original) in sorted(left.items())
+        )
+        pytest.fail(
+            f"a name copied at import kept this test's replacement: {named}. The module was first "
+            "imported while the test had replaced it; read the name through its module instead "
+            "(from tow import clock ... clock.local_zone()), see docs/EXTENDING.md.",
+            pytrace=False,
+        )
+    return result
+
+
 @pytest.fixture(autouse=True)
 def _isolate(tmp_path, monkeypatch):
     # The install root is the test's folder: keys/, backup/ and runtime/ land there, never in
