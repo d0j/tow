@@ -46,6 +46,7 @@ def _static_asset_version() -> str:
         "attention.js",
         "messages.css",
         "messages.js",
+        "checks.js",
         "updates.css",
         "updates.js",
         "content.css",

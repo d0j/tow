@@ -90,19 +90,64 @@ const unconfirmed = (element) => showMessage({
 });
 class Refused extends Error {}
 
+// A form back as it was before it was sent: enabled, its own label, no spinner.
+const restoreForm = (form, submitter) => {
+  delete form.dataset.submitting;
+  const autoControl = form.querySelector("[data-auto-submit-control]");
+  if (autoControl) {
+    autoControl.disabled = false;
+    if (autoControl.dataset.initialChecked !== undefined) {
+      autoControl.checked = autoControl.dataset.initialChecked === "1";
+    }
+  }
+  if (submitter && !submitter.dataset.keep) submitter.disabled = false;
+  if (submitter?.dataset.originalLabel) {
+    submitter.textContent = submitter.dataset.originalLabel;
+    delete submitter.dataset.originalLabel;
+  }
+  submitter?.removeAttribute("aria-busy");
+  submitter?.classList?.remove("spinning");
+  form.removeAttribute("aria-busy");
+  form.querySelectorAll("[data-busy-note]").forEach((note) => { note.hidden = true; });
+  (form.closest(".row-wrap") || form.closest("details"))?.querySelector(".dot")?.classList.remove("spinning");
+  form.closest(".row-ops")?.querySelector(".row-ico")?.classList.remove("busy");
+  if (form.closest("header.app")) document.querySelectorAll(".hdr-sites .trk, .hdr-clock").forEach((el) => el.classList.remove("busy"));
+};
+
+// D10: a Check goes with an action id this tab keeps before sending it (checks.js); TOW answers
+// with an acknowledgement, and the result comes as a message where the page is - no page opens.
+const CHECK_ACTIONS = /^\/(check|topics\/([^/]+)\/(check|adopt|replace-revision))$/;
+const beginCheck = (form, submitter, body) => {
+  let path = "";
+  try {
+    path = formActionUrl(form, submitter).pathname;
+  } catch {
+    return "";
+  }
+  const match = CHECK_ACTIONS.exec(path);
+  if (!match || !window.towChecks || typeof body?.set !== "function") return "";
+  const action = window.towChecks.begin({ subject: subjectOf(form), topic: match[2] ? decodeURIComponent(match[2]) : "" });
+  if (action) body.set("action_id", action);
+  return action || "";
+};
+
 const submitPostForm = async (form, submitter, preparedBody = null) => {
   if (form.dataset.submitting === "1") return;
   form.dataset.submitting = "1";
+  const body = preparedBody || (submitter ? new FormData(form, submitter) : new FormData(form));
+  const action = beginCheck(form, submitter, body);
+  let answered = false;
   try {
     // X-TOW-Fetch: the server answers {"redirect": url} instead of a 303, so the next
     // page is rendered once (by the location change), not twice.
     const response = await fetch(formActionUrl(form, submitter), {
       method: "POST",
-      body: preparedBody || (submitter ? new FormData(form, submitter) : new FormData(form)),
+      body,
       credentials: "same-origin",
       redirect: "follow",
       headers: { Accept: "text/html", "X-TOW-Fetch": "1" },
     });
+    answered = true;
     if (!response.ok) {
       // TOW's own refusal says why, in words (JSON, or a plain text before any page); an error
       // page's HTML is never shown - then nobody knows what was done.
@@ -126,31 +171,30 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
     let nextUrl = null;
     if ((response.headers.get("content-type") || "").includes("application/json")) {
       const data = await response.json();
+      if (action && data.accepted) {
+        // Accepted: this tab follows it; the page stays.
+        window.towChecks.acknowledge(action, data);
+        if (data.message) showMessage(data.message);
+        restoreForm(form, submitter);
+        return;
+      }
       if (data.redirect) nextUrl = new URL(data.redirect, location.href);
     } else if (response.redirected) {
       nextUrl = new URL(response.url);
     }
     if (!nextUrl) throw new Error(t("js.submit.no_next_page"));
+    if (action) window.towChecks.forget(action); // answered with a page (a refusal, a full queue)
     if (form.dataset.returnTarget) nextUrl.hash = form.dataset.returnTarget;
     rememberFocus(form, nextUrl);
     window.location.assign(nextUrl);
   } catch (error) {
-    delete form.dataset.submitting;
-    const autoControl = form.querySelector("[data-auto-submit-control]");
-    if (autoControl) {
-      autoControl.disabled = false;
-      if (autoControl.dataset.initialChecked !== undefined) {
-        autoControl.checked = autoControl.dataset.initialChecked === "1";
-      }
+    restoreForm(form, submitter);
+    if (action && !answered) {
+      // The answer was lost: TOW may have the check. It is looked up by its action id, never sent again.
+      showMessage({ id: `check-${action}`, kind: "info", subject: subjectOf(form), text: t("js.checks.sent") });
+      return;
     }
-    if (submitter && !submitter.dataset.keep) submitter.disabled = false;
-    if (submitter?.dataset.originalLabel) {
-      submitter.textContent = submitter.dataset.originalLabel;
-      delete submitter.dataset.originalLabel;
-    }
-    submitter?.removeAttribute("aria-busy");
-    form.removeAttribute("aria-busy");
-    form.querySelectorAll("[data-busy-note]").forEach((note) => { note.hidden = true; });
+    if (action) window.towChecks.forget(action);
     if (error instanceof Refused) {
       showMessage({ kind: "err", subject: subjectOf(form), text: t("js.submit.failed", { error: error.message }) });
     } else {
@@ -218,62 +262,7 @@ document.addEventListener("submit", (e) => {
   if (useFetch) submitPostForm(form, b, preparedBody);
 });
 
-// "Обновить все" runs in the background (D1): follow it, then show its result.
-const resultPending = document.querySelector("[data-check-result-pending]");
-const checkJob = new URL(location.href).searchParams.get("check_job") || (resultPending ? new URL(location.href).searchParams.get("check_result") : null);
-if (checkJob) {
-  let delay = 2000;
-  const follow = async () => {
-    if (document.hidden) {
-      window.setTimeout(follow, delay);
-      return;
-    }
-    try {
-      const response = await fetch(`/check/status?job=${encodeURIComponent(checkJob)}`, { cache: "no-store" });
-      if (response.status === 401) { window.location.assign("/"); return; }
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      const progress = document.querySelector("#check-activity [data-check-status]");
-      if (progress && (data.status === "queued" || data.status === "running")) {
-        // The server words it: the place in the queue, or since when it waits for another check.
-        if (data.progress) progress.textContent = data.progress;
-        const cancel = document.querySelector('#check-activity form');
-        if (cancel) cancel.hidden = data.status !== "queued";
-      }
-      if (data.status === "done" || data.status === "failed") {
-        // The result's own address (the server shows it from the job): it takes this page's
-        // place, so Back does not return to a page that follows a finished check. The same
-        // address but for its #fragment would only scroll: that page is loaded again.
-        const next = new URL(data.redirect || `/?check_result=${encodeURIComponent(checkJob)}#check-result`, location.href);
-        const here = new URL(location.href);
-        const checkForm = document.querySelector?.('header.app form[action="/check"]');
-        if (checkForm?.contains(document.activeElement)) rememberFocus(checkForm, next);
-        if (next.pathname === here.pathname && next.search === here.search) window.location.reload();
-        else window.location.replace(next);
-        return;
-      }
-      if (data.status !== "running" && data.status !== "queued") {
-        // TOW restarted or the record expired: neither the note nor a waiting result goes on
-        // saying "waiting", and the address no longer asks for the job.
-        const note = document.getElementById("check-activity");
-        if (note) note.textContent = t("js.checks.unconfirmed");
-        if (resultPending) resultPending.textContent = t("js.checks.unconfirmed");
-        const u = new URL(location.href);
-        u.searchParams.delete("check_job");
-        u.searchParams.delete("check_result");
-        history.replaceState({}, "", u.pathname + u.search);
-        return;
-      }
-    } catch {
-      // the next poll retries
-    }
-    delay = Math.min(delay + 1000, 5000);
-    window.setTimeout(follow, delay);
-  };
-  window.setTimeout(follow, delay);
-}
-
-// Check all's report closes in place: only its own
+// A check's progress and result: checks.js. Check all's report closes in place: only its own
 // parameter leaves the address (the filters and the open row stay); without a script the close
 // is a link to the same address.
 document.addEventListener("click", (event) => {

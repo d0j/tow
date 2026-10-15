@@ -376,7 +376,9 @@ def test_cancelling_an_unknown_check_does_not_say_it_already_started(client):
 def test_restart_or_expired_result_never_says_success(client, query):
     page = client.get(f"/?{query}=not-a-job").text
     assert "TOW перезапущен или сведения устарели" in page
-    assert client.get("/check/status?job=not-a-job").json() == {"status": "unknown"}
+    unknown = client.get("/check/status?job=not-a-job").json()
+    assert unknown["status"] == "unknown"
+    assert unknown["message"]["kind"] == "warn"  # unavailable, unconfirmed: never success
 
 
 def test_reports_escape_markup_and_bound_untrusted_details(client, monkeypatch):

@@ -8,16 +8,23 @@ from fastapi.responses import JSONResponse, Response
 from tow.check import blocked_by_previous_revision
 from tow.store import CheckBusyError, SecretStoreError
 from tow.web import check_jobs, services
-from tow.web.check_actions import enqueue_check, topic_feedback
+from tow.web.check_actions import accept_check, action_of, enqueue_check, topic_feedback
 from tow.web.messages import flash_redirect
 from tow.web.text import t
-from tow.web.views import check_job_message, check_progress, feedback_redirect, result_location, topic_check_row
+from tow.web.views import (
+    check_job_message,
+    check_progress,
+    check_status_message,
+    feedback_redirect,
+    result_location,
+    topic_check_row,
+)
 
 router = APIRouter()
 
 
 @router.post("/topics/{tid}/replace-revision")
-def topics_replace_revision(tid: str) -> Response:
+def topics_replace_revision(tid: str, action_id: str = Form("")) -> Response:
     """G1: stop the topic's previous revision(s) TOW added, then check it again.
 
     The automatic check never stops a seeding revision; this is the owner's one click.
@@ -48,11 +55,11 @@ def topics_replace_revision(tid: str) -> Response:
         services.log_event("client_stop_failed", topic=tid, error=str(exc), how="manual")
         return flash_redirect("/", "web.topics.replace_failed", "err", error=exc)
     services.log_event("client_stopped", topic=tid, hashes=stopped, reason="replace_revision", how="manual")
-    return _check_topic(tid)
+    return _check_topic(tid, action=action_of(action_id))
 
 
 @router.post("/topics/{tid}/adopt")
-def topics_adopt(tid: str) -> Response:
+def topics_adopt(tid: str, action_id: str = Form("")) -> Response:
     """Adopt into TOW (tow.adopt): mark the topic's torrent, already in the client without TOW's
     mark, as TOW's - on the owner's confirmed click only - then check the topic again."""
     try:
@@ -64,17 +71,20 @@ def topics_adopt(tid: str) -> Response:
         return flash_redirect("/", "web.check.blocked", "err")
     except Exception as exc:  # noqa: BLE001 - any client failure is logged (tow.adopt) and shown, never a 500
         return flash_redirect("/", "web.topics.adopt_failed", "err", error=exc)
-    return _check_topic(tid, adopted=True)
+    return _check_topic(tid, adopted=True, action=action_of(action_id))
 
 
 @router.post("/topics/{tid}/check")
-def topics_check(tid: str) -> Response:
-    return _check_topic(tid)
+def topics_check(tid: str, action_id: str = Form("")) -> Response:
+    return _check_topic(tid, action=action_of(action_id))
 
 
-def _check_topic(tid: str, *, adopted: bool = False) -> Response:
+def _check_topic(tid: str, *, adopted: bool = False, action: str = "") -> Response:
     """Check one topic now and say what it found; ``adopted``: the owner has just adopted its
-    torrent into TOW, which a check that changes nothing else confirms."""
+    torrent into TOW, which a check that changes nothing else confirms. With the page's
+    ``action`` id the check goes to the queue and the answer is its acknowledgement (D10)."""
+    if action:
+        return accept_check(topic_id=tid, apply=True, adopted=adopted, action=action)
     if check_jobs.has_pending(apply=True):  # never ahead of an applying check that waits
         return enqueue_check(topic_id=tid, apply=True, adopted=adopted)
     try:
@@ -88,24 +98,36 @@ def _check_topic(tid: str, *, adopted: bool = False) -> Response:
 
 
 @router.post("/check")
-def check(mode: str = Form("dry")) -> Response:
+def check(mode: str = Form("dry"), action_id: str = Form("")) -> Response:
+    if action := action_of(action_id):
+        return accept_check(topic_id="", apply=mode == "apply", action=action)
     return enqueue_check(topic_id="", apply=mode == "apply")
 
 
 @router.get("/check/status")
-def check_status(job: str = "") -> Response:
-    current = check_jobs.get(job)
+def check_status(job: str = "", action: str = "") -> Response:
+    """Where a manual check is, by its job or by the page's action id (a page that lost the
+    acknowledgement asks by the id it kept), with its one message record (D10). Asking writes
+    nothing."""
+    current = (check_jobs.get(job) if job else None) or check_jobs.by_action(action_of(action))
     if current is None:
-        return JSONResponse({"status": "unknown"})
+        message = check_status_message(None, key=action or job)
+        return JSONResponse({"status": "unknown", "message": message}, headers={"Cache-Control": "no-store"})
     waiting = current["status"] in {"queued", "running"}
-    body = {"status": current["status"], "flash": "" if waiting else check_job_message(current)}
+    body: dict[str, object] = {
+        "status": current["status"],
+        "job": current["id"],
+        "topic_id": current["topic_id"],
+        "message": check_status_message(current),
+        "flash": "" if waiting else check_job_message(current),
+    }
     if waiting:
         body["progress"] = check_progress(current)
     if current["status"] == "queued":
         body["position"] = current["position"]
     if not waiting:  # an address, not a message: polling writes nothing
         body["redirect"] = result_location(current)
-    return JSONResponse(body)
+    return JSONResponse(body, headers={"Cache-Control": "no-store"})
 
 
 @router.post("/check/{job}/cancel")

@@ -355,6 +355,45 @@ def check_result_flash(job: Mapping[str, Any]) -> dict[str, str] | None:
     )
 
 
+def check_status_message(job: Mapping[str, Any] | None, *, key: str = "") -> dict[str, str]:
+    """The one message of a manual check a page follows (``/check/status``, D10), by the same id
+    ("check-<job>") while it waits or runs and when it has ended, so the page updates it in place:
+    where it is (info); a topic's result, with its sign-in when the site asked for one; Check all's
+    "finished", coloured by its worst result, with its report; or, for a check this server does
+    not know (``key``: the page's action id), that its result is unavailable."""
+    if job is None:
+        return record(
+            t("web.check.result_unavailable"),
+            "warn",
+            message_id="check-unknown-" + re.sub(r"[^A-Za-z0-9_-]", "", key)[:64],
+            href="/history",
+            link=t("web.check.history_link"),
+        )
+    message_id = "check-" + str(job.get("id") or "")
+    subject = str(job.get("subject") or "")
+    if job.get("status") in {"queued", "running"}:
+        return record(check_progress(job), "info", subject=subject, message_id=message_id)
+    topic = check_result_flash(job)
+    if topic is not None:
+        feedback = job.get("feedback")
+        credential = feedback.get("credential_topic") if isinstance(feedback, Mapping) else ""
+        if credential:
+            topic.update(href="/?credential_topic=" + quote(str(credential)), link=t("web.check.sign_in"))
+        return topic
+    report = job.get("report")
+    ended = job.get("ended_at")
+    if not isinstance(report, Mapping):
+        return record(check_job_message(job), str(job.get("kind") or "err"), message_id=message_id)
+    return record(
+        t("web.check_all.done_short"),
+        str(report.get("kind") or job.get("kind") or "ok"),
+        message_id=message_id,
+        at=ended if isinstance(ended, (int, float)) else None,
+        href=f"/?check_result={quote(str(job['id']))}#check-result",
+        link=t("web.check_all.view_results"),
+    )
+
+
 def check_job_message(job: Mapping[str, Any]) -> str:
     """What a finished manual check says; for one that ended without a word of its own
     (cancelled, never given the check lock, stopped by an error of TOW itself), why."""

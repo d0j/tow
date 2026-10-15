@@ -238,4 +238,29 @@ verdict.boundedHistory = true;
 }
 verdict.undo = true;
 
+// A check's progress updates its one message in place: no new strip, no new reading time, not
+// said again; its result replaces it and is said once; a placeholder can be removed.
+{
+  const { center, time, said } = make();
+  center.show({ id: "check-J", kind: "info", text: "queued" });
+  time.advance(10000);
+  assert.equal(center.active(), "");
+  center.show({ id: "check-J", kind: "info", text: "running since 12:00" }, { replace: true, quiet: true });
+  assert.equal(center.active(), ""); // collapsed stays collapsed
+  assert.equal(center.items().length, 1);
+  assert.deepEqual(said, ["check-J"]);
+  center.show({ id: "check-K", kind: "info", text: "queued" });
+  time.advance(4000);
+  center.show({ id: "check-K", kind: "info", text: "running" }, { replace: true, quiet: true });
+  time.advance(6000);
+  assert.equal(center.active(), ""); // the running update did not restart its time
+  center.show({ id: "check-J", kind: "err", subject: "Show", text: "failed" }, { replace: true });
+  assert.equal(center.active(), "check-J");
+  assert.deepEqual(said, ["check-J", "check-K", "check-J"]);
+  assert.equal(center.items().length, 2);
+  center.remove("check-K");
+  assert.equal(JSON.stringify(center.items().map((item) => item.id)), JSON.stringify(["check-J"]));
+}
+verdict.progressInPlace = true;
+
 console.log(JSON.stringify(verdict));
