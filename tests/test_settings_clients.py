@@ -416,3 +416,49 @@ def test_a_failed_check_is_in_needs_attention_as_in_the_header(legacy_qbit, monk
         ("client_down:transmission", "check_client:transmission"),
     ]
     assert load_state()["health"]["clients_ok"] == {"default": True}  # the check's own word is left as it was
+
+
+def _client_card(page: str, client_id: str) -> str:
+    """The opening tag of a client's card."""
+    import re
+
+    return re.search(rf'<details class="integration-card client-card" id="client-{client_id}"[^>]*>', page).group()
+
+
+def test_a_working_client_folds_and_one_to_set_up_stays_open(legacy_qbit):
+    """A working client was a 574 px block every time Clients opened: it folds to one line, with
+    its address in that line; a client still to set up stays open."""
+    c = _client()
+    c.post("/settings/client/add", data={"kind": "transmission"}, follow_redirects=False)
+    page = c.get("/settings").text
+    assert " open" not in _client_card(page, "default")
+    assert '<span class="card-meta">127.0.0.1</span>' in page
+    assert " open" in _client_card(page, "transmission")  # no address yet
+
+
+def test_a_client_just_saved_checked_or_targeted_stays_open(legacy_qbit, monkeypatch):
+    c = _client()
+    saved = c.post(
+        "/settings/client",
+        data={"client_id": "", "host": "127.0.0.1", "port": "8080", "username": "admin", "password": ""},
+        follow_redirects=False,
+    )
+    assert saved.headers["location"].startswith("/settings?open=clients")
+    c.post("/settings/client/add", data={"kind": "qbittorrent"}, follow_redirects=False)
+    save_secrets({**load_secrets(), "clients": {**load_secrets()["clients"], "qbittorrent": {"host": "10.0.0.2"}}})
+    for client_id in ("default", "qbittorrent"):
+        saved = c.post(
+            "/settings/client",
+            data={"client_id": client_id, "host": "127.0.0.1", "port": "8080", "username": "admin", "password": ""},
+            follow_redirects=False,
+        )
+        assert f"card={client_id}" in saved.headers["location"]
+        assert saved.headers["location"].endswith(f"#client-{client_id}")
+        opened = c.get(saved.headers["location"].split("#")[0]).text
+        assert " open" in _client_card(opened, client_id)
+    monkeypatch.setattr("tow.web.services.client_answers", lambda _client_id: False)
+    checked = c.post("/settings/client/ping", data={"client_id": "qbittorrent"}, follow_redirects=False)
+    assert checked.headers["location"].endswith("#client-qbittorrent")
+    targeted = c.get("/settings?open=clients&spot=client-default").text
+    assert " open" in _client_card(targeted, "default")
+    assert " open" not in _client_card(c.get("/settings").text, "default")

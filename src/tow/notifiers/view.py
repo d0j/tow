@@ -77,6 +77,7 @@ def cards(secrets: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]
                     "kind": field.kind,
                     "placeholder": text(field.placeholder, lang),
                     "required": field.required,
+                    "width": field.width,
                     "saved": bool(value),
                     "value": ""
                     if field.kind == "secret"

@@ -16,6 +16,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Settings come in a new order: Torrent clients, Notifications, Checks, Network access and Backups first, then
   Version and updates, TOW service, Language and theme (now one section) and the optional Site access. Links
   to the former Language or Theme section open the new one.
+- Settings fields are as wide as what they hold (a port, a password, an address, a webhook) instead of the
+  whole card, and fields that belong together share a line: address and port, user name and password, the new
+  password and its repeat. A working torrent client folds to one line with its address and opens when it needs
+  setting up or does not answer, after Save or Check, and from a “Needs attention” link. On a wide screen two
+  open client or messenger cards stand side by side.
 
 ### Fixed
 

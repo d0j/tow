@@ -14,7 +14,7 @@
       <ol><li>{{ t('protection_ui.step_install') }}</li><li>{{ t('protection_ui.step_address') }}</li><li>{{ t('protection_ui.step_enable') }}</li><li>{{ t('protection_ui.step_check') }}</li></ol>
       <p class="action-hint"><a href="/settings/help#site-access">{{ t('protection_ui.guide_link') }}</a></p>
     </details>
-    <form method="post" action="/settings/protection" class="settings-form compact-form protection-form" data-return-target="acc-protection">
+    <form method="post" action="/settings/protection" class="settings-form form-grid protection-form" data-return-target="acc-protection">
       <fieldset{% if not access_local %} disabled{% endif %}>
         <legend class="sr-only">{{ t('protection_ui.title') }}</legend>
         <label class="check-field"><input type="checkbox" name="enabled" value="1" aria-describedby="protection-enabled-hint"{% if protection.enabled %} checked{% endif %}><span>{{ t('protection_ui.enabled') }}</span></label>
@@ -25,15 +25,15 @@
             <summary>{% if p.new %}{{ t('protection_ui.add') }}{% else %}{{ p.title }} · {{ p.order }}{% if p.on_demand %} · <span title="{{ t('protection_ui.on_demand_hint') }}">{{ t('protection_ui.on_demand') }}</span>{% endif %}{% endif %}</summary>
             <input type="hidden" name="provider_id" value="{{ p.id }}">
             {% if p.new %}
-            <div class="field"><label for="protection-kind-{{ p.id }}">{{ t('protection_ui.service_kind') }}</label><select id="protection-kind-{{ p.id }}" name="provider_kind" aria-describedby="protection-kind-hint-{{ p.id }}"><option value="">{{ t('protection_ui.choose_kind') }}</option>{% for choice in protection.choices %}<option value="{{ choice.kind }}">{{ choice.title }}</option>{% endfor %}</select><p class="field-hint" id="protection-kind-hint-{{ p.id }}">{{ t('protection_ui.service_kind_hint') }}</p></div>
+            <div class="field"><label for="protection-kind-{{ p.id }}">{{ t('protection_ui.service_kind') }}</label><select id="protection-kind-{{ p.id }}" name="provider_kind" class="w-m" aria-describedby="protection-kind-hint-{{ p.id }}"><option value="">{{ t('protection_ui.choose_kind') }}</option>{% for choice in protection.choices %}<option value="{{ choice.kind }}">{{ choice.title }}</option>{% endfor %}</select><p class="field-hint" id="protection-kind-hint-{{ p.id }}">{{ t('protection_ui.service_kind_hint') }}</p></div>
             {% else %}<input type="hidden" name="provider_kind" value="{{ p.kind }}">{% endif %}
             {% if not p.available %}{{ note(t('protection_ui.unavailable'), 'bad') }}{% endif %}{% if p.local_runtime_refused %}{{ note(t('protection_ui.local_runtime_refused'), 'bad') }}{% endif %}
             {% if not p.new and p.available %}<p class="action-hint" role="note">{% if not p.enabled or not protection.enabled %}{{ t('protection_ui.off') }}{% elif p.retry_sec %}{{ t('protection_ui.api_pause', seconds=p.retry_sec) }} · {{ t(p.api_key) }}{% else %}{{ t(p.api_key) }}{% endif %}</p>{% endif %}
             {% if p.on_demand %}<p class="action-hint">{{ t('protection_ui.on_demand_details') }}</p>{% endif %}
             <label class="check-field"><input type="checkbox" name="provider_enabled" value="{{ p.id }}"{% if p.enabled %} checked{% endif %}><span>{{ t('protection_ui.provider_enabled') }}</span></label>
-            <div class="field-grid">
-              <div class="field"><label for="protection-url-{{ p.id }}">{{ t('protection_ui.address') }}</label><input id="protection-url-{{ p.id }}" name="provider_url" value="{{ p.url }}" placeholder="http://127.0.0.1:8191" maxlength="256" autocomplete="off" aria-describedby="protection-url-hint-{{ p.id }}"><p class="field-hint" id="protection-url-hint-{{ p.id }}">{{ t('protection_ui.address_hint') }}</p></div>
-              <div class="field"><label for="protection-order-{{ p.id }}">{{ t('protection_ui.order') }}</label><input id="protection-order-{{ p.id }}" name="provider_order" value="{{ p.order }}" type="number" min="1" max="16" inputmode="numeric" aria-describedby="protection-order-hint-{{ p.id }}"><p class="field-hint" id="protection-order-hint-{{ p.id }}">{{ t('protection_ui.order_field_hint') }}</p></div>
+            <div class="field-row keep">
+              <div class="field"><label for="protection-url-{{ p.id }}">{{ t('protection_ui.address') }}</label><input id="protection-url-{{ p.id }}" name="provider_url" value="{{ p.url }}" class="w-l" placeholder="http://127.0.0.1:8191" maxlength="256" autocomplete="off" aria-describedby="protection-url-hint-{{ p.id }}"><p class="field-hint" id="protection-url-hint-{{ p.id }}">{{ t('protection_ui.address_hint') }}</p></div>
+              <div class="field"><label for="protection-order-{{ p.id }}">{{ t('protection_ui.order') }}</label><input id="protection-order-{{ p.id }}" name="provider_order" value="{{ p.order }}" class="w-xs" type="number" min="1" max="16" inputmode="numeric" aria-describedby="protection-order-hint-{{ p.id }}"><p class="field-hint" id="protection-order-hint-{{ p.id }}">{{ t('protection_ui.order_field_hint') }}</p></div>
             </div>
             {% if not p.new %}<label class="check-field"><input type="checkbox" name="provider_remove" value="{{ p.id }}"><span>{{ t('protection_ui.remove') }}</span></label>{% endif %}
           </details>
@@ -44,10 +44,10 @@
         <p class="section-note">{{ t('protection_ui.status_hint') }}</p>
         <details class="technical-details protection-limits">
           <summary>{{ t('protection_ui.limits') }}</summary>
-          <div class="field-grid">
-            <div class="field"><label for="protection-timeout">{{ t('protection_ui.timeout') }}</label><input id="protection-timeout" name="timeout_sec" value="{{ protection.timeout_sec }}" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">{{ t('protection_ui.timeout_hint') }}</p></div>
-            <div class="field"><label for="protection-interval">{{ t('protection_ui.interval') }}</label><input id="protection-interval" name="min_interval_sec" value="{{ protection.min_interval_sec }}" type="number" min="60" max="86400" inputmode="numeric" aria-describedby="protection-interval-hint"><p class="field-hint" id="protection-interval-hint">{{ t('protection_ui.interval_hint') }}</p></div>
-            <div class="field"><label for="protection-attempts">{{ t('protection_ui.attempts') }}</label><input id="protection-attempts" name="max_attempts" value="{{ protection.max_attempts }}" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">{{ t('protection_ui.attempts_hint') }}</p></div>
+          <div class="field-row">
+            <div class="field"><label for="protection-timeout">{{ t('protection_ui.timeout') }}</label><input id="protection-timeout" name="timeout_sec" value="{{ protection.timeout_sec }}" class="w-xs" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">{{ t('protection_ui.timeout_hint') }}</p></div>
+            <div class="field"><label for="protection-interval">{{ t('protection_ui.interval') }}</label><input id="protection-interval" name="min_interval_sec" value="{{ protection.min_interval_sec }}" class="w-xs" type="number" min="60" max="86400" inputmode="numeric" aria-describedby="protection-interval-hint"><p class="field-hint" id="protection-interval-hint">{{ t('protection_ui.interval_hint') }}</p></div>
+            <div class="field"><label for="protection-attempts">{{ t('protection_ui.attempts') }}</label><input id="protection-attempts" name="max_attempts" value="{{ protection.max_attempts }}" class="w-xs" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">{{ t('protection_ui.attempts_hint') }}</p></div>
           </div>
         </details>
         <p class="section-note">{{ t('protection_ui.save_hint') }}</p>

@@ -74,8 +74,10 @@ def settings_page(request: Request) -> Response:
             "client_types": [{"kind": spec.kind, "title": spec.title} for spec in ready_clients()],
             "notifiers": notifier_cards(s, state),
             "search_words": _search_words(),
-            # The messenger just saved / checked stays open even when it is not connected yet.
+            # The card just saved / checked stays open (a messenger not connected yet, a working
+            # client), as does the one a "Needs attention" link lands on (?spot=client-<id>).
             "open_card": str(request.query_params.get("card") or ""),
+            "spot": str(request.query_params.get("spot") or ""),
             # The section a link opens (?open=clients), without a script too.
             "open_section": str(request.query_params.get("open") or ""),
             # The clients that do not answer (client_down): their card's note and pill.

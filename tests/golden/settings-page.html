@@ -110,16 +110,16 @@
         <span class="pill mut">2 clients</span>
       </summary>
       <div class="settings-panel">
-        <div class="integration-list">
+        <div class="integration-list cards-2">
 
-          <article class="integration-card" id="client-main">
-            <div class="integration-head">
-              <h2>Living room</h2>
+          <details class="integration-card client-card" id="client-main">
+            <summary class="integration-head">
+              <h2>Living room <span class="card-meta">192.0.2.10</span></h2>
               <span class="integration-pills">
                 <span class="pill ok">Main</span>
                 <span class="pill mut">Set up</span>
               </span>
-            </div>
+            </summary>
 
 
             <details class="technical-details notifier-steps" >
@@ -130,30 +130,32 @@
               <p class="action-hint">TOW marks its torrents with the tag tow and never touches others.</p>
             </details>
 
-            <form id="client-form-client-0" method="post" action="/settings/client" class="settings-form" data-return-target="acc-clients">
+            <form id="client-form-client-0" method="post" action="/settings/client" class="settings-form form-grid" data-return-target="client-main">
               <input type="hidden" name="client_id" value="main">
               <input type="hidden" name="kind" value="qbittorrent">
               <fieldset>
                 <legend class="sr-only">Living room connection</legend>
-                <div class="field">
-                  <label for="q_host-client-0">Address</label>
-                  <input id="q_host-client-0" name="host" value="192.0.2.10" autocomplete="off" placeholder="127.0.0.1">
-                </div>
-                <div class="field-grid">
+                <div class="field-row keep">
+                  <div class="field">
+                    <label for="q_host-client-0">Address</label>
+                    <input id="q_host-client-0" name="host" value="192.0.2.10" class="w-l" autocomplete="off" placeholder="127.0.0.1">
+                  </div>
                   <div class="field">
                     <label for="q_port-client-0">Port</label>
-                    <input id="q_port-client-0" name="port" value="8080" type="number" min="1" max="65535" inputmode="numeric">
+                    <input id="q_port-client-0" name="port" value="8080" class="w-xs" type="number" min="1" max="65535" inputmode="numeric">
                   </div>
+                </div>
+                <div class="field-row">
 
                   <div class="field">
                     <label for="q_user-client-0">User name</label>
-                    <input id="q_user-client-0" name="username" value="admin" autocomplete="off">
+                    <input id="q_user-client-0" name="username" value="admin" class="w-m" autocomplete="off">
                   </div>
 
-                </div>
-                <div class="field">
-                  <label for="q_pass-client-0">Password <span class="pill ok">Saved</span></label>
-                  <input id="q_pass-client-0" name="password" type="password" placeholder="Empty — keep as is" autocomplete="new-password">
+                  <div class="field">
+                    <label for="q_pass-client-0">Password <span class="pill ok">Saved</span></label>
+                    <input id="q_pass-client-0" name="password" type="password" class="w-m" placeholder="Empty — keep as is" autocomplete="new-password">
+                  </div>
                 </div>
               </fieldset>
               <div class="settings-actions">
@@ -165,7 +167,7 @@
               <p class="action-hint">Used by 2 topics.</p>
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
             </form>
-            <form id="ping-client-0" method="post" action="/settings/client/ping" data-return-target="acc-clients">
+            <form id="ping-client-0" method="post" action="/settings/client/ping" data-return-target="client-main">
               <input type="hidden" name="client_id" value="main">
             </form>
 
@@ -176,16 +178,16 @@
                 <div><dt>ID</dt><dd><code>main</code></dd></div>
               </dl>
             </details>
-          </article>
+          </details>
 
-          <article class="integration-card" id="client-nas">
-            <div class="integration-head">
-              <h2>Transmission</h2>
+          <details class="integration-card client-card" id="client-nas">
+            <summary class="integration-head">
+              <h2>Transmission <span class="card-meta">http://nas.example:9091/transmission</span></h2>
               <span class="integration-pills">
 
                 <span class="pill mut">Set up</span>
               </span>
-            </div>
+            </summary>
 
 
             <details class="technical-details notifier-steps" >
@@ -196,30 +198,32 @@
               <p class="action-hint">Transmission 3.0 or newer is needed: TOW marks its torrents with the label tow. Magnet links are not supported with Transmission — it starts downloading before TOW can choose the files.</p>
             </details>
 
-            <form id="client-form-client-1" method="post" action="/settings/client" class="settings-form" data-return-target="acc-clients">
+            <form id="client-form-client-1" method="post" action="/settings/client" class="settings-form form-grid" data-return-target="client-nas">
               <input type="hidden" name="client_id" value="nas">
               <input type="hidden" name="kind" value="transmission">
               <fieldset>
                 <legend class="sr-only">Transmission connection</legend>
-                <div class="field">
-                  <label for="q_host-client-1">Address</label>
-                  <input id="q_host-client-1" name="host" value="http://nas.example:9091/transmission" autocomplete="off" placeholder="127.0.0.1">
-                </div>
-                <div class="field-grid">
+                <div class="field-row keep">
+                  <div class="field">
+                    <label for="q_host-client-1">Address</label>
+                    <input id="q_host-client-1" name="host" value="http://nas.example:9091/transmission" class="w-l" autocomplete="off" placeholder="127.0.0.1">
+                  </div>
                   <div class="field">
                     <label for="q_port-client-1">Port</label>
-                    <input id="q_port-client-1" name="port" value="9091" type="number" min="1" max="65535" inputmode="numeric">
+                    <input id="q_port-client-1" name="port" value="9091" class="w-xs" type="number" min="1" max="65535" inputmode="numeric">
                   </div>
+                </div>
+                <div class="field-row">
 
                   <div class="field">
                     <label for="q_user-client-1">User name</label>
-                    <input id="q_user-client-1" name="username" value="" autocomplete="off">
+                    <input id="q_user-client-1" name="username" value="" class="w-m" autocomplete="off">
                   </div>
 
-                </div>
-                <div class="field">
-                  <label for="q_pass-client-1">Password </label>
-                  <input id="q_pass-client-1" name="password" type="password" placeholder="Empty — keep as is" autocomplete="new-password">
+                  <div class="field">
+                    <label for="q_pass-client-1">Password </label>
+                    <input id="q_pass-client-1" name="password" type="password" class="w-m" placeholder="Empty — keep as is" autocomplete="new-password">
+                  </div>
                 </div>
               </fieldset>
               <div class="settings-actions">
@@ -234,11 +238,11 @@
               <p class="action-hint">Used by 1 topic.</p>
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
             </form>
-            <form id="ping-client-1" method="post" action="/settings/client/ping" data-return-target="acc-clients">
+            <form id="ping-client-1" method="post" action="/settings/client/ping" data-return-target="client-nas">
               <input type="hidden" name="client_id" value="nas">
             </form>
 
-            <form id="default-client-1" method="post" action="/settings/client/default" data-return-target="acc-clients">
+            <form id="default-client-1" method="post" action="/settings/client/default" data-return-target="client-nas">
               <input type="hidden" name="client_id" value="nas">
             </form>
             <form id="remove-client-1" method="post" action="/settings/client/remove" data-return-target="acc-clients" data-confirm="Remove the client “Transmission” from TOW? The client itself and its torrents stay as they are (you can bring it back with “Undo”).">
@@ -252,14 +256,14 @@
                 <div><dt>ID</dt><dd><code>nas</code></dd></div>
               </dl>
             </details>
-          </article>
+          </details>
 
         </div>
         <form method="post" action="/settings/client/add" class="settings-form client-add" data-return-target="acc-clients">
           <div class="field">
             <label for="client-add-kind">Add a torrent client</label>
             <div class="client-add-row">
-              <select id="client-add-kind" name="kind">
+              <select id="client-add-kind" name="kind" class="w-m">
                 <option value="qbittorrent">qBittorrent</option><option value="transmission">Transmission</option><option value="deluge">Deluge</option>
               </select>
               <button type="submit">Add</button>
@@ -277,7 +281,7 @@
       </summary>
       <div class="settings-panel">
         <p class="support-note">Connect one or more messengers — every message goes to all of them. If a messenger is unavailable, the message waits in a queue and goes out later by itself.</p>
-        <div class="integration-list">
+        <div class="integration-list cards-2">
 
           <details class="integration-card notifier-card" id="notifier-telegram" open>
             <summary class="integration-head">
@@ -296,24 +300,26 @@
               </ol>
               <p class="action-hint">Several recipients are fine: IDs separated by commas (for a group, its ID with a minus sign).</p>
             </details>
-            <form id="notifier-form-telegram" method="post" action="/settings/notifier/telegram" class="settings-form" data-return-target="acc-bots">
+            <form id="notifier-form-telegram" method="post" action="/settings/notifier/telegram" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
                 <legend class="sr-only">Telegram connection</legend>
+                <div class="field-row">
 
                 <div class="field">
                   <label for="nf-telegram-token">Bot token <span class="pill ok">Saved</span></label>
 
-                  <input id="nf-telegram-token" name="token" type="password" value="" placeholder="Empty — keep as is" autocomplete="new-password" spellcheck="false">
+                  <input id="nf-telegram-token" name="token" type="password" class="w-l" value="" placeholder="Empty — keep as is" autocomplete="new-password" spellcheck="false">
 
                 </div>
 
                 <div class="field">
                   <label for="nf-telegram-chat_ids">Recipient IDs, separated by commas </label>
 
-                  <input id="nf-telegram-chat_ids" name="chat_ids" value="1001" placeholder="123456789" autocomplete="off" spellcheck="false">
+                  <input id="nf-telegram-chat_ids" name="chat_ids" class="w-m" value="1001" placeholder="123456789" autocomplete="off" spellcheck="false">
 
                 </div>
 
+                </div>
               </fieldset>
               <div class="settings-actions">
                 <button type="submit">Save</button>
@@ -348,17 +354,19 @@
               </ol>
               <p class="action-hint">The webhook address is a key to the channel: TOW keeps it encrypted and never shows it to anyone.</p>
             </details>
-            <form id="notifier-form-discord" method="post" action="/settings/notifier/discord" class="settings-form" data-return-target="acc-bots">
+            <form id="notifier-form-discord" method="post" action="/settings/notifier/discord" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
                 <legend class="sr-only">Discord connection</legend>
+                <div class="field-row">
 
                 <div class="field">
                   <label for="nf-discord-webhook_url">Webhook URL </label>
 
-                  <input id="nf-discord-webhook_url" name="webhook_url" type="password" value="" placeholder="https://discord.com/api/webhooks/…" autocomplete="new-password" spellcheck="false">
+                  <input id="nf-discord-webhook_url" name="webhook_url" type="password" class="w-xl" value="" placeholder="https://discord.com/api/webhooks/…" autocomplete="new-password" spellcheck="false">
 
                 </div>
 
+                </div>
               </fieldset>
               <div class="settings-actions">
                 <button type="submit">Save</button>
@@ -387,24 +395,26 @@
               </ol>
               <p class="action-hint">Messages go through the free CallMeBot service, not the official WhatsApp API: it needs no business account, but it dislikes frequent messages — TOW groups them anyway.</p>
             </details>
-            <form id="notifier-form-whatsapp" method="post" action="/settings/notifier/whatsapp" class="settings-form" data-return-target="acc-bots">
+            <form id="notifier-form-whatsapp" method="post" action="/settings/notifier/whatsapp" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
                 <legend class="sr-only">WhatsApp connection</legend>
+                <div class="field-row">
 
                 <div class="field">
                   <label for="nf-whatsapp-phone">Your WhatsApp number </label>
 
-                  <input id="nf-whatsapp-phone" name="phone" value="" placeholder="+15551234567" autocomplete="off" spellcheck="false">
+                  <input id="nf-whatsapp-phone" name="phone" class="w-s" value="" placeholder="+15551234567" autocomplete="off" spellcheck="false">
 
                 </div>
 
                 <div class="field">
                   <label for="nf-whatsapp-apikey">apikey from CallMeBot </label>
 
-                  <input id="nf-whatsapp-apikey" name="apikey" type="password" value="" placeholder="123456" autocomplete="new-password" spellcheck="false">
+                  <input id="nf-whatsapp-apikey" name="apikey" type="password" class="w-s" value="" placeholder="123456" autocomplete="new-password" spellcheck="false">
 
                 </div>
 
+                </div>
               </fieldset>
               <div class="settings-actions">
                 <button type="submit">Save</button>
@@ -433,24 +443,26 @@
               </ol>
               <p class="action-hint">Anyone who knows the ntfy topic name can read its messages: do not make the name short and do not publish it.</p>
             </details>
-            <form id="notifier-form-ntfy" method="post" action="/settings/notifier/ntfy" class="settings-form" data-return-target="acc-bots">
+            <form id="notifier-form-ntfy" method="post" action="/settings/notifier/ntfy" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
                 <legend class="sr-only">ntfy (phone notifications) connection</legend>
+                <div class="field-row">
 
                 <div class="field">
                   <label for="nf-ntfy-topic">ntfy topic name </label>
 
-                  <input id="nf-ntfy-topic" name="topic" value="tow-<random>" placeholder="tow-…" autocomplete="off" spellcheck="false">
+                  <input id="nf-ntfy-topic" name="topic" class="w-m" value="tow-<random>" placeholder="tow-…" autocomplete="off" spellcheck="false">
 
                 </div>
 
                 <div class="field">
                   <label for="nf-ntfy-server">Server (optional) </label>
 
-                  <input id="nf-ntfy-server" name="server" value="https://ntfy.sh" placeholder="https://ntfy.sh" autocomplete="off" spellcheck="false">
+                  <input id="nf-ntfy-server" name="server" class="w-l" value="https://ntfy.sh" placeholder="https://ntfy.sh" autocomplete="off" spellcheck="false">
 
                 </div>
 
+                </div>
               </fieldset>
               <div class="settings-actions">
                 <button type="submit">Save</button>
@@ -472,14 +484,14 @@
         <span class="pill mut">1 h</span>
       </summary>
       <div class="settings-panel">
-        <form method="post" action="/settings/interval" class="settings-form compact-form" data-return-target="acc-intervals"><div class="field">
+        <form method="post" action="/settings/interval" class="settings-form form-grid" data-return-target="acc-intervals"><div class="field">
             <label for="interval_min">Global timer</label>
-            <div class="input-unit field-short"><input id="interval_min" name="interval_min" value="60" type="number" min="1" step="1" inputmode="numeric" aria-describedby="interval-hint"><span>min</span></div>
+            <div class="input-unit"><input id="interval_min" name="interval_min" value="60" class="w-xs" type="number" min="1" step="1" inputmode="numeric" aria-describedby="interval-hint"><span>min</span></div>
             <p class="field-hint" id="interval-hint">Active topics without a personal timer are checked every 1 h. A new interval applies within a minute and counts from the last check. Set a personal timer when adding or editing a topic.</p>
           </div>
           <div class="field">
             <label for="flash_ttl_min">Show “Undo” for</label>
-            <div class="input-unit field-short"><input id="flash_ttl_min" name="flash_ttl_min" value="1" type="number" min="1" step="1" inputmode="numeric" aria-describedby="undo-hint"><span>min</span></div>
+            <div class="input-unit"><input id="flash_ttl_min" name="flash_ttl_min" value="1" class="w-xs" type="number" min="1" step="1" inputmode="numeric" aria-describedby="undo-hint"><span>min</span></div>
             <p class="field-hint" id="undo-hint">How long the Undo button stays after a change.</p>
           </div>
           <div class="settings-actions"><button type="submit">Save</button></div>
@@ -503,22 +515,24 @@
               <h2>Password</h2>
               <span class="integration-pills"><span class="pill mut">Not set</span></span>
             </div>
-            <form method="post" action="/settings/password" class="settings-form compact-form" data-return-target="acc-access">
+            <form method="post" action="/settings/password" class="settings-form form-grid" data-return-target="acc-access">
               <fieldset>
                 <legend class="sr-only">Password</legend>
 
+                <div class="field-row">
                 <div class="field">
                   <label for="lan-password">Password</label>
-                  <input id="lan-password" name="lan_password" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" aria-describedby="lan-password-hint">
+                  <input id="lan-password" name="lan_password" type="password" class="w-m" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" aria-describedby="lan-password-hint">
                   <p class="field-hint" id="lan-password-hint">At least 8 characters. Easy to remember: three or four words joined with hyphens.</p>
                 </div>
                 <div class="field">
                   <label for="lan-password2">Repeat the password</label>
-                  <input id="lan-password2" name="lan_password2" type="password" autocomplete="new-password" minlength="8">
+                  <input id="lan-password2" name="lan_password2" type="password" class="w-m" autocomplete="new-password" minlength="8">
+                </div>
                 </div>
                 <div class="field">
                   <label for="lan-hint">Reminder (optional)</label>
-                  <input id="lan-hint" name="hint" type="text" maxlength="120" value="" autocomplete="off" aria-describedby="lan-hint-help">
+                  <input id="lan-hint" name="hint" type="text" class="w-l" maxlength="120" value="" autocomplete="off" aria-describedby="lan-hint-help">
                   <p class="field-hint" id="lan-hint-help">Shown on the sign-in page under “Forgot your password?”. Anyone on your network who opens that page can read it — never write the password itself.</p>
                 </div>
               </fieldset>
@@ -535,7 +549,7 @@
               <span class="integration-pills"><span class="pill mut">This computer only</span></span>
             </div>
 
-            <form method="post" action="/settings/access" class="settings-form compact-form" data-return-target="acc-access">
+            <form method="post" action="/settings/access" class="settings-form form-grid" data-return-target="acc-access">
               <fieldset>
                 <legend class="sr-only">Access from other devices</legend>
 
@@ -586,23 +600,25 @@
               </label>
               <noscript><button type="submit">Save</button></noscript>
             </form>
-            <form method="post" action="/settings/backup/retention" data-return-target="acc-transfer" class="settings-form compact-form backup-retention-form">
-              <div>
+            <form method="post" action="/settings/backup/retention" data-return-target="acc-transfer" class="settings-form form-grid backup-retention">
+              <div class="field">
                 <label for="backup-days">Keep nightly backups, days</label>
-                <input id="backup-days" type="number" name="days" value="7" min="1" max="3650" required aria-describedby="backup-days-hint">
+                <div class="inline-save">
+                  <input id="backup-days" type="number" name="days" value="7" class="w-xs" min="1" max="3650" required aria-describedby="backup-days-hint">
+                  <button type="submit">Save</button>
+                </div>
+                <p class="field-hint" id="backup-days-hint">Older nightly backups are removed only after a new copy passes verification. The new copy, the three newest earlier copies (whatever their age) and copies with future dates are kept. Default: 7 days. Free space for a complete copy and a reserve is checked before writing.</p>
               </div>
-              <button type="submit">Save</button>
-              <p class="field-hint" id="backup-days-hint">Older nightly backups are removed only after a new copy passes verification. The new copy, the three newest earlier copies (whatever their age) and copies with future dates are kept. Default: 7 days. Free space for a complete copy and a reserve is checked before writing.</p>
             </form>
 
             <details class="backup-location">
               <summary>Folder for nightly backups</summary>
 
-        <form method="post" action="/settings/backup/location" class="settings-form compact-form backup-folder" data-return-target="acc-transfer">
+        <form method="post" action="/settings/backup/location" class="settings-form form-grid backup-folder" data-return-target="acc-transfer">
           <input type="hidden" name="kind" value="night">
           <div class="field">
             <label for="backup-path-night">Folder for nightly backups <span class="pill mut">Default</span></label>
-            <input id="backup-path-night" name="path" value="" placeholder="<root>/backup/night" autocomplete="off" spellcheck="false">
+            <input id="backup-path-night" name="path" value="" class="w-xl" placeholder="<root>/backup/night" autocomplete="off" spellcheck="false">
 
             <p class="field-hint"><size> free · You can choose another drive or a network folder (\\server\folder — then it is reachable at night too). “Check” tries to write a file.</p>
           </div>
@@ -650,11 +666,11 @@
             <details class="backup-location">
               <summary>Folder for backups made with “Create a backup”</summary>
 
-        <form method="post" action="/settings/backup/location" class="settings-form compact-form backup-folder" data-return-target="acc-transfer">
+        <form method="post" action="/settings/backup/location" class="settings-form form-grid backup-folder" data-return-target="acc-transfer">
           <input type="hidden" name="kind" value="manual">
           <div class="field">
             <label for="backup-path-manual">Folder for backups made with “Create a backup” <span class="pill mut">Default</span></label>
-            <input id="backup-path-manual" name="path" value="" placeholder="<root>/restore-points" autocomplete="off" spellcheck="false">
+            <input id="backup-path-manual" name="path" value="" class="w-xl" placeholder="<root>/restore-points" autocomplete="off" spellcheck="false">
 
             <p class="field-hint"><size> free</p>
           </div>
@@ -677,7 +693,7 @@
             </form>
             <form method="post" action="/settings/portable/import" enctype="multipart/form-data" data-return-target="acc-transfer" class="portable-import-form">
               <label for="portable-backup-file">Choose a file: <code>.towx</code></label>
-              <input id="portable-backup-file" name="backup_file" type="file" accept=".towx,application/octet-stream" required>
+              <input id="portable-backup-file" name="backup_file" type="file" class="w-l" accept=".towx,application/octet-stream" required>
               <div class="settings-actions">
                 <button class="ghost" type="submit" name="operation" value="check" data-busy-label="Checking…">Check</button>
                 <button class="danger" type="submit" name="operation" value="restore" data-confirm="Restore TOW from this file? The current data is saved before it is replaced." data-busy-label="Restoring…">Restore</button>
@@ -724,7 +740,7 @@
             <p class="action-hint">Web updates support published stable versions from 1.22.21. Data is kept; an incompatible data schema refuses the change. Older releases require the terminal and may not understand current data.</p>
             <div class="field">
               <label for="rollback-version">Release version</label>
-              <input id="rollback-version" data-update-version inputmode="text" placeholder="1.22.21" maxlength="32" autocomplete="off">
+              <input id="rollback-version" class="w-s" data-update-version inputmode="text" placeholder="1.22.21" maxlength="32" autocomplete="off">
             </div>
             <div class="settings-actions"><button type="button" class="ghost" data-update-apply>Install version</button><button type="button" class="ghost" data-update-previous hidden></button></div>
           </details>
@@ -856,7 +872,7 @@
       <ol><li>An On demand card means the module is already installed: no manual start is needed. For another connection, install and run your chosen service separately. TOW does not install services for you.</li><li>Choose the running service&#39;s type and enter its address, not a site or topic address. For example, http://127.0.0.1:8191 is a service on the TOW computer. Another computer needs its private-network IP; never expose the API to the internet.</li><li>Select Use this connection and the overall Use optional challenge recovery switch, then Save. On Sites, the site must allow these services; Off for this site takes precedence.</li><li>Open the failed topic on Home and select Check access now, or wait for its scheduled retry. TOW contacts a service only if ordinary mirrors encounter Cloudflare again. Saving settings does not test it.</li></ol>
       <p class="action-hint"><a href="/settings/help#site-access">Read more in the guide</a></p>
     </details>
-    <form method="post" action="/settings/protection" class="settings-form compact-form protection-form" data-return-target="acc-protection">
+    <form method="post" action="/settings/protection" class="settings-form form-grid protection-form" data-return-target="acc-protection">
       <fieldset>
         <legend class="sr-only">Site access</legend>
         <label class="check-field"><input type="checkbox" name="enabled" value="1" aria-describedby="protection-enabled-hint"><span>Use optional challenge recovery</span></label>
@@ -867,15 +883,15 @@
             <summary>Add a connection</summary>
             <input type="hidden" name="provider_id" value="new-connection-1">
 
-            <div class="field"><label for="protection-kind-new-connection-1">Service type</label><select id="protection-kind-new-connection-1" name="provider_kind" aria-describedby="protection-kind-hint-new-connection-1"><option value="">Choose a service</option><option value="byparr">Byparr</option><option value="flare_bypasser">FlareBypasser (zendriver)</option><option value="flaresolverr">FlareSolverr</option><option value="trawl">Trawl</option></select><p class="field-hint" id="protection-kind-hint-new-connection-1">Choose the program serving this address. Selecting a type does not install it.</p></div>
+            <div class="field"><label for="protection-kind-new-connection-1">Service type</label><select id="protection-kind-new-connection-1" name="provider_kind" class="w-m" aria-describedby="protection-kind-hint-new-connection-1"><option value="">Choose a service</option><option value="byparr">Byparr</option><option value="flare_bypasser">FlareBypasser (zendriver)</option><option value="flaresolverr">FlareSolverr</option><option value="trawl">Trawl</option></select><p class="field-hint" id="protection-kind-hint-new-connection-1">Choose the program serving this address. Selecting a type does not install it.</p></div>
 
 
 
 
             <label class="check-field"><input type="checkbox" name="provider_enabled" value="new-connection-1"><span>Use this connection</span></label>
-            <div class="field-grid">
-              <div class="field"><label for="protection-url-new-connection-1">Service address</label><input id="protection-url-new-connection-1" name="provider_url" value="" placeholder="http://127.0.0.1:8191" maxlength="256" autocomplete="off" aria-describedby="protection-url-hint-new-connection-1"><p class="field-hint" id="protection-url-hint-new-connection-1">The service address TOW uses, not a site mirror. 127.0.0.1 means the TOW computer; /v1 may be omitted.</p></div>
-              <div class="field"><label for="protection-order-new-connection-1">Order</label><input id="protection-order-new-connection-1" name="provider_order" value="1" type="number" min="1" max="16" inputmode="numeric" aria-describedby="protection-order-hint-new-connection-1"><p class="field-hint" id="protection-order-hint-new-connection-1">1 is first, 2 is next. Each number must be unique.</p></div>
+            <div class="field-row keep">
+              <div class="field"><label for="protection-url-new-connection-1">Service address</label><input id="protection-url-new-connection-1" name="provider_url" value="" class="w-l" placeholder="http://127.0.0.1:8191" maxlength="256" autocomplete="off" aria-describedby="protection-url-hint-new-connection-1"><p class="field-hint" id="protection-url-hint-new-connection-1">The service address TOW uses, not a site mirror. 127.0.0.1 means the TOW computer; /v1 may be omitted.</p></div>
+              <div class="field"><label for="protection-order-new-connection-1">Order</label><input id="protection-order-new-connection-1" name="provider_order" value="1" class="w-xs" type="number" min="1" max="16" inputmode="numeric" aria-describedby="protection-order-hint-new-connection-1"><p class="field-hint" id="protection-order-hint-new-connection-1">1 is first, 2 is next. Each number must be unique.</p></div>
             </div>
 
           </details>
@@ -886,10 +902,10 @@
         <p class="section-note">Connection status is the last observed response, not a test now. API answered does not prove topic access. Opening settings never starts a module; the topic on Home shows the last check result.</p>
         <details class="technical-details protection-limits">
           <summary>Attempt limits</summary>
-          <div class="field-grid">
-            <div class="field"><label for="protection-timeout">Total recovery time, seconds</label><input id="protection-timeout" name="timeout_sec" value="30" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">One deadline for all service calls and independent access verification: 5–90 seconds. Not a timeout for each topic.</p></div>
-            <div class="field"><label for="protection-interval">Minimum retry interval, seconds</label><input id="protection-interval" name="min_interval_sec" value="1800" type="number" min="60" max="86400" inputmode="numeric" aria-describedby="protection-interval-hint"><p class="field-hint" id="protection-interval-hint">Minimum pause before another recovery attempt for one site origin: 60–86400 seconds. 1800 s = 30 minutes. Not the global or personal topic timer; the error shows a scheduled retry when known.</p></div>
-            <div class="field"><label for="protection-attempts">Maximum service calls per recovery</label><input id="protection-attempts" name="max_attempts" value="2" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">1 to 4 service calls in one recovery chain, shared across mirrors. A missing-clearance retry also consumes this limit. Not the number of topics checked.</p></div>
+          <div class="field-row">
+            <div class="field"><label for="protection-timeout">Total recovery time, seconds</label><input id="protection-timeout" name="timeout_sec" value="30" class="w-xs" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">One deadline for all service calls and independent access verification: 5–90 seconds. Not a timeout for each topic.</p></div>
+            <div class="field"><label for="protection-interval">Minimum retry interval, seconds</label><input id="protection-interval" name="min_interval_sec" value="1800" class="w-xs" type="number" min="60" max="86400" inputmode="numeric" aria-describedby="protection-interval-hint"><p class="field-hint" id="protection-interval-hint">Minimum pause before another recovery attempt for one site origin: 60–86400 seconds. 1800 s = 30 minutes. Not the global or personal topic timer; the error shows a scheduled retry when known.</p></div>
+            <div class="field"><label for="protection-attempts">Maximum service calls per recovery</label><input id="protection-attempts" name="max_attempts" value="2" class="w-xs" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">1 to 4 service calls in one recovery chain, shared across mirrors. A missing-clearance retry also consumes this limit. Not the number of topics checked.</p></div>
           </div>
         </details>
         <p class="section-note">Save applies switches, addresses, order and limits. It does not start a service or download a .torrent.</p>

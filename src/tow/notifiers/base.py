@@ -86,6 +86,9 @@ class Field:
     error: str = ""
     required: bool = True
     default: str = ""
+    # How wide the field is on the settings page, by what it holds (the page's width classes):
+    # xs a port, s a phone or a short key, m a name or an ID, l a token or an address, xl a webhook.
+    width: str = ""
 
 
 @runtime_checkable
