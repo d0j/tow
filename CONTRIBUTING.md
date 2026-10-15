@@ -32,7 +32,8 @@ pwsh scripts/gate.ps1 -Audit     # also checks the locked dependencies for known
 ```
 
 Coverage needs `pytest-cov`, which is not in the lock: the gate brings it from uv's cache or the network, and
-without either it runs the tests without coverage and says so (`gate: SKIPPED coverage`).
+without either it runs the tests without coverage and says so (`gate: SKIPPED coverage`). In CI (`CI=true`) or
+with `TOW_GATE_REQUIRE_COVERAGE=1` it fails instead.
 
 The hooks run it for you: **pre-commit** runs `-Staged`, **post-rewrite** runs `-Quick` after an amend or a
 rebase (git ignores its result, so it can only warn, loudly), **pre-push** requires the full gate on exactly the

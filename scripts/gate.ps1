@@ -9,6 +9,8 @@
     coverage and its threshold (pyproject [tool.coverage]), then the wheel smoke. On success it
     records the tree it passed on, so the pre-push hook lets exactly that content through
     without running it again.
+    Coverage is skipped only when pytest-cov cannot be had and neither CI (CI=true) nor
+    TOW_GATE_REQUIRE_COVERAGE=1 asks for it; then the gate fails instead.
     -Quick skips the test suite and the wheel smoke; it only collects the tests (every test
     module must import).
     -Staged checks what the next commit contains (the index), not the working tree: the
@@ -32,6 +34,7 @@ Set-Location $Root
 $EmptyTree = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 $Skipped = [System.Collections.Generic.List[string]]::new()
 $PytestCov = 'pytest-cov>=7.1'
+$RequireCoverage = $env:CI -eq 'true' -or $env:TOW_GATE_REQUIRE_COVERAGE -eq '1'
 
 function Step([string]$Name, [scriptblock]$Command) {
     Write-Host "gate: $Name" -ForegroundColor Cyan
@@ -145,12 +148,16 @@ try {
         # fixture stay together (--dist loadgroup, `xdist_group`).
         $parallel = @('-n', 'auto', '--dist', 'loadgroup')
         # pytest-cov is not a locked dependency (an offline lock cannot add it): `uv run --with`
-        # brings it in from uv's cache or the network; without either, coverage is skipped.
+        # brings it in from uv's cache or the network; without either, coverage is skipped on a
+        # developer's machine, never in CI or when TOW_GATE_REQUIRE_COVERAGE=1.
         Invoke-Tool --with $PytestCov python -c 'import pytest_cov' 2>$null
         if ($LASTEXITCODE -eq 0) {
             Step 'pytest (parallel, random order, branch coverage, threshold in pyproject)' {
                 Invoke-Tool --with $PytestCov pytest -q -ra -p no:cacheprovider @parallel --test-order random --cov --cov-report=
             }
+        }
+        elseif ($RequireCoverage) {
+            throw "gate failed: coverage is required here (CI or TOW_GATE_REQUIRE_COVERAGE=1), but $PytestCov is not available"
         }
         else {
             Skip 'coverage' "$PytestCov is not available offline"
