@@ -369,3 +369,33 @@ def test_the_retry_command_of_the_supervisor_recovers_the_topic(monkeypatch):
     assert "error_streak" not in saved["a"]
     assert saved["b"]["last_error_class"] == "tracker"
     assert state["health"]["check_ok"] is False  # the failed scheduled check is still failed
+
+
+@pytest.mark.parametrize(("cls", "offered"), [("tracker", True), ("frozen", False)])
+def test_check_access_now_is_not_offered_for_a_site_the_owner_paused(cls, offered):
+    from fastapi.testclient import TestClient
+
+    from tow.config import save_config
+    from tow.store import save_secrets, save_state
+    from tow.web import app
+
+    cfg = load_config()
+    cfg["trackers"] = {
+        "demo": {
+            "title": "Site A",
+            "fetch_hosts": ["https://demo.example"],
+            "url_regex": r"^https://demo\.example/topic/([a-z]+)$",
+            "download_path": "/download/{id}",
+        }
+    }
+    save_config(cfg)
+    save_secrets({"init_done": True})
+    topic = failed()
+    if cls == "frozen":
+        record = errors.TowError("mirrors.frozen", tracker="demo").record()
+        topic.update(last_error="demo: paused", last_error_code=record["code"], last_error_params=record["params"])
+    topic["last_error_class"] = cls
+    save_state({"topics": [topic], "mirrors": {}})
+    page = TestClient(app).get("/topics/a/edit")
+    assert page.status_code == 200
+    assert ("Проверить доступ сейчас" in page.text) is offered
