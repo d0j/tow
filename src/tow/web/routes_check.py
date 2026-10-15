@@ -145,10 +145,12 @@ def _perform_check(job: dict[str, Any]) -> None:
     except CheckBusyError:
         raise  # the FIFO retries the head without duplicating work or consuming a failure
     except SecretStoreError as exc:
-        services.record_check_failure(exc, how="manual")
+        if job["apply"]:  # a preview writes nothing, its failures included (AGENTS.md)
+            services.record_check_failure(exc, how="manual")
         flash, status, kind = i18n.t("web.check.blocked", lang), "failed", "err"
     except Exception as exc:  # noqa: BLE001 - the background job's boundary: the page polls for its result
-        services.log_event("check_blocked", how="manual", reason="result_unconfirmed", **error_fields(exc))
+        if job["apply"]:
+            services.log_event("check_blocked", how="manual", reason="result_unconfirmed", **error_fields(exc))
         flash, status, kind = i18n.t("web.check_all.not_run", lang, error=type(exc).__name__), "failed", "err"
     # The page follows the job and then opens Home with its result (a message kept on the server).
     credential = feedback.get("credential_topic")
