@@ -161,6 +161,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   (`viewtopic.php?f=3&t=55`), a tracker in a folder (`/tracker/details.php?id=5`), a deeper path
   (`/torrents/torrent/55`) and a link with the same digits in another parameter were guessed wrong. A guess that
   still misses its own link falls back to the number in it.
+- A site added from a pasted NNM-Club link now signs in through a browser window and takes its .torrent files
+  from bulk.nnmclub.to, as the built-in NNM-Club settings do; it could do neither before.
 
 ## [1.31.2] — 2026-10-15
 
