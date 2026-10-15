@@ -1123,3 +1123,48 @@ def test_services_are_asked_for_the_uncompressed_answer_they_must_give(monkeypat
     monkeypatch.setattr(providers.httpx, "Client", client)
     providers.cookie_api(settings()["providers"][0], ORIGIN, 15)
     assert seen[0].headers["accept-encoding"] == "identity"
+
+
+@pytest.mark.parametrize(
+    "reason", ["redirect_policy", "redirect_loop", "maintenance", "gone", "unexpected", "http", "http_topic"]
+)
+def test_every_replay_refusal_reason_is_recorded_and_explained(monkeypatch, reason):
+    from tow import i18n
+    from tow.log import format_event
+
+    events = []
+    monkeypatch.setattr(chain, "log_event", lambda kind, **fields: events.append(fields))
+    chain.record_event("protection_replay_refused", "demo", "local", "failed", reason=reason, phase="resource")
+    assert events[0]["reason"] == reason
+    try:
+        for lang in ("en", "ru"):
+            i18n.use(lang)
+            detail = format_event({"kind": "protection_replay_refused", "reason": reason, "phase": "resource"})
+            assert i18n.t(f"site_access.reason.{reason}") in detail["detail"]
+    finally:
+        i18n.use("en")
+
+
+def test_a_refused_replay_names_the_sites_actual_answer(monkeypatch):
+    from test_protection import CF, install
+    from test_protection import clearance as verified
+    from test_protection import settings as protection
+
+    from tow import mirrors
+
+    def handler(request):
+        if "cf_clearance=" not in request.headers.get("cookie", ""):
+            return httpx.Response(403, text=CF)
+        if request.url.path == "/":
+            return httpx.Response(200, text="front page")
+        return httpx.Response(302, headers={"location": "https://elsewhere.example/topic/1"})
+
+    install(monkeypatch, handler)
+    monkeypatch.setattr(chain, "candidates", lambda *a, **kw: iter([verified()]))
+    events = []
+    monkeypatch.setattr(chain, "log_event", lambda kind, **fields: events.append((kind, fields)))
+    with pytest.raises(mirrors.MirrorFetchError):
+        mirrors.pick_and_get("demo", ["https://site.example"], "/topic/1", protection=protection())
+    refused = [fields for kind, fields in events if kind == "protection_replay_refused"]
+    assert refused[0]["reason"] == "redirect_policy"
+    assert refused[0]["phase"] == "resource"
