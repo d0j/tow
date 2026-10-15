@@ -50,29 +50,34 @@ def _last_good_scheduled_check(health: Health) -> int | None:
     return int(value) if isinstance(value, (int, float)) and health.get("check_ok") is not False else None
 
 
-def record_check_failure(error: str | BaseException, *, how: str = "auto") -> Health:
-    """Persist a failed apply attempt so the UI clock has a fresh attempt time."""
+def record_check_failure(error: str | BaseException, *, how: str = "auto", whole: bool | None = None) -> Health:
+    """Persist a failed apply attempt so the UI clock has a fresh attempt time.
+
+    ``whole``: the failed run was to check every topic (the scheduled check - the default for
+    ``how="auto"`` - or Check all by hand). Only such a run says that checks fail ("The last check
+    of every topic did not complete"), as only such a run clears it again; a failed progress or
+    space pass, timer, site retry or one topic's check keeps that record as it was. Passwords and
+    tokens that cannot be opened block every check: always said."""
     code = _check_failure_code(error)
+    says_checks_fail = (how == "auto" if whole is None else whole) or code == "secrets_migration_required"
     now = machine_now()
     with persistence_lock():  # read-modify-write: never lose a concurrent edit
         state = load_state()
         previous = health_of(state)
         # A blocked check learned nothing about qBit or the bot: keep what the last real
         # check saw. Writing qbit_ok=False showed "связи нет" and swallowed the next
-        # real "торрент-клиент недоступен" notification.
+        # real "торрент-клиент недоступен" notification. Nor did it see the history rebuilt
+        # (the week's note), Settings' "Check" of a client, or a client listing nothing.
         health = Health()
-        if "qbit" in previous:
-            health["qbit"] = previous["qbit"]
-        if "client" in previous:
-            health["client"] = previous["client"]
-        if "qbit_ok" in previous:
-            health["qbit_ok"] = previous["qbit_ok"]
-        if "clients_ok" in previous:
-            health["clients_ok"] = previous["clients_ok"]
+        for kept in ("qbit", "client", "qbit_ok", "clients_ok", "history_rebuilt_at", "ping_failed", "clients_empty"):
+            if kept in previous:
+                health[kept] = previous[kept]
+        if not says_checks_fail:
+            for kept in ("check_ok", "check_error"):
+                if kept in previous:
+                    health[kept] = previous[kept]  # type: ignore[literal-required]
         health.update(
             {
-                "check_ok": False,
-                "check_error": code,
                 "at": now.isoformat(timespec="seconds"),
                 "at_ts": int(now.timestamp()),
                 # The header countdown runs from the last scheduled *attempt*...
@@ -83,6 +88,8 @@ def record_check_failure(error: str | BaseException, *, how: str = "auto") -> He
                 "check_failures": int(previous.get("check_failures") or 0) + (1 if how == "auto" else 0),
             }
         )
+        if says_checks_fail:
+            health.update({"check_ok": False, "check_error": code})
         state["health"] = health
         save_state(state)
     # The reason in words for History: the error's code and values (rendered in the reader's

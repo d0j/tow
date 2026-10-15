@@ -190,6 +190,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   client's last state is no longer kept.
 - `tow status` says the torrent client does not answer when Settings' "Check" found it so, as the header does; it
   said the client answered.
+- A failed progress pass, timer, site retry or check of one topic no longer shows "The last scheduled check did
+  not complete" until the next scheduled check; only a check of every topic (scheduled or Check all) says that
+  checks fail, now as "The last check of every topic did not complete". Such a failure also keeps the week's note
+  about a restarted download history and the client marks of Settings' "Check".
 
 ## [1.31.2] — 2026-10-15
 

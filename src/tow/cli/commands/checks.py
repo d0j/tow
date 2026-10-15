@@ -176,12 +176,12 @@ def _check(args: argparse.Namespace) -> int:
         )
     except SecretStoreError as exc:
         if apply:
-            record_check_failure(exc, how=how)
+            record_check_failure(exc, how=how, whole=how in {"auto", "manual"})
         render.show({"ok": False, "error": str(exc), "blocked": True}, args.json)
         return 3
     except Exception as exc:  # noqa: BLE001 - store, transaction, client library: recorded instead of a bare traceback
         if apply:
-            record_check_failure(exc, how=how)
+            record_check_failure(exc, how=how, whole=how in {"auto", "manual"})
         from tow.i18n import t
 
         render.show({"ok": False, "error": t("cli.command_failed")}, args.json)

@@ -1,5 +1,5 @@
-"""The last scheduled check did not complete: blocked by passwords and tokens that cannot be
-opened, or failed."""
+"""The last check of every topic (scheduled, or Check all) did not complete: blocked by passwords
+and tokens that cannot be opened, or failed (``check.record_check_failure``)."""
 
 from __future__ import annotations
 
