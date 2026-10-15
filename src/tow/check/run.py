@@ -219,6 +219,9 @@ class _RunResult:
     limited_today: set[str]
     quota: set[str]
     today: str
+    # Every topic's site was checked (the scheduled check, or Check all by hand): the run says
+    # whether checks work again. A partial one keeps the failed scheduled check's record.
+    whole: bool = True
 
 
 def _commit_run_state(result: _RunResult, history_rebuilt: bool = False) -> None:
@@ -239,9 +242,10 @@ def _commit_run_state(result: _RunResult, history_rebuilt: bool = False) -> None
     _note_history_rebuilt(health, previous_health, rebuilt=history_rebuilt)
     health["auto_at_ts"] = health["at_ts"] if how == "auto" else previous_health.get("auto_at_ts")
     health["auto_ok_at_ts"] = health["at_ts"] if how == "auto" else _last_good_scheduled_check(previous_health)
-    if how == "progress":
-        # A progress or space pass checks no site: a scheduled check that failed as a whole stays
-        # failed - in the header and for the watchdog, which counts such failures in a row (M6).
+    if not result.whole:
+        # A progress or space pass checks no site, a site retry, a personal timer or a check of
+        # chosen topics only some: a scheduled check that failed as a whole stays failed - in the
+        # header, in "Needs attention" and for the watchdog, which counts such failures in a row (M6).
         if "check_ok" in previous_health:
             health["check_ok"] = previous_health["check_ok"]
         if "check_error" in previous_health:
@@ -433,7 +437,10 @@ def _run_check(
         reconcile_preview(state, results, run, pending_reconcile_records, want)
         return {"qbit": pool.ping, "results": results, "preview": True}
 
-    outcome = _RunResult(state, results, started, pool, batch, cfg, how, limited_today, quota, today)
+    whole = how == "auto" or (
+        how == "manual" and ids is None and not scheduled_scope and not progress_only and not space_only
+    )
+    outcome = _RunResult(state, results, started, pool, batch, cfg, how, limited_today, quota, today, whole)
     cleanup_pending = reconcile_and_commit(
         state,
         results,

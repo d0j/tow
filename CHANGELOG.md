@@ -13,6 +13,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Automatic early retries of a site outage no longer count towards the three failed checks after which a
   lasting site problem is reported, so a short outage is not announced within minutes. A successful retry
   still ends the outage and reports that the site works again.
+- A failed scheduled check stays marked as failed in the header, in Needs attention and for the watchdog
+  until a check of every topic succeeds; a successful automatic retry after a site failure, a personal timer
+  or a check of one topic no longer clears it.
 
 ## [1.30.10] — 2026-10-15
 
