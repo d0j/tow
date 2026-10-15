@@ -41,20 +41,21 @@ def nested(pytester, monkeypatch):
     return run
 
 
-def test_swallowed_real_http_still_fails_the_test(nested):
+@pytest.mark.parametrize("library", ["httpx", "httpx2"])  # httpx2: TestClient's, locked for the tests
+def test_swallowed_real_http_still_fails_the_test(nested, library):
     result = nested(
-        """
-import httpx
+        f"""
+import {library}
 
 def test_inner():
     try:
-        httpx.get("https://example.invalid/")
+        {library}.get("https://example.invalid/")
     except Exception:
         pass  # code under test swallowing the failure
 """,
     )
     result.assert_outcomes(passed=1, errors=1)
-    result.stdout.fnmatch_lines(["*test guard violations*httpx request*"])
+    result.stdout.fnmatch_lines([f"*test guard violations*{library} request*"])
 
 
 def test_loopback_fixture_retries_service_ports_without_weakening_guard(nested):
