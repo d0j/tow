@@ -15,7 +15,8 @@ flowchart TD
     RUN -->|child, every interval_sec| CHECK["tow check --apply --notify --global-only"]
     RUN -->|child, when a personal timer is due| TIMER["tow check --apply --notify --timer-only"]
     RUN -->|child, every 30 min| PROG["tow check --apply --notify --progress-only"]
-    RUN -->|child, every 5 min while a torrent waits for disk space| SPACE["tow check --apply --notify --space-only"]
+    RUN -->|child, every 5 min while a torrent waits for space or verification| SPACE["tow check --apply --notify --space-only"]
+    RUN -->|child, when a site outage retry is due| RETRY["tow check --apply --notify --site-retry-only"]
     RUN -->|child, daily at backup_time| NIGHT["night copy (tow.snapshots)"]
     RUN -->|in-process, every 10 min| WD["watchdog duties<br/>lateness, alerts, heartbeat, outbox"]
     SERVE --> DATA[("data/ · config.yaml · keys/")]
@@ -23,9 +24,11 @@ flowchart TD
     TIMER --> DATA
     PROG --> DATA
     SPACE --> DATA
+    RETRY --> DATA
     NIGHT --> DATA
     CHECK --> TRK["tracker sites"]
     TIMER --> TRK
+    RETRY --> TRK
     CHECK --> CL["torrent client Web UI"]
     TIMER --> CL
     CHECK --> MSG["messengers"]
@@ -55,6 +58,13 @@ flowchart TD
   (`tow check --space-only`, client only), looks again and starts it once it fits, the start read back
   (`tow.check.space`). An earlier revision still running on the same files holds the start back, as it holds
   an add.
+- A client that is still verifying existing files after an add does not make the check wait or fail
+  (`tow.check.verification`). The topic keeps a `verification_pending` receipt that binds the selected file
+  identities to one revision, client and owner settings; it is neither success nor an error, and Home says
+  "Checking files". The next check, progress pass or `space` pass (which also runs while a receipt waits)
+  finishes it from the client alone: no tracker request, re-add, stop, move or priority reset. A receipt the client
+  contradicts (another owner, folder or selection, an error state) is blocked with a red error until the owner
+  repairs it; a row's check may try it again.
 - Personal tracker timers override the global cadence for their topic (`check_interval_min`,
   empty/null inherits; 1–10080 minutes). Changing the interval starts a new policy revision
   from save time; unrelated edits, manual checks and progress passes do not shift it.
@@ -68,6 +78,19 @@ flowchart TD
   Home shows clocks and digits only; tooltips distinguish waiting, checking, pause and unknown
   scheduler state. One shared visible-page poll refreshes custom deadlines, with server time
   and a monotonic browser clock. It stops polling while the page is hidden.
+- Site retries (`tow.site_retries`, the `site_retry` job) check a topic again after a check left it with a
+  transport-class error (class `tracker` or `cloudflare`): not after a ban, the daily limit or an HTTP sign-in
+  refusal, and not for a paused or completed once topic or a paused site. `policies(state, cfg)` reads saved
+  evidence only and binds each retry to a revision: a digest of the topic's link, hash, folder, client, selection,
+  timer and last success plus the site's and the protection settings, so an edit starts a new budget. The first
+  retry is due 300 s after the failed check (Cloudflare: `protection.min_interval_sec`, at least 1,800 s), each next
+  one twice as late, capped at 7,200 s or the first delay if longer (`tow.topic_timers.retry_deadline`), never
+  before the earliest mirror cooldown of the site ends, at most `MAX_SITE_RETRIES` (3) per revision. Topics of one
+  site due within 30 s share one batch; a per-site jitter of up to 30 s spreads different sites. `schedule.json`
+  holds `site_retry_attempts` and the dispatched `site_retry_batch`, written before the child starts: no unattended
+  request without a durable reservation. The child (`tow check --site-retry-only`) re-reads the batch after taking
+  the check lock (`site_retries.batch_ids`): deleted, paused, edited or recovered topics never run. `status.json`
+  publishes the planned times, and a topic's panel on Home shows its own (`layout.site_retry_status`).
 - Small diagnostic JSON records are bounded to 1 MiB and the store's nesting limit before
   use. Dates must be finite, non-negative and displayable. Reading does not rewrite or quarantine
   them; an unreadable backup/watchdog record is an observation error, not success or an outage.
@@ -93,24 +116,27 @@ flowchart TD
   it. SIGTERM, SIGHUP (its terminal closed), Ctrl+C and, on Windows, Ctrl+Break stop it the same way.
 - **Checks** hold `check_run_lock` for their whole run (one applying check at a time across processes) and take
   the data lock only to read and to commit, so the UI never waits for tracker or client network time.
-  A web topic check that cannot take this lock joins one bounded FIFO consumer instead of failing busy.
+  A web topic check that cannot take this lock joins one bounded FIFO consumer (`tow.web.check_jobs`) instead of
+  failing busy.
   Pending requests for the same scope/mode share a job; up to 32 jobs wait, and only queued work can be
   cancelled. The consumer uses nonblocking attempts, so scheduled/CLI checks keep the same lock contract.
   Up to 64 transient results (100 prioritized rows each, full totals) live for one hour in this web process;
   a restart explicitly leaves the result unconfirmed and never replays a manual re-add. Waiting client
-  verification, disk-space waits, skipped/unsaved results and real failures have distinct shared outcomes.
+  verification, disk-space waits, skipped/unsaved results and real failures have distinct shared outcomes
+  (`tow.check_outcomes`: one of new, same, pending, skipped or fail per row, for the web results and the run
+  totals alike).
 
 ## Modules
 
 | Package / module | Role |
 |---|---|
 | `tow.cli` | Every command (`run`, `serve`, `check`, `autostart`, `update`, `keys`, `export`…); `setup` lives in the launchers (`scripts/tow.cmd`, `scripts/tow`). The package itself is `main`: the language, the foreign-code check, one error boundary and the exit codes. `commands` is the one ordered command table, a `Command` (`command`) per command from `commands/service`, `data`, `security` and `checks`: its parser options, what it runs (importing what it needs only then), and how it runs (`layout`, `background`, `warn_open_folders`, `protects_folders`). `parser` builds argparse from the table, in the command's language; `render` is what a command prints. Only `tow.__main__` imports the package, and its modules never import the package itself. |
-| `tow.supervisor` | `tow run`: the loop (`core`), the table of its jobs (`jobs`), timing with a fake-clock-testable schedule (`schedule`), its files (`layout`). |
-| `tow.web` | FastAPI app built by `create_app()`: one `APIRouter` per `routes_*.py`, the request middleware, templates. Everything outside the package is called through `tow.web.services`. |
-| `tow.check`, `check_steps`, `check_transaction` | A check run: fetch, decide, hand to the client, record — with a journal for the commit. The package exports `run_check` and the checks the web pages share; inside it `run` is the run, its commit and health record, `topic` one topic's check, `apply` what that check does in the client, `client_ops` hash identity, ownership, read-back and relocation, `reconcile` progress and the history commit, `space` the wait for disk space, `notices` the messages, `rows` a topic's result row. |
+| `tow.supervisor` | `tow run`: the loop (`core`), the table of its jobs (`jobs`), timing with a fake-clock-testable schedule (`schedule`), its files (`layout`). What a personal timer or a site retry is due for comes from saved state: `tow.topic_timers` (intervals and retry deadlines) and `tow.site_retries` (which topics an outage retry may check). `tow.lifecycle` is the service as Settings sees it: status, autostart and a restart request with its marker. |
+| `tow.web` | FastAPI app built by `create_app()`: one `APIRouter` per `routes_*.py`, the request middleware, templates. Everything outside the package is called through `tow.web.services`. `check_jobs` is the bounded FIFO of manual checks and their results, kept in this web process only. |
+| `tow.check`, `check_steps`, `check_transaction` | A check run: fetch, decide, hand to the client, record — with a journal for the commit. The package exports `run_check` and the checks the web pages share; inside it `run` is the run, its commit and health record, `topic` one topic's check, `apply` what that check does in the client, `client_ops` hash identity, ownership, read-back and relocation, `reconcile` progress and the history commit, `space` the wait for disk space, `verification` the deferred client file verification, `notices` the messages, `rows` a topic's result row. `tow.check_outcomes` sorts a result row into one outcome. |
 | `tow.progress` | The progress pass: a topic's torrent in its client and its files on disk, recorded in the download history. The package exports `reconcile_topic`, `progress_summary` and the disk confirmation (`filesystem_confirmation`, `safe_relative_path`, `CONFIRMATION_REUSE_SEC`); inside it `confirmation` is the disk confirmation, `labels` the events and their wording, `presence` the torrent gone from its client or back and superseded revisions, `expected` the selected files and the episodes expected (selection, episodes, file rules, aliases), `history` the history index and item identity, `reconcile` the pass itself, `summary` the completion summary. |
 | `tow.trackers` | `generic.GenericHttpTracker` reads any configured site; `presets/<site>.py` adds what TOW knows about a particular site. `tow.mirrors` picks mirrors, cooldowns, redirects. |
-| `tow.protection` | Optional site-access layer: pure bounded verdicts (`detect`), validated settings/contracts (`spec`), independent adapter discovery and bounded service HTTP (`providers`, `solvers`), ordered finite fallback (`chain`), encrypted origin/expiry/config-bound clearance and durable leases (`store`), absolute deadline over the existing pinned network backend (`transport`). Mirrors remain first; account sign-in stays in the native tracker. See [PROTECTION.md](PROTECTION.md). |
+| `tow.protection` | Optional site-access layer: pure bounded verdicts (`detect`), validated settings/contracts (`spec`), independent adapter discovery and bounded service HTTP (`providers`, `solvers`), ordered finite fallback (`chain`), encrypted origin/expiry/config-bound clearance and durable leases (`store`), absolute deadline over the existing pinned network backend (`transport`). `local_service` launches an owner-installed Windows module on demand (`runtime/services/flaresolverr/`, a pinned manifest), only from an applying provider call; it copies the standalone broker `tow.platform._local_service_worker` beside the manifest and starts it with the install's base Python. That broker imports nothing from TOW (standard library, Python 3.11 syntax), listens on loopback only, starts the native service lazily inside a Windows job object, serializes its calls and stops it after the manifest's idle time. Mirrors remain first; account sign-in stays in the native tracker. See [PROTECTION.md](PROTECTION.md). |
 | `tow.clients` | Torrent adapters behind `TorrentClientAdapter`; qBittorrent, Transmission and Deluge all use the read-back contract of `managed.ManagedClient`; qBittorrent overrides its add, a full selection and the rollback's priority levels. The helper modules (`HELPERS`): `spec` (the contract and discovery), `factory` (the configured clients), `managed`, `files`, `address` (a client's Web UI address, shared by Transmission, Deluge and the web's reachability check), and `view` (the settings cards, as `notifiers.view` makes the messengers'). |
 | `tow.adopt` | Adopt into TOW: on the owner's request only, the `tow` mark on a torrent already in the client (added by hand or by another program), read back and logged; nothing else about the torrent changes. |
 | `tow.notifiers` | One module per messenger behind the `Notifier` protocol; `outbox` is the per-recipient delivery queue; `view` the settings cards and the header's status; `tow.delivery` groups, delays and digests. |
@@ -130,6 +156,15 @@ flowchart TD
 | `tow.platform` | Every OS difference (boot time, sleep, processes, browsers, protected folders). |
 | `tow.paths` | Every location, derived from one install root. |
 | `tow.i18n`, `tow.errors` | Language catalogs; typed errors (`TowError(key, **params)`) rendered in the reader's language. |
+| `tow.config`, `tow.records`, `tow.jsonish`, `tow.yaml_guard`, `tow.diagnostic_json` | The config file, its defaults, port and interval; the typed records of `state.json` and `download_history.json`; helpers for loosely typed stored data; YAML bounded before construction; bounded read-only decoding of small service records (supervisor status, watchdog, backup and restart records). |
+| `tow.http`, `tow.net_guard`, `tow.net_errors` | Site HTTP: response size and time limits, page decoding, Cloudflare detection, `Retry-After`; outbound connections pinned to a checked public DNS answer; network errors in the owner's words. |
+| `tow.guess`, `tow.title`, `tow.topic_form`, `tow.browser_auth` | New site settings from a pasted topic link; a topic's title from its link or page; the topic form's fields, selection rule and the record it builds; browser sign-in in a temporary profile under `data/browser-auth/`. |
+| `tow.log`, `tow.events`, `tow.notify`, `tow.download_history` | The event log (`data/tow.jsonl`: write, rotation, scrubbing, labels, History search); event and operation ids; the notifications a check collects and their wording; how long the download history keeps old entries. |
+| `tow.clock`, `tow.bind`, `tow.ratelimit` | Local time and displayed timestamps; the web server's bind address and the request-origin check; throttling of wrong network passwords. |
+| `tow.locations`, `tow.backup_actions`, `tow.backup_retention` | Where each kind of backup goes; Check, Restore and Delete bound to the selected copy; which night copies retention keeps. |
+| `tow.supervisor` helpers | `_os` (the children's Python, starting an owned child with its output in a file, the port check), `parent` (`tow serve --parent-pid`: the server ends with the supervisor), `starter` (`tow start`). |
+| `tow.platform` backends | `windows` and `posix` (Linux and macOS), with the helpers they share in `_common`. |
+| `tow.web` helpers | `middleware` (who may ask, the headers, recovery before dispatch), `_context` (one request's config, state and secrets, each read once), `templating` and `text` (templates and texts in the page's language), `site_form`, `site_actions` and `site_store` (what the site forms accept, do and write), `topic_actions` (the topic forms on Home). |
 
 Three places speak about problems, each for its own moment:
 
@@ -186,7 +221,7 @@ plus ten regexes, never a Python dispatch per file and mask.
     tow.jsonl              structured events — rotated
     restore-points/        restore points (.towx)
     logs/                  process and job output (including serve.log) — rotated
-    run/                   supervisor lock, pid, status, schedule, control/
+    run/                   supervisor lock, pid, status, schedule (with timer and site-retry reservations), control/
     torrent-metadata/      encrypted obtained torrent files for live topics (bounded)
     tmp/                   private temp folder (cleaned after a day)
     browser-auth/          temporary browser profiles for site sign-in
@@ -194,6 +229,7 @@ plus ten regexes, never a Python dispatch per file and mask.
   backup/                  night/ copies, update-…-before-… snapshots
   runtime/                 Python and uv cache of this install
     web-update/            durable job record, copied worker/updater and bounded UI log access
+    services/flaresolverr/ optional owner-installed on-demand site-access module: manifest, program, copied broker
 ```
 
 `tow.paths.root()` finds the install: `TOW_ROOT`; else the parent of an `app` code folder that has `config.yaml`
