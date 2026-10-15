@@ -15,7 +15,8 @@ def _site_words() -> re.Pattern[str]:
     the generic "torrent tracker". Built on first use: the tracker package imports this module."""
     from tow.trackers import presets
 
-    return re.compile(rf"({'|'.join((*presets.brands(), r'torrent[- ]?tracker'))})", re.IGNORECASE)
+    # Whole words only: "Rutorrent" in a title is not the site rutor.
+    return re.compile(rf"\b(?:{'|'.join((*presets.brands(), r'torrent[- ]?tracker'))})\b", re.IGNORECASE)
 
 
 _PHP = re.compile(r"\.php$", re.IGNORECASE)
@@ -30,8 +31,9 @@ _LONE_SURROGATE = re.compile("[\ud800-\udfff]")
 
 
 def _clean(s: str) -> str:
-    """Every title TOW takes from a page or a link passes here: one line of real text."""
-    s = _LONE_SURROGATE.sub("�", unquote(s or "")).replace("\xa0", " ").strip()
+    """Every title TOW takes from a page or a link passes here: one line of real text. Nothing is
+    decoded here: a link's slug is decoded once where it is read, a page's "%25" is its text."""
+    s = _LONE_SURROGATE.sub("�", s or "").replace("\xa0", " ").strip()
     s = re.sub(r"\s+", " ", s)
     if s.lower().endswith(".torrent"):
         s = s[: -len(".torrent")].rstrip()
@@ -95,23 +97,27 @@ def _title_part(html: str) -> str:
     return html[:cut]
 
 
+def _names_only_the_site(text: str) -> bool:
+    """``text`` is the site's own name ("RuTracker.org", "NNM-Club"), not a topic's title."""
+    rest = re.sub(r"(?i)\.[a-z]{2,6}\b", " ", _site_words().sub(" ", text))
+    return not re.search(r"\w", rest)
+
+
 def title_from_html(html: str) -> str:
     from bs4 import BeautifulSoup
 
     soup = BeautifulSoup(_title_part(html or ""), "html.parser")
+    candidates = []
     h1 = soup.find("h1")
     if h1:
-        got = _drop_site_bits(h1.get_text(" ", strip=True))
-        if got:
-            return got
+        candidates.append(h1.get_text(" ", strip=True))
     og = soup.find("meta", attrs={"property": "og:title"})
     if og and og.get("content"):
-        got = _drop_site_bits(str(og.get("content") or ""))
-        if got:
-            return got
+        candidates.append(str(og.get("content") or ""))
     if soup.title and soup.title.string:
-        return _drop_site_bits(str(soup.title.string))
-    return ""
+        candidates.append(str(soup.title.string))
+    # A page whose heading is the site's logo names the topic in og:title or <title>.
+    return next((got for raw in candidates if (got := _drop_site_bits(raw)) and not _names_only_the_site(got)), "")
 
 
 def _norm(s: str) -> str:

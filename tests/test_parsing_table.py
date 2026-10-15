@@ -201,3 +201,43 @@ def test_a_guess_that_misses_its_own_link_falls_back_to_the_number(monkeypatch):
     guessed = guess.guess_from_url("https://site.example.org/item/12345")
     assert _id(guessed, "https://site.example.org/item/12345") == "12345"
     assert guessed["download_path"] == "/item/{id}"
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        # A site name inside a longer word is not the site.
+        ("Show A / Rutorrent Edition", "Show A / Rutorrent Edition"),
+        ("Сериал А / Show A :: RuTracker.org", "Сериал А / Show A"),
+        # A percent sign in a page title is text, not an escape.
+        ("Show 100%25 Pure", "Show 100%25 Pure"),
+        ("Show %D0%90", "Show %D0%90"),
+    ],
+)
+def test_a_page_title_keeps_its_own_words(raw, expected):
+    from tow.title import _drop_site_bits
+
+    assert _drop_site_bits(raw) == expected
+
+
+def test_a_heading_that_only_names_the_site_is_not_the_title():
+    from tow.title import title_from_html
+
+    page = "<html><head><title>Сериал А :: RuTracker.org</title></head><body><h1>RuTracker.org</h1></body></html>"
+    assert title_from_html(page) == "Сериал А"
+    assert title_from_html("<h1>NNM-Club</h1><meta property='og:title' content='Show B'>") == "Show B"
+    assert title_from_html("<h1>Show C</h1><title>x :: RuTracker.org</title>") == "Show C"
+    assert title_from_html("<h1>RuTracker.org</h1>") == ""
+
+
+@pytest.mark.parametrize(
+    ("url", "slug"),
+    [
+        ("http://rutor.info/torrent/1/show_%2525", "show %25"),
+        ("http://rutor.info/torrent/1/%D0%A1%D0%B5%D1%80%D0%B8%D0%B0%D0%BB", "Сериал"),
+    ],
+)
+def test_a_link_slug_is_decoded_once(url, slug):
+    from tow.title import title_from_url_slug
+
+    assert title_from_url_slug(url) == slug

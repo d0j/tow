@@ -163,6 +163,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   still misses its own link falls back to the number in it.
 - A site added from a pasted NNM-Club link now signs in through a browser window and takes its .torrent files
   from bulk.nnmclub.to, as the built-in NNM-Club settings do; it could do neither before.
+- The title TOW takes from a topic page is no longer the site's name when the page's heading is only its logo,
+  keeps words that merely contain a site's name (`Rutorrent`), and keeps a `%25` of the page as it is.
 
 ## [1.31.2] — 2026-10-15
 
