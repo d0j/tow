@@ -19,6 +19,7 @@ from tow.check.client_ops import (
     info_owned_by_tow,
     live_previous_overlap,
 )
+from tow.check.rows import note_removed, removal_seen_by
 from tow.check.space import FREE_SPACE_MARGIN, Shortfall
 from tow.check_steps import client_identities, is_owned_add_recovery, store_revision
 from tow.clients.managed import ClientVerificationPending
@@ -314,6 +315,20 @@ def _refuse_still_blocked(work: TopicCheck, metadata: Any, *, h: str, replaces: 
         raise TowError(PREVIOUS_REVISION_ACTIVE, file=overlap, hash=h.upper())
 
 
+def _refuse_removed_readd(work: TopicCheck, metadata: Any) -> None:
+    """The topic's own revision is gone from its client: only the owner's row check asked after
+    the removal was seen adds it back (``removal_seen_by``) - a repair, a new file selection or a
+    scheduled check never does, and neither does a row check queued before the owner removed it.
+    It is reported as removed then, from now on (a later row check adds it back)."""
+    topic, run, old = work.topic, work.run, work.old
+    if not old or old not in client_identities(metadata):
+        return  # a new revision: an ordinary add
+    if run.readd_removed and removal_seen_by(topic, run.readd_since):
+        return
+    note_removed(topic)
+    raise TowError("check.removed_from_client")
+
+
 def apply_revision(
     work: TopicCheck,
     fetched: Fetched,
@@ -437,6 +452,7 @@ def _hand_to_client(
         )
         return h, verified
     if not exists:
+        _refuse_removed_readd(work, metadata)
         added = _add_new_revision(
             topic,
             run,
