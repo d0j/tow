@@ -444,9 +444,10 @@ def test_first_start_page_explains_tow_and_the_next_steps(client):
     save_config(cfg)
     page = client.get("/setup").text
     assert "TOW следит за раздачами на торрент-сайтах" in page
-    assert page.count("<li>") >= 3
-    assert "Подключите торрент-клиент: Настройки → Торрент-клиенты." in page
-    assert page.index("Что дальше") < page.index('name="lan_password"')
+    # 1.32: the next steps are Home's first-start card (shown until the first topic); this page
+    # asks its one question first.
+    assert "Что дальше" not in page
+    assert page.index('name="allow_lan"') < page.index('name="lan_password"')
 
 
 def test_empty_home_shows_three_steps_with_their_state(client, monkeypatch):

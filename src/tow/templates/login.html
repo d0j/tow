@@ -4,25 +4,34 @@
 {% with title = t('login.page_title') %}{% include "_head.html" %}{% endwith %}
 </head>
 <body class="auth-page">
+  {% from "_icons.html" import sprite %}
+  {% from "_note.html" import note %}
+  {% from "_secret.html" import reveal %}
+  {{ sprite() }}
   <main class="auth-shell">
     <section class="card auth-card" aria-labelledby="login-title">
       <h1 id="login-title">{{ t('login.heading') }}</h1>
       {% if not enabled %}
       <p>{{ t('login.disabled') }}</p>
       {% elif configured %}
-      <p>{% if credential_kind == "password" %}{{ t('login.enter_password') }}{% else %}{{ t('login.enter_key') }}{% endif %}</p>
+      <p class="sub">{% if credential_kind == "password" %}{{ t('login.enter_password') }}{% else %}{{ t('login.enter_key') }}{% endif %}</p>
       {% else %}
       <p role="alert">{{ problem or t('login.not_set') }}</p>
       {% endif %}
-      {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
-      {% if again %}<p role="status">{{ t('web.login.again') }}</p>{% endif %}
+      {#- A sign-in that ended says so above the field, as a note (not a line of the lead). -#}
+      {% if again %}<div role="status">{{ note(t('web.login.again')) }}</div>{% endif %}
+      {% if error %}<p class="form-error" id="login-error" role="alert">{{ error }}</p>{% endif %}
       {% if not enabled %}
       {#- Sign-in is off: only this computer reaches TOW, and it needs no password - no form, the way in. -#}
       <p><a class="btn" href="/">{{ t('login.open_tow') }}</a></p>
       {% else %}
-      <form method="post" action="/login" class="auth-form">
-        <label for="lan-password">{% if credential_kind == "password" %}{{ t('login.password') }}{% else %}{{ t('login.key') }}{% endif %}</label>
-        <input id="lan-password" name="password" type="password" autocomplete="current-password" required {% if not configured %}disabled{% else %}autofocus{% endif %}>
+      {% set label = t('login.password') if credential_kind == "password" else t('login.key') %}
+      {#- Sent as a form (data-native-submit): app.js is here for the eye only. -#}
+      <form method="post" action="/login" class="form-grid auth-form" data-native-submit>
+        <div class="field">
+          <label for="lan-password">{{ label }}</label>
+          <span class="secret"><input id="lan-password" name="password" type="password" autocomplete="current-password" required{% if error %} aria-invalid="true" aria-describedby="login-error"{% endif %} {% if not configured %}disabled{% else %}autofocus{% endif %}>{{ reveal('lan-password', label) }}</span>
+        </div>
         <div class="settings-actions"><button type="submit" {% if not configured %}disabled{% endif %}>{{ t('login.submit') }}</button></div>
       </form>
       {% endif %}
@@ -36,5 +45,7 @@
       {% endif %}
     </section>
   </main>
+  <script type="application/json" id="tow-i18n">{{ js_texts()|tojson }}</script>
+  <script src="/static/app.js?v={{ static_version }}" defer></script>
 </body>
 </html>

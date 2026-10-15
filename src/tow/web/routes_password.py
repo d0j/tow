@@ -37,11 +37,37 @@ from tow.web.views import first_run
 router = APIRouter()
 
 
-def _setup_page(request: Request, error: str = "", status_code: int = 200) -> Response:
+# The field a refused first start is about, by its reason's key (the reminder, a password).
+_SETUP_FIELDS = {
+    "auth.hint_too_long": "lan-hint",
+    "auth.hint_needs_password": "lan-hint",
+    "auth.hint_reveals_password": "lan-hint",
+    "auth.password_too_short": "lan-password",
+    "web.password.differ": "lan-password2",
+}
+
+
+def _setup_page(
+    request: Request,
+    error: Any = "",
+    status_code: int = 200,
+    *,
+    hint: str = "",
+    allow_lan: bool = False,
+) -> Response:
+    """The first-start page; a refused one keeps what was typed but the passwords (the reminder,
+    the box) and marks the field its reason is about."""
     return TEMPLATES.TemplateResponse(
         request,
         "setup.html",
-        {"error": error, "hint_max": MAX_HINT_LENGTH, "version": __version__},
+        {
+            "error": str(error),
+            "error_field": _SETUP_FIELDS.get(str(getattr(error, "code", "")), ""),
+            "hint": hint,
+            "allow_lan": allow_lan,
+            "hint_max": MAX_HINT_LENGTH,
+            "version": __version__,
+        },
         status_code=status_code,
     )
 
@@ -64,7 +90,10 @@ def setup_save(
     allow_lan: str = Form(""),
 ) -> Response:
     cfg = services.load_config()
-    if action == "skip":
+    lan = as_bool(allow_lan)
+    # The page asks "open TOW from other devices?" first: Start with the box clear and no password
+    # typed is the same as "later - this computer only".
+    if action == "skip" or not (lan or lan_password or lan_password2):
         cfg["setup_done"] = True
         services.save_config(cfg)
         services.log_event("setup_skipped", how="manual")
@@ -78,19 +107,18 @@ def setup_save(
         record = access.new_record(lan_password, lan_password2, hint)
         secrets = services.load_secrets()
     except AuthConfigurationError as exc:
-        return _setup_page(request, str(exc), status_code=400)
+        return _setup_page(request, exc, status_code=400, hint=hint, allow_lan=lan)
     except SecretStoreError:
-        return _setup_page(request, t("web.password.store_unavailable"), status_code=400)
+        return _setup_page(request, t("web.password.store_unavailable"), status_code=400, hint=hint, allow_lan=lan)
     secrets = copy.deepcopy(secrets)
     secrets[access.RECORD_KEY] = record
     cfg["setup_done"] = True
-    lan = as_bool(allow_lan)
     if lan:
         cfg.update(allow_lan=True, bind=network_bind(cfg.get("bind")))
     try:
         services.commit_stores(config=cfg, secrets=secrets)  # never a password without its network setting
     except TransactionError:
-        return _setup_page(request, t("web.password.store_unavailable"), status_code=503)
+        return _setup_page(request, t("web.password.store_unavailable"), status_code=503, hint=hint, allow_lan=lan)
     with contextlib.suppress(OSError):  # the first password: no device was signed in with an earlier one
         services.sign_out_everywhere()
     services.log_event("setup_password", allow_lan=lan, hint=bool(record.get("hint")), how="manual")

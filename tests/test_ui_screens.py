@@ -174,6 +174,53 @@ def test_history_says_its_limit_only_when_it_is_reached(client, monkeypatch):
     assert "Показано только последнее 1 событие." in page
 
 
+def _first_start():
+    from tow.config import load_config, save_config
+
+    cfg = load_config()
+    cfg.pop("setup_done", None)
+    save_config(cfg)
+
+
+def test_a_refused_first_start_keeps_what_was_typed_but_the_passwords(client):
+    """A refused first start cleared every field and unticked the box; the reason stood above
+    the form in lower case. The reminder and the box come back (never a password), the reason is
+    a sentence and the field it is about is marked."""
+    _first_start()
+    data = {"lan_password": "river-lamp-9", "lan_password2": "river-lamp-9", "hint": "river-lamp-9!", "allow_lan": "1"}
+    refused = client.post("/setup", data=data)
+    assert refused.status_code == 400
+    page = BeautifulSoup(refused.text, "html.parser")
+    assert page.select_one("#lan-hint")["value"] == "river-lamp-9!"
+    assert page.select_one("#allow-lan").has_attr("checked")
+    for field in ("#lan-password", "#lan-password2"):
+        assert not page.select_one(field).has_attr("value")
+    assert page.select_one("#lan-hint")["aria-invalid"] == "true"
+    error = page.select_one("#setup-error").get_text()
+    assert error[:1].isupper()
+    assert "setup-error" in page.select_one("#lan-hint")["aria-describedby"]
+
+
+def test_first_start_asks_about_other_devices_first(client):
+    """The optional password was three required fields above the one real question; the question
+    comes first now, and "Start" with the box clear is the old "Later - this computer only"."""
+    from tow.config import load_config
+    from tow.store import load_secrets
+
+    _first_start()
+    page = BeautifulSoup(client.get("/setup").text, "html.parser")
+    form = page.select_one("form")
+    order = [node["id"] for node in form.select("input[id]")]
+    assert order.index("allow-lan") < order.index("lan-password") < order.index("lan-hint")
+    assert not form.select("input[required]")
+    for field in ("lan-password", "lan-password2"):
+        assert page.select_one(f'button.reveal[data-reveal="{field}"]') is not None
+    started = client.post("/setup", data={"action": "save"}, follow_redirects=False)
+    assert (started.status_code, started.headers["location"].split("?")[0]) == (303, "/")
+    assert load_config()["setup_done"] is True
+    assert "lan_auth" not in load_secrets()
+
+
 def test_a_cleared_follow_box_is_saved_as_once_on_edit(client, monkeypatch):
     assert _add(client, monkeypatch).status_code == 303
     topic = load_state()["topics"][0]
