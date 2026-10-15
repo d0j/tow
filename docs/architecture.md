@@ -67,8 +67,9 @@ flowchart TD
   repairs it; a row's check may try it again. Allocation (qBittorrent) and a check waiting in Deluge's queue
   defer like a file check. A torrent the client does not list blocks only after two client answers at least
   600 s apart. A deferred add gets exactly one start, also when it is complete. Transmission hands over a paused
-  add while its first check runs (receipt phase `awaiting_initial_check`) and applies the selection, stopped and
-  read back, when it ends. The receipt keeps its first `since`; after 12 hours it shows a red
+  add while its first check runs (receipt phase `awaiting_initial_check`, saved as `unapplied_receipt`, never as
+  `receipt`: 1.30.10 and older refuse it instead of reading it as an applied selection) and applies the selection,
+  stopped and read back, when it ends. The receipt keeps its first `since`; after 12 hours it shows a red
   `check.verification_overdue` (notified once) and is still finished later. Meanwhile the site is asked
   read-only on the normal schedule (revision probe or page magnet, never a `.torrent`), and a newer revision is
   kept as `observed_hash`. A blocked receipt of an unchanged revision downloads no `.torrent`; a failed start
