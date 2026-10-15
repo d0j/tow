@@ -146,14 +146,17 @@ connected.
 Manual checks never change the torrent client concurrently. If another check holds it, a row's check joins
 a FIFO (up to 32 jobs); another click on the same waiting topic follows its existing job, and a click while that
 topic's check runs queues one more check after it. Previews wait in a queue of their own and never hold up a
-check. The waiting notice says since when it waits and offers **Cancel waiting**, which does not stop work that
-already started; a check that waits more than 65 minutes ends as not run. Paused/deleted topics are re-read
-when their turn comes, and a torrent you removed from the client after pressing Check is not added back.
-Completed results stay at their own address through **Results** for one hour in this web session; a restart
-does not silently replay manual re-add requests. A missing result is unconfirmed, not success.
+check. The page stays where it is: a waiting check is a message that says since when it waits and offers
+**Cancel waiting**, which does not stop work that already started; a check that waits more than 65 minutes ends
+as not run. Its result replaces that message ("Harbour Clock — no changes") and the topic's row updates in
+place; checks started from one browser tab are followed across its pages, and each ends in exactly one message.
+Paused/deleted topics are re-read when their turn comes, and a torrent you removed from the client after
+pressing Check is not added back. A restart does not silently replay manual re-add requests; a result TOW can no
+longer find is said to be unconfirmed, not success.
 
-**Results** separates updates, unchanged topics, waits, skips and errors, with topic names and links to current
-status and actions. File verification by the client is a wait, not a failure or a confirmed add; Home says
+A check of every topic ends with one message linking to its **Results** card (kept for one hour in this web
+session; × closes it in place). **Results** separates updates, unchanged topics, waits, skips and errors, with
+topic names and links to current status and actions. File verification by the client is a wait, not a failure or a confirmed add; Home says
 **Checking files** until read-back confirms it. A verification still waiting after 12 hours turns red so you
 can look at the client; TOW still finishes it when the client does. A run's report is historical: a later
 successful check can already have cleared its error. Diagnostic run totals use the same outcome rules.
@@ -226,8 +229,9 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
   of a topic (the row's files link) lists every file of every version; files of older versions are kept for
   `history_keep_days` (730 by default), files of the current version are never dropped.
 - **Undo.** After a change (an edit, a delete, a settings save, a password change) its message carries **Undo**
-  with the time left; on later pages the button stays in the header. It lasts a short time (Settings → Checks,
-  “Show “Undo” for”) and puts back the last change, as one step. Removing a topic
+  with the time left, also in **Recent messages** after the message folded. It lasts a short time (Settings →
+  Checks, “Show “Undo” for”) and puts back that change, as one step; an **Undo** of an earlier message never
+  puts back a newer change. Removing a topic
   (**Remove from TOW**) removes the topic from TOW only: the torrent and its files stay in the client, and its
   history stays.
 - A network error is said in words (connection refused, no answer in time, address not found…); the raw text is
@@ -332,9 +336,14 @@ Settings → **Version and updates**; the version in the corner of every page op
 ## Troubleshooting
 
 The left column is the text TOW shows (on Home, in a row, in a message or on a page).
-Warnings above the list can be folded and reopened. They fold automatically after the display interval, but not
-while hovered or focused; a manual choice takes precedence. Red errors stay visible. Folding or closing a message
-does not clear the topic's error or its History record.
+Every message after an action appears once at the top of the page, starting with the topic, site or client it is
+about: green when it worked, neutral for information, amber for a warning, red for an error. It folds into the
+**Recent messages** icon in the header after 10 seconds (a warning after 25, an error after 30; not while the
+pointer or keyboard is on it, × folds it at once). The icon takes the colour of the worst unread message and
+shows how many are unread; it lists this browser tab's last 50 messages of the past day, with **Mark all read**
+and **Clear history**. Problems that last (a topic error, a client that does not answer) stay in **Needs
+attention** until they are fixed. Folding or closing a message does not clear the topic's error or its History
+record.
 
 | Message | Meaning | What to do |
 |---|---|---|
