@@ -136,6 +136,9 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
   form.dataset.submitting = "1";
   const body = preparedBody || (submitter ? new FormData(form, submitter) : new FormData(form));
   const action = beginCheck(form, submitter, body);
+  // Signed out while the answer is on its way: what it brings belongs to the old session.
+  const session = window.towMessages?.session?.();
+  const ended = () => session !== undefined && window.towMessages?.session?.() !== session;
   // A check is forgotten only on a whole, definite answer that TOW did not take it (its refusal
   // in words, a page to open); a broken or unreadable answer leaves it to the lookup by its id.
   let definite = false;
@@ -173,6 +176,7 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
     let nextUrl = null;
     if ((response.headers.get("content-type") || "").includes("application/json")) {
       const data = await response.json();
+      if (ended()) return;
       if (typeof data.cancelled === "boolean") {
         // A waiting check's Cancel from its message: the check's own entry (removed from the
         // queue) says it; only a Cancel that came too late has words of its own. No page opens.
@@ -201,6 +205,7 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
     window.location.assign(nextUrl);
   } catch (error) {
     restoreForm(form, submitter);
+    if (ended()) return;
     if (action && !definite) {
       // The answer was lost or broke off: TOW may have the check. It is looked up by its action id,
       // never sent again - and said so only while it is still followed (its result may have come

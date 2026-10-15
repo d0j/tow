@@ -255,4 +255,17 @@ verdict.cancelFromMessage = true;
 }
 verdict.signOutClears = true;
 
+// A message said a moment after it arrives is not said once the owner has signed out meanwhile.
+{
+  const out = page({ storage: memoryStorage(), served: { id: "m8", kind: "err", subject: "Show", text: "failed" } });
+  const form = build(out.document, ["form", { method: "post", action: "/logout" }]);
+  out.document.body.append(form);
+  out.document.dispatch(form, "submit");
+  out.timers.advance(1000);
+  assert.equal(out.$("#announce-alert").textContent, "");
+  assert.equal(out.$("#announce").textContent, "");
+  assert.equal(out.window.towMessages.session(), 1);
+}
+verdict.signOutSilencesAnnouncements = true;
+
 console.log(JSON.stringify(verdict));
