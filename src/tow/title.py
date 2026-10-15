@@ -166,10 +166,10 @@ def _title_from_page(url: str) -> str:
     tracker = match_tracker(load_trackers(cfg), url)
     if tracker is None:
         return ""
-    trusted_host = next(
-        (host for host in tracker.spec.get("fetch_hosts") or [] if origin_key(host) == origin_key(url)),
-        "",
-    )
+    # The link's own mirror, else the site's first one: a topic link of a mirror the site does not
+    # fetch from (kinozal.tv) is read from a mirror it does, at the same path.
+    hosts = [str(host) for host in tracker.spec.get("fetch_hosts") or [] if host]
+    trusted_host = next((host for host in hosts if origin_key(host) == origin_key(url)), hosts[0] if hosts else "")
     if not trusted_host:
         return ""
     ua = cfg.get("user_agent")

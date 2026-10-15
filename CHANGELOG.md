@@ -165,6 +165,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   from bulk.nnmclub.to, as the built-in NNM-Club settings do; it could do neither before.
 - The title TOW takes from a topic page is no longer the site's name when the page's heading is only its logo,
   keeps words that merely contain a site's name (`Rutorrent`), and keeps a `%25` of the page as it is.
+- Kinozal topic links with `www.`, more parameters or a `#comments` anchor are recognised by the built-in Kinozal
+  settings, and a `kinozal.tv` link gets its title from one of the site's mirrors.
 
 ## [1.31.2] — 2026-10-15
 
