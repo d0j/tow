@@ -685,6 +685,48 @@ def test_a_message_is_shown_as_a_sentence(client):
 
 
 @pytest.mark.parametrize(
+    "text",
+    [
+        "qBittorrent does not answer",  # a capital inside: a program's own spelling
+        "nnmclub: all mirrors are paused",  # a site as the settings name it
+        "rutor.info answers",  # a host
+        "kinozal_tv: no connection",  # a site key
+        "ntfy: no connection",  # a messenger
+    ],
+)
+def test_a_message_never_capitalises_a_name_it_starts_with(client, text):
+    """A message said on its own started with a capital whatever its first word was: the strip and
+    Recent messages showed "QBittorrent не отвечает" and "Nnmclub: все зеркала на паузе". The
+    record says when its words start with a name (``named``); the page (``message_text``, the
+    strip's data-named for messages.js) then keeps them as written."""
+    from tow.web.messages import FLASHES, message_text, record
+
+    said = record(text, "warn")
+    assert said["text"] == text
+    assert said["named"] == "1"
+    assert message_text(said) == text
+    page = client.get(f"/?flash={FLASHES.put(said)}").text
+    assert f'<span class="msg-text">{text}</span>' in page
+    assert 'data-named="1"' in page
+    # With a subject the words follow it as they are.
+    assert message_text(record(text, "warn", subject="Show")) == f"Show — {text}"
+
+
+def test_a_catalog_message_is_a_sentence_but_a_value_it_starts_with_keeps_its_case(client):
+    from tow.web.messages import flash_location, message_text, record
+
+    said = record("saved", "ok")
+    assert "named" not in said
+    assert message_text(said) == "Saved"
+    assert message_text(record("saved", "ok", subject="Show")) == "Show — saved"
+    # "{tracker}: все зеркала на паузе" starts with its value: an unknown site keeps its spelling too.
+    page = client.get(flash_location("/", "mirrors.all_paused", "warn", subject="", tracker="oldsite")).text
+    assert '<span class="msg-text">oldsite: ' in page
+    page = client.get(flash_location("/", "web.check.check_failed", "err", subject="", error="x")).text
+    assert re.search(r'<span class="msg-text">[А-ЯЁ]', page)  # "the check failed: x" as a sentence
+
+
+@pytest.mark.parametrize(
     "target", ["https://evil.example/", "//evil.example/", "/%2fevil.example/", "/\\evil.example/"]
 )
 def test_flash_redirect_refuses_an_external_target(target):

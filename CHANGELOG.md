@@ -18,6 +18,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   filling the screen, even for three lines.
 - The search icon in the header is only on Home and Sites, the pages it filters. On History with a search it
   opened by itself over the page's title; elsewhere it filtered nothing.
+- A message that starts with a name keeps its spelling: "qBittorrent does not answer" and "nnmclub: all mirrors
+  are paused" were shown as "QBittorrent …" and "Nnmclub: …".
 
 ## [1.31.2] — 2026-10-15
 

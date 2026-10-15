@@ -32,10 +32,12 @@
     const value = String(href ?? "");
     return value.startsWith("/") && !value.startsWith("//") && !/[\\\s\u0000-\u001f]/.test(value) ? value.slice(0, 500) : "";
   };
-  const sentence = (text) => text.slice(0, 1).toUpperCase() + text.slice(1);
-  // "{subject} — {result}" (the server's catalog key, views.message_text), never the subject twice.
-  const format = (pattern, subject, text) => {
-    if (!subject || text.toLowerCase().startsWith(`${subject} — `.toLowerCase())) return sentence(text);
+  // "{subject} — {result}" (the server's catalog key, messages.message_text), never the subject
+  // twice. Said on its own the result starts as a sentence - unless its words start with a name
+  // (``named``, the server's record says so: "qBittorrent …", "nnmclub: …" never get a capital).
+  const sentence = (text, named) => (named ? text : text.slice(0, 1).toUpperCase() + text.slice(1));
+  const format = (pattern, subject, text, named = false) => {
+    if (!subject || text.toLowerCase().startsWith(`${subject} — `.toLowerCase())) return sentence(text, named);
     return String(pattern || "{subject} — {result}").replace("{subject}", () => subject).replace("{result}", () => text);
   };
 
@@ -62,6 +64,7 @@
         kind: KINDS.includes(raw?.kind) ? raw.kind : "ok",
         subject: scrub(raw?.subject, 200),
         text: scrub(raw?.text),
+        named: raw?.named === true || raw?.named === "1",
         at: at > 0 ? (at < 1e11 ? at * 1000 : at) : stamp,
         href: localHref(raw?.href),
         link: clean(raw?.link, 80),
@@ -352,7 +355,7 @@
     const region = document.getElementById(item.kind === "err" ? "announce-alert" : "announce");
     if (!region) return;
     const prefix = item.kind === "warn" || item.kind === "err" ? `${KIND_WORDS[item.kind]}: ` : "";
-    const sentenceSaid = prefix + format(pattern, said.subject, said.text);
+    const sentenceSaid = prefix + format(pattern, said.subject, said.text, item.named);
     region.textContent = "";
     // A moment later: a live region changed while the page opens is not said by every reader.
     const mine = session;
@@ -462,7 +465,7 @@
     const kind = box.querySelector(".msg-ico");
     kind.setAttribute("aria-label", KIND_WORDS[item.kind]);
     kind.replaceChildren(icon(ICONS[item.kind]));
-    const words = format(pattern, said.subject, said.text);
+    const words = format(pattern, said.subject, said.text, item.named);
     const text = box.querySelector(".msg-text");
     if (text.textContent !== words) text.textContent = words;
     const old = box.querySelector(":scope > .msg-actions");
@@ -531,7 +534,7 @@
     row.dataset.sign = entrySign(item);
     const head = element("div", "msg-entry-head");
     head.append(icon(ICONS[item.kind]), element("span", "msg-entry-kind", KIND_WORDS[item.kind]), when(item.at));
-    const text = element("p", "msg-entry-text", format(pattern, item.subject, item.text));
+    const text = element("p", "msg-entry-text", format(pattern, item.subject, item.text, item.named));
     const oldHead = row.querySelector(":scope > .msg-entry-head");
     const oldText = row.querySelector(":scope > .msg-entry-text");
     if (oldHead) oldHead.replaceWith(head);
@@ -706,7 +709,7 @@
   if (served) {
     const data = served.dataset;
     const record = {
-      id: data.messageId, kind: data.kind, subject: data.subject, text: data.text, at: data.at,
+      id: data.messageId, kind: data.kind, subject: data.subject, text: data.text, at: data.at, named: data.named,
       href: data.href, link: data.link, undo: data.undo || "", undoUntil: data.undo && data.undo === stamp ? until : 0,
     };
     served.remove();
