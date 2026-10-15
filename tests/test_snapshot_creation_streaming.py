@@ -289,9 +289,11 @@ def test_log_append_and_rotation_wait_until_snapshot_read_finishes(night, monkey
     real_copy = night_create._copy_snapshot_member
     failures = []
 
+    # The waits only end a broken run (a snapshot of the data folder under coverage on a busy
+    # runner can take seconds); a working one never waits for them.
     def append():
         try:
-            assert entered.wait(2)
+            assert entered.wait(30)
             attempted.set()
             log_event("synthetic_concurrent_append")
             finished.set()
@@ -302,7 +304,7 @@ def test_log_append_and_rotation_wait_until_snapshot_read_finishes(night, monkey
         if name == "tow.jsonl":
             assert source == log_path()
             entered.set()
-            assert attempted.wait(2)
+            assert attempted.wait(30)
             assert not finished.wait(0.05)
         return real_copy(source, destination, name)
 
@@ -313,7 +315,7 @@ def test_log_append_and_rotation_wait_until_snapshot_read_finishes(night, monkey
         result = snapshots.create_snapshot()
     finally:
         entered.set()
-        worker.join(timeout=2)
+        worker.join(timeout=30)
     assert not worker.is_alive()
     assert not failures
     assert finished.is_set()
