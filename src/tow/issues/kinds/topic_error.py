@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from tow import i18n
-from tow.clients.factory import default_client_id
+from tow.clients import factory
 from tow.errors import as_value, summary_record
 from tow.issues import clients
 from tow.issues.model import Fix, Issue, Message, Snapshot, Target
@@ -36,7 +36,9 @@ def _error(topic: Mapping[str, Any], config: Mapping[str, Any]) -> Any:
 
 
 def collect(snapshot: Snapshot) -> list[Issue]:
-    default = default_client_id(dict(snapshot.config))
+    # Read through the module, as `issues.clients` does: a function captured at import keeps the
+    # one the import saw, and its topics would then not fold into the client that `down` names.
+    default = factory.default_client_id(dict(snapshot.config))
     clients_down = set(clients.down(snapshot))  # their failed topics are counted in client_down
     found = []
     for topic in snapshot.topics:
