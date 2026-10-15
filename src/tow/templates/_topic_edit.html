@@ -2,11 +2,19 @@
    /topics/<id>/edit without scripts. `standalone` is set on that page. #}
 {% from "_note.html" import note %}
 <div class="edit-panel" data-edit-loaded>
-  {% if topic.last_ok_at %}<p class="sub">{{ t('home.topic.last_ok', at=topic.last_ok_at) }}</p>{% endif %}
+  {#- The panel's top line: when it last worked, and the topic on its site. -#}
+  {% if topic.last_ok_at or topic.search_href %}<p class="sub panel-top">
+    {%- if topic.last_ok_at %}{{ tm('home.topic.last_ok', at=(short_time(topic.last_ok_iso) if short_time is defined and topic.last_ok_iso else topic.last_ok_at)) }}{% endif %}
+    {%- if topic.search_href %}{% if topic.last_ok_at %} · {% endif %}<a href="{{ topic.search_href }}" target="_blank" rel="noopener">{{ t('home.topic.search_on', site=site_title(topic.tracker)) }}</a>{% if topic.next_season_href %} · <a href="{{ topic.next_season_href }}" target="_blank" rel="noopener">{{ t('home.topic.next_season') }}</a>{% endif %}{% endif %}</p>{% endif %}
   {% set error_words = topic.last_error_human or topic.last_error %}
   {#- D6: the row says it short, the open panel in full - one note in the row's colour (AGENTS.md). -#}
-  {% if topic.last_error %}{{ note(t('home.topic.last_error_at', at=topic.last_check, error=error_words) if topic.last_check else t('home.topic.last_error', error=error_words), 'warn' if topic.torrent_tone == 'warn' else 'bad') }}
-  {%- if topic.last_error_details or error_words != topic.last_error %}<details class="technical-details raw-error"><summary>{{ t('common.details') }}</summary><code>{{ topic.last_error_details or topic.last_error }}</code></details>{% endif %}{% endif %}
+  {% set error_at = (short_time(topic.last_check_iso) if short_time is defined and topic.last_check_iso else topic.last_check) %}
+  {% if topic.last_error %}{{ note(tm('home.topic.last_error_at', at=error_at, error=error_words) if topic.last_check else t('home.topic.last_error', error=error_words), 'warn' if topic.torrent_tone == 'warn' else 'bad') }}
+  {%- if topic.last_error_details or error_words != topic.last_error %}<details class="technical-details raw-error"><summary>{{ t('common.details') }}</summary><code>{{ topic.last_error_details or topic.last_error }}</code></details>{% endif %}
+  {#- The next step of a failure that has one elsewhere: the site's row (all mirrors paused), the
+      torrent client's settings. -#}
+  {%- if topic.last_error_class == 'frozen' and topic.tracker %}<p class="sub"><a href="/sites?open={{ topic.tracker|urlencode }}#site-row-{{ topic.tracker|urlencode }}">{{ t('home.topic.open_site', site=site_title(topic.tracker)) }}</a></p>
+  {%- elif topic.last_error_class == 'qbit' %}<p class="sub"><a href="/settings?open=clients">{{ t('home.topic.client_settings') }}</a></p>{% endif %}{% endif %}
   {% if topic.site_retry_at %}<p class="sub">{{ t('site_access.retry_at', at=topic.site_retry_at) }}</p>{% endif %}
   {% if topic.torrent_tone == 'warn' and topic.last_error and topic.last_error_class != 'frozen' %}<form method="post" action="/topics/{{ topic.id|urlencode }}/check"><button type="submit" data-busy-label="{{ t('common.busy.checking') }}"{{ fix_attrs('check_topic', topic.id) }}>{{ t('site_access.retry_check') }}</button></form>{% endif %}
   {% if topic.sign_in_href %}<p><a class="btn" href="{{ topic.sign_in_href }}"{{ fix_attrs('sign_in', topic.id) }}>{{ t('home.topic.sign_in') }}</a></p>{% endif %}
@@ -20,21 +28,35 @@
     <button type="submit">{{ t('home.topic.adopt') }}</button>
   </form>
   {% endif %}
-  {% if topic.selection_dirty %}{% set sel_text = t('home.topic.sel_dirty') %}{% elif topic.selection_verified is sameas false %}{% set sel_text = t('home.topic.sel_unverified') %}{% elif topic.selected_file_count is defined %}{% set sel_text = t('home.topic.sel_count', selected=topic.selected_file_count, total=topic.torrent_file_count or '?') %}{% elif topic.selection and topic.selection.mode != 'all' %}{% set sel_text = t('home.topic.sel_pending') %}{% else %}{% set sel_text = t('home.topic.sel_all') %}{% endif %}
-  <p class="sub">{{ t('home.topic.summary', selection=sel_text, mode=t('home.topic.mode_once') if topic.tracking_mode == 'once' else t('home.topic.mode_watch'), done=('; ' ~ t('home.topic.once_done')) if topic.once_done else '') }}</p>
-  <form id="ed-{{ topic.id }}" method="post" action="/topics/{{ topic.id|urlencode }}/edit" class="row row-three">
-    <div><label for="edit-title-{{ topic.id }}">{{ t('home.edit.name') }}</label><input id="edit-title-{{ topic.id }}" name="title" value="{{ topic.name }}"></div>
-    <div><label for="edit-url-{{ topic.id }}">{{ t('home.edit.url') }}</label><input id="edit-url-{{ topic.id }}" name="url" value="{{ topic.url }}"></div>
-    <div><label for="edit-path-{{ topic.id }}">{{ t('home.add.folder') }}</label><div class="folder-input"><input id="edit-path-{{ topic.id }}" name="save_path" list="save-roots" value="{{ topic.save_path or '' }}" autocomplete="off"><button type="button" class="ghost ico folder-toggle" data-save-folders aria-label="{{ t('home.add.recent_folders') }}" tabindex="-1" hidden><span aria-hidden="true">▾</span></button></div><p class="field-hint space-hint" data-space-hint aria-live="polite" hidden></p></div>
-    <div><label for="edit-client-{{ topic.id }}">{{ t('home.add.client') }}</label><select id="edit-client-{{ topic.id }}" name="client_id">{% for client in client_options %}<option value="{{ client.id }}"{% if client.id == (topic.client_id or default_client_id) %} selected{% endif %}>{{ client_name(client) }}</option>{% endfor %}</select></div>
-    <div><label for="edit-selection-mode-{{ topic.id }}">{{ t('home.add.what') }}</label><select id="edit-selection-mode-{{ topic.id }}" name="selection_mode" data-exact-option="{{ t('content.manual') }}"><option value="all"{% if not topic.selection or topic.selection.mode == 'all' %} selected{% endif %}>{{ t('home.add.mode_all') }}</option>{% if topic.selection and topic.selection.mode == 'exact' %}<option value="exact" selected>{{ t('content.manual') }}</option>{% endif %}<option value="episodes"{% if topic.selection and topic.selection.mode == 'episodes' %} selected{% endif %}>{{ t('home.add.mode_episodes') }}</option><option value="files"{% if topic.selection and topic.selection.mode == 'files' %} selected{% endif %}>{{ t('home.add.mode_files') }}</option></select></div>
-    <div><label for="edit-tracking-mode-{{ topic.id }}">{{ t('home.add.follow') }}</label><select id="edit-tracking-mode-{{ topic.id }}" name="tracking_mode"><option value="watch"{% if (topic.tracking_mode or 'watch') == 'watch' %} selected{% endif %}>{{ t('home.add.watch') }}</option><option value="once"{% if topic.tracking_mode == 'once' %} selected{% endif %}>{{ t('home.add.once') }}</option></select></div>
-    <div data-content-expression><label for="edit-selection-value-{{ topic.id }}">{{ t('home.edit.selection') }}</label><textarea id="edit-selection-value-{{ topic.id }}" name="selection_value" rows="2">{{ topic.selection.value if topic.selection else '' }}</textarea></div>
-    <div><label for="edit-check-interval-{{ topic.id }}">{{ t('timer.field') }}</label><input id="edit-check-interval-{{ topic.id }}" name="check_interval_min" type="number" min="1" max="10080" step="1" value="{{ topic.check_interval_min or '' }}" placeholder="{{ t('timer.global_placeholder') }}" aria-describedby="edit-check-interval-hint-{{ topic.id }}"><p class="field-hint" id="edit-check-interval-hint-{{ topic.id }}">{{ t('timer.hint') }}</p></div>
+  {#- The fields below say the selection and the mode; only what they cannot say is said here. -#}
+  {% if topic.selection_dirty %}<p class="sub">{{ t('home.topic.sel_dirty') }}</p>{% elif topic.selection_verified is sameas false %}<p class="sub">{{ t('home.topic.sel_unverified') }}</p>{% endif %}
+  {% if topic.once_done %}<p class="sub">{{ t('home.topic.once_done') }}</p>{% endif %}
+  {% set mode = topic.selection.mode if topic.selection else 'all' %}
+  <form id="ed-{{ topic.id }}" method="post" action="/topics/{{ topic.id|urlencode }}/edit" class="form-grid edit-form">
+    <div class="field-row">
+      <div class="field"><label for="edit-title-{{ topic.id }}">{{ t('home.add.name') }}</label><input id="edit-title-{{ topic.id }}" class="w-m" name="title" value="{{ topic.name }}"></div>
+      <div class="field"><label for="edit-url-{{ topic.id }}">{{ t('home.add.url') }}</label><input id="edit-url-{{ topic.id }}" class="w-xl" name="url" value="{{ topic.url }}" inputmode="url"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label for="edit-path-{{ topic.id }}">{{ t('home.add.folder') }}</label><div class="folder-input"><input id="edit-path-{{ topic.id }}" class="w-l" name="save_path" list="save-roots" value="{{ topic.save_path or '' }}" autocomplete="off"><button type="button" class="ghost ico folder-toggle" data-save-folders aria-label="{{ t('home.add.recent_folders') }}" tabindex="-1" hidden><span aria-hidden="true">▾</span></button></div><p class="field-hint space-hint" data-space-hint aria-live="polite" hidden></p>
+        {#- Said once the folder changes (content.js); without a script, always. -#}
+        <p class="field-hint" data-move-note hidden>{{ t('home.topic.path_note') }}</p><noscript><p class="field-hint">{{ t('home.topic.path_note') }}</p></noscript></div>
+      {% if client_options|length > 1 %}
+      <div class="field"><label for="edit-client-{{ topic.id }}">{{ t('home.add.client') }}</label><select id="edit-client-{{ topic.id }}" class="w-m" name="client_id">{% for client in client_options %}<option value="{{ client.id }}"{% if client.id == (topic.client_id or default_client_id) %} selected{% endif %}>{{ client_name(client) }}</option>{% endfor %}</select></div>
+      {% else %}
+      {#- One client: the one the select offered, sent as it was. -#}
+      <input type="hidden" id="edit-client-{{ topic.id }}" name="client_id" value="{{ client_options[0].id if client_options else (topic.client_id or default_client_id) }}">
+      {% endif %}
+    </div>
+    <div class="field-row">
+      <div class="field"><label for="edit-selection-mode-{{ topic.id }}">{{ t('home.add.what') }}</label><select id="edit-selection-mode-{{ topic.id }}" class="w-m" name="selection_mode" data-exact-option="{{ t('content.manual') }}"><option value="all"{% if mode == 'all' %} selected{% endif %}>{{ t('home.add.mode_all') }}</option>{% if mode == 'exact' %}<option value="exact" selected>{{ t('content.manual') }}</option>{% endif %}<option value="episodes"{% if mode == 'episodes' %} selected{% endif %}>{{ t('home.add.mode_episodes') }}</option><option value="files"{% if mode == 'files' %} selected{% endif %}>{{ t('home.add.mode_files') }}</option></select></div>
+      <div class="field interval-field"><label for="edit-check-interval-{{ topic.id }}">{{ t('timer.field') }}</label><input id="edit-check-interval-{{ topic.id }}" class="w-xs" name="check_interval_min" type="number" min="1" max="10080" step="1" value="{{ topic.check_interval_min or '' }}" aria-describedby="edit-check-interval-hint-{{ topic.id }}"><p class="field-hint" id="edit-check-interval-hint-{{ topic.id }}">{{ t('timer.hint') }}</p></div>
+    </div>
+    <input type="hidden" name="tracking_unchecked" value="once">
+    <label class="check-label" for="edit-tracking-mode-{{ topic.id }}"><input id="edit-tracking-mode-{{ topic.id }}" name="tracking_mode" value="watch" type="checkbox"{% if topic.tracking_mode != 'once' %} checked{% endif %}> {{ t('home.add.follow') }}</label>
+    <div class="field" data-content-expression><label for="edit-selection-value-{{ topic.id }}">{{ t('home.add.selection') }}</label><textarea id="edit-selection-value-{{ topic.id }}" class="w-xl" name="selection_value" rows="2" placeholder="{{ t('home.add.selection_placeholder') }}">{{ topic.selection.value if topic.selection else '' }}</textarea></div>
     {% set draft = none %}{% include '_content_picker.html' %}
   </form>
-  {% if topic.search_href %}<p class="sub"><a href="{{ topic.search_href }}" target="_blank" rel="noopener">{{ t('home.topic.search_on', site=site_title(topic.tracker)) }}</a>{% if topic.next_season_href %} · <a href="{{ topic.next_season_href }}" target="_blank" rel="noopener">{{ t('home.topic.next_season') }}</a>{% endif %}</p>{% endif %}
-  <p class="sub path-note">{{ t('home.topic.path_note') }}</p>
   {% if (topic.download_summary or {}).is_complete and not topic.paused %}
   <form id="stop-{{ topic.id }}" method="post" action="/topics/{{ topic.id|urlencode }}/pause" hidden></form>
   <p class="sub">{{ t('home.topic.season_done', done=topic.download_summary.completed, total=topic.download_summary.expected) }} <button class="ghost sm" type="submit" form="stop-{{ topic.id }}">{{ t('home.topic.stop_watching') }}</button></p>

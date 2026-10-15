@@ -46,6 +46,14 @@
     };
     const source = () => JSON.stringify([field("url").value.trim(), field("client_id").value]);
     const manual = () => mode.value === "exact";
+    // "Follow the topic" is a checkbox: ticked sends its value ("watch"); cleared, the form's
+    // tracking_unchecked says what it means ("once"). A select (an older page) sends its value.
+    const tracking = field("tracking_mode");
+    const lifecycle = () => tracking.type === "checkbox"
+      ? (tracking.checked ? tracking.value : field("tracking_unchecked")?.value || "once")
+      : tracking.value;
+    // The whole box for "Choose files", one line that previews a rule, nothing for all files.
+    const showView = () => { root.dataset.view = manual() ? "files" : mode.value === "all" ? "none" : "rule"; };
     const rowSize = (row) => BigInt(row.size);
     // The same units and words as the server's sizes (web.bytes.*): "1,5 ГБ", "1.5 GB".
     const humanSize = (size) => {
@@ -216,18 +224,18 @@
     const resolveRule = async () => {
       if (!snapshot || manual()) { render(); return; }
       const epoch = ++ruleGeneration, current = snapshot, kind = mode.value, value = expression.value;
-      const title = field("title").value, lifecycle = field("tracking_mode").value;
+      const title = field("title").value, followed = lifecycle();
       ruleNotice = t("content.js.rule_loading");
       selected.clear();
       render();
       const body = new FormData();
       Object.entries({ token: current.token, url: field("url").value, client_id: field("client_id").value, mode: kind, value,
-        topic_id: root.dataset.topicId || "", title, tracking_mode: lifecycle }).forEach(([key, item]) => body.set(key, item));
+        topic_id: root.dataset.topicId || "", title, tracking_mode: followed }).forEach(([key, item]) => body.set(key, item));
       try {
         const response = await fetch("/content/resolve", { method: "POST", body });
         const data = await answer(response);
         if (epoch !== ruleGeneration || current !== snapshot || kind !== mode.value || value !== expression.value
-          || title !== field("title").value || lifecycle !== field("tracking_mode").value) return;
+          || title !== field("title").value || followed !== lifecycle()) return;
         if (!response.ok) throw new Error(data.error);
         selected = new Set(data.indices);
         ruleNotice = data.waiting || "";
@@ -323,8 +331,15 @@
     upload.addEventListener("change", () => load());
     field("url").addEventListener("input", invalidate);
     field("client_id").addEventListener("change", invalidate);
-    const showExpression = () => expression.closest("[data-content-expression]")?.classList.toggle("content-unused", mode.value === "all" || manual());
+    const showExpression = () => {
+      expression.closest("[data-content-expression]")?.classList.toggle("content-unused", mode.value === "all" || manual());
+      showView();
+    };
     showExpression();
+    // The edit panel says the torrent client moves the files once the folder changes.
+    const moveNote = form.querySelector?.("[data-move-note]") ?? null;
+    const showMove = () => { if (moveNote && folder) moveNote.hidden = folder.value.trim() === folder.defaultValue.trim(); };
+    folder?.addEventListener("input", showMove);
     form.addEventListener("reset", () => {
       // Cancel resets the native fields after firing this event. It must also discard
       // prepared state, not revive an abandoned edit or keep its hidden preparation.
@@ -333,7 +348,7 @@
       preparationAttempted = false;
       token.value = initialToken; indices.value = initialIndices;
       status.textContent = "";
-      window.setTimeout(() => { previousMode = mode.value; showExpression(); }, 0);
+      window.setTimeout(() => { previousMode = mode.value; showExpression(); showMove(); }, 0);
     });
     mode.addEventListener("change", () => {
       ruleGeneration++;
@@ -357,7 +372,7 @@
       window.clearTimeout(ruleTimer);
       if (!manual()) ruleTimer = window.setTimeout(resolveRule, 200);
     });
-    field("tracking_mode").addEventListener("change", () => { ruleGeneration++; if (!manual()) resolveRule(); });
+    tracking.addEventListener("change", () => { ruleGeneration++; if (!manual()) resolveRule(); });
     search.addEventListener("input", () => { page = 0; render(); });
     more.addEventListener("click", () => { page++; render(); tree.scrollTop = 0; });
     previous.addEventListener("click", () => { page--; render(); tree.scrollTop = 0; });

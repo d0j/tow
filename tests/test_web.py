@@ -778,7 +778,7 @@ def test_add_and_edit_round_trip_selection_and_once_mode(monkeypatch):
     html = client.get("/").text
     assert 'name="selection_mode"' in html
     assert 'name="tracking_mode"' in html
-    assert "совпадение неоднозначно, ничего не запускается" in html.lower()
+    assert "нет совпадения или оно неоднозначно — ничего не запускается" in html.lower()
 
     topic["hash"] = "A" * 40
     topic["once_done"] = True
@@ -1690,7 +1690,8 @@ def test_ui_explains_observation_deletion_and_qbit_relocation():
     home = c.get("/").text + c.get("/topics/ui-topic/edit-panel").text  # M2
     sites = c.get("/sites").text
     assert "Убрать раздачу из TOW" in home
-    assert "Изменение папки: TOW попросит торрент-клиент" in home
+    # Said under the folder once it changes (content.js) and always without a script.
+    assert '<noscript><p class="field-hint">Файлы переместит торрент-клиент.</p></noscript>' in home
     assert "style=" not in home
     assert "style=" not in sites
     assert "Шаблон ссылки на раздачу (regex)" in sites
@@ -2166,7 +2167,8 @@ def test_a_refused_add_reopens_the_form_with_the_typed_values(monkeypatch):
     assert 'value="Мой сериал"' in page
     assert ">S01E03-E05</textarea>" in page
     assert '<option value="episodes" selected>' in page
-    assert '<option value="once" selected>' in page
+    # "Follow the topic" is a checkbox (1.32): a one-time add comes back cleared.
+    assert '<input id="topic-tracking-mode" name="tracking_mode" value="watch" type="checkbox">' in page
     assert load_state()["topics"] == []
 
 

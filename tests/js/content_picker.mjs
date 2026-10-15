@@ -294,6 +294,28 @@ assert.equal(offered.fields.selection_mode.options[1].text, "Choose files");
 const kept = setup(null, [files[0]], select(["all", "exact", "episodes", "files"]));
 assert.equal(kept.fields.selection_mode.options.filter((option) => option.value === "exact").length, 1, "an existing option is not repeated");
 
+// The box shows only for "Choose files"; a rule keeps a compact preview line; all files, nothing.
+const viewed = setup(null, [], (fields) => { fields.selection_mode.value = "all"; });
+assert.equal(viewed.root.dataset.view, "none", "all files: no picker");
+viewed.fields.selection_mode.value = "episodes"; viewed.fields.selection_mode.fire("change");
+assert.equal(viewed.root.dataset.view, "rule", "an episode rule keeps its preview entry");
+viewed.fields.selection_mode.value = "files"; viewed.fields.selection_mode.fire("change");
+assert.equal(viewed.root.dataset.view, "rule", "a pattern rule keeps its preview entry");
+viewed.fields.selection_mode.value = "exact"; viewed.fields.selection_mode.fire("change");
+assert.equal(viewed.root.dataset.view, "files", "choose files: the whole picker");
+
+// "Follow the topic" as a checkbox: ticked previews "watch", cleared what the form says ("once").
+const followed = setup(null, [], (fields) => {
+  Object.assign(fields.tracking_mode, { type: "checkbox", value: "watch", checked: true });
+  fields.tracking_unchecked = Object.assign(new Element(), { value: "once" });
+});
+followed.controls.load.fire("click"); await reply(followed.requests[0], snapshot);
+followed.fields.selection_mode.value = "episodes"; followed.fields.selection_value.value = "S01E01";
+followed.fields.selection_mode.fire("change");
+assert.equal(followed.requests.at(-1).options.body.get("tracking_mode"), "watch");
+followed.fields.tracking_mode.checked = false; followed.fields.tracking_mode.fire("change");
+assert.equal(followed.requests.at(-1).options.body.get("tracking_mode"), "once", "a cleared box previews a one-time add");
+
 // Sizes are rounded as the server rounds them: eight files of 1.4 GB are 11.2 GB, not 11.1 GB.
 globalThis.pickerMessages = JSON.stringify({ "web.bytes.gb": "{size} GB", "content.js.count": "{count} · {size}" });
 const sized = setup();
@@ -306,4 +328,4 @@ assert.match(sized.controls.status.textContent, /^8 · 11[.,]2 GB$/, "the total 
 assert.match(sized.controls.tree.querySelectorAll("*").find((n) => n.tagName === "small").textContent, /^1[.,]4 GB$/);
 globalThis.pickerMessages = "";
 
-console.log(JSON.stringify({ roundedSizes: true, exactNeedsScript: true, plainTextRefusals: true, localFileFollowsLink: true, cancelRestoresHidden: true, safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true, ruleContext: true, cacheLabel: true, explicitFresh: true, quotaConsent: true }));
+console.log(JSON.stringify({ pickerViews: true, followCheckbox: true, roundedSizes: true, exactNeedsScript: true, plainTextRefusals: true, localFileFollowsLink: true, cancelRestoresHidden: true, safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true, ruleContext: true, cacheLabel: true, explicitFresh: true, quotaConsent: true }));

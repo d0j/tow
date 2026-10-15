@@ -31,6 +31,14 @@ async def _interval_form(request: Request) -> str | None:
     return str(form["check_interval_min"]) if "check_interval_min" in form else None
 
 
+def _tracking(mode: str, unchecked: str) -> str:
+    """The lifecycle a topic form asks for. "Follow the topic" is a checkbox (``tracking_mode=watch``
+    when ticked); a cleared box sends nothing, so the form says what that means
+    (``tracking_unchecked=once``). A posted ``tracking_mode`` (an older page, a script) still
+    decides; neither means "watch"."""
+    return mode or unchecked or "watch"
+
+
 @router.get("/topics/{tid}/downloads.json", response_model=None)
 def topic_downloads(tid: str, limit: int = 100, offset: int = 0) -> dict[str, Any] | Response:
     state = services.load_state()
@@ -136,7 +144,8 @@ def topics_add(
     client_id: str = Form(""),
     selection_mode: str = Form("all"),
     selection_value: str = Form(""),
-    tracking_mode: str = Form("watch"),
+    tracking_mode: str = Form(""),
+    tracking_unchecked: str = Form(""),
     check_interval_min: str = Form(""),
     content_token: str = Form(""),
     selection_indices: str = Form(""),
@@ -150,7 +159,7 @@ def topics_add(
         client_id=client_id,
         selection_mode=selection_mode,
         selection_value=selection_value,
-        tracking_mode=tracking_mode,
+        tracking_mode=_tracking(tracking_mode, tracking_unchecked),
         check_interval_min=check_interval_min,
         content_token=content_token,
         selection_indices=selection_indices,
@@ -198,7 +207,8 @@ def topics_edit(
     client_id: str = Form(""),
     selection_mode: str = Form("all"),
     selection_value: str = Form(""),
-    tracking_mode: str = Form("watch"),
+    tracking_mode: str = Form(""),
+    tracking_unchecked: str = Form(""),
     check_interval_min: str | None = Depends(_interval_form),
     content_token: str = Form(""),
     selection_indices: str = Form(""),
@@ -210,7 +220,7 @@ def topics_edit(
         client_id=client_id,
         selection_mode=selection_mode,
         selection_value=selection_value,
-        tracking_mode=tracking_mode,
+        tracking_mode=_tracking(tracking_mode, tracking_unchecked),
         check_interval_min=check_interval_min,
         content_token=content_token,
         selection_indices=selection_indices,

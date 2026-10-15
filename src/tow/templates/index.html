@@ -37,7 +37,9 @@
 {% set bad_field = ({'no_site': 'topic-url', 'folder': 'topic-save-path', 'client': 'topic-client', 'selection': 'topic-selection-value', 'timer': 'topic-check-interval'}.get(draft.get('kind'), 'topic-url')) if draft.get('error') else '' %}
 <details class="add card" id="new"{% if draft.get('error') %} open{% endif %}>
   <summary>+</summary>
-  <form class="row new-topic-form" method="post" action="/topics/add" aria-labelledby="add-topic-title">
+  {#- Compact (1.32): content-sized fields in the shared form grid; a client choice only when there
+      is one to make; "follow" a checkbox. -#}
+  <form class="form-grid new-topic-form" method="post" action="/topics/add" aria-labelledby="add-topic-title">
     <h2 id="add-topic-title" class="add-title">{{ t('home.add.title') }}</h2>
     {% if draft.get('error') %}
     <div class="form-error add-error" id="add-error" role="alert" tabindex="-1" data-focus-field="{{ bad_field }}">
@@ -45,48 +47,50 @@
       {% if draft.get('kind') == 'no_site' %}<p class="sub"><a href="/sites#new">{{ t('home.add.add_site') }}</a></p>{% endif %}
     </div>
     {% endif %}
-    {% macro invalid(field, bad) %}{% if bad == field %} aria-invalid="true" aria-describedby="add-error"{% endif %}{% endmacro %}
-    <label for="topic-url">{{ t('home.add.url') }}</label>
-    <input id="topic-url" name="url" required placeholder="https://…" value="{{ draft.get('url', '') }}" inputmode="url"{{ invalid('topic-url', bad_field) }}>
-    <div class="row row-two">
-      <div><label for="topic-title">{{ t('home.add.name') }}</label><input id="topic-title" name="title" placeholder="{{ t('home.add.name_placeholder') }}" value="{{ draft.get('title', '') }}"><input type="hidden" id="topic-guessed-title" name="guessed_title" value="{{ draft.get('guessed_title', '') }}"><span id="guess-msg" class="field-hint" aria-live="polite"></span></div>
-      <div><label for="topic-save-path">{{ t('home.add.folder') }}</label><div class="folder-input"><input id="topic-save-path" name="save_path" list="save-roots" value="{{ draft.get('save_path') or (save_roots[0] if save_roots else '') }}" placeholder="{{ os_example_folder() }}" autocomplete="off"{{ invalid('topic-save-path', bad_field) }}><button type="button" class="ghost ico folder-toggle" data-save-folders aria-label="{{ t('home.add.recent_folders') }}" tabindex="-1" hidden><span aria-hidden="true">▾</span></button></div><p class="field-hint space-hint" data-space-hint aria-live="polite" hidden></p></div>
+    {% macro invalid(field, bad, hint='') %}{% if bad == field %} aria-invalid="true" aria-describedby="add-error{{ ' ' ~ hint if hint }}"{% elif hint %} aria-describedby="{{ hint }}"{% endif %}{% endmacro %}
+    <div class="field">
+      <label for="topic-url">{{ t('home.add.url') }}</label>
+      <input id="topic-url" class="w-xl" name="url" required placeholder="https://…" value="{{ draft.get('url', '') }}" inputmode="url"{{ invalid('topic-url', bad_field) }}>
     </div>
-    <label for="topic-client">{{ t('home.add.client') }}</label>
-    <select id="topic-client" name="client_id" required{{ invalid('topic-client', bad_field) }}>
-      {% for client in client_options %}
-      <option value="{{ client.id }}"{% if client.id == (draft.get('client_id') or default_client_id) %} selected{% endif %}>{{ client_name(client) }}</option>
-      {% endfor %}
-    </select>
-    <div class="row row-two">
-      <div>
-        <label for="topic-selection-mode">{{ t('home.add.what') }}</label>
-        <select id="topic-selection-mode" name="selection_mode" data-exact-option="{{ t('content.manual') }}">
-          {% set mode = draft.get('selection_mode', 'all') %}
+    <div class="field-row">
+      <div class="field"><label for="topic-title">{{ t('home.add.name') }}</label><input id="topic-title" class="w-m" name="title" placeholder="{{ t('home.add.name_placeholder') }}" value="{{ draft.get('title', '') }}"><input type="hidden" id="topic-guessed-title" name="guessed_title" value="{{ draft.get('guessed_title', '') }}"><span id="guess-msg" class="field-hint" aria-live="polite"></span></div>
+      <div class="field"><label for="topic-save-path">{{ t('home.add.folder') }}</label><div class="folder-input"><input id="topic-save-path" class="w-l" name="save_path" list="save-roots" value="{{ draft.get('save_path') or (save_roots[0] if save_roots else '') }}" placeholder="{{ os_example_folder() }}" autocomplete="off"{{ invalid('topic-save-path', bad_field) }}><button type="button" class="ghost ico folder-toggle" data-save-folders aria-label="{{ t('home.add.recent_folders') }}" tabindex="-1" hidden><span aria-hidden="true">▾</span></button></div><p class="field-hint space-hint" data-space-hint aria-live="polite" hidden></p></div>
+    </div>
+    {% set mode = draft.get('selection_mode', 'all') %}
+    <div class="field-row">
+      {% if client_options|length > 1 %}
+      <div class="field"><label for="topic-client">{{ t('home.add.client') }}</label>
+        <select id="topic-client" class="w-m" name="client_id" required{{ invalid('topic-client', bad_field) }}>
+          {% for client in client_options %}
+          <option value="{{ client.id }}"{% if client.id == (draft.get('client_id') or default_client_id) %} selected{% endif %}>{{ client_name(client) }}</option>
+          {% endfor %}
+        </select></div>
+      {% else %}
+      {#- One client (the usual install): nothing to choose, its id goes with the form. -#}
+      <input type="hidden" id="topic-client" name="client_id" value="{{ client_options[0].id if client_options else '' }}">
+      {% endif %}
+      <div class="field"><label for="topic-selection-mode">{{ t('home.add.what') }}</label>
+        <select id="topic-selection-mode" class="w-m" name="selection_mode" data-exact-option="{{ t('content.manual') }}">
           <option value="all"{% if mode == 'all' %} selected{% endif %}>{{ t('home.add.mode_all') }}</option>
           {% if mode == 'exact' %}<option value="exact" selected>{{ t('content.manual') }}</option>{% endif %}
           <option value="episodes"{% if mode == 'episodes' %} selected{% endif %}>{{ t('home.add.mode_episodes') }}</option>
           <option value="files"{% if mode == 'files' %} selected{% endif %}>{{ t('home.add.mode_files') }}</option>
-        </select>
-      </div>
-      <div>
-        <label for="topic-tracking-mode">{{ t('home.add.follow') }}</label>
-        <select id="topic-tracking-mode" name="tracking_mode">
-          <option value="watch"{% if draft.get('tracking_mode') != 'once' %} selected{% endif %}>{{ t('home.add.watch') }}</option>
-          <option value="once"{% if draft.get('tracking_mode') == 'once' %} selected{% endif %}>{{ t('home.add.once') }}</option>
-        </select>
-      </div>
+        </select></div>
     </div>
-    <div data-content-expression>
-    <label for="topic-selection-value">{{ t('home.add.selection') }}</label>
-    <textarea id="topic-selection-value" name="selection_value" rows="2" placeholder="{{ t('home.add.selection_placeholder') }}"{{ invalid('topic-selection-value', bad_field) }}>{{ draft.get('selection_value', '') }}</textarea>
-    <p class="sub">{{ t('home.add.selection_hint') }}</p>
+    <div class="field-row follow-row">
+      {#- A cleared box sends nothing: the hidden field says that means "once". -#}
+      <input type="hidden" name="tracking_unchecked" value="once">
+      <label class="check-label" for="topic-tracking-mode"><input id="topic-tracking-mode" name="tracking_mode" value="watch" type="checkbox"{% if draft.get('tracking_mode') != 'once' %} checked{% endif %}> {{ t('home.add.follow') }}</label>
+      <div class="field interval-field"><label for="topic-check-interval">{{ t('timer.field') }}</label>
+        <input id="topic-check-interval" class="w-xs" name="check_interval_min" type="number" min="1" max="10080" step="1" value="{{ draft.get('check_interval_min', '') }}"{{ invalid('topic-check-interval', bad_field, 'topic-check-interval-hint') }}>
+        <p id="topic-check-interval-hint" class="field-hint">{{ t('timer.hint') }}</p></div>
+    </div>
+    <div class="field" data-content-expression>
+      <label for="topic-selection-value">{{ t('home.add.selection') }}</label>
+      <textarea id="topic-selection-value" class="w-xl" name="selection_value" rows="2" placeholder="{{ t('home.add.selection_placeholder') }}"{{ invalid('topic-selection-value', bad_field, 'topic-selection-hint') }}>{{ draft.get('selection_value', '') }}</textarea>
+      <p class="field-hint" id="topic-selection-hint">{{ t('home.add.selection_hint') }}</p>
     </div>
     {% set topic = none %}{% include '_content_picker.html' %}
-    <label for="topic-check-interval">{{ t('timer.field') }}</label>
-    <input id="topic-check-interval" name="check_interval_min" type="number" min="1" max="10080" step="1" placeholder="{{ t('timer.global_placeholder') }}" value="{{ draft.get('check_interval_min', '') }}" aria-describedby="topic-check-interval-hint"{{ invalid('topic-check-interval', bad_field) }}>
-    <p id="topic-check-interval-hint" class="field-hint">{{ t('timer.hint') }}</p>
-    <p class="sub">{{ t('home.add.check_hint') }}</p>
     <p class="field-hint busy-note" data-busy-note role="status" hidden>{{ t('home.add.checking_note') }}</p>
     <div class="actions">
       <button type="submit" data-busy-label="{{ t('home.add.checking') }}">{{ t('home.add.submit') }}</button>
