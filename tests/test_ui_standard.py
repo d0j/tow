@@ -102,8 +102,9 @@ def test_the_copy_command_button_stays_one_line_in_the_master_key_note():
     rules = dict(_rules(CSS))
     assert "flex: 0 0 auto" in rules[".secret-store-copy"]
     assert "white-space: nowrap" in rules[".secret-store-copy > button"]
-    assert "flex-wrap: wrap" in rules[".flash.secret-store"]
-    assert "flex: 1 1 24rem" in rules[".flash.secret-store > span:first-child"]
+    # A red note since the notes became one component (it was a blue .flash).
+    assert "flex-wrap: wrap" in rules[".notice.secret-store"]
+    assert "flex: 1 1 24rem" in rules[".notice.secret-store > .notice-text"]
 
 
 def test_the_home_progress_link_is_a_24_px_target_that_looks_the_same():

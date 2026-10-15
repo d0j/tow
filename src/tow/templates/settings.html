@@ -10,12 +10,11 @@
   </header>
 
   {#- Also while the last check stayed blocked by them ("Needs attention" lands here): the
-      command that says why is one copy away. -#}
+      command that says why is one copy away. A red note while it lasts, not a message. -#}
   {% if secret_store_error or hh.check_error == 'secrets_migration_required' %}
-  <div class="flash secret-store" id="secret-store" role="alert">
-    <span>{{ tm('settings.page.secret_store', help='/settings/help#export-import', launcher=os_launcher()) }}</span>
+  {% call note(tm('settings.page.secret_store', help='/settings/help#export-import', launcher=os_launcher()), 'bad', id='secret-store', cls='secret-store', tag='div') -%}
     <span class="secret-store-copy"><button type="button" class="ghost sm" data-copy-text="{{ os_launcher() }} keys status"{{ fix_attrs('copy_keys_status') }}>{{ t('settings.page.copy_command') }}</button> <span id="copy-command-status" class="field-hint" role="status"></span></span>
-  </div>
+  {%- endcall %}
   {% endif %}
 
   <div class="settings-content" id="settings-acc">

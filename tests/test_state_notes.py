@@ -115,3 +115,23 @@ def test_a_note_lights_up_where_a_link_lands():
     rules = _rules(CSS)
     landing = next(selector for selector in rules if selector.startswith(":is(.row-wrap"))
     assert ".notice" in landing
+
+
+def test_the_master_key_problem_is_one_red_note_with_its_command(client):
+    from tow.config import load_config
+    from tow.store import load_state
+    from tow.web.views import attention_view
+
+    _state(check_ok=False, check_error="secrets_migration_required")
+    page = _page(client, "/settings")
+    note = page.select_one("#secret-store")
+    assert note["class"] == ["notice", "bad", "secret-store"]  # was a blue message strip
+    assert note["role"] == "note"  # was an alert, said again on every visit
+    assert not page.select(".flash.secret-store")
+    assert note.select_one("a[href='/settings/help#export-import']") is not None  # its instructions
+    copy = note.select_one("button[data-copy-text]")
+    assert copy["data-copy-text"].endswith(" keys status")
+    assert note.select_one("#copy-command-status") is not None
+    # Needs attention still names it, and lands on this note.
+    [entry] = attention_view(load_state(), load_config())["entries"]
+    assert (entry["kind"], entry["severity"]) == ("check_blocked", "bad")
