@@ -126,6 +126,11 @@ def _inside(path: str, root: str, *, fold: bool = False) -> bool:
     return path == root or path.startswith(root.rstrip("\\/") + separator)
 
 
+def _root_relative(path: str) -> bool:
+    """``/Windows``, ``\\Users\\x``: rooted, but without a drive letter or a share."""
+    return path.startswith(("/", "\\")) and not path.startswith(("//", "\\\\"))
+
+
 _SHORT_NAME = re.compile(r"~\d")
 
 
@@ -135,7 +140,7 @@ def _ambiguous_component(path: str) -> str | None:
     ``AppData.`` and ``AppData `` are ``AppData`` (trailing dots and spaces are dropped), and
     ``APPDAT~1`` is the 8.3 short name of ``AppData``: compared as text they slip past the rule.
     """
-    if not _windows_shaped(path):
+    if not (_windows_shaped(path) or (_root_relative(path) and platform.current().name == "windows")):
         return None
     for part in re.split(r"[\\/]+", path):
         if not part or (len(part) == 2 and part[1] == ":"):
@@ -187,8 +192,12 @@ def _protected_by(path: str) -> str | None:
     if is_windows_device_path(path):
         return "windows"
     candidates = [path]
-    if (real := _real_path(path)) is not None:
-        candidates.append(real)
+    # A client on a Windows PC opens /Windows/System32 on its current drive, C:\Windows\System32
+    # (since Python 3.13 not an absolute path for os.path there). A remote Linux client's
+    # /downloads is no such folder and stays usable.
+    if _root_relative(path):
+        candidates.append(windows.on_system_drive(path))
+    candidates += [real for real in map(_real_path, list(candidates)) if real is not None]
     # Any profile's AppData of a Windows client (C:\Users\<name>\AppData), also when TOW runs on
     # Linux or macOS and knows no Windows profile of its own.
     if any(_windows_shaped(candidate) and windows.is_profile_appdata(candidate) for candidate in candidates):

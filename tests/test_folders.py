@@ -132,6 +132,49 @@ def test_a_windows_clients_appdata_is_protected_whatever_tow_runs_on(monkeypatch
             assert not is_protected_folder(path), path
 
 
+_ROOT_RELATIVE_SYSTEM = (
+    "/Windows/System32",
+    "/Windows\\System32",
+    "\\Windows\\System32",
+    "/windows/system32/drivers",
+    "/Program Files/x",
+    "/ProgramData/Microsoft/Windows/Start Menu/Programs/StartUp",
+    "/Users/bob/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup",
+    "/users/x/appdata/roaming/microsoft/windows/start menu/programs/startup",
+)
+
+
+@pytest.mark.parametrize("name", ["windows", "linux", "macos"])
+def test_a_root_relative_path_is_read_on_the_windows_system_drive_too(monkeypatch, name):
+    """A client on a Windows PC opens ``/Windows/System32`` as ``C:\\Windows\\System32`` (the
+    current drive): written without a drive letter, a system or Startup folder stays refused."""
+    from tow.folders import save_path_policy_problem, save_path_problem
+
+    for variable in ("SystemRoot", "ProgramFiles", "ProgramData", "APPDATA", "LOCALAPPDATA", "USERPROFILE"):
+        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setenv("SYSTEMDRIVE", "C:")
+    backend = PosixBackend(name, home="/no-such-home-for-tow/x") if name != "windows" else WindowsBackend()
+    with platform.use(backend):
+        for path in _ROOT_RELATIVE_SYSTEM:
+            if path.startswith("/"):
+                assert save_path_problem(path) is None, path  # the syntax of a remote client's folder
+            assert save_path_policy_problem(path), path
+            assert is_protected_folder(path), path
+        # A remote Linux client's folders stay usable, also from a Windows PC.
+        for path in ("/downloads/tv", "/Users/bob/Videos", "/mnt/media/Windows", "/srv/ProgramDataBackup"):
+            assert save_path_policy_problem(path) is None, path
+
+
+def test_a_root_relative_path_with_a_name_windows_reads_as_another_is_refused_on_windows(monkeypatch):
+    from tow.folders import save_path_policy_problem
+
+    monkeypatch.delenv("USERPROFILE", raising=False)
+    monkeypatch.setenv("SYSTEMDRIVE", "C:")
+    with platform.use(WindowsBackend()):
+        for path in ("/Users/bob/AppData./Roaming/x", "/Users/bob/APPDAT~1/Roaming/x", "/Windows /System32"):
+            assert save_path_policy_problem(path), path
+
+
 def test_seen_from_here_needs_the_drive_or_top_folder_of_this_machine(tmp_path):
     assert seen_from_here(str(tmp_path / "Show" / "S01"))
     assert not seen_from_here("/no-such-top-folder-for-tow/tv")  # a client in a container

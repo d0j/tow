@@ -434,15 +434,25 @@ def is_profile_appdata(path: str) -> bool:
     return bool(_PROFILE_APPDATA.match(ntpath.normcase(ntpath.normpath(path))))
 
 
+def _system_drive() -> str:
+    drive = os.environ.get("SYSTEMDRIVE", "").strip()
+    return drive if re.fullmatch(r"[A-Za-z]:", drive) else "C:"
+
+
 def protected_folders() -> list[str]:
     """Windows and program folders, AppData (incl. the Startup folder): never a download target."""
     roots = [os.environ.get(name, "") for name in _PROTECTED_ENV]
     profile = os.environ.get("USERPROFILE", "")
     if profile:
         roots.append(ntpath.join(profile, "AppData"))
-    drive = os.environ.get("SYSTEMDRIVE", "") or "C:"
-    roots += [ntpath.join(drive + "\\", name) for name in _DEFAULT_PROTECTED]
+    roots += [ntpath.join(_system_drive() + "\\", name) for name in _DEFAULT_PROTECTED]
     return list(dict.fromkeys(root for root in roots if root))
+
+
+def on_system_drive(path: str) -> str:
+    """A root-relative path (``/Windows/System32``, ``\\Users\\x``) as a program on a Windows PC
+    opens it: on its current drive, which for a torrent client is the system drive."""
+    return ntpath.join(_system_drive() + "\\", path.lstrip("/\\"))
 
 
 # --- folders for this account only --------------------------------------------------------------
