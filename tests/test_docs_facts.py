@@ -107,3 +107,41 @@ def test_the_guides_explain_the_current_problem_triangle_and_recovery(guide, wor
     text = " ".join((ROOT / guide).read_text(encoding="utf-8").split())
     for word in words:
         assert word in text, word
+
+
+@pytest.mark.parametrize(
+    "doc",
+    ["README.md", "README.ru.md", "docs/guide.md", "docs/ru/guide.md", "docs/install.md", "docs/ru/install.md"],
+)
+def test_text_lines_fit_120_columns(doc):
+    """README.ru.md had a 124-character line; tables, links and HTML may be longer (repository style)."""
+    long = [
+        f"{doc}:{number}"
+        for number, line in enumerate((ROOT / doc).read_text(encoding="utf-8").splitlines(), 1)
+        if len(line) > 120 and not line.lstrip().startswith(("|", "<")) and "](" not in line and "://" not in line
+    ]
+    assert long == []
+
+
+@pytest.mark.parametrize(
+    ("doc", "words"),
+    [
+        ("README.md", ("[Site access](docs/PROTECTION.md) |", "**Site behind a browser check?**")),
+        ("README.ru.md", ("[Доступ к сайтам](docs/ru/protection.md) |", "**Сайт за браузерной проверкой?**")),
+        ("docs/guide.md", ("| **Settings** | **Site access**", "| Site retry |", "checks you start wait for it too")),
+        (
+            "docs/ru/guide.md",
+            (
+                "| **Настройки** | **Доступ к сайтам**",
+                "| Повтор по сайту |",
+                "проверки, запущенные вами, тоже его ждут",
+            ),
+        ),
+    ],
+)
+def test_the_docs_name_site_access_and_site_retries(doc, words):
+    """Settings starts with Site access and checks are retried after an outage since 1.30, but the README and the
+    guides did not say so; the guide still said a manual check ignores a site's own request to wait (1.30.0)."""
+    text = " ".join((ROOT / doc).read_text(encoding="utf-8").split())
+    for word in words:
+        assert word in text, word
