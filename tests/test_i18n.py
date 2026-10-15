@@ -820,7 +820,7 @@ def test_every_russian_text_is_translated():
 
 _RU_JARGON = re.compile(
     r"\b(tracker|session|secrets?|read-back|scheduler|redirect|browser-auth|cross-origin|allowlist|origin)\b"
-    r"|браузер-auth|\bэпизод",
+    r"|браузер-auth|\bэпизод|\bсесси",
     re.IGNORECASE,
 )
 # The owner is addressed formally ("укажите"), never "укажи".
