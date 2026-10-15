@@ -130,15 +130,21 @@ the `installers` workflow on 24.04). The legacy
 
 ## Publishing a release
 
-The release commit (version in `pyproject.toml`, changelogs) has the subject `release: vX.Y.Z - <summary>`.
+A release is one pull request from a work branch. It holds the area commits (`web: …`, `clients: …`), each
+with its tests and its lines under `## [Unreleased]` in both changelogs, and ends with one release commit
+`release: vX.Y.Z - <summary>` that changes nothing but the version (`pyproject.toml`, `uv.lock`) and turns
+`[Unreleased]` into the dated section of that version in `CHANGELOG.md` and `CHANGELOG.ru.md`. Code never goes
+into the release commit.
 Pull requests that touch the installers, the updater or the dependencies also run the `installers`
 workflow: the Windows bundle and `install.ps1`, and the update of the latest release to the pull request
 (`scripts/update-smoke.py`: a broken copy must roll back, then the real update) on Windows, Linux and
 macOS.
 
-Merge the release commit through a pull request that is up to date with `main` (its last `ci` run then
-covers the merge; otherwise wait for `ci` on `main`). Fetch `origin/main` and create
-an annotated tag on the merge commit with the message `TOW X.Y.Z`
+Merge the pull request with **Rebase and merge** once it is up to date with `main` (its last `ci` run then
+covers the merge; otherwise wait for `ci` on `main`): `main` gets every commit as it is, with no merge commit,
+and the release commit is its tip. GitHub cannot rebase-merge more than 100 commits; split a longer branch.
+The repository deletes the merged head branch (`--delete-branch-on-merge`); delete a merged local branch
+yourself. Fetch `origin/main` and create an annotated tag on the release commit with the message `TOW X.Y.Z`
 (`git tag -a vX.Y.Z -m "TOW X.Y.Z" origin/main`). Publish it with:
 
 ```sh

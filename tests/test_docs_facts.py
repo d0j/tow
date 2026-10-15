@@ -177,3 +177,16 @@ def test_the_architecture_names_every_module():
     roadmap = " ".join((ROOT / "docs" / "ROADMAP.md").read_text(encoding="utf-8").split())
     for fact in ("automatic retries after a site outage", "waits in a bounded queue", "long verification of existing"):
         assert fact in roadmap, fact
+
+
+def test_contributing_describes_the_release_flow_in_use():
+    """Releases are area commits plus a version-only release commit in one rebase-merged pull request, and the
+    merged head branch is deleted; CONTRIBUTING spoke only of merging "the release commit"."""
+    contributing = " ".join((ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8").split())
+    for words in (
+        "holds the area commits",
+        "changes nothing but the version",
+        "**Rebase and merge**",
+        "deletes the merged head branch",
+    ):
+        assert words in contributing, words
