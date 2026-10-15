@@ -8,8 +8,19 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-ENGLISH = [ROOT / "README.md", ROOT / "docs" / "guide.md", ROOT / "docs" / "install.md", ROOT / "config.example.yaml"]
-RUSSIAN = [ROOT / "README.ru.md", ROOT / "docs" / "ru" / "guide.md", ROOT / "docs" / "ru" / "install.md"]
+ENGLISH = [
+    ROOT / "README.md",
+    ROOT / "docs" / "guide.md",
+    ROOT / "docs" / "install.md",
+    ROOT / "docs" / "PROTECTION.md",
+    ROOT / "config.example.yaml",
+]
+RUSSIAN = [
+    ROOT / "README.ru.md",
+    ROOT / "docs" / "ru" / "guide.md",
+    ROOT / "docs" / "ru" / "install.md",
+    ROOT / "docs" / "ru" / "protection.md",
+]
 
 # Word -> the term the table gives for it.
 _ENGLISH_WRONG = {
