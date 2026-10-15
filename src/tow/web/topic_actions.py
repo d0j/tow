@@ -38,15 +38,9 @@ from tow.torrent import TorrentMetadata, parse_torrent_metadata
 from tow.trackers import GenericHttpTracker, load_trackers, match_tracker
 from tow.web import check_jobs, services
 from tow.web.check_actions import enqueue_check
+from tow.web.messages import flash_redirect, topic_subject, use_subject
 from tow.web.text import t
-from tow.web.views import (
-    add_refused_redirect,
-    flash_redirect,
-    manual_check_flash,
-    topic_check_row,
-    topic_subject,
-    use_subject,
-)
+from tow.web.views import add_refused_redirect, manual_check_flash, topic_check_row
 
 
 class Refused(Exception):

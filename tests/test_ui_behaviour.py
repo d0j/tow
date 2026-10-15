@@ -103,12 +103,12 @@ def test_routes_say_the_kind_of_their_message():
 
 
 def test_no_route_writes_a_message_into_an_address():
-    """Every message goes through the server-side store (tow.web.views.flash_location)."""
+    """Every message goes through the server-side store (tow.web.messages.flash_location)."""
     from pathlib import Path
 
     src = Path(__file__).parents[1] / "src" / "tow"
     for path in [*(src / "web").glob("*.py"), src / "static" / "app.js"]:
-        if path.name != "views.py":
+        if path.name not in {"views.py", "messages.py"}:
             assert "flash=" not in path.read_text(encoding="utf-8"), path.name
 
 

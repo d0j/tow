@@ -11,8 +11,8 @@ from tow import access, undo
 from tow.config import whole_number
 from tow.store_transaction import StoreTransaction
 from tow.web import services
+from tow.web.messages import flash_redirect
 from tow.web.site_store import save_together
-from tow.web.views import flash_redirect
 
 router = APIRouter()
 _TARGET = "/settings?open=protection#acc-protection"

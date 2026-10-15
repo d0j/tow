@@ -19,9 +19,9 @@ from tow.clients.view import topics_using
 from tow.config import interval_sec_of, whole_number
 from tow.store_transaction import StoreTransaction
 from tow.web import services
+from tow.web.messages import flash_redirect, use_subject
 from tow.web.site_store import save_secrets_with_undo, save_together
 from tow.web.text import t
-from tow.web.views import flash_redirect, use_subject
 
 router = APIRouter()
 

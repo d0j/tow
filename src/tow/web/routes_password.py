@@ -28,10 +28,11 @@ from tow.config import as_bool
 from tow.store import SecretStoreError
 from tow.store_transaction import StoreTransaction, TransactionError
 from tow.web import _context, services
+from tow.web.messages import flash_redirect
 from tow.web.site_store import save_together
 from tow.web.templating import TEMPLATES
 from tow.web.text import t
-from tow.web.views import first_run, flash_redirect
+from tow.web.views import first_run
 
 router = APIRouter()
 

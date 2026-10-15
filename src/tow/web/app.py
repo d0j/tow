@@ -46,8 +46,8 @@ from tow.web import (
     routes_undo,
     templating,
 )
+from tow.web.messages import flash_redirect, resolve_subject
 from tow.web.text import t
-from tow.web.views import flash_redirect, resolve_subject
 from tow.yaml_guard import YamlLimitError
 
 # The order routes are matched in: a fixed path before a parameterised one that would match

@@ -12,10 +12,10 @@ from starlette.concurrency import run_in_threadpool
 
 from tow.config import as_bool, interval_sec_of
 from tow.web import services
+from tow.web.messages import flash_redirect
 from tow.web.site_form import internal_host, unresolved_note
 from tow.web.site_store import save_secrets_with_undo
 from tow.web.text import t
-from tow.web.views import flash_redirect
 
 router = APIRouter()
 

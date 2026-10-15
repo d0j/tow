@@ -184,7 +184,7 @@ flowchart TD
 | `tow.locations`, `tow.backup_actions`, `tow.backup_retention` | Where each kind of backup goes; Check, Restore and Delete bound to the selected copy; which night copies retention keeps. |
 | `tow.supervisor` helpers | `_os` (the children's Python, starting an owned child with its output in a file, the port check), `parent` (`tow serve --parent-pid`: the server ends with the supervisor), `starter` (`tow start`). |
 | `tow.platform` backends | `windows` and `posix` (Linux and macOS), with the helpers they share in `_common`. |
-| `tow.web` helpers | `middleware` (who may ask, the headers, recovery before dispatch), `_context` (one request's config, state and secrets, each read once), `templating` and `text` (templates and texts in the page's language), `site_form`, `site_actions` and `site_store` (what the site forms accept, do and write), `topic_actions` (the topic forms on Home). |
+| `tow.web` helpers | `middleware` (who may ask, the headers, recovery before dispatch), `_context` (one request's config, state and secrets, each read once), `templating` and `text` (templates and texts in the page's language), `messages` (a message after an action: its record - kind, subject, text, id, undo stamp -, the subject a topic, site or client route names before it changes anything, the "{subject} — {result}" wording and the redirect that shows it once; `static/messages.js` shows it, collapses it into the header's recent messages and keeps this tab's history), `site_form`, `site_actions` and `site_store` (what the site forms accept, do and write), `topic_actions` (the topic forms on Home). |
 
 Three places speak about problems, each for its own moment:
 

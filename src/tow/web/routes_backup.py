@@ -24,9 +24,9 @@ from tow.restore_points import CREATE_FAILED, INVALID_FILE, ROLLBACK_FAILED, Res
 from tow.snapshots import SnapshotError
 from tow.store import StoreCorruptionError
 from tow.web import services
+from tow.web.messages import flash_redirect
 from tow.web.templating import TEMPLATES
 from tow.web.text import format_bytes, t
-from tow.web.views import flash_redirect
 
 router = APIRouter()
 

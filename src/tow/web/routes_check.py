@@ -9,15 +9,9 @@ from tow.check import blocked_by_previous_revision
 from tow.store import CheckBusyError, SecretStoreError
 from tow.web import check_jobs, services
 from tow.web.check_actions import enqueue_check, topic_feedback
+from tow.web.messages import flash_redirect
 from tow.web.text import t
-from tow.web.views import (
-    check_job_message,
-    check_progress,
-    feedback_redirect,
-    flash_redirect,
-    result_location,
-    topic_check_row,
-)
+from tow.web.views import check_job_message, check_progress, feedback_redirect, result_location, topic_check_row
 
 router = APIRouter()
 

@@ -26,7 +26,7 @@ from tow.bind import origin_matches_request
 from tow.bundle import MAX_BUNDLE_BYTES
 from tow.torrent import MAX_TORRENT_BYTES
 from tow.web import _context, services, site_store
-from tow.web.views import flash_at
+from tow.web.messages import flash_at
 
 _PORTABLE_UPLOAD_REQUEST_LIMIT = MAX_BUNDLE_BYTES + 2 * 1024 * 1024
 _UPLOAD_LIMITS = {
