@@ -6,6 +6,7 @@ Outside a request (a test, a background thread) the language is the owner's.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from typing import Any
 
 from markupsafe import Markup, escape
@@ -42,6 +43,25 @@ def tm(key: str, /, **params: Any) -> Markup:
     text = _MARKUP_LINK.sub(link, text).replace("&lt;/a&gt;", "</a>")
     text = _MARKUP_TAG.sub(r"<\1\2>", text)
     return Markup(i18n.fill(text, {name: str(escape(value)) for name, value in params.items()}))
+
+
+_FIRST_WORD = re.compile(r"\w[\w.+-]*")
+
+
+def sentence(text: str, names: Iterable[str] = ()) -> str:
+    """``text`` said on its own, as a sentence: its first letter upper-case ("saved" -> "Saved";
+    catalog texts that are also the end of "{subject} — {result}" start in lower case). A text that
+    starts with a name keeps its spelling: a word with a capital inside it ("qBittorrent",
+    "macOS"), a dot, a digit or "_" in it (a host, a site key), or one of ``names`` (a site, a
+    client or a messenger as the settings call it: "nnmclub", "ntfy")."""
+    word = _FIRST_WORD.match(text)
+    if word is None or not text[:1].islower():
+        return text
+    first = word.group(0)
+    inner_capital = any(letter.isupper() for letter in first[1:])
+    if not first.isalpha() or inner_capital or first.casefold() in {str(name).casefold() for name in names}:
+        return text
+    return text[:1].upper() + text[1:]
 
 
 def format_bytes(value: Any) -> str:

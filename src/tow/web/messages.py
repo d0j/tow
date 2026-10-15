@@ -28,7 +28,7 @@ from tow.errors import Msg, TowError
 from tow.log import owner_language
 from tow.records import shown_title
 from tow.web import _context, services
-from tow.web.text import t
+from tow.web.text import sentence, t
 
 # ok: done; info: accepted, queued, skipped or awaiting confirmation; warn: transport trouble or a
 # real caution; err: an actionable failure (the status-colour contract).
@@ -86,6 +86,39 @@ def _local_href(href: str) -> str:
     return value[:500]
 
 
+def known_names() -> frozenset[str]:
+    """The names a message may start with that keep their own spelling (``text.sentence``): every
+    site's key and title, every torrent client's id, kind and title, every messenger's kind and
+    name - a lower-case "nnmclub" or "ntfy" is a name, not a word. Once per request."""
+
+    def build() -> frozenset[str]:
+        from tow.clients.factory import client_configurations
+        from tow.jsonish import as_dict
+        from tow.notifiers.registry import kinds
+
+        names: set[str] = set()
+        try:
+            cfg = _context.config()
+            for key, spec in as_dict(cfg.get("trackers")).items():
+                names.update((str(key), str(as_dict(spec).get("title") or "")))
+            for row in client_configurations(cfg):
+                names.update(str(row.get(field) or "") for field in ("id", "kind", "title"))
+        except OSError, ValueError, TypeError, RuntimeError:
+            pass  # unreadable settings: the words alone decide
+        for kind, module in kinds().items():
+            names.update((str(kind), str(getattr(module, "TITLE", "") or "")))
+        names.discard("")
+        return frozenset(names)
+
+    return _context.memo("message_names", build)
+
+
+def starts_with_name(text: str) -> bool:
+    """``text`` starts with a name that keeps its spelling at the start of a message
+    (``text.sentence``: "qBittorrent …", "nnmclub: …", "rutor.info …")."""
+    return bool(text[:1].islower()) and sentence(text, known_names()) == text
+
+
 def record(
     text: str,
     kind: str = "ok",
@@ -96,11 +129,17 @@ def record(
     href: str = "",
     link: str = "",
     cancel: str = "",
+    value_first: bool = False,
 ) -> dict[str, str]:
     """One message: ``text`` in the page's language, its kind, what it is about, its identity in
     the page's history (a new random one by default), when it was said, the page it offers
     (``href``, named ``link``: "View results") and the address its Cancel posts to (``cancel``:
-    a check that waits) - addresses of this TOW only."""
+    a check that waits) - addresses of this TOW only.
+
+    ``named`` ("1") says that the words start with a name - one ``text.sentence`` knows, or a value
+    its catalog text puts first (``value_first``: "{tracker}: all mirrors are paused") - which a
+    message said on its own keeps as written; other words start it as a sentence
+    (``message_text``, messages.js)."""
     said = {
         "id": message_id or secrets.token_urlsafe(9),
         "text": text,
@@ -108,6 +147,8 @@ def record(
         "subject": " ".join(str(subject or "").split())[:200],
         "at": str(int(time.time() if at is None else at)),
     }
+    if value_first or starts_with_name(str(text or "")):
+        said["named"] = "1"
     if (target := _local_href(href)) and link:
         said.update(href=target, link=" ".join(str(link).split())[:80])
     if cancel_at := _local_href(cancel):
@@ -138,6 +179,17 @@ def flash_text(message: Any, /, **params: Any) -> str:
         return message.text()
     text = str(message or "")
     return t(text, **params) if text and i18n.has(text) else text
+
+
+def starts_with_value(message: Any) -> bool:
+    """The catalog text of ``message`` (a key, a ``Msg`` or a typed error) starts with a value - a
+    name its caller gave ("{tracker}: all mirrors are paused", an error's site prefix) - which
+    keeps its own spelling at the start of a message."""
+    if isinstance(message, (Msg, TowError)):
+        code, prefixed = message.code, bool(message.params.get("_prefix"))
+    else:
+        code, prefixed = str(message or ""), False
+    return prefixed or (i18n.has(code) and i18n.translate(code).lstrip().startswith("{"))
 
 
 def use_subject(value: str) -> None:
@@ -172,12 +224,13 @@ def resolve_subject(request: Request) -> None:
 
 def message_text(message: Mapping[str, Any] | None) -> str:
     """A message as the page says it: "{subject} — {result}" for one about a topic, a site or a
-    client, the result alone (as a sentence) for a global one; never the subject twice."""
+    client, the result alone, as a sentence, for a global one; never the subject twice. Words
+    that start with a name (``named``, ``record``) keep it as written: never "QBittorrent"."""
     message = message or {}
     text = str(message.get("text") or "").strip()
     subject = str(message.get("subject") or "").strip()
     if not subject or text.casefold().startswith(f"{subject} — ".casefold()):
-        return text[:1].upper() + text[1:]
+        return text if message.get("named") else text[:1].upper() + text[1:]
     return t("web.message.subject_result", subject=subject, result=text)
 
 
@@ -198,7 +251,14 @@ def flash_location(
     text = flash_text(message, **params)
     if not text:
         return url
-    said = record(text, kind, subject=_context.subject() if subject is None else subject, href=href, link=link)
+    said = record(
+        text,
+        kind,
+        subject=_context.subject() if subject is None else subject,
+        href=href,
+        link=link,
+        value_first=starts_with_value(message),
+    )
     # The undo this action made goes with its message: a check right after a save says
     # "Connected" without an "Undo" that would put the save back.
     if stamped := services.undo_stamped_here():

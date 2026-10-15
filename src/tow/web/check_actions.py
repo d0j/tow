@@ -81,6 +81,7 @@ def accept_check(*, topic_id: str, apply: bool, action: str, adopted: bool = Fal
     message = check_status_message(job)
     if job["status"] in {"queued", "running"}:
         message["text"] = i18n.t("web.check_all.started" if starts_now else "web.check_all.queued")
+        message.pop("named", None)  # catalog words now: a sentence when said on their own
     body = {
         "accepted": True,
         "action": action,

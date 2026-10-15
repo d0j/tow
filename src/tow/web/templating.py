@@ -30,7 +30,7 @@ from tow.jsonish import as_dict
 from tow.log import check_error_label
 from tow.status import site_check_tone
 from tow.web import _context, services
-from tow.web.messages import message_text, topic_subject
+from tow.web.messages import message_text, starts_with_name, topic_subject
 from tow.web.text import t, tm
 from tow.web.views import attention_view, stored_ui_time
 
@@ -323,9 +323,9 @@ def content_existing(topic: dict[str, Any] | None) -> list[dict[str, str]]:
 
 def sentence(text: object) -> str:
     """A message as a sentence: its first letter upper-case (catalog texts that are also parts
-    of longer messages start in lower case)."""
+    of longer messages start in lower case) - never a name's ("qBittorrent", "nnmclub")."""
     value = str(text or "")
-    return value[:1].upper() + value[1:]
+    return value if starts_with_name(value) else value[:1].upper() + value[1:]
 
 
 @pass_context

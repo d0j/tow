@@ -21,6 +21,7 @@ const page = ({ storage, served = null, undo = null, address = "http://127.0.0.1
   const strip = served && ["div", {
     class: "flash error", id: "flash", role: "alert", "data-message-id": served.id, "data-kind": served.kind,
     "data-subject": served.subject, "data-text": served.text, "data-at": "1800000000", ...(served.undo ? { "data-undo": served.undo } : {}),
+    ...(served.named ? { "data-named": "1" } : {}),
   }, ["span", { class: "msg-text" }, `${served.subject} — ${served.text}`]];
   const header = build(document, ["header", { class: "app" },
     ["details", { class: "attention-menu", id: "current-problems", "data-attention": "" }, ["summary", {}, "!"]],
@@ -153,6 +154,24 @@ assert.equal(offline.$("#flash .msg-text").textContent, "Partly saved");
 offline.timers.advance(400);
 assert.equal(offline.$("#announce").textContent, "Warning: Partly saved");
 verdict.storageBlocked = true;
+
+// Words that start with a name (the server's record says so: data-named, "named") keep it as
+// written, in the strip, in what is said and in the history: it showed "QBittorrent …" and
+// "Nnmclub: …". Catalog words said on their own still start as a sentence.
+{
+  const named = page({ storage: memoryStorage(), served: { id: "n1", kind: "warn", subject: "", text: "nnmclub: all mirrors are paused", named: true } });
+  assert.equal(named.$("#flash .msg-text").textContent, "nnmclub: all mirrors are paused");
+  named.timers.advance(400);
+  assert.equal(named.$("#announce").textContent, "Warning: nnmclub: all mirrors are paused");
+  named.window.towMessages.showMessage({ kind: "err", text: "qBittorrent does not answer", named: "1" });
+  assert.equal(named.$("#flash .msg-text").textContent, "qBittorrent does not answer");
+  named.window.towMessages.showMessage({ kind: "info", text: "check sent" });
+  assert.equal(named.$("#flash .msg-text").textContent, "Check sent");
+  named.menu.open = true;
+  const texts = named.document.root.querySelectorAll("[data-messages-list] .msg-entry-text").map((node) => node.textContent);
+  assert.deepEqual(texts, ["Check sent", "qBittorrent does not answer", "nnmclub: all mirrors are paused"]);
+}
+verdict.namesKeepTheirSpelling = true;
 
 // Another script shows a message the same way, and gets the same strip.
 offline.window.towMessages.showMessage({ kind: "err", subject: "Show", text: "could not confirm the result" });
