@@ -301,8 +301,13 @@ def _languages() -> list[dict[str, str]]:
 
 def js_texts() -> dict[str, str]:
     """The ``js.*`` texts of app.js in the current language (base.html hands them over as JSON),
-    and the language's date pattern under ``_datetime`` (not a catalog key)."""
-    return {**i18n.texts_with_prefix("js."), "_datetime": i18n.datetime_pattern()}
+    the secret fields' eye (``web.secret.*``), and the language's date pattern under ``_datetime``
+    (not a catalog key)."""
+    return {
+        **i18n.texts_with_prefix("js."),
+        **i18n.texts_with_prefix("web.secret."),
+        "_datetime": i18n.datetime_pattern(),
+    }
 
 
 def content_texts() -> dict[str, str]:

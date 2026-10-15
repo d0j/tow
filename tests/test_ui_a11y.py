@@ -336,6 +336,54 @@ def test_a_refused_field_has_a_red_border_not_only_the_focus_ring():
     assert "box-shadow: 0 0 0 1px var(--bad)" in rule
 
 
+def test_a_secret_fields_eye_is_a_named_toggle_button_inside_the_field(client):
+    """Secret fields had no way to check a pasted token. The eye is a real button (type=button:
+    it never sends the form) that names its field, controls it and says whether it is pressed;
+    "saved - leave empty to keep" is a hint the field is described by, never a placeholder. The
+    eye sits inside the field's end, as tall as the field allows."""
+    from bs4 import BeautifulSoup
+
+    from tow.web.templating import TEMPLATES
+
+    _seed()
+    client.get("/")  # a request sets the page language for the macros
+    html = TEMPLATES.env.from_string(
+        '{% from "_secret.html" import reveal, saved_hint %}'
+        '<span class="secret"><input type="password" id="tok" aria-describedby="tok-saved">'
+        "{{ reveal('tok', 'Bot token') }}</span>{{ saved_hint('tok-saved') }}"
+    ).render()
+    page = BeautifulSoup(html, "html.parser")
+    eye = page.select_one(".secret > button.ico.reveal")
+    assert eye is not None
+    assert (eye["type"], eye["data-reveal"], eye["aria-controls"], eye["aria-pressed"]) == (
+        "button",
+        "tok",
+        "tok",
+        "false",
+    )
+    assert eye["aria-label"] == eye["title"] == "Показать «Bot token»"
+    assert eye.select_one("use")["href"] == "#i-eye"
+    assert page.select_one("#tok-saved").get_text() == "Сохранён · оставьте пустым, чтобы не менять"
+    sprite = client.get("/").text
+    assert '<symbol id="i-eye" ' in sprite
+    assert '<symbol id="i-eye-off" ' in sprite
+    rules = _desktop_rules()
+    assert "position: relative" in rules[".secret"]
+    assert "padding-right: calc(var(--field-h) + .1rem)" in rules[".secret > input"]
+    button = rules[".secret > button.ico.reveal"]
+    assert "position: absolute" in button
+    assert "height: calc(var(--field-h) - .5rem)" in button  # 28 px, 36 px on a touch screen: over 24 px
+    # The eye's words in both states reach the script.
+    assert {"web.secret.show", "web.secret.hide"} <= set(_texts(client))
+
+
+def _texts(client) -> dict[str, str]:
+    import json
+
+    page = client.get("/").text
+    return json.loads(re.search(r'<script type="application/json" id="tow-i18n">(.*?)</script>', page).group(1))
+
+
 def test_a_long_topic_name_wraps_on_a_phone():
     """A14: a phone cut long topic names with "…" though it wraps the folder and the error."""
     phone = CSS[CSS.index("  /* A phone has the width for one value per line") :]
