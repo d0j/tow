@@ -138,7 +138,7 @@ def test_actual_http_cleanup_warning_does_not_claim_the_copy_or_restore_failed(b
     assert t(key, lang) in soup.select_one(".flash.warn").get_text()
     assert load_state()["topics"] == [{"id": "before"}]
     if operation == "copy":
-        assert t(key, lang) in soup.select_one("#backup-night [role=status]").get_text()
+        assert t(key, lang) in soup.select_one("#backup-night [role=note]").get_text()
         assert (
             t("settings.backups.pill_cleanup", lang) in soup.select_one("#acc-transfer > summary .pill.warn").get_text()
         )
