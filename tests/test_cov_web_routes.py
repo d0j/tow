@@ -1120,7 +1120,7 @@ def test_check_all_preview_counts_results(monkeypatch, client):
 
     assert _flash(response) == "проверка запущена"
     body = _wait_job(client, response)
-    assert body == {"status": "done", "flash": "предпросмотр: новое 1, без изменений 1, сбой 1"}
+    assert body == {"status": "done", "flash": "предпросмотр: изменится при применении 1, без изменений 1, с ошибкой 1"}
     assert seen["apply"] is False
 
 
@@ -1131,7 +1131,13 @@ def test_check_all_preview_counts_results(monkeypatch, client):
             SecretStoreError("secret gate"),
             "проверка заблокирована: сохранённые пароли и токены не открываются — см. Настройки",
         ),
-        (ValueError("bad state"), "проверка не выполнена: ValueError"),
+        (
+            ValueError("bad state"),
+            (
+                "не удалось подтвердить результат проверки (ValueError); "
+                "проверьте состояние раздач и историю ошибок, прежде чем повторять"
+            ),
+        ),
     ],
 )
 def test_check_all_failure_is_reported_by_status(monkeypatch, client, error, flash):

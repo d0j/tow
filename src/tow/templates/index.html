@@ -2,6 +2,31 @@
 {% from "_icons.html" import icon %}
 {% block body %}
 <h1 id="page-title" class="sr-only">{{ t('home.title') }}</h1>
+{% if check_activity_requested %}
+<div class="issue-note check-activity" id="check-activity" role="status"><span>{{ check_activity_title }} — <span data-check-status>{{ t('web.check_all.waiting') if check_activity and check_activity.status in ['queued', 'running'] else t('web.check_all.unconfirmed') }}</span></span> <a href="/?check_result={{ request.query_params.get('check_job', '')|urlencode }}#check-result">{{ t('web.check_all.results') }}</a>{% if check_activity and check_activity.status == 'queued' %}<form method="post" action="/check/{{ check_activity.id|urlencode }}/cancel"><button type="submit" class="ghost">{{ t('web.check_all.cancel') }}</button></form>{% endif %}</div>
+{% endif %}
+{% if check_result_requested %}
+<section class="card check-results" id="check-result" aria-labelledby="check-result-title">
+  <h2 id="check-result-title">{{ t('web.check_all.results') }}</h2>
+  {% if check_result_at %}<p class="sub">{{ check_result_at }}</p>{% endif %}
+  {% if check_result and check_result.report %}
+  <p>{{ check_result.report.summary|sentence }}</p>
+  <p class="sub">{{ t('web.check_all.observation') }}</p>
+  <ul class="check-result-list">
+    {% for row in check_result.report.rows %}
+    <li class="check-result-row"><span class="pill {{ 'bad' if row.outcome == 'fail' else 'warn' if row.outcome == 'pending' else 'mut' if row.outcome == 'skipped' else 'ok' }}">{{ row.label }}</span>
+      {% if row.topic_id %}<a href="/?open={{ row.topic_id|urlencode }}&amp;spot=row-{{ row.topic_id|urlencode }}#row-{{ row.topic_id|urlencode }}">{{ row.title or t('home.head.torrent') }}</a>{% else %}<span>{{ row.title or t('home.head.torrent') }}</span>{% endif %}
+      <span>{{ row.reason }}</span></li>
+    {% endfor %}
+  </ul>
+  {% if check_result.report.total > check_result.report.rows|length %}<p class="sub">{{ t('web.check_all.more', n=check_result.report.total) }}</p>{% endif %}
+  {% elif check_result and check_result.status in ['running', 'queued'] %}<p data-check-result-pending>{{ t('web.check_all.waiting') }}</p>
+  {% elif check_result and check_result.cancelled %}<p>{{ t('web.check_all.cancelled')|sentence }}</p>
+  {% elif check_result and check_result.flash %}<p>{{ check_result.flash|sentence }}</p>
+  {% else %}<p>{{ t('web.check_all.unconfirmed') }}</p>{% endif %}
+  <p><a href="/history?group=errors">{{ t('web.check_all.history') }}</a> · <a href="/">{{ t('base.close') }}</a></p>
+</section>
+{% endif %}
 {# The draft comes only from the server's own record of a refused add (?add=<token>), never
    from values in the link. #}
 {% set draft = add_draft or {} %}
@@ -178,7 +203,7 @@
       <span class="topic-tracker" data-label="{{ t('home.row.site') }}" title="{{ site_title(topic.tracker) if topic.tracker else '' }}"><span class="sr-only">{{ t('home.row.site') }} </span>{{ site_title(topic.tracker) if topic.tracker else '' }}</span>
       <span class="mono topic-path" data-label="{{ t('home.row.folder') }}"><span class="sr-only">{{ t('home.row.folder') }} </span><span class="clip-start" title="{{ topic.save_path or '' }}"><bdi>{{ topic.save_path or "—" }}</bdi></span></span>
       <span class="clip addition topic-event" data-label="{{ t('home.row.event') }}" title="{{ topic.last_event_at or t('home.topic.no_events') }}"><span class="sr-only">{{ t('home.row.event') }} </span>
-        {%- if topic.error_line %}<span class="row-error {{ 'bad' if torrent_tone == 'bad' else 'warn' }}" title="{{ topic.last_error_human or topic.last_error }}">{{ topic.error_line }}<span class="sr-only"> {{ t('home.row.full_error') }}</span></span>{% elif topic.last_event_label %}<b>{{ topic.last_event_label }}</b> <small class="mut event-at">{{ topic.last_event_at }}</small>{% else %}<span class="mut">—</span>{% endif -%}
+        {%- if topic.error_line %}<span class="row-error {{ 'bad' if torrent_tone == 'bad' else 'warn' }}" title="{{ topic.last_error_human or topic.last_error }}">{{ topic.error_line }}<span class="sr-only"> {{ t('home.row.full_error') }}</span></span>{% elif topic.manual_job %}<span>{{ t('web.check_all.row_queued') if topic.manual_job.status == 'queued' else t('common.busy.checking') }}</span>{% elif topic.verification_pending %}<b>{{ t('check.verifying_files') }}</b>{% elif topic.last_event_label %}<b>{{ topic.last_event_label }}</b> <small class="mut event-at">{{ topic.last_event_at }}</small>{% else %}<span class="mut">—</span>{% endif -%}
       </span>
       {#- The progress link lives outside <summary> (no link inside its button, A2) and is laid
           over this cell; the cell keeps the same words, unseen while the link covers it. -#}
@@ -200,7 +225,7 @@
   <span class="row-ops">
     {% if topic.url|web_link %}<a class="row-ico {{ tracker_tone }}" href="{{ topic.url|web_link }}" target="_blank" rel="noopener" title="{{ tracker_label }}" aria-label="{{ t('home.topic.site_aria_named', name=topic.series, label=tracker_label) }}">{{ icon('globe', 'sm') }}</a>{% else %}<span class="row-ico {{ tracker_tone }}" title="{{ tracker_label }}">{{ icon('globe', 'sm') }}</span>{% endif %}
     <form method="post" action="/topics/{{ topic.id|urlencode }}/pause"><button class="row-ico{% if topic.paused %} on{% endif %}" type="submit" title="{{ pause_label }}" aria-label="{{ t('home.topic.resume_named' if topic.paused else 'home.topic.pause_named', name=topic.series) }}">{{ icon('play' if topic.paused else 'pause', 'sm') }}</button></form>
-    <form method="post" action="/topics/{{ topic.id|urlencode }}/check"><button class="row-ico" type="submit" title="{{ t('home.topic.check_title') }}" aria-label="{{ t('home.topic.check_named', name=topic.series) }}">{{ icon('refresh', 'sm') }}</button></form>
+    <form method="post" action="/topics/{{ topic.id|urlencode }}/check"><button class="row-ico{% if topic.manual_job and topic.manual_job.status == 'running' %} spinning{% endif %}" type="submit" title="{{ t('web.check_all.row_queued') if topic.manual_job and topic.manual_job.status == 'queued' else t('home.topic.check_title') }}" aria-label="{{ t('home.topic.check_named', name=topic.series) }}">{{ icon('clock' if topic.manual_job and topic.manual_job.status == 'queued' else 'refresh', 'sm') }}</button></form>
   </span>
   </div>
   {% else %}

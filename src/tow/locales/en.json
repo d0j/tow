@@ -1150,6 +1150,11 @@
     }
   },
   "js": {
+    "checks": {
+      "queued": "Check queued: position {position}. You can check other topics.",
+      "running": "Checking. You can check other topics; they will be queued.",
+      "unconfirmed": "The check result is unavailable: TOW restarted or the record expired. Review the topic status and run the check again if needed."
+    },
     "timer": {
       "title": "Personal timer: every {minutes} min",
       "scheduled": "Next automatic check",
@@ -1457,6 +1462,7 @@
       "qbit_down": "torrent client unreachable"
     },
     "check_result": "checked: {n}, without errors: {ok}",
+    "check_outcomes": "updated: {new}, unchanged: {same}, waiting: {pending}, skipped: {skipped}, failed: {fail}",
     "client_pass_result": "topics: {n}",
     "site_skipped": "topics not checked: {n}",
     "check_preview": "preview, nothing changed",
@@ -2317,9 +2323,33 @@
     },
     "check_all": {
       "preview": "preview: ",
-      "applied": "applied: ",
-      "summary": "new {new}, unchanged {same}, failed {fail}",
-      "not_run": "the check did not run: {error}",
+      "applied": "check finished: ",
+      "updated_count": "updated {count}",
+      "would_update_count": "would change {count}",
+      "outcome_preview": "Would change",
+      "unchanged_count": "unchanged {count}",
+      "waiting_count": "awaiting confirmation {count}",
+      "skipped_count": "skipped {count}",
+      "failed_count": "failed {count}",
+      "empty": "no topics to check",
+      "queued": "check queued; it will start after the current check",
+      "row_queued": "Queued for checking",
+      "cancel": "Cancel waiting",
+      "cancelled": "check removed from the queue; checks and downloads already started continue",
+      "cannot_cancel": "the check already started or finished; cancelling its wait did not stop it — review the result",
+      "queue_full": "the check queue is full; wait for the current jobs to finish, then try again",
+      "results": "Results",
+      "waiting": "Check accepted. Waiting for its turn or completion; results will appear automatically. You can check other topics.",
+      "unconfirmed": "The result is unavailable: TOW restarted or the record expired. Review topic status and run the check again if needed.",
+      "observation": "This is the result of that run, not the current status. Open a topic to see its current status and available actions.",
+      "outcome_new": "Updated",
+      "outcome_same": "Unchanged",
+      "outcome_pending": "Waiting",
+      "outcome_skipped": "Skipped",
+      "outcome_fail": "Failed",
+      "more": "{n} results in total. The first 100 are shown here; see History for the rest.",
+      "history": "Error history",
+      "not_run": "could not confirm the check result ({error}); review topic status and error history before trying again",
       "running": "a check is already running",
       "started": "check started"
     },

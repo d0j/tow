@@ -5,10 +5,11 @@ whole network-bound run; the web process must not wait for it on plain reads.
 """
 
 import threading
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import shown
+from helpers import shown, wait_for_check_job
 
 from tow.store import load_state, persistence_lock, save_state
 from tow.web import app
@@ -62,18 +63,19 @@ def _hold_check_lock(release: threading.Event, held: threading.Event) -> threadi
     return thread
 
 
-def test_a_manual_check_does_not_wait_for_a_running_check():
+def test_a_manual_check_does_not_wait_for_a_running_check(monkeypatch):
     """M3: the request waited for the check lock while holding the HTTP lock - every page froze."""
 
     save_state({"topics": [{"id": "t", "title": "Show", "url": "http://rutor.info/torrent/1", "save_path": "M:\\s"}]})
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
     release, held = threading.Event(), threading.Event()
     holder = _hold_check_lock(release, held)
+    monkeypatch.setattr("tow.check.run._run_check", lambda **_kw: {"results": [{"id": "t", "ok": True}]})
     try:
         response = client.post("/topics/t/check", follow_redirects=False)
         assert held.is_set(), "the request only answered after the other check ended"
         assert response.status_code == 303
-        assert "сейчас идёт другая проверка" in shown(response.headers["location"])
+        assert "проверка поставлена в очередь" in shown(response.headers["location"])
         added = client.post(
             "/topics/add",
             data={"url": "http://rutor.info/torrent/2/x", "title": "Другой сериал", "save_path": "M:\\s"},
@@ -85,6 +87,8 @@ def test_a_manual_check_does_not_wait_for_a_running_check():
     finally:
         release.set()
         holder.join()
+    job = parse_qs(urlsplit(response.headers["location"]).query)["check_job"][0]
+    assert wait_for_check_job(client, job)["status"] == "done"
 
 
 def test_check_lock_without_waiting_refuses_a_held_lock_across_handles():

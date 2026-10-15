@@ -67,7 +67,7 @@ def _tracker_tone(topic: dict[str, Any]) -> str:
         if cls in SITE_ERROR_CLASSES:
             return "bad"
         return "ok" if topic.get("last_ok_at") or topic.get("site_ok_at") else "mut"
-    if topic.get("last_ok"):
+    if topic.get("last_ok") or topic.get("site_ok_at"):
         return "ok"
     return "mut"
 

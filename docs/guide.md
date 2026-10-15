@@ -143,6 +143,17 @@ connected.
 
 ## Checks
 
+Manual checks never change the torrent client concurrently. If another check holds it, a row's check joins
+a FIFO (up to 32 jobs); another click on the same pending topic follows its existing job. The waiting notice
+offers **Cancel waiting**, which does not stop work that already started. Paused/deleted topics are re-read
+when their turn comes. Completed results stay available through **Results** for one hour in this web session;
+a restart does not silently replay manual re-add requests. A missing result is unconfirmed, not success.
+
+**Results** separates updates, unchanged topics, waits, skips and errors, with topic names and links to current
+status and actions. File verification by the client is a wait, not a failure or a confirmed add; Home says
+**Checking files** until read-back confirms it. A run's report is historical: a later successful check can
+already have cleared its error. Diagnostic run totals use the same outcome rules.
+
 | Check | When | What it does |
 |---|---|---|
 | Global timer | Every hour by default (Settings → Checks, 15 min – 24 h); the very first one two minutes after TOW starts, and a restart keeps the cadence | Active topics without a personal timer: checks the site and adds a new version of the torrent to the selected client. |
@@ -153,7 +164,7 @@ connected.
 | One topic | ↻ in the row | That topic only; ignores the mirror pause. |
 
 A check missed while the computer slept or was off runs right after it wakes or starts. Manual checks send
-notifications the same way as scheduled ones. **Pause** in a row skips the topic in scheduled checks; the row's check still works.
+notifications the same way as scheduled ones. **Pause** skips the topic until it is resumed, including queued checks.
 An empty personal timer uses the global interval. Saving a different personal interval starts a new countdown;
 manual checks and progress checks do not reset it.
 

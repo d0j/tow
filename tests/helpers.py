@@ -126,7 +126,7 @@ def wait_for_check_job(client: Any, job: str, *, timeout: float = 10.0) -> dict[
     deadline = time.monotonic() + timeout
     while True:
         body: dict[str, Any] = client.get(f"/check/status?job={job}").json()
-        if body["status"] != "running":
+        if body["status"] not in {"running", "queued"}:
             return body
         if time.monotonic() > deadline:
             raise AssertionError(f"background check {job} still running after {timeout} s")

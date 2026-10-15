@@ -13,6 +13,7 @@ from tow.check.client_ops import ClientPool, remote_clients
 from tow.check.notices import RunNotifications, flush_notifications
 from tow.check.reconcile import reconcile_and_commit, reconcile_preview
 from tow.check.topic import CheckRun, check_topic, log_site_skips, read_secrets
+from tow.check_outcomes import counts_of
 from tow.check_steps import changed_owner_fields, merge_check_results, owner_fields
 from tow.clients import factory as client_factory
 from tow.clock import iso_now, machine_now
@@ -449,5 +450,13 @@ def _run_check(
     # errors" would count topics whose site refused them (the Log's "check · checked: 11, without
     # errors: 11" while six topics had errors).
     scope = {"scope": "space"} if space_only else {"scope": "progress"} if progress_only else {}
-    _record("check", apply=apply, ok=sum(1 for r in results if r.get("ok")), n=len(results), how=how, **scope)
+    _record(
+        "check",
+        apply=apply,
+        ok=sum(1 for r in results if r.get("ok")),
+        n=len(results),
+        how=how,
+        outcomes=counts_of(results),
+        **scope,
+    )
     return {"qbit": pool.ping, "results": results}

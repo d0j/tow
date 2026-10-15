@@ -187,13 +187,14 @@ def _no_background_check_outlives_its_test():
     is gone) and its job state would leak into the next /check request.
     """
     yield
-    module = sys.modules.get("tow.web.routes_check")
+    module = sys.modules.get("tow.web.check_jobs")
     stray = [thread for thread in threading.enumerate() if thread.name == "tow-check-all"]
     for thread in stray:
         thread.join(timeout=10)
     if module is not None:
-        with module._CHECK_JOB_LOCK:
-            module._check_job.clear()
+        with module.LOCK:
+            module.JOBS.clear()
+            module.PENDING.clear()
     alive = [thread for thread in stray if thread.is_alive()]
     if alive:
         pytest.fail(f"background 'check all' thread still running 10 s after the test: {alive}")

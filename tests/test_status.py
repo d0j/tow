@@ -70,6 +70,18 @@ def test_unknown_topic_is_gray():
     assert status.tracker_tone == "mut"
 
 
+def test_pending_client_verification_does_not_erase_confirmed_site_access():
+    topic = {
+        "last_ok": False,
+        "site_ok_at": "2026-10-15T10:00:00+03:00",
+        "verification_pending": {"since": "2026-10-15T10:00:00+03:00"},
+    }
+    status = project_home_status(topic, {})
+    assert status.torrent_tone == "mut"
+    assert status.tracker_tone == "ok"
+    assert status.torrent_label == "Проверка файлов"
+
+
 def test_new_tracker_action_is_blue_when_no_error():
     status = project_home_status(
         {"last_ok": True, "last_error": None, "last_changed": True},

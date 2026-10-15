@@ -93,6 +93,12 @@ flowchart TD
   it. SIGTERM, SIGHUP (its terminal closed), Ctrl+C and, on Windows, Ctrl+Break stop it the same way.
 - **Checks** hold `check_run_lock` for their whole run (one applying check at a time across processes) and take
   the data lock only to read and to commit, so the UI never waits for tracker or client network time.
+  A web topic check that cannot take this lock joins one bounded FIFO consumer instead of failing busy.
+  Pending requests for the same scope/mode share a job; up to 32 jobs wait, and only queued work can be
+  cancelled. The consumer uses nonblocking attempts, so scheduled/CLI checks keep the same lock contract.
+  Up to 64 transient results (100 prioritized rows each, full totals) live for one hour in this web process;
+  a restart explicitly leaves the result unconfirmed and never replays a manual re-add. Waiting client
+  verification, disk-space waits, skipped/unsaved results and real failures have distinct shared outcomes.
 
 ## Modules
 

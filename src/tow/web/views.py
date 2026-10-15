@@ -122,7 +122,9 @@ def flash_text(message: Any, /, **params: Any) -> str:
     return t(text, **params) if text and i18n.has(text) else text
 
 
-def flash_location(url: str, message: Any, kind: str = "ok", /, *, problem_topic: str = "", **params: Any) -> str:
+def flash_location(
+    url: str, message: Any, kind: str = "ok", /, *, problem_topic: str = "", result_job: str = "", **params: Any
+) -> str:
     """``url`` with ``flash=<token>`` of a message kept on the server (see ``flash_redirect``)."""
     text = flash_text(message, **params)
     if not text:
@@ -130,6 +132,8 @@ def flash_location(url: str, message: Any, kind: str = "ok", /, *, problem_topic
     record = {"text": text, "kind": kind if kind in FLASH_KINDS else "ok"}
     if problem_topic:
         record["problem_topic"] = problem_topic
+    if result_job:
+        record["result_job"] = result_job
     # The undo this action made goes with its message: a check right after a save says
     # "Connected" without an "Undo" that would put the save back.
     if stamped := services.undo_stamped_here():
@@ -280,6 +284,73 @@ def manual_check_flash(
 
 def topic_check_row(topic_id: str, out: dict[str, Any]) -> CheckRow | None:
     return next((r for r in out.get("results") or [] if str(r.get("id")) == str(topic_id)), None)
+
+
+def check_report(out: dict[str, Any], *, apply: bool) -> dict[str, Any]:
+    """Mutually exclusive outcomes: waiting/skipped/unsaved are not failed or unchanged."""
+    counts = services.check_outcome_counts(out.get("results") or [])
+    details: list[dict[str, str]] = []
+    labels = {
+        "new": "web.check_all.outcome_new",
+        "same": "web.check_all.outcome_same",
+        "pending": "web.check_all.outcome_pending",
+        "skipped": "web.check_all.outcome_skipped",
+        "fail": "web.check_all.outcome_fail",
+    }
+    priority = {"fail": 0, "pending": 1, "skipped": 2, "new": 3, "same": 4}
+    for row in sorted(out.get("results") or [], key=lambda item: priority[services.check_outcome(item)]):
+        outcome = services.check_outcome(row)
+        if outcome == "skipped":
+            reason = str(row.get("note") or row.get("skipped") or t("web.common.no_changes"))
+        elif outcome == "pending":
+            reason = t("web.check.verifying") if row["status"] == "verification_pending" else _row_error(row)
+        elif outcome == "fail":
+            record = row.get("error_record")
+            reason = (
+                services.site_error_summary(record, fallback=_row_error(row))
+                if isinstance(record, Mapping)
+                else _row_error(row)
+            )
+        elif outcome == "new":
+            reason = t(
+                "web.check.selection_updated"
+                if row.get("selection_updated")
+                else "web.check.started"
+                if row.get("started")
+                else "web.check.added"
+                if row.get("added")
+                else "web.check.changed"
+            )
+        else:
+            reason = t("web.common.no_changes")
+        if len(details) < 100:
+            topic_id = str(row.get("id") or "")
+            details.append(
+                {
+                    "topic_id": topic_id if re.fullmatch(r"[A-Za-z0-9_-]{1,64}", topic_id) else "",
+                    "title": services.scrub_text(shown_title(row))[:200],
+                    "outcome": outcome,
+                    "label": t("web.check_all.outcome_preview" if not apply and outcome == "new" else labels[outcome]),
+                    "reason": humanize(services.scrub_text(reason))[:1000],
+                }
+            )
+    prefix = t("web.check_all.applied" if apply else "web.check_all.preview")
+    count_keys = {
+        "new": "web.check_all.updated_count",
+        "same": "web.check_all.unchanged_count",
+        "pending": "web.check_all.waiting_count",
+        "skipped": "web.check_all.skipped_count",
+        "fail": "web.check_all.failed_count",
+    }
+    summary = prefix + (
+        ", ".join(
+            t("web.check_all.would_update_count" if not apply and key == "new" else count_keys[key], count=value)
+            for key, value in counts.items()
+            if value
+        )
+        or t("web.check_all.empty")
+    )
+    return {"summary": summary, "counts": counts, "rows": details, "total": sum(counts.values())}
 
 
 def ui_time(value: str | None) -> str:
