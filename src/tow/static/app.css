@@ -1249,3 +1249,39 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 .theme-field > legend { margin: 0 0 .16rem; padding: 0; color: var(--mut); font-size: 12px; }
 .theme-field .theme-choice { margin: 0; }
 .appearance .field-hint { max-width: 68ch; margin-top: .16rem; }
+/* The forms (.form-grid): a fieldset's fields 9 px apart like the form's own groups; the compact
+   page's per-field margins do not add to that gap. */
+.settings-page .form-grid > fieldset { display: grid; gap: .55rem; min-width: 0; }
+.settings-page-compact .form-grid { gap: .55rem; }
+.settings-page-compact .form-grid .field + .field,
+.settings-page-compact .form-grid .field-grid + .field { margin-top: 0; }
+/* Hints and notes outside a form keep a readable line too. */
+.settings-panel :is(.field-hint, .action-hint, .section-note, .support-note, .check-field p, .notifier-steps ol) { max-width: 68ch; }
+.settings-panel .notice { max-width: 46rem; }
+/* Clients and connected messengers: two open cards side by side on a wide screen, in their own
+   order; a folded card takes the whole line. */
+@media (min-width: 1200px) {
+  .integration-list.cards-2:has(> details[open] ~ details[open]) { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .integration-list.cards-2 > :not(details[open]) { grid-column: 1 / -1; }
+}
+/* A client (and a site-access connection) folds like a messenger: its title row is the toggle. */
+:is(.client-card, .protection-card) > summary { list-style: none; cursor: pointer; align-items: center; }
+:is(.client-card, .protection-card) > summary::-webkit-details-marker { display: none; }
+:is(.client-card, .protection-card) > summary h2::before {
+  content: ""; display: inline-block; width: .4rem; height: .4rem; margin: 0 .6rem .12rem .1rem;
+  border-right: 2px solid var(--mut); border-bottom: 2px solid var(--mut); transform: rotate(-45deg);
+  transition: transform .15s ease;
+}
+:is(.client-card, .protection-card)[open] > summary h2::before { transform: rotate(45deg); }
+.settings-page-compact :is(.client-card, .protection-card):not([open]) > summary { border-bottom: 0; padding-bottom: 0; }
+.client-card > summary h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-meta { margin-left: .35rem; color: var(--mut); font-size: 12px; font-weight: 400; }
+/* A connection's order number keeps its label on one line beside the address; the three limits
+   share their line. */
+.protection-card .field-row > .field:has(.w-xs) { flex: 0 0 auto; }
+.protection-card .field-row > .field:has(.w-xs) > label { white-space: nowrap; }
+@container (min-width: 38rem) {
+  .protection-limits .field-row > .field { flex: 1 1 0; }
+}
+/* Version and updates: a section inside another reads as inside it. */
+.technical-details .technical-details { margin-left: 1rem; }

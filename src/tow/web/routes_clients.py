@@ -8,7 +8,7 @@ import ipaddress
 import re
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from fastapi import APIRouter, Form
 from fastapi.responses import RedirectResponse, Response
@@ -26,14 +26,27 @@ from tow.web.text import t
 router = APIRouter()
 
 
-def _clients_redirect(message: Any, kind: str = "ok", /, **params: Any) -> RedirectResponse:
-    return flash_redirect("/settings?open=clients", message, kind, **params)
+def _clients_target(client_id: str = "") -> str:
+    """The clients section; with a client, the page lands on its card and keeps it open (a working
+    client's card is folded otherwise)."""
+    if not client_id:
+        return "/settings?open=clients"
+    return f"/settings?open=clients&card={quote(client_id)}#client-{quote(client_id)}"
+
+
+def _clients_redirect(message: Any, kind: str = "ok", /, card: str = "", **params: Any) -> RedirectResponse:
+    return flash_redirect(_clients_target(card), message, kind, **params)
 
 
 def _change_clients(
-    change: Callable[[dict[str, Any], dict[str, Any]], object], message: str, event: str, **fields: Any
+    change: Callable[[dict[str, Any], dict[str, Any]], object],
+    message: str,
+    event: str,
+    card: Callable[[], str] = str,
+    **fields: Any,
 ) -> RedirectResponse:
-    """Apply ``change(cfg, secrets)`` to the client list; the owner can undo it."""
+    """Apply ``change(cfg, secrets)`` to the client list; the owner can undo it. ``card()`` names
+    the client whose card the page then opens (none: the section)."""
     cfg = services.load_config()
     s = services.load_secrets()
     before = {key: copy.deepcopy(cfg.get(key)) for key in ("client", "clients")}
@@ -41,7 +54,7 @@ def _change_clients(
     try:
         change(cfg, s)
     except ValueError as exc:
-        return _clients_redirect(exc, "err")
+        return _clients_redirect(exc, "err", card=card())
     state = services.load_state()
 
     def write(txn: StoreTransaction) -> None:
@@ -52,10 +65,10 @@ def _change_clients(
         txn.save_config(cfg)
         txn.save_state(state)
 
-    if refused := save_together("/settings?open=clients", write):
+    if refused := save_together(_clients_target(card()), write):
         return refused
     services.log_event(event, **fields, how="manual")
-    return _clients_redirect(message)
+    return _clients_redirect(message, card=card())
 
 
 @router.post("/settings/client/add")
@@ -72,6 +85,7 @@ def settings_client_add(kind: str = Form("")) -> Response:
         lambda cfg, s: added.append(add_client(cfg, s, spec.kind)),
         t("web.settings.client_added", title=spec.title),
         "settings_client_add",
+        card=lambda: added[0] if added else "",
         client_kind=spec.kind,
     )
 
@@ -100,6 +114,7 @@ def settings_client_default(client_id: str = Form("")) -> Response:
         lambda cfg, _s: set_default_client(cfg, client_id),
         t("web.settings.default_client"),
         "settings_client_default",
+        card=lambda: client_id,
         client_id=client_id,
     )
 
@@ -118,23 +133,24 @@ def settings_client(
     from tow.clients.spec import get as client_get
 
     _name_client(client_id)
+    target = _clients_target(client_id)
     cfg = services.load_config()
     try:
         configuration = client_configuration(cfg, client_id or None)
     except (RuntimeError, ValueError) as e:
-        return flash_redirect("/settings?open=clients", e, "err")
+        return flash_redirect(target, e, "err")
     selected_kind = str(configuration.get("kind") or kind).lower()
     spec = client_get(selected_kind)
     if spec is None or not spec.ready or (kind.strip() and kind.strip().lower() != selected_kind):
-        return flash_redirect("/settings?open=clients", "web.settings.no_such_client", "err")
+        return flash_redirect(target, "web.settings.no_such_client", "err")
     s = services.load_secrets()
     undo_secrets = copy.deepcopy(s)
     old_sec = interval_sec_of(cfg)
     port_number = whole_number(port) if port.strip() else spec.default_port
     if port_number is None or not 1 <= port_number <= 65535:
-        return flash_redirect("/settings?open=clients", "web.settings.bad_port", "err")
+        return flash_redirect(target, "web.settings.bad_port", "err")
     if host.strip() and not _client_host_ok(host.strip()):
-        return flash_redirect("/settings?open=clients", "web.settings.bad_client_host", "err")
+        return flash_redirect(target, "web.settings.bad_client_host", "err")
     q = client_secret_block(cfg, s, str(configuration["id"]), ensure=True)
     endpoint_changed = (str(q.get("host") or "").strip(), q.get("port"), str(q.get("username") or "").strip()) != (
         host.strip(),
@@ -143,7 +159,7 @@ def settings_client(
     )
     if endpoint_changed and q.get("password") and not password.strip():
         # A stored password must never be sent to a new (possibly mistyped) address.
-        return flash_redirect("/settings?open=clients", "web.settings.password_again", "warn")
+        return flash_redirect(target, "web.settings.password_again", "warn")
     q["host"] = host.strip()
     q["port"] = port_number
     q["username"] = username.strip()
@@ -154,10 +170,10 @@ def settings_client(
         if cfg.get("clients")
         else [spec.secrets_key]
     )
-    if refused := save_secrets_with_undo("/settings?open=clients", undo_secrets, s, old_sec, secret_scope):
+    if refused := save_secrets_with_undo(target, undo_secrets, s, old_sec, secret_scope):
         return refused
     services.log_event("settings_client", client_id=configuration["id"], client_kind=selected_kind, how="manual")
-    return flash_redirect("/settings?open=clients", "web.common.saved", "ok")
+    return flash_redirect(target, "web.common.saved", "ok")
 
 
 _HOST_LABEL = re.compile(r"(?!-)[a-z0-9_-]{1,63}(?<!-)")
@@ -216,7 +232,7 @@ def settings_client_ping(client_id: str = Form("")) -> Response:
         # program) is the app's "try again", never "no connection" for a client that answered.
         msg, kind = t("web.settings.ping_ok", version=version), "ok"
         _client_answered(client_id)
-    return flash_redirect("/settings?open=clients", msg, kind)
+    return flash_redirect(_clients_target(client_id), msg, kind)
 
 
 def _client_answered(client_id: str, *, answered: bool = True) -> None:

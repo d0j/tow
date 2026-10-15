@@ -255,7 +255,7 @@ def test_settings_multiple_clients_render_as_independent_cards(monkeypatch):
 
     page = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text
 
-    assert page.count('class="integration-card"') == 2
+    assert page.count('class="integration-card client-card"') == 2
     assert page.count('class="integration-card notifier-card"') == 4
     assert page.count('action="/settings/client"') == 2
     assert "main-host" in page
@@ -347,3 +347,52 @@ def test_the_guide_calls_the_master_key_by_its_name():
     en = client.get("/settings/help").text
     assert "encryption key" not in en.lower()
     assert "the same master key (<code>keys/master.key</code>)" in en
+
+
+def test_settings_fields_are_as_wide_as_what_they_hold():
+    """At 1440 px a port was 470 px wide and a password, a token or a webhook 1354 px: every field
+    filled its card. Each field has its width class; related fields share a row."""
+    from tow.store import save_secrets
+
+    save_secrets({"qbittorrent": {"host": "127.0.0.1", "port": 8080, "username": "admin", "password": "pw"}})
+    page = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text
+
+    def classes(field_id: str) -> str:
+        tag = re.search(rf'<(?:input|select)[^>]* id="{field_id}"[^>]*>|<(?:input|select) id="{field_id}"[^>]*>', page)
+        assert tag, field_id
+        found = re.search(r'class="([^"]*)"', tag.group())
+        return found.group(1) if found else ""
+
+    widths = {
+        "q_host-client-0": "w-l",
+        "q_port-client-0": "w-xs",
+        "q_user-client-0": "w-m",
+        "q_pass-client-0": "w-m",
+        "nf-telegram-token": "w-l",
+        "nf-telegram-chat_ids": "w-m",
+        "nf-discord-webhook_url": "w-xl",
+        "nf-whatsapp-phone": "w-s",
+        "nf-whatsapp-apikey": "w-s",
+        "nf-ntfy-topic": "w-m",
+        "nf-ntfy-server": "w-l",
+        "interval_min": "w-xs",
+        "flash_ttl_min": "w-xs",
+        "lan-password": "w-m",
+        "lan-password2": "w-m",
+        "lan-hint": "w-l",
+        "backup-days": "w-xs",
+        "backup-path-night": "w-xl",
+        "language-choice": "w-l",
+        "protection-timeout": "w-xs",
+    }
+    for field_id, width in widths.items():
+        assert width in classes(field_id).split(), (field_id, classes(field_id))
+    clients = page.split('id="acc-clients"', 1)[1].split('id="acc-bots"', 1)[0]
+    assert 'class="settings-form form-grid"' in clients
+    assert '<div class="field-row keep">' in clients  # the address and its port, on a phone too
+    access = page.split('id="acc-access"', 1)[1].split('id="acc-transfer"', 1)[0]
+    new_password = access.split('<div class="field-row">', 1)[1].split(
+        '<div class="field">\n                  <label for="lan-hint"', 1
+    )[0]
+    assert 'id="lan-password"' in new_password
+    assert 'id="lan-password2"' in new_password

@@ -31,6 +31,7 @@ FIELDS = (
         placeholder="123456789:AA…",
         pattern=r"\d{5,12}:[A-Za-z0-9_-]{30,}",
         error="notifier.telegram.token_error",
+        width="l",
     ),
     Field(
         "chat_ids",
@@ -39,6 +40,7 @@ FIELDS = (
         placeholder="123456789",
         pattern=r"-?\d{3,20}",
         error="notifier.telegram.chat_ids_error",
+        width="m",
     ),
 )
 

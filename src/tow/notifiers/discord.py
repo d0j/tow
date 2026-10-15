@@ -29,6 +29,7 @@ FIELDS = (
         placeholder="https://discord.com/api/webhooks/…",
         pattern=r"https://(?:\w+\.)?(?:discord|discordapp)\.com/api/webhooks/\d+/[\w-]+",
         error="notifier.discord.webhook_error",
+        width="xl",
     ),
 )
 

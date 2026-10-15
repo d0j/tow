@@ -32,6 +32,7 @@ FIELDS = (
         placeholder="tow-…",
         pattern=r"[A-Za-z0-9_-]{8,64}",
         error="notifier.ntfy.topic_error",
+        width="m",
     ),
     Field(
         "server",
@@ -41,6 +42,7 @@ FIELDS = (
         error="notifier.ntfy.server_error",
         required=False,
         default="https://ntfy.sh",
+        width="l",
     ),
 )
 # The fields that name a server TOW posts to by itself: one in the home network is refused
