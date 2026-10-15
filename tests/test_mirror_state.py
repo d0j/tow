@@ -261,3 +261,18 @@ def test_a_preview_never_quarantines_a_damaged_state_file(monkeypatch):
         pick_and_get("demo", SPEC["fetch_hosts"], "/topic/1", persist=False)
     assert state_path().read_bytes() == b"{damaged"
     assert sorted(p.name for p in state_path().parent.iterdir() if p.name.startswith("state")) == ["state.json"]
+
+
+def test_an_answer_compressed_in_a_way_tow_cannot_read_does_not_pause_the_mirror(monkeypatch):
+    # TOW asks for gzip, deflate or none; a server answering "br" anyway said nothing of its
+    # connection, yet three such answers paused the mirror as if it were down.
+    install(monkeypatch, lambda r: httpx.Response(200, headers={"content-encoding": "br"}, content=b"\x1b\x00"))
+    for _ in range(3):
+        with pytest.raises(MirrorFetchError) as error:
+            pick_and_get("demo", SPEC["fetch_hosts"], "/topic/1", fail_threshold=3)
+    assert error.value.failure == "encoding"
+    assert error.value.error_class == "tracker"
+    assert "br" not in error.value.text("en")
+    bucket = load_state()["mirrors"].get("demo", {})
+    assert not bucket.get("cool")
+    assert not any(bucket.get("fail", {}).values())

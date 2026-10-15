@@ -1531,7 +1531,8 @@
     "connection_retry": "{tracker}: no connection to the site",
     "transport": "no connection ({error})",
     "local": "{tracker}: TOW could not read the site's answer ({error})",
-    "too_large": "the answer is too large"
+    "too_large": "the answer is too large",
+    "bad_encoding": "the site compressed its answer in a way TOW cannot read"
   },
   "protection": {
     "invalid_settings": "Optional site-access settings are invalid: check the enabled flag, service addresses, order and time limits",
