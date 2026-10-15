@@ -167,3 +167,8 @@ def test_a_sign_in_page_answered_with_200_does_not_say_error_200(monkeypatch):
         pick_and_get("demo", SPEC["fetch_hosts"], "/download/1", ok=lambda r: False, persist=False)
     assert "200" not in error.value.text("en")
     assert error.value.params["error"].text("en") == "the site asks to sign in"
+
+
+def test_the_attention_menu_class_has_no_trailing_space_when_nothing_needs_attention(client):
+    page = client.get("/sites").text
+    assert '<details class="attention-menu" id="current-problems"' in page

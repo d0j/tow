@@ -22,7 +22,7 @@
       <span id="search-status" class="sr-only" aria-live="polite"></span>
     </details>
     <button type="button" class="ico" id="log-open" title="{{ t('base.log.open') }}" aria-label="{{ t('base.log.open') }}" aria-haspopup="dialog">{{ icon('log') }}</button>
-    <details class="attention-menu {{ h.attention.tone }}" id="current-problems" data-attention data-fingerprint="{{ h.attention.fingerprint }}"{% if not h.attention.count %} hidden{% endif %}>
+    <details class="attention-menu{% if h.attention.tone %} {{ h.attention.tone }}{% endif %}" id="current-problems" data-attention data-fingerprint="{{ h.attention.fingerprint }}"{% if not h.attention.count %} hidden{% endif %}>
       <summary class="ico" data-attention-toggle aria-label="{{ h.attention.label }}" title="{{ h.attention.label }}">{{ icon('alert', 'sm') }}<span class="attention-count" data-attention-count aria-hidden="true">{{ h.attention.count }}</span></summary>
       <div class="attention-panel" role="region" aria-labelledby="current-problems-title">
         <strong id="current-problems-title">{{ t('home.attention') }}</strong>
