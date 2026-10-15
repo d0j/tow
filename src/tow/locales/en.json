@@ -1074,12 +1074,12 @@
       "checking_note": "Checking the topic — up to a minute."
     },
     "auth": {
-      "title": "Sign-in needed",
+      "title": "Sign in to {site}",
       "start": "Sign in",
-      "enter": "Enter the user name and password.",
+      "browser_where": "A browser window opens on the computer running TOW.",
       "username": "User name",
       "password": "Password",
-      "password_note": "The password never goes into the page address, TOW's data or the log.",
+      "password_note": "Stored encrypted; never shown or logged.",
       "save_retry": "Save and retry"
     },
     "tools": {

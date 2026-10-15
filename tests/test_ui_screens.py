@@ -67,6 +67,27 @@ def test_a_client_error_names_its_client_once(error, line):
     assert _error_line(error, "qbit") == line
 
 
+def test_the_sign_in_dialog_names_the_site_and_says_where_the_password_goes(client):
+    """The dialog said "Sign-in needed" over the topic's name, and "the password never goes into
+    TOW's data" beside "Save and retry". It now names the site, says the password is stored
+    encrypted and offers the shared eye for what is typed."""
+    from tow.store import save_state
+
+    url = "https://rutracker.org/forum/viewtopic.php?t=1234567"
+    save_state({"topics": [{"id": "rt", "title": "Сериал А", "url": url, "last_error_class": "tracker_auth"}]})
+    dialog = BeautifulSoup(client.get("/?credential_topic=rt").text, "html.parser").select_one("dialog")
+    assert dialog.select_one("h2").get_text() == "Вход на RuTracker"
+    assert dialog.select_one("p.sub").get_text() == "Сериал А"
+    assert "Введите логин и пароль" not in dialog.get_text()
+    password = dialog.select_one('input[name="password"]')
+    assert (password["type"], password["autocomplete"]) == ("password", "current-password")
+    eye = password.find_parent(class_="secret").select_one("button.reveal")
+    assert (eye["type"], eye["data-reveal"], eye["aria-controls"]) == ("button", password["id"], password["id"])
+    assert eye["aria-pressed"] == "false"
+    note = dialog.select_one(f"#{password['aria-describedby']}").get_text()
+    assert note == "Хранится зашифрованным, не показывается и не пишется в журнал."
+
+
 def test_a_cleared_follow_box_is_saved_as_once_on_edit(client, monkeypatch):
     assert _add(client, monkeypatch).status_code == 303
     topic = load_state()["topics"][0]
