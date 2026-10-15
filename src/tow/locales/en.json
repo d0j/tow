@@ -1018,6 +1018,7 @@
     "check_blocked_secrets": "The last scheduled check did not complete: saved passwords and tokens cannot be opened.",
     "check_failed": "The last scheduled check did not complete.",
     "client_down": "The torrent client is unavailable: new versions are not added.",
+    "client_down_named": "{client} is unavailable: new versions are not added to it.",
     "history_rebuilt": "The download history file was damaged: TOW started it over and keeps checking (the damaged file is kept next to it as download_history.json.corrupt-…). Downloads are not affected; events from before are not shown.",
     "site_needs_login": "Sign in to {site} (topics: {count})",
     "site_needs_login_unknown": "Sign in to the site (topics: {count})",

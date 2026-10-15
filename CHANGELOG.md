@@ -36,6 +36,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   Copy the command, instead of a blue message strip; Needs attention still lists it and leads to that note.
 - A new version no longer puts a permanent green strip at the top of Home: the version in the corner of every
   page, Home included, gets a small badge, and Settings → Version and updates has the details.
+- A torrent client that Check in Settings found not answering is listed in Needs attention at once, as the
+  header already showed it; each additional client that does not answer has its own entry naming it, and its
+  failed topics are counted there instead of once each. The main client is never listed twice.
 
 ## [1.30.11] — 2026-10-15
 

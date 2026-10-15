@@ -174,6 +174,53 @@ def test_dead_default_client_is_not_counted_again_for_each_topic():
     assert [issue.id for issue in collect(_snapshot(topics, {"qbit_ok": True}))] == ["topic_error:a", "topic_error:b"]
 
 
+TWO_CLIENTS = {**CONFIG, "clients": {"nas": {"kind": "qbittorrent", "default": True}, "tr": {"kind": "transmission"}}}
+
+
+def _two(topics=(), health=None) -> Snapshot:
+    return Snapshot(state={"topics": list(topics), "health": health or {}}, config=TWO_CLIENTS, now=NOW)
+
+
+def test_a_failed_check_in_settings_makes_the_client_down_as_the_header_says():
+    """D5: Settings' "Check" that found the main client not answering turned the header red, while
+    Needs attention said nothing: the issue reads the same mark (``ping_failed``) the header does."""
+    [issue] = collect(_snapshot(health={"qbit_ok": True, "ping_failed": {"nas": 1}}))
+    assert (issue.id, issue.severity, issue.subjects) == ("client_down", "bad", ("nas",))
+    assert issue.message.key == "issues.client_down"
+    # The check and "Check" both said it: one issue, not two.
+    assert [i.id for i in collect(_snapshot(health={"qbit_ok": False, "ping_failed": {"nas": 1}}))] == ["client_down"]
+
+
+@pytest.mark.parametrize("health", [{"ping_failed": {"tr": 1}}, {"clients_ok": {"nas": True, "tr": False}}])
+def test_a_second_client_that_does_not_answer_is_its_own_issue(health):
+    [issue] = collect(_two(health={"qbit_ok": True, **health}))
+    assert (issue.kind, issue.id, issue.severity, issue.subjects) == ("client_down", "client_down:tr", "bad", ("tr",))
+    assert issue.message == Message("issues.client_down_named", {"client": "Transmission (tr)"})
+    assert issue.target == Target("settings", open="clients", anchor="client-tr")
+    assert issue.fix == Fix("check_client", "tr", label="settings.common.check")
+
+
+def test_each_client_down_is_said_once_the_main_one_first():
+    found = collect(_two(health={"qbit_ok": False, "clients_ok": {"tr": False}, "ping_failed": {"tr": 1, "nas": 2}}))
+    assert [issue.id for issue in found] == ["client_down", "client_down:tr"]
+    # Two clients: the main one is named too, so the two entries are told apart.
+    assert found[0].message == Message("issues.client_down_named", {"client": "qBittorrent (nas)"})
+
+
+def test_a_client_no_longer_configured_is_not_down():
+    assert collect(_two(health={"ping_failed": {"gone": 1}, "clients_ok": {"gone": False}})) == []
+
+
+def test_the_topics_of_a_second_client_down_are_counted_in_its_issue():
+    topics = [
+        {"id": "a", "last_error": "client down", "last_error_class": "qbit"},
+        {"id": "b", "last_error": "client down", "last_error_class": "qbit", "client_id": "tr"},
+    ]
+    found = collect(_two(topics, {"qbit_ok": True, "ping_failed": {"tr": 1}}))
+    assert [issue.id for issue in found] == ["client_down:tr", "topic_error:a"]
+    assert found[0].subjects == ("tr", "b")
+
+
 def test_legacy_unknown_error_codes_use_the_saved_text():
     from tow.errors import render_stored
 
