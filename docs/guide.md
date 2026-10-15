@@ -40,7 +40,7 @@ client to add, start, stop or move a torrent. It only ever changes torrents it a
 |---|---|
 | **Home** | Your topics: status dot, site icon, name, folder, latest event, progress. **+** adds a topic. Click a row to edit it. A name you type there or when adding the topic is shown instead of the site's title (Home, messages, History); the title TOW fills in itself, or an empty name, follows the site. Filters and search hide rows; when nothing matches, **Show all topics** clears them. **Sort**: *As added*, *By name*, *By latest event* or *Errors first*; this device remembers the choice. Until the first topic is added, Home shows three first steps: the torrent client, a messenger (optional), a topic link. |
 | **Sites** | Sites and their mirrors, sign-in state, pause and check per site (the icons in its row). **+** adds a site: paste a link to any topic of it first, the rest fills in; patterns and paths are under **Advanced**. |
-| **Settings** | Language, theme (as the system, light or dark), torrent clients, notifications, checks, network access and password, version and updates, the TOW service, backups, the log; below them **Diagnostics**, the **Guide** and, on a device signed in over the network, **Sign out on this device**. |
+| **Settings** | **Site access** (optional services for sites behind a Cloudflare browser check, off by default: [Site access](PROTECTION.md)), language, theme (as the system, light or dark), torrent clients, notifications, checks, network access and password, version and updates, the TOW service, backups, the log; below them **Diagnostics**, the **Guide** and, on a device signed in over the network, **Sign out on this device**. |
 | **Log** | The scroll icon in the header: the latest events, live. |
 | **History** | Downloads, errors, changes and notifications, with filters and search. It has no icon in the header: the link **History of downloads and changes** in the Log window opens it. |
 | **Diagnostics** | At the end of Settings: the connection to the torrent client, to every site and to the running TOW service. The in-app **Guide** is next to it. |
@@ -160,8 +160,9 @@ already have cleared its error. Diagnostic run totals use the same outcome rules
 | Personal timer | Set minutes when adding or editing a topic, 1 min – 7 days | Overrides the global timer for that topic. A clock and countdown appear in its Home row. |
 | Progress | Every 30 minutes; the first one five minutes after TOW starts | Only asks the client about downloads; no requests to sites. |
 | Disk space | Every 5 minutes, only while a torrent waits for disk space | Only asks the client: starts a waiting torrent once its files fit; no requests to sites. |
-| Check all | ↻ in the header on Home (asks to confirm) | Checks active topics now in the background, including those with personal timers; does not reset their countdowns. Ignores the mirror pause. |
-| One topic | ↻ in the row | That topic only; ignores the mirror pause. |
+| Site retry | After a check found the site unavailable (mirrors down, Cloudflare): about 5, 10 and 20 minutes later (Cloudflare: 30, 60 and 120 by default), never while all its mirrors rest; at most three times | Checks those topics of that site again, together. Not for a ban, the daily limit or a sign-in problem, nor for a paused topic or site. The topic's panel on Home shows “Automatic retry: …”; editing the topic or the site starts the count again. |
+| Check all | ↻ in the header on Home (asks to confirm) | Checks active topics now in the background, including those with personal timers; does not reset their countdowns. Ignores the mirror pause, but not a wait the site asked for. |
+| One topic | ↻ in the row | That topic only; ignores the mirror pause, but not a wait the site asked for. |
 
 A check missed while the computer slept or was off runs right after it wakes or starts. Manual checks send
 notifications the same way as scheduled ones. **Pause** skips the topic until it is resumed, including queued checks.
@@ -176,14 +177,15 @@ manual checks and progress checks do not reset it.
 - **Cooldown.** A mirror that fails three times in a row rests for an hour (Rutor: 30 minutes); the others keep
   working. A site's `fail_threshold` and `cooldown_sec` in `config.yaml` change the count and the pause. A check you
   start (the row's ↻ on Home, **Check all topics now**) tries resting mirrors too, and a mirror that answers ends its
-  pause; the check icon in the site's row on **Sites** (“Check the site's mirrors”) only shows which mirrors answer.
-  Only the mirror's own failures count: it refuses
-  or drops the connection, does not answer, answers with a server error, or shows a Cloudflare check on its front
-  page too. A Cloudflare check or a slow answer on one topic's page alone is that topic's error (yellow) and does not
-  pause the mirror for the other topics.
+  pause; the check icon in the site's row on **Sites** (“Check the site's mirrors”) only shows which mirrors answer. A
+  mirror that answers “too many requests” rests for the time it names (at most a day; otherwise one to 30 minutes),
+  and checks you start wait for it too. Only the mirror's own failures count: it refuses or drops the connection, does
+  not answer, answers with a server error, or shows a Cloudflare check on its front page too. A Cloudflare check or a
+  slow answer on one topic's page alone is that topic's error (yellow) and does not pause the mirror for the other
+  topics.
 - **Daily limit.** When a site says the download limit for today is reached, scheduled checks leave that site alone
-  until tomorrow and do not try other mirrors (they share the limit). A check you start (the row's ↻, **Check all topics now**)
-  still tries it.
+  until tomorrow and do not try other mirrors (they share the limit). A check you start (the row's ↻, **Check all
+  topics now**) still tries it.
 - **Sign-in.** Sites that need it get a user name and password on **Sites**, stored encrypted. A site that only allows
   signing in through a browser (NNM-Club) opens a browser window (Chrome, Chromium or Edge) on the computer
   running TOW; the session is saved after you sign in. When the saved session has expired (the site answers with a

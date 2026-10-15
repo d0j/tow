@@ -33,6 +33,9 @@ every new version to your torrent client.
 - **Mirrors.** Several addresses per site with fallback and cooldown; daily download limits respected; sign-in by
   password or a browser window.
   New-site previews use public addresses only; private sites need explicit permission and saved configuration.
+  A site that was unavailable is checked again a few times on its own.
+- **Site behind a browser check?** Optional services for a Cloudflare challenge (on Windows also an installed module
+  that starts on demand); off by default, mirrors and sign-in come first. [Site access](docs/PROTECTION.md).
 - **Notifications.** One message per topic per check, quiet hours, a daily digest, a queue that survives restarts.
 - **History and undo.** Every file and version is recorded; the last change can be undone.
 - **Backups and updates.** Signed nightly backups, restore points, encrypted TOW files (`.towx`); updates from the
@@ -160,6 +163,7 @@ settings, topics and history stay readable (passwords stay encrypted), so keep t
 |---|---|
 | [Install](docs/install.md) | step by step for Windows, macOS and Linux; start, stop, update, remove; problems |
 | [User guide](docs/guide.md) | screens, statuses, notifications, backups, troubleshooting |
+| [Site access](docs/PROTECTION.md) | optional services for sites behind a browser check |
 | [Install and operations](docs/PORTABLE.md) | folder layout, `tow run`, autostart, updates |
 | [Architecture](docs/architecture.md) | processes, modules, data, recovery, security |
 | [Extending](docs/EXTENDING.md) | add a torrent client, messenger, site, language or page |
