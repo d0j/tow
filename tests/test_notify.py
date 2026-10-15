@@ -155,3 +155,17 @@ def test_recovered_is_kept_when_the_topic_also_has_an_event():
         ((text, _, _),) = compose(batch)
         assert text.startswith("Show — добавлено в торрент-клиент")
         assert text.endswith("(сбой устранён)")
+
+
+def test_works_again_said_with_an_event_survives_a_later_event_of_the_topic():
+    # "works again" folded into an add was lost when a completion of the same topic followed.
+    topic = {"id": "topic-1", "title": "Show"}
+    batch = NotificationBatch()
+    batch.queue(topic, kind="recovered", operation_id="op-r", tracker="rutor")
+    batch.queue(topic, kind="added", operation_id="op-a", tracker="rutor")
+    batch.queue(topic, kind="completed", operation_id="op-c", tracker="rutor", episodes="S01E01")
+    (item,) = list(batch)
+    assert (item.kind, item.recovered) == ("completed", True)
+    batch.queue(topic, kind="new_file", operation_id="op-f", tracker="rutor", error="client refused")
+    (item,) = list(batch)
+    assert (item.kind, item.recovered) == ("completed", True)
