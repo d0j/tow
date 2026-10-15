@@ -94,7 +94,6 @@
   </div>
 </header>
 <main id="main"{% if request.url.path == '/' %} class="home-page"{% endif %} aria-labelledby="page-title">
-  {% if request.url.path == '/' %}<a class="release-notice" href="/settings?open=updates#acc-updates" data-release-notice aria-live="polite" hidden></a>{% endif %}
   {#- The one message strip (_message.html, messages.js). A failed check is shown too while
       "Needs attention" lists its topic: the message is the click's result, the triangle what is
       still wrong. -#}

@@ -483,7 +483,8 @@ def test_automatic_update_checks_can_be_disabled_and_manual_checks_still_work(mo
 def test_update_links_open_only_compact_updates_panel():
     client = TestClient(app)
     home = BeautifulSoup(client.get("/").text, "html.parser")
-    assert home.select_one("[data-release-notice]")["hidden"] == ""
+    assert home.select_one("[data-release-notice]") is None  # the footer badge says it on Home too
+    assert home.select_one(".app-version [data-release-badge]")["hidden"] == ""
     assert "open=updates" in home.select_one(".app-version a")["href"]
     page = BeautifulSoup(client.get("/settings").text, "html.parser")
     updates = page.select_one("#acc-updates")

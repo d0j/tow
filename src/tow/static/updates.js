@@ -56,7 +56,6 @@
   const check = document.querySelector("[data-release-check]");
   const notes = document.querySelector("[data-release-notes]");
   const command = document.querySelector("[data-release-command]");
-  const notice = document.querySelector("[data-release-notice]");
   const history = document.querySelector("[data-update-history]");
   const install = document.querySelector("[data-release-install]");
   const progress = document.querySelector("[data-update-progress]");
@@ -109,13 +108,10 @@
       command.textContent = command.textContent.replace(/--ref\s+\S+$/, "--ref v" + data.latest);
     }
     controls();
-    badge.hidden = !available || Boolean(notice);
+    // A newer version is the footer's badge on every page, Home too; Settings → Updates says more.
+    badge.hidden = !available;
     badge.textContent = available ? t("js.releases.badge", { version: data.latest }) : "";
     badge.title = available ? t("js.releases.available", { version: data.latest }) : "";
-    if (notice) {
-      notice.hidden = !available;
-      notice.textContent = available ? t("js.releases.available", { version: data.latest }) : "";
-    }
     positionOverlay();
     if (notes && /^https:\/\/github\.com\/d0j\/tow\/releases(?:\/tag\/v\d+\.\d+\.\d+)?$/.test(data.url || "")) {
       notes.href = data.url;
