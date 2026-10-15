@@ -429,6 +429,7 @@ def test_a_secret_field_says_saved_only_when_a_secret_is_saved():
     assert "placeholder" not in new
     assert 'id="q_pass-client-1-saved"' not in page
     assert 'aria-describedby="nf-telegram-token-saved"' in _tag(page, "nf-telegram-token")
+    assert "placeholder" not in _tag(page, "nf-telegram-token")  # a format there read as the saved value
     assert "aria-describedby" not in _tag(page, "nf-discord-webhook_url")  # not connected
     assert 'placeholder="https://discord.com/api/webhooks/…"' in _tag(page, "nf-discord-webhook_url")
 
