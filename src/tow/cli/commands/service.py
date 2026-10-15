@@ -95,12 +95,13 @@ def _status_view() -> dict[str, Any]:
 def _issues(state: dict[str, Any], cfg: dict[str, Any], next_at: float | None) -> list[Any]:
     import time
 
-    from tow.issues import Snapshot, collect
+    from tow.issues import Snapshot, attention, collect
     from tow.supervisor import data_lost
 
-    # The note of a lost data folder matters only while no topic is watched (as on Home).
+    # The note of a lost data folder matters only while no topic is watched (as on Home); a note
+    # such as the restarted download history is no problem to act on (``attention``).
     lost = None if state.get("topics") else data_lost()
-    return collect(Snapshot(state=state, config=cfg, now=time.time(), next_check_at=next_at, data_lost=lost))
+    return attention(collect(Snapshot(state=state, config=cfg, now=time.time(), next_check_at=next_at, data_lost=lost)))
 
 
 def _status(args: argparse.Namespace) -> int:

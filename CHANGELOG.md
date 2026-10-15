@@ -184,6 +184,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   to a new id, a removed messenger) are forgotten instead of waiting for ever.
 - When the first check of a newly added topic failed and the owner was told, the check that works again now says
   so ("works again"); nothing closed that message before.
+- `tow status` counts what needs attention exactly as Home does: the note that the download history was started
+  over is no longer counted as a problem.
 
 ## [1.31.2] — 2026-10-15
 

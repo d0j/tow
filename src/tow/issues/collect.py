@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import functools
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from types import ModuleType
 
@@ -71,6 +71,17 @@ def _merged(issues: list[Issue]) -> list[Issue]:
             target=first.target_many or first.target,
         )
     return list(out.values())
+
+
+# Kinds that are a note on their page, not a problem to act on now (History says the download
+# history was started over): never counted as needing attention.
+NOTE_KINDS = frozenset({"history_rebuilt"})
+
+
+def attention(issues: Iterable[Issue]) -> list[Issue]:
+    """What needs the owner now - Home's "Needs attention" and the count of ``tow status``, by
+    one rule: every issue but a note (``NOTE_KINDS``)."""
+    return [issue for issue in issues if issue.kind not in NOTE_KINDS]
 
 
 def collect(snapshot: Snapshot, *, only: tuple[Kind, ...] | None = None) -> list[Issue]:
