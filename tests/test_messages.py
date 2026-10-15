@@ -221,6 +221,19 @@ def test_the_page_hands_its_message_and_undo_to_the_script(client):
     assert re.search(r"\.msg-host \{ position: sticky; top: var\(--msg-top", css)
 
 
+@pytest.mark.parametrize(
+    ("href", "kept"), [("/?check_result=j1", True), ("https://evil.example/", False), ("//evil.example", False)]
+)
+def test_a_message_offers_a_page_of_this_tow_only(client, href, kept):
+    location = flash_location("/", "check all finished", "warn", href=href, link="View results")
+    said = flash_record(location)
+    assert (said.get("href"), said.get("link")) == ((href, "View results") if kept else (None, None))
+    strip = BeautifulSoup(client.get(location).text, "html.parser").select_one("#flash")
+    link = strip.select_one("a.msg-link")
+    assert (link["href"] if link else None) == (href if kept else None)
+    assert strip.get("data-href") == (href if kept else None)
+
+
 def test_an_explicit_subject_wins_and_an_empty_one_opts_out(client):
     assert flash_record(flash_location("/", "web.common.saved", "ok", subject="Kodi"))["subject"] == "Kodi"
     assert flash_record(flash_location("/", "web.common.saved", "ok", subject=""))["subject"] == ""
