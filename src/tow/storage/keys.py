@@ -177,6 +177,23 @@ def write_new_key_file(path: Path, key: bytes) -> None:
             path.unlink()  # a half-written key must not look like a different one next time
         raise SecretStoreError(Msg("cli.keys.error.write_failed")) from exc
     restrict_file(path)
+    _sync_folder(path.parent)
+
+
+def _sync_folder(folder: Path) -> None:
+    """The new key's folder entry is on the disk too: a power cut soon after the first setup could
+    lose keys/master.key while secrets.enc (whose folder is flushed) survived, and the secrets
+    could not be opened any more. Where the system can (POSIX; on Windows a folder cannot be
+    opened so, and NTFS journals its entries)."""
+    try:
+        handle = os.open(folder, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        with suppress(OSError):
+            os.fsync(handle)
+    finally:
+        os.close(handle)
 
 
 # Why a master key could not be created or adopted (catalog keys cli.keys.error.<kind>).

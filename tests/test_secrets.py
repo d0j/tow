@@ -258,6 +258,19 @@ def test_undecodable_secrets_bytes_are_a_damaged_store_not_a_crash(monkeypatch):
         assert str(error.value) == i18n.translate("store.secrets_damaged", i18n.current())
 
 
+def test_a_new_key_files_folder_entry_is_flushed_too(tmp_path, monkeypatch):
+    """The key's bytes were flushed but not its folder's entry: a power cut soon after the first
+    setup could lose keys/master.key on POSIX while secrets.enc (whose folder is flushed)
+    survived, and the secrets could not be opened any more."""
+    from tow.storage import keys
+
+    path = tmp_path / "keys" / "master.key"
+    synced: list[tuple[Path, bool]] = []
+    monkeypatch.setattr(keys, "_sync_folder", lambda folder: synced.append((folder, path.is_file())), raising=False)
+    keys.write_new_key_file(path, b"k" * 44)
+    assert synced == [(path.parent, True)]
+
+
 def test_a_half_written_key_file_is_removed(tmp_path, monkeypatch):
     import os
 
