@@ -318,6 +318,20 @@ def _season_word_episode_word(text: str, path: PurePosixPath) -> tuple[EpisodeLa
     return None
 
 
+def _number_season_episode_word(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, ...] | None:
+    """``1 сезон 01 серия`` / ``2 season 3 episode`` (not ``1-2 сезон``: no one season)."""
+    match = re.search(
+        r"(?i)(?<![\d\-–—+,&])\b(\d{1,2})\s*(?:season|сезон)\w*\D{0,20}?\b(\d{1,4})\s*(?:сери|эпизод|episode)",
+        text,
+    )
+    if match:
+        season, episode = int(match.group(1)), int(match.group(2))
+        if season == 0 or episode == 0:
+            return ()
+        return (EpisodeLabel(episode=episode, season=season),)
+    return None
+
+
 def _episode_word(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, ...] | None:
     """``E05``, ``Ep 5``, ``Серия 5``, with an optional second number or range."""
     match = re.search(
@@ -543,6 +557,7 @@ _COVERAGE_PARSERS: tuple[Callable[[str, PurePosixPath], tuple[EpisodeLabel, ...]
     _season_episode_range,
     _season_dash_episode,
     _season_word_episode_word,
+    _number_season_episode_word,
     _episode_word,
     _number_then_episode_word,
     _range_then_plural_word,
