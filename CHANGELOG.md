@@ -200,6 +200,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   is recorded.
 - `tow check` marks a skipped topic, or one whose result was not saved, with `–` instead of `ok`, and says each
   result in words instead of an internal code (`succeeded`, `preview`).
+- A check on the web whose every topic was skipped or not saved ends in a neutral message, not a green success.
 
 ## [1.31.2] — 2026-10-15
 

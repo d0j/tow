@@ -307,7 +307,8 @@ def check_report(out: dict[str, Any], *, apply: bool) -> dict[str, Any]:
         )
         or t("web.check_all.empty")
     )
-    kind = "err" if "bad" in tones else "warn" if "warn" in tones else "ok"
+    # Only skipped or unsaved rows confirmed nothing: a neutral message, not a green success.
+    kind = "err" if "bad" in tones else "warn" if "warn" in tones else "ok" if tones & {"ok", "new"} else "info"
     return {"summary": summary, "counts": counts, "rows": details, "total": sum(counts.values()), "kind": kind}
 
 
