@@ -941,8 +941,8 @@ def _merge_run_view(saved: dict[str, Any], run: dict[str, Any]) -> None:
             saved[key][host] = max(float(saved[key].get(host) or 0), until)
     for key in ("observed", "access"):
         for host, row in run[key].items():
-            old = saved[key].get(host)
-            if isinstance(row, dict) and not (isinstance(old, dict) and float(old.get("at") or 0) >= row.get("at", 0)):
+            mine, theirs = _observation(row), _observation(saved[key].get(host))
+            if mine is not None and (theirs is None or mine["at"] > theirs["at"]):
                 saved[key][host] = row
 
 

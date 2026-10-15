@@ -276,3 +276,12 @@ def test_an_answer_compressed_in_a_way_tow_cannot_read_does_not_pause_the_mirror
     bucket = load_state()["mirrors"].get("demo", {})
     assert not bucket.get("cool")
     assert not any(bucket.get("fail", {}).values())
+
+
+def test_a_damaged_saved_observation_does_not_break_an_applying_run(monkeypatch):
+    install(monkeypatch, lambda r: httpx.Response(200, text="<title>Show A</title>"))
+    run = _tracker()
+    run.fetch_title("https://site.example/topic/1", {}, None, persist=False)
+    _saved(observed={HOST: {"failure": "ok", "at": "yesterday", "token": None}}, access={HOST: "x"})
+    assert run.fetch_title("https://site.example/topic/2", {}, None, persist=True) == "Show A"
+    assert load_state()["mirrors"]["demo"]["observed"][HOST]["failure"] == "ok"
