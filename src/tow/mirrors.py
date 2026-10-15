@@ -565,6 +565,9 @@ def response_verdict(
 
 
 def refuse_verdict(verdict: Verdict, status: int) -> None:
+    if verdict == Verdict.LOGIN_NEEDED and status < 400:
+        # A sign-in page with a good status: "error 200" would say nothing went wrong.
+        raise MirrorFetchError(_VERDICT_KEYS[verdict], failure=verdict.value)
     if verdict != Verdict.OK:
         raise MirrorFetchError(_VERDICT_KEYS[verdict], failure=verdict.value, status=status)
 
