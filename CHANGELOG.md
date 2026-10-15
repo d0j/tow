@@ -46,11 +46,23 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The sign-in dialog says which site it is for (“Sign in to RuTracker”), puts the user name and password side
   by side with an eye to show what you typed, and says the password is stored encrypted; the browser sign-in
   says that its window opens on the computer running TOW.
+- A site's card on Sites starts with its sign-in: user name and password (with an eye), or the browser
+  sign-in, which now hides the password fields and keeps what is saved. The mirrors follow; the name,
+  patterns and paths a preset fills in wait under “Advanced”. The add-site help is two sentences, and filling
+  the patterns in by hand is explained under “Advanced” next to them.
 
 ### Fixed
 
 - A torrent client's error on Home names the client once (“qBittorrent: connection refused”, not “Torrent
   client: qBittorrent: …”), and a row never writes it as “QBittorrent”.
+- A refused save of a site's card opens the site again at the refused field, marked and focused, with
+  “Advanced” open when the field is there, instead of closing the list.
+- The example of the `.torrent` link pattern on Sites shows `download\.php\?id=(\d+)`; it showed doubled
+  backslashes, and a copied example did not work.
+- A site's password field no longer says “keep as is” when no password is saved; a saved one says
+  “Saved · leave empty to keep”.
+- A refused site name says the rule plainly (“Short name: small Latin letters, digits and _”), and for “new”
+  or “guess” that TOW uses the name itself, instead of listing both in every refusal.
 
 ### Fixed
 

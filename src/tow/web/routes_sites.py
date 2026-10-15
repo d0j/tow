@@ -116,6 +116,8 @@ def sites(request: Request) -> Response:
                 k: {
                     "user": (v or {}).get("username") or "",
                     "set": bool((v or {}).get("username") or (v or {}).get("password") or (v or {}).get("uid")),
+                    # A saved password (never its value): the field says an empty one keeps it.
+                    "password": bool((v or {}).get("password")),
                 }
                 for k, v in (_context.secrets().get("trackers") or {}).items()
             },
@@ -124,6 +126,8 @@ def sites(request: Request) -> Response:
             # The site a link opens (?open=<name>, "Needs attention"), without a script too, and
             # what needs the owner there.
             "open_site": str(request.query_params.get("open") or ""),
+            # The field a refused save of that site was about (site_actions._edit_refused).
+            "edit_field": str(request.query_params.get("field") or ""),
             "notes": issue_notes(state, _context.config(), "sites"),
         },
     )
