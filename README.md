@@ -37,7 +37,10 @@ every new version to your torrent client.
 - **Site behind a browser check?** Optional services for a Cloudflare challenge (on Windows also an installed module
   that starts on demand); off by default, mirrors and sign-in come first. [Site access](docs/PROTECTION.md).
 - **Notifications.** One message per topic per check, quiet hours, a daily digest, a queue that survives restarts.
-- **History and undo.** Every file and version is recorded; the last change can be undone.
+- **One message per action.** A check or change ends in one message that names its topic (green, amber or red);
+  it folds into Recent messages in the header, and lasting problems stay in Needs attention until fixed. Checks of
+  several topics in a row stay on the page and update each row in place.
+- **History and undo.** Every file and version is recorded; a change can be undone from its own message.
 - **Backups and updates.** Signed nightly backups, restore points, encrypted TOW files (`.towx`); updates from the
   Settings page that put the previous version back by themselves if anything fails.
 - **One folder, two languages.** Code, settings, data, key, backups and its own Python: move it and it keeps
