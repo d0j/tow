@@ -34,6 +34,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   a health), and the pills that repeated the section's (“Set up”, “This computer only”, “Saved: 1”) are gone.
   Times in Settings follow the short rule: the Backups pill says “Nightly backup 20:31” instead of
   “2026-10-15 22:29:52 CET UTC+01:00”.
+- The add-topic form and a topic's edit panel are compact: fields as wide as what they hold, the torrent
+  client choice only when there is more than one client, “Add new versions” as a checkbox and “Check every,
+  min” with one line of help. The file list shows only for “Choose files”; an episode or pattern rule keeps
+  one line to preview its files. The edit panel no longer repeats its fields in a sentence, says that the
+  torrent client moves the files only once the folder changes, and links a paused site or a failing torrent
+  client to where it is fixed.
 
 ### Fixed
 

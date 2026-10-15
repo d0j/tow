@@ -101,7 +101,7 @@ RU_ALLOWED = {
 RU_KNOWN_LEAKS = {
     "secrets": "log.check_error.secrets",
     "tracker": "log.cls.tracker_auth",
-    "torrent": "home.add.check_hint",
+    "torrent": "home.add.client",
 }
 
 

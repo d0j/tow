@@ -19,7 +19,7 @@ from fastapi.responses import RedirectResponse
 from tow import access, i18n
 from tow.adopt import unmarked_hash
 from tow.check import PREVIOUS_REVISION_ACTIVE, blocked_by_previous_revision
-from tow.clock import format_ui_timestamp
+from tow.clock import format_ui_timestamp, parse_timestamp
 from tow.config import as_bool, flash_ttl, interval_sec_of
 from tow.episodes import expected_for_topic
 from tow.errors import render_stored
@@ -422,6 +422,20 @@ def ui_time(value: str | None) -> str:
 _STORED_ZONE = re.compile(r"(?P<when>.+?) (?:[A-Z]{2,5} )?UTC(?:(?P<sign>[+-])(?P<hours>\d{2}):(?P<minutes>\d{2}))?")
 
 
+def _stored_moment(text: str) -> datetime | None:
+    """The moment of a time a check stored as text by TOW 1.24 and before ("07.10.2026 12:16:13
+    UTC+03:00", in the page language of that moment); None for any other text."""
+    match = _STORED_ZONE.fullmatch(text)
+    if match is None:
+        return None
+    minutes = int(match["hours"] or 0) * 60 + int(match["minutes"] or 0)
+    zone = timezone(timedelta(minutes=-minutes if match["sign"] == "-" else minutes))
+    for code in i18n.codes():
+        with suppress(ValueError):
+            return datetime.strptime(match["when"], i18n.datetime_pattern(code)).replace(tzinfo=zone)
+    return None
+
+
 def stored_ui_time(value: Any) -> str:
     """A time a check stored - an ISO time, or (TOW 1.24 and before) a text written in the page
     language of that moment ("07.10.2026 12:16:13 UTC+03:00") - written in this page's language.
@@ -431,16 +445,21 @@ def stored_ui_time(value: Any) -> str:
         return ""
     with suppress(TypeError, ValueError):
         return format_ui_timestamp(text)
-    match = _STORED_ZONE.fullmatch(text)
-    if match is None:
-        return text
-    minutes = int(match["hours"] or 0) * 60 + int(match["minutes"] or 0)
-    zone = timezone(timedelta(minutes=-minutes if match["sign"] == "-" else minutes))
-    for code in i18n.codes():
-        with suppress(ValueError):
-            moment = datetime.strptime(match["when"], i18n.datetime_pattern(code)).replace(tzinfo=zone)
-            return format_ui_timestamp(moment)
-    return text
+    moment = _stored_moment(text)
+    return format_ui_timestamp(moment) if moment is not None else text
+
+
+def stored_iso(value: Any) -> str:
+    """The same stored time as ISO text, for the short form the pages show (``short_time``);
+    "" when it is not a time (the page then shows ``stored_ui_time``'s text). The stored value
+    is never changed."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    with suppress(TypeError, ValueError):
+        return parse_timestamp(text).isoformat()
+    moment = _stored_moment(text)
+    return moment.isoformat() if moment is not None else ""
 
 
 # Event kind -> catalog key of its short label.
@@ -743,6 +762,9 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "series": shown_title(topic).split(" / ")[0],
                 "download_summary": summary,
                 "last_event_label": _event_display(event) if event else "",
+                # The same as ISO times, for the pages' short form (today "20:31").
+                "last_check_iso": stored_iso(topic.get("last_check")),
+                "last_ok_iso": stored_iso(topic.get("last_ok_at")),
                 "last_event_at": ui_time(event.get("at")) if event else "",
                 "last_event_iso": str(event.get("at") or "") if event else "",
                 "last_error_class": (
