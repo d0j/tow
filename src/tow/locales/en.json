@@ -466,6 +466,7 @@
     "check": {
       "client": "client: {value}",
       "preview": "(preview, nothing changed)",
+      "would_change": "would change the torrent client",
       "total": "total: {n}, failed: {failed}",
       "total_waiting": "total: {n}, waiting: {waiting}, failed: {failed}",
       "scope_refused": "--progress-only and --space-only ask the torrent client alone: they do not go with --global-only, --timer-only or --site-retry-only."

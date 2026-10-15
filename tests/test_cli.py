@@ -371,7 +371,7 @@ def test_check_text_output_follows_the_owners_language(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert not re.search("[а-яё]", out, re.IGNORECASE), out
     assert t("cli.check.total", "en", n=1, failed=0) in out
-    assert t("web.check.changed", "en") in out
+    assert t("cli.check.would_change", "en") in out  # a preview changed nothing yet
 
 
 def test_check_text_output_is_one_line_per_topic(monkeypatch, capsys):
@@ -446,3 +446,34 @@ def test_the_table_says_how_each_command_runs():
     assert named("background") == {"run", "serve", "check", "watchdog", "backup"}
     assert named("warn_open_folders") == {"run", "start", "serve"}
     assert {c.name for c in commands.COMMANDS if not c.protects_folders} == {"permissions"}
+
+
+def test_check_text_says_each_outcome_in_words_never_a_status_code(monkeypatch, capsys):
+    # A skipped or unsaved row was marked "ok" like a success, and a row's internal status
+    # ("succeeded", "preview") was printed as its text.
+    from tow import check
+
+    results = [
+        {"title": "Show A", "ok": True, "status": "succeeded"},
+        {"title": "Show B", "ok": True, "status": "skipped", "skipped": "paused"},
+        {"title": "Show C", "ok": True, "status": "succeeded", "added": True},
+        {"title": "Show D", "ok": False, "status": "failed"},
+        {"title": "Show E", "ok": False, "status": "verification_pending"},
+    ]
+    monkeypatch.setattr(check, "run_check", lambda **_kw: {"results": results})
+    assert cli.main(["check", "--apply"]) == 2
+    out = capsys.readouterr().out.splitlines()
+    assert out[:5] == [
+        "ok  Show A",
+        "–   Show B — paused",
+        "ok  Show C — " + t("web.check.added"),
+        "ERR Show D — " + t("web.check.not_confirmed"),
+        "…   Show E — " + t("web.check.verifying"),
+    ]
+    monkeypatch.setattr(
+        check,
+        "run_check",
+        lambda **_kw: {"preview": True, "results": [{"title": "F", "ok": True, "status": "preview", "changed": True}]},
+    )
+    assert cli.main(["check"]) == 0
+    assert capsys.readouterr().out.splitlines()[1] == "ok  F — " + t("cli.check.would_change")
