@@ -37,7 +37,7 @@ from tow.check.client_ops import (
     info_owned_by_tow,
     live_previous_overlap,
 )
-from tow.check.rows import client_marks, fail_row, set_error, stamp_result, withdrawn_meanwhile
+from tow.check.rows import client_marks, fail_row, note_removed, set_error, stamp_result, withdrawn_meanwhile
 from tow.clients.managed import ClientVerificationPending, completed_progress
 from tow.clients.spec import TorrentClientAdapter
 from tow.clock import iso_now
@@ -454,6 +454,7 @@ def space_pass_row(topic: Topic, run: CheckRun, row: dict[str, Any]) -> None:
         row.update({"ok": True, "status": "skipped"})  # still waiting: the pass itself went fine
         _clear_row_error(row)
     elif outcome == GONE:
+        note_removed(topic)
         fail_row(topic, row, TowError("check.removed_from_client"))
     elif outcome == FOREIGN:
         seen = {"hash": str(row.get("hash") or ""), "url": str(topic.get("url") or ""), "client": client_id}

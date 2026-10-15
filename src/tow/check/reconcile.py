@@ -10,7 +10,7 @@ from typing import Any, cast
 from tow import check_transaction, download_history
 from tow.check.client_ops import client_unreachable
 from tow.check.notices import queue_recoveries
-from tow.check.rows import fail_row, row_error, stamp_result
+from tow.check.rows import fail_row, note_removed, row_error, stamp_result
 from tow.check.topic import CheckRun
 from tow.check_steps import mark_reconcile_failure, reconcile_notification
 from tow.clock import iso_now
@@ -257,8 +257,11 @@ def _reconcile_one(
             )
     _note_season_complete(topic, row, run, history_topics.get(topic_key), reconcile)
     present = (history_topics.get(topic_key) or {}).get("client_present") is not False
+    if present:
+        topic.pop("client_removed_at", None)  # back (or added again): a later removal is a new one
     if checked_ok and not present:
         # B4: the torrent was removed from the client; "раздача исчезла" was sent once.
+        note_removed(topic)
         fail_row(topic, row, TowError("check.removed_from_client"))
     elif not checked_ok and row.get("ok") and present and topic.get("last_error_code") == RECONCILE_FAILED:
         # A reconcile failure that a progress pass (or a check that skipped the topic) set is

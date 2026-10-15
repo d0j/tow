@@ -11,7 +11,7 @@ import copy
 from typing import TYPE_CHECKING, Any
 
 from tow.check.client_ops import client_unreachable, info_confirms, info_owned_by_tow
-from tow.check.rows import client_marks, set_error, stamp_result, withdrawn_meanwhile
+from tow.check.rows import client_marks, removal_seen_by, set_error, stamp_result, withdrawn_meanwhile
 from tow.clients import files
 from tow.clients.managed import ClientVerificationPending
 from tow.clients.spec import TorrentClientAdapter
@@ -392,7 +392,9 @@ def _confirm(
         raise client_unreachable(run, client_id)
     info = client.inspect_torrent(h)
     if run.readd_removed and (
-        info is None or str(waiting.get("blocked") or "") in OWNER_REPAIR_CODES or waiting.get("repair_only")
+        (info is None and removal_seen_by(topic, run.readd_since))
+        or str(waiting.get("blocked") or "") in OWNER_REPAIR_CODES
+        or waiting.get("repair_only")
     ):
         return False  # only the owner's explicit row check may re-add or repair altered evidence
     _observe_presence(waiting, info)  # never re-added here: a confirmed absence blocks the receipt

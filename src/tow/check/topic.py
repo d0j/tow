@@ -21,7 +21,7 @@ from tow.check.client_ops import (
     magnet_matches_saved_hash,
 )
 from tow.check.rows import client_marks as _client_marks
-from tow.check.rows import set_error, stamp_result
+from tow.check.rows import removal_seen_by, set_error, stamp_result
 from tow.check.rows import withdrawn_meanwhile as _withdrawn_meanwhile
 from tow.check_steps import client_identities, resolve_client_hash, store_file_aliases, verify_magnet_metadata
 from tow.clients.spec import TorrentClientAdapter
@@ -222,6 +222,8 @@ class CheckRun:
     # The owner checks these topics by hand (a row's check): a current revision gone from its
     # client is added again. A scheduled check only reports it - the owner may have removed it.
     readd_removed: bool = False
+    # When the owner asked for that check, if it waited in a queue (``removal_seen_by``).
+    readd_since: float | None = None
     # (site, error code) -> {"error", "topics"}: topics not asked because of their site (SITE_SKIP_CODES).
     site_skips: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)
 
@@ -280,7 +282,12 @@ def _confirm_matching_magnet(
         _observe_cached_magnet(url, magnet_url, topic)
     if not magnet_matches_saved_hash(magnet_url, old, topic_client):
         return False
-    if run.readd_removed and topic_client is not None and topic_client.inspect_torrent(old) is None:
+    if (
+        run.readd_removed
+        and topic_client is not None
+        and topic_client.inspect_torrent(old) is None
+        and removal_seen_by(topic, run.readd_since)
+    ):
         return False  # a manual re-add needs metadata and the ordinary, confirmed add path
     saved_selection_ready = bool(
         not topic.get("selection_dirty")
@@ -680,7 +687,7 @@ def _readds_removed(work: TopicCheck, *, h: str, needs_selection_update: bool) -
         return False
     if (needs_selection_update and not work.row.get("verification_repair")) or work.client is None:
         return False  # the selection update adds it anyway; a client that did not answer is reported
-    return work.client.inspect_torrent(h) is None
+    return work.client.inspect_torrent(h) is None and removal_seen_by(work.topic, work.run.readd_since)
 
 
 def _fetch_revision(work: TopicCheck, policy: dict[str, Any]) -> Fetched | None:

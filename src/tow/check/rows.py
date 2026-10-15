@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from tow import errors
-from tow.clock import iso_now
+from tow.clock import iso_now, parse_timestamp
 from tow.errors import TowError
 from tow.i18n import t
 from tow.log import error_class, owner_language
@@ -36,6 +36,28 @@ def fail_row(topic: Topic, row: dict[str, Any], error: TowError) -> None:
     row.update({"ok": False, "status": "failed"})
     set_error(row, error)
     stamp_result(topic, row)
+
+
+def note_removed(topic: Topic) -> None:
+    """A check found the topic's torrent gone from its client: when it was first seen gone
+    (``client_removed_at``, kept while it stays gone)."""
+    topic.setdefault("client_removed_at", now())
+
+
+def removal_seen_by(topic: Topic, moment: float | None) -> bool:
+    """Whether a check had already seen the topic's torrent gone from its client by ``moment``
+    (epoch seconds: when the owner asked to add it back; None: no such bound). A torrent removed
+    after the owner's request was not what the request was about."""
+    if moment is None:
+        return True
+    receipt = topic.get("verification_pending")
+    for seen in (topic.get("client_removed_at"), receipt.get("missing_since") if isinstance(receipt, dict) else None):
+        try:
+            if seen and parse_timestamp(str(seen)).timestamp() <= moment:
+                return True
+        except TypeError, ValueError, OverflowError:
+            continue
+    return False
 
 
 def client_marks(topic: Topic) -> tuple[str, ...]:

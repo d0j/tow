@@ -614,6 +614,48 @@ def test_removed_task_is_not_readded_by_background_but_manual_check_can_readd(wo
     assert client.calls[0][0] == "add"
 
 
+def _watch():
+    disk = load_state()
+    disk["topics"][0]["tracking_mode"] = "watch"
+    save_state(disk)
+
+
+def test_a_queued_manual_check_readds_only_a_removal_seen_before_the_click(world):
+    """A row's check that waited in the queue runs minutes after the click: a torrent removed in
+    the client meanwhile - after the owner asked - is reported, not added back."""
+    import time
+
+    client, _tracker, _sent = world
+    _watch()
+    client.checking = False
+    assert _run()["ok"]
+    clicked = time.time()
+    client.torrents.clear()  # removed in the client after the click
+    client.calls.clear()
+    row = check.run_check(apply=True, notify=False, how="manual", ids=["slow"], readd_since=clicked)["results"][0]
+    assert not row["ok"]
+    assert "add" not in [call[0] for call in client.calls]
+    seen = load_state()["topics"][0]["client_removed_at"]  # the check saw it gone
+    assert row["error_record"]["code"] == "check.removed_from_client"
+    row = check.run_check(apply=True, notify=False, how="manual", ids=["slow"], readd_since=time.time() + 1)
+    assert client.calls[0][0] == "add"
+    assert row["results"][0]["ok"]
+    assert "client_removed_at" not in load_state()["topics"][0]
+    assert seen
+
+
+def test_a_manual_check_started_at_once_still_readds_a_removed_torrent(world):
+    client, _tracker, _sent = world
+    _watch()
+    client.checking = False
+    assert _run()["ok"]
+    client.torrents.clear()
+    client.calls.clear()
+    row = check.run_check(apply=True, notify=False, how="manual", ids=["slow"])["results"][0]
+    assert row["ok"]
+    assert client.calls[0][0] == "add"
+
+
 def test_manual_readd_finishes_as_added_not_selection_updated(world):
     client, _tracker, sent = world
     _run()

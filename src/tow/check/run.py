@@ -128,8 +128,13 @@ def run_check(
     wait: bool = True,
     scheduled_scope: str = "",
     space_only: bool = False,
+    readd_since: float | None = None,
 ) -> dict[str, Any]:
     """Run one check; applying checks never overlap (scheduled, progress, web, CLI).
+
+    ``readd_since``: when the owner asked for this row check (epoch seconds), for a request that
+    waited in a queue - a torrent gone from its client is added back only when a check had
+    already seen it gone by then, never one removed after the request.
 
     ``space_only``: the supervisor's space pass - only the topics whose revision waits in the
     client for disk space, asked of the client alone (``tow.check.space``), no site traffic.
@@ -156,6 +161,7 @@ def run_check(
             progress_only=progress_only,
             scheduled_scope=scheduled_scope,
             space_only=space_only,
+            readd_since=readd_since,
         )
     with check_run_lock(wait=wait):
         return _run_check(
@@ -167,6 +173,7 @@ def run_check(
             progress_only=progress_only,
             scheduled_scope=scheduled_scope,
             space_only=space_only,
+            readd_since=readd_since,
         )
 
 
@@ -340,6 +347,7 @@ def _run_check(
     progress_only: bool = False,
     scheduled_scope: str = "",
     space_only: bool = False,
+    readd_since: float | None = None,
 ) -> dict[str, Any]:
     cfg = load_config()
     secrets, secrets_stamp = read_secrets()
@@ -414,6 +422,7 @@ def _run_check(
         # A row's check (the owner chose these topics) puts a removed torrent back; Check all
         # and the scheduled checks only report it.
         readd_removed=how == "manual" and ids is not None,
+        readd_since=readd_since,
     )
     results: list[CheckRow] = []
     for topic in topics_of(state):
