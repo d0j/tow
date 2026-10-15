@@ -171,6 +171,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   for every other topic while the site's front page answers.
 - A check with several messages for a messenger that does not answer no longer retries that messenger once per
   message (minutes, with the next check waiting): the queue is sent once and every message is still logged.
+- Several messages of one check sent together no longer arrive under "Not delivered earlier:" (only messages that
+  failed before do), and the note about messages dropped from a full queue is no longer lost when a delivery
+  fails once.
 
 ## [1.31.2] — 2026-10-15
 
