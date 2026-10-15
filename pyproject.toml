@@ -64,6 +64,8 @@ dev = [
     "httpx2>=2.12.0",
     "mypy>=2.4.0",
     "pytest>=9.1.1",
+    # Branch coverage of the gate; locked with its coverage, not fetched unpinned on each run.
+    "pytest-cov>=7.1.0",
     "pytest-timeout>=2.4",
     "pytest-xdist>=3.8",
     "ruff>=0.16.10",
@@ -111,7 +113,7 @@ filterwarnings = [
     "error::DeprecationWarning",
 ]
 
-# Branch coverage of the full gate (pytest-cov comes in with `uv run --with`, see scripts/gate.ps1).
+# Branch coverage of the full gate (pytest-cov, a dev dependency; see scripts/gate.ps1).
 [tool.coverage.run]
 branch = true
 source = ["tow"]
