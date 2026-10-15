@@ -14,6 +14,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - A field that was refused (a wrong link, a bad site name) now has a red border, not only the red message at
   the top of the form.
+- The Log and a topic's episode list open as tall as their lines (up to most of the screen) instead of always
+  filling the screen, even for three lines.
 
 ## [1.31.2] — 2026-10-15
 

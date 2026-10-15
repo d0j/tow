@@ -422,8 +422,9 @@ a.set-link:hover { background: var(--panel2); text-decoration: none; }
 .log-line details.raw-error[open] { display: block; }
 details.raw-error > code { display: block; margin-top: .2rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 dialog.log-pop {
-  /* As tall as its lines, up to most of the screen (it opened full height for two lines). */
-  width: min(92vw, 90rem); height: auto; max-height: min(88vh, 58rem); padding: 0;
+  /* As tall as its lines, up to most of the screen (it opened full height for two lines: on a
+     modal dialog, which sits at inset-block 0, `height: auto` stretches it to the screen). */
+  width: min(92vw, 90rem); height: fit-content; max-height: min(88vh, 58rem); padding: 0;
   border: 1px solid var(--line); border-radius: 10px;
   background: var(--bg); color: inherit;
 }

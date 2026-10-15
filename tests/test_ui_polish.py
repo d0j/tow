@@ -27,6 +27,17 @@ def client():
     return TestClient(app, headers=ORIGIN)
 
 
+def test_the_log_and_the_episodes_open_as_tall_as_their_lines():
+    """The Log and a topic's episodes always opened ~790 px tall, even for three lines: on a modal
+    dialog (inset-block: 0) `height: auto` stretches it to the screen (Chromium: 798 px with auto,
+    78 px with fit-content). Up to most of the screen, then the lines scroll inside."""
+    rule = _rules(CSS)["dialog.log-pop"]
+    assert "height: fit-content" in rule
+    assert "height: auto" not in rule
+    assert "max-height: min(88vh, 58rem)" in rule
+    assert "min-height: 0" in _rules(CSS)["dialog.log-pop .log-box"]
+
+
 def test_hidden_list_tools_are_really_hidden():
     """`.list-tools { display: flex }` beat the UA's [hidden]: the filter bar never went away."""
     rules = _rules(CSS)
