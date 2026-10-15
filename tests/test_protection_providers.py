@@ -1107,3 +1107,19 @@ def test_only_the_local_module_can_say_it_is_warming(monkeypatch, local, phase):
     with pytest.raises(ProviderUnavailableError) as caught:
         providers.cookie_api(settings()["providers"][0], ORIGIN, 15)
     assert (caught.value.reason, caught.value.phase) == ("busy", phase)
+
+
+def test_services_are_asked_for_the_uncompressed_answer_they_must_give(monkeypatch):
+    seen = []
+    real_client = httpx.Client
+
+    def client(**kwargs):
+        kwargs["transport"].close()
+        kwargs["transport"] = httpx.MockTransport(
+            lambda request: seen.append(request) or httpx.Response(200, json=solution())
+        )
+        return real_client(**kwargs)
+
+    monkeypatch.setattr(providers.httpx, "Client", client)
+    providers.cookie_api(settings()["providers"][0], ORIGIN, 15)
+    assert seen[0].headers["accept-encoding"] == "identity"

@@ -201,7 +201,10 @@ def cookie_api(
         httpx.Client(
             trust_env=False, follow_redirects=False, timeout=timeout, transport=_transport(deadline)
         ) as client,
-        client.stream("POST", endpoint, json=payload, headers={"Accept": "application/json"}) as response,
+        # A compressed answer is refused below, so none is offered (the client's default would).
+        client.stream(
+            "POST", endpoint, json=payload, headers={"Accept": "application/json", "Accept-Encoding": "identity"}
+        ) as response,
     ):
         _service_status(response, local=locally_managed)
         if response.headers.get("content-encoding", "identity").strip().lower() not in {"", "identity"}:

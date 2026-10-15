@@ -48,6 +48,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   in again once instead of reporting "not a torrent file". A removed topic and the daily limit still win.
 - Settings and each site-access request no longer read the installed module's whole program file to check it:
   it is checked again when the file changes, and always right before the module starts.
+- Site-access services are asked for an uncompressed answer, the only kind TOW accepts: a service that
+  compressed it because TOW's request allowed that was refused.
 
 ## [1.30.10] — 2026-10-15
 
