@@ -145,3 +145,35 @@ def test_the_docs_name_site_access_and_site_retries(doc, words):
     text = " ".join((ROOT / doc).read_text(encoding="utf-8").split())
     for word in words:
         assert word in text, word
+
+
+def test_the_architecture_names_every_module():
+    """docs/architecture.md lacked tow.web.check_jobs, tow.check_outcomes, tow.site_retries, the client
+    verification, the on-demand site-access module and its broker, and many supporting modules.
+
+    Every top-level module and package of ``tow``, and every module of the packages below (route modules
+    excepted: "one ``APIRouter`` per ``routes_*.py``"), is named by its dotted name or, inside its package's
+    entry, by its own name in backticks."""
+    text = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
+    source = ROOT / "src" / "tow"
+    names = [
+        f"tow.{path.stem}"
+        for path in sorted(source.iterdir())
+        if not path.name.startswith("_") and (path.suffix == ".py" or (path / "__init__.py").is_file())
+    ]
+    names += [
+        f"tow.{package}.{path.stem}"
+        for package in ("check", "protection", "supervisor", "platform", "web")
+        for path in sorted((source / package).glob("*.py"))
+        if path.stem != "__init__" and not path.stem.startswith("routes_")
+    ]
+
+    def named(name):
+        return re.search(rf"`{re.escape(name)}[`.(]", text) or f"`{name.rsplit('.', 1)[-1]}`" in text
+
+    assert [name for name in names if not named(name)] == []
+    for fact in ("site_retry_attempts", "site_retry_batch", "--site-retry-only", "verification_pending"):
+        assert fact in text, fact
+    roadmap = " ".join((ROOT / "docs" / "ROADMAP.md").read_text(encoding="utf-8").split())
+    for fact in ("automatic retries after a site outage", "waits in a bounded queue", "long verification of existing"):
+        assert fact in roadmap, fact
