@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
 {% from "_issue_notes.html" import issue_notes_at %}
+{% from "_note.html" import note %}
 {% block body %}
 {% set hh = header_health() %}
 <div class="settings-page settings-page-compact">
@@ -567,7 +568,7 @@
               <button type="submit" data-busy-label="{{ t('common.busy.copying') }}">{{ t('settings.backups.create') }}</button>
             </form>
             {% if restore_points_error %}
-            <p class="notice error" role="alert">{{ t('settings.backups.list_error') }}</p>
+            {{ note(t('settings.backups.list_error'), 'bad') }}
             {% elif restore_points %}
             <details class="backup-inventory"{{ fix_open('restore_night') }}>
             <summary>{{ t('settings.backups.saved_count', n=restore_points|length) }} · {{ restore_points_size }}</summary>
