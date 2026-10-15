@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.14"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -1008,7 +1008,7 @@ wheels = [
 
 [[package]]
 name = "tow"
-version = "1.30.10"
+version = "1.30.11"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
