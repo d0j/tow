@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.31.1] — 2026-10-15
+
 ### Security
 
 - A site page made of thousands of unclosed tags no longer costs TOW a second or more of processor time on
