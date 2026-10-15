@@ -62,7 +62,11 @@ def sites(request: Request) -> Response:
     probes = list(by_host.values())
     for row in probes:
         row["reason"] = (
-            (services.doctor_reason(str(row["error"])) if row.get("error") else t("sites.not_responding"))
+            (
+                services.doctor_reason(str(row["error"]), status=row.get("status"))
+                if row.get("error")
+                else t("sites.not_responding")
+            )
             if not row.get("ok")
             else t("sites.responds")
         )

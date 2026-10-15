@@ -121,3 +121,41 @@ def test_routine_successes_refresh_their_time_every_five_minutes(monkeypatch, cl
     page = client.get("/sites").text
     assert _tone(page) == "ok"
     assert 'class="dot ok"' in _mirror(page)
+
+
+@pytest.mark.parametrize(
+    ("failure", "status", "key"),
+    [
+        ("transport", None, "doctor.reason.no_connection"),
+        ("http", 503, None),
+        ("redirect_policy", None, "doctor.reason.redirect"),
+        ("redirect_loop", None, "mirrors.redirect_limit"),
+        ("origin_down", 522, None),
+        ("rate_limited", 429, "mirrors.rate_limited"),
+    ],
+)
+def test_every_mirror_failure_is_said_in_words(client, failure, status, key):
+    cfg = load_config()
+    cfg["trackers"] = {"demo": SPEC}
+    save_config(cfg)
+    _saved({"observed": {HOST: {"failure": failure, "at": time.time(), "status": status}}})
+    mirror = _mirror(client.get("/sites").text)
+    reason = re.search(r'title="([^"]*)"', mirror).group(1)
+    assert failure not in reason
+    assert "{" not in reason
+    if key:
+        assert reason == t(key, "en")
+    else:
+        assert str(status) in reason
+
+
+@pytest.mark.parametrize(
+    "error", ["auth", "origin_down", "transport", "http 503", "gone", "local", "too_large", "paused"]
+)
+def test_a_probes_failure_code_is_said_in_words_without_a_raw_placeholder(error):
+    from tow.doctor import reason_text
+
+    text = reason_text(error, "ru")
+    assert "{" not in text
+    assert text != error
+    assert "_" not in text

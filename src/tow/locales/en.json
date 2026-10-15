@@ -841,7 +841,11 @@
       "reset": "connection reset",
       "http": "HTTP error {code}",
       "unknown": "unknown error",
-      "network": "network error"
+      "network": "network error",
+      "no_connection": "no connection",
+      "http_error": "HTTP error",
+      "local": "TOW could not read the answer",
+      "paused": "paused"
     },
     "autostart": "Autostart",
     "autostart_on": "Starts automatically",

@@ -10,6 +10,7 @@ from tow import http as thttp
 from tow.clients import factory as client_factory
 from tow.clock import iso_now
 from tow.config import as_bool, load_config
+from tow.errors import Msg
 from tow.http import client as http_client
 from tow.i18n import t
 from tow.jsonish import as_dict
@@ -236,13 +237,43 @@ _REASONS = (
 )
 
 
-def reason_text(raw: str, lang: str | None = None) -> str:
+# A mirror failure code (tow.mirrors: a check's observation of a mirror, a probe's verdict) in
+# the owner's words.
+_CODE_REASONS = {
+    "auth": "mirrors.http_auth",
+    "quota": "mirrors.daily_limit",
+    "cloudflare": "doctor.reason.cloudflare",
+    "interactive": "mirrors.interactive",
+    "blocked": "mirrors.blocked",
+    "rate_limited": "mirrors.rate_limited",
+    "origin_down": "mirrors.origin_down",
+    "maintenance": "mirrors.maintenance",
+    "unexpected": "mirrors.unexpected",
+    "transport": "doctor.reason.no_connection",
+    "http": "doctor.reason.http_error",
+    "http_topic": "doctor.reason.http_error",
+    "gone": "mirrors.topic_removed",
+    "local": "doctor.reason.local",
+    "too_large": "mirrors.too_large",
+    "paused": "doctor.reason.paused",
+    "frozen": "doctor.reason.paused",
+    "redirect_policy": "doctor.reason.redirect",
+    "redirect_loop": "mirrors.redirect_limit",
+    "config": "doctor.reason.unknown",
+}
+
+
+def reason_text(raw: str, lang: str | None = None, *, status: object = None) -> str:
     """A probe's or the client ping's raw failure ("cloudflare", "http 503", a library's
-    message) in the owner's words; an unknown one as it is."""
+    message), or a mirror's failure code with its HTTP ``status``, in the owner's words; an
+    unknown one as it is. A text naming a status it was not given leaves it out."""
     text = str(raw or "").strip()
     low = text.lower()
-    if low in {"interactive", "blocked", "rate_limited", "origin_down", "maintenance", "auth", "quota", "unexpected"}:
-        return t(f"mirrors.{'http_auth' if low == 'auth' else 'daily_limit' if low == 'quota' else low}", lang)
+    code = status if isinstance(status, int) and not isinstance(status, bool) and status >= 400 else None
+    if low in _CODE_REASONS:
+        if low in {"http", "http_topic"} and code is not None:
+            return t("doctor.reason.http", lang, code=code)
+        return Msg(_CODE_REASONS[low], **({"status": code} if code is not None else {})).text(lang)
     if low.startswith("http ") and low[5:].strip().isdigit():
         return t("doctor.reason.http", lang, code=low[5:].strip())
     for phrase, key in _REASONS:
