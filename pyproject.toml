@@ -61,6 +61,8 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    # Imported by nothing in TOW: FastAPI's TestClient (starlette.testclient) runs on httpx2; with
+    # only httpx it warns that this is deprecated.
     "httpx2>=2.12.0",
     "mypy>=2.4.0",
     "pytest>=9.1.1",
