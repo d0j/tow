@@ -67,7 +67,9 @@ PURE: dict[str, set[str]] = {
     "tow.clients.view": {"cards", "topics_using"},
     # DEFAULT_KIND: the client kind a form that names none means (a constant).
     "tow.clients.spec": {"DEFAULT_KIND", "get"},
-    "tow.clock": {"format_ui_timestamp", "iso_now", "machine_now"},
+    # local_zone: the zone TOW shows times in (the clock's seam, as machine_now); parse_timestamp:
+    # a stored time as an aware one; no I/O.
+    "tow.clock": {"format_ui_timestamp", "iso_now", "local_zone", "machine_now", "parse_timestamp"},
     # whole_number: reads a typed number, no I/O.
     "tow.config": {
         "INTERVAL_MAX_MINUTES",
@@ -88,13 +90,16 @@ PURE: dict[str, set[str]] = {
     # What needs the owner, as data: the snapshot handed to services.collect_issues, the issue and
     # the control that fixes it, the name of a set of issues and the worst severity among them; no I/O.
     "tow.issues": {"Fix", "Issue", "Snapshot", "fingerprint", "worst"},
+    # datetime_pattern, format_datetime: how a language writes a date (its catalog's pattern); no I/O.
     "tow.i18n": {
         "AUTO",
         "available",
         "canonical",
         "codes",
         "current",
+        "datetime_pattern",
         "for_request",
+        "format_datetime",
         "setting",
         "t",
         "translate",
@@ -166,9 +171,7 @@ HELPER_ALLOWED: dict[str, set[str]] = {
     "site_store": {"tow.store_transaction.transaction", "tow.undo.cleanup_needed"},
     "templating": {
         "tow.auth.SESSION_COOKIE",
-        "tow.clock.parse_timestamp",
         "tow.config.port_of",
-        "tow.i18n.datetime_pattern",
         "tow.i18n.texts_with_prefix",
         "tow.notifiers.summary",
         "tow.paths.launcher",
@@ -189,7 +192,6 @@ HELPER_ALLOWED: dict[str, set[str]] = {
         "tow.check.PREVIOUS_REVISION_ACTIVE",
         "tow.episodes.expected_for_topic",
         "tow.errors.render_stored",
-        "tow.i18n.datetime_pattern",
         "tow.log.CLS_RU",
         "tow.net_errors.humanize",
         "tow.progress.progress_summary",
