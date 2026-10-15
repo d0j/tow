@@ -17,53 +17,9 @@
   {%- endcall %}
   {% endif %}
 
+  {# The owner's order: what TOW needs first (clients, messengers, checks), then access, copies and
+     updates, then the rarely changed (the service, language and theme, optional site access). #}
   <div class="settings-content" id="settings-acc">
-    {% include '_settings_protection.html' %}
-    <details class="settings-section settings-accordion acc" id="acc-language"{% if open_section == 'language' %} open{% endif %} data-q="{{ language_setting.search }}">
-      <summary>
-        <span class="settings-summary-title">{{ t('settings.language.title') }}{% if lang() != 'en' %} · Language{% endif %}</span>
-        <span class="pill mut">{% if language_setting.auto %}{{ t('settings.language.pill_auto', name=language_setting.current_name) }}{% else %}{{ language_setting.current_name }}{% endif %}</span>
-      </summary>
-      <div class="settings-panel">
-        <form method="post" action="/settings/language" class="settings-form compact-form" data-return-target="acc-language">
-          <div class="field">
-            <label for="language-choice">{{ t('settings.language.choose') }}</label>
-            <select id="language-choice" name="language" aria-describedby="language-auto-hint">
-              <option value="auto"{% if language_setting.auto %} selected{% endif %}>{{ t('settings.language.auto', name=language_setting.current_name) }}</option>
-              {% for l in languages() %}<option value="{{ l.code }}"{% if not language_setting.auto and language_setting.chosen == l.code %} selected{% endif %}>{{ l.native }}{% if l.native != l.name %} — {{ l.name }}{% endif %}</option>{% endfor %}
-            </select>
-            <p id="language-auto-hint" class="action-hint">{{ t('settings.language.auto_hint') }}</p>
-          </div>
-          <p class="action-hint">{% if language_setting.auto %}{{ t('settings.language.messages_note_auto') }}{% else %}{{ t('settings.language.messages_note') }}{% endif %}</p>
-          <div class="settings-actions"><button type="submit">{{ t('common.save') }}</button></div>
-        </form>
-      </div>
-    </details>
-
-    <details class="settings-section settings-accordion acc" id="acc-theme"{% if open_section == 'theme' %} open{% endif %} data-q="{{ t('settings.theme.q') }}">
-      <summary>
-        <span class="settings-summary-title">{{ t('settings.theme.title') }}</span>
-        {% set themes = [('auto', 'monitor', t('settings.theme.auto')), ('light', 'sun', t('settings.theme.light')), ('dark', 'moon', t('settings.theme.dark'))] %}
-        <span class="pill mut">{% for value, _picture, label in themes if value == theme_setting %}{{ label }}{% endfor %}</span>
-      </summary>
-      <div class="settings-panel">
-        <form method="post" action="/settings/theme" class="compact-form" data-return-target="acc-theme" data-theme-form>
-          <fieldset class="theme-choice" aria-describedby="theme-hint">
-            <legend class="sr-only">{{ t('settings.theme.title') }}</legend>
-            {% for value, picture, label in themes %}
-            <label class="theme-option">
-              <input type="radio" name="theme" value="{{ value }}"{% if theme_setting == value %} checked{% endif %}>
-              {{ icon(picture, 'sm') }}<span>{{ label }}</span>
-            </label>
-            {% endfor %}
-          </fieldset>
-          <p id="theme-hint" class="action-hint">{{ t('settings.theme.hint') }}</p>
-          {#- app.js saves a choice in the background and says so as a message (A6); without scripts, Save. #}
-          <noscript><div class="settings-actions"><button type="submit">{{ t('common.save') }}</button></div></noscript>
-        </form>
-      </div>
-    </details>
-
     <details class="settings-section settings-accordion acc" id="acc-clients"{% if open_section == 'clients' %} open{% endif %} data-q="{{ search_words.clients }}">
       <summary>
         <span id="settings-clients-title" class="settings-summary-title">{{ t('settings.clients.title') }}</span>
@@ -359,125 +315,6 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc" id="acc-updates"{% if open_section == 'updates' %} open{% endif %} data-q="{{ t('releases.search') }}">
-      <summary>
-        <span class="settings-summary-title">{{ t('releases.title') }}</span>
-        <span class="pill mut">{{ hh.ver }}</span>
-      </summary>
-      <div class="settings-panel">
-        <section id="updates" class="release-panel" aria-labelledby="release-title">
-          <p id="release-title">{{ t('releases.current', version=hh.ver) }}</p>
-          <form method="post" action="/settings/updates" class="compact-form immediate-form" data-return-target="acc-updates" data-auto-submit>
-            <input type="hidden" name="enabled" value="0">
-            <div class="check-field">
-              <input id="check-updates" name="enabled" value="1" type="checkbox"{% if check_updates %} checked{% endif %} aria-describedby="check-updates-hint" data-auto-submit-control>
-              <label for="check-updates">{{ t('releases.automatic') }}</label>
-              <p id="check-updates-hint" data-auto-submit-status>{{ t('releases.automatic_hint') }}</p>
-            </div>
-            <noscript><button type="submit">{{ t('settings.service.apply') }}</button></noscript>
-          </form>
-          <p class="action-hint" data-release-status role="status">{{ t('releases.pending') }}</p>
-          <div class="settings-actions">
-            <button type="button" class="ghost" data-release-check>{{ t('releases.check') }}</button>
-            <a href="https://github.com/d0j/tow/releases" class="btn ghost" data-release-notes target="_blank" rel="noopener noreferrer">{{ t('releases.notes') }}</a>
-            <button type="button" data-release-install hidden disabled>{{ t('releases.update_button') }}</button>
-          </div>
-          <p class="action-hint" data-update-progress role="status" hidden></p>
-          <p class="action-hint" data-update-unavailable role="status" hidden></p>
-          <div class="settings-actions"><button type="button" class="ghost" data-update-reload hidden>{{ t('js.releases.reload') }}</button></div>
-          <details class="technical-details" data-update-details>
-            <summary>{{ t('releases.details') }}</summary>
-            <p class="action-hint" data-update-history hidden></p>
-            <p class="action-hint" data-update-support></p>
-          <details class="technical-details" data-update-rollback hidden>
-            <summary>{{ t('releases.rollback_title') }}</summary>
-            <p class="action-hint">{{ t('releases.rollback_policy') }}</p>
-            <div class="field">
-              <label for="rollback-version">{{ t('releases.target_label') }}</label>
-              <input id="rollback-version" data-update-version inputmode="text" placeholder="1.22.21" maxlength="32" autocomplete="off">
-            </div>
-            <div class="settings-actions"><button type="button" class="ghost" data-update-apply>{{ t('releases.apply_version') }}</button><button type="button" class="ghost" data-update-previous hidden></button></div>
-          </details>
-          <p class="action-hint">{{ t('releases.policy') }}</p>
-          <details class="technical-details">
-            <summary>{{ t('releases.how') }}</summary>
-            <p>{{ t('releases.install') }}</p>
-            <code data-release-command>{{ os_launcher() }} update --ref v{{ hh.ver }}</code>
-          </details>
-          <details class="technical-details" data-update-log>
-            <summary>{{ t('releases.log') }}</summary>
-            <pre data-update-log-text>{{ t('releases.log_pending') }}</pre>
-          </details>
-          </details>
-          <noscript><p class="action-hint">{{ t('releases.no_script') }}</p></noscript>
-        </section>
-      </div>
-    </details>
-
-    <details class="settings-section settings-accordion acc" id="acc-service"{% if open_section == 'service' %} open{% endif %} data-q="{{ t('settings.service.q') }}">
-      <summary>
-        <span id="settings-service-title" class="settings-summary-title">{{ t('settings.service.title') }}</span>
-        <span class="pill {{ 'ok' if service.autostart else 'mut' }}">{{ t('settings.service.autostart_on') if service.autostart else t('settings.service.autostart_off') }}</span>
-      </summary>
-      <div class="settings-panel">{{ issue_notes_at(notes, 'acc-service') }}
-        <p class="action-hint">{{ t('settings.service.mode_supervisor') }}</p>
-        <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
-          <input type="hidden" name="enabled" value="0">
-          <input type="hidden" name="without_login" value="{{ '1' if service.without_login else '0' }}">
-          <div class="check-field">
-            <input id="service-autostart" name="enabled" value="1" type="checkbox"{% if service.autostart %} checked{% endif %} aria-describedby="service-autostart-hint" data-auto-submit-control>
-            <label for="service-autostart">{{ t('settings.service.autostart') }}</label>
-            <p id="service-autostart-hint" data-auto-submit-status>{{ t('settings.service.autostart_hint_any') }}</p>
-          </div>
-          <noscript><button type="submit">{{ t('settings.service.apply') }}</button></noscript>
-        </form>
-        {% if service.autostart_foreign %}{{ note(t('doctor.autostart_foreign', where=(service.autostart_detail or {}).get('where') or 'TOW'), 'warn') }}{% endif %}
-        {% if service.autostart_stale %}{{ note(t('doctor.autostart_stale', where=(service.autostart_detail or {}).get('where') or 'TOW'), 'warn') }}{% endif %}
-        {% if service.supports_without_login and service.autostart %}
-        <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
-          <input type="hidden" name="enabled" value="1">
-          <input type="hidden" name="without_login" value="0">
-          <div class="check-field">
-            <input id="service-without-login" name="without_login" value="1" type="checkbox"{% if service.without_login %} checked{% endif %} aria-describedby="service-without-login-hint" data-auto-submit-control>
-            <label for="service-without-login">{{ t('settings.service.without_login') }}</label>
-            <p id="service-without-login-hint" data-auto-submit-status>{{ t('settings.service.without_login_hint') }}</p>
-          </div>
-          <noscript><button type="submit">{{ t('settings.service.apply') }}</button></noscript>
-        </form>
-        {% endif %}
-        <div class="service-restart">
-          <form method="post" action="/settings/service/restart" data-return-target="acc-service" data-confirm="{{ t('settings.service.restart_confirm') }}">
-            <button type="submit"{{ fix_attrs('restart_service') }}>{{ t('settings.service.restart') }}</button>
-          </form>
-          <p>{{ t('settings.service.restart_note') }}</p>
-        </div>
-        <div class="watchdog-note">
-          <p class="action-hint">{{ t('settings.service.watchdog') }}</p>
-          {% if service.watchdog_problem %}
-          <p class="action-hint">{{ t('settings.service.watchdog_last') }} <b>{{ service.watchdog_problem.at }}</b>:</p>
-          <ul class="watchdog-lines">{% for line in service.watchdog_problem.lines %}<li>{{ line }}</li>{% endfor %}</ul>
-          {% endif %}
-        </div>
-        {% if service.running_since %}
-        <p class="restart-result">{{ t('settings.service.running_since') }} <b>{{ service.running_since }}</b>.</p>
-        {% endif %}
-        {% if service.restart_view %}
-        <p class="restart-result{% if service.restart_view.failed %} error{% endif %}" role="note">{{ t('settings.service.last_restart') }} <b>{{ service.restart_view.at }}</b> · {{ service.restart_view.reason }} · {{ service.restart_view.state }}.</p>
-        {% else %}
-        <p class="restart-result" role="note">{{ t('settings.service.no_restarts') }}</p>
-        {% endif %}
-        <details class="technical-details">
-          <summary>{{ t('settings.common.technical') }}</summary>
-          <dl>
-            <div><dt>PID</dt><dd><code>{{ service.pid }}</code></dd></div>
-            <div><dt>{{ t('settings.service.autostart_where') }}</dt><dd><code>{{ (service.autostart_detail or {}).get('where') or '—' }}</code></dd></div>
-            {% if service.supervisor %}{% set server_state = service.supervisor.get('server', {}).get('state') %}{% set state_key = {'up': 'settings.service.server_state.up', 'starting': 'settings.service.server_state.starting', 'waiting': 'settings.service.server_state.waiting', 'not_answering': 'settings.service.server_state.not_answering', 'stopped': 'settings.service.server_state.stopped'}.get(server_state) %}<div><dt>{{ t('settings.service.web_server') }}</dt><dd>{% if state_key %}{{ t(state_key) }}{% else %}<code>{{ server_state or '—' }}</code>{% endif %}</dd></div>{% endif %}
-            {% if service.restart %}<div><dt>{{ t('settings.service.operation_id') }}</dt><dd><code>{{ service.restart.get('operation_id') or '—' }}</code></dd></div>{% endif %}
-          </dl>
-        </details>
-      </div>
-    </details>
-
     {% set point_cleanup_unknown = backups.point_cleanup_read_error or (backups.point_cleanup_unrecorded and restore_points) %}
     {% set night_cleanup_unknown = backups.cleanup_read_error or (backups.cleanup_unrecorded and backups.snapshots) %}
     <details class="settings-section settings-accordion acc" id="acc-transfer"{% if open_section == 'transfer' %} open{% endif %} data-q="{{ t('settings.backups.q') }}">
@@ -618,6 +455,173 @@
         </div>
       </div>
     </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-updates"{% if open_section == 'updates' %} open{% endif %} data-q="{{ t('releases.search') }}">
+      <summary>
+        <span class="settings-summary-title">{{ t('releases.title') }}</span>
+        <span class="pill mut">{{ hh.ver }}</span>
+      </summary>
+      <div class="settings-panel">
+        <section id="updates" class="release-panel" aria-labelledby="release-title">
+          <p id="release-title">{{ t('releases.current', version=hh.ver) }}</p>
+          <form method="post" action="/settings/updates" class="compact-form immediate-form" data-return-target="acc-updates" data-auto-submit>
+            <input type="hidden" name="enabled" value="0">
+            <div class="check-field">
+              <input id="check-updates" name="enabled" value="1" type="checkbox"{% if check_updates %} checked{% endif %} aria-describedby="check-updates-hint" data-auto-submit-control>
+              <label for="check-updates">{{ t('releases.automatic') }}</label>
+              <p id="check-updates-hint" data-auto-submit-status>{{ t('releases.automatic_hint') }}</p>
+            </div>
+            <noscript><button type="submit">{{ t('settings.service.apply') }}</button></noscript>
+          </form>
+          <p class="action-hint" data-release-status role="status">{{ t('releases.pending') }}</p>
+          <div class="settings-actions">
+            <button type="button" class="ghost" data-release-check>{{ t('releases.check') }}</button>
+            <a href="https://github.com/d0j/tow/releases" class="btn ghost" data-release-notes target="_blank" rel="noopener noreferrer">{{ t('releases.notes') }}</a>
+            <button type="button" data-release-install hidden disabled>{{ t('releases.update_button') }}</button>
+          </div>
+          <p class="action-hint" data-update-progress role="status" hidden></p>
+          <p class="action-hint" data-update-unavailable role="status" hidden></p>
+          <div class="settings-actions"><button type="button" class="ghost" data-update-reload hidden>{{ t('js.releases.reload') }}</button></div>
+          <details class="technical-details" data-update-details>
+            <summary>{{ t('releases.details') }}</summary>
+            <p class="action-hint" data-update-history hidden></p>
+            <p class="action-hint" data-update-support></p>
+          <details class="technical-details" data-update-rollback hidden>
+            <summary>{{ t('releases.rollback_title') }}</summary>
+            <p class="action-hint">{{ t('releases.rollback_policy') }}</p>
+            <div class="field">
+              <label for="rollback-version">{{ t('releases.target_label') }}</label>
+              <input id="rollback-version" data-update-version inputmode="text" placeholder="1.22.21" maxlength="32" autocomplete="off">
+            </div>
+            <div class="settings-actions"><button type="button" class="ghost" data-update-apply>{{ t('releases.apply_version') }}</button><button type="button" class="ghost" data-update-previous hidden></button></div>
+          </details>
+          <p class="action-hint">{{ t('releases.policy') }}</p>
+          <details class="technical-details">
+            <summary>{{ t('releases.how') }}</summary>
+            <p>{{ t('releases.install') }}</p>
+            <code data-release-command>{{ os_launcher() }} update --ref v{{ hh.ver }}</code>
+          </details>
+          <details class="technical-details" data-update-log>
+            <summary>{{ t('releases.log') }}</summary>
+            <pre data-update-log-text>{{ t('releases.log_pending') }}</pre>
+          </details>
+          </details>
+          <noscript><p class="action-hint">{{ t('releases.no_script') }}</p></noscript>
+        </section>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-service"{% if open_section == 'service' %} open{% endif %} data-q="{{ t('settings.service.q') }}">
+      <summary>
+        <span id="settings-service-title" class="settings-summary-title">{{ t('settings.service.title') }}</span>
+        <span class="pill {{ 'ok' if service.autostart else 'mut' }}">{{ t('settings.service.autostart_on') if service.autostart else t('settings.service.autostart_off') }}</span>
+      </summary>
+      <div class="settings-panel">{{ issue_notes_at(notes, 'acc-service') }}
+        <p class="action-hint">{{ t('settings.service.mode_supervisor') }}</p>
+        <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
+          <input type="hidden" name="enabled" value="0">
+          <input type="hidden" name="without_login" value="{{ '1' if service.without_login else '0' }}">
+          <div class="check-field">
+            <input id="service-autostart" name="enabled" value="1" type="checkbox"{% if service.autostart %} checked{% endif %} aria-describedby="service-autostart-hint" data-auto-submit-control>
+            <label for="service-autostart">{{ t('settings.service.autostart') }}</label>
+            <p id="service-autostart-hint" data-auto-submit-status>{{ t('settings.service.autostart_hint_any') }}</p>
+          </div>
+          <noscript><button type="submit">{{ t('settings.service.apply') }}</button></noscript>
+        </form>
+        {% if service.autostart_foreign %}{{ note(t('doctor.autostart_foreign', where=(service.autostart_detail or {}).get('where') or 'TOW'), 'warn') }}{% endif %}
+        {% if service.autostart_stale %}{{ note(t('doctor.autostart_stale', where=(service.autostart_detail or {}).get('where') or 'TOW'), 'warn') }}{% endif %}
+        {% if service.supports_without_login and service.autostart %}
+        <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
+          <input type="hidden" name="enabled" value="1">
+          <input type="hidden" name="without_login" value="0">
+          <div class="check-field">
+            <input id="service-without-login" name="without_login" value="1" type="checkbox"{% if service.without_login %} checked{% endif %} aria-describedby="service-without-login-hint" data-auto-submit-control>
+            <label for="service-without-login">{{ t('settings.service.without_login') }}</label>
+            <p id="service-without-login-hint" data-auto-submit-status>{{ t('settings.service.without_login_hint') }}</p>
+          </div>
+          <noscript><button type="submit">{{ t('settings.service.apply') }}</button></noscript>
+        </form>
+        {% endif %}
+        <div class="service-restart">
+          <form method="post" action="/settings/service/restart" data-return-target="acc-service" data-confirm="{{ t('settings.service.restart_confirm') }}">
+            <button type="submit"{{ fix_attrs('restart_service') }}>{{ t('settings.service.restart') }}</button>
+          </form>
+          <p>{{ t('settings.service.restart_note') }}</p>
+        </div>
+        <div class="watchdog-note">
+          <p class="action-hint">{{ t('settings.service.watchdog') }}</p>
+          {% if service.watchdog_problem %}
+          <p class="action-hint">{{ t('settings.service.watchdog_last') }} <b>{{ service.watchdog_problem.at }}</b>:</p>
+          <ul class="watchdog-lines">{% for line in service.watchdog_problem.lines %}<li>{{ line }}</li>{% endfor %}</ul>
+          {% endif %}
+        </div>
+        {% if service.running_since %}
+        <p class="restart-result">{{ t('settings.service.running_since') }} <b>{{ service.running_since }}</b>.</p>
+        {% endif %}
+        {% if service.restart_view %}
+        <p class="restart-result{% if service.restart_view.failed %} error{% endif %}" role="note">{{ t('settings.service.last_restart') }} <b>{{ service.restart_view.at }}</b> · {{ service.restart_view.reason }} · {{ service.restart_view.state }}.</p>
+        {% else %}
+        <p class="restart-result" role="note">{{ t('settings.service.no_restarts') }}</p>
+        {% endif %}
+        <details class="technical-details">
+          <summary>{{ t('settings.common.technical') }}</summary>
+          <dl>
+            <div><dt>PID</dt><dd><code>{{ service.pid }}</code></dd></div>
+            <div><dt>{{ t('settings.service.autostart_where') }}</dt><dd><code>{{ (service.autostart_detail or {}).get('where') or '—' }}</code></dd></div>
+            {% if service.supervisor %}{% set server_state = service.supervisor.get('server', {}).get('state') %}{% set state_key = {'up': 'settings.service.server_state.up', 'starting': 'settings.service.server_state.starting', 'waiting': 'settings.service.server_state.waiting', 'not_answering': 'settings.service.server_state.not_answering', 'stopped': 'settings.service.server_state.stopped'}.get(server_state) %}<div><dt>{{ t('settings.service.web_server') }}</dt><dd>{% if state_key %}{{ t(state_key) }}{% else %}<code>{{ server_state or '—' }}</code>{% endif %}</dd></div>{% endif %}
+            {% if service.restart %}<div><dt>{{ t('settings.service.operation_id') }}</dt><dd><code>{{ service.restart.get('operation_id') or '—' }}</code></dd></div>{% endif %}
+          </dl>
+        </details>
+      </div>
+    </details>
+
+    {#- Language and theme: one section, two forms, each with its own label. ?open=theme and
+        #acc-theme (the theme form) still land here. The language is saved with its button (a
+        list changed with the arrow keys must not reload the page at each step); the theme in the
+        background, as before. -#}
+    {% set themes = [('auto', 'monitor', t('settings.theme.auto')), ('light', 'sun', t('settings.theme.light')), ('dark', 'moon', t('settings.theme.dark'))] %}
+    <details class="settings-section settings-accordion acc" id="acc-language"{% if open_section in ('language', 'theme') %} open{% endif %} data-q="{{ language_setting.search }} {{ t('settings.theme.q') }}">
+      <summary>
+        <span class="settings-summary-title">{{ t('settings.appearance.title') }}{% if lang() != 'en' %} · Language{% endif %}</span>
+        <span class="integration-pills">
+          <span class="pill mut">{% if language_setting.auto %}{{ t('settings.language.pill_auto', name=language_setting.current_name) }}{% else %}{{ language_setting.current_name }}{% endif %}</span>
+          <span class="pill mut" data-theme-pill>{% for value, _picture, label in themes if value == theme_setting %}{{ label }}{% endfor %}</span>
+        </span>
+      </summary>
+      <div class="settings-panel appearance">
+        <form method="post" action="/settings/language" class="settings-form" data-return-target="acc-language">
+          <div class="field">
+            <label for="language-choice">{{ t('settings.language.choose') }}</label>
+            <div class="inline-save">
+              <select id="language-choice" name="language" class="w-l" aria-describedby="language-note">
+                <option value="auto"{% if language_setting.auto %} selected{% endif %}>{{ t('settings.language.auto', name=language_setting.current_name) }}</option>
+                {% for l in languages() %}<option value="{{ l.code }}"{% if not language_setting.auto and language_setting.chosen == l.code %} selected{% endif %}>{{ l.native }}{% if l.native != l.name %} — {{ l.name }}{% endif %}</option>{% endfor %}
+              </select>
+              <button type="submit">{{ t('common.save') }}</button>
+            </div>
+            <p id="language-note" class="field-hint">{% if language_setting.auto %}{{ t('settings.language.messages_note_auto') }}{% else %}{{ t('settings.language.messages_note') }}{% endif %}</p>
+          </div>
+        </form>
+        <form method="post" action="/settings/theme" class="theme-form" id="acc-theme" data-return-target="acc-theme" data-theme-form>
+          <fieldset class="theme-field" aria-describedby="theme-hint">
+            <legend>{{ t('settings.theme.title') }}</legend>
+            <div class="theme-choice">
+              {% for value, picture, label in themes %}
+              <label class="theme-option">
+                <input type="radio" name="theme" value="{{ value }}"{% if theme_setting == value %} checked{% endif %}>
+                {{ icon(picture, 'sm') }}<span>{{ label }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </fieldset>
+          <p id="theme-hint" class="field-hint">{{ t('settings.theme.hint') }}</p>
+          {#- app.js saves a choice in the background and says so as a message (A6); without scripts, Save. #}
+          <noscript><div class="settings-actions"><button type="submit">{{ t('common.save') }}</button></div></noscript>
+        </form>
+      </div>
+    </details>
+
+    {% include '_settings_protection.html' %}
 
     <details class="settings-section settings-accordion acc settings-log" id="acc-log"{% if open_section == 'log' %} open{% endif %} data-q="{{ t('settings.log.q') }}">
       <summary>

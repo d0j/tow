@@ -243,7 +243,7 @@ def test_a_theme_choice_is_saved_in_the_background_without_a_reload(client):
     from tow.config import load_config
 
     page = client.get("/settings").text
-    theme = page[page.index('id="acc-theme"') : page.index('id="acc-clients"')]
+    theme = page[page.index('id="acc-theme"') : page.index('id="acc-protection"')]
     assert "data-theme-status" not in theme  # its outcome is a message like any other
     assert '<noscript><div class="settings-actions"><button type="submit">' in theme  # without scripts: Save
     block = JS[JS.index("// Settings → Theme:") : JS.index('window.addEventListener("beforeunload"')]

@@ -41,6 +41,38 @@ def test_settings_explains_global_and_personal_timers(language, custom_minutes):
         assert "Every watched topic is checked" not in interval
 
 
+def test_settings_sections_follow_the_owners_order_and_language_holds_the_theme():
+    """The sections TOW needs first come first; optional site access sits near the end. Language
+    and theme are one section, and the older links to either still open it."""
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    page = client.get("/settings").text
+    order = re.findall(r'<details class="settings-section settings-accordion[^"]*" id="(acc-[a-z]+)"', page)
+    assert order == [
+        "acc-clients",
+        "acc-bots",
+        "acc-intervals",
+        "acc-access",
+        "acc-transfer",
+        "acc-updates",
+        "acc-service",
+        "acc-language",
+        "acc-protection",
+        "acc-log",
+    ]
+    appearance = page.split('id="acc-language"', 1)[1].split('id="acc-protection"', 1)[0]
+    assert "Язык и тема · Language</span>" in appearance
+    assert 'action="/settings/language"' in appearance
+    assert 'action="/settings/theme"' in appearance
+    assert 'id="acc-theme"' in appearance  # #acc-theme still lands here
+    assert "<legend>Тема</legend>" in appearance  # each control keeps its own visible label
+    assert '<label for="language-choice">Язык</label>' in appearance
+    # Without scripts both are saved by a button: the language's own, the theme's in <noscript>.
+    assert appearance.count('<button type="submit">') == 2
+    for name in ("language", "theme"):
+        opened = client.get(f"/settings?open={name}").text
+        assert " open" in re.search(r'<details[^>]+id="acc-language"[^>]*>', opened).group()
+
+
 def test_mobile_settings_anchor_keeps_clear_of_the_two_row_header():
     from pathlib import Path
 
@@ -75,7 +107,7 @@ def test_settings_ui_is_sectioned_and_explains_actions():
     assert 'class="settings-section settings-accordion acc" id="acc-service"' in page
     assert 'class="settings-section settings-accordion acc settings-log" id="acc-log"' in page
     accordion_tags = re.findall(r'<details class="settings-section settings-accordion[^>]+>', page)
-    assert len(accordion_tags) == 11  # protection is independently optional; updates and theme have their own
+    assert len(accordion_tags) == 10  # protection is independently optional; language and theme share one
     assert all(" open" not in tag for tag in accordion_tags)
     assert "Проверяются сохранённые настройки." in page
     assert "После «Сохранить» появится кнопка «Проверить» — она отправит пробное сообщение." in page
@@ -124,7 +156,7 @@ def test_settings_ui_is_sectioned_and_explains_actions():
     assert "height: var(--field-h)" in css
     assert 'grid-template-areas: "nav nav right" "sites services clock"' in css
     assert 'input[type="file"]::file-selector-button' in css
-    service = page.split('id="acc-service"', 1)[1].split('id="acc-transfer"', 1)[0]
+    service = page.split('id="acc-service"', 1)[1].split('id="acc-language"', 1)[0]
     assert "data-auto-submit-control" in service
     assert 'type="hidden" name="enabled" value="0"' in service
     assert ">Сохранить</button>" not in service
@@ -148,7 +180,7 @@ def test_settings_renders_saved_restore_points(monkeypatch):
     )
 
     page = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text
-    transfer = page.split('id="acc-transfer"', 1)[1].split('id="acc-log"', 1)[0]
+    transfer = page.split('id="acc-transfer"', 1)[1].split('id="acc-updates"', 1)[0]
 
     assert "Сохранено: 1" in transfer
     assert "24.09.2026" in transfer
@@ -170,7 +202,7 @@ def test_settings_access_without_a_password_says_the_network_is_closed(monkeypat
     monkeypatch.setattr("tow.web.services.load_secrets", dict)
 
     page = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text
-    access = page.split('id="acc-access"', 1)[1].split('id="acc-service"', 1)[0]
+    access = page.split('id="acc-access"', 1)[1].split('id="acc-transfer"', 1)[0]
 
     assert '<span class="pill warn">Сеть закрыта: нет пароля</span>' in access
     assert "<b>Пароль не задан</b> — с других устройств TOW сейчас недоступен." in access
@@ -197,7 +229,7 @@ def test_settings_access_cannot_be_changed_from_another_device(monkeypatch):
         headers={"Origin": "http://127.0.0.1"},
         cookies={"tow_session": issue_session("t" * 32)},
     )
-    access = lan.get("/settings").text.split('id="acc-access"', 1)[1].split('id="acc-service"', 1)[0]
+    access = lan.get("/settings").text.split('id="acc-access"', 1)[1].split('id="acc-transfer"', 1)[0]
     assert 'action="/settings/access"' not in access
     assert "Доступ с других устройств включается и выключается только на компьютере с TOW" in access
     assert 'action="/settings/password"' not in access  # no password yet: the first one is set on this PC
@@ -249,7 +281,7 @@ def test_settings_translates_restart_marker_to_human_status(monkeypatch):
     )
 
     page = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text
-    service = page.split('id="acc-service"', 1)[1].split('id="acc-transfer"', 1)[0]
+    service = page.split('id="acc-service"', 1)[1].split('id="acc-language"', 1)[0]
 
     assert "Веб-страница работает с:" in service
     assert "02.10" in service

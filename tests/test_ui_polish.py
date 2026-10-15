@@ -524,7 +524,7 @@ def test_settings_theme_is_saved_and_every_page_is_drawn_in_it(client, choice):
     from tow.config import load_config
 
     page = client.get("/settings").text
-    form = page[page.index('id="acc-theme"') : page.index('id="acc-clients"')]
+    form = page[page.index('id="acc-theme"') : page.index('id="acc-protection"')]
     assert re.findall(r'name="theme" value="(\w+)"', form) == ["auto", "light", "dark"]
     assert all(f'href="#i-{picture}"' in form for picture in ("monitor", "sun", "moon"))
     saved = client.post("/settings/theme", data={"theme": choice}, follow_redirects=False)
@@ -541,7 +541,7 @@ def test_settings_theme_is_saved_and_every_page_is_drawn_in_it(client, choice):
             assert f'<meta name="color-scheme" content="{choice}">' in head
             assert head.count('name="theme-color"') == 1
     page = client.get("/settings").text
-    form = page[page.index('id="acc-theme"') : page.index('id="acc-clients"')]
+    form = page[page.index('id="acc-theme"') : page.index('id="acc-protection"')]
     assert re.search(rf'value="{choice}" checked', form)
 
 

@@ -13,6 +13,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   "15 Oct 2025, 20:31" for another year, always with the date for a time still to come. They are in the
   time zone of the computer running TOW, also in Recent messages; the full time with seconds and the UTC
   offset is the tooltip. Recent messages, the Log and a topic's episode list use it now.
+- Settings come in a new order: Torrent clients, Notifications, Checks, Network access and Backups first, then
+  Version and updates, TOW service, Language and theme (now one section) and the optional Site access. Links
+  to the former Language or Theme section open the new one.
 
 ### Fixed
 
