@@ -236,6 +236,53 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { he
   :root { --field-h: 2.75rem; }
   input, textarea, select { font-size: 16px; }
 }
+/* A field as wide as what it holds, at most (it still shrinks with its form): ports, minutes and
+   days; phone numbers and short keys; names, passwords and IDs; hosts, addresses and tokens;
+   webhooks, paths, patterns and mirrors. A field without a class takes the whole line. A secret
+   field's wrapper (.secret) takes its field's width; a field with a unit beside it keeps the unit
+   next to it. */
+.w-xs { max-width: 6.5rem; }
+.w-s { max-width: 12rem; }
+.w-m { max-width: 18rem; }
+.w-l { max-width: 26rem; }
+.w-xl { max-width: 36rem; }
+.secret:has(> .w-xs) { max-width: 6.5rem; }
+.secret:has(> .w-s) { max-width: 12rem; }
+.secret:has(> .w-m) { max-width: 18rem; }
+.secret:has(> .w-l) { max-width: 26rem; }
+.secret:has(> .w-xl) { max-width: 36rem; }
+.input-unit:has(> .w-xs) { grid-template-columns: minmax(0, 6.5rem) auto; justify-content: start; }
+.input-unit:has(> .w-s) { grid-template-columns: minmax(0, 12rem) auto; justify-content: start; }
+/* One form layout (Settings, Sites, the add and edit forms, dialogs): at most 46 rem wide, its
+   groups (a .field: label, field, hint; a .field-row; a check field; the buttons) 9 px apart, a
+   label 3 px above its field, help text at most 68 characters a line. The form is the container
+   its rows measure. */
+.form-grid {
+  display: grid; gap: .55rem; align-content: start; min-width: 0; max-width: 46rem;
+  container-type: inline-size;
+}
+.form-grid > *, .field-row > * { min-width: 0; }
+.form-grid label { margin: 0; }
+.form-grid .field { display: grid; gap: .1875rem; align-content: start; }
+.form-grid :is(.field-hint, .action-hint, .section-note, .support-note, .check-field p) { max-width: 68ch; }
+/* Fields that belong together (address and port, user and password) share a line once their
+   form is 38 rem wide - the form's width, not the window's: two cards side by side stack their
+   own rows. Each takes the width of its field's class; one without a class takes what is left. */
+.field-row { display: flex; flex-direction: column; gap: .55rem .75rem; min-width: 0; }
+/* An address and its port stay on one line on a phone too, while the address keeps 12 rem. */
+.field-row.keep { flex-direction: row; flex-wrap: wrap; align-items: start; }
+.field-row.keep > * { flex: 1 1 12rem; }
+.field-row.keep > :is(.w-xs, :has(.w-xs)) { flex: 0 0 6.5rem; }
+/* After .keep: in a wide form its fields take their classes' widths too. */
+@container (min-width: 38rem) {
+  .field-row { flex-direction: row; align-items: start; }
+  .field-row > * { flex: 1 1 0; }
+  .field-row > :is(.w-xs, :has(.w-xs)) { flex: 0 1 6.5rem; }
+  .field-row > :is(.w-s, :has(.w-s)) { flex: 0 1 12rem; }
+  .field-row > :is(.w-m, :has(.w-m)) { flex: 0 1 18rem; }
+  .field-row > :is(.w-l, :has(.w-l)) { flex: 0 1 26rem; }
+  .field-row > :is(.w-xl, :has(.w-xl)) { flex: 0 1 36rem; }
+}
 input[type="checkbox"], input[type="radio"] { width: auto; }
 input:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
   outline: 2px solid var(--acc); outline-offset: 2px;
