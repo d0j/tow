@@ -566,6 +566,15 @@
     });
   }, true);
 
+  // The strip stays in sight under the sticky header while it is shown: a page opened further down
+  // (Settings at a card, a row) still shows its result.
+  const header = document.querySelector("header.app");
+  const place = () => {
+    if (header?.getBoundingClientRect) host.style?.setProperty("--msg-top", `${Math.ceil(header.getBoundingClientRect().height)}px`);
+  };
+  place();
+  window.addEventListener?.("resize", place);
+
   document.addEventListener("visibilitychange", () => (document.hidden ? center.hold("hidden") : center.release("hidden")));
   if (document.hidden) center.hold("hidden");
   // Signing out ends this tab's history with the session.

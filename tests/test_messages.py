@@ -214,6 +214,11 @@ def test_the_page_hands_its_message_and_undo_to_the_script(client):
     assert menu.has_attr("hidden")  # shown by the script, which keeps the history
     assert menu.select_one('summary use[href="#i-message"]')
     assert page.select_one('script[src^="/static/messages.js"]').has_attr("defer")
+    # In sight under the sticky header while shown: a page opened at a card further down shows it.
+    from pathlib import Path
+
+    css = (Path(__file__).parents[1] / "src" / "tow" / "static" / "messages.css").read_text(encoding="utf-8")
+    assert re.search(r"\.msg-host \{ position: sticky; top: var\(--msg-top", css)
 
 
 def test_an_explicit_subject_wins_and_an_empty_one_opts_out(client):
