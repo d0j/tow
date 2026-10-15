@@ -150,6 +150,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   episode that is already there.
 - A file named with the season before its word (`1 сезон 01 серия.mkv`) now keeps its season: a pack of
   several seasons named so no longer counts every season's first episode as one.
+- A numbered film, part or volume before a release tag (`Movie 2 [1080p].mkv`, `Part 2 [1080p].mkv`) is no
+  longer taken for episode 2.
 
 ## [1.31.2] — 2026-10-15
 

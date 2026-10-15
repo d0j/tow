@@ -432,8 +432,12 @@ def _dash_number_dash(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, ...
 
 
 def _number_before_release_tag(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, ...] | None:
-    """``Show 13 [1080p]``."""
-    match = re.search(r"(?i)\s(\d{1,4})(?:v\d+)?\s+\[(?:\d{3,4}p|web|bd|raw)\b", text)
+    """``Show 13 [1080p]`` (not ``Movie 2 [1080p]``: a numbered film, part or volume)."""
+    match = re.search(
+        r"(?i)(?<!\bmovie)(?<!\bfilm)(?<!\bфильм)(?<!\bpart)(?<!\bчасть)(?<!\bvol)(?<!\bvol\.)(?<!\bтом)"
+        r"\s(\d{1,4})(?:v\d+)?\s+\[(?:\d{3,4}p|web|bd|raw)\b",
+        text,
+    )
     if match:
         value = int(match.group(1))
         return (EpisodeLabel(episode=value),) if value > 0 and not 1900 <= value <= 2099 else ()
