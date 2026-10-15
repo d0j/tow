@@ -21,6 +21,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   password and its repeat. A working torrent client folds to one line with its address and opens when it needs
   setting up or does not answer, after Save or Check, and from a “Needs attention” link. On a wide screen two
   open client or messenger cards stand side by side.
+- Password, token, webhook and key fields in Settings have an eye that shows what was typed or pasted. A
+  messenger's token, webhook or key and a torrent client's password no longer make the browser offer to
+  generate a new password.
 
 ### Fixed
 
@@ -32,6 +35,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   opened by itself over the page's title; elsewhere it filtered nothing.
 - A message that starts with a name keeps its spelling: "qBittorrent does not answer" and "nnmclub: all mirrors
   are paused" were shown as "QBittorrent …" and "Nnmclub: …".
+- A torrent client with no saved password no longer says “Empty — keep as is” in its password field: there
+  was nothing to keep. A saved password, token or webhook is said under its field (“Saved · leave empty to
+  keep”) instead of by a green “Saved” beside its label.
 
 ## [1.31.2] — 2026-10-15
 

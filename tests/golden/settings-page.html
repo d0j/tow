@@ -149,12 +149,13 @@
 
                   <div class="field">
                     <label for="q_user-client-0">User name</label>
-                    <input id="q_user-client-0" name="username" value="admin" class="w-m" autocomplete="off">
+                    <input id="q_user-client-0" name="username" value="admin" class="w-m" autocomplete="section-client-0 username" autocapitalize="off" spellcheck="false">
                   </div>
 
                   <div class="field">
-                    <label for="q_pass-client-0">Password <span class="pill ok">Saved</span></label>
-                    <input id="q_pass-client-0" name="password" type="password" class="w-m" placeholder="Empty — keep as is" autocomplete="new-password">
+                    <label for="q_pass-client-0">Password</label>
+                    <span class="secret"><input id="q_pass-client-0" name="password" type="password" class="w-m" autocomplete="section-client-0 current-password" aria-describedby="q_pass-client-0-saved"><button type="button" class="ico reveal" data-reveal="q_pass-client-0" data-reveal-name="Password" aria-controls="q_pass-client-0" aria-pressed="false" aria-label="Show “Password”" title="Show “Password”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
+                    <p class="field-hint" id="q_pass-client-0-saved">Saved · leave empty to keep</p>
                   </div>
                 </div>
               </fieldset>
@@ -217,12 +218,13 @@
 
                   <div class="field">
                     <label for="q_user-client-1">User name</label>
-                    <input id="q_user-client-1" name="username" value="" class="w-m" autocomplete="off">
+                    <input id="q_user-client-1" name="username" value="" class="w-m" autocomplete="section-client-1 username" autocapitalize="off" spellcheck="false">
                   </div>
 
                   <div class="field">
-                    <label for="q_pass-client-1">Password </label>
-                    <input id="q_pass-client-1" name="password" type="password" class="w-m" placeholder="Empty — keep as is" autocomplete="new-password">
+                    <label for="q_pass-client-1">Password</label>
+                    <span class="secret"><input id="q_pass-client-1" name="password" type="password" class="w-m" autocomplete="section-client-1 current-password"><button type="button" class="ico reveal" data-reveal="q_pass-client-1" data-reveal-name="Password" aria-controls="q_pass-client-1" aria-pressed="false" aria-label="Show “Password”" title="Show “Password”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
+
                   </div>
                 </div>
               </fieldset>
@@ -306,16 +308,19 @@
                 <div class="field-row">
 
                 <div class="field">
-                  <label for="nf-telegram-token">Bot token <span class="pill ok">Saved</span></label>
 
-                  <input id="nf-telegram-token" name="token" type="password" class="w-l" value="" placeholder="Empty — keep as is" autocomplete="new-password" spellcheck="false">
+                  <label for="nf-telegram-token">Bot token</label>
+
+                  <span class="secret"><input id="nf-telegram-token" name="token" type="password" class="w-l" value="" placeholder="123456789:AA…" autocomplete="off" spellcheck="false" autocapitalize="off" aria-describedby="nf-telegram-token-saved"><button type="button" class="ico reveal" data-reveal="nf-telegram-token" data-reveal-name="Bot token" aria-controls="nf-telegram-token" aria-pressed="false" aria-label="Show “Bot token”" title="Show “Bot token”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
+                  <p class="field-hint" id="nf-telegram-token-saved">Saved · leave empty to keep</p>
 
                 </div>
 
                 <div class="field">
-                  <label for="nf-telegram-chat_ids">Recipient IDs, separated by commas </label>
 
-                  <input id="nf-telegram-chat_ids" name="chat_ids" class="w-m" value="1001" placeholder="123456789" autocomplete="off" spellcheck="false">
+                  <label for="nf-telegram-chat_ids">Recipient IDs, separated by commas</label>
+
+                  <input id="nf-telegram-chat_ids" name="chat_ids" class="w-m" value="1001" placeholder="123456789" autocomplete="off" spellcheck="false" autocapitalize="off">
 
                 </div>
 
@@ -360,9 +365,11 @@
                 <div class="field-row">
 
                 <div class="field">
-                  <label for="nf-discord-webhook_url">Webhook URL </label>
 
-                  <input id="nf-discord-webhook_url" name="webhook_url" type="password" class="w-xl" value="" placeholder="https://discord.com/api/webhooks/…" autocomplete="new-password" spellcheck="false">
+                  <label for="nf-discord-webhook_url">Webhook URL</label>
+
+                  <span class="secret"><input id="nf-discord-webhook_url" name="webhook_url" type="password" class="w-xl" value="" placeholder="https://discord.com/api/webhooks/…" autocomplete="off" spellcheck="false" autocapitalize="off"><button type="button" class="ico reveal" data-reveal="nf-discord-webhook_url" data-reveal-name="Webhook URL" aria-controls="nf-discord-webhook_url" aria-pressed="false" aria-label="Show “Webhook URL”" title="Show “Webhook URL”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
+
 
                 </div>
 
@@ -401,16 +408,19 @@
                 <div class="field-row">
 
                 <div class="field">
-                  <label for="nf-whatsapp-phone">Your WhatsApp number </label>
 
-                  <input id="nf-whatsapp-phone" name="phone" class="w-s" value="" placeholder="+15551234567" autocomplete="off" spellcheck="false">
+                  <label for="nf-whatsapp-phone">Your WhatsApp number</label>
+
+                  <input id="nf-whatsapp-phone" name="phone" class="w-s" value="" placeholder="+15551234567" autocomplete="off" spellcheck="false" autocapitalize="off">
 
                 </div>
 
                 <div class="field">
-                  <label for="nf-whatsapp-apikey">apikey from CallMeBot </label>
 
-                  <input id="nf-whatsapp-apikey" name="apikey" type="password" class="w-s" value="" placeholder="123456" autocomplete="new-password" spellcheck="false">
+                  <label for="nf-whatsapp-apikey">apikey from CallMeBot</label>
+
+                  <span class="secret"><input id="nf-whatsapp-apikey" name="apikey" type="password" class="w-s" value="" placeholder="123456" autocomplete="off" spellcheck="false" autocapitalize="off"><button type="button" class="ico reveal" data-reveal="nf-whatsapp-apikey" data-reveal-name="apikey from CallMeBot" aria-controls="nf-whatsapp-apikey" aria-pressed="false" aria-label="Show “apikey from CallMeBot”" title="Show “apikey from CallMeBot”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
+
 
                 </div>
 
@@ -449,16 +459,18 @@
                 <div class="field-row">
 
                 <div class="field">
-                  <label for="nf-ntfy-topic">ntfy topic name </label>
 
-                  <input id="nf-ntfy-topic" name="topic" class="w-m" value="tow-<random>" placeholder="tow-…" autocomplete="off" spellcheck="false">
+                  <label for="nf-ntfy-topic">ntfy topic name</label>
+
+                  <input id="nf-ntfy-topic" name="topic" class="w-m" value="tow-<random>" placeholder="tow-…" autocomplete="off" spellcheck="false" autocapitalize="off">
 
                 </div>
 
                 <div class="field">
-                  <label for="nf-ntfy-server">Server (optional) </label>
 
-                  <input id="nf-ntfy-server" name="server" class="w-l" value="https://ntfy.sh" placeholder="https://ntfy.sh" autocomplete="off" spellcheck="false">
+                  <label for="nf-ntfy-server">Server (optional)</label>
+
+                  <input id="nf-ntfy-server" name="server" class="w-l" value="https://ntfy.sh" placeholder="https://ntfy.sh" autocomplete="off" spellcheck="false" autocapitalize="off">
 
                 </div>
 
@@ -521,13 +533,15 @@
 
                 <div class="field-row">
                 <div class="field">
+
                   <label for="lan-password">Password</label>
-                  <input id="lan-password" name="lan_password" type="password" class="w-m" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" aria-describedby="lan-password-hint">
+                  <span class="secret"><input id="lan-password" name="lan_password" type="password" class="w-m" autocomplete="new-password" minlength="8" aria-describedby="lan-password-hint"><button type="button" class="ico reveal" data-reveal="lan-password" data-reveal-name="Password" aria-controls="lan-password" aria-pressed="false" aria-label="Show “Password”" title="Show “Password”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
+
                   <p class="field-hint" id="lan-password-hint">At least 8 characters. Easy to remember: three or four words joined with hyphens.</p>
                 </div>
                 <div class="field">
                   <label for="lan-password2">Repeat the password</label>
-                  <input id="lan-password2" name="lan_password2" type="password" class="w-m" autocomplete="new-password" minlength="8">
+                  <span class="secret"><input id="lan-password2" name="lan_password2" type="password" class="w-m" autocomplete="new-password" minlength="8"><button type="button" class="ico reveal" data-reveal="lan-password2" data-reveal-name="Repeat the password" aria-controls="lan-password2" aria-pressed="false" aria-label="Show “Repeat the password”" title="Show “Repeat the password”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
                 </div>
                 </div>
                 <div class="field">
