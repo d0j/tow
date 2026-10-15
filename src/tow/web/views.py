@@ -512,6 +512,17 @@ def issue_notes(state: Mapping[str, Any], cfg: Mapping[str, Any], page: str) -> 
     ]
 
 
+def client_notes(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str, dict[str, str]]:
+    """The clients that do not answer now, by id: their card's one note is their ``client_down``
+    issue (``issue``: its id, ``severity``), on the same evidence as the header and Needs
+    attention. The kind names the client first among its subjects."""
+    return {
+        issue.subjects[0]: {"issue": issue.id, "severity": issue.severity}
+        for issue in issues_now(state, cfg)
+        if issue.kind == "client_down" and issue.subjects
+    }
+
+
 def attention(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> list[dict[str, Any]]:
     """The entries of ``attention_view``."""
     items: list[dict[str, Any]] = attention_view(state, cfg)["entries"]

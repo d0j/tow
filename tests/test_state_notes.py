@@ -152,3 +152,45 @@ def test_an_update_is_the_footer_badge_on_every_page_not_a_strip_on_home(client,
 def test_the_update_scripts_and_styles_know_no_home_strip():
     assert "release-notice" not in (STATIC / "updates.css").read_text(encoding="utf-8")
     assert "data-release-notice" not in (STATIC / "updates.js").read_text(encoding="utf-8")
+
+
+def _two_clients(client: TestClient) -> None:
+    client.post("/settings/client/add", data={"kind": "transmission"}, headers={"Origin": "http://127.0.0.1"})
+
+
+def test_a_client_card_says_its_problem_once_with_a_pill_that_agrees(client):
+    """D5: a failed Check left two red texts about one fact in the card (the message and a red
+    .form-error) beside a grey "Set up" pill. The card keeps one note - the client_down issue's -
+    and its pill says the same."""
+    _state(qbit_ok=True, ping_failed={"default": 1})
+    page = _page(client, "/settings")
+    card = page.select_one("#client-default")
+    assert card.select(".form-error") == []
+    [note] = card.select("[role=note]")
+    assert note["data-issue-id"] == "client_down"
+    assert note["class"] == ["notice", "bad"]
+    assert "новые версии не добавляются" in note.get_text()
+    assert [pill.get_text() for pill in card.select(".integration-pills .pill.bad")] == ["Не отвечает"]
+    summary = page.select_one("#acc-clients > summary .pill")
+    assert summary["class"] == ["pill", "bad"]
+
+
+def test_a_second_client_down_has_its_own_note_and_pills(client):
+    _two_clients(client)
+    _state(qbit_ok=True, clients_ok={"default": True}, ping_failed={"transmission": 1})
+    page = _page(client, "/settings")
+    assert page.select("#client-default [role=note]") == []
+    assert page.select_one("#client-default .integration-pills .pill.bad") is None
+    [note] = page.select("#client-transmission [role=note]")
+    assert note["data-issue-id"] == "client_down:transmission"
+    assert page.select_one("#client-transmission .integration-pills .pill.bad").get_text() == "Не отвечает"
+    summary = page.select_one("#acc-clients > summary .pill")
+    assert summary["class"] == ["pill", "bad"]  # was green: the header's verdict on the main client only
+    assert "Transmission" in summary.get_text()
+
+
+def test_a_client_that_answers_has_no_note(client):
+    _state(qbit_ok=True, clients_ok={"default": True})
+    page = _page(client, "/settings")
+    assert page.select("#client-default [role=note]") == []
+    assert page.select_one("#client-default .integration-pills .pill.bad") is None

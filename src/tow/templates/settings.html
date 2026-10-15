@@ -70,9 +70,12 @@
         {#- What is set up, not how many cards there are: "1 client" read as working when it was not. -#}
         {#- The header's verdict on the client (header_health), as on Home's first steps: green
             answers, red does not, grey not asked yet. -#}
+        {#- A client that does not answer (Needs attention lists it) is red here too, the main one or not. -#}
         {% set ready = clients | selectattr('host') | list %}
         {% set ready_name = (ready[0].title if ready|length == 1 else t('settings.clients.count', n=ready|length)) if ready else '' %}
-        <span class="pill {{ 'warn' if not ready else hh.qbit_tone }}">{% if not ready %}{{ t('settings.clients.not_configured') }}{% elif hh.qbit_tone == 'bad' %}{{ t('settings.clients.pill_down', name=ready_name) }}{% else %}{{ ready_name }}{% endif %}</span>
+        {%- set down = clients | selectattr('id', 'in', clients_down) | list %}
+        {%- set down_name = (down[0].title if down|length == 1 else t('settings.clients.count', n=down|length)) if down else ready_name %}
+        <span class="pill {{ 'bad' if down else ('warn' if not ready else hh.qbit_tone) }}">{% if down or (ready and hh.qbit_tone == 'bad') %}{{ t('settings.clients.pill_down', name=down_name) }}{% elif not ready %}{{ t('settings.clients.not_configured') }}{% else %}{{ ready_name }}{% endif %}</span>
       </summary>
       <div class="settings-panel">
         <div class="integration-list">
@@ -82,10 +85,10 @@
               <h2>{{ c.title }}</h2>
               <span class="integration-pills">
                 {% if c.multi and c.default %}<span class="pill ok">{{ t('settings.clients.main') }}</span>{% endif %}
-                <span class="pill {{ 'mut' if c.host else 'warn' }}">{{ t('settings.clients.configured') if c.host else t('settings.clients.not_configured') }}</span>
+                {% if c.id in clients_down %}<span class="pill bad">{{ t('settings.clients.pill_not_answering') }}</span>{% else %}<span class="pill {{ 'mut' if c.host else 'warn' }}">{{ t('settings.clients.configured') if c.host else t('settings.clients.not_configured') }}</span>{% endif %}{# the card's state: one pill and, while it does not answer, one note (its client_down issue) #}
               </span>
             </div>
-            {% if c.id in clients_down %}<p class="form-error" role="status">{{ t('settings.clients.not_answering') }}</p>{% endif %}
+            {% if c.id in clients_down %}{{ note(t('settings.clients.not_answering'), clients_down[c.id].severity, issue=clients_down[c.id].issue) }}{% endif %}
             {% if c.steps %}
             <details class="technical-details notifier-steps" {% if not c.host %}open{% endif %}>
               <summary>{{ t('settings.common.how_to_connect') }}</summary>

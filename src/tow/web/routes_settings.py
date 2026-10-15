@@ -35,7 +35,7 @@ from tow.web.messages import flash_redirect, request_flash
 from tow.web.site_store import save_together, settings_undo
 from tow.web.templating import TEMPLATES
 from tow.web.text import format_bytes, t
-from tow.web.views import backup_view, flash_ttl_sec, issue_notes, service_view
+from tow.web.views import backup_view, client_notes, flash_ttl_sec, issue_notes, service_view
 
 router = APIRouter()
 
@@ -78,7 +78,8 @@ def settings_page(request: Request) -> Response:
             "open_card": str(request.query_params.get("card") or ""),
             # The section a link opens (?open=clients), without a script too.
             "open_section": str(request.query_params.get("open") or ""),
-            "clients_down": _clients_down(state, cfg),
+            # The clients that do not answer (client_down): their card's note and pill.
+            "clients_down": client_notes(state, cfg),
             "interval_min": _shown_minutes(interval_sec_of(cfg)),
             "interval_label": _interval_label(interval_sec_of(cfg)),
             "flash_ttl_min": _shown_minutes(flash_ttl_sec()),
@@ -104,20 +105,6 @@ def settings_page(request: Request) -> Response:
             "notes": issue_notes(state, cfg, "settings"),
         },
     )
-
-
-def _clients_down(state: dict[str, Any], cfg: dict[str, Any]) -> set[str]:
-    """The clients that did not answer: the last check's word on each (the main one's is
-    ``qbit_ok``), or Settings' "Check" since then (``ping_failed``)."""
-    from tow.clients.factory import default_client_id
-    from tow.jsonish import as_dict
-
-    health = as_dict(state.get("health"))
-    down = {str(client) for client, ok in as_dict(health.get("clients_ok")).items() if ok is False}
-    down |= {str(client) for client in as_dict(health.get("ping_failed"))}
-    if health.get("qbit_ok") is False:
-        down.add(default_client_id(cfg))
-    return down
 
 
 def _search_words() -> dict[str, str]:
