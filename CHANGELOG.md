@@ -55,6 +55,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   offers “Show all”.
 - Home's rows and edit panel, History and the results of “Check all topics now” write their times by the same short rule
   (“20:31”, “15 Oct, 20:31”), the full time in the tooltip.
+- The first start asks first whether TOW should open from other devices; the password and reminder fields
+  show only for a yes, each password with an eye, and “Start” with the box clear does what “Later — this
+  computer only” did. The sign-in page is compact, with an eye on its password field, and says a sign-in
+  that ended in a note above it.
 
 ### Fixed
 
@@ -68,6 +72,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   “Saved · leave empty to keep”.
 - A refused site name says the rule plainly (“Short name: small Latin letters, digits and _”), and for “new”
   or “guess” that TOW uses the name itself, instead of listing both in every refusal.
+- A refused first start keeps the reminder and the box (never the passwords), says why as a sentence and marks
+  the field it is about; it cleared every field before.
 - A field that was refused (a wrong link, a bad site name) now has a red border, not only the red message at
   the top of the form.
 - The Log and a topic's episode list open as tall as their lines (up to most of the screen) instead of always

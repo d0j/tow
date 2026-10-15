@@ -58,11 +58,12 @@ def test_first_start_offers_the_password_and_this_pc_sets_it():
     assert "Добро пожаловать в TOW" in page
     assert 'name="lan_password2"' in page
     assert 'name="hint"' in page
-    assert 'value="skip"' in page
+    # 1.32: one "Start" - with the box clear and no password it does what "Later" did.
+    assert 'name="action" value="save"' in page
 
     mismatch = local.post("/setup", data={"lan_password": "first-pass-1", "lan_password2": "other-pass-2"})
     assert mismatch.status_code == 400
-    assert "пароли не совпадают" in mismatch.text
+    assert "пароли не совпадают" in mismatch.text.lower()
 
     saved = local.post(
         "/setup",
