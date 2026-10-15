@@ -192,9 +192,58 @@ def test_a_restore_point_is_made_after_a_mirror_answered(tmp_path, monkeypatch):
     assert mirrors._seq(state["mirrors"]["demo"]["observed"]["https://demo.example"]) == 1792000000.5
 
 
+def test_a_site_or_a_file_named_like_a_credential_does_not_block_a_restore_point(tmp_path, monkeypatch):
+    """Site names, client ids, messenger names and file identities are data used as map keys,
+    not field names: a site on my-token.example (``my_token``) or a file whose name ends in
+    ``_token`` refused every restore point, and so the web update, for good."""
+    from tow import guess, mirrors, restore_points
+    from tow.config import load_config, save_config
+    from tow.episodes import item_identity
+
+    site = guess._name_from_host("my-token.example")
+    assert site == "my_token"
+    _seed_source(monkeypatch, tmp_path / "source")
+    config = load_config()
+    config["trackers"] = {**config["trackers"], site: {"url_regex": r"my-token\.example"}, "pass": {"url_regex": "x"}}
+    save_config(config)
+    bucket: dict = {}
+    mirrors._observe(bucket, "https://my-token.example", "transport", 503, token=1792000000.0)
+    mirrors._observe(bucket, "https://my-token.example", "transport", 503, token=1792000001.0)
+    state = load_state()
+    state["mirrors"] = {**state["mirrors"], site: bucket, "pass": {"active": "https://pass.example"}}
+    state["daily_limit"] = {site: "2026-10-16", "pass": "2026-10-16"}
+    state["health"] = {
+        "clients_ok": {"token": False},
+        "clients_empty": {"secret": 3},
+        "ping_failed": {"uid": 1792000000},
+    }
+    state["notify_status"] = {"token": {"ok": False, "at": 1792000000}}
+    save_state(state)
+    item = {"label": "notes", "status": "completed", "size": 7}
+    identities = (item_identity("Extras/token.txt", None), item_identity("Extras/my_token", None), "secret")
+    save_download_history({"schema_version": 1, "topics": {"pass": {"items": dict.fromkeys(identities, item)}}})
+
+    point = restore_points.create_restore_point()
+    assert import_bundle(restore_points.point_path(point["id"]), restore_points._passphrase(), apply=False)
+
+
 @pytest.mark.parametrize(
     ("label", "data"),
     [
+        ("state.json", {"mirrors": {"my_token": {"password": "synthetic-access"}}}),
+        ("state.json", {"mirrors": {"pass": {"observed": {"https://pass.example": {"cookies": "a=b"}}}}}),
+        ("state.json", {"health": {"clients_ok": {"main": {"token": "synthetic-access"}}}}),
+        ("state.json", {"notify_status": {"telegram": {"token": "synthetic-access"}}}),
+        ("state.json", {"token": "synthetic-access"}),
+        ("state.json", {"topics": [{"pass": "synthetic-access"}]}),
+        ("download_history.json", {"topics": {"pass": {"items": {"secret": {"cookies": "a=b"}}}}}),
+        ("download_history.json", {"topics": {"pass": {"api_key": "synthetic-access"}}}),
+        ("download_history.json", {"token": "synthetic-access"}),
+        ("config.yaml", {"trackers": {"my_token": {"password": "synthetic-access"}}}),
+        ("config.yaml", {"mirrors": {"my_token": {"x": 1}}}),
+        ("config.yaml", {"clients": [{"id": "main", "password": "synthetic-access"}]}),
+        ("state.json", {"trackers": {"my_token": {"x": 1}}}),
+        ("download_history.json", {"mirrors": {"my_token": {"x": 1}}}),
         ("state.json", {"mirrors": {"demo": {"observed": {"https://demo.example": {"token": "synthetic-access"}}}}}),
         ("state.json", {"mirrors": {"demo": {"rate": {"https://demo.example": {"token": 1792000000}}}}}),
         ("state.json", {"mirrors": {"demo": {"observed": {"https://demo.example": {"x": {"token": 1792000000}}}}}}),

@@ -94,6 +94,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   torrent's id under a name the backup check takes for a password. It now has another name, and what older
   versions saved is accepted. If such a topic waits now, update to this version from the terminal once
   (Settings → Updates → How to update).
+- A site whose name looks like a password field (a site on my-token.example is named "my_token", one on
+  pass.example "pass") or a downloaded file so named no longer stops every restore point and update from
+  Settings: such names are now told apart from real password fields.
 
 ## [1.31.2] — 2026-10-15
 
