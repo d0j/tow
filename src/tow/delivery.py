@@ -251,12 +251,19 @@ def _moment(value: str) -> datetime | None:
 def maybe_digest(*, cfg: dict[str, Any], send: Send, now: datetime | None = None) -> bool:
     """Once a day, after ``daily_digest_hour``: what was added and completed since the last one."""
     hour = cfg.get("daily_digest_hour")
-    if not isinstance(hour, int) or isinstance(hour, bool):
+    if not isinstance(hour, int) or isinstance(hour, bool) or not 0 <= hour <= 23:
         return False
     now = now or datetime.now().astimezone(clock.local_zone())
-    if now.hour < hour or quiet_now(cfg, now):
+    due = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+    if now < due:
+        # Before today's hour only yesterday's digest can be due: one its hour found in the quiet
+        # hours (23 within "22-7"), held until they end - else it was never sent.
+        due -= timedelta(days=1)
+        if not quiet_now(cfg, due):
+            return False
+    if quiet_now(cfg, now):
         return False
-    today = now.date().isoformat()
+    today = due.date().isoformat()  # the day the digest is for (its "sent" mark)
     state = load_state()
     if state.get("digest_sent_on") == today:
         return False

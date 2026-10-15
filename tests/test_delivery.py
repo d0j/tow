@@ -231,3 +231,20 @@ def test_a_check_with_several_messages_delivers_the_queue_once(monkeypatch):
     kinds = [json.loads(line)["kind"] for line in log_path().read_text(encoding="utf-8").splitlines()]
     assert kinds.count("bot_delivery_started") == 5  # every message is still audited
     assert kinds.count("bot_delivery_failed") == 5
+
+
+def test_a_digest_whose_hour_falls_in_the_evening_quiet_hours_comes_when_they_end():
+    # daily_digest_hour 23 with quiet hours 22-7: at 23 it was quiet, after 7 it was "before 23" -
+    # the digest was never sent.
+    sent, send = _sender()
+    cfg = {"daily_digest_hour": 23, "quiet_hours": "22-7"}
+    evening = datetime(2026, 10, 1, 23, 30).astimezone()
+    morning = datetime(2026, 10, 2, 7, 30).astimezone()
+
+    assert delivery.maybe_digest(cfg=cfg, send=send, now=evening) is False  # held
+    assert delivery.maybe_digest(cfg=cfg, send=send, now=morning) is True
+    assert delivery.maybe_digest(cfg=cfg, send=send, now=morning + timedelta(hours=3)) is False  # once
+    assert load_state()["digest_sent_on"] == "2026-10-01"
+    assert len(sent) == 1
+    # Before its hour, a digest that was not held by the quiet hours is not due yet.
+    assert delivery.maybe_digest(cfg={"daily_digest_hour": 9}, send=send, now=morning) is False
