@@ -152,6 +152,48 @@ def test_a_pending_selection_retry_waits_for_a_short_initial_check_too():
     assert client.wanted_torrent_indices() == {E01}
 
 
+@pytest.mark.parametrize("start", [True, False])
+def test_the_real_client_tests_finish_a_handover_as_the_passes_do(start):
+    """``helpers.finish_handover`` (tests/integration: a real client's check may outlast the
+    grace period) finishes a handed-over add as TOW's passes do: nothing while the client checks,
+    then the selection applied, the start when asked, the release."""
+    from helpers import finish_handover
+
+    client = VerifyingClient()
+    client.initial_check, client.checking = True, False
+    with pytest.raises(ClientVerificationPending) as handed_over:
+        client.add_torrent_selected(TORRENT, "D:/tv", H, [E01], start=start)
+    client.calls.clear()
+    real_inspect = client.inspect_torrent
+    reads = {"count": 0}
+
+    def inspect(infohash):
+        reads["count"] += 1
+        if reads["count"] == 4:
+            client.torrents[H]["state"] = "stoppedDL"  # the check ends while the helper waits
+        return real_inspect(infohash)
+
+    client.inspect_torrent = inspect
+    info = finish_handover(client, H, "D:/tv", handed_over.value, seconds=60, pause=0)
+    assert [call[0] for call in client.calls] == ["set_wanted", *(["start"] if start else []), "labels"]
+    assert info["tags"] == ["tow"]
+    assert client.wanted_torrent_indices() == {E01}
+    assert client.torrents[H]["state"] == ("downloading" if start else "stoppedDL")
+
+
+def test_the_real_client_tests_give_up_on_a_check_that_never_ends():
+    from helpers import finish_handover
+
+    client = VerifyingClient()
+    client.initial_check, client.checking = True, False
+    with pytest.raises(ClientVerificationPending) as handed_over:
+        client.add_torrent_selected(TORRENT, "D:/tv", H, [E01], start=False)
+    client.calls.clear()
+    with pytest.raises(AssertionError, match="did not end"):
+        finish_handover(client, H, "D:/tv", handed_over.value, seconds=0, pause=0)
+    assert client.calls == []
+
+
 def test_retry_during_check_is_read_only_and_keeps_the_same_task():
     client = VerifyingClient()
     _pending(client)

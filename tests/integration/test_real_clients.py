@@ -210,6 +210,9 @@ def summary(info: dict[str, Any] | None) -> Any:
 
 @pytest.mark.parametrize("kind", KINDS)
 def test_the_adapter_adds_selects_starts_moves_adopts_in_the_real_client(kind, tmp_path):
+    from helpers import finish_handover
+
+    from tow.clients.managed import ClientVerificationPending
     from tow.folders import paths_equal
 
     adapter = adapter_for(kind)
@@ -228,9 +231,17 @@ def test_the_adapter_adds_selects_starts_moves_adopts_in_the_real_client(kind, t
 
     added: list[str] = []
     try:
-        # 1. Added STOPPED with two of its three files, confirmed by read-back (TOW's add).
-        adapter.add_torrent_selected(torrent.content, str(data), h, [0, 2], start=False)
-        added.append(h)
+        # 1. Added STOPPED with two of its three files, confirmed by read-back (TOW's add). The
+        # data is there, so the client may check it first (Transmission does): a check that
+        # outlasts the adapter's short wait for it is handed over and finished as TOW's next
+        # passes finish it.
+        try:
+            adapter.add_torrent_selected(torrent.content, str(data), h, [0, 2], start=False)
+        except ClientVerificationPending as handed_over:
+            added.append(h)
+            finish_handover(adapter, h, str(data), handed_over, seconds=WAIT_SEC)
+        else:
+            added.append(h)
         info = adapter.inspect_torrent(h)
         assert stopped(info), show()
         assert wanted(info) == {"a/e01.mkv": True, "e02.mkv": False, "notes.txt": True}, show()
@@ -373,16 +384,35 @@ def configure_install(kind: str, site: Site, downloads: Path) -> None:
     save_state({"topics": [topic]})
 
 
+def checking(info: dict[str, Any] | None) -> bool:
+    return str((info or {}).get("state") or "").casefold().startswith(("checking", "allocating"))
+
+
 def check_apply(capsys, raw: Raw, *, ok: bool = True) -> dict[str, Any]:
     """`tow check --apply` as the owner runs it (in this process: the guard is off here). The
-    whole report and the client's torrent list are in the message when it is not as expected."""
+    whole report and the client's torrent list are in the message when it is not as expected.
+
+    A torrent the client still checks after TOW's short wait for it is handed over ("checking
+    files", neither success nor failure): as TOW's next pass would, the check runs again once the
+    client's own check has ended (bounded), and that one is the result."""
     from tow import cli
 
-    capsys.readouterr()
-    code = cli.main(["check", "--apply", "--manual", "--json"])
-    out = capsys.readouterr().out
-    report = json.loads(out[out.index("{") :])
-    rows = report.get("results") or []
+    deadline = time.monotonic() + WAIT_SEC
+    while True:
+        capsys.readouterr()
+        code = cli.main(["check", "--apply", "--manual", "--json"])
+        out = capsys.readouterr().out
+        report = json.loads(out[out.index("{") :])
+        rows = report.get("results") or []
+        handed_over = [row for row in rows if row.get("status") == "verification_pending"]
+        if not handed_over or time.monotonic() > deadline:
+            break
+        h = str(handed_over[0].get("hash") or "")
+        wait_until(
+            f"the client's check of {h} ended",
+            lambda h=h: not checking(raw.adapter.inspect_torrent(h)),
+            lambda h=h: summary(raw.adapter.inspect_torrent(h)),
+        )
     expected = (0, [True]) if ok else (2, [False])
     assert (code, [bool(row.get("ok")) for row in rows]) == expected, f"{out}; the client holds: {raw.listing()!r}"
     return rows[0]
@@ -450,6 +480,8 @@ def test_tow_check_apply_hands_each_new_version_to_the_real_client(kind, tmp_pat
             response = browser.post(f"/topics/{topic()['id']}/replace-revision", follow_redirects=False)
             said = shown(response.headers.get("location", ""))
             assert response.status_code == 303, said
+            if topic().get("verification_pending"):
+                check_apply(capsys, raw)  # the client still checked its data: TOW's next pass finishes it
             info = held(second)
             assert wanted(info) == {
                 "Show.S01E01.mkv": True,
