@@ -1334,8 +1334,18 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 /* The add form and the edit panel: the folder's wrapper is as wide as its field, so the recent
    folders button stays at the field's end. */
 .new-topic-form .folder-input, .edit-form .folder-input { max-width: 26rem; }
-.follow-row { align-items: end; }
-.follow-row > .check-label { min-height: var(--field-h); }
+/* The interval field is as wide as its label ("Check every, min") and hint, never squeezed into
+   its field's 6.5 rem; the checkbox beside it stands at the field's height. */
+.field-row > .interval-field { flex: 0 0 auto; }
+.interval-field > label, .interval-field > .field-hint { white-space: nowrap; }
+.follow-row > .check-label { flex: 0 0 auto; min-height: var(--field-h); }
+@container (min-width: 38rem) {
+  .follow-row { align-items: start; }
+  .follow-row > .check-label { margin-top: calc(12px * 1.5 + .1875rem); }
+}
+/* The selection's rule field is hidden for "All files" and "Choose files" (content.js), also as a
+   group of the form grid. */
+.form-grid .content-unused { display: none; }
 .panel-top { margin-bottom: .45rem; }
 /* The content picker: the whole box for "Choose files", one compact line for a rule, nothing for
    all files (data-view, content.js). */
