@@ -135,3 +135,20 @@ def test_the_master_key_problem_is_one_red_note_with_its_command(client):
     # Needs attention still names it, and lands on this note.
     [entry] = attention_view(load_state(), load_config())["entries"]
     assert (entry["kind"], entry["severity"]) == ("check_blocked", "bad")
+
+
+@pytest.mark.parametrize("path", ["/", "/sites", "/history", "/settings"])
+def test_an_update_is_the_footer_badge_on_every_page_not_a_strip_on_home(client, path):
+    _state()
+    page = _page(client, path)
+    assert page.select_one("[data-release-notice]") is None  # Home's permanent green strip is gone
+    assert page.select_one(".release-notice") is None
+    badge = page.select_one("footer.app-version [data-release-badge]")
+    assert badge is not None
+    assert "open=updates" in badge["href"]
+    assert not badge.has_attr("aria-live")  # an available update is not announced
+
+
+def test_the_update_scripts_and_styles_know_no_home_strip():
+    assert "release-notice" not in (STATIC / "updates.css").read_text(encoding="utf-8")
+    assert "data-release-notice" not in (STATIC / "updates.js").read_text(encoding="utf-8")

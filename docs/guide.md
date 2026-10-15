@@ -277,8 +277,9 @@ cannot be restored. `tow keys status` shows which key file is in use (never the 
 Settings → **Version and updates**; the version in the corner of every page opens it.
 
 - **Check for updates** asks GitHub for the latest stable release. With **Check for updates automatically** on, TOW
-  asks by itself at most every 12 hours while a page is open, and Home shows a small notice when a new version is
-  out. Nothing is installed without you, and nothing about your topics or settings is sent.
+  asks by itself at most every 12 hours while a page is open, and the version in the corner of every page gets a
+  small badge when a new version is out. Nothing is installed without you, and nothing about your topics or
+  settings is sent.
 - When TOW is already the latest release, the check says so, and an update (`Update TOW.cmd`, `Update TOW.command`
   on macOS, `update-tow` on Linux) says “… is the latest release: nothing to update” and changes nothing.
 - **Update** installs it after you confirm. TOW first saves and checks a restore point (a `.towx` archive of your

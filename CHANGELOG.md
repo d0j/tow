@@ -34,6 +34,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   as part of the page instead of announcing them again on every visit.
 - When saved passwords and tokens cannot be opened, Settings says so in one red note with its instructions and
   Copy the command, instead of a blue message strip; Needs attention still lists it and leads to that note.
+- A new version no longer puts a permanent green strip at the top of Home: the version in the corner of every
+  page, Home included, gets a small badge, and Settings → Version and updates has the details.
 
 ## [1.30.11] — 2026-10-15
 
