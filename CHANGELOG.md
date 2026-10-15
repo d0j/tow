@@ -11,6 +11,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   answer started under a name the backup check takes for a password, and refused every restore point after a
   site answered. The value now has another name, and what 1.31.0 and 1.31.1 saved is accepted. To get from
   1.31.0 or 1.31.1 to this version, update from the terminal once (Settings → Updates → How to update).
+- An update from Settings that cannot start because the restore point fails now says why (for example, which
+  value the backup check refused), and the Log records it, instead of only saying the restore point failed.
 
 ## [1.31.1] — 2026-10-15
 

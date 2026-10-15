@@ -521,6 +521,7 @@ HISTORY_GROUPS = {
             "settings_restore_point_applied",
             "settings_portable_restore",
             "settings_update_started",
+            "settings_update_refused",
             "settings_backup_deleted",
             "settings_backup_retention",
             "settings_backup_automatic",
