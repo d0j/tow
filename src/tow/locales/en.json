@@ -835,7 +835,7 @@
   },
   "doctor": {
     "title": "Diagnostics",
-    "lead": "Connection to the torrent client and the sites. Passwords and tokens are not shown.",
+    "lead": "Connection to the torrent client and the sites.",
     "python": "Python version",
     "client_address": "Client address",
     "set": "Set",
@@ -853,7 +853,7 @@
     "run": "Check connection",
     "client_ok": "answers: {value}",
     "client_fail": "not answering: {reason}",
-    "probe_ok": "answers ({status})",
+    "probe_ok": "answers",
     "reason": {
       "client_not_set": "the torrent client is not set up in Settings",
       "refused": "connection refused",
@@ -2670,7 +2670,7 @@
   "not_found": {
     "title": "Page not found",
     "heading": "This page does not exist",
-    "text": "The address may be old or mistyped. Everything TOW has is reachable from the header.",
+    "text": "The address may be old or mistyped.",
     "home": "Home"
   }
 }

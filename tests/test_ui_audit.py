@@ -341,7 +341,7 @@ def test_doctor_shows_results_in_words_and_keeps_the_raw_text_in_a_tooltip(clien
     assert ">не отвечает: торрент-клиент не настроен в Настройках</span>" in page
     assert 'title="FAIL qbit secrets missing"' in page
     assert ">соединение отклонено</span>" in page
-    assert ">отвечает (200)</span>" in page
+    assert 'title="200">отвечает</span>' in page  # 1.32: the status is the tooltip
     assert ">ошибка HTTP 503</span>" in page
     assert ">FAIL" not in page
 
@@ -354,7 +354,7 @@ def test_doctor_in_english(client):
 
     assert ">not answering: the torrent client is not set up in Settings</span>" in page
     assert ">connection refused</span>" in page
-    assert ">answers (200)</span>" in page
+    assert 'title="200">answers</span>' in page
 
 
 @pytest.mark.parametrize("autostart_on", [True, False])
