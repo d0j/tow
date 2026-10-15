@@ -32,6 +32,7 @@ from tow.i18n import t
 from tow.jsonish import as_dict
 from tow.log import error_class, error_fields, is_daily_limit, log_event, owner_language
 from tow.mirrors import MirrorFetchError
+from tow.net_guard import tracker_address
 from tow.records import CheckRow, Topic, content_ref, mirror_of
 from tow.selection import SelectionPendingError, policy_from_topic, resolve_selection
 from tow.store import (
@@ -41,7 +42,7 @@ from tow.store import (
     load_secrets,
 )
 from tow.title import title_is_placeholder as _title_placeholder
-from tow.torrent import TorrentPathConflictError, parse_magnet_hashes, parse_torrent_metadata
+from tow.torrent import TorrentPathConflictError, parse_magnet_hashes, parse_torrent_metadata, preview_magnet
 from tow.trackers import GenericHttpTracker, match_tracker, presets
 
 _LOG = logging.getLogger("tow.check")
@@ -227,6 +228,8 @@ class CheckRun:
     readd_removed: bool = False
     # When the owner asked for that check, if it waited in a queue (``removal_seen_by``).
     readd_since: float | None = None
+    # allow_private_tracker_hosts: a page's magnet may name trackers in the home network.
+    private_tracker_hosts: bool = False
     # (site, error code) -> {"error", "topics"}: topics not asked because of their site (SITE_SKIP_CODES).
     site_skips: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)
 
@@ -892,6 +895,12 @@ def _fetch_by_magnet(work: TopicCheck, policy: dict[str, Any], torrent_error: Ex
         _LOG.warning("magnet fallback failed for %s: %s", tr.name, type(magnet_error).__name__)
         raise torrent_error from magnet_error
     _observe_cached_magnet(work.url, magnet_url, topic)
+    # The page's link reaches the client as a preview's does: its hashes and the trackers a site
+    # may be at. A tr=, x.pe= or ws= into the home network would make the client knock there.
+    public_only = not run.private_tracker_hosts
+    handed = preview_magnet(magnet_url, lambda tracker_url: tracker_address(tracker_url, public_only=public_only))
+    if handed is None:
+        raise torrent_error
     run.record(
         "tracker_magnet_found",
         component="tracker",
@@ -903,7 +912,7 @@ def _fetch_by_magnet(work: TopicCheck, policy: dict[str, Any], torrent_error: Ex
         status="succeeded",
         how=run.how,
     )
-    blob = client.materialize_magnet(magnet_url, dest, magnet_hash)
+    blob = client.materialize_magnet(handed, dest, magnet_hash)
     work.row["source"] = "magnet"
     work.row["fallback_reason"] = "tracker_auth"
     return Fetched(blob, magnet_hash)

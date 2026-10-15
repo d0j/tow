@@ -17,7 +17,7 @@ from tow.check_outcomes import counts_of
 from tow.check_steps import changed_owner_fields, merge_check_results, owner_fields
 from tow.clients import factory as client_factory
 from tow.clock import iso_now, machine_now
-from tow.config import load_config
+from tow.config import as_bool, load_config
 from tow.i18n import t
 from tow.jsonish import as_dict
 from tow.log import error_class, error_fields, log_event, owner_language
@@ -434,6 +434,7 @@ def _run_check(
         # and the scheduled checks only report it.
         readd_removed=how == "manual" and ids is not None,
         readd_since=readd_since,
+        private_tracker_hosts=as_bool(cfg.get("allow_private_tracker_hosts")),
     )
     results: list[CheckRow] = []
     for topic in topics_of(state):

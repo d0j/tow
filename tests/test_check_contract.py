@@ -280,7 +280,8 @@ def test_tracker_auth_falls_back_to_magnet_metadata_and_normal_add_flow(monkeypa
     monkeypatch.setattr(
         tracker,
         "fetch_magnet",
-        lambda *_args, **_kwargs: ("magnet:?xt=urn:btih:HASH-NEW", "HASH-NEW"),
+        # A link the client may be given: a real info-hash (the fallback hands on only those).
+        lambda *_args, **_kwargs: (f"magnet:?xt=urn:btih:{'D' * 40}", "HASH-NEW"),
         raising=False,
     )
     materialized = []
@@ -300,8 +301,59 @@ def test_tracker_auth_falls_back_to_magnet_metadata_and_normal_add_flow(monkeypa
     assert row["fallback_reason"] == "tracker_auth"
     assert row["added"] is True
     assert row["selection_updated"] is False
-    assert materialized == [("magnet:?xt=urn:btih:HASH-NEW", r"M:\TV", "HASH-NEW")]
+    assert materialized == [(f"magnet:?xt=urn:btih:{'D' * 40}", r"M:\TV", "HASH-NEW")]
     assert load_state()["topics"][0]["hash"] == "HASH-NEW"
+
+
+@pytest.mark.parametrize(("private_hosts", "lan_tracker_kept"), [(False, False), (True, True)])
+def test_the_magnet_fallback_hands_the_client_only_hashes_and_allowed_trackers(
+    monkeypatch, private_hosts, lan_tracker_kept
+):
+    """A tracker page's magnet may name trackers, peers and web seeds in the home network
+    (tr=, x.pe=, ws=): the client would knock there. The check hands it what a preview does."""
+    import socket
+
+    infohash = "C" * 40
+    save_state({"topics": [{"id": "magnet-topic", "title": "Show", "url": "https://tracker/1", "save_path": r"M:\TV"}]})
+    save_download_history({"schema_version": 1, "topics": {}})
+    client = FakeClient()
+    client.capabilities = {**FakeClient.capabilities, "magnet_metadata": True}
+    tracker = _wire_fake_check(monkeypatch, client)
+    cfg = {"trackers": {}, "client": {"id": "main", "kind": "fake"}, "allow_private_tracker_hosts": private_hosts}
+    monkeypatch.setattr(check_run, "load_config", lambda: cfg)
+    monkeypatch.setattr(
+        tracker,
+        "fetch_torrent",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("fake: no download link on page")),
+    )
+    page_magnet = (
+        f"magnet:?xt=urn:btih:{infohash}&dn=Show"
+        "&tr=http%3A%2F%2Fpublic.tracker.example%2Fannounce"
+        "&tr=http%3A%2F%2Frouter.lan.example%2Fannounce"
+        "&x.pe=10.0.0.5:80&ws=http%3A%2F%2F169.254.169.254%2Fx"
+    )
+    monkeypatch.setattr(tracker, "fetch_magnet", lambda *_args, **_kwargs: (page_magnet, infohash), raising=False)
+    addresses = {"public.tracker.example": "93.184.216.34", "router.lan.example": "192.168.1.1"}
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (addresses[host], port))],
+    )
+    materialized = []
+
+    def materialize(url, path, wanted):
+        materialized.append(url)
+        client.present = True
+        return b"torrent"
+
+    client.materialize_magnet = materialize
+    row = check.run_check(apply=True, notify=False, ids=["magnet-topic"], how="manual")["results"][0]
+
+    assert row["source"] == "magnet"
+    expected = f"magnet:?xt=urn:btih:{infohash}&tr=http%3A%2F%2Fpublic.tracker.example%2Fannounce"
+    if lan_tracker_kept:  # the owner allowed sites in the home network
+        expected += "&tr=http%3A%2F%2Frouter.lan.example%2Fannounce"
+    assert materialized == [expected]
 
 
 @pytest.mark.parametrize("saved_hash", [None, "A" * 40])

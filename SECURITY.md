@@ -73,6 +73,10 @@ otherwise.
   does not constrain that separate process. Run only trusted services, keep their API private and restrict browser
   egress to prevent access to LAN, link-local and cloud-metadata services. TOW does not install or sandbox them.
   Imported Python plugin modules are trusted executable code, not a security boundary.
+- A magnet link from a site's page reaches the torrent client only as its info-hashes and the trackers TOW itself
+  may contact (public addresses, unless `allow_private_tracker_hosts` is on); its peers and web seeds are left out.
+  A `.torrent` file reaches the client as the site gave it: the trackers and web seeds listed inside it are the
+  client's to contact, also when they point into your home network.
 - Traffic between a device and TOW over the network is plain HTTP: anyone who can watch the home network (a shared
   Wi-Fi, a compromised router) can read the password at sign-in and the session cookie, and that cookie works for
   90 days until the device signs out or you use "Sign out everywhere". Use a VPN (WireGuard, Tailscale) or an SSH
