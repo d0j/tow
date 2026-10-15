@@ -410,6 +410,7 @@ def test_facts_come_from_the_state_and_the_night_copies():
         "topic_timers": {},
         "timer_policies": {},
         "site_retries": {},
+        "topic_ids": set(),
         "space_waiting": False,
     }
     record_status(last_ok_at=99.5)

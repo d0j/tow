@@ -70,15 +70,15 @@ class Service:
         self.supervisor = core.Supervisor(deps, python="python")
         return self.supervisor
 
-    def due(self) -> float | None:
+    def due(self, tid: str = "a") -> float | None:
         service = self.supervisor
         service.schedule.site_retries = self.facts()["site_retries"]
-        return service.schedule.site_retry_due(self.now).get("a")
+        return service.schedule.site_retry_due(self.now).get(tid)
 
-    def dispatch(self) -> bool:
-        """Start the retry job at its time, as the loop would; True when it was spawned."""
+    def dispatch(self, tid: str = "a") -> bool:
+        """Start the retry job at ``tid``'s time, as the loop would; True when it was spawned."""
         before = len(self.spawned)
-        at = self.due()
+        at = self.due(tid)
         if at is None:
             return False
         self.now = max(self.now, at)
@@ -86,9 +86,15 @@ class Service:
         return len(self.spawned) > before
 
     def retry_failed(self) -> None:
-        """The retry child ran and the site still failed: the topic's last check moved."""
-        self.topics = [failed(str(topic["id"]), at=self.now + 60) for topic in self.topics]
+        """The retry child ran and the site still failed: the last check of its topics moved."""
+        batch = layout.read_json(layout.schedule_path()).get("site_retry_batch") or {}
         self.now += 60
+        for topic in self.topics:
+            if topic["id"] in batch:
+                topic["last_check"] = datetime.fromtimestamp(self.now, UTC).isoformat()
+
+    def topic(self, tid: str) -> dict[str, Any]:
+        return next(topic for topic in self.topics if topic["id"] == tid)
 
 
 def saved_attempt(tid: str = "a") -> Any:
@@ -106,3 +112,68 @@ def test_a_damaged_saved_budget_is_never_restarted(count):
     assert service.dispatch() is False
     assert service.spawned == []
     assert saved_attempt() == damaged
+
+
+def test_the_budget_counts_one_two_three_then_stops_across_restarts():
+    service = Service(failed())
+    for count in (1, 2, 3):
+        assert service.dispatch()
+        assert saved_attempt()["count"] == count
+        assert layout.read_json(layout.schedule_path())["site_retry_batch"]["a"]["count"] == count
+        assert "--site-retry-only" in service.spawned[-1]
+        service.retry_failed()
+        service.start()  # a new `tow run` knows the spent budget only from schedule.json
+    assert service.supervisor.schedule.site_retry_attempts["a"]["count"] == 3
+    service.now += 7 * 86400
+    assert service.due() is None
+    assert service.dispatch() is False
+    assert len(service.spawned) == 3
+
+
+def test_retries_back_off_between_attempts():
+    service = Service(failed())
+    starts = []
+    for _ in range(3):
+        assert service.dispatch()
+        starts.append(service.now)
+        service.retry_failed()
+    assert starts[0] - T0 >= 300  # a site that did not answer: five minutes, then doubled
+    assert starts[1] - starts[0] >= 2 * 300
+    assert starts[2] - starts[1] >= 4 * 300
+
+
+@pytest.mark.parametrize("leave", ["paused", "site_paused", "red_error"])
+def test_a_topic_briefly_out_of_the_queue_keeps_its_spent_budget(leave):
+    service = Service(failed("a"), failed("b"))
+    assert service.dispatch("a")
+    service.retry_failed()
+    assert saved_attempt("a")["count"] == 1
+    topic = service.topic("a")
+    held = dict(topic)
+    if leave == "paused":
+        topic["paused"] = True
+    elif leave == "site_paused":
+        topic["last_error_class"] = "frozen"
+    else:
+        topic["last_error_class"] = "error"
+    assert service.due("a") is None
+    assert service.dispatch("b")  # another topic's retry rewrites the saved budgets
+    service.retry_failed()
+    assert saved_attempt("a")["count"] == 1
+    service.start()
+    topic.clear()
+    topic.update(held)  # back in the queue, the same outage of the same topic
+    assert service.dispatch("a")
+    assert saved_attempt("a")["count"] == 2
+
+
+def test_a_deleted_topic_or_a_week_out_of_the_queue_forgets_its_budget():
+    service = Service(failed("a"), failed("b"), failed("c"))
+    assert service.dispatch("a")
+    service.retry_failed()
+    service.topic("a")["paused"] = True
+    service.topics = [topic for topic in service.topics if topic["id"] != "c"]
+    service.now += 7 * 86400 + 1
+    assert service.dispatch("b")
+    attempts = layout.read_json(layout.schedule_path())["site_retry_attempts"]
+    assert set(attempts) == {"b"}

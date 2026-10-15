@@ -56,6 +56,8 @@ RESTART_OPERATION_ATTEMPTS = 3
 STOP_JOB_WAIT_SEC = 10 * 60
 STOP_RETRY_SEC = 10.0
 FACTS_EVERY_SEC = 60.0
+# The spent site retry budget of a topic that left the retry queue is kept this long.
+SITE_RETRY_KEEP_SEC = 7 * 24 * 3600
 
 # The child jobs of the table (tow.supervisor.jobs), the in-process watchdog left out. Plain
 # dicts on purpose: tests change one entry for a run (monkeypatch.setitem).
@@ -73,6 +75,15 @@ def _now_iso(ts: float) -> str:
     return datetime.fromtimestamp(ts, UTC).isoformat(timespec="seconds")
 
 
+def _retry_expired(saved: Any, wall: float) -> bool:
+    """A saved site retry last reserved longer ago than ``SITE_RETRY_KEEP_SEC`` (one without a
+    readable time is kept: it can only end a budget, never grant one)."""
+    from tow.diagnostic_json import epoch
+
+    started = epoch(saved.get("started_at")) if isinstance(saved, dict) else None
+    return started is not None and wall - started > SITE_RETRY_KEEP_SEC
+
+
 @dataclass
 class Deps:
     """Everything the supervisor asks of the system; tests pass fakes."""
@@ -84,7 +95,9 @@ class Deps:
     watchdog_pass: Callable[[float | None], Any]
     send: Callable[[str], bool]
     load_config: Callable[[], dict[str, Any]]
-    facts: Callable[[], dict[str, Any]]  # last_scheduled_check, last_backup_ok, topic_timers, space_waiting
+    # last_scheduled_check, last_backup_ok, topic_timers, timer_policies, site_retries, topic_ids,
+    # space_waiting
+    facts: Callable[[], dict[str, Any]]
     crash_line: Callable[[float], str] = field(default=lambda _since: "")
     now: Callable[[], float] = time.time
     monotonic: Callable[[], float] = time.monotonic
@@ -603,10 +616,14 @@ class Supervisor:
                 }
             if not batch:
                 return False
+            # A topic out of the queue for a while (paused, its site paused, another error between
+            # two failures of the same outage) keeps its spent budget, until it is deleted or a
+            # week without a retry has passed: the revision decides whether it still applies.
+            topics = self._facts.get("topic_ids", self.schedule.site_retries)
             attempts = {
                 tid: saved
                 for tid, saved in self.schedule.site_retry_attempts.items()
-                if tid in self.schedule.site_retries
+                if tid in self.schedule.site_retries or (tid in topics and not _retry_expired(saved, wall))
             }
             attempts.update(batch)
             persisted = {**self._persisted, "site_retry_attempts": attempts, "site_retry_batch": batch}

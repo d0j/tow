@@ -16,6 +16,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A failed scheduled check stays marked as failed in the header, in Needs attention and for the watchdog
   until a check of every topic succeeds; a successful automatic retry after a site failure, a personal timer
   or a check of one topic no longer clears it.
+- A topic that leaves the automatic site retries for a while (paused, its site paused, another error) keeps
+  the retries already used for the same outage instead of getting three new ones.
 
 ## [1.30.10] — 2026-10-15
 
