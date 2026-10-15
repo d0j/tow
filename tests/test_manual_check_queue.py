@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
-from helpers import flash_of, manual_check_consumers, wait_for_check_job
+from helpers import flash_of, flash_record, manual_check_consumers, wait_for_check_job
 
 from tow.check_outcomes import counts_of, outcome_of
 from tow.log import format_event
@@ -452,6 +452,70 @@ def test_a_broken_result_handler_does_not_strand_the_queue(client, crash):
     assert "Результат недоступен" in client.get(f"/?check_result={job['id']}").text
 
 
+NNM = {
+    "title": "NNM-Club",
+    "url_regex": r"^https?://(?:www\.)?nnmclub\.to/forum/viewtopic\.php\?t=(\d+)",
+    "login_hosts": ["https://nnmclub.to"],
+    "fetch_hosts": ["https://nnmclub.to"],
+    "login_path": "/forum/login.php",
+    "topic_path": "/forum/viewtopic.php?t={id}",
+    "download_href_regex": r"download\\.php\\?id=(\\d+)",
+    "page_download": True,
+    "cookie_names": [],
+}
+WAITING_SPACE = "ждёт места на диске: не хватает 40,5 ГБ; TOW запустит раздачу сам, когда место появится"
+
+
+def _feedback_of(location):
+    """What the owner meets after a check: the message, its kind, its topic and the sign-in prompt."""
+    record = flash_record(location) or {}
+    query = parse_qs(urlsplit(location).query)
+    return (
+        record.get("text"),
+        record.get("kind"),
+        record.get("problem_topic", ""),
+        (query.get("credential_topic") or [""])[0],
+    )
+
+
+@pytest.mark.parametrize(
+    ("route", "row"),
+    [
+        ("check", {"ok": False, "error": "nnmclub: no download link on page", "error_class": "tracker_auth"}),
+        (
+            "check",
+            {"ok": False, "status": "waiting_space", "added": True, "error": WAITING_SPACE, "error_class": "disk"},
+        ),
+        ("check", {"ok": False, "status": "verification_pending", "changed": True}),
+        ("check", {"ok": False, "error": "client refused", "error_class": "qbit"}),
+        ("check", {"ok": False, "error": "tracker: all hosts failed", "error_class": "tracker"}),
+        ("check", {"ok": True, "added": True}),
+        ("check", {"ok": True, "status": "skipped", "skipped": "paused"}),
+        ("adopt", {"ok": True}),
+        ("check", None),  # deleted while the check waited
+    ],
+)
+def test_a_queued_topic_check_says_what_a_check_at_once_says(client, monkeypatch, consumers, route, row):
+    monkeypatch.setattr("tow.web.services.load_config", lambda: {"trackers": {"nnmclub": NNM}})
+    monkeypatch.setattr("tow.web.services.adopt_topic", lambda *_a, **_kw: None)
+    save_state({"topics": [{"id": "t1", "title": "Show A", "url": "https://nnmclub.to/forum/viewtopic.php?t=1234567"}]})
+    busy = [False]
+
+    def check(**_kw):
+        if busy[0]:
+            busy[0] = False
+            raise CheckBusyError("busy")
+        return {"results": [{"id": "t1", "title": "Show A", **row}] if row is not None else []}
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    at_once = _feedback_of(client.post(f"/topics/t1/{route}", follow_redirects=False).headers["location"])
+    busy[0] = True
+    job = _job(client.post(f"/topics/t1/{route}", follow_redirects=False))
+    consumers[0].run()
+    assert _feedback_of(_status(client, job)["redirect"]) == at_once
+    assert at_once[0]
+
+
 class _ThreadStop(BaseException):
     """Not an Exception: what ends a thread (SystemExit, KeyboardInterrupt) in the middle of a check."""
 
@@ -477,7 +541,9 @@ def test_a_consumer_ended_mid_check_never_leaves_its_job_running_or_replays_it(c
     assert check_jobs.get(second["id"])["status"] == "failed"  # ended() never reported a result
 
 
-def test_a_missing_queued_topic_is_skipped_not_changed_into_check_all(client, monkeypatch):
+def test_a_missing_queued_topic_is_not_found_not_changed_into_check_all(client, monkeypatch, consumers):
+    # Deleted while its check waited: "not found", as a check at once says - not an invented
+    # "skipped" row that counted as a result.
     attempts = []
 
     def check(**kw):
@@ -488,8 +554,9 @@ def test_a_missing_queued_topic_is_skipped_not_changed_into_check_all(client, mo
 
     monkeypatch.setattr("tow.web.services.run_check", check)
     job = _job(client.post("/topics/deleted/check", follow_redirects=False))
-    result = wait_for_check_job(client, job)
-    assert result["status"] == "done"
+    consumers[0].run()
+    result = _status(client, job)
+    assert result["status"] == "failed"
     assert attempts == [["deleted"], ["deleted"]]
-    assert "пропущено 1" in result["flash"]
-    assert check_jobs.get(job)["report"]["rows"][0]["outcome"] == "skipped"
+    assert result["flash"] == "раздача не найдена"
+    assert "report" not in check_jobs.get(job)

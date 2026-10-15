@@ -11,18 +11,19 @@ from fastapi.responses import JSONResponse, Response
 from tow import i18n
 from tow.check import blocked_by_previous_revision
 from tow.log import error_fields, owner_language
-from tow.records import shown_title
+from tow.records import CheckRow, shown_title
 from tow.store import CheckBusyError, SecretStoreError
 from tow.trackers import load_trackers, match_tracker
 from tow.web import check_jobs, services
 from tow.web.text import t
 from tow.web.views import (
+    check_feedback,
     check_job_message,
     check_progress,
     check_report,
+    feedback_redirect,
     flash_location,
     flash_redirect,
-    manual_check_flash,
     topic_check_row,
 )
 
@@ -97,36 +98,20 @@ def _check_topic(tid: str, *, adopted: bool = False) -> Response:
     except SecretStoreError as exc:
         services.record_check_failure(exc, how="manual")
         return flash_redirect("/", "web.check.blocked", "err")
-    row = topic_check_row(tid, out)
-    if row is None:
-        return flash_redirect("/", "web.topics.not_found", "err")
-    if row.get("note"):  # its link or client changed meanwhile: nothing of this check was saved
-        return flash_redirect("/", "web.check.no_changes_reason", "warn", reason=row["note"])
-    if row and not row.get("ok"):
+    return feedback_redirect(_topic_feedback(tid, topic_check_row(tid, out), adopted=adopted))
+
+
+def _topic_feedback(tid: str, row: CheckRow | None, *, adopted: bool) -> dict[str, str]:
+    """``check_feedback`` with what a failed row needs: the topic's title, and its site when the
+    site signs in (its sign-in prompt)."""
+    tracker_name = title = ""
+    if row is not None and not row.get("ok") and not row.get("note"):
         state = services.load_state()
         topic = next((item for item in state.get("topics") or [] if str(item.get("id")) == str(tid)), None)
         tracker = match_tracker(load_trackers(services.load_config()), str((topic or {}).get("url") or ""))
         tracker_name = tracker.name if tracker and tracker.spec.get("login_path") else ""
-        redirect = manual_check_flash(
-            row, topic_id=tid, tracker_name=tracker_name, topic_title=shown_title(topic or {})
-        )
-        if redirect is not None:
-            return redirect
-    if row and row.get("added"):
-        return flash_redirect("/", "web.check.added")
-    if row and row.get("started"):  # a torrent that waited for disk space, started now
-        return flash_redirect("/", "web.check.started")
-    if row and row.get("selection_updated"):
-        return flash_redirect("/", "web.check.selection_updated")
-    if row and row.get("changed"):
-        return flash_redirect("/", "web.check.changed")
-    if row and row.get("ok") and adopted:
-        return flash_redirect("/", "web.check.adopted")
-    if row and row.get("ok") and row.get("skipped"):
-        return flash_redirect("/", "web.check.no_changes_reason", "ok", reason=row["skipped"])
-    if row and row.get("ok"):
-        return flash_redirect("/", "web.common.no_changes")
-    return flash_redirect("/", "web.check.failed", "err")
+        title = shown_title(topic or {})
+    return check_feedback(row, topic_id=tid, adopted=adopted, tracker_name=tracker_name, topic_title=title)
 
 
 def _perform_check(job: dict[str, Any]) -> None:
@@ -134,6 +119,7 @@ def _perform_check(job: dict[str, Any]) -> None:
     lang = str(job.get("lang") or owner_language())
     i18n.use(lang)
     topic_id = str(job.get("topic_id") or "")
+    feedback: dict[str, str] = {}
     try:
         out = services.run_check(
             apply=job["apply"],
@@ -143,22 +129,19 @@ def _perform_check(job: dict[str, Any]) -> None:
             wait=False,
             ids=[topic_id] if topic_id else None,
         )
-        if topic_id and not topic_check_row(topic_id, out):
-            out = {"results": [{"id": topic_id, "ok": True, "status": "skipped", "skipped": t("web.topics.not_found")}]}
         report = check_report(out, apply=job["apply"])
-        flash, status, kind = (
-            report["summary"],
-            "done",
-            "warn" if report["counts"]["fail"] or report["counts"]["pending"] else "ok",
-        )
-        with check_jobs.LOCK:
-            job["report"] = report
-        if topic_id and report["rows"] and report["rows"][0]["title"]:
-            flash = t(
-                "web.check.topic_result",
-                title=services.short_series_title(report["rows"][0]["title"], lang),
-                result=flash,
-            )
+        if topic_id:
+            # A topic's check says what a check of it at once says; deleted meanwhile, it was
+            # never checked ("not found"), and there is no result of it to show.
+            row = topic_check_row(topic_id, out)
+            feedback = _topic_feedback(topic_id, row, adopted=bool(job.get("adopted")))
+            flash, status, kind = feedback["text"], "done" if row is not None else "failed", feedback["kind"]
+        else:
+            waiting_or_failed = report["counts"]["fail"] or report["counts"]["pending"]
+            flash, status, kind = report["summary"], "done", "warn" if waiting_or_failed else "ok"
+        if status == "done":
+            with check_jobs.LOCK:
+                job["report"] = report
     except CheckBusyError:
         raise  # the FIFO retries the head without duplicating work or consuming a failure
     except SecretStoreError as exc:
@@ -168,9 +151,16 @@ def _perform_check(job: dict[str, Any]) -> None:
         services.log_event("check_blocked", how="manual", reason="result_unconfirmed", **error_fields(exc))
         flash, status, kind = i18n.t("web.check_all.not_run", lang, error=type(exc).__name__), "failed", "err"
     # The page follows the job and then opens Home with its result (a message kept on the server).
-    redirect = flash_location("/", flash, kind, result_job=job["id"])
+    credential = feedback.get("credential_topic")
+    redirect = flash_location(
+        "/?credential_topic=" + quote(credential) if credential else "/",
+        flash,
+        kind,
+        problem_topic=feedback.get("problem_topic", ""),
+        result_job=job["id"],
+    )
     with check_jobs.LOCK:
-        job.update({"status": status, "flash": flash, "redirect": redirect})
+        job.update({"status": status, "flash": flash, "kind": kind, "feedback": feedback, "redirect": redirect})
 
 
 @router.post("/check")

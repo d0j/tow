@@ -242,20 +242,77 @@ def _row_error(row: CheckRow) -> str:
     return render_stored(record["code"], params, text).strip() or text
 
 
+def _feedback(text: str, kind: str = "ok", *, problem_topic: str = "", credential_topic: str = "") -> dict[str, str]:
+    return {"text": text, "kind": kind, "problem_topic": problem_topic, "credential_topic": credential_topic}
+
+
+def feedback_redirect(feedback: Mapping[str, str]) -> RedirectResponse:
+    """Home with what a manual check said (``check_feedback``): its message, and the sign-in
+    prompt when the site asked for one."""
+    return home_redirect(
+        feedback["text"],
+        feedback["kind"],
+        problem_topic=feedback["problem_topic"],
+        credential_topic=feedback["credential_topic"] or None,
+    )
+
+
+def check_feedback(
+    row: CheckRow | None, *, topic_id: str, adopted: bool = False, tracker_name: str = "", topic_title: str = ""
+) -> dict[str, str]:
+    """What a manual check of one topic says, as data - ``text``, its ``kind``, the
+    ``problem_topic`` it is about and the ``credential_topic`` whose sign-in to ask for ("" for
+    none) - the same for a check run at once and a queued one. ``row``: the topic's result, None
+    for a topic that is gone; ``adopted``: the owner has just adopted its torrent into TOW, which
+    a check that changes nothing else confirms; ``tracker_name``: its site when it signs in."""
+    if row is None:
+        return _feedback(t("web.topics.not_found"), "err")
+    if row.get("note"):  # its link or client changed meanwhile: nothing of this check was saved
+        return _feedback(t("web.check.no_changes_reason", reason=row["note"]), "warn")
+    failed = failed_check_feedback(row, topic_id=topic_id, tracker_name=tracker_name, topic_title=topic_title)
+    if failed is not None:
+        return failed
+    if not row.get("ok"):  # an empty row: nothing says the check worked
+        return _feedback(t("web.check.failed"), "err")
+    if row.get("added"):
+        return _feedback(t("web.check.added"))
+    if row.get("started"):  # a torrent that waited for disk space, started now
+        return _feedback(t("web.check.started"))
+    if row.get("selection_updated"):
+        return _feedback(t("web.check.selection_updated"))
+    if row.get("changed"):
+        return _feedback(t("web.check.changed"))
+    if adopted:
+        return _feedback(t("web.check.adopted"))
+    if row.get("skipped"):
+        return _feedback(t("web.check.no_changes_reason", reason=row["skipped"]))
+    return _feedback(t("web.common.no_changes"))
+
+
 def manual_check_flash(
     row: CheckRow | None, *, topic_id: str, tracker_name: str = "", new_topic: bool = False, topic_title: str = ""
 ) -> RedirectResponse | None:
+    """Home after a failed check by hand (``failed_check_feedback``); None for a row that is ok."""
+    feedback = failed_check_feedback(
+        row, topic_id=topic_id, tracker_name=tracker_name, new_topic=new_topic, topic_title=topic_title
+    )
+    return feedback_redirect(feedback) if feedback is not None else None
+
+
+def failed_check_feedback(
+    row: CheckRow | None, *, topic_id: str, tracker_name: str = "", new_topic: bool = False, topic_title: str = ""
+) -> dict[str, str] | None:
     """A failed check by hand, in words: "added to TOW, ..." only for the first check of a
     topic just added (``new_topic``); a check of a topic TOW already had says the check failed."""
     if not row or row.get("ok"):
         return None
     if row.get("status") == "verification_pending":
-        return home_redirect(t("web.check.verifying"), "warn")
+        return _feedback(t("web.check.verifying"), "warn")
     error = humanize(_row_error(row))
     if row.get("status") == "waiting_space":
         # Not a failed check: the torrent is in the client, stopped, and TOW starts it once its
         # files fit (the error says so). Just added now, or still waiting from an earlier check.
-        return home_redirect(
+        return _feedback(
             t("web.check.added_waiting_space", error=error) if row.get("added") else error,
             "warn",
             problem_topic=topic_id,
@@ -274,11 +331,11 @@ def manual_check_flash(
         flash = t("web.check.topic_result", title=services.short_series_title(title, owner_language()), result=flash)
     # The status-colour contract (AGENTS.md): a site that does not answer is amber, not an error.
     kind = "warn" if cls in TRACKER_WARNING_CLASSES else "err"
-    return home_redirect(
+    return _feedback(
         flash,
         kind,
         problem_topic=topic_id,
-        credential_topic=topic_id if cls == "tracker_auth" and tracker_name else None,
+        credential_topic=topic_id if cls == "tracker_auth" and tracker_name else "",
     )
 
 
