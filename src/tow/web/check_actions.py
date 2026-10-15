@@ -60,6 +60,8 @@ def perform_check(job: dict[str, Any]) -> None:
             how="manual",
             wait=False,
             ids=[topic_id] if topic_id else None,
+            # A torrent removed after the click is not added back by a check that waited for it.
+            readd_since=job.get("requested_at") if topic_id else None,
         )
     except CheckBusyError:
         raise  # the FIFO retries the head without duplicating work or consuming a failure

@@ -52,6 +52,8 @@ def submit(
             # before the change the owner clicks for, so one follow-up waits behind it.
             if job["status"] == "queued" and job["topic_id"] == topic_id and job["apply"] == apply:
                 job["adopted"] = bool(job.get("adopted")) or adopted
+                # The latest click is the owner's request: what it may re-add (``run_check``).
+                job["requested_at"] = time.time()
                 return get(job["id"]), False
         if len(_lane(apply)) >= MAX_PENDING:
             return None, False
@@ -71,6 +73,7 @@ def submit(
             "adopted": adopted,
             "lang": lang,
             "status": "queued",
+            "requested_at": time.time(),
         }
         JOBS[job["id"]] = job
         PENDING.append(job["id"])
