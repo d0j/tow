@@ -206,7 +206,7 @@ def test_every_check_this_tab_started_is_followed_within_bounds_to_exactly_one_r
     # for; a finished check opened a second page. One bounded scheduler follows them all instead.
     verdict = _verdict("check_scheduler.mjs")
     assert verdict == dict.fromkeys(verdict, True), verdict
-    assert len(verdict) == 15
+    assert len(verdict) == 16
 
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
