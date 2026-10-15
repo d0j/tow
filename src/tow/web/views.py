@@ -353,6 +353,27 @@ def check_report(out: dict[str, Any], *, apply: bool) -> dict[str, Any]:
     return {"summary": summary, "counts": counts, "rows": details, "total": sum(counts.values())}
 
 
+def check_progress(job: Mapping[str, Any]) -> str:
+    """Where a manual check that waits or runs is, in words (Home's note and its polling)."""
+    if job.get("status") == "running":
+        return t("web.check_all.progress_running")
+    if isinstance(job.get("waiting_since"), (int, float)):
+        return t("web.check_all.progress_waiting", at=_epoch_time(job["waiting_since"]))
+    return t("web.check_all.progress_queued", position=job.get("position") or 1)
+
+
+def check_job_message(job: Mapping[str, Any]) -> str:
+    """What a finished manual check says; for one that ended without a word of its own
+    (cancelled, never given the check lock), why."""
+    if job.get("flash"):
+        return str(job["flash"])
+    if job.get("cancelled"):
+        return t("web.check_all.cancelled")
+    if job.get("lock_timeout"):
+        return t("web.check_all.lock_timeout")
+    return t("web.check_all.unconfirmed")
+
+
 def ui_time(value: str | None) -> str:
     if not value:
         return ""

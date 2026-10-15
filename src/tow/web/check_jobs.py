@@ -25,6 +25,10 @@ PENDING: deque[str] = deque()  # the jobs of both lanes that wait or run, oldest
 _WORKERS: dict[bool, threading.Thread] = {}
 MAX_PENDING = 32  # per lane
 RESULT_TTL = 3600
+# How long a manual check waits for the check lock: a scheduled check's 3600-second maximum and
+# five minutes for its cleanup. Then it ends as not run; it is tried once a second until then.
+LOCK_WAIT_SEC = 3900
+LOCK_RETRY_SEC = 1.0
 
 
 def _lane(apply: bool) -> list[str]:
@@ -103,9 +107,10 @@ def _consume(apply: bool, perform: Callable[[dict[str, Any]], None]) -> None:
         except CheckBusyError:
             # Scheduled/CLI checks share the same cross-process lock. Waiting is
             # work, not a tracker failure, and never holds an HTTP request open.
-            with LOCK:
-                job["status"] = "queued"
-            threading.Event().wait(0.25)
+            if _waited_too_long(job):
+                _finish(job)
+            else:
+                _pause(LOCK_RETRY_SEC)
             continue
         except Exception:  # noqa: BLE001 - never strand the FIFO if result rendering itself fails
             with LOCK:
@@ -116,6 +121,26 @@ def _consume(apply: bool, perform: Callable[[dict[str, Any]], None]) -> None:
             _finish(job)
             raise
         _finish(job)
+
+
+def _waited_too_long(job: dict[str, Any]) -> bool:
+    """The check lock refused ``job`` again: it waits on (True only after LOCK_WAIT_SEC by the
+    monotonic clock; then it ends as not run, which stamps no site or topic failure). When it
+    started waiting is kept as a wall-clock time too, for the page alone."""
+    with LOCK:
+        now = time.monotonic()
+        started = job.setdefault("wait_started", now)
+        job.setdefault("waiting_since", time.time())
+        if now - started >= LOCK_WAIT_SEC:
+            job.update(status="failed", lock_timeout=True)
+            return True
+        job["status"] = "queued"
+        return False
+
+
+def _pause(seconds: float) -> None:
+    """The wait between two attempts to take the check lock (the seam tests replace)."""
+    threading.Event().wait(seconds)
 
 
 def _finish(job: dict[str, Any]) -> None:
