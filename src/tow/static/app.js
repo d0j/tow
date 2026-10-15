@@ -910,7 +910,8 @@ if (settingsPage) {
   // option, the section's pill names the choice, and the hidden status says it was saved; the
   // last of quick moves is the one saved.
   settingsPage.querySelectorAll("[data-theme-form]").forEach((form) => {
-    const pill = form.closest("details")?.querySelector(":scope > summary .pill");
+    // Its own pill: the section is Language and theme, and the first pill is the language's.
+    const pill = form.closest("details")?.querySelector(":scope > summary [data-theme-pill]");
     let sequence = 0;
     let timer = 0;
     let pending = null;

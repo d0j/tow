@@ -552,3 +552,17 @@ def test_the_backups_pill_writes_its_time_by_the_one_rule(monkeypatch):
     head = manual.split("</div>", 2)[1]
     assert "Сохранено: 1</span>" not in head  # the list's own summary counts them
     assert '<time datetime="2026-09-24T' in manual
+
+
+def test_a_theme_choice_updates_the_theme_pill_not_the_languages():
+    """Language and theme share a section and its summary: the background save of a theme names
+    the choice in the theme's own pill (data-theme-pill), not in the first pill, the language's."""
+    from pathlib import Path
+
+    page = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text
+    summary = page.split('id="acc-language"', 1)[1].split("</summary>", 1)[0]
+    pills = re.findall(r'<span class="pill mut"( data-theme-pill)?>', summary)
+    assert pills == ["", " data-theme-pill"]  # the language's first, then the theme's
+    js = (Path(__file__).parents[1] / "src" / "tow" / "static" / "app.js").read_text(encoding="utf-8")
+    block = js[js.index("// Settings → Theme:") : js.index('window.addEventListener("beforeunload"')]
+    assert 'querySelector(":scope > summary [data-theme-pill]")' in block
