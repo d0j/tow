@@ -320,19 +320,92 @@ def test_last_chance_uses_anonymous_public_api_and_does_not_cache(safe_dns, monk
     assert store.read("kinozal", ORIGIN, settings(), now=time.time()) is None
 
 
-def test_last_chance_never_resets_shared_mirror_call_limit(safe_dns, monkeypatch):
+def test_last_chance_never_takes_a_call_reserved_for_a_later_mirror(safe_dns, monkeypatch):
+    # The contract before 1.30.11 let the first mirror's last chance spend the second mirror's
+    # only call; a call is now reserved for every later mirror that can still be recovered.
     calls = []
 
     def solve(provider, origin, timeout):
-        calls.append(provider["id"])
+        calls.append(origin)
         raise AccessFailure("missing_cookie", "validation", "synthetic")
 
     monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": solve})
     budget = RecoveryBudget(2)
-    assert list(chain.candidates("sample", ORIGIN, settings(), call_budget=budget)) == []
-    assert list(chain.candidates("sample", "https://other.example", settings(), call_budget=budget)) == []
-    assert calls == ["first", "first"]
+    first = budget.for_origin(later=1)
+    assert first.remaining == 1
+    assert list(chain.candidates("sample", ORIGIN, settings(), call_budget=first)) == []
+    assert list(chain.candidates("sample", "https://other.example", settings(), call_budget=budget.for_origin(0))) == []
+    assert calls == [ORIGIN, "https://other.example"]
     assert budget.remaining == 0
+
+
+def test_shared_call_limit_is_never_exceeded_by_origin_shares():
+    budget = RecoveryBudget(3)
+    alone = budget.for_origin(later=0)
+    assert alone.remaining == 3
+    crowded = budget.for_origin(later=5)
+    assert crowded.remaining == 1  # the current mirror always keeps one call
+    assert crowded.consume()
+    assert not crowded.consume()
+    assert budget.remaining == 2
+    assert RecoveryBudget(0).for_origin(later=0).remaining == 0
+    share = budget.for_origin(later=0)
+    budget.remaining = 0  # spent elsewhere: a share cannot outlive the shared limit
+    assert not share.consume()
+
+
+def _challenged_mirrors(monkeypatch, cfg, hosts):
+    from test_protection import CF, install
+
+    install(monkeypatch, lambda request: httpx.Response(403, text=CF), hosts=hosts, protection=cfg)
+    monkeypatch.setattr(chain, "public_addresses", lambda *args: ["93.184.216.34"])
+    calls = []
+
+    def solve(provider, origin, timeout):
+        calls.append(origin)
+        raise AccessFailure("missing_cookie", "validation", "synthetic")
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": solve})
+    return calls
+
+
+def test_each_challenged_mirror_gets_a_call_before_any_last_chance(monkeypatch):
+    from tow import mirrors
+
+    hosts = ["https://a.example", "https://b.example"]
+    cfg = settings(max_attempts=2)
+    calls = _challenged_mirrors(monkeypatch, cfg, hosts)
+    with pytest.raises(mirrors.MirrorFetchError):
+        mirrors.pick_and_get("demo", hosts, "/topic/1", protection=cfg)
+    assert calls == hosts
+
+
+def test_one_challenged_mirror_still_gets_its_last_chance(monkeypatch):
+    from tow import mirrors
+
+    hosts = ["https://a.example"]
+    cfg = settings(max_attempts=2)
+    calls = _challenged_mirrors(monkeypatch, cfg, hosts)
+    with pytest.raises(mirrors.MirrorFetchError):
+        mirrors.pick_and_get("demo", hosts, "/topic/1", protection=cfg)
+    assert calls == hosts * 2
+
+
+@pytest.mark.parametrize("why", ["rate_limited", "recently_tried"])
+def test_a_mirror_that_cannot_be_recovered_reserves_no_call(monkeypatch, why):
+    from tow import mirrors
+
+    hosts = ["https://a.example", "https://b.example"]
+    cfg = settings(max_attempts=2)
+    calls = _challenged_mirrors(monkeypatch, cfg, hosts)
+    if why == "rate_limited":
+        # Challenged in this run, then paused by the site's own deadline: recovery skips it.
+        monkeypatch.setattr(mirrors, "_host_paused", lambda bucket, host, **kw: host == hosts[1] and kw["ignore_cool"])
+    else:
+        assert store.reserve_attempt("demo", hosts[1], cfg, now=time.time()) is not None
+    with pytest.raises(mirrors.MirrorFetchError):
+        mirrors.pick_and_get("demo", hosts, "/topic/1", protection=cfg)
+    assert calls == [hosts[0], hosts[0]]
 
 
 def test_only_verified_clearance_retained_and_encrypted(safe_dns, monkeypatch):

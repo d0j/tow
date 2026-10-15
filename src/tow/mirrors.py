@@ -857,11 +857,13 @@ def _recover_challenges(
     if not _recovery_supported(public_only, deadline):
         return None
     call_budget = RecoveryBudget(int(protection.get("max_attempts", 2)))
-    for host in challenged:
+    for index, host in enumerate(challenged):
         if time.monotonic() >= deadline or call_budget.remaining <= 0:
             break
         if _host_paused(bucket, host, ignore_cool=True):
             continue  # recovery cannot override a server's rate deadline
+        # One call stays reserved for each later origin that can still be recovered.
+        later = [other for other in challenged[index + 1 :] if not _host_paused(bucket, other, ignore_cool=True)]
         candidates = chain.candidates(
             tracker,
             host,
@@ -869,7 +871,7 @@ def _recover_challenges(
             public_only=public_only,
             budget_sec=deadline - time.monotonic(),
             skip_cached=True,
-            call_budget=call_budget,
+            call_budget=call_budget.for_origin(chain.waiting_origins(tracker, later, protection)),
         )
         try:
             with ExitStack() as cleanup:

@@ -253,6 +253,23 @@ def recovery_origins(site: str, origins: list[str]) -> list[str]:
     return sorted(origins, key=last_attempt)
 
 
+def _reserved(previous: dict[str, Any] | None, settings: dict[str, Any], now: float) -> bool:
+    # Configuration changes must not bypass single-flight/cooldown. A future timestamp
+    # after a clock correction refuses attempts until the original anchor is reached.
+    if not previous:
+        return False
+    return bool(now < previous["lease_until"] or now - previous["attempt_at"] < settings["min_interval_sec"])
+
+
+def recoverable(
+    site: str, origins: list[str], settings: dict[str, Any], providers: list[dict[str, Any]], *, now: float
+) -> list[str]:
+    """Read-only: the origins a new reservation could call one of ``providers`` for now."""
+    records = _load()
+    ready = any(records.get(_service_key(p), {}).get("service_retry_at", 0) <= now for p in providers)
+    return [origin for origin in origins if ready and not _reserved(records.get(_key(site, origin)), settings, now)]
+
+
 def reserve(site: str, origin: str, settings: dict[str, Any], *, now: float) -> bool:
     """Compatibility helper for a caller that only needs to know whether it reserved."""
     return reserve_attempt(site, origin, settings, now=now) is not None
@@ -264,9 +281,7 @@ def reserve_attempt(site: str, origin: str, settings: dict[str, Any], *, now: fl
         records = _load()
         key = _key(site, origin)
         previous = records.get(key)
-        # Configuration changes must not bypass single-flight/cooldown. A future timestamp
-        # after a clock correction refuses attempts until the original anchor is reached.
-        if previous and (now < previous["lease_until"] or now - previous["attempt_at"] < settings["min_interval_sec"]):
+        if _reserved(previous, settings, now):
             return None
         if key not in records and len(records) >= _MAX_RECORDS:
             records = {k: v for k, v in records.items() if now - v["attempt_at"] < 86400}
