@@ -244,6 +244,15 @@ class DelugeClient(ManagedClient):
             "files": files,
         }
 
+    def _preparing(self, info: dict[str, Any] | None, *, after_check: bool = False) -> bool:
+        """Deluge says "Queued" for its download queue and for a torrent that waits for its file
+        check alike. Once a check was seen, TOW's unfinished add (its pending label) that Deluge
+        shows queued has not started yet: Deluge drops a start given while it checks."""
+        if super()._preparing(info, after_check=after_check):
+            return True
+        queued = str((info or {}).get("state") or "").casefold().startswith("queued")
+        return after_check and queued and PENDING in self._tags(info)
+
     def _prepare_add(self) -> None:
         self._ensure_labels()  # a torrent added before its label exists could stay unmarked
 

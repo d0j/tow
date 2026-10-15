@@ -14,7 +14,7 @@ from tow.check import run as check_run
 from tow.check import space, verification
 from tow.check import topic as topic_step
 from tow.clients import factory
-from tow.clients.managed import ClientError, ClientVerificationPending
+from tow.clients.managed import ClientError, ClientVerificationPending, completed_progress
 from tow.notify import NotificationBatch
 from tow.progress import reconcile_topic
 from tow.progress.summary import progress_summary
@@ -23,6 +23,12 @@ from tow.web.views import topic_progress_summary
 
 
 class VerifyingClient(FakeClient):
+    """A client that checks the files it finds when a torrent is started, as real clients do:
+    the state is checkingDL and the progress (of the check, not of the download) rises from 0
+    with every read. While ``checking`` the check outlasts any start deadline; ``end_check``
+    ends it with what it found on disk, and a client that dropped the start given meanwhile
+    (Deluge) leaves the torrent stopped then."""
+
     client_id = "main"
     client_kind = "fake"
     START_POLLS = 3
@@ -33,9 +39,23 @@ class VerifyingClient(FakeClient):
 
     def _start(self, infohash):
         super()._start(infohash)
+        row = self.torrents[infohash.upper()]
         if self.checking:
-            self.torrents[infohash.upper()]["state"] = "checkingDL"
-            self.torrents[infohash.upper()]["progress"] = 1.0
+            row.update(state="checkingDL", progress=0.0)
+        elif self.start_works and completed_progress(row.get("progress")):
+            row["state"] = "uploading"
+
+    def inspect_torrent(self, infohash):
+        row = self.torrents.get(str(infohash).upper())
+        if row is not None and self.checking and str(row.get("state")).startswith("checking"):
+            row["progress"] = min(0.9, round(float(row.get("progress") or 0) + 0.1, 1))
+        return super().inspect_torrent(infohash)
+
+    def end_check(self, *, found: float, dropped_start: bool) -> None:
+        self.checking = False
+        done = completed_progress(found)
+        state = ("stoppedUP" if done else "stoppedDL") if dropped_start else ("uploading" if done else "downloading")
+        self.torrents[H].update(state=state, progress=found)
 
 
 def _pending(client, path="D:/tv"):
@@ -74,15 +94,40 @@ def test_matching_pending_check_does_not_enter_a_blocking_client_preparation(mon
         client.configure_torrent_selection(TORRENT, H, [E01], ensure_started=True)
 
 
-def test_unknown_state_never_releases_the_pending_label():
+@pytest.mark.parametrize(("state", "preparing"), [("allocating", True), ("someFutureState", False)])
+def test_unknown_state_never_releases_the_pending_label(state, preparing):
+    """qBittorrent reserves disk space ("allocating") before it runs a torrent: preparation,
+    still pending; a state TOW does not know is no confirmed start either."""
     client = VerifyingClient()
     receipt = _pending(client)
-    client.torrents[H]["state"] = "allocating"
+    client.checking = False
+    client.torrents[H]["state"] = state
     client.calls.clear()
-    with pytest.raises(ClientError):
+    with pytest.raises(ClientError) as error:
         client.finish_verification(H, "D:/tv", receipt)
+    assert isinstance(error.value, ClientVerificationPending) is preparing
+    assert (error.value.receipt == receipt) if preparing else error.value.code == "client.managed.start_unconfirmed"
     assert client.calls == []
     assert "tow-pending" in client.torrents[H]["tags"]
+
+
+def test_qbittorrent_allocating_after_the_start_is_deferred_without_cleanup():
+    client = VerifyingClient()
+    client.checking = False
+    start = client._start
+
+    def allocating(infohash):
+        start(infohash)
+        client.torrents[H]["state"] = "allocating"
+
+    client._start = allocating
+    receipt = _pending(client)
+    assert [call[0] for call in client.calls] == ["add", "set_wanted", "start"]
+    assert client.torrents[H]["tags"] == ["tow", "tow-pending"]
+    client.torrents[H]["state"] = "downloading"
+    client.calls.clear()
+    assert client.finish_verification(H, "D:/tv", receipt)["tags"] == ["tow"]
+    assert [call[0] for call in client.calls] == ["labels"]
 
 
 @pytest.mark.parametrize(
@@ -130,7 +175,8 @@ def test_selection_change_timeout_never_rolls_back_a_verified_selection():
 def test_completion_only_releases_the_pending_label(state):
     client = VerifyingClient()
     receipt = _pending(client)
-    client.torrents[H]["state"] = state
+    client.checking = False
+    client.torrents[H].update(state=state, progress=1.0 if state.endswith("UP") else 0.4)
     client.calls.clear()
     info = client.finish_verification(H, "D:/tv", receipt)
     assert info["tags"] == ["tow"]
@@ -333,6 +379,31 @@ def test_stopped_after_check_is_retried_once_not_forever(world):
     assert len(client.calls) == starts
     assert load_state()["topics"][0]["verification_pending"]["resume_attempted"] is True
     assert tracker.fetches == 1
+
+
+def test_allocating_add_is_deferred_and_finished_without_stops_or_repeated_starts(world, monkeypatch):
+    client, tracker, sent = world
+    client.checking = False
+    start = client._start
+
+    def allocating(infohash):
+        start(infohash)
+        client.torrents[H]["state"] = "allocating"
+
+    monkeypatch.setattr(client, "_start", allocating)
+    first = _run()
+    assert first["status"] == "verification_pending"
+    assert [call[0] for call in client.calls] == ["add", "set_wanted", "start"]
+    client.calls.clear()
+    assert _run(space_only=True)["status"] == "verification_pending"
+    assert _run()["status"] == "verification_pending"
+    assert client.calls == []
+    client.torrents[H]["state"] = "downloading"
+    assert _run(space_only=True)["ok"]
+    assert [call[0] for call in client.calls] == ["labels"]
+    assert len(client.torrents) == 1
+    assert tracker.fetches == 1
+    assert sent == ["updated"]
 
 
 def test_preflight_transport_failure_does_not_consume_the_resume_attempt(world, monkeypatch):
@@ -559,6 +630,8 @@ def test_preview_changes_nothing_in_client_state_history_or_marker(world):
 def test_checking_progress_one_cannot_emit_files_or_completion_events(tmp_path):
     client = VerifyingClient()
     _pending(client, str(tmp_path))
+    client.checking = False  # the check's own progress reached 1.0 before its state changed
+    client.torrents[H].update(state="checkingDL", progress=1.0)
     topic = {"id": "slow", "hash": H, "save_path": str(tmp_path), "title": "Show S01 [1 of 1]"}
     history = {"topics": {}}
     result = reconcile_topic(topic, client, history, "2026-10-14T12:00:00+03:00")

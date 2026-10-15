@@ -114,6 +114,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - One damaged saved topic error no longer hides every other topic failure from "Needs attention".
 - An unexpected failure while confirming one torrent's file check no longer ends the whole check run; that topic
   shows the error and keeps waiting for its client.
+- qBittorrent: a new torrent that first reserves its disk space is no longer stopped and handed over again at every
+  check; TOW waits for it as for a file check. Deluge: a new torrent that waits in Deluge's queue for its file check
+  is no longer reported as added before Deluge starts it.
 
 ## [1.30.10] — 2026-10-15
 

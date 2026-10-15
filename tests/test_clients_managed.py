@@ -57,6 +57,9 @@ class Torrent:
         self.path = path
         self.labels = list(labels)
         self.running = not paused
+        # What a client says beyond running or stopped (Deluge: "Checking", "Queued"), and its progress.
+        self.state: str | None = None
+        self.progress = 0.0
 
 
 # --- a fake transmission-daemon -------------------------------------------------------------
@@ -256,8 +259,8 @@ class FakeDeluge:
         row = {
             "hash": t.hash,
             "name": t.name,
-            "state": "Downloading" if t.running else "Paused",
-            "progress": 0.0,
+            "state": t.state or ("Downloading" if t.running else "Paused"),
+            "progress": t.progress * 100,
             "all_time_download": 0,
             "time_added": 1000,
             "completed_time": 0,
@@ -1170,6 +1173,66 @@ def test_deluge_check_changes_nothing_and_adding_turns_on_labels(tmp_path):
     adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
     assert server.plugins == ["Label"]
     assert server.labels == {"tow", "tow-pending"}
+
+
+def _deluge_receipt(server: FakeDeluge, adapter: DelugeClient, tmp_path, label: str) -> dict[str, Any]:
+    torrent = Torrent(TORRENT, str(tmp_path), [label], paused=False)
+    torrent.wanted = [index == E01 for index in range(len(torrent.files))]
+    server.torrents[K] = torrent
+    return adapter._verification_receipt(H, adapter.inspect_torrent(H), META, {E01})
+
+
+def test_deluge_queued_after_a_check_is_not_a_confirmed_start(tmp_path):
+    """Deluge says "Queued" also for a torrent that waits for its file check: TOW's unfinished
+    add stays pending until Deluge shows it running, then its pending label is released."""
+    from tow.clients.managed import ClientVerificationPending
+
+    server = FakeDeluge()
+    adapter = _deluge(server)
+    receipt = _deluge_receipt(server, adapter, tmp_path, "tow-pending")
+    server.torrents[K].state = "Queued"
+    with pytest.raises(ClientVerificationPending) as error:
+        adapter.finish_verification(H, str(tmp_path), receipt)
+    assert error.value.receipt == receipt
+    assert server.torrents[K].labels == ["tow-pending"]
+    assert "label.set_torrent" not in server.calls
+    server.torrents[K].state = "Downloading"
+    assert adapter.finish_verification(H, str(tmp_path), receipt)["tags"] == ["tow"]
+
+
+def test_deluge_queued_in_its_download_queue_still_counts_without_a_pending_add(tmp_path):
+    server = FakeDeluge()
+    adapter = _deluge(server)
+    receipt = _deluge_receipt(server, adapter, tmp_path, "tow")
+    server.torrents[K].state = "Queued"
+    assert adapter.finish_verification(H, str(tmp_path), receipt)["state"] == "queuedDL"
+
+
+def test_deluge_queued_once_its_check_was_seen_defers_the_add(tmp_path, monkeypatch):
+    from tow.clients.managed import ClientVerificationPending
+
+    server = FakeDeluge()
+    adapter = _deluge(server)
+    states = iter(["Checking", "Checking"])
+
+    def resume(ids):
+        for torrent_id in ids:
+            server.torrents[torrent_id].running = True
+            server.torrents[torrent_id].state = "Checking"
+
+    def status(torrent_id, keys):
+        torrent = server.torrents.get(torrent_id)
+        if torrent is not None and torrent.state:
+            torrent.state = next(states, "Queued")
+        return FakeDeluge.m_core_get_torrent_status(server, torrent_id, keys)
+
+    monkeypatch.setattr(server, "m_core_resume_torrents", resume)
+    monkeypatch.setattr(server, "m_core_get_torrent_status", status)
+    with pytest.raises(ClientVerificationPending) as error:
+        adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01])
+    assert error.value.receipt
+    assert server.torrents[K].labels == ["tow-pending"]
+    assert "core.pause_torrents" not in server.calls[server.calls.index("core.resume_torrents") :]
 
 
 def test_deluge_reattaches_when_its_web_ui_does_not_know_a_method(tmp_path):
