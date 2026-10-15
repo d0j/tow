@@ -801,6 +801,8 @@ _RU_AS_IN_ENGLISH = frozenset(
         "mirrors.all_failed",  # punctuation joins already-translated site and cause
         "web.message.subject_result",  # punctuation joins a message's subject and its translated result
         "issues.topic_error",  # punctuation joins topic name and translated error
+        "time.this_year",  # the order of a short date ("15 окт, 20:31"); its month is translated
+        "time.other_year",
     }
 )
 
@@ -1051,6 +1053,7 @@ def _families() -> dict[str, set[str]]:
         "pulse.shutdown.{action}": {"restarted", "powered_off"},
         "settings.{section}.q": {"clients", "notify"},
         "notifier.{module.KIND}.title": set(),  # optional by design: the TITLE is used without it
+        "time.month_short.{moment.month}": {str(month) for month in range(1, 13)},
         "backup.restore_point.{name}": {
             "rollback_failed",
             "validation_failed",

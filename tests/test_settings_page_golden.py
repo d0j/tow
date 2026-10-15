@@ -65,6 +65,10 @@ def _normalised(page: str) -> str:
     page = page.replace(STATIC_VERSION, "<static>").replace(__version__, "<version>")
     # A time in the computer's own zone; the free space of its disk; ntfy's suggested random topic.
     page = re.sub(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?( [A-Z]{2,5})?( UTC([+-]\d{2}:\d{2})?)?", "<time>", page)
+    # A time by the one rule (short_time: "20:31" today, "15 Oct, 20:31" another day); the page
+    # script's TOW zone, whose offset changes with summer time.
+    page = re.sub(r'<time datetime="[^"]*" title="[^"]*" data-short>[^<]*</time>', "<short-time>", page)
+    page = re.sub(r'"_tz_(now|half)": "-?\d+"', r'"_tz_\1": "<offset>"', page)
     page = re.sub(r"[\d.,]+ (B|KB|MB|GB|TB) free", "<size> free", page)
     page = re.sub(r'value="tow-[0-9a-f]{12}"', 'value="tow-<random>"', page)
     # Where the tab keeps its recent messages: a hash of this install's folders.

@@ -117,6 +117,24 @@
     "reset_busy": "A check is running. Wait for it to finish before resetting saved access.",
     "reset_refused": "Reset could not be confirmed: its file or temporary folder could not be verified. Keep the existing records and check the folder on this computer."
   },
+  "time": {
+    "month_short": {
+      "1": "Jan",
+      "2": "Feb",
+      "3": "Mar",
+      "4": "Apr",
+      "5": "May",
+      "6": "Jun",
+      "7": "Jul",
+      "8": "Aug",
+      "9": "Sep",
+      "10": "Oct",
+      "11": "Nov",
+      "12": "Dec"
+    },
+    "this_year": "{day} {month}, {time}",
+    "other_year": "{day} {month} {year}, {time}"
+  },
   "timer": {
     "field": "Personal check interval, minutes",
     "global_placeholder": "Global interval",

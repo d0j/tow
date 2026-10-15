@@ -517,7 +517,10 @@
     else host.prepend(box);
   };
 
+  // When a message was said, by the one time rule (app.js's towTime: TOW's zone, "20:31",
+  // "15 Oct, 20:31"); the browser's own words only on a page without app.js.
   const when = (at) => {
+    if (window.towTime) return window.towTime.element(at);
     const moment = new Date(at);
     const lang = document.documentElement.lang || undefined;
     const today = new Date().toDateString() === moment.toDateString();

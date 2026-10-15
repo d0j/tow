@@ -242,6 +242,14 @@ def test_a_secret_fields_eye_shows_and_hides_what_was_typed_and_nothing_else():
     assert len(verdict) == 7
 
 
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_page_scripts_write_times_by_the_servers_rule_in_tows_zone():
+    verdict = _verdict("time_short.mjs")
+    assert verdict == dict.fromkeys(verdict, True), verdict
+    assert len(verdict) == 8
+
+
 @pytest.mark.allow_system
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_one_broken_health_reader_cannot_stall_or_spin_other_readers():

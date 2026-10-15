@@ -31,7 +31,7 @@ from tow.log import check_error_label
 from tow.status import site_check_tone
 from tow.web import _context, services
 from tow.web.messages import message_text, starts_with_name, topic_subject
-from tow.web.text import t, tm
+from tow.web.text import short_time, t, tm, zone_minutes
 from tow.web.views import attention_view, stored_ui_time
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
@@ -301,12 +301,16 @@ def _languages() -> list[dict[str, str]]:
 
 def js_texts() -> dict[str, str]:
     """The ``js.*`` texts of app.js in the current language (base.html hands them over as JSON),
-    the secret fields' eye (``web.secret.*``), and the language's date pattern under ``_datetime``
-    (not a catalog key)."""
+    the secret fields' eye (``web.secret.*``), the time words (``time.*``), and - not catalog
+    keys - the language's date pattern (``_datetime``) and TOW's zone for ``towTime``: its UTC
+    offset in minutes now (``_tz_now``) and half a year ago (``_tz_half``)."""
     return {
         **i18n.texts_with_prefix("js."),
         **i18n.texts_with_prefix("web.secret."),
+        **i18n.texts_with_prefix("time."),
         "_datetime": i18n.datetime_pattern(),
+        "_tz_now": str(zone_minutes()),
+        "_tz_half": str(zone_minutes(182 * 86400)),
     }
 
 
@@ -371,7 +375,10 @@ def configure(templates: Jinja2Templates = TEMPLATES) -> None:
     """The globals every template may call."""
     templates.env.filters["sentence"] = sentence
     templates.env.filters["web_link"] = web_link
+    # The one time rule: "20:31", "15 Oct, 20:31", "15 Oct 2025, 20:31" (tow.web.text.short_time).
+    templates.env.filters["short_time"] = short_time
     env = templates.env.globals
+    env["short_time"] = short_time
     env["t"] = i18n.translate
     env["tm"] = tm
     env["lang"] = i18n.current

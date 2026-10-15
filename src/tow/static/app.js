@@ -12,6 +12,110 @@ const t = (key, vars = {}) => String(I18N[key] ?? key).replace(
   (whole, name) => (Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : whole),
 );
 
+// The one time rule, as the server writes it (tow.web.text.short_time): today "20:31"; another day
+// of this year "15 Oct, 20:31"; another year "15 Oct 2025, 20:31"; a time still to come always
+// dated. 24 h, in TOW's own zone (its computer's), not the browser's: base.html gives its UTC offset
+// now and half a year ago. When the browser's zone has both, its own calendar is used (summer time
+// included); otherwise TOW's offset of now. ``value``: milliseconds or seconds since 1970 (a
+// number or digits), or an ISO text; ``now`` for the tests.
+const towTime = (() => {
+  const DAY = 86400000;
+  const offsetNow = Number(I18N._tz_now);
+  const offsetHalf = Number(I18N._tz_half);
+  const browserOffset = (ms) => -new Date(ms).getTimezoneOffset();
+  let same = null; // asked once, at the first time written
+  const sameZone = () => {
+    if (same === null) {
+      same = !Number.isFinite(offsetNow) || !(String(I18N._tz_now ?? "").trim())
+        || (browserOffset(Date.now()) === offsetNow && browserOffset(Date.now() - 182 * DAY) === offsetHalf);
+    }
+    return same;
+  };
+  const parts = (ms) => {
+    if (sameZone()) {
+      const d = new Date(ms);
+      return { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate(), h: d.getHours(), min: d.getMinutes(), s: d.getSeconds(), offset: browserOffset(ms) };
+    }
+    const d = new Date(ms + offsetNow * 60000);
+    return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate(), h: d.getUTCHours(), min: d.getUTCMinutes(), s: d.getUTCSeconds(), offset: offsetNow };
+  };
+  const msOf = (value) => {
+    if (value === null || value === undefined || value === "" || typeof value === "boolean") return NaN;
+    const number = typeof value === "number" ? value : /^\s*\d+(\.\d+)?\s*$/.test(String(value)) ? Number(value) : NaN;
+    if (Number.isFinite(number)) return number > 0 ? (number < 1e11 ? number * 1000 : number) : NaN;
+    return Date.parse(String(value));
+  };
+  const two = (n) => String(n).padStart(2, "0");
+  const zone = (minutes) => (minutes ? `UTC${minutes > 0 ? "+" : "-"}${two(Math.floor(Math.abs(minutes) / 60))}:${two(Math.abs(minutes) % 60)}` : "UTC");
+  const short = (value, now = Date.now()) => {
+    const ms = msOf(value);
+    if (!Number.isFinite(ms)) return value === null || value === undefined ? "" : String(value);
+    const at = parts(ms);
+    const today = parts(now);
+    const clock = `${two(at.h)}:${two(at.min)}`;
+    if (at.y === today.y && at.m === today.m && at.d === today.d && ms <= now + 60000) return clock;
+    return t(at.y === today.y ? "time.this_year" : "time.other_year", { day: at.d, month: t(`time.month_short.${at.m}`), year: at.y, time: clock });
+  };
+  // The full time (the tooltip): the language's date pattern with seconds, and the UTC offset.
+  const full = (value) => {
+    const ms = msOf(value);
+    if (!Number.isFinite(ms)) return "";
+    const at = parts(ms);
+    const fields = { Y: String(at.y), m: two(at.m), d: two(at.d), H: two(at.h), M: two(at.min), S: two(at.s) };
+    const date = String(I18N._datetime || "%Y-%m-%d %H:%M:%S").replace(/%([YmdHMS])/g, (_, field) => fields[field]);
+    return `${date} ${zone(at.offset)}`;
+  };
+  // The ISO time with TOW's offset (a <time>'s datetime); "" for no time.
+  const iso = (value) => {
+    const ms = msOf(value);
+    if (!Number.isFinite(ms)) return "";
+    const at = parts(ms);
+    const sign = at.offset < 0 ? "-" : "+";
+    return `${at.y}-${two(at.m)}-${two(at.d)}T${two(at.h)}:${two(at.min)}:${two(at.s)}${sign}${two(Math.floor(Math.abs(at.offset) / 60))}:${two(Math.abs(at.offset) % 60)}`;
+  };
+  // Milliseconds to the next midnight in TOW's zone (when "today" changes).
+  const untilMidnight = (now = Date.now()) => {
+    const at = parts(now);
+    return Math.max(60000, DAY - ((at.h * 60 + at.min) * 60 + at.s) * 1000);
+  };
+  // A <time> by the rule, its full time the tooltip; a value with no time in it is shown as
+  // ``fallback`` (the words the server sent).
+  const element = (value, fallback = "") => {
+    const node = document.createElement("time");
+    const when = iso(value);
+    if (!when) {
+      node.textContent = fallback || (value === null || value === undefined ? "" : String(value));
+      return node;
+    }
+    node.setAttribute("datetime", when);
+    node.setAttribute("data-short", "");
+    node.title = full(value);
+    node.textContent = short(value);
+    keepToday();
+    return node;
+  };
+  // "Today" changes at midnight and while the tab sleeps: every time written by the rule - by
+  // the server or a script (time[data-short]) - is written again then, and when the tab is shown
+  // again. Only a page that shows such a time keeps a midnight timer.
+  const rewrite = () => document.querySelectorAll("time[data-short][datetime]").forEach((node) => {
+    const text = short(node.getAttribute("datetime"));
+    if (text && node.textContent !== text) node.textContent = text;
+  });
+  let midnight = 0;
+  const keepToday = () => {
+    if (midnight) return;
+    midnight = window.setTimeout(() => {
+      midnight = 0;
+      rewrite();
+      keepToday();
+    }, untilMidnight() + 1000) || -1;
+  };
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) rewrite(); });
+  if (document.querySelector("time[data-short]")) keepToday();
+  return { short, full, iso, element, untilMidnight };
+})();
+window.towTime = towTime;
+
 const formActionUrl = (form, submitter = null) => new URL(
   submitter?.getAttribute("formaction") || form.getAttribute("action") || form.action || location.href,
   location.href,
@@ -923,7 +1027,8 @@ if (downloadPop && downloadBody) {
       line.className = "log-line";
       const status = item.status === "completed" ? "✓" : "·";
       line.append(status, " ", item.label || item.identity || t("js.downloads.file"));
-      if (item.completed_at) line.append(" · ", item.completed_at);
+      // The time by the one rule (the stored time); the server's words when it is not one.
+      if (item.completed_at) line.append(" · ", towTime.element(item.completed_observed_at || item.completed_at, item.completed_at));
       else if (item.progress != null) line.append(" · ", `${Math.round(Number(item.progress) * 100)}%`);
       return line;
     });
@@ -932,7 +1037,7 @@ if (downloadPop && downloadBody) {
     eventLine.className = "log-line";
     if (event) {
       eventLine.append(t("js.downloads.last_event", { event: event.display || event.label || event.kind || "—" }));
-      if (event.event_at) eventLine.append(" · ", event.event_at);
+      if (event.event_at) eventLine.append(" · ", towTime.element(event.at || event.event_at, event.event_at));
     }
     const content = event ? [eventLine, ...rows] : rows;
     if (j.pagination?.has_more) {
@@ -1292,7 +1397,8 @@ const paintLog = (body, rows) => {
       div.className = "log-line";
       const at = document.createElement("span");
       at.className = "mut";
-      at.textContent = e.at || "";
+      // The line's time by the one rule (its stored time, "iso"); else the server's words.
+      if (e.at || e.iso) at.append(towTime.element(e.iso || e.at, e.at));
       const b = document.createElement("b");
       b.textContent = e.label || "";
       div.append(at, " · ", b);
