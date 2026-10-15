@@ -52,6 +52,36 @@ def test_every_changelog_item_starts_on_its_own_line():
         assert joined == [], "start each item on a line of its own"
 
 
+_SUBSECTIONS = {
+    "CHANGELOG.md": {"Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"},
+    "CHANGELOG.ru.md": {"Добавлено", "Изменено", "Устарело", "Удалено", "Исправлено", "Безопасность"},
+}
+
+
+def test_changelog_subsections_are_keep_a_changelog_kinds():
+    root = SCRIPT.parents[1]
+    for name, kinds in _SUBSECTIONS.items():
+        wrong = [
+            f"{name}:{number}: {line}"
+            for number, line in enumerate((root / name).read_text(encoding="utf-8").splitlines(), 1)
+            if line.startswith("### ") and line[4:].strip() not in kinds
+        ]
+        assert wrong == [], "use the Keep a Changelog subsection names"
+
+
+def test_a_changelog_list_has_no_blank_line_between_its_items():
+    # A blank line inside a list makes it "loose": GitHub and the release page space it differently.
+    root = SCRIPT.parents[1]
+    for name in _SUBSECTIONS:
+        lines = (root / name).read_text(encoding="utf-8").splitlines()
+        gaps = [
+            f"{name}:{number + 1}"
+            for number in range(1, len(lines) - 1)
+            if lines[number] == "" and lines[number + 1].startswith("- ") and lines[number - 1].startswith(("- ", "  "))
+        ]
+        assert gaps == [], "keep each list's items together"
+
+
 def test_the_notes_carry_the_changelog_items_unwrapped():
     text = _module().notes("v1.25.0", "d0j/tow")
     assert (

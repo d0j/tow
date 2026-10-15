@@ -18,7 +18,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [1.30.9] — 2026-10-14
 
-### Improved
+### Changed
 
 - Site access explains when recovery is needed, installed on-demand modules versus external services,
   addresses, switches, fallback, shared limits and the meaning of saved API status. Essential setup instructions
@@ -153,7 +153,6 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   explicitly logged without treating an answered API as verified site access.
 - A temporary root-request outage no longer revokes verified access or spends another solver attempt. Recovery
   reserves time for independent verification, and a paused cursor no longer restarts and starves later connections.
-
 - A client's checking state no longer confirms a start. Start read-back has its own bounded wait; pending ownership
   is retained on failure. Recovery of a lost add acknowledgement never adopts a foreign duplicate.
 - Disk-space checks count allocated file bytes, not sparse logical sizes, and do not assume that an unknown allocation
