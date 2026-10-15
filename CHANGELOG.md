@@ -143,6 +143,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   as `v1.32.0` or a commit's hash: something that merely starts like a release, a branch or another git
   expression is refused before anything is downloaded or stopped, and a release name means the release tag
   even where a branch has the same name. Downloads follow redirects only within GitHub.
+### Fixed
+
+- A file holding several episodes followed by a quality tag (`Show.S01E01-E02.1080p.mkv`, also `.10bit`, `.4K`
+  or a year) now counts every episode, not only the first: progress and episode rules no longer wait for an
+  episode that is already there.
 
 ## [1.31.2] — 2026-10-15
 
