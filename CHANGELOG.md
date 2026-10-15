@@ -5,6 +5,13 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- Restore points, and so updates from Settings, work again: 1.31.0 saved when the request behind a mirror's
+  answer started under a name the backup check takes for a password, and refused every restore point after a
+  site answered. The value now has another name, and what 1.31.0 and 1.31.1 saved is accepted. To get from
+  1.31.0 or 1.31.1 to this version, update from the terminal once (Settings → Updates → How to update).
+
 ## [1.31.1] — 2026-10-15
 
 ### Security
