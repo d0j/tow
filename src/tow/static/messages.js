@@ -482,38 +482,64 @@
     node.setAttribute("datetime", moment.toISOString());
     return node;
   };
-  const entry = (item) => {
-    const row = element("li", `msg-entry ${item.kind}${item.read ? "" : " unread"}`);
-    row.dataset.messageId = item.id;
+  // One entry of the history; patched in place when its message changes (a check's progress,
+  // then its result), so the open panel shows what the strip shows.
+  const entrySign = (item) => `${item.kind}|${item.subject}|${item.text}|${item.at}|${actionShape(item)}`;
+  const fillEntry = (row, item) => {
+    row.className = `msg-entry ${item.kind}${item.read ? "" : " unread"}`;
+    row.dataset.sign = entrySign(item);
     const head = element("div", "msg-entry-head");
     head.append(icon(ICONS[item.kind]), element("span", "msg-entry-kind", KIND_WORDS[item.kind]), when(item.at));
-    row.append(head, element("p", "msg-entry-text", format(pattern, item.subject, item.text)));
-    const actions = [];
-    if (item.href) actions.push(link(item));
-    if (center.undoLive(item)) actions.push(undoForm(item));
-    if (actions.length) {
-      const box = element("div", "msg-entry-actions");
-      box.append(...actions);
-      row.append(box);
-    }
+    const text = element("p", "msg-entry-text", format(pattern, item.subject, item.text));
+    const oldHead = row.querySelector(":scope > .msg-entry-head");
+    const oldText = row.querySelector(":scope > .msg-entry-text");
+    if (oldHead) oldHead.replaceWith(head);
+    else row.append(head);
+    if (oldText) oldText.replaceWith(text);
+    else row.append(text);
+    const old = row.querySelector(":scope > .msg-actions");
+    if (old?.dataset.shape === actionShape(item)) return;
+    const focused = old?.contains(document.activeElement);
+    const fresh = actionsOf(item);
+    fresh.classList.add("msg-entry-actions");
+    if (old) old.replaceWith(fresh);
+    else row.append(fresh);
+    if (focused) (fresh.querySelector("a, button") || toggle)?.focus();
+  };
+  const entry = (item) => {
+    const row = element("li");
+    row.dataset.messageId = item.id;
+    fillEntry(row, item);
     return row;
   };
   let listShape = "";
   const drawList = () => {
     if (!list || !menu?.open) return;
     const items = center.items();
-    const shape = items.map((item) => `${item.id}:${center.undoLive(item)}`).join("|");
+    const shape = items.map((item) => item.id).join("|");
+    let changed = false;
     if (shape !== listShape) {
       const focusedId = list.contains(document.activeElement) ? document.activeElement.closest?.("[data-message-id]")?.dataset.messageId : "";
       listShape = shape;
       const rows = items.map(entry);
       list.replaceChildren(...rows);
       if (focusedId) (rows.find((row) => row.dataset.messageId === focusedId)?.querySelector("a, button") || toggle)?.focus();
+      changed = true;
+    } else {
+      list.querySelectorAll("li[data-message-id]").forEach((row) => {
+        const item = center.find(row.dataset.messageId);
+        if (item && row.dataset.sign !== entrySign(item)) {
+          fillEntry(row, item);
+          changed = true;
+        }
+      });
     }
     list.querySelectorAll("li[data-message-id]").forEach((row) => {
       row.classList.toggle("unread", !center.find(row.dataset.messageId)?.read);
     });
     if (empty) empty.hidden = items.length > 0;
+    // A new or changed entry is read only once the open panel shows it.
+    if (changed) window.setTimeout(() => markShown(), 300);
   };
   const drawIcon = () => {
     if (!menu || !toggle) return;
