@@ -196,7 +196,7 @@ def test_a_client_that_answers_has_no_note(client):
     assert page.select_one("#client-default .integration-pills .pill.bad") is None
 
 
-SETTINGS_SOURCES = ("settings.html", "_settings_protection.html")
+SETTINGS_SOURCES = ("settings.html", "_settings_protection.html", "_topic_edit.html")
 
 
 @pytest.mark.parametrize("name", SETTINGS_SOURCES)
