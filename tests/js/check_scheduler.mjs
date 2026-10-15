@@ -323,4 +323,36 @@ verdict.repeatResultSuppressed = true;
 }
 verdict.pendingUntilDelivered = true;
 
+// A click is being asked about when its late acknowledgement shows it is the job another click
+// already follows: the answer on its way is used (not dropped), and the job is asked no sooner
+// than 5 s after it - one result for both.
+{
+  let release = null;
+  let asked = 0;
+  const test = harness({
+    answer: () => {
+      asked += 1;
+      if (asked === 1) return new Promise((resolve) => { release = () => resolve(ok({ status: "running", job: "J" })); });
+      return ok({ status: asked < 3 ? "running" : "done", job: "J" });
+    },
+  });
+  const a = test.scheduler.begin({});
+  const b = test.scheduler.begin({});
+  test.scheduler.acknowledge(b, { job: "J" });
+  await test.advance(5000); // a is asked first, its answer waits
+  assert.equal(test.requests.length, 1);
+  assert.equal(test.requests[0].action, a);
+  test.scheduler.acknowledge(a, { job: "J" }); // a's acknowledgement, late
+  assert.equal(test.scheduler.count(), 1);
+  release();
+  await flush();
+  assert.equal(test.progress.length, 1); // a's answer was used
+  await test.advance(60000);
+  const at = test.requests.map((request) => request.at);
+  assert.ok(at.every((value, index) => index === 0 || value - at[index - 1] >= 5000), JSON.stringify(at));
+  assert.equal(test.terminal.length, 1);
+  assert.equal(test.terminal[0].same, 2);
+}
+verdict.inFlightMergeKeepsItsAnswer = true;
+
 console.log(JSON.stringify(verdict));

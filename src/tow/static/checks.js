@@ -64,6 +64,7 @@
     let last = -Infinity;
     let cursor = 0;
     let stopped = false;
+    let asking = null; // the entry whose request is on its way
     const save = () => {
       changed();
       if (memoryOnly) return;
@@ -92,14 +93,17 @@
       }
       return null;
     };
-    // Two clicks TOW took as one job (a waiting check of one topic) are followed as one: one
-    // deadline, one request at a time for the job, one result. The other click's id stays an alias.
+    // Two clicks TOW took as one waiting job (a waiting check of one topic) are followed as one: one
+    // deadline (the later of the two), one request at a time for the job, one result. The click
+    // being asked about now stays - its answer on the way is used; the other's id becomes an alias.
     const merge = (entry) => {
       const other = entry.job ? entries.find((item) => item !== entry && item.job === entry.job) : null;
       if (!other) return entry;
-      other.aliases = [...(other.aliases || []), ...(entry.action ? [entry.action] : []), ...(entry.aliases || [])];
-      entries = entries.filter((item) => item !== entry);
-      return other;
+      const [keep, gone] = entry === asking ? [entry, other] : [other, entry];
+      keep.aliases = [...(keep.aliases || []), ...(gone.action ? [gone.action] : []), ...(gone.aliases || [])];
+      keep.due = Math.max(keep.due, gone.due);
+      entries = entries.filter((item) => item !== gone);
+      return keep;
     };
     const clicksOf = (entry) => [entry, ...(entry.aliases || []).map((action) => ({ action, job: entry.job, aliases: [] }))];
     const finish = (entry, body) => {
@@ -176,6 +180,7 @@
         return;
       }
       inFlight = true;
+      asking = entry;
       last = now();
       let answer = null;
       try {
@@ -184,8 +189,12 @@
         answer = null;
       }
       inFlight = false;
-      if (stopped) return; // signed out while it was on its way: its answer is not used
+      if (stopped) {
+        asking = null;
+        return; // signed out while it was on its way: its answer is not used
+      }
       handle(entry, answer);
+      asking = null;
       plan();
     };
     return {
