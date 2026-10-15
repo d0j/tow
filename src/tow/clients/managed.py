@@ -73,11 +73,14 @@ class AddMarkError(Exception):
 
 
 class ClientVerificationPending(ClientError):
-    """The client is checking files; only a validated receipt permits deferring cleanup."""
+    """The client is checking files; only a validated receipt permits deferring cleanup.
+
+    ``start_attempted``: the receipt's one start (``finish_verification``) was already given."""
 
     def __init__(self, infohash: str, *, prefix: str, receipt: dict[str, Any] | None = None) -> None:
         self.infohash = infohash.upper()
         self.receipt = copy.deepcopy(receipt)
+        self.start_attempted = False
         super().__init__("client.managed.verification_pending", prefix=prefix)
 
 
@@ -377,7 +380,9 @@ class ManagedClient:
     ) -> dict[str, Any]:
         """Finish a verified transaction without re-adding, stopping or resetting file selection.
 
-        A dropped start may be explicitly retried by the caller, at most once per receipt.
+        ``start_stopped``: the caller's one start of TOW's own unfinished transaction, given to a
+        stopped torrent whether or not it is complete (the client may have dropped the start it
+        got while it checked); at most once per receipt, without the start wait's repeats.
         Checking is a bounded observation, not a blocking wait on every scheduled pass.
         """
         issued = {"start": False}
@@ -391,6 +396,9 @@ class ManagedClient:
             return self._finish_verification(
                 infohash, destination, receipt, start_stopped=start_stopped, on_start=before_start
             )
+        except ClientVerificationPending as pending:
+            pending.start_attempted = pending.start_attempted or issued["start"]
+            raise
         except ClientError as error:
             if issued["start"] and error.code in {
                 "client.managed.wrong_selection",
@@ -413,12 +421,14 @@ class ManagedClient:
         info = self._verify_receipt(infohash, destination, receipt, require_pending=False)
         if self._preparing(info, after_check=True):
             raise ClientVerificationPending(infohash, prefix=self.title, receipt=receipt)
-        if self._stopped(info) and not completed_progress(info.get("progress")) and start_stopped:
+        if self._stopped(info) and start_stopped:
+            # Also a complete torrent: stopped+complete counts only once it was started (a reached
+            # seeding limit may keep it stopped then).
             self._require_owned(infohash)
             on_start()
             self._start(infohash)
             try:
-                self._wait_started(infohash)
+                self._wait_started(infohash, repeats=0)
             except ClientVerificationPending:
                 info = self._verify_receipt(infohash, destination, receipt, require_pending=False)
                 if self._preparing(info, after_check=True):
@@ -753,7 +763,9 @@ class ManagedClient:
                 }:
                     raise
             else:
-                return self.finish_verification(infohash, str(before.get("save_path") or ""), receipt)
+                return self.finish_verification(
+                    infohash, str(before.get("save_path") or ""), receipt, start_stopped=True
+                )
         before = self._ready_for_selection(before)
         if OWNER not in self._tags(before):
             raise self._fail("client.managed.not_owned")
