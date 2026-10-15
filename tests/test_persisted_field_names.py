@@ -28,6 +28,8 @@ ALLOWED = {
     ("trackers/generic.py", "cookies_by_origin"): "a site login's cookies in secrets.enc",
     ("web/routes_topic_login.py", "cookies_by_origin"): "a site login's cookies in secrets.enc",
     ("web/routes_clients.py", "password"): "a torrent client's login in secrets.enc",
+    ("web/routes_password.py", "auth.hint_needs_password"): "a refusal's catalog key -> its first-start field",
+    ("web/routes_password.py", "auth.hint_reveals_password"): "a refusal's catalog key -> its first-start field",
     ("web/site_actions.py", "password"): "a site login in secrets.enc",
     ("web/site_store.py", "password"): "a site login in secrets.enc",
     ("web/services.py", "api_key"): "the catalog key of a protection provider's status on the page",
