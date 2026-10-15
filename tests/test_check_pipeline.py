@@ -475,6 +475,68 @@ def test_a_check_without_messages_keeps_the_recovery_for_the_next_one(monkeypatc
     assert "error_notified" not in load_state()["topics"][0]
 
 
+def _messages_per_run(notified: list[tuple[Any, Any]], *hows: str) -> list[list[Any]]:
+    kinds = []
+    for how in hows:
+        check.run_check(apply=True, notify=True, how=how)
+        kinds.append([kind for _tid, kind in notified])
+        notified.clear()
+    return kinds
+
+
+def test_failed_site_retries_neither_lengthen_the_streak_nor_report(monkeypatch, stores):
+    """The supervisor retries a site outage within minutes: counted like scheduled checks, three
+    quick retries reported a short outage as one that had lasted three checks."""
+    client = Client()
+    _healthy_topic(client)
+    notified = _notified(monkeypatch)
+    _wire(monkeypatch, {"main": client}, Failing({1, 2, 3, 4}, _site_down()))
+    assert _messages_per_run(notified, "auto", "retry", "retry", "retry") == [[], [], [], []]
+    assert load_state()["topics"][0]["error_streak"] == 1
+
+
+def test_scheduled_and_manual_failures_still_count_between_retries(monkeypatch, stores):
+    client = Client()
+    _healthy_topic(client)
+    notified = _notified(monkeypatch)
+    _wire(monkeypatch, {"main": client}, Failing({1, 2, 3, 4, 5}, _site_down()))
+    assert _messages_per_run(notified, "auto", "retry", "manual", "retry", "auto") == [[], [], [], [], ["error"]]
+
+
+def test_a_successful_retry_ends_the_outage(monkeypatch, stores):
+    client = Client()
+    _healthy_topic(client)
+    notified = _notified(monkeypatch)
+    _wire(monkeypatch, {"main": client}, Failing({1, 2, 3, 4}, _site_down()))
+    assert _messages_per_run(notified, "auto", "auto", "auto", "retry", "retry") == [
+        [],
+        [],
+        ["error"],
+        [],
+        ["recovered"],
+    ]
+    assert "error_streak" not in load_state()["topics"][0]
+
+
+def test_outages_a_retry_saw_end_do_not_add_up(monkeypatch, stores):
+    client = Client()
+    _healthy_topic(client)
+    notified = _notified(monkeypatch)
+    _wire(monkeypatch, {"main": client}, Failing({1, 2, 4}, _site_down()))
+    assert _messages_per_run(notified, "auto", "auto", "retry", "auto") == [[], [], [], []]
+    assert load_state()["topics"][0]["error_streak"] == 1
+
+
+def test_a_red_error_found_by_a_retry_is_reported_at_once(monkeypatch, stores):
+    from tow.errors import TowError
+
+    client = Client()
+    _healthy_topic(client)
+    notified = _notified(monkeypatch)
+    _wire(monkeypatch, {"main": client}, Failing({1, 2}, TowError("tracker.not_torrent")))
+    assert _messages_per_run(notified, "retry", "retry") == [["error"], []]
+
+
 # --- a site whose mirrors rest is one line of the log per check, not one per topic ---------------
 
 

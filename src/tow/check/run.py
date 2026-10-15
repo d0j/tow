@@ -376,6 +376,7 @@ def _run_check(
         },
         client_errors=pool.errors,
         default_client_id=pool.default_id,
+        how=how,
     )
     # Nothing to check (a new install, or no topic in this run): no client is asked, so one not
     # set up yet is not logged as unreachable; the header keeps what was seen before.
