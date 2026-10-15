@@ -100,6 +100,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Restoring a nightly backup no longer takes itself for failed and puts the old data back when only its
   leftover lock file could not be removed (an antivirus holding it), and a putting-back that is cut off
   half-way is finished before TOW writes anything again, instead of being taken for a finished restore.
+- An update that loses power while it switches the code no longer leaves an install that refuses to start
+  ("the update snapshot is damaged") or a broken updater: the copy of the data the update makes first, and
+  the updater the start files run, are written to the disk before anything moves.
 
 ## [1.31.2] — 2026-10-15
 

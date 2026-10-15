@@ -436,16 +436,16 @@ def test_a_failed_snapshot_changes_nothing_and_starts_tow_again(install, monkeyp
     fake = Fake(install["app"])
     before = head(install)
     folders = snapshots(install)
-    copy = updater.shutil.copy2
+    copy = updater.durable_copy
 
-    def broken(source, destination, *args, **kwargs):
+    def broken(source, destination):
         if fault == "disk full" and Path(destination).name == "config.yaml":
             raise OSError("disk full")  # the data is copied already: half a snapshot
-        copy(source, destination, *args, **kwargs)
+        copy(source, destination)
         if fault == "read-back" and Path(destination).name == "state.json":
             Path(destination).write_text("{}", encoding="utf-8")
 
-    monkeypatch.setattr(updater.shutil, "copy2", broken)
+    monkeypatch.setattr(updater, "durable_copy", broken)
     code, lines = run(fake)
     assert code == 1
     assert head(install) == before
