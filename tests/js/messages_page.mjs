@@ -159,6 +159,40 @@ offline.window.towMessages.showMessage({ kind: "err", subject: "Show", text: "co
 assert.equal(offline.$("#flash .msg-text").textContent, "Show — could not confirm the result");
 verdict.oneEntryPoint = true;
 
+// A check's progress and then its result patch the strip in place: the same element, its focus
+// kept; a control that goes while it has the focus hands it to the strip's x, so the strip's
+// time is still held by a focus that is really there.
+{
+  const live = page({ storage: memoryStorage() });
+  const show = (record, options) => live.window.towMessages.showMessage(record, options);
+  show({ id: "check-J", kind: "info", subject: "Show", text: "queued" });
+  const box = live.$("#flash");
+  const close = box.querySelector(".flash-x");
+  close.focus();
+  live.document.dispatch(close, "focusin");
+  show({ id: "check-J", kind: "info", subject: "Show", text: "running since 12:00" }, { replace: true, quiet: true });
+  assert.equal(live.$("#flash"), box);
+  assert.equal(box.querySelector(".msg-text").textContent, "Show — running since 12:00");
+  assert.equal(live.document.activeElement, close);
+  show({ id: "check-J", kind: "err", subject: "Show", text: "failed", href: "/?open=a", link: "Open" }, { replace: true });
+  assert.equal(live.$("#flash"), box);
+  assert.ok(box.classList.contains("error"));
+  assert.equal(box.querySelector(".msg-ico").getAttribute("aria-label"), "Error");
+  const anchor = box.querySelector("a.msg-link");
+  assert.equal(anchor.getAttribute("href"), "/?open=a");
+  assert.equal(live.document.activeElement, close);
+  anchor.focus();
+  show({ id: "check-J", kind: "err", subject: "Show", text: "failed again" }, { replace: true });
+  assert.equal(box.querySelector("a.msg-link"), null);
+  assert.equal(live.document.activeElement, close); // not lost with the link
+  // The focus leaves: the hold ends and the strip collapses after its time.
+  live.document.activeElement = live.document.body;
+  live.document.dispatch(close, "focusout", { relatedTarget: null });
+  live.timers.advance(30000);
+  assert.equal(live.$("#flash"), null);
+}
+verdict.progressPatchesInPlace = true;
+
 // Signing out: this tab's message history goes, of every install and sign-in, and nothing of it
 // is shown any more.
 {

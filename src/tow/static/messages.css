@@ -13,12 +13,17 @@
    the words. */
 .flash[data-kind] { flex-wrap: nowrap; scroll-margin-top: 5.5rem; }
 .flash[data-kind] > .msg-link, .flash[data-kind] > .flash-undo { flex: 0 0 auto; white-space: nowrap; }
+/* The script's strip keeps its link and buttons in one group it updates in place. */
+.flash[data-kind] > .msg-actions { display: inline-flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; white-space: nowrap; }
+.msg-actions form { margin: 0; }
+.msg-actions a { text-decoration: underline; }
+.msg-actions:empty { display: none; }
 @media (max-width: 480px) {
   .flash[data-kind] { display: grid; grid-template-columns: auto 1fr auto; column-gap: .6rem; row-gap: .35rem; }
   .flash[data-kind] > .msg-ico { grid-area: 1 / 1; }
   .flash[data-kind] > .msg-text { grid-area: 1 / 2; }
   .flash[data-kind] > .flash-x { grid-area: 1 / 3; }
-  .flash[data-kind] > .msg-link, .flash[data-kind] > .flash-undo { grid-column: 2; justify-self: start; }
+  .flash[data-kind] > .msg-link, .flash[data-kind] > .flash-undo, .flash[data-kind] > .msg-actions { grid-column: 2; justify-self: start; }
 }
 
 /* The header icon: coloured by the worst unread message, with their count; muted when all are

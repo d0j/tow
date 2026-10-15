@@ -124,6 +124,13 @@ export class FakeElement {
     node.parent = parent;
     parent.children.splice(index, 0, node);
   }
+  before(...nodes) {
+    const parent = this.parent;
+    for (const node of nodes) {
+      if (node instanceof FakeElement) { node.remove(); node.parent = parent; }
+      parent.children.splice(parent.children.indexOf(this), 0, node);
+    }
+  }
   get isConnected() { let node = this; while (node.parent) node = node.parent; return node === this.ownerDocument.root; }
   contains(node) { return node === this || this.children.some((child) => child instanceof FakeElement && child.contains(node)); }
   closest(selector) { for (let node = this; node; node = node.parent) if (matchesSelector(node, selector)) return node; return null; }
