@@ -1,3 +1,4 @@
+import functools
 import os
 import shutil
 import sys
@@ -287,6 +288,43 @@ def _fast_export_kdf(monkeypatch):
     import tow.bundle.crypto
 
     monkeypatch.setattr(tow.bundle.crypto, "KDF_ITERATIONS", 100_000)
+
+
+@pytest.fixture(autouse=True)
+def _no_credential_named_field_is_stored(request, monkeypatch):
+    """Every save of state.json, the download history and config.yaml, in every test, passes the
+    restore point's check for plaintext credentials (``tow.bundle.secret_scan``): a field TOW
+    writes under a name it refuses blocks every restore point and the update from Settings
+    (1.23.0's ``content_token``, 1.31.0's mirror ``token``). The test fails at its end with the
+    field's path. ``@pytest.mark.writes_secret_shape``: a test that saves one on purpose."""
+    if request.node.get_closest_marker("writes_secret_shape"):
+        yield
+        return
+    import tow.config
+    import tow.store
+    from tow.bundle.secret_scan import secret_field_path
+
+    found: list[str] = []
+    save_json, dump_yaml = tow.store.save_json, tow.config.dump_yaml
+
+    @functools.wraps(save_json)  # the same signature (tests/test_public_api.py reads it)
+    def checked_save_json(path, data, **kwargs):
+        name = Path(path).name
+        if name in {"state.json", "download_history.json"} and (where := secret_field_path(name, data)):
+            found.append(f"{name}:{where}")
+        save_json(path, data, **kwargs)
+
+    @functools.wraps(dump_yaml)
+    def checked_dump_yaml(data, *args, **kwargs):  # save_config's only serialisation
+        if where := secret_field_path("config.yaml", data):
+            found.append(f"config.yaml:{where}")
+        return dump_yaml(data, *args, **kwargs)
+
+    monkeypatch.setattr(tow.store, "save_json", checked_save_json)
+    monkeypatch.setattr(tow.config, "dump_yaml", checked_dump_yaml)
+    yield
+    if found:
+        pytest.fail(f"saved a field the backup check refuses as a credential: {sorted(set(found))}", pytrace=False)
 
 
 @pytest.fixture(autouse=True)
