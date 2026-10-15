@@ -7,6 +7,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Settings no longer shows a restart left over from TOW before 1.21, or an unfinished one more than a day old, as
+  the last requested restart; `tow run` removes such a record when it starts.
 - The Russian hint of the site-access settings no longer uses an English loanword for a browser sign-in.
 
 ## [1.30.10] — 2026-10-15

@@ -63,6 +63,48 @@ def _read_marker() -> dict[str, Any] | None:
     return value
 
 
+# An unfinished restart (queued, stopping, starting) that has not moved for a day has nobody left
+# to finish it: the supervisor that would have reported on it is gone.
+_STALE_SECONDS = 86400
+_FINISHED = frozenset({"ready", "failed"})
+
+
+def _stale(marker: dict[str, Any]) -> bool:
+    """A marker no supervisor will ever report on: one written before 1.21 (no ``via``; its
+    restart script is gone) or an unfinished operation older than a day. A finished one stays the
+    true last requested restart, however old; an unreadable one is evidence, not stale."""
+    if marker.get("status") == "unknown" and "operation_id" not in marker:
+        return False
+    if marker.get("via") != "supervisor":
+        return True
+    if marker.get("status") in _FINISHED:
+        return False
+    try:
+        stamp = datetime.fromisoformat(str(marker.get("updated_at") or marker.get("created_at")))
+        age = time.time() - stamp.timestamp()
+    except TypeError, ValueError, OverflowError, OSError:
+        return True
+    return not -_STALE_SECONDS <= age <= _STALE_SECONDS
+
+
+def _current_marker() -> dict[str, Any] | None:
+    """What Settings shows: a stale marker is left in place (a read never writes) and not shown."""
+    marker = _read_marker()
+    return None if marker is None or _stale(marker) else marker
+
+
+def discard_stale_restart_marker() -> bool:
+    """Remove a marker no supervisor will report on; called when ``tow run`` starts."""
+    marker = _read_marker()
+    if marker is None or not _stale(marker):
+        return False
+    try:
+        service_restart_path().unlink(missing_ok=True)
+    except OSError:
+        return False
+    return True
+
+
 # The settings page would ask the OS (schtasks, systemctl, launchctl) on every render; the
 # registration only changes through set_autostart (which drops this cache) or by hand.
 _AUTOSTART_CACHE_SECONDS = 60.0
@@ -98,7 +140,7 @@ def service_status() -> dict[str, Any]:
     autostart = _autostart_status()
     return {
         "pid": os.getpid(),
-        "restart": _read_marker(),
+        "restart": _current_marker(),
         "autostart": bool(autostart.get("on")),
         "without_login": bool(autostart.get("without_login")),
         "supports_without_login": bool(autostart.get("supports_without_login")),
@@ -146,6 +188,7 @@ def request_restart(*, reason: str = "settings") -> dict[str, Any]:
 
 
 __all__ = [
+    "discard_stale_restart_marker",
     "request_restart",
     "service_restart_path",
     "service_status",

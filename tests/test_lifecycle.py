@@ -108,3 +108,78 @@ def test_without_tow_run_a_restart_is_refused_not_improvised(monkeypatch):
     assert result["ok"] is False
     assert not lifecycle.service_restart_path().exists()
     assert not (layout.control_dir() / "restart").exists()
+
+
+def _marker(**fields):
+    from tow import lifecycle
+
+    lifecycle._write_marker(fields)
+    return lifecycle.service_restart_path().read_bytes()
+
+
+def _ago(seconds):
+    from datetime import UTC, datetime, timedelta
+
+    return (datetime.now(UTC) - timedelta(seconds=seconds)).isoformat()
+
+
+def test_a_legacy_restart_marker_is_not_shown_and_not_rewritten_by_a_read(monkeypatch):
+    # A live install showed a pre-1.21 restart (by a script that no longer exists) on Settings for ever.
+    from tow import lifecycle
+
+    raw = _marker(operation_id="restart-old", status="starting", created_at=_ago(60), script="tow-restart.py")
+    assert lifecycle.service_status()["restart"] is None
+    assert lifecycle.service_restart_path().read_bytes() == raw  # a GET never writes
+
+
+def test_an_unfinished_restart_older_than_a_day_is_not_shown(monkeypatch):
+    from tow import lifecycle
+
+    raw = _marker(operation_id="restart-a", status="stopping", via="supervisor", created_at=_ago(90000))
+    assert lifecycle.service_status()["restart"] is None
+    assert lifecycle.service_restart_path().read_bytes() == raw
+    _marker(operation_id="restart-a", status="stopping", via="supervisor", created_at=_ago(90000), updated_at="x")
+    assert lifecycle.service_status()["restart"] is None  # no readable date: not current either
+
+
+def test_current_and_finished_restarts_are_still_shown(monkeypatch):
+    from tow import lifecycle
+
+    _marker(operation_id="restart-a", status="queued", via="supervisor", created_at=_ago(30))
+    assert lifecycle.service_status()["restart"]["status"] == "queued"
+    # A finished restart stays the true "last requested restart", however old.
+    _marker(operation_id="restart-b", status="ready", via="supervisor", created_at=_ago(864000))
+    assert lifecycle.service_status()["restart"]["operation_id"] == "restart-b"
+
+
+def test_the_supervisor_start_removes_only_a_stale_restart_marker():
+    from tow import lifecycle
+    from tow.supervisor import _clear_old_requests
+
+    _marker(operation_id="restart-old", status="starting", created_at=_ago(60))
+    _clear_old_requests()
+    assert not lifecycle.service_restart_path().exists()
+    _marker(operation_id="restart-a", status="queued", via="supervisor", created_at=_ago(90000))
+    _clear_old_requests()
+    assert not lifecycle.service_restart_path().exists()
+    kept = _marker(operation_id="restart-b", status="failed", via="supervisor", created_at=_ago(864000))
+    _clear_old_requests()
+    assert lifecycle.service_restart_path().read_bytes() == kept
+    lifecycle.service_restart_path().write_bytes(b"{")  # unreadable: evidence, never deleted
+    _clear_old_requests()
+    assert lifecycle.service_restart_path().read_bytes() == b"{"
+
+
+def test_a_restart_request_replaces_a_stale_marker(monkeypatch):
+    from tow import lifecycle
+    from tow.supervisor import layout
+
+    _marker(operation_id="restart-old", status="starting", created_at=_ago(60))
+    held = layout.InstanceLock()
+    assert held.acquire()
+    try:
+        result = lifecycle.request_restart(reason="manual")
+    finally:
+        held.release()
+    shown = lifecycle.service_status()["restart"]
+    assert (shown["operation_id"], shown["via"], shown["status"]) == (result["operation_id"], "supervisor", "queued")

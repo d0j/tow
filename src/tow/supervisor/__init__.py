@@ -280,6 +280,10 @@ def _clear_old_requests() -> None:
     for action in layout.CONTROL_ACTIONS:
         with contextlib.suppress(OSError):
             (layout.control_dir() / action).unlink(missing_ok=True)
+    # A restart marker no supervisor will report on (pre-1.21, or unfinished for a day) goes too.
+    from tow import lifecycle
+
+    lifecycle.discard_stale_restart_marker()
 
 
 def _acquire(lock: layout.InstanceLock, tries: int = 3) -> bool:
