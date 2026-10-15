@@ -150,12 +150,16 @@ def test_the_progress_link_is_outside_the_rows_summary(client):
     ghost = first.select_one("summary .topic-progress .progress-ghost")
     assert ghost["aria-hidden"] == "true"
     assert ghost.get_text() == link.get_text()
-    assert rows[1].select_one(".row-progress") is None  # nothing downloaded: the cell says "—"
-    assert rows[1].select_one(".topic-progress .mut").get_text() == "—"
+    # Nothing downloaded: no progress at all (1.32: the progress shares the event's cell, the
+    # cell said "—" beside an empty event).
+    assert rows[1].select_one(".row-progress") is None
+    assert rows[1].select_one(".topic-progress") is None
+    assert first.select_one("summary .topic-event > .topic-progress .progress-ghost") is ghost
     rules = _desktop_rules()
     summary_columns = re.search(r"grid-template-columns: ([^;]+);", rules[".list-head, details.row-edit > summary"])
-    layer = re.search(r"\n\.row-progress \{([^}]*)\}", CSS).group(1)  # the first rule: not @supports
-    assert summary_columns.group(1) in layer  # the same columns as the summary
+    layers = re.findall(r"\n\.row-progress \{([^}]*)\}", CSS)  # top-level rules: not @media
+    assert summary_columns.group(1) in layers[-1]  # the same columns as the summary (the rule in force)
+    layer = layers[0]
     assert "pointer-events: none" in layer
     assert "pointer-events: auto" in rules[".row-progress > a"]
     assert "visibility: hidden" in rules[".row-wrap:has(> .row-progress) .topic-progress"]
@@ -169,7 +173,8 @@ def test_the_progress_link_is_outside_the_rows_summary(client):
 
 @pytest.mark.parametrize(
     ("lang", "labels"),
-    [("en", ["Site:", "Folder:", "Event:", "Progress:"]), ("ru", ["Сайт:", "Папка:", "Событие:", "Прогресс:"])],
+    # A row without progress has no progress cell (its link outside the summary says "Progress").
+    [("en", ["Site:", "Folder:", "Event:"]), ("ru", ["Сайт:", "Папка:", "Событие:"])],
 )
 def test_each_row_cell_says_its_column_to_a_screen_reader(client, lang, labels):
     """A11: on a desktop the columns' names were only in the head row (and on a phone only in

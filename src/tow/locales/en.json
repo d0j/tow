@@ -1104,8 +1104,7 @@
       "torrent": "Topic",
       "site": "Site",
       "folder": "Folder",
-      "event": "Latest event",
-      "progress": "Progress"
+      "event": "Latest event"
     },
     "topic": {
       "no_events": "No events yet",

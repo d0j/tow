@@ -1288,6 +1288,49 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 /* Version and updates: a section inside another reads as inside it. */
 .technical-details .technical-details { margin-left: 1rem; }
 /* == screens == */
+/* Home rows (1.32): the event and its progress share one column (the Progress column was empty on
+   most rows); a tablet leaves the folder out (the edit panel has it); a phone says a topic in two
+   or three lines with no visible labels - each cell keeps its hidden name. The progress link is
+   laid over the end of the event cell: the overlay keeps the summary's columns. */
+.list-head, details.row-edit > summary {
+  grid-template-columns: 1.3rem minmax(0,1.6fr) 5.5rem minmax(0,1fr) minmax(10rem,1.6fr) 6.4rem;
+}
+.row-progress {
+  grid-template-columns: 1.3rem minmax(0,1.6fr) 5.5rem minmax(0,1fr) minmax(10rem,1.6fr) 6.4rem;
+}
+#topics .row-progress > a { grid-column: -3 / -2; justify-self: end; }
+.topic-event { position: relative; display: flex; align-items: center; gap: .5rem; min-width: 0; }
+.event-body { flex: 1 1 auto; min-width: 0; line-height: 1.3; }
+.event-body .event-at { display: inline; margin-left: .25em; font-size: 12px; }
+.topic-progress { flex: 0 0 auto; }
+@media (min-width: 721px) and (max-width: 1099px) {
+  .list-head, details.row-edit > summary, .row-progress {
+    grid-template-columns: 1.3rem minmax(0,1.8fr) 5.5rem minmax(10rem,1.5fr) 6.4rem;
+  }
+  .topic-path, .list-head > .col-folder { display: none; }
+}
+@media (max-width: 720px) {
+  /* Line 1: dot, name (two lines at most) and the icons; line 2: site · folder; line 3, when
+     there is one: the event or error, the progress at its end. */
+  #topics details.row-edit > summary {
+    grid-template-columns: 12px auto minmax(0, 1fr); align-items: start; column-gap: .5rem; row-gap: .1rem;
+  }
+  #topics details.row-edit > summary > .dot { grid-column: 1; margin-top: .4rem; }
+  #topics details.row-edit > summary > .topic-name { grid-column: 2 / -1; }
+  #topics .topic-name > .clip { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  #topics details.row-edit > summary > .topic-tracker {
+    grid-column: 2; max-width: 11rem; color: var(--mut); font-size: 13px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #topics details.row-edit > summary > .topic-path { grid-column: 3; color: var(--mut); }
+  #topics details.row-edit > summary > .topic-event { grid-column: 2 / -1; align-items: flex-end; font-size: 13px; }
+  #topics details.row-edit > summary > .is-empty { display: none; }
+  #topics details.row-edit [data-label]::before, #topics .row-progress::before { content: none; }
+  #topics details.row-edit > summary > .topic-path::before { content: "·" / ""; margin-right: .35em; }
+  #topics .topic-path .clip-start { white-space: nowrap; direction: rtl; text-overflow: ellipsis; overflow-wrap: normal; }
+  #topics .event-body { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+  #topics .row-progress { justify-content: flex-end; }
+}
 /* The add form and the edit panel: the folder's wrapper is as wide as its field, so the recent
    folders button stays at the field's end. */
 .new-topic-form .folder-input, .edit-form .folder-input { max-width: 26rem; }

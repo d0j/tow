@@ -94,9 +94,10 @@ def test_phone_row_labels_come_from_the_page_language(client):
     _set_language("ru")
     russian = client.get("/").text
 
-    for label in ('data-label="Site:"', 'data-label="Folder:"', 'data-label="Event:"', 'data-label="Progress:"'):
+    # A row without progress has no progress cell (1.32: progress shares the event's cell).
+    for label in ('data-label="Site:"', 'data-label="Folder:"', 'data-label="Event:"'):
         assert label in english
-    for label in ('data-label="Сайт:"', 'data-label="Папка:"', 'data-label="Событие:"', 'data-label="Прогресс:"'):
+    for label in ('data-label="Сайт:"', 'data-label="Папка:"', 'data-label="Событие:"'):
         assert label in russian
     assert "content: attr(data-label)" in CSS
 
