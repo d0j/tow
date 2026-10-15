@@ -155,6 +155,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Transmission: going back to TOW 1.30.10 or older while Transmission still checks such a new torrent no longer
   lets the older version start it while it waits for disk space; the older version shows an error for it until you
   check the topic by hand.
+- A torrent whose file check TOW waits for and that the client stops listing just while TOW confirms it is no longer
+  blocked as removed at once either: as for any absence, only two answers ten minutes apart without it do that.
 
 ## [1.30.10] — 2026-10-15
 
