@@ -37,6 +37,9 @@ OWNER = "tow"
 PENDING = "tow-pending"
 STOPPED_PREFIXES = ("stopped", "paused")
 UNSAFE_STATES = frozenset({"error", "missingfiles", "unknown"})
+# Preparation a client does on its own before a torrent runs, besides checking its files:
+# qBittorrent reserves the files' disk space first ("allocating").
+PREPARING_STATES = frozenset({"allocating"})
 
 
 def completed_progress(value: object) -> bool:
@@ -242,14 +245,17 @@ class ManagedClient:
     def _wait_stopped(self, infohash: str) -> dict[str, Any]:
         return self._wait(infohash, self._stopped, "client.managed.stop_unconfirmed")
 
-    def _wait_started(self, infohash: str) -> dict[str, Any]:
-        """The start, confirmed. A torrent that checks the files it found has not started yet:
-        Deluge drops a start given while it checks, and the torrent stays stopped afterwards, so
-        a stopped torrent is given the start again (START_REPEATS times). A complete torrent the
+    def _wait_started(self, infohash: str, *, repeats: int | None = None) -> dict[str, Any]:
+        """The start, confirmed. A torrent the client prepares (checks the files it found,
+        reserves their space) has not started yet: Deluge drops a start given while it checks,
+        and the torrent stays stopped afterwards, so a stopped torrent is given the start again
+        (``repeats`` times, START_REPEATS unless the caller allows fewer). A complete torrent the
         client keeps stopped (a seeding limit already reached) counts once the repeats are spent;
-        a check still running at the deadline is not a confirmed start: the add keeps its
-        pending mark, and a later attempt can complete it once the check ends."""
-        repeats = 0
+        a preparation still running at the deadline is not a confirmed start: the add keeps its
+        pending mark, and a later attempt can complete it once the client is done."""
+        allowed = self.START_REPEATS if repeats is None else repeats
+        given = 0
+        checked = False
         last: dict[str, Any] | None = None
 
         def read(current_hash: str) -> dict[str, Any] | None:
@@ -258,17 +264,20 @@ class ManagedClient:
             return last
 
         def started(info: dict[str, Any]) -> bool:
-            nonlocal repeats, last
+            nonlocal given, checked, last
             last = info
             state = str(info.get("state") or "")
             if not state:
                 return False
-            if state.casefold().startswith("checking") or state.casefold() in {"moving", "metadl", "forcedmetadl"}:
+            if self._preparing(info, after_check=checked):
+                checked = True
+                return False
+            if state.casefold() in {"moving", "metadl", "forcedmetadl"}:
                 return False
             if not self._stopped(info):
                 return self._running(info)
-            if repeats < self.START_REPEATS:
-                repeats += 1
+            if given < allowed:
+                given += 1
                 self._require_owned(infohash)
                 self._start(infohash)
                 return False
@@ -284,13 +293,18 @@ class ManagedClient:
                 read=read,
             )
         except ClientError as error:
-            if error.code == "client.managed.start_unconfirmed" and self._checking(last):
+            if error.code == "client.managed.start_unconfirmed" and self._preparing(last, after_check=checked):
                 raise ClientVerificationPending(infohash, prefix=self.title) from None
             raise
 
-    @staticmethod
-    def _checking(info: dict[str, Any] | None) -> bool:
-        return str((info or {}).get("state") or "").casefold().startswith("checking")
+    def _preparing(self, info: dict[str, Any] | None, *, after_check: bool = False) -> bool:
+        """The client prepares the torrent on its own - checks the files it found, or reserves
+        their disk space - and has neither started nor refused it yet: waiting for that is never
+        a failure and never a reason to stop it. ``after_check``: the torrent was seen checking
+        in this transaction (a client that reports a check queue as a download queue says so)."""
+        del after_check  # only a client whose queued state is ambiguous needs it (Deluge)
+        state = str((info or {}).get("state") or "").casefold()
+        return state.startswith("checking") or state in PREPARING_STATES
 
     def _verification_receipt(
         self, infohash: str, verified: dict[str, Any], metadata: TorrentMetadata, selected: set[int]
@@ -397,7 +411,7 @@ class ManagedClient:
         on_start: Callable[[], None],
     ) -> dict[str, Any]:
         info = self._verify_receipt(infohash, destination, receipt, require_pending=False)
-        if self._checking(info):
+        if self._preparing(info, after_check=True):
             raise ClientVerificationPending(infohash, prefix=self.title, receipt=receipt)
         if self._stopped(info) and not completed_progress(info.get("progress")) and start_stopped:
             self._require_owned(infohash)
@@ -407,7 +421,7 @@ class ManagedClient:
                 self._wait_started(infohash)
             except ClientVerificationPending:
                 info = self._verify_receipt(infohash, destination, receipt, require_pending=False)
-                if self._checking(info):
+                if self._preparing(info, after_check=True):
                     raise ClientVerificationPending(infohash, prefix=self.title, receipt=receipt) from None
             info = self._verify_receipt(infohash, destination, receipt, require_pending=False)
         self._assert_started(info)
@@ -415,7 +429,7 @@ class ManagedClient:
             self._clear_pending(infohash)
         # Clearing the transaction label must not mask an ownership, path or priority change.
         info = self._verify_receipt(infohash, destination, receipt, require_pending=False)
-        if self._checking(info):
+        if self._preparing(info, after_check=True):
             raise ClientVerificationPending(infohash, prefix=self.title, receipt=receipt)
         self._assert_started(info)
         return info
@@ -441,7 +455,7 @@ class ManagedClient:
     ) -> dict[str, Any]:
         receipt = self._verification_receipt(infohash, verified, metadata, selected)
         info = self._verify_receipt(infohash, destination, receipt, require_pending=require_pending)
-        if self._checking(info):
+        if self._preparing(info, after_check=True):
             raise ClientVerificationPending(infohash, prefix=self.title, receipt=receipt)
         self._assert_started(info)
         return info
@@ -635,7 +649,7 @@ class ManagedClient:
         try:
             if not paths_equal(str(added.get("save_path") or ""), destination):
                 raise self._fail("client.managed.wrong_folder")
-            if start and self._checking(added) and added.get("files"):
+            if start and self._preparing(added) and added.get("files"):
                 try:
                     receipt = self._verification_receipt(infohash, added, metadata, selected)
                     self._verify_receipt(infohash, destination, receipt, require_pending=True)
@@ -727,7 +741,7 @@ class ManagedClient:
             raise self._fail("client.managed.not_owned")
         pending = PENDING in self._tags(before)
         selected = {int(index) for index in selected_indices}
-        if pending and self._checking(before) and not keep_stopped:
+        if pending and self._preparing(before) and not keep_stopped:
             try:
                 receipt = self._verification_receipt(infohash, before, metadata, selected)
                 self._verify_receipt(infohash, str(before.get("save_path") or ""), receipt, require_pending=True)

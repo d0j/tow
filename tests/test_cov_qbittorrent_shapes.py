@@ -305,8 +305,10 @@ def test_active_states_confirm_a_start(monkeypatch, state):
     assert _adapter(monkeypatch, api)._wait_started(H)["state"] == state
 
 
-@pytest.mark.parametrize("state", ["checkingDL", "checkingUP", "checkingResumeData"])
-def test_a_file_check_does_not_confirm_a_start(monkeypatch, state):
+@pytest.mark.parametrize("state", ["checkingDL", "checkingUP", "checkingResumeData", "allocating"])
+def test_a_file_check_or_space_allocation_does_not_confirm_a_start(monkeypatch, state):
+    """Preparation the client does on its own (checking files, reserving their space) is no
+    start yet, and no failure either: the add is deferred, never stopped."""
     api = QbitApi(state=state)
     adapter = _adapter(monkeypatch, api)
     adapter.START_POLLS = 3
@@ -314,7 +316,7 @@ def test_a_file_check_does_not_confirm_a_start(monkeypatch, state):
         adapter._wait_started(H)
 
 
-@pytest.mark.parametrize("state", ["metaDL", "forcedMetaDL", "moving", "allocating", "unexpected"])
+@pytest.mark.parametrize("state", ["metaDL", "forcedMetaDL", "moving", "unexpected"])
 def test_transient_or_unrecognized_state_does_not_confirm_a_start(monkeypatch, state):
     api = QbitApi(state=state)
     adapter = _adapter(monkeypatch, api)
