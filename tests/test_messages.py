@@ -242,3 +242,12 @@ def test_an_explicit_subject_wins_and_an_empty_one_opts_out(client):
 def test_a_subject_already_at_the_start_is_not_said_twice(client):
     location = flash_location("/", f"{SUBJECT} — no changes", "ok", subject=SUBJECT)
     assert _strip(client, location) == f"{SUBJECT} — no changes"
+
+
+def test_a_skipped_topic_check_is_a_note_not_a_success():
+    # Skipped work is "info" (neutral), as queued and deferred work: it did not check anything.
+    from tow.web.views import check_feedback
+
+    said = check_feedback({"id": "t1", "ok": True, "status": "skipped", "skipped": "paused"}, topic_id="t1")
+    assert said["kind"] == "info"
+    assert check_feedback({"id": "t1", "ok": True}, topic_id="t1")["kind"] == "ok"

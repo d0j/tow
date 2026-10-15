@@ -178,7 +178,7 @@ def check_feedback(
     if adopted:
         return _feedback(t("web.check.adopted"))
     if row.get("skipped"):
-        return _feedback(t("web.check.no_changes_reason", reason=row["skipped"]))
+        return _feedback(t("web.check.no_changes_reason", reason=row["skipped"]), "info")  # skipped: nothing checked
     return _feedback(t("web.common.no_changes"))
 
 
