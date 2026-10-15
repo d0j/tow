@@ -241,3 +241,15 @@ def _real_backup_view(cfg, request):
     from tow.web.views import backup_view
 
     return backup_view(cfg, request)
+
+
+def test_the_attention_heading_is_neutral_and_each_entry_marks_its_severity(client):
+    """Audit 3.1.8: the panel's heading was always amber, even under a red icon. The heading is
+    neutral; each entry carries a mark in its own colour (the words say what is wrong)."""
+    rules = _rules(CSS)
+    assert "var(--warn)" not in rules[".attention-panel strong"]
+    assert "var(--bad)" in rules[".attention-link.bad::before"]
+    assert "var(--dot-warn)" in rules[".attention-link.warn::before"]
+    _state({"id": "a", "title": "A", "last_error": "client refused", "last_error_class": "qbit"})
+    [link] = _page(client, "/").select("#current-problems .attention-link")
+    assert link["class"] == ["attention-link", "bad"]
