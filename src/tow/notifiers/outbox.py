@@ -184,15 +184,17 @@ def enqueue(state: dict[str, Any], secrets: dict[str, Any], text: str) -> list[s
 
 
 def _combined(items: list[dict[str, Any]], dropped: int, *, retry: bool) -> str:
-    """One message for what is queued; a repeat attempt or a backlog says it is late."""
-    texts = [str(item["text"]) for item in items]
-    if len(texts) == 1 and not retry and not dropped:
-        return texts[0]
+    """One message for what is queued. Only the messages an earlier attempt already tried come
+    under "not delivered earlier" (a queue of an older TOW, ``retry`` without marks: all of them);
+    the messages one pass queued together are fresh."""
+    marked = any(item.get("tried") for item in items)
+    late = [str(item["text"]) for item in items if item.get("tried") or (retry and not marked)]
+    fresh = [str(item["text"]) for item in items if not (item.get("tried") or (retry and not marked))]
     lang = message_language()
     note = t("notifier.common.dropped", lang, n=dropped) + "\n\n" if dropped else ""
-    if len(texts) == 1 and not retry:
-        return note + texts[0]
-    return t("notifier.common.late", lang) + "\n\n" + note + "\n\n".join(texts)
+    if not late:
+        return note + "\n\n".join(fresh)
+    return t("notifier.common.late", lang) + "\n\n" + note + "\n\n".join([*late, *fresh])
 
 
 def set_status(state: dict[str, Any], key: str, reason: str | Msg | None) -> None:
@@ -230,23 +232,29 @@ def _claim(key: str, settings: dict[str, Any], token: str) -> tuple[str, dict[st
         box.pop("blocked", None)
         inflight = box.get("inflight")
         if inflight and int(inflight.get("done") or 0) == 0:
-            # Nothing of it arrived yet: rebuild it with whatever was queued meanwhile.
+            # Nothing of it arrived yet: rebuild it with whatever was queued meanwhile, and with
+            # the note of dropped messages it carried.
             box.pop("inflight")
             box["retry"] = True
+            if carried := int(inflight.get("dropped") or 0):
+                box["dropped"] = int(box.get("dropped") or 0) + carried
         if not box.get("inflight"):
             if not box["items"]:
-                box.pop("retry", None)
-                box.pop("one_by_one", None)
-                _tidy(state)
-                save_state(state)
+                if box.pop("retry", None) or box.pop("one_by_one", None):
+                    _tidy(state)
+                    save_state(state)
                 return "idle", None
             # After a refused combined message, find the one the messenger refuses: one at a time.
             batch = box["items"][:1] if box.get("one_by_one") else box["items"]
+            dropped = int(box.pop("dropped", 0) or 0)
             box["inflight"] = {
                 "ids": [item["id"] for item in batch],
-                "text": _combined(batch, int(box.pop("dropped", 0) or 0), retry=bool(box.pop("retry", False))),
+                "text": _combined(batch, dropped, retry=bool(box.pop("retry", False))),
                 "done": 0,
+                "dropped": dropped,
             }
+            for item in batch:
+                item["tried"] = True  # a next attempt calls it late
         state.setdefault("notify_lease", {})[key] = _lease(token, now + LEASE_SEC)
         save_state(state)
         return "send", dict(box["inflight"])

@@ -1204,3 +1204,54 @@ def test_notification_title_limits_untrusted_text_before_regex_matching():
 
     title = "Series" + " " * 100_000 + "[" + "x" * 100_000
     assert short_series_title(title) == "Series"
+
+
+def _queued(*texts: str, **box: object) -> None:
+    """Messages waiting for Discord as one pass of a check leaves them (``enqueue``)."""
+    from tow.notifiers.outbox import enqueue
+    from tow.store import save_state
+
+    state: dict = {}
+    for text in texts:
+        enqueue(state, DISCORD, text)
+    state["notify_outbox"]["discord"].update(box)
+    save_state(state)
+
+
+def test_fresh_messages_of_one_pass_are_not_called_late(http):
+    # The messages one check queued together arrived under "Not delivered earlier:".
+    set_handler, seen, _ = http
+    set_handler(lambda _r: httpx.Response(204))
+    _queued("серия 1", "серия 2")
+    assert notifiers.flush_outbox(DISCORD) == {"discord": (True, "")}
+    assert [json.loads(r.content)["content"] for r in seen] == ["серия 1\n\nсерия 2"]
+
+
+def test_only_the_messages_tried_before_are_called_late(http):
+    set_handler, seen, _ = http
+    set_handler(lambda _r: httpx.Response(503))
+    _queued("серия 1")
+    notifiers.flush_outbox(DISCORD)
+    from tow.notifiers.outbox import enqueue
+    from tow.store import save_state
+
+    state = load_state()
+    enqueue(state, DISCORD, "серия 2")  # a later pass queues a fresh one
+    save_state(state)
+    seen.clear()
+    set_handler(lambda _r: httpx.Response(204))
+    notifiers.flush_outbox(DISCORD)
+    assert [json.loads(r.content)["content"] for r in seen] == ["Не доставлено ранее:\n\nсерия 1\n\nсерия 2"]
+
+
+def test_the_note_of_dropped_messages_survives_a_failed_attempt(http):
+    # "N old messages were dropped" was taken out of the queue by the first attempt: lost when it failed.
+    set_handler, seen, _ = http
+    set_handler(lambda _r: httpx.Response(503))
+    _queued("серия 1", dropped=3)
+    notifiers.flush_outbox(DISCORD)
+    seen.clear()
+    set_handler(lambda _r: httpx.Response(204))
+    notifiers.flush_outbox(DISCORD)
+    (request,) = seen
+    assert "3 старых сообщения не поместились" in json.loads(request.content)["content"]
