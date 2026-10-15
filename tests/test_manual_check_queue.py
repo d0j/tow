@@ -538,6 +538,26 @@ def test_a_manual_preview_writes_nothing_even_when_it_fails(client, monkeypatch,
     assert writes == []
 
 
+@pytest.mark.parametrize("topic_id", ["", "a"])
+def test_a_check_that_ran_but_whose_result_cannot_be_shown_says_so(client, monkeypatch, consumers, topic_id):
+    # The check ran and saved what it found: "could not confirm the check result" and a
+    # "check did not complete" entry said the opposite.
+    events = []
+    monkeypatch.setattr("tow.web.services.log_event", lambda kind, **kw: events.append((kind, kw.get("error_class"))))
+    monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: {"results": [{"id": "a", "ok": True}]})
+
+    def broken_report(*_a, **_kw):
+        raise KeyError("synthetic report failure")
+
+    monkeypatch.setattr("tow.web.routes_check.check_report", broken_report)
+    job = check_jobs.submit(topic_id=topic_id, apply=True, lang="ru", perform=routes_check._perform_check)[0]
+    consumers[0].run()
+    ended = _status(client, job["id"])
+    assert ended["status"] == "done"
+    assert ended["flash"].startswith("проверка прошла, но TOW не смог показать её результат (KeyError)")
+    assert [kind for kind, _ in events] == ["check_report_failed"]
+
+
 class _ThreadStop(BaseException):
     """Not an Exception: what ends a thread (SystemExit, KeyboardInterrupt) in the middle of a check."""
 
