@@ -206,6 +206,32 @@ def test_typed_topic_error_uses_current_site_title_and_keeps_saved_evidence():
     assert topic == before
 
 
+@pytest.mark.parametrize("params", [["tracker", "nnmclub"], "nnmclub", 7])
+def test_malformed_saved_error_params_still_list_the_topic(params):
+    topic = {"id": "a", "title": "Show A", "last_error": "saved text", "last_error_class": "tracker"}
+    topic["last_error_params"] = params
+    [issue] = collect(_snapshot([topic]))
+    assert issue.id == "topic_error:a"
+
+
+@pytest.mark.parametrize("site", ["broken", ["nnmclub"], None])
+def test_a_malformed_site_entry_does_not_break_the_site_access_issue(site):
+    from tow.errors import TowError
+
+    record = TowError("mirrors.all_failed", tracker="nnmclub", error=TowError("mirrors.rate_limited")).record()
+    topic = {
+        "id": "a",
+        "title": "Show A",
+        "last_error": "x",
+        "last_error_class": "tracker",
+        "last_error_code": record["code"],
+        "last_error_params": record["params"],
+    }
+    config = {**CONFIG, "trackers": {**CONFIG["trackers"], "nnmclub": site}}
+    [issue] = collect(Snapshot(state={"topics": [topic], "health": {}}, config=config, now=NOW))
+    assert issue.subjects == ("a",)
+
+
 def test_cleared_error_with_a_legacy_auth_class_does_not_hold_the_indicator():
     assert collect(_snapshot([{"id": "a", "url": NNM + "1", "last_error_class": "tracker_auth"}])) == []
 

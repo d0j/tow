@@ -50,17 +50,21 @@ def collect(snapshot: Snapshot) -> list[Issue]:
             and str(topic.get("client_id") or default) == default
         ):
             continue
-        site = (topic.get("last_error_params") or {}).get("tracker")
-        sites = snapshot.config.get("trackers") or {}
-        normalized = summary_record({"code": topic.get("last_error_code"), "params": topic.get("last_error_params")})
+        # Saved state and config are read as they are: one malformed record must not hide the others.
+        raw = topic.get("last_error_params")
+        params = raw if isinstance(raw, Mapping) else {}
+        site = params.get("tracker")
+        sites = snapshot.config.get("trackers")
+        spec = sites.get(site) if isinstance(sites, Mapping) and isinstance(site, str) else None
+        normalized = summary_record({"code": topic.get("last_error_code"), "params": params})
         if (
             cls in TRACKER_WARNING_CLASSES
             and isinstance(site, str)
-            and site in sites
+            and isinstance(spec, Mapping)
             and normalized
             and normalized.get("code") in _SITE_MESSAGES
         ):
-            title = sites[site].get("title") or site
+            title = spec.get("title") or site
             target = Target("home", open=identity, anchor=f"row-{identity}")
             found.append(
                 Issue(
