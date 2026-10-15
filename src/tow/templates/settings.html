@@ -2,6 +2,7 @@
 {% from "_icons.html" import icon %}
 {% from "_issue_notes.html" import issue_notes_at %}
 {% from "_note.html" import note %}
+{% from "_secret.html" import reveal, saved_hint %}
 {% block body %}
 {% set hh = header_health() %}
 <div class="settings-page settings-page-compact">
@@ -76,12 +77,16 @@
                   {% if 'username' in c.fields %}
                   <div class="field">
                     <label for="q_user-{{ c.form_id }}">{{ c.labels.username }}</label>
-                    <input id="q_user-{{ c.form_id }}" name="username" value="{{ c.user }}" class="w-m" autocomplete="off">
+                    <input id="q_user-{{ c.form_id }}" name="username" value="{{ c.user }}" class="w-m" autocomplete="section-{{ c.form_id }} username" autocapitalize="off" spellcheck="false">
                   </div>
                   {% endif %}
                   <div class="field">
-                    <label for="q_pass-{{ c.form_id }}">{{ c.labels.password }} {% if c.pass_set %}<span class="pill ok">{{ t('settings.common.saved_pill') }}</span>{% endif %}</label>
-                    <input id="q_pass-{{ c.form_id }}" name="password" type="password" class="w-m" placeholder="{{ t('settings.common.keep_empty') }}" autocomplete="new-password">
+                    {#- The client's own sign-in: its user name and password for this card's section
+                        (never TOW's own password, never a "new" one to generate). "Saved" only
+                        when a password is saved: there is nothing to keep otherwise. #}
+                    <label for="q_pass-{{ c.form_id }}">{{ c.labels.password }}</label>
+                    <span class="secret"><input id="q_pass-{{ c.form_id }}" name="password" type="password" class="w-m" autocomplete="section-{{ c.form_id }} current-password"{% if c.pass_set %} aria-describedby="q_pass-{{ c.form_id }}-saved"{% endif %}>{{ reveal('q_pass-' ~ c.form_id, c.labels.password) }}</span>
+                    {% if c.pass_set %}{{ saved_hint('q_pass-' ~ c.form_id ~ '-saved') }}{% endif %}
                   </div>
                 </div>
               </fieldset>
@@ -179,11 +184,14 @@
                 <div class="field-row">
                 {% for f in n.fields %}
                 <div class="field">
-                  <label for="nf-{{ n.kind }}-{{ f.name }}">{{ f.label }}{% if not f.required %} {{ t('settings.common.optional') }}{% endif %} {% if f.kind == 'secret' and f.saved %}<span class="pill ok">{{ t('settings.common.saved_pill') }}</span>{% endif %}</label>
+                  {% set field_id = 'nf-' ~ n.kind ~ '-' ~ f.name %}
+                  <label for="{{ field_id }}">{{ f.label }}{% if not f.required %} {{ t('settings.common.optional') }}{% endif %}</label>
                   {% if f.kind == 'secret' %}
-                  <input id="nf-{{ n.kind }}-{{ f.name }}" name="{{ f.name }}" type="password"{% if f.width %} class="w-{{ f.width }}"{% endif %} value="{{ f.suggestion }}" placeholder="{{ t('settings.common.keep_empty') if f.saved else f.placeholder }}" autocomplete="new-password" spellcheck="false">
+                  {#- A token, a webhook or a key: not a password to remember or to generate. #}
+                  <span class="secret"><input id="{{ field_id }}" name="{{ f.name }}" type="password"{% if f.width %} class="w-{{ f.width }}"{% endif %} value="{{ f.suggestion }}" placeholder="{{ f.placeholder }}" autocomplete="off" spellcheck="false" autocapitalize="off"{% if f.saved %} aria-describedby="{{ field_id }}-saved"{% endif %}>{{ reveal(field_id, f.label) }}</span>
+                  {% if f.saved %}{{ saved_hint(field_id ~ '-saved') }}{% endif %}
                   {% else %}
-                  <input id="nf-{{ n.kind }}-{{ f.name }}" name="{{ f.name }}"{% if f.width %} class="w-{{ f.width }}"{% endif %} value="{{ f.value or f.suggestion }}" placeholder="{{ f.placeholder }}" autocomplete="off" spellcheck="false">
+                  <input id="{{ field_id }}" name="{{ f.name }}"{% if f.width %} class="w-{{ f.width }}"{% endif %} value="{{ f.value or f.suggestion }}" placeholder="{{ f.placeholder }}" autocomplete="off" spellcheck="false" autocapitalize="off">
                   {% endif %}
                 </div>
                 {% endfor %}
@@ -257,24 +265,26 @@
                 {% if not access_local %}
                 <div class="field">
                   <label for="current-password">{{ t('settings.access.current_password') }}</label>
-                  <input id="current-password" name="current_password" type="password" class="w-m" autocomplete="current-password" required>
+                  <span class="secret"><input id="current-password" name="current_password" type="password" class="w-m" autocomplete="current-password" required>{{ reveal('current-password', t('settings.access.current_password')) }}</span>
                 </div>
                 {% elif lan_password_set %}
                 <div class="field">
                   <label for="current-password">{{ t('settings.access.current_password') }}</label>
-                  <input id="current-password" name="current_password" type="password" class="w-m" autocomplete="current-password" aria-describedby="current-password-hint">
+                  <span class="secret"><input id="current-password" name="current_password" type="password" class="w-m" autocomplete="current-password" aria-describedby="current-password-hint">{{ reveal('current-password', t('settings.access.current_password')) }}</span>
                   <p class="field-hint" id="current-password-hint">{{ t('settings.access.current_password_local') }}</p>
                 </div>
                 {% endif %}
                 <div class="field-row">
                 <div class="field">
-                  <label for="lan-password">{{ t('settings.access.new_password') if lan_password_set else t('settings.access.password') }}</label>
-                  <input id="lan-password" name="lan_password" type="password" class="w-m" autocomplete="new-password" minlength="8" placeholder="{{ t('settings.access.keep_password') if lan_password_set else t('settings.access.min8') }}" aria-describedby="lan-password-hint">
+                  {% set new_label = t('settings.access.new_password') if lan_password_set else t('settings.access.password') %}
+                  <label for="lan-password">{{ new_label }}</label>
+                  <span class="secret"><input id="lan-password" name="lan_password" type="password" class="w-m" autocomplete="new-password" minlength="8" aria-describedby="{% if lan_password_set %}lan-password-saved {% endif %}lan-password-hint">{{ reveal('lan-password', new_label) }}</span>
+                  {% if lan_password_set %}{{ saved_hint('lan-password-saved') }}{% endif %}
                   <p class="field-hint" id="lan-password-hint">{{ t('settings.access.password_hint') }}</p>
                 </div>
                 <div class="field">
                   <label for="lan-password2">{{ t('settings.access.repeat_password') }}</label>
-                  <input id="lan-password2" name="lan_password2" type="password" class="w-m" autocomplete="new-password" minlength="8">
+                  <span class="secret"><input id="lan-password2" name="lan_password2" type="password" class="w-m" autocomplete="new-password" minlength="8">{{ reveal('lan-password2', t('settings.access.repeat_password')) }}</span>
                 </div>
                 </div>
                 <div class="field">

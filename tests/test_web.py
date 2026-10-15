@@ -1721,7 +1721,7 @@ def test_settings_supports_distinct_client_forms_and_ping(monkeypatch):
     assert page.count('id="q_host-') == 2
     assert page.count('id="q_port-') == 2
     assert page.count('id="q_user-') == 2
-    assert page.count('id="q_pass-') == 2
+    assert page.count('<input id="q_pass-') == 2
     assert "main-host" in page
     assert "backup-host" in page
     assert page.count('action="/settings/client/ping"') == 2

@@ -396,3 +396,62 @@ def test_settings_fields_are_as_wide_as_what_they_hold():
     )[0]
     assert 'id="lan-password"' in new_password
     assert 'id="lan-password2"' in new_password
+
+
+def _tag(page: str, field_id: str) -> str:
+    return re.search(rf'<input id="{field_id}"[^>]*>', page).group()
+
+
+def test_a_secret_field_says_saved_only_when_a_secret_is_saved():
+    """A client with no password saved said "Empty — keep as is": there was nothing to keep. A
+    saved password or token is said by a persistent hint the field is described by; a field with
+    nothing saved has none, and no field carries the instruction in its placeholder."""
+    from tow.store import save_secrets
+
+    save_secrets(
+        {
+            "qbittorrent": {"host": "127.0.0.1", "port": 8080, "username": "admin", "password": "pw"},
+            "telegram": {"token": "123456:fake-token", "chat_ids": ["1001"]},
+        }
+    )
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    client.post("/settings/client/add", data={"kind": "transmission"})
+    page = client.get("/settings").text
+    assert "Пусто — не менять" not in page
+    assert "Сохранён</span>" not in page  # no green "Saved" pill beside a label
+    kept = "Сохранён · оставьте пустым, чтобы не менять"
+    saved = _tag(page, "q_pass-client-0")
+    assert 'aria-describedby="q_pass-client-0-saved"' in saved
+    assert f'<p class="field-hint" id="q_pass-client-0-saved">{kept}</p>' in page
+    new = _tag(page, "q_pass-client-1")  # Transmission, just added: nothing saved
+    assert "aria-describedby" not in new
+    assert "placeholder" not in new
+    assert 'id="q_pass-client-1-saved"' not in page
+    assert 'aria-describedby="nf-telegram-token-saved"' in _tag(page, "nf-telegram-token")
+    assert "aria-describedby" not in _tag(page, "nf-discord-webhook_url")  # not connected
+    assert 'placeholder="https://discord.com/api/webhooks/…"' in _tag(page, "nf-discord-webhook_url")
+
+
+def test_secret_fields_have_an_eye_and_the_right_autofill():
+    """A client's password is its own sign-in, a messenger's token, webhook or key is no password
+    at all: neither offers to generate a new password (new-password did). TOW's own new password
+    keeps new-password."""
+    from tow.store import save_secrets
+
+    save_secrets({"qbittorrent": {"host": "127.0.0.1", "port": 8080, "username": "admin", "password": "pw"}})
+    page = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text
+    assert 'autocomplete="section-client-0 username"' in _tag(page, "q_user-client-0")
+    assert 'autocomplete="section-client-0 current-password"' in _tag(page, "q_pass-client-0")
+    for field_id in ("nf-telegram-token", "nf-discord-webhook_url", "nf-whatsapp-apikey"):
+        tag = _tag(page, field_id)
+        assert 'autocomplete="off"' in tag
+        assert 'spellcheck="false"' in tag
+        assert 'autocapitalize="off"' in tag
+    assert 'autocomplete="new-password"' in _tag(page, "lan-password")
+    assert "new-password" not in page.split('id="acc-access"', 1)[0]  # only TOW's own password
+    for field_id in ("q_pass-client-0", "nf-telegram-token", "nf-discord-webhook_url", "lan-password", "lan-password2"):
+        assert re.search(
+            rf'<span class="secret"><input id="{field_id}"[^>]*><button type="button" class="ico reveal" '
+            rf'data-reveal="{field_id}"[^>]* aria-controls="{field_id}" aria-pressed="false"',
+            page,
+        ), field_id
