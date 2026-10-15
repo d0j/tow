@@ -68,6 +68,8 @@ class Topic(TypedDict, total=False):
     waiting_space: dict[str, Any]
     # A selected revision whose client is still verifying existing files, not a failed add.
     verification_pending: dict[str, Any]
+    # when a check first saw its torrent gone from the client (kept while it stays gone)
+    client_removed_at: str
     # the latest result (the Home status colour, AGENTS.md)
     last_ok: bool
     last_ok_at: str
