@@ -203,3 +203,61 @@ def test_a_503_with_retry_after_rests_the_mirror_for_scheduled_checks(monkeypatc
     assert bucket["cool"].get(HOST) == rests_until  # at most the site's own cooldown
     assert not bucket["rate_cool"]
     assert has_available_host("demo", SPEC["fetch_hosts"], ignore_cool=True)  # a manual check still asks
+
+
+def _tracker(hosts=None):
+    from tow.trackers.generic import GenericHttpTracker
+
+    return GenericHttpTracker("demo", {**SPEC, "fetch_hosts": hosts or SPEC["fetch_hosts"]})
+
+
+def test_a_previews_rate_limit_holds_for_the_rest_of_its_run_and_nothing_is_saved(monkeypatch):
+    # Each request of a preview read the saved state again: a 429 on one topic was forgotten by
+    # the next, which asked the same limited origin again.
+    from tow.paths import state_path
+    from tow.store import save_state
+
+    hosts = ["https://site.example", "https://free.example"]
+    calls, _ = install(
+        monkeypatch,
+        lambda r: (
+            httpx.Response(429, headers={"retry-after": "600"})
+            if r.url.host == "site.example"
+            else httpx.Response(200, text="<title>Show A</title>")
+        ),
+        hosts=hosts,
+    )
+    save_state(load_state())
+    before = state_path().read_bytes()
+    run = _tracker(hosts)
+    assert run.fetch_title("https://site.example/topic/1", {}, None, persist=False) == "Show A"
+    assert run.fetch_title("https://site.example/topic/2", {}, None, persist=False) == "Show A"
+    asked = [request.url.host for request in calls]
+    assert asked == ["site.example", "free.example", "free.example"]  # the limited one once
+    assert state_path().read_bytes() == before
+    _tracker(hosts).fetch_title("https://site.example/topic/3", {}, None, persist=False)
+    assert [request.url.host for request in calls][3] == "site.example"  # a new run asks afresh
+
+
+def test_an_applying_run_keeps_a_limit_its_preview_request_saw(monkeypatch):
+    calls, _ = install(monkeypatch, lambda r: httpx.Response(429, headers={"retry-after": "600"}))
+    run = _tracker()
+    with pytest.raises(MirrorFetchError):
+        run.fetch_title("https://site.example/topic/1", {}, None, persist=False)
+    with pytest.raises(MirrorFetchError) as paused:
+        run.fetch_title("https://site.example/topic/2", {}, None, persist=True)
+    assert paused.value.code == "mirrors.all_paused"
+    assert len(calls) == 1
+
+
+def test_a_preview_never_quarantines_a_damaged_state_file(monkeypatch):
+    from tow.paths import state_path
+    from tow.store import StoreCorruptionError
+
+    install(monkeypatch, lambda r: httpx.Response(200, text="page"))
+    state_path().parent.mkdir(parents=True, exist_ok=True)
+    state_path().write_bytes(b"{damaged")
+    with pytest.raises(StoreCorruptionError):
+        pick_and_get("demo", SPEC["fetch_hosts"], "/topic/1", persist=False)
+    assert state_path().read_bytes() == b"{damaged"
+    assert sorted(p.name for p in state_path().parent.iterdir() if p.name.startswith("state")) == ["state.json"]

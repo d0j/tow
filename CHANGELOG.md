@@ -67,6 +67,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A removed topic, a page that is not a torrent or TOW failing on an answer no longer marks the mirror as having a
   problem on Sites or colours the site amber. A sign-in or the day's download limit stays an amber note beside a
   healthy mirror until a download shows it gone, and a mirror that keeps answering refreshes its time on Sites.
+- A preview (dry run) remembers a site's request limit for the rest of the preview instead of asking the limited
+  mirror again for every topic, and never sets a damaged state file aside.
 
 ## [1.30.10] — 2026-10-15
 

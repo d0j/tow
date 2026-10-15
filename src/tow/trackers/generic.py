@@ -19,6 +19,7 @@ from tow.errors import Msg, TowError
 from tow.jsonish import as_dict
 from tow.mirrors import (
     MirrorFetchError,
+    MirrorSession,
     cached_request_credentials,
     has_available_host,
     login_recent,
@@ -338,6 +339,7 @@ class GenericHttpTracker:
         self._pages: dict[str, tuple[float, str]] = {}
         self._login_attempted = False
         self._challenged_logins: dict[str, str | None] = {}
+        self._mirrors = MirrorSession()  # this run's view of the site's mirrors (a preview's 429 holds)
         self._rx = validate_tracker_regex(spec["url_regex"], label="url")
 
     def _keep_page(self, tid: str, page_html: str) -> None:
@@ -570,6 +572,7 @@ class GenericHttpTracker:
             "download_limit": torrent_only and as_bool(self.spec.get("download_limit")),
             "maintenance_markers": list(self.spec.get("maintenance_markers") or []),
             "protection": self._protection_settings(),
+            "session": self._mirrors,
         }
         try:
             return pick_and_get(self.name, hosts, path, **kw)

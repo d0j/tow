@@ -892,6 +892,44 @@ def _invalidate_probe_access(tracker: str, path: str, failure: str, revoke: Call
         pass  # a broken optional probe declaration cannot change the resource's failure
 
 
+class MirrorSession:
+    """What one run - a check, a preview, a web action - learnt of its sites' mirrors, kept by
+    the run's tracker (``GenericHttpTracker``) for all its requests: topic pages, downloads and
+    titles. A preview's 429 then holds for the rest of the preview, as a check's saved one does,
+    and nothing of a preview is saved. A new run starts afresh; nothing is shared between runs.
+    """
+
+    def __init__(self) -> None:
+        self._sites: dict[str, dict[str, Any]] = {}
+
+    def bucket(self, tracker: str, *, persist: bool, cooldown_sec: float) -> dict[str, Any]:
+        """The site's entry this request decides by, and records its answers in. An applying
+        request reads the saved entry each time (other checks write it as well) and adds what
+        this run alone saw; a preview reads it once, never setting a damaged file aside."""
+        known = self._sites.get(tracker)
+        if persist or known is None:
+            fresh = _bucket(load_state(quarantine=persist), tracker)
+            if _clamp(fresh, now=_now(), cooldown_sec=cooldown_sec) and persist:
+                _record(tracker, None, lambda saved: _clamp(saved, now=_now(), cooldown_sec=cooldown_sec))
+            if known is not None:
+                _merge_run_view(fresh, known)
+            self._sites[tracker] = fresh
+        return self._sites[tracker]
+
+
+def _merge_run_view(saved: dict[str, Any], run: dict[str, Any]) -> None:
+    """Keep what this run saw that the saved entry lacks: its pauses and its newer observations
+    (a preview request's 429 within an applying run, which was not saved)."""
+    for key in ("cool", "rate_cool"):
+        for host, until in run[key].items():
+            saved[key][host] = max(float(saved[key].get(host) or 0), until)
+    for key in ("observed", "access"):
+        for host, row in run[key].items():
+            old = saved[key].get(host)
+            if isinstance(row, dict) and not (isinstance(old, dict) and float(old.get("at") or 0) >= row.get("at", 0)):
+                saved[key][host] = row
+
+
 def pick_and_get(
     tracker: str,
     hosts: list[str],
@@ -910,16 +948,15 @@ def pick_and_get(
     download_limit: bool = False,
     maintenance_markers: list[str] | None = None,
     protection: dict[str, Any] | None = None,
+    session: MirrorSession | None = None,
 ) -> tuple[httpx.Response, str]:
     """The first mirror's good answer: ``ok`` says what a good one is (None: any page that is
     not a Cloudflare check). ``download_limit``: the site has a daily download limit, so a
-    page instead of a torrent may be the one saying it is reached."""
+    page instead of a torrent may be the one saying it is reached. ``session``: what the run
+    making this request learnt of the site's mirrors so far (None: this request alone)."""
     if not hosts:
         raise MirrorFetchError("mirrors.no_hosts", failure="config", cls="error", tracker=tracker)
-    state = load_state()
-    b = _bucket(state, tracker)
-    if _clamp(b, now=_now(), cooldown_sec=cooldown_sec) and persist:
-        _record(tracker, None, lambda saved: _clamp(saved, now=_now(), cooldown_sec=cooldown_sec))
+    b = (session or MirrorSession()).bucket(tracker, persist=persist, cooldown_sec=cooldown_sec)
     if b.get("frozen"):
         raise MirrorFetchError("mirrors.frozen", failure="frozen", tracker=tracker)
     wanted = ok is not None  # a torrent: its success shows a sign-in or day's limit gone
