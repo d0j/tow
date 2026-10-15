@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.31.2] — 2026-10-15
+
 ### Fixed
 
 - Restore points, and so updates from Settings, work again: 1.31.0 saved when the request behind a mirror's
