@@ -78,6 +78,9 @@ class Backend(Protocol):
 
     def make_private(self, path: Path, *, created: bool = False) -> bool: ...
 
+    # What a file takes on disk, as the file system says it (``allocated_file_bytes``).
+    def allocated_bytes(self, path: Path) -> int | None: ...
+
     # `tow permissions`: who owns a folder, and giving an install back to its owner.
     def elevated(self) -> bool: ...
 
@@ -227,23 +230,36 @@ def is_plain_dir(info: os.stat_result) -> bool:
     return stat.S_ISDIR(info.st_mode) and not is_link_like(info)
 
 
-def allocated_file_bytes(info: os.stat_result) -> int | None:
-    """Bytes a regular file already reserves on disk, never its unallocated logical holes.
+def allocated_file_bytes(path: Path | str, *, info: os.stat_result | None = None) -> int | None:
+    """Bytes the regular file at ``path`` already reserves on disk, never its unallocated
+    logical holes, and never more than its size; ``info`` is its ``lstat`` when the caller has
+    it. None: not a plain file (a link, junction or mount point never counts), or unknown.
 
-    POSIX reports allocated 512-byte blocks. Windows stat has no allocation count: an
-    ordinary file reserves its size, but sparse or compressed files are unknown here.
-    Those never receive a full-size credit just because their logical length is large.
+    POSIX reports allocated 512-byte blocks. On Windows an ordinary file reserves its size; for
+    a sparse or compressed one the file system says what it takes (the backend's
+    ``allocated_bytes``): a compressed file takes less than its size, a cautious credit. A file
+    never receives a full-size credit just because its logical length is large.
     """
+    if info is None:
+        try:
+            info = Path(path).lstat()
+        except OSError, ValueError:
+            return None
     size = info.st_size
     if not is_plain_file(info) or type(size) is not int or size < 0:
         return None
-    if is_windows():
+    backend = current()
+    if backend.name == "windows":
         attributes = getattr(info, "st_file_attributes", None)
         if type(attributes) is not int or attributes < 0:
             return None
-        if attributes & (stat.FILE_ATTRIBUTE_SPARSE_FILE | stat.FILE_ATTRIBUTE_COMPRESSED):
+        if not attributes & (stat.FILE_ATTRIBUTE_SPARSE_FILE | stat.FILE_ATTRIBUTE_COMPRESSED):
+            return size
+        try:
+            allocated = backend.allocated_bytes(Path(path))
+        except AttributeError, OSError, ValueError:  # a backend without the question: unknown
             return None
-        return size
+        return min(size, allocated) if type(allocated) is int and allocated >= 0 else None
     blocks = getattr(info, "st_blocks", None)
     return min(size, blocks * 512) if type(blocks) is int and blocks >= 0 else None
 

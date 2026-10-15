@@ -552,6 +552,14 @@ class PosixBackend:
             return False
         return self.folder_shared(path) is False
 
+    def allocated_bytes(self, path: Path) -> int | None:
+        """What ``path`` (not followed) takes on disk: its allocated 512-byte blocks."""
+        try:
+            blocks = getattr(path.lstat(), "st_blocks", None)
+        except OSError, ValueError:
+            return None
+        return blocks * 512 if type(blocks) is int and blocks >= 0 else None
+
     # --- handing a folder back to its owner (tow permissions fix) ---------------------------------
 
     def elevated(self) -> bool:

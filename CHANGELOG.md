@@ -135,6 +135,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A torrent that waited for disk space and whose file selection or folder changed while TOW started it is stopped
   and keeps a red error until you check the topic by hand; later checks no longer show it green while it stays
   stopped.
+- Windows: what a torrent client already wrote into a sparse or compressed file now counts toward the free-space
+  check (as the file system reports it), so a torrent waiting for disk space is no longer held back by its own
+  partly downloaded files.
 
 ## [1.30.10] — 2026-10-15
 
