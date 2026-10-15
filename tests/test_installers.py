@@ -561,6 +561,17 @@ def test_ci_keeps_the_required_check_names_and_audits_once():
     assert "${{ matrix.audit && '-Audit' || '' }}" in _runs(jobs["gate"])
 
 
+def test_ci_lets_the_gate_stop_a_hung_test_run_itself():
+    """The job's limit equalled the gate's 30-minute deadline for the test run alone: GitHub ended
+    the job first, and the gate never named and stopped the hung processes."""
+    gate = (ROOT / "scripts" / "gate.ps1").read_text(encoding="utf-8")
+    deadline = re.search(r"\$PytestDeadlineSec = .* else \{ (\d+) \}", gate)
+    assert deadline is not None
+    job = _workflow("ci")[1]["jobs"]["gate"]
+    assert job["timeout-minutes"] * 60 >= int(deadline.group(1)) + 10 * 60
+    assert not any("TOW_GATE_PYTEST_DEADLINE_SEC" in str(step.get("env", {})) for step in job["steps"])
+
+
 def test_ci_compiles_the_base_python_files_with_a_real_python_3_11():
     # ast.parse(feature_version=(3, 11)) accepts f"{d["a"]}" (3.12), which Python 3.11 refuses.
     import tomllib
