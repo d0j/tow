@@ -5,6 +5,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- The Russian hint of the site-access settings no longer uses an English loanword for a browser sign-in.
+
 ## [1.30.10] — 2026-10-15
 
 ### Fixed
