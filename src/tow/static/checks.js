@@ -469,8 +469,10 @@
   if (note?.dataset.checkJob && note.dataset.checkStatus !== "finished") {
     const job = note.dataset.checkJob;
     const words = note.querySelector("[data-check-status]")?.textContent.trim() || "";
+    // Its Cancel goes with it into the message (the note that had it goes).
+    const cancel = note.querySelector('form[action$="/cancel"]')?.getAttribute("action") || "";
     if (scheduler.adopt(job, { subject: note.dataset.checkSubject || "", topic: note.dataset.checkTopic || "", first: 2000 })) {
-      show({ id: `check-${job}`, kind: "info", subject: note.dataset.checkSubject || "", text: words });
+      show({ id: `check-${job}`, kind: "info", subject: note.dataset.checkSubject || "", text: words, cancel });
     }
     note.remove();
     try {

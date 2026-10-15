@@ -223,6 +223,22 @@ verdict.progressPatchesInPlace = true;
 }
 verdict.panelFollowsUpdates = true;
 
+// A waiting check's message can cancel it (its POST form) until it runs.
+{
+  const live = page({ storage: memoryStorage() });
+  const show = (record, options) => live.window.towMessages.showMessage(record, options);
+  show({ id: "check-Q", kind: "info", subject: "Show", text: "queued", cancel: "/check/Q/cancel" });
+  const form = live.$('#flash form[action="/check/Q/cancel"]');
+  assert.ok(form);
+  assert.equal(form.getAttribute("method"), "post");
+  assert.equal(form.querySelector("button").textContent, "js.messages.cancel");
+  show({ id: "check-Q", kind: "info", subject: "Show", text: "running" }, { replace: true, quiet: true });
+  assert.equal(live.$('#flash form[action="/check/Q/cancel"]'), null);
+  show({ id: "check-R", kind: "info", text: "queued", cancel: "https://evil.example/x" });
+  assert.equal(live.$("#flash form"), null); // only this TOW's own address
+}
+verdict.cancelFromMessage = true;
+
 // Signing out: this tab's message history goes, of every install and sign-in, and nothing of it
 // is shown any more.
 {

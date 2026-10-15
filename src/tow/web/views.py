@@ -372,7 +372,9 @@ def check_status_message(job: Mapping[str, Any] | None, *, key: str = "") -> dic
     message_id = "check-" + str(job.get("id") or "")
     subject = str(job.get("subject") or "")
     if job.get("status") in {"queued", "running"}:
-        return record(check_progress(job), "info", subject=subject, message_id=message_id)
+        # While it waits it can still be cancelled from its message (no page follows it any more).
+        cancel = f"/check/{quote(str(job.get('id') or ''))}/cancel" if job.get("status") == "queued" else ""
+        return record(check_progress(job), "info", subject=subject, message_id=message_id, cancel=cancel)
     topic = check_result_flash(job)
     if topic is not None:
         feedback = job.get("feedback")
