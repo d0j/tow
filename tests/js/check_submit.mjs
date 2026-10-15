@@ -54,7 +54,17 @@ const page = (reply) => {
     await settle();
     return { form, button };
   };
-  return { shown, sent, assigned, checks, submit };
+  // The Cancel of a waiting check's message (messages.js draws the same form).
+  const cancel = async () => {
+    const strip = build(document, ["div", { id: "flash" }, ["form", { method: "post", action: "/check/J1/cancel" }, ["button", { class: "ghost sm" }, "Cancel waiting"]]]);
+    document.body.append(strip);
+    const form = strip.querySelector("form");
+    const button = form.querySelector("button");
+    document.dispatch(form, "submit", { submitter: button });
+    await settle();
+    return { form, button };
+  };
+  return { shown, sent, assigned, checks, submit, cancel };
 };
 const json = (body) => Promise.resolve({ ok: true, status: 200, headers: { get: () => "application/json" }, json: async () => body });
 const verdict = {};
@@ -125,5 +135,22 @@ verdict.errorPageStillFollowed = true;
   assert.equal(test.shown[0].text, "js.submit.failed");
 }
 verdict.refusalForgets = true;
+
+// The script's Cancel of a waiting check: no page opens and it says nothing of its own - the
+// check's own entry (removed from the queue, info) is its one record; one that came too late says so.
+{
+  const test = page(() => json({ cancelled: true, job: "J1", message: null }));
+  const { button } = await test.cancel();
+  assert.equal(test.sent[0].url, "http://127.0.0.1/check/J1/cancel");
+  assert.equal(test.assigned.length, 0);
+  assert.equal(test.shown.length, 0);
+  assert.equal(button.disabled, false);
+  assert.equal(test.checks.begun.length, 0); // a Cancel is not a check to follow
+  const late = page(() => json({ cancelled: false, job: "J1", message: { kind: "warn", text: "it already started" } }));
+  await late.cancel();
+  assert.equal(late.assigned.length, 0);
+  assert.equal(JSON.stringify(late.shown.map((record) => record.kind)), JSON.stringify(["warn"]));
+}
+verdict.scriptedCancelSaysNothing = true;
 
 console.log(JSON.stringify(verdict));

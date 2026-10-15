@@ -385,7 +385,9 @@ def check_status_message(job: Mapping[str, Any] | None, *, key: str = "") -> dic
     report = job.get("report")
     ended = job.get("ended_at")
     if not isinstance(report, Mapping):
-        return record(check_job_message(job), str(job.get("kind") or "err"), message_id=message_id)
+        # Cancelled while it waited: a note (the owner asked for it), not a failure.
+        kind = "info" if job.get("cancelled") else str(job.get("kind") or "err")
+        return record(check_job_message(job), kind, message_id=message_id)
     return record(
         t("web.check_all.done_short"),
         str(report.get("kind") or job.get("kind") or "ok"),

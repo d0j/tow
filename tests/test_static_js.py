@@ -231,7 +231,7 @@ def test_a_row_whose_check_ended_is_drawn_again_but_never_under_the_owners_hands
 def test_a_check_is_sent_with_its_kept_action_id_and_followed_where_the_page_is():
     verdict = _verdict("check_submit.mjs")
     assert verdict == dict.fromkeys(verdict, True), verdict
-    assert len(verdict) == 6
+    assert len(verdict) == 7
 
 
 @pytest.mark.allow_system

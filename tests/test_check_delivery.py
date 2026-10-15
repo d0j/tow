@@ -184,3 +184,43 @@ def test_a_waiting_check_can_be_cancelled_from_its_message(client, consumers, mo
     assert waiting["cancel"] == f"/check/{first['job']}/cancel"
     check_jobs.JOBS[first["job"]]["status"] = "running"
     assert "cancel" not in client.get("/check/status?action=A1").json()["message"]
+
+
+@pytest.mark.parametrize("topic", ["t1", ""])
+def test_a_scripted_cancel_leaves_one_record_the_checks_own(client, consumers, monkeypatch, topic):
+    # The owner wants no duplication: the cancelled check's own entry ("removed from the queue",
+    # info) is its one record; the Cancel sent by the script says nothing of its own.
+    from tow.web import views
+
+    _checks(monkeypatch, {"t1": {"ok": True}})
+    route = f"/topics/{topic}/check" if topic else "/check"
+    ack = client.post(route, data={"action_id": "A1", "mode": "apply"}, headers=FETCH).json()
+    check_jobs.JOBS[ack["job"]]["status"] = "queued"
+    before = len(views._FLASHES._records)
+    cancelled = client.post(f"/check/{ack['job']}/cancel", headers=FETCH)
+    assert cancelled.status_code == 200
+    assert cancelled.json() == {"cancelled": True, "job": ack["job"], "message": None}
+    assert len(views._FLASHES._records) == before  # no message of its own
+    message = client.get("/check/status?action=A1").json()["message"]
+    assert (message["kind"], message["id"]) == ("info", f"check-{ack['job']}")
+    assert "removed from the queue" in message["text"]
+
+
+def test_a_scripted_cancel_that_came_too_late_says_so_where_the_page_is(client, consumers, monkeypatch):
+    _checks(monkeypatch, {"t1": {"ok": True}})
+    ack = client.post("/topics/t1/check", data={"action_id": "A1"}, headers=FETCH).json()
+    check_jobs.JOBS[ack["job"]]["status"] = "running"
+    late = client.post(f"/check/{ack['job']}/cancel", headers=FETCH).json()
+    assert late["cancelled"] is False
+    assert late["message"]["kind"] == "warn"
+    assert "redirect" not in late
+
+
+def test_a_cancel_without_the_script_keeps_its_message(client, consumers, monkeypatch):
+    _checks(monkeypatch, {"t1": {"ok": True}})
+    response = client.post("/check", data={"mode": "apply"}, follow_redirects=False)
+    job = parse_qs(urlsplit(response.headers["location"]).query)["check_job"][0]
+    check_jobs.JOBS[job]["status"] = "queued"
+    native = client.post(f"/check/{job}/cancel", follow_redirects=False)
+    assert native.status_code == 303
+    assert parse_qs(urlsplit(native.headers["location"]).query)["flash"]
