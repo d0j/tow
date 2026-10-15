@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import gc
+import sys
 import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -114,19 +117,53 @@ def test_repeated_broken_markup_is_read_in_one_pass(fragment):
     """An unended ``<input`` (or any unended tag) was read again to the end of the page from every
     one of them, by a regex and then by an HTML parser: quadratic in 64 KiB.
 
-    Timed by growth, not by a wall-clock limit a slow runner misses: four times the page takes
-    about four times as long when reading is linear, sixteen times when it is quadratic."""
+    Timed by growth, not by a wall-clock limit a slow runner misses: sixteen times the page takes
+    at most sixteen times as long when reading is linear, 256 times when it is quadratic; the
+    bound sits between them. A read is timed on this thread's own clock, which stands still
+    while the thread waits for a processor: on a busy runner a wall clock counted the waits,
+    and one wait during a read of a millisecond looked like quadratic growth (7 % of the runs
+    with 2.5 times more work than cores). Each size keeps its fastest of fifteen interleaved
+    reads, without the garbage collector's pauses."""
 
-    def seconds(size: int) -> float:
-        page = fragment * (size // len(fragment))
-        best = float("inf")
-        for _ in range(3):  # the fastest of three runs: a busy machine slows one, not the shape
-            started = time.perf_counter()
-            assert classify(200, page, torrent_wanted=True) in {Verdict.UNEXPECTED, Verdict.LOGIN_NEEDED}
-            best = min(best, time.perf_counter() - started)
-        return best
+    small, large = (fragment * (size // len(fragment)) for size in (4096, 65536))  # 64 KiB: the scan's limit
+    clock = _thread_clock()
+    best = {small: float("inf"), large: float("inf")}
+    collecting = gc.isenabled()
+    gc.disable()
+    try:
+        until = time.monotonic() + 5  # a quadratic regression fails without fifteen slow reads
+        for _ in range(15):
+            for page, fastest in best.items():
+                started = clock()
+                assert classify(200, page, torrent_wanted=True) in {Verdict.UNEXPECTED, Verdict.LOGIN_NEEDED}
+                best[page] = min(fastest, clock() - started)
+            if time.monotonic() > until:
+                break
+    finally:
+        if collecting:
+            gc.enable()
+    assert best[large] < 64 * best[small], (best[small], best[large])
 
-    assert seconds(65536) < 8 * seconds(16384) + 0.01
+
+def _thread_clock() -> Callable[[], float]:
+    """The running time of the calling thread, in a unit of its own (only ratios are compared).
+    Windows counts it in processor cycles (QueryThreadCycleTime): its thread_time advances in
+    15.6 ms steps, longer than a read."""
+    if sys.platform != "win32":
+        return time.thread_time
+    import ctypes
+
+    kernel32 = ctypes.WinDLL("kernel32")  # its own function objects: no shared signature changes
+    kernel32.GetCurrentThread.restype = ctypes.c_void_p
+    kernel32.QueryThreadCycleTime.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulonglong)]
+    thread, cycles = kernel32.GetCurrentThread(), ctypes.c_ulonglong()
+
+    def read() -> float:
+        if not kernel32.QueryThreadCycleTime(thread, ctypes.byref(cycles)):
+            raise OSError("QueryThreadCycleTime failed")
+        return float(cycles.value)
+
+    return read
 
 
 def test_removed_topic_and_daily_limit_keep_precedence_over_a_long_sign_in_page(monkeypatch):
