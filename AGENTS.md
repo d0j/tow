@@ -44,7 +44,8 @@ tracker degradation from a client or TOW failure before changing state.
 - **Every action button is 26 px high, everywhere** (Save, Check, Add, Remove, Cancel…), with 12.5 px text. The size
   comes only from the shared `button, .btn` rule in `app.css` (`--btn-h: 1.625rem`); no page, card or form sizes a
   button itself, and there is no inline `style=`. Square icon buttons (`.ico`, `.row-ico`, `.flash-x`) are the only
-  exception. Inputs and selects stay 40 px (`--field-h`).
+  exception. Inputs and selects are 36 px with 14 px text, 44 px with 16 px text on phones and touch
+  screens (`--field-h`, also from `app.css` only).
 - `tests/test_ui_standard.py` enforces this; a new screen is also measured in a real browser before release.
 - Settings cards follow one pattern: status pill, "How to connect" steps, fields, then the buttons. Messengers that
   are not connected are collapsed to one line; connected ones are expanded.

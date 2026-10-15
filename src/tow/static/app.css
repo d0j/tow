@@ -5,7 +5,8 @@
   color-scheme: dark;
   --btn-h: 1.625rem;
   --btn-h-sm: 1.625rem;
-  --field-h: 2.5rem;
+  /* A field: 36 px on a desktop, 44 px on a phone or a touch screen (below). */
+  --field-h: 2.25rem;
   --bg: light-dark(#f4f6fa, #0b0d12);
   --panel: light-dark(#ffffff, #141822);
   --panel2: light-dark(#eef1f6, #1a1f2b);
@@ -220,13 +221,21 @@ main > .card + .card, main > .card + form { margin-top: 1rem; }
 .pill.mut { background: var(--panel2); color: var(--mut); }
 .pill.new { background: var(--new-row); color: var(--acc); } /* new data observed: an event, blue */
 label { display: block; margin: .55rem 0 .2rem; color: var(--mut); font-size: 12px; }
+/* A field's text is 14 px (16 px on a touch screen, below: iOS zooms into a smaller one). */
 input, textarea, select {
   width: 100%; box-sizing: border-box; background: var(--panel2); color: var(--fg);
-  border: 1px solid var(--line); padding: .5rem .65rem; border-radius: 8px;
-  font: inherit;
+  border: 1px solid var(--line); padding: .3rem .6rem; border-radius: 8px;
+  font: inherit; font-size: 14px; line-height: 1.45;
 }
-/* One field height everywhere, equal to the buttons. */
+textarea { padding-block: .4rem; }
+/* A placeholder reads like a hint (the browser's grey was 3.6:1 in the dark theme). */
+::placeholder { color: var(--mut); opacity: 1; }
+/* One field height everywhere (--field-h): 36 px, 44 px on a phone or a touch screen. */
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { height: var(--field-h); }
+@media (max-width: 720px), (pointer: coarse) {
+  :root { --field-h: 2.75rem; }
+  input, textarea, select { font-size: 16px; }
+}
 input[type="checkbox"], input[type="radio"] { width: auto; }
 input:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
   outline: 2px solid var(--acc); outline-offset: 2px;
@@ -246,7 +255,7 @@ button.sm, .btn.sm { min-height: var(--btn-h-sm); padding: 0 .6rem; }
 button.ico, button.row-ico, button.flash-x { min-height: 0; }
 .folder-input { position: relative; min-width: 0; }
 .folder-input input[role="combobox"] { padding-right: 2.6rem; }
-.folder-toggle { position: absolute; right: .4rem; top: .4375rem; width: var(--btn-h); height: var(--btn-h); padding: 0; }
+.folder-toggle { position: absolute; right: .4rem; top: calc((var(--field-h) - var(--btn-h)) / 2); width: var(--btn-h); height: var(--btn-h); padding: 0; }
 .folder-toggle[hidden] { display: none; }
 .folder-options {
   position: absolute; top: calc(100% + .2rem); left: 0; right: 0; z-index: 15;
@@ -885,7 +894,7 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .backup-card .section-note { margin: 0; }
 .portable-import-form { display: grid; gap: .4rem; max-width: 42rem; }
 .portable-import-form label { margin: 0; }
-/* L1: 40 px like the other fields; its 26 px button sits centred inside. */
+/* L1: as tall as the other fields; its 26 px button sits centred inside. */
 .portable-import-form input[type="file"], .content-picker input[type="file"] {
   height: var(--field-h); padding: calc((var(--field-h) - var(--btn-h-sm)) / 2 - 1px) .35rem; font-size: 12.5px; line-height: var(--btn-h-sm);
 }
@@ -1001,7 +1010,7 @@ svg.i.xs { width: .75rem; height: .75rem; stroke-width: 2.4; }
   border-radius: 999px; padding: 0 .6rem;
 }
 .chip.on, .chip:hover { color: var(--fg); border-color: var(--acc2); background: var(--panel2); }
-/* L1: the sort select is a field like every other select (40 px). */
+/* L1: the sort select is a field like every other select (--field-h). */
 #list-sort { width: auto; max-width: 100%; }
 .sort-picker { position: relative; }
 .sort-picker[hidden], .sort-menu[hidden] { display: none; }
