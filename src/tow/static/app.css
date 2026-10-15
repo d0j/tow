@@ -1141,7 +1141,8 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 /* The master-key note: its "Copy the command" stays one 26 px line, beside the text on a wide
    page and under it on a phone (the text column shrank it into two lines before). */
 .notice.secret-store { flex-wrap: wrap; margin-bottom: 1rem; }
-.notice.secret-store > .notice-text { flex: 1 1 24rem; }
+/* Beside its icon on a phone too: never wider than the line left after the icon (1 rem + gap). */
+.notice.secret-store > .notice-text { flex: 1 1 min(24rem, calc(100% - 1.5rem)); }
 .secret-store-copy {
   display: inline-flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: .4rem; margin-left: .4rem;
 }
