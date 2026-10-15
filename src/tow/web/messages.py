@@ -95,10 +95,12 @@ def record(
     at: float | None = None,
     href: str = "",
     link: str = "",
+    cancel: str = "",
 ) -> dict[str, str]:
     """One message: ``text`` in the page's language, its kind, what it is about, its identity in
-    the page's history (a new random one by default), when it was said, and the page it offers
-    (``href``, named ``link``: "View results"), a page of this TOW only."""
+    the page's history (a new random one by default), when it was said, the page it offers
+    (``href``, named ``link``: "View results") and the address its Cancel posts to (``cancel``:
+    a check that waits) - addresses of this TOW only."""
     said = {
         "id": message_id or secrets.token_urlsafe(9),
         "text": text,
@@ -108,6 +110,8 @@ def record(
     }
     if (target := _local_href(href)) and link:
         said.update(href=target, link=" ".join(str(link).split())[:80])
+    if cancel_at := _local_href(cancel):
+        said["cancel"] = cancel_at
     return said
 
 

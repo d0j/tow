@@ -65,6 +65,7 @@
         at: at > 0 ? (at < 1e11 ? at * 1000 : at) : stamp,
         href: localHref(raw?.href),
         link: clean(raw?.link, 80),
+        cancel: localHref(raw?.cancel),
         undo: clean(raw?.undo, 64),
         undoUntil: Number(raw?.undoUntil) || 0,
         read: raw?.read === true,
@@ -401,11 +402,22 @@
   };
 
   // A message's links and buttons (Details, Undo), in one place the strip and the history share.
-  const actionShape = (item) => `${item.href}|${item.link}|${center.undoLive(item)}`;
+  // A waiting check's Cancel: the same POST its page had (/check/<job>/cancel).
+  const cancelForm = (item) => {
+    const form = element("form", "msg-cancel");
+    form.setAttribute("method", "post");
+    form.setAttribute("action", item.cancel);
+    const button = element("button", "ghost sm", t("js.messages.cancel"));
+    button.type = "submit";
+    form.append(button);
+    return form;
+  };
+  const actionShape = (item) => `${item.href}|${item.link}|${center.undoLive(item)}|${item.cancel || ""}`;
   const actionsOf = (item) => {
     const box = element("span", "msg-actions");
     box.dataset.shape = actionShape(item);
     if (item.href) box.append(link(item));
+    if (item.cancel) box.append(cancelForm(item));
     if (center.undoLive(item)) box.append(undoForm(item));
     return box;
   };

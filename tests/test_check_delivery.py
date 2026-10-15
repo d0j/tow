@@ -172,3 +172,15 @@ def test_the_following_page_has_no_link_to_a_waiting_result(client, consumers, m
     consumers[0].run()
     note = BeautifulSoup(client.get(f"/?check_job={job}").text, "html.parser").select_one("#check-activity")
     assert note.select_one(f'a[href="/?check_result={job}#check-result"]')  # finished: its results
+
+
+def test_a_waiting_check_can_be_cancelled_from_its_message(client, consumers, monkeypatch):
+    # Without the page that followed it, the message is the only place a waiting check is seen:
+    # it carries the cancel while the check waits, and loses it once it runs or has ended.
+    _checks(monkeypatch, {"t1": {"ok": True}})
+    first = client.post("/topics/t1/check", data={"action_id": "A1"}, headers=FETCH).json()
+    check_jobs.JOBS[first["job"]]["status"] = "queued"
+    waiting = client.get("/check/status?action=A1").json()["message"]
+    assert waiting["cancel"] == f"/check/{first['job']}/cancel"
+    check_jobs.JOBS[first["job"]]["status"] = "running"
+    assert "cancel" not in client.get("/check/status?action=A1").json()["message"]
