@@ -7,8 +7,10 @@ name: real systems
 # install made the way the owner makes one, started by the OS and turned off again
 # (tests/integration/test_real_autostart.py). Those tests are skipped without TOW_REAL_CLIENTS /
 # TOW_REAL_AUTOSTART, which only this workflow sets: never on a development machine. It runs on
-# pull requests that touch that code, once a week (new runner images, new client versions) and
-# by hand. Not a required check: the path filter would leave it pending on other pull requests.
+# pull requests that touch that code and when such a change reaches main, once a week (new runner
+# images, new client versions) and by hand. Not a required check: the path filter would leave it
+# pending on other pull requests. GitHub compares only the first 300 changed files with the
+# filter: a larger change may skip it, and the weekly run still covers it.
 
 on:
   pull_request:
@@ -19,7 +21,56 @@ on:
       - "src/tow/autostart/**"
       - "src/tow/check/**"
       - "src/tow/supervisor/**"
+      # What the client test runs through (torrents, folders, settings, state, `tow check`) and the
+      # install the autostart test makes (installers, bundle, launchers, the OS layer).
+      - "src/tow/torrent.py"
+      - "src/tow/folders.py"
+      - "src/tow/config.py"
+      - "src/tow/store.py"
+      - "src/tow/storage/**"
+      - "src/tow/platform/**"
+      - "src/tow/cli/**"
+      - "install/**"
+      - "scripts/build-bundle.py"
+      - "scripts/tow*"
+      # The tests' own helpers and guard (its real_system rule), and the locked dependencies (a
+      # qbittorrent-api bump).
       - "tests/integration/**"
+      - "tests/helpers.py"
+      - "tests/conftest.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - ".github/workflows/real.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/tow/clients/**"
+      # The scan that finds the client modules (tow.clients.spec discovers them through it).
+      - "src/tow/plugins.py"
+      - "src/tow/autostart/**"
+      - "src/tow/check/**"
+      - "src/tow/supervisor/**"
+      # What the client test runs through (torrents, folders, settings, state, `tow check`) and the
+      # install the autostart test makes (installers, bundle, launchers, the OS layer).
+      - "src/tow/torrent.py"
+      - "src/tow/folders.py"
+      - "src/tow/config.py"
+      - "src/tow/store.py"
+      - "src/tow/storage/**"
+      - "src/tow/platform/**"
+      - "src/tow/cli/**"
+      - "install/**"
+      - "scripts/build-bundle.py"
+      - "scripts/tow*"
+      # The tests' own helpers and guard (its real_system rule), and the locked dependencies (a
+      # qbittorrent-api bump).
+      - "tests/integration/**"
+      - "tests/helpers.py"
+      - "tests/conftest.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
       - ".github/workflows/real.yml"
   schedule:
     - cron: "41 4 * * 2"

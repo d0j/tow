@@ -466,21 +466,42 @@ def test_installers_run_the_release_smokes_before_a_tag():
 
 def test_real_systems_run_on_their_code_weekly_and_by_hand_never_unbounded():
     """real.yml: the only place the tests/integration tests run (their variables are set nowhere
-    else), on pull requests that touch what they test, weekly and by hand; every job bounded."""
+    else), on pull requests that touch what they test and when that reaches main, weekly and by
+    hand; every job bounded."""
     text, flow = _workflow("real")
     assert flow["name"] == "real systems"
     triggers = flow[True]  # YAML 1.1 reads the key `on` as True
     assert triggers["schedule"]
     assert "workflow_dispatch" in triggers
+    # Before, a change to the test helpers, the OS layer, the launchers or a client library in
+    # uv.lock never ran these tests before the weekly run.
     assert set(triggers["pull_request"]["paths"]) == {
         "src/tow/clients/**",
         "src/tow/plugins.py",
         "src/tow/autostart/**",
         "src/tow/check/**",
         "src/tow/supervisor/**",
+        "src/tow/torrent.py",
+        "src/tow/folders.py",
+        "src/tow/config.py",
+        "src/tow/store.py",
+        "src/tow/storage/**",
+        "src/tow/platform/**",
+        "src/tow/cli/**",
+        "install/**",
+        "scripts/build-bundle.py",
+        "scripts/tow*",
         "tests/integration/**",
+        "tests/helpers.py",
+        "tests/conftest.py",
+        "pyproject.toml",
+        "uv.lock",
+        ".python-version",
         ".github/workflows/real.yml",
     }
+    assert triggers["push"] == {"branches": ["main"], "paths": triggers["pull_request"]["paths"]}
+    for path in triggers["pull_request"]["paths"]:  # no filter names a file that is gone
+        assert next(ROOT.glob(path.removesuffix("/**")), None), path
     jobs = flow["jobs"]
     assert set(jobs) == {"clients", "autostart"}
     assert all(job["timeout-minutes"] <= 40 for job in jobs.values())
