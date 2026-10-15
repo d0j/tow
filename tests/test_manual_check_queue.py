@@ -887,3 +887,21 @@ def test_a_new_topics_first_check_from_the_queue_says_what_a_check_at_once_says(
         assert ended["flash"] == i18n.t("web.topics.added_check_failed")
         assert "add_check_fail" in events
         assert [str(error) for error in notified] == ["storage exploded"]
+
+
+def test_a_direct_row_check_that_crashes_says_so_instead_of_a_500(client, monkeypatch):
+    # Without the page's script a row's Check ran at once; a store or transaction failure there
+    # answered a bare HTTP 500 and logged nothing, unlike the same failure of a queued check.
+    from tow.check_transaction import CheckTransactionError
+
+    events = []
+    monkeypatch.setattr("tow.web.services.log_event", lambda kind, **kw: events.append((kind, kw.get("reason"))))
+
+    def crash(**_kw):
+        raise CheckTransactionError("synthetic journal failure")
+
+    monkeypatch.setattr("tow.web.services.run_check", crash)
+    response = client.post("/topics/t1/check", follow_redirects=False)
+    assert response.status_code == 303
+    assert "CheckTransactionError" in flash_of(response.headers["location"])
+    assert events == [("check_blocked", "result_unconfirmed")]

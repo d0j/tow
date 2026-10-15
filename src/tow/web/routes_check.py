@@ -6,6 +6,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse, Response
 
 from tow.check import blocked_by_previous_revision
+from tow.log import error_fields
 from tow.store import CheckBusyError, SecretStoreError
 from tow.web import check_jobs, services
 from tow.web.check_actions import accept_check, action_of, enqueue_check, topic_feedback
@@ -94,6 +95,9 @@ def _check_topic(tid: str, *, adopted: bool = False, action: str = "") -> Respon
     except SecretStoreError as exc:
         services.record_check_failure(exc, how="manual")
         return flash_redirect("/", "web.check.blocked", "err")
+    except Exception as exc:  # noqa: BLE001 - as a queued check says it (check_actions.perform_check), never a bare 500
+        services.log_event("check_blocked", how="manual", reason="result_unconfirmed", **error_fields(exc))
+        return flash_redirect("/", "web.check_all.not_run", "err", error=type(exc).__name__)
     return feedback_redirect(topic_feedback(tid, topic_check_row(tid, out), adopted=adopted))
 
 

@@ -212,6 +212,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   client shows garbled is still taken for a possible overlap.
 - The episodes in an "added" or "updated" message come from the topic's title as its progress reads them: a
   voice-over studio named `(2x2)` is no longer "S02E02", and `Сезон: 2 / Серии: 1-12 из 12` gives "S02E01–12 of 12".
+- A topic's Check in a browser without scripts that fails inside TOW (a store or journal error) shows "the check
+  was not run" and logs it, as a queued check does, instead of an error page.
 
 ## [1.31.2] — 2026-10-15
 
