@@ -115,6 +115,12 @@ class ManagedClient:
     START_WAIT_SEC = 60.0
     # How often a start the client dropped is given again before a stopped torrent is judged.
     START_REPEATS = 2
+    # How long an add waits for its client's check of the data it found before it is handed over
+    # unfinished (``_awaiting_initial_check``). Data already on disk is read at disk speed: the
+    # check of a small or partly present torrent ends within a second or two, and 5 s leaves room
+    # for a slow disk while a run of many adds never blocks for a minute each (the start wait); a
+    # check still running then is finished by the next passes.
+    INITIAL_CHECK_GRACE_SEC = 5.0
 
     # --- primitives every client implements ---------------------------------------------------
 
@@ -468,6 +474,30 @@ class ManagedClient:
         del info
         return False
 
+    def _verification_state(self, infohash: str) -> dict[str, Any] | None:
+        """The torrent's state and tags (None: gone). A client overrides this with a query that
+        skips the file list: it is polled while the client checks the files."""
+        return self.inspect_torrent(infohash)
+
+    def _after_initial_check(self, infohash: str, info: dict[str, Any]) -> dict[str, Any]:
+        """The client's check of the data a new add found, given INITIAL_CHECK_GRACE_SEC to end:
+        the torrent read again when it ended (the add goes on as any other), else ``info`` as it
+        was - the add is handed over unfinished then."""
+        try:
+            self._wait(
+                infohash,
+                lambda current: not self._defers_initial_check(current),
+                "client.managed.verification_pending",
+                polls=self.START_POLLS,
+                timeout=self.INITIAL_CHECK_GRACE_SEC,
+                read=self._verification_state,
+            )
+        except ClientError as error:
+            if error.code != "client.managed.verification_pending":
+                raise
+            return info
+        return self._inspect_with_files(infohash)
+
     def _awaiting_initial_check(
         self,
         infohash: str,
@@ -752,6 +782,8 @@ class ManagedClient:
         try:
             if not paths_equal(str(added.get("save_path") or ""), destination):
                 raise self._fail("client.managed.wrong_folder")
+            if self._defers_initial_check(added) and added.get("files"):
+                added = self._after_initial_check(infohash, added)
             if start and self._preparing(added) and added.get("files"):
                 try:
                     receipt = self._verification_receipt(infohash, added, metadata, selected)
@@ -846,6 +878,8 @@ class ManagedClient:
             raise self._fail("client.managed.not_owned")
         pending = PENDING in self._tags(before)
         selected = {int(index) for index in selected_indices}
+        if pending and self._defers_initial_check(before):
+            before = self._after_initial_check(infohash, before)
         if pending and self._preparing(before) and not keep_stopped:
             try:
                 receipt = self._verification_receipt(infohash, before, metadata, selected)

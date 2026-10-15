@@ -856,6 +856,29 @@ def test_transmission_initial_verification_is_handed_over_before_its_selection(
         assert server.calls.index("torrent-set") < server.calls.index("torrent-start")
 
 
+class ShortCheckTransmission(CheckingTransmission):
+    """transmission-daemon whose check of the data a paused add found ends after a few reads (the
+    small torrents of the real-client tests: within a second)."""
+
+    def _row(self, t: Torrent) -> dict[str, Any]:
+        if self.reads >= 3:
+            self.checking = False
+        return super()._row(t)
+
+
+@pytest.mark.parametrize("start", [False, True])
+def test_transmission_short_initial_check_is_waited_for_and_the_add_finished_at_once(tmp_path, start):
+    server = ShortCheckTransmission()
+    adapter = _transmission(server)
+    adapter.START_POLLS = 50
+    info = adapter.add_torrent_selected(TORRENT, str(tmp_path), H, [E01], start=start)
+    assert not server.checking
+    assert _wanted(info) == [index == E01 for index in range(3)]
+    assert info["tags"] == ["tow"]
+    assert server.torrents[K].running is start
+    assert "torrent-stop" not in server.calls  # the check was never cancelled
+
+
 @pytest.mark.parametrize(
     ("change", "code"),
     [("owner", "not_owned"), ("folder", "wrong_folder"), ("files", "wrong_selection"), ("gone", "missing")],

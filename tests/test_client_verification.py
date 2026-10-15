@@ -89,6 +89,69 @@ def test_timeout_keeps_verified_selection_and_does_not_stop_the_check():
     assert receipt["hash"] == H
 
 
+def _checks_for(client, pauses):
+    """The client's own check of the data an add found ends after TOW paused ``pauses`` times
+    between its reads (``seen["pauses"]``: how often TOW waited)."""
+    seen = {"pauses": 0}
+
+    def pause():
+        seen["pauses"] += 1
+        if seen["pauses"] >= pauses and str(client.torrents[H]["state"]).startswith("checking"):
+            client.torrents[H]["state"] = "stoppedDL"
+
+    client._sleep = pause
+    return seen
+
+
+@pytest.mark.parametrize("start", [True, False])
+def test_a_short_initial_check_is_waited_for_and_the_add_finished_at_once(start):
+    """Transmission checks the data an add found: a check that ends within the grace period (the
+    real clients' 75 KB end within a second) is waited for, and the add goes on as any other -
+    its selection applied stopped and read back, then started or left stopped, released."""
+    client = VerifyingClient()
+    client.initial_check, client.checking = True, False
+    client.START_POLLS = 600
+    _checks_for(client, 3)
+    info = client.add_torrent_selected(TORRENT, "D:/tv", H, [E01], start=start)
+    assert [call[0] for call in client.calls] == ["add", "set_wanted", *(["start"] if start else []), "labels"]
+    assert info["tags"] == ["tow"]
+    assert client.wanted_torrent_indices() == {E01}
+    assert client.torrents[H]["state"] == ("downloading" if start else "stoppedDL")
+
+
+def test_a_long_initial_check_is_handed_over_after_the_grace_period(monkeypatch):
+    client = VerifyingClient()
+    client.initial_check, client.checking = True, False
+    client.START_POLLS = 600
+    now = {"value": 0.0}
+    seen = _checks_for(client, 10**6)  # never ends here
+
+    def monotonic():
+        now["value"] += 0.5
+        return now["value"]
+
+    monkeypatch.setattr("tow.clients.managed.time.monotonic", monotonic)
+    with pytest.raises(ClientVerificationPending) as error:
+        client.add_torrent_selected(TORRENT, "D:/tv", H, [E01], start=False)
+    assert error.value.receipt["phase"] == "awaiting_initial_check"
+    assert [call[0] for call in client.calls] == ["add"]  # never stopped: that cancels the check
+    assert 1 < seen["pauses"] <= client.INITIAL_CHECK_GRACE_SEC / 0.5  # waited the grace period, no longer
+    assert client.INITIAL_CHECK_GRACE_SEC <= 10  # never the minute-long wait again
+
+
+def test_a_pending_selection_retry_waits_for_a_short_initial_check_too():
+    client = VerifyingClient()
+    client.initial_check, client.checking = True, False
+    client._add_stopped(TORRENT, "D:/tv", ["tow", "tow-pending"])
+    client.calls.clear()
+    client.START_POLLS = 600
+    _checks_for(client, 2)
+    info = client.configure_torrent_selection(TORRENT, H, [E01], ensure_started=True)
+    assert [call[0] for call in client.calls] == ["stop", "set_wanted", "start", "labels"]
+    assert info["tags"] == ["tow"]
+    assert client.wanted_torrent_indices() == {E01}
+
+
 def test_retry_during_check_is_read_only_and_keeps_the_same_task():
     client = VerifyingClient()
     _pending(client)
