@@ -68,7 +68,9 @@ flowchart TD
   defer like a file check. A torrent the client does not list blocks only after two client answers at least
   600 s apart. A deferred add gets exactly one start, also when it is complete. Transmission hands over a paused
   add while its first check runs (receipt phase `awaiting_initial_check`, saved as `unapplied_receipt`, never as
-  `receipt`: 1.30.10 and older refuse it instead of reading it as an applied selection) and applies the selection,
+  `receipt`: 1.30.5-1.30.10 block it before any client change instead of reading it as an applied selection;
+  versions before 1.30.5 know no receipts, so a rollback below 1.30.5 during that first check can take a "once"
+  topic for done while its torrent stays stopped) and applies the selection,
   stopped and read back, when it ends. The receipt keeps its first `since`; after 12 hours it shows a red
   `check.verification_overdue` (notified once) and is still finished later. Meanwhile the site is asked
   read-only on the normal schedule (revision probe or page magnet, never a `.torrent`), and a newer revision is
