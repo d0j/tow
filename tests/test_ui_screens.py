@@ -88,6 +88,62 @@ def test_the_sign_in_dialog_names_the_site_and_says_where_the_password_goes(clie
     assert note == "Хранится зашифрованным, не показывается и не пишется в журнал."
 
 
+@pytest.mark.parametrize(
+    ("form", "field", "element", "advanced"),
+    [
+        ({"login_path": "relative"}, "login_path", "site-login-path-rutor", True),
+        ({"download_href_regex": "(a*)*"}, "download_href_regex", "site-href-rx-rutor", True),
+        ({"new_name": "kinozal"}, "new_name", "site-new-name-rutor", True),
+        ({"fetch_hosts": "ftp://rutor.info"}, "fetch_hosts", "site-hosts-rutor", False),
+    ],
+)
+def test_a_refused_site_save_reopens_the_site_at_its_field(client, form, field, element, advanced):
+    """A refused save of a site's card went back to a closed list with a message only. It now
+    reopens the site's row at the refused field: marked invalid, focused, and the Advanced part
+    open when the field lives there."""
+    from urllib.parse import parse_qs, urlsplit
+
+    response = client.post("/sites/rutor", data={"fetch_hosts": "http://rutor.info", **form}, follow_redirects=False)
+    location = response.headers["location"]
+    query = parse_qs(urlsplit(location).query)
+    assert (query["open"], query["field"]) == (["rutor"], [field])
+    row = BeautifulSoup(client.get(location).text, "html.parser").select_one("#site-row-rutor")
+    assert row.select_one("details.row-edit").has_attr("open")
+    bad = row.select_one(f"#{element}")
+    assert bad["aria-invalid"] == "true"
+    assert bad.has_attr("autofocus")
+    assert row.select_one("details.advanced").has_attr("open") is advanced
+
+
+def test_the_site_card_starts_with_the_sign_in(client):
+    """The user name and password were the last of nine fields; what a preset fills in now waits
+    under Advanced, closed, and the mirrors stay in view."""
+    row = BeautifulSoup(client.get("/sites?open=rutor").text, "html.parser").select_one("#ed-site-rutor")
+    ids = [node["id"] for node in row.select("input[id], textarea[id], select[id]")]
+    assert ids.index("site-user-rutor") < ids.index("site-pass-rutor") < ids.index("site-hosts-rutor")
+    advanced = row.select_one("details.advanced")
+    assert not advanced.has_attr("open")
+    for hidden in ("site-new-name-rutor", "site-url-rx-rutor", "site-download-path-rutor", "site-login-path-rutor"):
+        assert advanced.select_one(f"#{hidden}") is not None
+    # No "keep as is" over a password that was never saved.
+    assert not row.select_one("#site-pass-rutor").has_attr("placeholder")
+
+
+def test_a_sign_in_target_on_a_site_without_a_sign_in_page_opens_advanced(client):
+    """The "site asks to sign in" link of a site without a sign-in path focuses its user name; the
+    sign-in path it also needs is under Advanced, which opens for it."""
+    page = client.get("/sites?open=rutor&fix=site_login:rutor").text
+    row = BeautifulSoup(page, "html.parser").select_one("#site-row-rutor")
+    assert row.select_one("#site-user-rutor").has_attr("autofocus")
+    assert row.select_one("details.advanced").has_attr("open")
+
+
+def test_the_regex_placeholders_show_single_backslashes(client):
+    page = BeautifulSoup(client.get("/sites").text, "html.parser")
+    for field in page.select('[name="download_href_regex"]'):
+        assert field["placeholder"] == r"download\.php\?id=(\d+)"
+
+
 def test_a_cleared_follow_box_is_saved_as_once_on_edit(client, monkeypatch):
     assert _add(client, monkeypatch).status_code == 303
     topic = load_state()["topics"][0]

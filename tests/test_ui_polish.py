@@ -306,13 +306,15 @@ def test_site_form_messages_name_the_field_and_no_config_keys():
 
 def test_site_form_starts_with_the_link_and_folds_the_patterns(client):
     page = client.get("/sites").text
-    form = page[page.index('<form class="new-site-form"') : page.index("</form>", page.index('class="new-site-form"'))]
+    form = page[
+        page.index('<form class="form-grid new-site-form"') : page.index("</form>", page.index('new-site-form"'))
+    ]
     assert '<h2 id="add-site-title" class="add-title">Добавить сайт</h2>' in form
     assert form.index('id="from-url"') < form.index('id="site-name"') < form.index('id="site-hosts"')
     advanced = form[form.index('<details class="advanced"') :]
     for field in ("site-regex", "site-dl", "site-login-path", "site-topic-path", "site-href-rx"):
         assert f'id="{field}"' in advanced
-    assert 'class="field-narrow"' in form
+    assert 'id="site-name" class="w-s"' in form  # a short name: the shared width class (1.32)
     assert "details.add > summary" in _rules(CSS)
     assert "details.add summary" not in _rules(CSS)
 

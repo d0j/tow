@@ -8,7 +8,8 @@ import ipaddress
 import re
 import socket
 import string
-from collections.abc import Container
+from collections.abc import Container, Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from typing import Any
 from urllib.parse import urlparse
@@ -127,8 +128,10 @@ def valid_site_hosts(hosts: list[str]) -> list[str]:
 
 def valid_site_name(value: str) -> str:
     name = value.strip().lower()
-    if not re.fullmatch(r"[a-z0-9_]{1,64}", name) or name in {"new", "guess"}:
+    if not re.fullmatch(r"[a-z0-9_]{1,64}", name):
         raise ValueError(t("web.site_form.name_invalid"))
+    if name in {"new", "guess"}:  # the Sites page's own addresses (/sites/new, /sites/guess)
+        raise ValueError(t("web.site_form.name_reserved", name=name))
     return name
 
 
@@ -167,12 +170,24 @@ def validate_tracker_regexes(url_regex: str, download_href_regex: str) -> None:
             raise ValueError(t("web.site_form.regex_no_group", what=what))
 
 
-class FieldRefused(Exception):
-    """A value of the site form is refused: ``reason`` (an error or a text) and the field it is about."""
+class FieldRefused(ValueError):
+    """A value of a site form is refused: ``reason`` (an error or a text) and the field it is
+    about (a ValueError, as every refusal of these forms is)."""
 
     def __init__(self, reason: object, field: str) -> None:
         super().__init__(str(reason))
         self.reason, self.field = reason, field
+
+
+@contextmanager
+def _about(field: str) -> Iterator[None]:
+    """A refusal raised inside names ``field`` (one that already names its own field keeps it)."""
+    try:
+        yield
+    except FieldRefused:
+        raise
+    except ValueError as exc:
+        raise FieldRefused(exc, field) from exc
 
 
 @dataclass(frozen=True)
@@ -222,6 +237,8 @@ def new_site_spec(key: str, form: NewSite, guessed: dict[str, Any]) -> tuple[lis
         validate_tracker_regexes(regex, "")
         field = "download_href_regex"
         validate_tracker_regexes("", href)
+    except FieldRefused:
+        raise
     except ValueError as exc:  # the field being checked when it was refused
         raise FieldRefused(exc, field) from exc
     spec: dict[str, Any] = {
@@ -279,13 +296,18 @@ class SiteEdit:
 
 def edit_site_hosts(name: str, spec: dict[str, Any], form: SiteEdit, taken: Container[str]) -> tuple[str, list[str]]:
     """The edit's new name and mirrors, applied to ``spec`` (a copy of site ``name``'s); returns
-    the name and the sign-in mirrors the edit added. A ValueError says why it cannot be saved."""
-    validate_tracker_regexes(
-        form.url_regex.strip() or str(spec.get("url_regex") or ""), form.download_href_regex.strip()
-    )
-    key = valid_site_name(form.new_name) if form.new_name.strip() else name
-    new_hosts = valid_site_hosts(split_lines(form.fetch_hosts))
-    chosen_login_hosts = form.chosen_login_hosts(new_hosts)
+    the name and the sign-in mirrors the edit added. A ``FieldRefused`` says why it cannot be saved
+    and which field it is about."""
+    with _about("url_regex"):
+        validate_tracker_regexes(form.url_regex.strip() or str(spec.get("url_regex") or ""), "")
+    with _about("download_href_regex"):
+        validate_tracker_regexes("", form.download_href_regex.strip())
+    with _about("new_name"):
+        key = valid_site_name(form.new_name) if form.new_name.strip() else name
+    with _about("fetch_hosts"):
+        new_hosts = valid_site_hosts(split_lines(form.fetch_hosts))
+    with _about("login_hosts"):
+        chosen_login_hosts = form.chosen_login_hosts(new_hosts)
     if key != name and key in taken:
         raise SiteNameTaken
     old_login_hosts = list(spec.get("login_hosts") or [])
@@ -304,24 +326,31 @@ class SiteNameTaken(Exception):
 
 
 def edit_site_paths(spec: dict[str, Any], form: SiteEdit) -> None:
-    """The edit's pattern, paths and download settings, applied to ``spec`` (ValueError: refused)."""
+    """The edit's pattern, paths and download settings, applied to ``spec`` (``FieldRefused``:
+    refused, and which field)."""
     if form.protection:
         if form.protection not in {"auto", "off"}:
-            raise ValueError(t("protection.invalid_site"))
+            raise FieldRefused(t("protection.invalid_site"), "protection")
         spec["protection"] = form.protection
     if form.browser_auth_present == "1":
         spec["browser_auth"] = form.browser_auth in {"1", "true", "on"}
     if form.infohash_path is not None:
-        spec["infohash_path"] = valid_tracker_path(form.infohash_path, label=t("sites.infohash_path"), needs_id=True)
+        with _about("infohash_path"):
+            spec["infohash_path"] = valid_tracker_path(
+                form.infohash_path, label=t("sites.infohash_path"), needs_id=True
+            )
     if form.url_regex.strip():
         spec["url_regex"] = form.url_regex.strip()
-    new_download_path = (
-        valid_tracker_path(form.download_path, label=t("sites.download_path"), needs_id=True)
-        if form.download_path.strip()
-        else ""
-    )
-    new_login_path = valid_tracker_path(form.login_path, label=t("sites.login_path"))
-    new_topic_path = valid_tracker_path(form.topic_path, label=t("sites.topic_path"), needs_id=True)
+    with _about("download_path"):
+        new_download_path = (
+            valid_tracker_path(form.download_path, label=t("sites.download_path"), needs_id=True)
+            if form.download_path.strip()
+            else ""
+        )
+    with _about("login_path"):
+        new_login_path = valid_tracker_path(form.login_path, label=t("sites.login_path"))
+    with _about("topic_path"):
+        new_topic_path = valid_tracker_path(form.topic_path, label=t("sites.topic_path"), needs_id=True)
     if new_download_path:
         spec["download_path"] = new_download_path
     spec["login_path"] = new_login_path

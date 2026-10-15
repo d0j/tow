@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi.responses import RedirectResponse
 from starlette.background import BackgroundTask
@@ -130,6 +131,14 @@ def _guessed(from_url: str) -> dict[str, Any]:
         raise FieldRefused(t(e.key), "from_url") from e
 
 
+def _edit_refused(name: str, reason: object, kind: str = "err", *, field: str = "") -> RedirectResponse:
+    """A refused save of site ``name``'s card: its row opens again at the refused field
+    (``?open=&field=``; the page marks and focuses it, and opens Advanced when it is there)."""
+    field = field or str(getattr(reason, "field", "") or "")
+    query = urlencode({"open": name, **({"field": field} if field else {})})
+    return flash_redirect(f"/sites?{query}", reason, kind)
+
+
 def edit_site(name: str, form: SiteEdit) -> RedirectResponse:
     """Site ``name``'s card as saved - renamed, its mirrors, sign-in mirrors, paths and login -
     with an undo, as one transaction (the caller holds the persistence lock)."""
@@ -142,17 +151,17 @@ def edit_site(name: str, form: SiteEdit) -> RedirectResponse:
     try:
         key, added_login_hosts = edit_site_hosts(name, spec, form, trackers)
     except ValueError as exc:
-        return flash_redirect("/sites", exc, "err")
+        return _edit_refused(name, exc)
     except SiteNameTaken:
-        return flash_redirect("/sites", "web.sites.name_taken", "err")
+        return _edit_refused(name, "web.sites.name_taken", field="new_name")
     stored_password = ((services.load_secrets().get("trackers") or {}).get(name) or {}).get("password")
     if added_login_hosts and stored_password and not form.password.strip():
         # A stored tracker password must never be posted to a host it was not entered for.
-        return flash_redirect("/sites", "web.sites.password_again", "warn")
+        return _edit_refused(name, "web.sites.password_again", "warn", field="password")
     try:
         edit_site_paths(spec, form)
     except ValueError as exc:
-        return flash_redirect("/sites", exc, "err")
+        return _edit_refused(name, exc)
     old_state = services.load_state()
     new_state = copy.deepcopy(old_state)
     old_mirrors = as_dict(old_state.get("mirrors"))
