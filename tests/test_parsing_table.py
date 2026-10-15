@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from tow.episodes import parse_episode_coverage, resolve_episode_coverages
+from tow.episodes import parse_episode_coverage, parse_season_hint, resolve_episode_coverages
 
 
 def _keys(name: str) -> list[str]:
@@ -121,3 +121,36 @@ def test_a_numbered_film_before_a_release_tag(name, keys):
 )
 def test_an_episode_titled_with_a_special_word(name, keys):
     assert _resolved(name) == keys
+
+
+@pytest.mark.parametrize(
+    ("title", "season"),
+    [
+        # One season with an episode range: not several seasons.
+        ("Шоу (3 сезон: 1-8 серии из 10)", 3),
+        ("Шоу 2 сезон 1-8 серии из 8", 2),
+        ("Шоу / Сезон 1 / 12 серий из 12", 1),
+        ("Шоу 3 сезон: 1-8 из 10", 3),
+        ("Show Season 2: 1-8 episodes of 10", 2),
+        # A possessive "'s" is no season.
+        ("Ocean's 11", None),
+        ("Ocean’s 11 (2001)", None),
+        # Controls.
+        ("Шоу / Сезон 3 / Серии 1-8 из 10", 3),
+        ("Сериал / Сезон: 2 / Серии: 1-8 из 10", 2),
+        ("Show [S03] (2026)", 3),
+        ("Show S02, 1-10 из 10", 2),
+        ("Show Season 2 / 1-10 of 10", 2),
+        ("Сезон 2 - 01-10 из 10", 2),
+        ("Ocean's Eleven S01", 1),
+        ("Сериал (Сезон: 1-3) [WEB-DL]", None),
+        ("Сезон 1-2 / Серии 1-24 из 24", None),
+        ("Шоу 1-2 сезон, 1-20 из 20", None),
+        ("Show S01-02 [24 из 24]", None),
+        ("Show Season 1, 2 [24 из 24]", None),
+        ("Show Season 1 & Season 2 [24 of 24]", None),
+        ("Шоу 1 сезон и 2 сезон [24 из 24]", None),
+    ],
+)
+def test_season_hint_of_a_title(title, season):
+    assert parse_season_hint(title) == season
