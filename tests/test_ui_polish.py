@@ -659,7 +659,7 @@ def test_labels_chips_heads_and_pills_are_in_sentence_case(lang):
     groups = {
         "home.add": ("url", "name", "folder", "client", "what", "follow", "selection"),
         "home.tools": ("all", "problem", "new", "paused"),
-        "home.head": ("torrent", "site", "folder", "event", "progress"),
+        "home.head": ("torrent", "site", "folder", "event"),
         "history.group": ("all", "downloads", "errors", "changes", "notifications"),
         "sites": ("name", "mirrors", "url_regex", "col_site", "col_login", "login", "password"),
         "doctor": ("th_site", "th_mirror", "th_status"),

@@ -50,6 +50,23 @@ def test_the_add_form_offers_follow_as_one_checked_box(client):
     assert page.select_one('label[for="topic-tracking-mode"]') is not None
 
 
+@pytest.mark.parametrize(
+    ("error", "line"),
+    [
+        ("qBittorrent: connection refused", "qBittorrent: connection refused"),
+        ("Transmission: connection refused", "Transmission: connection refused"),
+        ("connection refused", "Торрент-клиент: connection refused"),  # no name: the class says whose
+    ],
+)
+def test_a_client_error_names_its_client_once(error, line):
+    """The row said "Торрент-клиент: qBittorrent: connection refused": the class and the client
+    named the same thing twice. A detail that starts with its client's name keeps only that, as
+    written ("qBittorrent", never "QBittorrent")."""
+    from tow.web.views import _error_line
+
+    assert _error_line(error, "qbit") == line
+
+
 def test_a_cleared_follow_box_is_saved_as_once_on_edit(client, monkeypatch):
     assert _add(client, monkeypatch).status_code == 303
     topic = load_state()["topics"][0]

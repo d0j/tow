@@ -40,6 +40,14 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   one line to preview its files. The edit panel no longer repeats its fields in a sentence, says that the
   torrent client moves the files only once the folder changes, and links a paused site or a failing torrent
   client to where it is fixed.
+- Home on a phone shows a topic in two or three lines (name and buttons; site and folder; the event with its
+  progress) without a label on every line; on a tablet the folder column is left out (the edit panel has it).
+  The progress now sits at the end of the event instead of a mostly empty column of its own.
+
+### Fixed
+
+- A torrent client's error on Home names the client once (“qBittorrent: connection refused”, not “Torrent
+  client: qBittorrent: …”), and a row never writes it as “QBittorrent”.
 
 ### Fixed
 

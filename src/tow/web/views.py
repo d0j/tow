@@ -666,9 +666,21 @@ def _error_line(error: str, cls: str, site: str = "") -> str:
     label = CLS_RU.label(cls, lang, i18n.t("web.error_line.error", lang))
     # A paused mirror's own words already say what happened ("all mirrors are paused"), and so do
     # a disk's ("waiting for disk space: …"): no "Mirror paused:" or "Low disk space:" in front.
-    same = detail.lower().startswith(label.lower()) or cls in ("frozen", "disk")
+    # A client's error named by the client ("qBittorrent: …") says whose it is: no "Torrent
+    # client:" in front of it either.
+    same = (
+        detail.lower().startswith(label.lower())
+        or cls in ("frozen", "disk")
+        or (cls == "qbit" and _NAMED.match(detail) is not None)
+    )
     line = detail if same else f"{label}: {detail}"
-    return line[:1].upper() + line[1:]
+    # A sentence's capital, but a name stays as written ("qBittorrent", not "QBittorrent").
+    first = line.split(" ", 1)[0]
+    return line if first[1:] != first[1:].lower() else line[:1].upper() + line[1:]
+
+
+# "<Name>: " at the start of an error: a program or a site naming itself.
+_NAMED = re.compile(r"[A-Za-z][\w.+-]{1,30}: ")
 
 
 # Frequent internal phrases in the owner's words for the row (catalog keys); the raw text stays
@@ -750,6 +762,9 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
                 # check): shown in this page's language.
                 "last_check": stored_ui_time(topic.get("last_check")),
                 "last_ok_at": stored_ui_time(topic.get("last_ok_at")),
+                # The same as ISO times, for the pages' short form (today "20:31").
+                "last_check_iso": stored_iso(topic.get("last_check")),
+                "last_ok_iso": stored_iso(topic.get("last_ok_at")),
                 "last_error": last_error,
                 "last_error_details": services.diagnostic_details(
                     {"code": topic.get("last_error_code"), "params": topic.get("last_error_params")}
@@ -762,9 +777,6 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "series": shown_title(topic).split(" / ")[0],
                 "download_summary": summary,
                 "last_event_label": _event_display(event) if event else "",
-                # The same as ISO times, for the pages' short form (today "20:31").
-                "last_check_iso": stored_iso(topic.get("last_check")),
-                "last_ok_iso": stored_iso(topic.get("last_ok_at")),
                 "last_event_at": ui_time(event.get("at")) if event else "",
                 "last_event_iso": str(event.get("at") or "") if event else "",
                 "last_error_class": (
