@@ -448,6 +448,7 @@ def test_restore_point_and_export_work_after_settings_and_site_edits(monkeypatch
     assert exported.content.startswith(b"{")
 
 
+@pytest.mark.writes_secret_shape  # the refusal of a credential-named field is the subject
 def test_plaintext_secret_in_state_is_refused_with_its_path(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     save_state({"topics": [{"id": "t1", "auth": {"password": "hunter2"}}], "mirrors": {}})
@@ -459,6 +460,7 @@ def test_plaintext_secret_in_state_is_refused_with_its_path(monkeypatch, tmp_pat
     assert list_restore_points() == []
 
 
+@pytest.mark.writes_secret_shape  # the refusal of a credential-named field is the subject
 def test_restore_point_failure_flash_names_the_reason(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     save_state({"topics": [], "mirrors": {}, "telegram_token": "x"})
