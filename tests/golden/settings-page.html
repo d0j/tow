@@ -101,133 +101,8 @@
     <h1 id="page-title">Settings</h1>
   </header>
 
+
   <div class="settings-content" id="settings-acc">
-    <details class="settings-section settings-accordion acc" id="acc-protection" data-q="Cloudflare challenge protection FlareSolverr Byparr FlareBypasser zendriver nodriver Trawl modules">
-  <summary>
-    <span class="settings-summary-title">Site access</span>
-    <span class="pill mut">Off</span>
-  </summary>
-  <div class="settings-panel">
-    <p class="action-hint">Use this section when a site shows a Cloudflare browser challenge instead of a topic. If topics check without errors, you do not need to connect anything.</p>
-
-
-    <details class="technical-details" id="protection-guide" open>
-      <summary>How it works and how to connect</summary>
-      <p>TOW tries ordinary mirrors first. If a Cloudflare challenge blocks access, an enabled service opens an anonymous public page in its browser. TOW receives clearance and checks the actual topic itself; a service response alone is not success.</p>
-      <ol><li>An On demand card means the module is already installed: no manual start is needed. For another connection, install and run your chosen service separately. TOW does not install services for you.</li><li>Choose the running service&#39;s type and enter its address, not a site or topic address. For example, http://127.0.0.1:8191 is a service on the TOW computer. Another computer needs its private-network IP; never expose the API to the internet.</li><li>Select Use this connection and the overall Use optional challenge recovery switch, then Save. On Sites, the site must allow these services; Off for this site takes precedence.</li><li>Open the failed topic on Home and select Check access now, or wait for its scheduled retry. TOW contacts a service only if ordinary mirrors encounter Cloudflare again. Saving settings does not test it.</li></ol>
-      <p class="action-hint"><a href="/settings/help#site-access">Read more in the guide</a></p>
-    </details>
-    <form method="post" action="/settings/protection" class="settings-form compact-form protection-form" data-return-target="acc-protection">
-      <fieldset>
-        <legend class="sr-only">Site access</legend>
-        <label class="check-field"><input type="checkbox" name="enabled" value="1" aria-describedby="protection-enabled-hint"><span>Use optional challenge recovery</span></label>
-        <p class="field-hint" id="protection-enabled-hint">Overall switch for additional services. Ordinary mirrors and browser sign-in also work without them. The change applies when saved.</p>
-        <div class="integration-list">
-
-          <details class="integration-card protection-card">
-            <summary>Add a connection</summary>
-            <input type="hidden" name="provider_id" value="new-connection-1">
-
-            <div class="field"><label for="protection-kind-new-connection-1">Service type</label><select id="protection-kind-new-connection-1" name="provider_kind" aria-describedby="protection-kind-hint-new-connection-1"><option value="">Choose a service</option><option value="byparr">Byparr</option><option value="flare_bypasser">FlareBypasser (zendriver)</option><option value="flaresolverr">FlareSolverr</option><option value="trawl">Trawl</option></select><p class="field-hint" id="protection-kind-hint-new-connection-1">Choose the program serving this address. Selecting a type does not install it.</p></div>
-
-
-
-
-            <label class="check-field"><input type="checkbox" name="provider_enabled" value="new-connection-1"><span>Use this connection</span></label>
-            <div class="field-grid">
-              <div class="field"><label for="protection-url-new-connection-1">Service address</label><input id="protection-url-new-connection-1" name="provider_url" value="" placeholder="http://127.0.0.1:8191" maxlength="256" autocomplete="off" aria-describedby="protection-url-hint-new-connection-1"><p class="field-hint" id="protection-url-hint-new-connection-1">The service address TOW uses, not a site mirror. 127.0.0.1 means the TOW computer; /v1 may be omitted.</p></div>
-              <div class="field"><label for="protection-order-new-connection-1">Order</label><input id="protection-order-new-connection-1" name="provider_order" value="1" type="number" min="1" max="16" inputmode="numeric" aria-describedby="protection-order-hint-new-connection-1"><p class="field-hint" id="protection-order-hint-new-connection-1">1 is first, 2 is next. Each number must be unique.</p></div>
-            </div>
-
-          </details>
-
-        </div>
-
-        <p class="action-hint">If the first method fails, TOW considers the next within the shared call and time limit. Once that limit is reached, the next eligible check continues with later connections. Disabled connections and services in cooldown are not called.</p>
-        <p class="section-note">Connection status is the last observed response, not a test now. API answered does not prove topic access. Opening settings never starts a module; the topic on Home shows the last check result.</p>
-        <details class="technical-details protection-limits">
-          <summary>Attempt limits</summary>
-          <div class="field-grid">
-            <div class="field"><label for="protection-timeout">Total recovery time, seconds</label><input id="protection-timeout" name="timeout_sec" value="30" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">One deadline for all service calls and independent access verification: 5–90 seconds. Not a timeout for each topic.</p></div>
-            <div class="field"><label for="protection-interval">Minimum retry interval, seconds</label><input id="protection-interval" name="min_interval_sec" value="1800" type="number" min="60" max="86400" inputmode="numeric" aria-describedby="protection-interval-hint"><p class="field-hint" id="protection-interval-hint">Minimum pause before another recovery attempt for one site origin: 60–86400 seconds. 1800 s = 30 minutes. Not the global or personal topic timer; the error shows a scheduled retry when known.</p></div>
-            <div class="field"><label for="protection-attempts">Maximum service calls per recovery</label><input id="protection-attempts" name="max_attempts" value="2" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">1 to 4 service calls in one recovery chain, shared across mirrors. A missing-clearance retry also consumes this limit. Not the number of topics checked.</p></div>
-          </div>
-        </details>
-        <p class="section-note">Save applies switches, addresses, order and limits. It does not start a service or download a .torrent.</p>
-        <div class="settings-actions"><button type="submit">Save</button></div>
-      </fieldset>
-    </form>
-    <details class="technical-details">
-      <summary>If access is still blocked</summary>
-      <p>Expand the topic&#39;s warning for each mirror&#39;s reason and retry time. The log identifies the failed stage: module startup, service response or topic access. A connection failure needs its type and address checked; a sign-in error needs the account checked on Sites.</p>
-      <p>Services do not remove bans, download quotas or request rate limits. Wait out a 429 pause. An interactive check may require supported browser sign-in; access through every future challenge is not guaranteed.</p>
-      <p>Use only services you trust and sandbox their browser&#39;s network access. They receive an audited public page, not your password, sign-in cookies or topic link. TOW keeps only verified clearance, encrypted and time-limited. Interactive challenges may still require your action; download limits remain enforced.</p>
-    </details>
-
-    <details class="technical-details">
-      <summary>Reset saved access</summary>
-      <p class="action-hint" id="protection-reset-hint">Use only for damaged saved data or a stale clearance problem. Removes Cloudflare clearance, retry reservations and service cooldowns; site passwords, connections and torrents remain. Reset does not install a module or cancel site limits. The old encrypted record stays in the temporary folder until cleanup; a running check blocks reset.</p>
-      <form method="post" action="/settings/protection/reset" data-return-target="acc-protection" data-confirm="Reset saved site clearance, retry reservations and service cooldowns? Service settings and site sign-ins remain unchanged.">
-        <button type="submit" class="ghost" aria-describedby="protection-reset-hint">Reset saved access</button>
-      </form>
-    </details>
-
-  </div>
-</details>
-    <details class="settings-section settings-accordion acc" id="acc-language" data-q="language язык en english ru russian русский">
-      <summary>
-        <span class="settings-summary-title">Language</span>
-        <span class="pill mut">English</span>
-      </summary>
-      <div class="settings-panel">
-        <form method="post" action="/settings/language" class="settings-form compact-form" data-return-target="acc-language">
-          <div class="field">
-            <label for="language-choice">Language</label>
-            <select id="language-choice" name="language" aria-describedby="language-auto-hint">
-              <option value="auto">Automatic — the browser&#39;s language (now: English)</option>
-              <option value="en" selected>English</option><option value="ru">Русский — Russian</option>
-            </select>
-            <p id="language-auto-hint" class="action-hint">Automatic: TOW shows the language your browser prefers, English if TOW does not have it yet.</p>
-          </div>
-          <p class="action-hint">Messages to messengers use the same language.</p>
-          <div class="settings-actions"><button type="submit">Save</button></div>
-        </form>
-      </div>
-    </details>
-
-    <details class="settings-section settings-accordion acc" id="acc-theme" data-q="theme appearance colours dark light night mode">
-      <summary>
-        <span class="settings-summary-title">Theme</span>
-
-        <span class="pill mut">As the system</span>
-      </summary>
-      <div class="settings-panel">
-        <form method="post" action="/settings/theme" class="compact-form" data-return-target="acc-theme" data-theme-form>
-          <fieldset class="theme-choice" aria-describedby="theme-hint">
-            <legend class="sr-only">Theme</legend>
-
-            <label class="theme-option">
-              <input type="radio" name="theme" value="auto" checked>
-              <svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-monitor"/></svg><span>As the system</span>
-            </label>
-
-            <label class="theme-option">
-              <input type="radio" name="theme" value="light">
-              <svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-sun"/></svg><span>Light</span>
-            </label>
-
-            <label class="theme-option">
-              <input type="radio" name="theme" value="dark">
-              <svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-moon"/></svg><span>Dark</span>
-            </label>
-
-          </fieldset>
-          <p id="theme-hint" class="action-hint">The colours of TOW&#39;s pages on every device. “As the system” follows the light or dark mode of the computer or phone that opens them.</p>
-          <noscript><div class="settings-actions"><button type="submit">Save</button></div></noscript>
-        </form>
-      </div>
-    </details>
-
     <details class="settings-section settings-accordion acc" id="acc-clients" data-q="clients torrent connections qbittorrent qbit transmission transm. deluge">
       <summary>
         <span id="settings-clients-title" class="settings-summary-title">Torrent clients</span>
@@ -681,109 +556,6 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc" id="acc-updates" data-q="version update release rollback log automatic">
-      <summary>
-        <span class="settings-summary-title">Version and updates</span>
-        <span class="pill mut"><version></span>
-      </summary>
-      <div class="settings-panel">
-        <section id="updates" class="release-panel" aria-labelledby="release-title">
-          <p id="release-title">Installed: TOW <version></p>
-          <form method="post" action="/settings/updates" class="compact-form immediate-form" data-return-target="acc-updates" data-auto-submit>
-            <input type="hidden" name="enabled" value="0">
-            <div class="check-field">
-              <input id="check-updates" name="enabled" value="1" type="checkbox" checked aria-describedby="check-updates-hint" data-auto-submit-control>
-              <label for="check-updates">Check for updates automatically</label>
-              <p id="check-updates-hint" data-auto-submit-status>At most once every 12 hours, while a TOW page is open. When it is off, TOW checks only when you press the button.</p>
-            </div>
-            <noscript><button type="submit">Apply</button></noscript>
-          </form>
-          <p class="action-hint" data-release-status role="status">Update status has not been checked yet.</p>
-          <div class="settings-actions">
-            <button type="button" class="ghost" data-release-check>Check for updates</button>
-            <a href="https://github.com/d0j/tow/releases" class="btn ghost" data-release-notes target="_blank" rel="noopener noreferrer">Release notes</a>
-            <button type="button" data-release-install hidden disabled>Update</button>
-          </div>
-          <p class="action-hint" data-update-progress role="status" hidden></p>
-          <p class="action-hint" data-update-unavailable role="status" hidden></p>
-          <div class="settings-actions"><button type="button" class="ghost" data-update-reload hidden>Reload page</button></div>
-          <details class="technical-details" data-update-details>
-            <summary>More: history, rollback and log</summary>
-            <p class="action-hint" data-update-history hidden></p>
-            <p class="action-hint" data-update-support></p>
-          <details class="technical-details" data-update-rollback hidden>
-            <summary>Install another version or roll back</summary>
-            <p class="action-hint">Web updates support published stable versions from 1.22.21. Data is kept; an incompatible data schema refuses the change. Older releases require the terminal and may not understand current data.</p>
-            <div class="field">
-              <label for="rollback-version">Release version</label>
-              <input id="rollback-version" data-update-version inputmode="text" placeholder="1.22.21" maxlength="32" autocomplete="off">
-            </div>
-            <div class="settings-actions"><button type="button" class="ghost" data-update-apply>Install version</button><button type="button" class="ghost" data-update-previous hidden></button></div>
-          </details>
-          <p class="action-hint">Stable releases only. Nothing is installed without you.</p>
-          <details class="technical-details">
-            <summary>How to update</summary>
-            <p>The “Update” button above installs a newer release, or “Update TOW” in the TOW folder on the computer running TOW (“Update TOW.cmd” on Windows, “Update TOW.command” on macOS, update-tow on Linux). For a chosen version, open a terminal in the TOW folder (the one with config.yaml) and run the command below with that version: it shows how. The update makes an update snapshot first.</p>
-            <code data-release-command>scripts/tow update --ref v<version></code>
-          </details>
-          <details class="technical-details" data-update-log>
-            <summary>Update log</summary>
-            <pre data-update-log-text>Open this section to read the latest update log.</pre>
-          </details>
-          </details>
-          <noscript><p class="action-hint">Without JavaScript, use Release notes to check the latest version.</p></noscript>
-        </section>
-      </div>
-    </details>
-
-    <details class="settings-section settings-accordion acc" id="acc-service" data-q="service autostart restart windows">
-      <summary>
-        <span id="settings-service-title" class="settings-summary-title">TOW service</span>
-        <span class="pill ok">Starts automatically</span>
-      </summary>
-      <div class="settings-panel">
-        <p class="action-hint">TOW runs as one service: the web page, scheduled checks, nightly backups and the watchdog.</p>
-        <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
-          <input type="hidden" name="enabled" value="0">
-          <input type="hidden" name="without_login" value="0">
-          <div class="check-field">
-            <input id="service-autostart" name="enabled" value="1" type="checkbox" checked aria-describedby="service-autostart-hint" data-auto-submit-control>
-            <label for="service-autostart">Start automatically</label>
-            <p id="service-autostart-hint" data-auto-submit-status>Start TOW when you sign in to this computer. The change takes effect at once.</p>
-          </div>
-          <noscript><button type="submit">Apply</button></noscript>
-        </form>
-
-
-
-        <div class="service-restart">
-          <form method="post" action="/settings/service/restart" data-return-target="acc-service" data-confirm="Restart TOW? The page may be unavailable for a few seconds.">
-            <button type="submit" data-fix="restart_service">Restart</button>
-          </form>
-          <p>The page will be unavailable for a few seconds.</p>
-        </div>
-        <div class="watchdog-note">
-          <p class="action-hint">The watchdog checks the schedule and reports downtime and its cause to connected messengers. When the web server fails, the TOW service restarts it; the watchdog itself does not restart TOW.</p>
-
-        </div>
-
-        <p class="restart-result">Web page running since: <b><time></b>.</p>
-
-
-        <p class="restart-result" role="note">Last requested restart: <b><time></b> · from settings · being checked.</p>
-
-        <details class="technical-details">
-          <summary>Technical details</summary>
-          <dl>
-            <div><dt>PID</dt><dd><code>4321</code></dd></div>
-            <div><dt>Autostart</dt><dd><code>—</code></dd></div>
-            <div><dt>Web server</dt><dd><code>—</code></dd></div>
-            <div><dt>Operation ID</dt><dd><code>restart-test</code></dd></div>
-          </dl>
-        </details>
-      </div>
-    </details>
-
 
 
     <details class="settings-section settings-accordion acc" id="acc-transfer" data-q="backups transfer export / import towx">
@@ -916,6 +688,231 @@
         </div>
       </div>
     </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-updates" data-q="version update release rollback log automatic">
+      <summary>
+        <span class="settings-summary-title">Version and updates</span>
+        <span class="pill mut"><version></span>
+      </summary>
+      <div class="settings-panel">
+        <section id="updates" class="release-panel" aria-labelledby="release-title">
+          <p id="release-title">Installed: TOW <version></p>
+          <form method="post" action="/settings/updates" class="compact-form immediate-form" data-return-target="acc-updates" data-auto-submit>
+            <input type="hidden" name="enabled" value="0">
+            <div class="check-field">
+              <input id="check-updates" name="enabled" value="1" type="checkbox" checked aria-describedby="check-updates-hint" data-auto-submit-control>
+              <label for="check-updates">Check for updates automatically</label>
+              <p id="check-updates-hint" data-auto-submit-status>At most once every 12 hours, while a TOW page is open. When it is off, TOW checks only when you press the button.</p>
+            </div>
+            <noscript><button type="submit">Apply</button></noscript>
+          </form>
+          <p class="action-hint" data-release-status role="status">Update status has not been checked yet.</p>
+          <div class="settings-actions">
+            <button type="button" class="ghost" data-release-check>Check for updates</button>
+            <a href="https://github.com/d0j/tow/releases" class="btn ghost" data-release-notes target="_blank" rel="noopener noreferrer">Release notes</a>
+            <button type="button" data-release-install hidden disabled>Update</button>
+          </div>
+          <p class="action-hint" data-update-progress role="status" hidden></p>
+          <p class="action-hint" data-update-unavailable role="status" hidden></p>
+          <div class="settings-actions"><button type="button" class="ghost" data-update-reload hidden>Reload page</button></div>
+          <details class="technical-details" data-update-details>
+            <summary>More: history, rollback and log</summary>
+            <p class="action-hint" data-update-history hidden></p>
+            <p class="action-hint" data-update-support></p>
+          <details class="technical-details" data-update-rollback hidden>
+            <summary>Install another version or roll back</summary>
+            <p class="action-hint">Web updates support published stable versions from 1.22.21. Data is kept; an incompatible data schema refuses the change. Older releases require the terminal and may not understand current data.</p>
+            <div class="field">
+              <label for="rollback-version">Release version</label>
+              <input id="rollback-version" data-update-version inputmode="text" placeholder="1.22.21" maxlength="32" autocomplete="off">
+            </div>
+            <div class="settings-actions"><button type="button" class="ghost" data-update-apply>Install version</button><button type="button" class="ghost" data-update-previous hidden></button></div>
+          </details>
+          <p class="action-hint">Stable releases only. Nothing is installed without you.</p>
+          <details class="technical-details">
+            <summary>How to update</summary>
+            <p>The “Update” button above installs a newer release, or “Update TOW” in the TOW folder on the computer running TOW (“Update TOW.cmd” on Windows, “Update TOW.command” on macOS, update-tow on Linux). For a chosen version, open a terminal in the TOW folder (the one with config.yaml) and run the command below with that version: it shows how. The update makes an update snapshot first.</p>
+            <code data-release-command>scripts/tow update --ref v<version></code>
+          </details>
+          <details class="technical-details" data-update-log>
+            <summary>Update log</summary>
+            <pre data-update-log-text>Open this section to read the latest update log.</pre>
+          </details>
+          </details>
+          <noscript><p class="action-hint">Without JavaScript, use Release notes to check the latest version.</p></noscript>
+        </section>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-service" data-q="service autostart restart windows">
+      <summary>
+        <span id="settings-service-title" class="settings-summary-title">TOW service</span>
+        <span class="pill ok">Starts automatically</span>
+      </summary>
+      <div class="settings-panel">
+        <p class="action-hint">TOW runs as one service: the web page, scheduled checks, nightly backups and the watchdog.</p>
+        <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
+          <input type="hidden" name="enabled" value="0">
+          <input type="hidden" name="without_login" value="0">
+          <div class="check-field">
+            <input id="service-autostart" name="enabled" value="1" type="checkbox" checked aria-describedby="service-autostart-hint" data-auto-submit-control>
+            <label for="service-autostart">Start automatically</label>
+            <p id="service-autostart-hint" data-auto-submit-status>Start TOW when you sign in to this computer. The change takes effect at once.</p>
+          </div>
+          <noscript><button type="submit">Apply</button></noscript>
+        </form>
+
+
+
+        <div class="service-restart">
+          <form method="post" action="/settings/service/restart" data-return-target="acc-service" data-confirm="Restart TOW? The page may be unavailable for a few seconds.">
+            <button type="submit" data-fix="restart_service">Restart</button>
+          </form>
+          <p>The page will be unavailable for a few seconds.</p>
+        </div>
+        <div class="watchdog-note">
+          <p class="action-hint">The watchdog checks the schedule and reports downtime and its cause to connected messengers. When the web server fails, the TOW service restarts it; the watchdog itself does not restart TOW.</p>
+
+        </div>
+
+        <p class="restart-result">Web page running since: <b><time></b>.</p>
+
+
+        <p class="restart-result" role="note">Last requested restart: <b><time></b> · from settings · being checked.</p>
+
+        <details class="technical-details">
+          <summary>Technical details</summary>
+          <dl>
+            <div><dt>PID</dt><dd><code>4321</code></dd></div>
+            <div><dt>Autostart</dt><dd><code>—</code></dd></div>
+            <div><dt>Web server</dt><dd><code>—</code></dd></div>
+            <div><dt>Operation ID</dt><dd><code>restart-test</code></dd></div>
+          </dl>
+        </details>
+      </div>
+    </details>
+    <details class="settings-section settings-accordion acc" id="acc-language" data-q="language язык en english ru russian русский theme appearance colours dark light night mode">
+      <summary>
+        <span class="settings-summary-title">Language and theme</span>
+        <span class="integration-pills">
+          <span class="pill mut">English</span>
+          <span class="pill mut" data-theme-pill>As the system</span>
+        </span>
+      </summary>
+      <div class="settings-panel appearance">
+        <form method="post" action="/settings/language" class="settings-form" data-return-target="acc-language">
+          <div class="field">
+            <label for="language-choice">Language</label>
+            <div class="inline-save">
+              <select id="language-choice" name="language" class="w-l" aria-describedby="language-note">
+                <option value="auto">Automatic — the browser&#39;s language (now: English)</option>
+                <option value="en" selected>English</option><option value="ru">Русский — Russian</option>
+              </select>
+              <button type="submit">Save</button>
+            </div>
+            <p id="language-note" class="field-hint">Messages to messengers use the same language.</p>
+          </div>
+        </form>
+        <form method="post" action="/settings/theme" class="theme-form" id="acc-theme" data-return-target="acc-theme" data-theme-form>
+          <fieldset class="theme-field" aria-describedby="theme-hint">
+            <legend>Theme</legend>
+            <div class="theme-choice">
+
+              <label class="theme-option">
+                <input type="radio" name="theme" value="auto" checked>
+                <svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-monitor"/></svg><span>As the system</span>
+              </label>
+
+              <label class="theme-option">
+                <input type="radio" name="theme" value="light">
+                <svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-sun"/></svg><span>Light</span>
+              </label>
+
+              <label class="theme-option">
+                <input type="radio" name="theme" value="dark">
+                <svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-moon"/></svg><span>Dark</span>
+              </label>
+
+            </div>
+          </fieldset>
+          <p id="theme-hint" class="field-hint">The colours of TOW&#39;s pages on every device. “As the system” follows the light or dark mode of the computer or phone that opens them.</p>
+          <noscript><div class="settings-actions"><button type="submit">Save</button></div></noscript>
+        </form>
+      </div>
+    </details>
+
+    <details class="settings-section settings-accordion acc" id="acc-protection" data-q="Cloudflare challenge protection FlareSolverr Byparr FlareBypasser zendriver nodriver Trawl modules">
+  <summary>
+    <span class="settings-summary-title">Site access</span>
+    <span class="pill mut">Off</span>
+  </summary>
+  <div class="settings-panel">
+    <p class="action-hint">Use this section when a site shows a Cloudflare browser challenge instead of a topic. If topics check without errors, you do not need to connect anything.</p>
+
+
+    <details class="technical-details" id="protection-guide" open>
+      <summary>How it works and how to connect</summary>
+      <p>TOW tries ordinary mirrors first. If a Cloudflare challenge blocks access, an enabled service opens an anonymous public page in its browser. TOW receives clearance and checks the actual topic itself; a service response alone is not success.</p>
+      <ol><li>An On demand card means the module is already installed: no manual start is needed. For another connection, install and run your chosen service separately. TOW does not install services for you.</li><li>Choose the running service&#39;s type and enter its address, not a site or topic address. For example, http://127.0.0.1:8191 is a service on the TOW computer. Another computer needs its private-network IP; never expose the API to the internet.</li><li>Select Use this connection and the overall Use optional challenge recovery switch, then Save. On Sites, the site must allow these services; Off for this site takes precedence.</li><li>Open the failed topic on Home and select Check access now, or wait for its scheduled retry. TOW contacts a service only if ordinary mirrors encounter Cloudflare again. Saving settings does not test it.</li></ol>
+      <p class="action-hint"><a href="/settings/help#site-access">Read more in the guide</a></p>
+    </details>
+    <form method="post" action="/settings/protection" class="settings-form compact-form protection-form" data-return-target="acc-protection">
+      <fieldset>
+        <legend class="sr-only">Site access</legend>
+        <label class="check-field"><input type="checkbox" name="enabled" value="1" aria-describedby="protection-enabled-hint"><span>Use optional challenge recovery</span></label>
+        <p class="field-hint" id="protection-enabled-hint">Overall switch for additional services. Ordinary mirrors and browser sign-in also work without them. The change applies when saved.</p>
+        <div class="integration-list">
+
+          <details class="integration-card protection-card">
+            <summary>Add a connection</summary>
+            <input type="hidden" name="provider_id" value="new-connection-1">
+
+            <div class="field"><label for="protection-kind-new-connection-1">Service type</label><select id="protection-kind-new-connection-1" name="provider_kind" aria-describedby="protection-kind-hint-new-connection-1"><option value="">Choose a service</option><option value="byparr">Byparr</option><option value="flare_bypasser">FlareBypasser (zendriver)</option><option value="flaresolverr">FlareSolverr</option><option value="trawl">Trawl</option></select><p class="field-hint" id="protection-kind-hint-new-connection-1">Choose the program serving this address. Selecting a type does not install it.</p></div>
+
+
+
+
+            <label class="check-field"><input type="checkbox" name="provider_enabled" value="new-connection-1"><span>Use this connection</span></label>
+            <div class="field-grid">
+              <div class="field"><label for="protection-url-new-connection-1">Service address</label><input id="protection-url-new-connection-1" name="provider_url" value="" placeholder="http://127.0.0.1:8191" maxlength="256" autocomplete="off" aria-describedby="protection-url-hint-new-connection-1"><p class="field-hint" id="protection-url-hint-new-connection-1">The service address TOW uses, not a site mirror. 127.0.0.1 means the TOW computer; /v1 may be omitted.</p></div>
+              <div class="field"><label for="protection-order-new-connection-1">Order</label><input id="protection-order-new-connection-1" name="provider_order" value="1" type="number" min="1" max="16" inputmode="numeric" aria-describedby="protection-order-hint-new-connection-1"><p class="field-hint" id="protection-order-hint-new-connection-1">1 is first, 2 is next. Each number must be unique.</p></div>
+            </div>
+
+          </details>
+
+        </div>
+
+        <p class="action-hint">If the first method fails, TOW considers the next within the shared call and time limit. Once that limit is reached, the next eligible check continues with later connections. Disabled connections and services in cooldown are not called.</p>
+        <p class="section-note">Connection status is the last observed response, not a test now. API answered does not prove topic access. Opening settings never starts a module; the topic on Home shows the last check result.</p>
+        <details class="technical-details protection-limits">
+          <summary>Attempt limits</summary>
+          <div class="field-grid">
+            <div class="field"><label for="protection-timeout">Total recovery time, seconds</label><input id="protection-timeout" name="timeout_sec" value="30" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">One deadline for all service calls and independent access verification: 5–90 seconds. Not a timeout for each topic.</p></div>
+            <div class="field"><label for="protection-interval">Minimum retry interval, seconds</label><input id="protection-interval" name="min_interval_sec" value="1800" type="number" min="60" max="86400" inputmode="numeric" aria-describedby="protection-interval-hint"><p class="field-hint" id="protection-interval-hint">Minimum pause before another recovery attempt for one site origin: 60–86400 seconds. 1800 s = 30 minutes. Not the global or personal topic timer; the error shows a scheduled retry when known.</p></div>
+            <div class="field"><label for="protection-attempts">Maximum service calls per recovery</label><input id="protection-attempts" name="max_attempts" value="2" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">1 to 4 service calls in one recovery chain, shared across mirrors. A missing-clearance retry also consumes this limit. Not the number of topics checked.</p></div>
+          </div>
+        </details>
+        <p class="section-note">Save applies switches, addresses, order and limits. It does not start a service or download a .torrent.</p>
+        <div class="settings-actions"><button type="submit">Save</button></div>
+      </fieldset>
+    </form>
+    <details class="technical-details">
+      <summary>If access is still blocked</summary>
+      <p>Expand the topic&#39;s warning for each mirror&#39;s reason and retry time. The log identifies the failed stage: module startup, service response or topic access. A connection failure needs its type and address checked; a sign-in error needs the account checked on Sites.</p>
+      <p>Services do not remove bans, download quotas or request rate limits. Wait out a 429 pause. An interactive check may require supported browser sign-in; access through every future challenge is not guaranteed.</p>
+      <p>Use only services you trust and sandbox their browser&#39;s network access. They receive an audited public page, not your password, sign-in cookies or topic link. TOW keeps only verified clearance, encrypted and time-limited. Interactive challenges may still require your action; download limits remain enforced.</p>
+    </details>
+
+    <details class="technical-details">
+      <summary>Reset saved access</summary>
+      <p class="action-hint" id="protection-reset-hint">Use only for damaged saved data or a stale clearance problem. Removes Cloudflare clearance, retry reservations and service cooldowns; site passwords, connections and torrents remain. Reset does not install a module or cancel site limits. The old encrypted record stays in the temporary folder until cleanup; a running check blocks reset.</p>
+      <form method="post" action="/settings/protection/reset" data-return-target="acc-protection" data-confirm="Reset saved site clearance, retry reservations and service cooldowns? Service settings and site sign-ins remain unchanged.">
+        <button type="submit" class="ghost" aria-describedby="protection-reset-hint">Reset saved access</button>
+      </form>
+    </details>
+
+  </div>
+</details>
 
     <details class="settings-section settings-accordion acc settings-log" id="acc-log" data-q="log journal events failure diagnostics">
       <summary>

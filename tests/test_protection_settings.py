@@ -36,7 +36,7 @@ def form(**changes):
 
 
 def card(page):
-    return page.split('id="acc-protection"', 1)[1].split('id="acc-language"', 1)[0]
+    return page.split('id="acc-protection"', 1)[1].split('id="acc-log"', 1)[0]
 
 
 def test_default_card_closed_off_and_no_contacts(monkeypatch):
