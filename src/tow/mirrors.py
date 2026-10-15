@@ -90,6 +90,12 @@ def _rebuild_fetch_error(
 # Failures that describe the requested topic, not the mirror's health; nor does TOW's own
 # failure on an answer it got (``local``): neither counts towards the mirror cooldown.
 _NOT_HOST_HEALTH_CODES = frozenset({"auth", "http_topic", "too_large", "gone", "local", "unexpected"})
+# Failures that say how the site treats this account (a sign-in, the day's limit), not whether
+# the mirror answers: kept apart from its health (``access``), amber on Sites (AGENTS.md).
+_ACCESS_CODES = frozenset({"auth", "quota"})
+# A routine success refreshes its observation's time at most this often: Sites weighs it
+# against a later probe, without a state write for every page.
+_OK_REFRESH_SEC = 300
 
 
 def says_topic_removed(content: bytes | str) -> bool:
@@ -133,8 +139,9 @@ def _bucket(state: dict[str, Any], tracker: str) -> dict[str, Any]:
         b["active"] = None
     if not isinstance(b.get("frozen"), bool):
         b["frozen"] = False
-    if not isinstance(b.get("observed"), dict):
-        b["observed"] = {}
+    for key in ("observed", "access"):
+        if not isinstance(b.get(key), dict):
+            b[key] = {}
     return b
 
 
@@ -211,7 +218,8 @@ def _prune(bucket: dict[str, Any], configured: set[str]) -> None:
     now = _now()
     for key in ("cool", "rate_cool"):
         bucket[key] = {host: until for host, until in bucket[key].items() if until > now}
-    bucket["observed"] = {host: row for host, row in bucket["observed"].items() if host in configured}
+    for key in ("observed", "access"):
+        bucket[key] = {host: row for host, row in bucket[key].items() if host in configured}
 
 
 def _later(saved: object, token: float) -> bool:
@@ -236,9 +244,10 @@ def _note_failure(
     fail_threshold: int = 3,
     cooldown_sec: int = 3600,
     retry_after: float = 0,
+    download: bool = False,
 ) -> None:
     """A failed request to ``host`` that started at ``token``; ``counts``: towards its cooldown."""
-    _observe(bucket, host, failure, status, token=token)
+    _observe(bucket, host, failure, status, token=token, download=download)
     if not counts:
         return
     failures = int(bucket["fail"].get(host) or 0) + 1
@@ -256,10 +265,12 @@ def _note_failure(
         bucket["cool"][host] = max(float(bucket["cool"].get(host) or 0), _now() + rest)
 
 
-def _note_success(bucket: dict[str, Any], host: str, *, status: int | None, token: float) -> None:
+def _note_success(
+    bucket: dict[str, Any], host: str, *, status: int | None, token: float, download: bool = False
+) -> None:
     """A good answer of ``host`` to a request that started at ``token``. A failure of a request
     that started later stands (its answer came first); so does a server's rate deadline."""
-    _observe(bucket, host, "ok", status, token=token)
+    _observe(bucket, host, "ok", status, token=token, download=download)
     if _later(bucket["failed_at"].get(host), token):
         return
     bucket["fail"][host] = 0
@@ -622,12 +633,15 @@ def _mark_host_ok(
     persist: bool,
     status: int | None = None,
     token: float | None = None,
+    download: bool = False,
 ) -> None:
-    """A good answer: in this request's view, and (``persist``) in the saved entry."""
+    """A good answer (``download``: a torrent): in this request's view, and (``persist``) saved."""
     started = _now() if token is None else token
-    _note_success(bucket, host, status=status, token=started)
+    _note_success(bucket, host, status=status, token=started, download=download)
     if persist:
-        _record(tracker, host, lambda saved: _note_success(saved, host, status=status, token=started))
+        _record(
+            tracker, host, lambda saved: _note_success(saved, host, status=status, token=started, download=download)
+        )
 
 
 def _mark_host_failed(
@@ -643,8 +657,10 @@ def _mark_host_failed(
     fail_threshold: int = 3,
     cooldown_sec: int = 3600,
     retry_after: float = 0,
+    download: bool = False,
 ) -> None:
-    """A failed request: in this request's view, and (``persist``) in the saved entry."""
+    """A failed request (``download``: for a torrent): in this request's view, and (``persist``)
+    in the saved entry."""
 
     def change(target: dict[str, Any]) -> None:
         _note_failure(
@@ -657,6 +673,7 @@ def _mark_host_failed(
             fail_threshold=fail_threshold,
             cooldown_sec=cooldown_sec,
             retry_after=retry_after,
+            download=download,
         )
 
     change(bucket)
@@ -664,18 +681,95 @@ def _mark_host_failed(
         _record(tracker, host, change)
 
 
-def _observe(bucket: dict[str, Any], host: str, failure: str, status: int | None = None, *, token: float) -> None:
-    if not isinstance(bucket.get("observed"), dict):
-        bucket["observed"] = {}
+def _recent(at: object) -> bool:
+    return (
+        isinstance(at, (int, float))
+        and not isinstance(at, bool)
+        and math.isfinite(at)
+        and 0 <= _now() - at < _OK_REFRESH_SEC
+    )
+
+
+def _observe(
+    bucket: dict[str, Any],
+    host: str,
+    failure: str,
+    status: int | None = None,
+    *,
+    token: float,
+    download: bool = False,
+) -> None:
+    """Keep what an answer says of the mirror: its health (``observed``: transport and server
+    answers, and success) apart from the site's access for this account (``access``: a sign-in
+    or the day's limit, until a success shows it gone - for a download's, a downloaded
+    torrent). A topic's own failure (removed, not a torrent, too large) or TOW's says neither."""
+    for key in ("observed", "access"):
+        if not isinstance(bucket.get(key), dict):
+            bucket[key] = {}
+    row = {"failure": failure, "at": _now(), "status": status, "token": token}
+    if failure in _ACCESS_CODES:
+        old = bucket["access"].get(host)
+        if not (isinstance(old, dict) and _later(old.get("token"), token)):
+            bucket["access"][host] = {**row, "download": download}
+        return
+    if failure in _NOT_HOST_HEALTH_CODES:
+        return
+    access = bucket["access"].get(host)
+    if (
+        failure == "ok"
+        and isinstance(access, dict)
+        and (download or not access.get("download"))
+        and not _later(access.get("token"), token)
+    ):
+        del bucket["access"][host]
     old = bucket["observed"].get(host)
     if isinstance(old, dict):
         if _later(old.get("token"), token):
             return  # a request that started later already said how the mirror is
-        # A routine success does not rewrite/fsync state for every page. An error (or a
-        # transition back to success) is fresh evidence for Sites and mirror preference.
-        if failure == "ok" and old.get("failure") == "ok":
+        # A routine success does not rewrite/fsync state for every page; it renews its time
+        # now and then. An error (or a transition back to success) is fresh evidence at once.
+        if failure == "ok" and old.get("failure") == "ok" and _recent(old.get("at")):
             return
-    bucket["observed"][host] = {"failure": failure, "at": _now(), "status": status, "token": token}
+    bucket["observed"][host] = row
+
+
+def _observation(row: object) -> dict[str, Any] | None:
+    if not isinstance(row, dict) or not isinstance(row.get("failure"), str):
+        return None
+    at = row.get("at")
+    if isinstance(at, bool) or not isinstance(at, (int, float)) or not math.isfinite(at) or at < 0:
+        return None
+    status = row.get("status")
+    return {
+        "failure": row["failure"],
+        "at": float(at),
+        "status": status if isinstance(status, int) and not isinstance(status, bool) else None,
+    }
+
+
+def mirror_observations(bucket: object, hosts: list[Any]) -> dict[str, dict[str, Any]]:
+    """What a saved site entry says of each of ``hosts`` (as configured, matched without a
+    trailing "/"), for Sites and the site's colour: the standing observation ``{"failure",
+    "at", "status"}``. A sign-in or day's-limit evidence stands beside a healthy mirror until
+    it is shown gone; a later transport failure says more. A topic's own failure an older TOW
+    saved among the mirror's observations is none."""
+    view = _bucket({"mirrors": {"site": copy.deepcopy(bucket)}}, "site")
+    result: dict[str, dict[str, Any]] = {}
+    for configured in hosts:
+        host = str(configured).rstrip("/")
+        health = _observation(view["observed"].get(host))
+        access = _observation(view["access"].get(host))
+        if health is not None and health["failure"] in _ACCESS_CODES:
+            if access is None or health["at"] > access["at"]:
+                access = health
+            health = None
+        elif health is not None and health["failure"] in _NOT_HOST_HEALTH_CODES:
+            health = None
+        if access is not None and not (health and health["failure"] != "ok" and health["at"] > access["at"]):
+            result[configured] = access
+        elif health is not None:
+            result[configured] = health
+    return result
 
 
 # What a host that does not answer well raises: the network library's errors, the socket's,
@@ -828,6 +922,7 @@ def pick_and_get(
         _record(tracker, None, lambda saved: _clamp(saved, now=_now(), cooldown_sec=cooldown_sec))
     if b.get("frozen"):
         raise MirrorFetchError("mirrors.frozen", failure="frozen", tracker=tracker)
+    wanted = ok is not None  # a torrent: its success shows a sign-in or day's limit gone
     last_err = None
     failures: list[Exception] = []
     failure_indices: dict[str, int] = {}
@@ -863,7 +958,7 @@ def pick_and_get(
                 _refuse_page(
                     r, wanted=ok is not None, download_limit=download_limit, maintenance_markers=maintenance_markers
                 )
-            _mark_host_ok(tracker, b, host, persist=persist, status=r.status_code, token=token)
+            _mark_host_ok(tracker, b, host, persist=persist, status=r.status_code, token=token, download=wanted)
             return r, host
         except Exception as e:  # noqa: BLE001 - any failure of a host is classified (_failure_code) and the next host tried
             last_err = e
@@ -877,7 +972,9 @@ def pick_and_get(
             status = getattr(e, "params", {}).get("status")
             if code == "quota":
                 host_failures.append(False)
-                _mark_host_failed(tracker, b, host, code, persist=persist, status=status, token=token, counts=False)
+                _mark_host_failed(
+                    tracker, b, host, code, persist=persist, status=status, token=token, counts=False, download=wanted
+                )
                 break
             # Only host-health failures count towards the mirror cooldown; a missing or
             # oversized topic, a check page or a slow answer on one topic's page (its host's
@@ -905,6 +1002,7 @@ def pick_and_get(
                 counts=host_failed,
                 fail_threshold=fail_threshold,
                 cooldown_sec=cooldown_sec,
+                download=wanted,
                 retry_after=float(getattr(e, "params", {}).get("retry_after") or getattr(e, "retry_after", 0) or 0),
             )
     if persist and challenged and not (isinstance(last_err, MirrorFetchError) and last_err.failure == "quota"):
@@ -1127,7 +1225,9 @@ def _recover_origin(
                 _refuse_page(
                     r, wanted=ok is not None, download_limit=download_limit, maintenance_markers=maintenance_markers
                 )
-            _mark_host_ok(tracker, bucket, host, persist=True, status=r.status_code, token=token)
+            _mark_host_ok(
+                tracker, bucket, host, persist=True, status=r.status_code, token=token, download=ok is not None
+            )
             chain.record_event("protection_restored", tracker, clearance.provider, "succeeded")
             return r, host
         except MirrorFetchError as exc:
@@ -1165,6 +1265,7 @@ def _recover_origin(
                         status=exc.params.get("status"),
                         token=token,
                         counts=False,
+                        download=ok is not None,
                     )
             if exc.failure in {"quota", "blocked"}:
                 # A probe ban/quota ends recovery too; do not manufacture resource evidence.

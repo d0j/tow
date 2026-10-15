@@ -64,6 +64,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   clock that is off no longer lengthens or shortens the pause.
 - A mirror that answers "unavailable" (503) with a time to retry is left alone by scheduled checks until then, for
   at most the site's cooldown; a check you start still tries it.
+- A removed topic, a page that is not a torrent or TOW failing on an answer no longer marks the mirror as having a
+  problem on Sites or colours the site amber. A sign-in or the day's download limit stays an amber note beside a
+  healthy mirror until a download shows it gone, and a mirror that keeps answering refreshes its time on Sites.
 
 ## [1.30.10] — 2026-10-15
 

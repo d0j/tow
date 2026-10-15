@@ -48,6 +48,7 @@ from tow.lifecycle import request_restart, service_status, set_autostart
 from tow.locations import check_writable as folder_write_problem
 from tow.locations import free_bytes
 from tow.log import history_events, log_event, read_events, scrub_text
+from tow.mirrors import mirror_observations
 from tow.mirrors import note_signed_in as _note_signed_in
 from tow.mirrors import prefer_host as _prefer_host
 from tow.notifiers import test as test_notifier
@@ -152,6 +153,7 @@ __all__ = [
     "locked_state_mutation",
     "log_event",
     "login_throttle",
+    "mirror_observations",
     "network_credential",
     "next_check_at",
     "night_cleanup_status",

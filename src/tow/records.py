@@ -109,6 +109,8 @@ class MirrorState(TypedDict, total=False):
     cool: dict[str, float]  # host -> until when it rests (epoch seconds)
     rate_cool: dict[str, float]  # server-rate deadline; manual checks cannot override it
     failed_at: dict[str, float]  # host -> when the request of its latest counted failure started
+    observed: dict[str, dict[str, Any]]  # host -> its latest health answer: transport, server, success
+    access: dict[str, dict[str, Any]]  # host -> a sign-in or daily-limit refusal not yet shown gone
     frozen: bool
 
 
