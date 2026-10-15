@@ -98,7 +98,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   restarted or the record expired”.
 - The results of a manual check are dated when the check ended, not when it was asked for. A long result no
   longer promises the rest “in History”, where unchanged topics never appear: it says problems come first and
-  Home shows every topic's current status.
+  Home shows every topic's current status. Cancelling a check TOW no longer knows says so instead of “already
+  started or finished”.
 - A manual check's results open at their own address, which shows them for the hour TOW keeps them (its
   message used to vanish after ten minutes). A results page still waiting for its check now shows the results
   when the check ends instead of staying on “waiting”, and Back no longer returns to the waiting page.

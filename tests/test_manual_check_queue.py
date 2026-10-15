@@ -343,6 +343,13 @@ def test_cancel_only_removes_queued_work(client, monkeypatch, consumers):
     assert calls == [None]
 
 
+def test_cancelling_an_unknown_check_does_not_say_it_already_started(client):
+    response = client.post("/check/not-a-job/cancel", follow_redirects=False)
+    message = flash_of(response.headers["location"])
+    assert "уже началась" not in message
+    assert message == "эта проверка больше не известна: TOW перезапущен или сведения устарели; ничего не отменено"
+
+
 @pytest.mark.parametrize("query", ["check_job", "check_result"])
 def test_restart_or_expired_result_never_says_success(client, query):
     page = client.get(f"/?{query}=not-a-job").text

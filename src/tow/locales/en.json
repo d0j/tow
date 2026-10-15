@@ -2357,6 +2357,7 @@
       "cancel": "Cancel waiting",
       "cancelled": "check removed from the queue; checks and downloads already started continue",
       "cannot_cancel": "the check already started or finished; cancelling its wait did not stop it — review the result",
+      "cancel_unknown": "this check is no longer known: TOW restarted or the record expired; nothing was cancelled",
       "queue_full": "the check queue is full; wait for the current jobs to finish, then try again",
       "results": "Results",
       "waiting": "Check accepted. Waiting for its turn or completion; results will appear automatically. You can check other topics.",
