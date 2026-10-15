@@ -111,6 +111,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   when the check ends instead of staying on “waiting”, and Back no longer returns to the waiting page.
   The waiting page of a check that has ended says it finished, with the link to its results, instead of “TOW
   restarted or the record expired”, and a results page whose check TOW no longer knows stops saying “waiting”.
+- One damaged saved topic error no longer hides every other topic failure from "Needs attention".
 
 ## [1.30.10] — 2026-10-15
 
