@@ -453,6 +453,83 @@ def test_an_applying_check_prunes_the_history_and_writes_it_once(monkeypatch):
     assert writes == [1]
 
 
+def _history_items(prefix: str, count: int, **fields) -> dict:
+    return {
+        f"file:{prefix}/{n:05d}.mkv": {"label": f"{prefix} {n}", "relative_path": "x" * 160, **fields}
+        for n in range(count)
+    }
+
+
+@pytest.fixture
+def small_bundles(monkeypatch):
+    """A restore point holds 256 KiB, the history may take 160 KiB of it (64 MiB / 40 MiB)."""
+    from tow import download_history
+    from tow.bundle import io as bundle_io
+
+    monkeypatch.setattr(bundle_io, "MAX_BUNDLE_BYTES", 256 * 1024)
+    monkeypatch.setattr(download_history, "MAX_BYTES", 160 * 1024)
+
+
+def test_a_history_too_large_for_a_restore_point_is_trimmed_by_the_check(monkeypatch, small_bundles):
+    """Every current file of every topic stayed for ever: past the bundle's size every restore
+    point, and so every update from Settings, failed, and a shorter keep time did not help."""
+    from tow import restore_points
+    from tow.paths import download_history_path
+    from tow.store import load_download_history, save_download_history
+
+    lately = iso_now()
+    save_state({"topics": [{**TOPIC, "hash": "HASH-NEW"}]})
+    current = _history_items("current", 300, first_seen_at=lately)
+    older = _history_items("older", 300, first_seen_at="2026-01-01T00:00:00+00:00", superseded=True)
+    newer = _history_items("newer", 100, first_seen_at=lately, superseded=True)
+    gone = {"last_scan_at": lately, "items": _history_items("gone", 300, first_seen_at=lately)}
+    t_record = {"last_scan_at": lately, "baseline_at": lately, "items": {**current, **older, **newer}}
+    save_download_history({"schema_version": 1, "topics": {"t": t_record, "deleted-lately": gone}})
+    with pytest.raises(restore_points.RestorePointError):
+        restore_points.create_restore_point()
+
+    _wire_fake_check(monkeypatch, FakeClient())
+    check.run_check(apply=True, notify=False)
+
+    assert download_history_path().stat().st_size <= 160 * 1024
+    topics = load_download_history()["topics"]
+    assert set(topics) == {"t"}  # first the records of topics no longer watched
+    items = topics["t"]["items"]
+    assert set(current) <= set(items)  # never a current file
+    assert len(set(older) & set(items)) < len(older)  # then files of older versions, the oldest first
+    assert set(newer) <= set(items)
+    assert "health" not in load_state() or "history_trimmed_at" not in load_state()["health"]
+    restore_points.create_restore_point()
+
+
+def test_current_files_alone_too_large_start_the_topics_record_over_and_say_so(monkeypatch, small_bundles):
+    """Never single current files (one dropped would be announced as new again): the largest
+    watched topic's record starts over, and the Log and Needs attention say so."""
+    from tow import restore_points
+    from tow.config import load_config
+    from tow.i18n import t
+    from tow.log import read_events
+    from tow.store import load_download_history, save_download_history
+    from tow.web.views import attention
+
+    lately = iso_now()
+    save_state({"topics": [{**TOPIC, "hash": "HASH-NEW"}, {**TOPIC, "id": "small", "hash": "HASH-2"}]})
+    big = {"last_scan_at": lately, "baseline_at": lately, "items": _history_items("big", 900, first_seen_at=lately)}
+    small = {"last_scan_at": lately, "baseline_at": lately, "items": _history_items("small", 20, first_seen_at=lately)}
+    save_download_history({"schema_version": 1, "topics": {"t": big, "small": small}})
+
+    _wire_fake_check(monkeypatch, FakeClient())
+    check.run_check(apply=True, notify=False)
+
+    assert set(load_download_history()["topics"]) == {"small"}
+    assert any(event.get("kind") == "download_history_trimmed" for event in read_events(limit=50))
+    health = load_state()["health"]
+    assert health["history_trimmed_at"] == health["at_ts"]
+    notes = [item["text"] for item in attention(load_state(), load_config())]
+    assert t("issues.history_trimmed", "ru") in notes
+    restore_points.create_restore_point()
+
+
 def test_a_history_quarantined_earlier_with_nothing_to_record_is_still_written(monkeypatch):
     from tow.paths import download_history_path
 

@@ -95,3 +95,43 @@ def test_a_broken_history_is_left_alone():
     assert prune({"topics": []}, watched=set(), now=NOW) is False
     history = {"topics": {"t": "broken", "u": {"items": "broken"}}}
     assert prune(history, watched=set(), now=NOW) is False
+
+
+def test_the_history_leaves_room_in_a_restore_point():
+    from tow.bundle.io import MAX_BUNDLE_BYTES
+    from tow.download_history import MAX_BYTES
+
+    assert MAX_BYTES <= MAX_BUNDLE_BYTES * 5 // 8  # state.json, config.yaml, secrets and the log fit beside it
+
+
+def test_fit_drops_in_order_and_never_a_single_current_file():
+    from tow.download_history import _size, fit
+
+    def files(prefix, count, days_ago, *, superseded):
+        return {f"{prefix}{n}": {**_item(days_ago, superseded=superseded), "path": "x" * 50} for n in range(count)}
+
+    history = {
+        "topics": {
+            "gone-old": {"last_scan_at": _at(9), "items": files("g", 5, 9, superseded=False)},
+            "gone-new": {"last_scan_at": _at(1), "items": files("h", 5, 1, superseded=False)},
+            "big": {"items": {**files("c", 20, 1, superseded=False), **files("o", 5, 50, superseded=True)}},
+            "small": {"items": {**files("s", 3, 1, superseded=False), **files("p", 5, 5, superseded=True)}},
+        }
+    }
+    assert fit(history, watched={"big", "small"}, limit=_size(history) + 1) == (False, [])
+
+    limit = _size(history) - _size(history["topics"]["gone-old"]) + 10
+    assert fit(history, watched={"big", "small"}, limit=limit) == (True, [])
+    assert set(history["topics"]) == {"gone-new", "big", "small"}  # the longest unscanned first
+    assert {f"p{n}" for n in range(5)} <= set(history["topics"]["small"]["items"])
+
+    del history["topics"]["gone-new"]
+    older = sum(_size({key: value}) - 2 for key, value in history["topics"]["big"]["items"].items() if key[0] == "o")
+    assert fit(history, watched={"big", "small"}, limit=_size(history) + 1 - older) == (True, [])
+    items = {key for record in history["topics"].values() for key in record["items"]}
+    assert not {f"o{n}" for n in range(5)} & items  # the oldest files of older versions next
+    assert {f"p{n}" for n in range(5)} | {f"c{n}" for n in range(20)} <= items
+
+    assert fit(history, watched={"big", "small"}, limit=_size(history["topics"]["small"]) + 40) == (True, ["big"])
+    assert set(history["topics"]) == {"small"}  # then the largest watched record, whole
+    assert {f"s{n}" for n in range(3)} <= set(history["topics"]["small"]["items"])

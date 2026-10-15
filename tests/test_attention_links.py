@@ -323,6 +323,15 @@ def test_a_rebuilt_history_lands_on_its_note_with_nothing_to_focus(client):
     assert " autofocus" not in page
 
 
+def test_a_trimmed_history_is_said_on_home_and_lands_on_its_note_in_the_history(client):
+    _home_state(_topic("z", 9), history_trimmed_at=int(time.time()))
+    assert "history_trimmed" in _entries(client)  # unlike a rebuilt one: it goes on while there are so many files
+    page = client.get("/history#issue-history_trimmed").text
+    note = page.split('id="issue-history_trimmed"', 1)[1].split("</p>", 1)[0]
+    assert "точку восстановления" in note
+    assert " autofocus" not in page
+
+
 def test_a_topic_error_opens_its_row_with_the_current_problem(client):
     _home_state(_topic("a", 1, last_error="Synthetic connection refused", last_error_class="tracker"))
     entry = _entries(client)["topic_error"]
@@ -359,6 +368,7 @@ LANDINGS = {
     "check_stale": test_late_checks_open_the_service_card_with_restart,
     "check_blocked": test_a_failed_check_lands_on_its_error_in_the_history_with_check_all,
     "history_rebuilt": test_a_rebuilt_history_lands_on_its_note_with_nothing_to_focus,
+    "history_trimmed": test_a_trimmed_history_is_said_on_home_and_lands_on_its_note_in_the_history,
     "data_lost": test_a_lost_data_folder_lands_on_the_night_copies_with_the_newest_restore,
     "topic_error": test_a_topic_error_opens_its_row_with_the_current_problem,
 }

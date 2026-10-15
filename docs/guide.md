@@ -228,7 +228,10 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
 
 - **History** shows downloads, errors, changes and notifications, filterable and searchable. The file history
   of a topic (the row's files link) lists every file of every version; files of older versions are kept for
-  `history_keep_days` (730 by default), files of the current version are never dropped.
+  `history_keep_days` (730 by default), files of the current version are never dropped. The history also
+  goes into every restore point, which holds at most 64 MiB: past 40 MiB the check drops, in this order, the
+  records of topics no longer watched, then the oldest files of older versions; should the current files alone
+  still be too many, the history of the topic with the most files starts over and **Needs attention** says so.
 - **Undo.** After a change (an edit, a delete, a settings save, a password change) its message carries **Undo**
   with the time left, also in **Recent messages** after the message folded. It lasts a short time (Settings →
   Checks, “Show “Undo” for”) and puts back that change, as one step; an **Undo** of an earlier message never

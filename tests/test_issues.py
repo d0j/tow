@@ -52,6 +52,7 @@ def test_every_kind_is_found_once_in_its_order():
         "check_blocked",
         "client_down",
         "history_rebuilt",
+        "history_trimmed",
         "site_needs_login",
         "topic_error",
     ]

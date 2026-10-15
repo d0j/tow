@@ -110,6 +110,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   the watchdog of `tow run` says it is down only after two checks in a row found it so (TOW restarts it by
   itself and says that once, then once every 6 hours), and the time it was down counts from the first. The
   restart messages now also wait for the end of the quiet hours.
+- A download history that grew past what a restore point holds (64 MiB, reached with tens of thousands of
+  files) no longer stops every restore point and every update from Settings: past 40 MiB the check drops the
+  records of topics no longer watched, then the oldest files of older versions, whatever their age; if the
+  current files alone are still too many, the history of the topic with the most files starts over and Needs
+  attention says so (never single files, which would be announced as new again).
 
 ## [1.31.2] — 2026-10-15
 
