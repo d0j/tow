@@ -241,3 +241,45 @@ def test_a_link_slug_is_decoded_once(url, slug):
     from tow.title import title_from_url_slug
 
     assert title_from_url_slug(url) == slug
+
+
+@pytest.mark.parametrize(
+    ("url", "topic_id"),
+    [
+        ("https://kinozal.tv/details.php?id=3456789", "3456789"),
+        ("https://www.kinozal.tv/details.php?id=3456789", "3456789"),
+        ("https://kinozal.guru/details.php?id=3456789&page=2", "3456789"),
+        ("https://kinozal.guru/details.php?id=3456789#comments", "3456789"),
+        ("https://kinozal.guru/details.php?sid=1&id=3456789", "3456789"),
+        ("https://kinozal.guru/details.php?id=34567890x", None),
+        ("https://kinozal.example/details.php?id=1", None),
+    ],
+)
+def test_the_kinozal_preset_takes_its_own_topic_links(url, topic_id):
+    from tow.trackers.presets import get
+
+    preset = get("kinozal")
+    assert preset is not None
+    found = re.match(preset.spec["url_regex"], url)
+    assert (found.group(1) if found else None) == topic_id
+
+
+def test_a_topic_link_of_a_mirror_the_site_does_not_fetch_from_still_gets_its_title(monkeypatch):
+    # kinozal.tv is a Kinozal topic link, but not one of its mirrors: no title was read at all.
+    import httpx
+
+    from tow.title import guess_topic_title
+    from tow.trackers.presets import get
+
+    preset = get("kinozal")
+    assert preset is not None
+    asked = []
+
+    def page(url, ua=None):
+        asked.append(url)
+        return httpx.Response(200, html="<h1>Сериал К [1-8 из 10]</h1>")
+
+    monkeypatch.setattr("tow.config.load_config", lambda: {"trackers": {"kinozal": dict(preset.spec)}})
+    monkeypatch.setattr("tow.http.get_public_page", page)
+    assert guess_topic_title("https://kinozal.tv/details.php?id=3456789") == "Сериал К [1-8 из 10]"
+    assert asked == ["https://kinozal.guru/details.php?id=3456789"]

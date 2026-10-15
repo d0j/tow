@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from tow.trackers.presets import SitePreset, UrlParts
+from tow.trackers.presets import SitePreset, UrlParts, query_param
 
 _DOWNLOAD = "/download.php?id={id}"
 
@@ -57,9 +57,10 @@ PRESET = SitePreset(
     maintenance_markers=("ведутся технические работы", "technical works in progress"),
     spec={
         "title": "Kinozal",
+        # Also with "www.", other parameters or a "#comments" anchor, as the site's own links are.
         "url_regex": (
-            r"^https?://(?:kinozal\.(?:tv|me|guru)|kinozal\.jumpingcrab\.com|kinozal\.cloudns\.nz)"
-            r"/details\.php\?id=(\d+)$"
+            r"^https?://(?:www\.)?(?:kinozal\.(?:tv|me|guru)|kinozal\.jumpingcrab\.com|kinozal\.cloudns\.nz)"
+            r"/details\.php" + query_param("id")
         ),
         "login_hosts": ["https://kinozal.guru", "https://kinozal.jumpingcrab.com", "https://kinozal.cloudns.nz"],
         "fetch_hosts": ["https://kinozal.guru", "https://kinozal.jumpingcrab.com", "https://kinozal.cloudns.nz"],
