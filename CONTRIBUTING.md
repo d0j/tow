@@ -33,7 +33,9 @@ pwsh scripts/gate.ps1 -Audit     # also checks the locked dependencies for known
 
 Coverage needs `pytest-cov`, which is not in the lock: the gate brings it from uv's cache or the network, and
 without either it runs the tests without coverage and says so (`gate: SKIPPED coverage`). In CI (`CI=true`) or
-with `TOW_GATE_REQUIRE_COVERAGE=1` it fails instead.
+with `TOW_GATE_REQUIRE_COVERAGE=1` it fails instead. The test run has a 30-minute deadline, collection and worker
+shutdown included (`TOW_GATE_PYTEST_DEADLINE_SEC` overrides it): past it the gate stops that run's own processes
+and fails, and the tree is not recorded as passed.
 
 The hooks run it for you: **pre-commit** runs `-Staged`, **post-rewrite** runs `-Quick` after an amend or a
 rebase (git ignores its result, so it can only warn, loudly), **pre-push** requires the full gate on exactly the

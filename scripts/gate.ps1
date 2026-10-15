@@ -10,7 +10,10 @@
     records the tree it passed on, so the pre-push hook lets exactly that content through
     without running it again.
     Coverage is skipped only when pytest-cov cannot be had and neither CI (CI=true) nor
-    TOW_GATE_REQUIRE_COVERAGE=1 asks for it; then the gate fails instead.
+    TOW_GATE_REQUIRE_COVERAGE=1 asks for it; then the gate fails instead. The test run has a
+    wall-clock deadline of 30 minutes (TOW_GATE_PYTEST_DEADLINE_SEC overrides it), collection and
+    worker shutdown included: past it, only that run's process tree is stopped and the gate fails
+    without recording the tree as passed.
     -Quick skips the test suite and the wheel smoke; it only collects the tests (every test
     module must import).
     -Staged checks what the next commit contains (the index), not the working tree: the
@@ -34,6 +37,10 @@ Set-Location $Root
 $EmptyTree = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 $Skipped = [System.Collections.Generic.List[string]]::new()
 $PytestCov = 'pytest-cov>=7.1'
+# The per-test limit (pyproject, 300 s) does not bound collection, worker start or shutdown: the
+# whole run gets six times the usual five minutes.
+$PytestDeadlineSec = if ($env:TOW_GATE_PYTEST_DEADLINE_SEC) { [int]$env:TOW_GATE_PYTEST_DEADLINE_SEC } else { 1800 }
+if ($PytestDeadlineSec -le 0) { throw 'gate failed: TOW_GATE_PYTEST_DEADLINE_SEC must be a positive number of seconds' }
 $RequireCoverage = $env:CI -eq 'true' -or $env:TOW_GATE_REQUIRE_COVERAGE -eq '1'
 
 function Step([string]$Name, [scriptblock]$Command) {
@@ -51,6 +58,90 @@ function Skip([string]$Name, [string]$Why) {
 # .venv (the snapshot directory has none, and must not get one).
 function Invoke-Tool {
     if ($Staged) { uv run --frozen --no-sync @args } else { uv run --frozen @args }
+}
+
+# When a process started, or $null when it is gone: a pid alone may be reused by another program.
+function Get-StartTime([int]$Id) {
+    try { return [System.Diagnostics.Process]::GetProcessById($Id).StartTime } catch { return $null }
+}
+
+# Adds to $Known (pid -> start time) every process below it that is running now. The whole tree is
+# read before anything is stopped: a launcher that takes its child down with it (the venv's
+# python.exe on Windows) would otherwise hide that child's own children.
+function Add-ProcessTree([hashtable]$Known) {
+    $rows = if ($IsWindows) {
+        Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId |
+            ForEach-Object { [pscustomobject]@{ Id = [int]$_.ProcessId; Parent = [int]$_.ParentProcessId } }
+    }
+    else {
+        & /bin/ps -A -o pid= -o ppid= | ForEach-Object {
+            $fields = -split $_
+            [pscustomobject]@{ Id = [int]$fields[0]; Parent = [int]$fields[1] }
+        }
+    }
+    do {
+        $added = $false
+        foreach ($row in $rows) {
+            if (-not $Known.ContainsKey($row.Parent) -or $Known.ContainsKey($row.Id)) { continue }
+            $started = Get-StartTime $row.Id
+            # A child starts after its parent; anything else holds a reused pid.
+            if ($null -ne $started -and $started -ge $Known[$row.Parent]) {
+                $Known[$row.Id] = $started
+                $added = $true
+            }
+        }
+    } while ($added)
+}
+
+# Stops $Process and every process below it, nothing else; a few rounds catch children started
+# meanwhile. True when none of them is left.
+function Stop-ProcessTree([System.Diagnostics.Process]$Process) {
+    $known = @{ $Process.Id = $Process.StartTime }
+    for ($round = 1; $round -le 5; $round++) {
+        Add-ProcessTree $known
+        $alive = @($known.Keys | Where-Object { (Get-StartTime $_) -eq $known[$_] })
+        if (-not $alive) { return $true }
+        $names = $alive | ForEach-Object { try { "$_ $([System.Diagnostics.Process]::GetProcessById($_).ProcessName)" } catch { "$_" } }
+        Write-Host "gate: stopping $($names -join ', ')" -ForegroundColor Red
+        foreach ($id in $alive) {
+            try { [System.Diagnostics.Process]::GetProcessById($id).Kill() } catch { }
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    return -not @($known.Keys | Where-Object { (Get-StartTime $_) -eq $known[$_] })
+}
+
+# Runs one program with the console of the gate and waits at most $Seconds. Past the deadline it
+# stops that program's own process tree (nothing else), and throws: the caller's Step fails and the
+# tree is never recorded as passed. $LASTEXITCODE is the program's exit code.
+function Invoke-WithDeadline([int]$Seconds, [string]$FilePath, [string[]]$Arguments) {
+    $info = [System.Diagnostics.ProcessStartInfo]::new($FilePath)
+    foreach ($argument in $Arguments) { $info.ArgumentList.Add($argument) }
+    $info.UseShellExecute = $false
+    # .NET starts in the process's directory, not in PowerShell's location (Set-Location above).
+    $info.WorkingDirectory = (Get-Location).ProviderPath
+    $process = [System.Diagnostics.Process]::Start($info)
+    try {
+        if (-not $process.WaitForExit($Seconds * 1000)) {
+            Write-Host "gate: the test run (pid $($process.Id)) is still running after $Seconds s" -ForegroundColor Red
+            if (-not (Stop-ProcessTree $process)) {
+                Write-Host 'gate: some of its processes could not be stopped' -ForegroundColor Red
+            }
+            $global:LASTEXITCODE = 124
+            throw "gate failed: the test run did not finish within $Seconds s"
+        }
+        $process.WaitForExit()
+        $global:LASTEXITCODE = $process.ExitCode
+    }
+    finally {
+        $process.Dispose()
+    }
+}
+
+# Invoke-Tool under the test-run deadline (the full gate only: -Staged never runs the suite).
+function Invoke-ToolWithDeadline {
+    $uv = (Get-Command uv -CommandType Application | Select-Object -First 1).Source
+    Invoke-WithDeadline $PytestDeadlineSec $uv (@('run', '--frozen') + $args)
 }
 
 # The tree object of the working tree as it is (tracked and untracked, not ignored): equal to
@@ -153,7 +244,7 @@ try {
         Invoke-Tool --with $PytestCov python -c 'import pytest_cov' 2>$null
         if ($LASTEXITCODE -eq 0) {
             Step 'pytest (parallel, random order, branch coverage, threshold in pyproject)' {
-                Invoke-Tool --with $PytestCov pytest -q -ra -p no:cacheprovider @parallel --test-order random --cov --cov-report=
+                Invoke-ToolWithDeadline --with $PytestCov pytest -q -ra -p no:cacheprovider @parallel --test-order random --cov --cov-report=
             }
         }
         elseif ($RequireCoverage) {
@@ -161,7 +252,7 @@ try {
         }
         else {
             Skip 'coverage' "$PytestCov is not available offline"
-            Step 'pytest (parallel, random order)' { Invoke-Tool pytest -q -ra -p no:cacheprovider @parallel --test-order random }
+            Step 'pytest (parallel, random order)' { Invoke-ToolWithDeadline pytest -q -ra -p no:cacheprovider @parallel --test-order random }
         }
         Test-Wheel
     }
