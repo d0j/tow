@@ -32,6 +32,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   a red problem (a lost data folder, a site that asks for a sign-in TOW cannot make) is red, no longer amber,
   and messages and notes share one red instead of two slightly different ones. Screen readers treat these notes
   as part of the page instead of announcing them again on every visit.
+- When saved passwords and tokens cannot be opened, Settings says so in one red note with its instructions and
+  Copy the command, instead of a blue message strip; Needs attention still lists it and leads to that note.
 
 ## [1.30.11] — 2026-10-15
 
