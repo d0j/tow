@@ -5,6 +5,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Security
+
+- A site page made of thousands of unclosed tags no longer costs TOW a second or more of processor time on
+  every answer: the page is read in one pass when TOW looks for a sign-in form (1.30.11 meant to do this but
+  still read such a page again from every unclosed tag).
+
 ## [1.31.0] — 2026-10-15
 
 ### Fixed
