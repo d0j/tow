@@ -94,7 +94,7 @@ def known_names() -> frozenset[str]:
     def build() -> frozenset[str]:
         from tow.clients.factory import client_configurations
         from tow.jsonish import as_dict
-        from tow.notifiers.registry import kinds
+        from tow.notifiers import kinds
 
         names: set[str] = set()
         try:
