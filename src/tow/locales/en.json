@@ -33,7 +33,14 @@
       "blocked": "Site blocked access",
       "auth": "Site sign-in required",
       "origin_down": "Site origin unavailable",
-      "transport": "Connection failed"
+      "transport": "Connection failed",
+      "redirect_policy": "Site redirected to an address TOW does not follow",
+      "redirect_loop": "Too many redirects",
+      "maintenance": "Site under maintenance",
+      "gone": "Topic removed",
+      "unexpected": "Not the expected page",
+      "http": "Site server error",
+      "http_topic": "Page not available"
     },
     "phase": {
       "startup": "Module startup",

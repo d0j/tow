@@ -818,6 +818,13 @@ _ACCESS_REASON_KEYS = {
     "auth": "site_access.reason.auth",
     "origin_down": "site_access.reason.origin_down",
     "transport": "site_access.reason.transport",
+    "redirect_policy": "site_access.reason.redirect_policy",
+    "redirect_loop": "site_access.reason.redirect_loop",
+    "maintenance": "site_access.reason.maintenance",
+    "gone": "site_access.reason.gone",
+    "unexpected": "site_access.reason.unexpected",
+    "http": "site_access.reason.http",
+    "http_topic": "site_access.reason.http_topic",
 }
 
 

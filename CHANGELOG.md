@@ -52,6 +52,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   it is checked again when the file changes, and always right before the module starts.
 - Site-access services are asked for an uncompressed answer, the only kind TOW accepts: a service that
   compressed it because TOW's request allowed that was refused.
+- History also names the reason when a site refused a page after its site-access check passed because of a
+  redirect elsewhere, maintenance, a removed topic, another page or an HTTP error.
 
 ## [1.30.10] — 2026-10-15
 

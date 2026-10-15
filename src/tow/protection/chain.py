@@ -61,6 +61,14 @@ def record_event(
             "auth",
             "origin_down",
             "transport",
+            # What a verified replay of the probe or the topic was answered instead (mirrors).
+            "redirect_policy",
+            "redirect_loop",
+            "maintenance",
+            "gone",
+            "unexpected",
+            "http",
+            "http_topic",
         }:
             extra["reason"] = reason
         if phase in {"startup", "service", "validation", "probe", "resource"}:
