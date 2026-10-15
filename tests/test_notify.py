@@ -171,3 +171,27 @@ def test_works_again_said_with_an_event_survives_a_later_event_of_the_topic():
     batch.queue(topic, kind="new_file", operation_id="op-f", tracker="rutor", error="client refused")
     (item,) = list(batch)
     assert (item.kind, item.recovered) == ("completed", True)
+
+
+@pytest.mark.parametrize(
+    ("title", "episodes"),
+    [
+        # "2x2" is a voice-over studio, not season 2 episode 2.
+        ("Шоу / Show / Сезон: 1 / Серии: 1-8 из 10 (Режиссёр) [2024, WEB-DL 1080p] MVO (2x2)", "S01E01–08 из 10"),
+        ("Шоу / Show [Сезон 1: 1-8 серии из 8] (2x2) [2021]", "S01E01–08 из 8"),
+        # The usual RuTracker form, read as tow.episodes reads it for the topic's progress.
+        ("Шоу / Show / Сезон: 2 / Серии: 1-12 из 12 [2023, WEBRip 1080p]", "S02E01–12 из 12"),
+        ("Шоу (сезон 1 из 16, серии 1-20 из 20)", "S01E01–20 из 20"),
+        # Controls.
+        ("Show (1x01-05 из 10)", "S01E01–05 из 10"),
+        ("Show [03x01-13 из 14]", "S03E01–13 из 14"),
+        ("Show [S01E02 из 10]", "S01E02 из 10"),
+        ("Show MVO (2x2)", ""),
+        ("Film (2004)", ""),
+        ("Show [1-8 из 10]", ""),  # no season named: nothing invented
+    ],
+)
+def test_the_message_names_the_episodes_the_title_names(title, episodes):
+    # The title of an added or updated topic said "S02E02 из 10" for "(2x2)" and nothing for the
+    # usual "Сезон: 2 / Серии: 1-12 из 12".
+    assert _episode_text(title, "ru") == episodes

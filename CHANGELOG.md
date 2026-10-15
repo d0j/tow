@@ -210,6 +210,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A new version with Cyrillic file names (Russian subtitles, a renamed series) is no longer refused with "the
   previous version is still active" because the running old version has plain Latin file names; only a name the
   client shows garbled is still taken for a possible overlap.
+- The episodes in an "added" or "updated" message come from the topic's title as its progress reads them: a
+  voice-over studio named `(2x2)` is no longer "S02E02", and `Сезон: 2 / Серии: 1-12 из 12` gives "S02E01–12 of 12".
 
 ## [1.31.2] — 2026-10-15
 

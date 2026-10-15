@@ -14,6 +14,13 @@ from tow.records import Topic
 _EPISODE_RANGE = re.compile(
     r"(?ix)\b(?:s?(?P<season>\d{1,2})[xх])(?P<start>\d{1,4})"
     r"(?:\s*[-–]\s*(?P<end>\d{1,4}))?"
+    # Not "MVO (2x2)": a voice-over studio's name in brackets is no season and episode.
+    r"(?!\s*[)\]])"
+)
+# "Серии: 1-12 из 12" / "Episodes 1-8 of 10": the episodes of a season the title names elsewhere.
+_EPISODE_SPAN = re.compile(
+    r"(?i)(?<![\dxх])(?P<start>\d{1,4})(?:\s*[-–—]\s*(?P<end>\d{1,4}))?"
+    r"\s*(?:сери[яий]|эпизод\w*|episodes?)?\s*(?:из|of)\s*(?P<total>\d{1,4})\b"
 )
 _EPISODE_SE = re.compile(r"(?ix)\bS(?P<season>\d{1,2})E(?P<start>\d{1,4})(?:\s*[-–]\s*E?(?P<end>\d{1,4}))?\b")
 _EPISODE_TOTAL = re.compile(r"(?ix)\b(?:из|of)\s*(?P<total>\d{1,4})\b")
@@ -170,17 +177,34 @@ def short_series_title(title: str, lang: str | None = None) -> str:
 
 
 def _episode_text(title: str, lang: str) -> str:
+    """The episodes a topic's title names, as "S01E01–08 из 10" ("" when it names none)."""
     source = (title or "")[:4096]
-    match = _EPISODE_RANGE.search(source) or _EPISODE_SE.search(source)
-    if not match:
-        return ""
-    season = int(match.group("season"))
-    start = int(match.group("start"))
-    end = match.group("end")
+    match = _EPISODE_SE.search(source) or _EPISODE_RANGE.search(source)
+    found_total = _EPISODE_TOTAL.search(source)  # "of 10" / "из 10" in the site's title
+    total = int(found_total.group("total")) if found_total else None
+    if match:
+        season, start, end = int(match.group("season")), int(match.group("start")), match.group("end")
+    else:
+        # "Сезон: 2 / Серии: 1-12 из 12": the season and the episode count as tow.episodes reads
+        # them for the topic's progress, the episodes from that count's own "a-b из c".
+        from tow.episodes import parse_expected_count, parse_season_hint
+
+        expected = parse_expected_count(source)
+        hinted = parse_season_hint(source) if expected else None
+        span = next(
+            (
+                found
+                for found in _EPISODE_SPAN.finditer(source)
+                if expected and int(found.group("total")) == int(expected["episode_max"])
+            ),
+            None,
+        )
+        if hinted is None or span is None:
+            return ""
+        season, start, end, total = hinted, int(span.group("start")), span.group("end"), int(span.group("total"))
     prefix = f"S{season:02d}E{start:02d}"
     value = f"{prefix}–{int(end):02d}" if end and int(end) != start else prefix
-    total = _EPISODE_TOTAL.search(source)  # "of 10" / "из 10" in the site's title
-    return t("notify.episode_of", lang, episodes=value, total=int(total.group("total"))) if total else value
+    return t("notify.episode_of", lang, episodes=value, total=total) if total else value
 
 
 def _tracker_text(tracker: str) -> str:
