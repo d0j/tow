@@ -23,6 +23,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   automatic site retries.
 - History and the Log name the automatic retries after a site failure ("automatic retry") like the other
   kinds of checks.
+- A topic of a site you paused no longer offers Check access now: the check would only report the pause again.
 
 ## [1.30.10] — 2026-10-15
 
