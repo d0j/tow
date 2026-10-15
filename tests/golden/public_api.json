@@ -20,6 +20,7 @@
   "recover_import_transactions": "def() -> 'list[str]'",
   "recover_interrupted_import": "def() -> 'None'",
   "rollback_import": "def(checkpoint: 'Path', *, apply: 'bool' = False) -> 'dict[str, Any]'",
+  "this_install_settings": "def() -> 'dict[str, Any]'",
   "verify_bundle": "def(path: 'Path', passphrase: 'str') -> 'None'"
  },
  "tow.cli": {

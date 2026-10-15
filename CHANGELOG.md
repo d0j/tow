@@ -131,6 +131,14 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - When a site refuses the `.torrent` and a check takes the page's magnet link instead, the torrent client now
   gets only its info-hash and the trackers a site may be at, as the preview of a new topic already did: trackers,
   peers and web seeds in the home network that a page put into the link are left out.
+- `tow import --apply` no longer takes a file's security settings as they are: this TOW keeps its own network
+  access, password for other devices, backup folders, opt-ins for shares and the home network and access
+  providers. The preview lists those the file holds otherwise; `--accept-security-settings` takes the file's
+  (moving your own TOW to another computer). A file someone handed you could open TOW to the network with their
+  password or send its backups to their computer.
+- Restoring a backup, a restore point or a TOW file - also from another device - now keeps this computer's
+  opt-ins for shares and the home network and its access providers too, as it already kept network access, the
+  password and the backup folders.
 
 ## [1.31.2] — 2026-10-15
 

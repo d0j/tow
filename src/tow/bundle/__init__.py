@@ -28,7 +28,7 @@ from tow.bundle.checkpoint import (
 from tow.bundle.crypto import KDF_ITERATIONS, KDF_NAME, KDF_SALT_BYTES
 from tow.bundle.errors import ExportImportError
 from tow.bundle.export import export_bundle, load_json_for_export
-from tow.bundle.importer import import_bundle
+from tow.bundle.importer import import_bundle, this_install_settings
 from tow.bundle.io import FORMAT, MAX_BUNDLE_BYTES
 from tow.bundle.path_maps import parse_path_maps
 
@@ -53,5 +53,6 @@ __all__ = [
     "recover_import_transactions",
     "recover_interrupted_import",
     "rollback_import",
+    "this_install_settings",
     "verify_bundle",
 ]

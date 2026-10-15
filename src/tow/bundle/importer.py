@@ -12,6 +12,7 @@ from typing import Any
 
 import yaml
 
+from tow.backup_actions import KEPT_SETTINGS
 from tow.bundle.archive import read_bundle
 from tow.bundle.checkpoint import (
     IMPORT_CHECKPOINTS_KEPT,
@@ -41,8 +42,72 @@ from tow.store import (
 from tow.yaml_guard import YamlLimitError
 from tow.yaml_guard import dump as dump_yaml
 
-# The backup folders of the install a bundle is restored into (a restore point keeps them).
-_FOLDER_OVERRIDES = ("backup_dir", "restore_points_dir")
+# The type of each setting an import may keep from this install (KEPT_SETTINGS).
+_OVERRIDE_TYPES: dict[str, type] = {
+    "bind": str,
+    "port": int,
+    "allow_lan": bool,
+    "backup_dir": str,
+    "restore_points_dir": str,
+    "allow_unc_save_paths": bool,
+    "allow_private_tracker_hosts": bool,
+    "allow_private_notifier_hosts": bool,
+    "protection": dict,
+}
+# The password other devices sign in with (secrets.enc): kept with the settings above.
+_ACCESS_SECRET = "lan_auth"
+
+
+def this_install_settings() -> dict[str, Any]:
+    """This install's security settings (KEPT_SETTINGS) as config overrides for an import that
+    keeps them; None for one it does not have. Local only when its config cannot be read."""
+    from tow.config import load_config
+
+    try:
+        live = load_config()
+    except Exception:  # noqa: BLE001 - replacing a broken or missing config is often the point
+        return {**dict.fromkeys(KEPT_SETTINGS), "bind": "127.0.0.1", "allow_lan": False}
+    return {key: copy.deepcopy(live.get(key)) for key in KEPT_SETTINGS}
+
+
+def _security_settings(
+    parsed: dict[str, Any], destination_secrets: dict[str, Any] | None, kept: set[str]
+) -> list[dict[str, Any]]:
+    """The security settings the file holds otherwise than this install, and whether the import
+    keeps this install's value (``kept``: config keys, and ``lan_auth`` for the password, which
+    is said only as "set")."""
+    from tow.config import load_config, validated
+
+    try:
+        live: dict[str, Any] = load_config()
+    except Exception:  # noqa: BLE001 - no readable config here: every value of the file is new
+        live = {}
+    try:
+        incoming = validated(copy.deepcopy(parsed["config"]))  # defaults filled in, as live's
+    except Exception:  # noqa: BLE001 - validate_config_schema accepted it; compare it as written
+        incoming = parsed["config"]
+    changes = [
+        {"setting": key, "file": incoming.get(key), "this_computer": live.get(key), "kept": key in kept}
+        for key in KEPT_SETTINGS
+        if incoming.get(key) != live.get(key)
+    ]
+    theirs = parsed["secrets"].get(_ACCESS_SECRET)
+    if destination_secrets is None:
+        try:
+            destination_secrets = load_secrets()
+        except SecretStoreError:
+            destination_secrets = None
+    ours = None if destination_secrets is None else destination_secrets.get(_ACCESS_SECRET)
+    if destination_secrets is None or theirs != ours:
+        changes.append(
+            {
+                "setting": _ACCESS_SECRET,
+                "file": "set" if theirs else None,
+                "this_computer": ("set" if ours else None) if destination_secrets is not None else "unknown",
+                "kept": _ACCESS_SECRET in kept,
+            }
+        )
+    return changes
 
 
 def _destination_readback(parsed: dict[str, Any], state_bytes: bytes, history_bytes: bytes) -> None:
@@ -112,18 +177,15 @@ def _config_override_bytes(effective_config: dict[str, Any]) -> bytes:
 
 def _apply_config_overrides(parsed: dict[str, Any], overrides: dict[str, Any]) -> None:
     """This install's own settings over the bundle's config.yaml (``parsed`` is changed in place)."""
-    if not set(overrides).issubset({"bind", "port", "allow_lan", *_FOLDER_OVERRIDES}):
+    if not set(overrides).issubset(_OVERRIDE_TYPES):
         raise ExportImportError("unsupported config override")
     # Typed values from the CLI or the web form: no "yes" or "80" written for them.
-    validate_field(overrides, "bind", str, label="config.yaml")
-    validate_field(overrides, "port", int, label="config.yaml")
-    validate_field(overrides, "allow_lan", bool, label="config.yaml")
-    for key in _FOLDER_OVERRIDES:
-        validate_field(overrides, key, str, label="config.yaml")
+    for key, expected in _OVERRIDE_TYPES.items():
+        validate_field(overrides, key, expected, label="config.yaml")
     effective_config = copy.deepcopy(parsed["config"])
     for key, value in overrides.items():
-        if key in _FOLDER_OVERRIDES and value is None:
-            effective_config.pop(key, None)  # this install has none: the default folder, not the bundle's
+        if value is None:
+            effective_config.pop(key, None)  # this install has none: the default, not the bundle's
         else:
             effective_config[key] = copy.deepcopy(value)
     validate_config_schema(effective_config)
@@ -143,16 +205,20 @@ def _import_bundle(
     recover_import_transactions()
     parsed = read_bundle(Path(input_path), passphrase)
     overrides = dict(config_overrides or {})
-    if overrides:
-        _apply_config_overrides(parsed, overrides)
     secret_keys = {str(key) for key in (preserve_secret_keys or ())}
-    if not secret_keys.issubset({"lan_auth"}):
+    if not secret_keys.issubset({_ACCESS_SECRET}):
         raise ExportImportError("unsupported preserved secret key")
+    destination_secrets: dict[str, Any] | None = None
     if secret_keys:
         try:
             destination_secrets = load_secrets()
         except SecretStoreError as exc:
             raise ExportImportError("cannot read destination secrets to preserve access") from exc
+    # Said before this install's values replace the file's: what the file would have changed.
+    security = _security_settings(parsed, destination_secrets, set(overrides) | secret_keys)
+    if overrides:
+        _apply_config_overrides(parsed, overrides)
+    if destination_secrets is not None:
         effective_secrets = copy.deepcopy(parsed["secrets"])
         for key in secret_keys:
             if key in destination_secrets:
@@ -173,6 +239,7 @@ def _import_bundle(
         "members": members,
         "path_maps": [{"old": old, "new": new} for old, new in mappings],
         "config_overrides": sorted(overrides),
+        "security_settings": security,
         "preserved_secret_keys": sorted(secret_keys),
         "path_warnings": warnings,
         "scheduler": "not restored; turn autostart on separately with tow autostart on",

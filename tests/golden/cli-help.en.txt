@@ -260,17 +260,22 @@ options:
   --json           machine-readable output (JSON), also when the command fails
 
 $ tow import --help
-usage: tow import [-h] --input INPUT [--path-map PATH_MAP] [--apply] [--json]
+usage: tow import [-h] --input INPUT [--path-map PATH_MAP] [--apply] [--accept-security-settings]
+                  [--json]
 
 restore from a `tow export` file (a preview unless --apply)
 
 options:
-  -h, --help           show this help message and exit
-  --input INPUT        the file `tow export` wrote
-  --path-map PATH_MAP  OLD=NEW: change the start of the topics' folders (can be given several
-                       times)
-  --apply              restore (without it: a preview only)
-  --json               machine-readable output (JSON), also when the command fails
+  -h, --help            show this help message and exit
+  --input INPUT         the file `tow export` wrote
+  --path-map PATH_MAP   OLD=NEW: change the start of the topics' folders (can be given several
+                        times)
+  --apply               restore (without it: a preview only)
+  --accept-security-settings
+                        also take the file's network access, password, backup folders, opt-ins for
+                        shares and the home network, and access providers (without it this
+                        computer's stay)
+  --json                machine-readable output (JSON), also when the command fails
 
 $ tow import-rollback --help
 usage: tow import-rollback [-h] --checkpoint CHECKPOINT [--apply] [--json]

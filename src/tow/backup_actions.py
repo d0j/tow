@@ -12,8 +12,20 @@ from tow.platform import is_plain_dir, is_plain_file
 
 # This install's own settings, never the restored copy's (a nightly backup or a restore point):
 # its network access and its backup folders (the safety point just made stays listed; a copy
-# from another system keeps night copies working). A restore keeps the live values.
-KEPT_SETTINGS = ("bind", "port", "allow_lan", "backup_dir", "restore_points_dir")
+# from another system keeps night copies working), the opt-ins that let TOW reach shares and the
+# home network, and the access providers (set only from this computer). A restore - also one a
+# device on the network asks for - keeps the live values; `tow import` too, unless told not to.
+KEPT_SETTINGS = (
+    "bind",
+    "port",
+    "allow_lan",
+    "backup_dir",
+    "restore_points_dir",
+    "allow_unc_save_paths",
+    "allow_private_tracker_hosts",
+    "allow_private_notifier_hosts",
+    "protection",
+)
 
 
 def cleanup_names(location: Path, candidate: Callable[[str], bool]) -> list[str]:

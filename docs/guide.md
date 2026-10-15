@@ -251,6 +251,11 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
 | Export | `tow export --output tow.towx` (asks a passphrase, 12+ characters) | `tow import --input tow.towx --apply` | the same, protected by your passphrase |
 
 - None of them contains the master key, downloaded files or the torrent client's own data.
+- **A restore keeps this computer's security settings**: network access (`bind`, `port`, `allow_lan`), the
+  password for other devices, the backup folders, the opt-ins for shares and the home network (`allow_unc_save_paths`,
+  `allow_private_tracker_hosts`, `allow_private_notifier_hosts`) and the access providers (`protection`). So does
+  `tow import`: its preview lists those the file holds otherwise, and only `--accept-security-settings` (moving your
+  own TOW to another computer) takes the file's.
 - **Nightly backups are signed, not fully encrypted.** Settings, topics, history and logs remain readable files;
   saved passwords, tokens and cookies stay encrypted. Keep the backup folder private. TOW files (`.towx`)
   encrypt the whole copy with the install's **master key** (`keys/master.key`). Checking/restoring a signed
@@ -400,7 +405,7 @@ every one. The others:
 | `tow backup` | makes a nightly backup now (as **Back up now** does) |
 | `tow access status` | whether network access is on; `on` opens it after `tow restart`, `off` closes it at once |
 | `tow export --output FILE` | the settings, topics, history, passwords and tokens in one file protected by a passphrase; `--include-log` adds the log, `--force` replaces an existing file |
-| `tow import --input FILE` | a preview of restoring that file; `--apply` restores it; `--path-map OLD=NEW` changes the start of the topics' folders (another computer; can be given several times) |
+| `tow import --input FILE` | a preview of restoring that file; `--apply` restores it; `--path-map OLD=NEW` changes the start of the topics' folders (another computer; can be given several times); `--accept-security-settings` also takes the file's network access, password, backup folders and opt-ins |
 | `tow import-rollback --checkpoint FOLDER` | puts back what an import replaced (a preview unless `--apply`) |
 | `tow secrets status` | where the passwords and tokens are and which key opens them (`migrate` and `generate-key`: see `--help`) |
 
