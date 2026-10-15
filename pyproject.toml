@@ -117,5 +117,5 @@ source = ["tow"]
 
 [tool.coverage.report]
 # The measured total, rounded down: raise it as coverage grows, never lower it to pass.
-fail_under = 89
+fail_under = 93
 skip_covered = true
