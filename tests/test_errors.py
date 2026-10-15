@@ -102,6 +102,20 @@ def test_incomplete_hidden_diagnostics_cannot_restore_the_verbose_fallback():
     )
 
 
+@pytest.mark.parametrize(("language", "words"), [("en", "Site A: no connection"), ("ru", "Site A: нет связи")])
+def test_a_lost_connection_keeps_its_words_in_the_short_summary(language, words):
+    # Every mirror failing to connect ("no local network" among them) read as "site access is
+    # temporarily limited": the owner looked at the site instead of this computer's connection.
+    lost = Msg("mirrors.transport", error="no local network")
+    record = TowError("mirrors.all_failed", tracker="Site A", error=lost).record()
+    assert errors.summary_record(record) == record
+    assert errors.summary_of(errors.as_value(record), language).startswith(words)
+    # A site that also refuses or limits access is still the short site incident.
+    mixed = Msg("mirrors.reason_pair", first=lost, second=TowError("mirrors.rate_limited"))
+    record = TowError("mirrors.all_failed", tracker="Site A", error=mixed).record()
+    assert errors.summary_record(record) == {"code": "mirrors.access_retry", "params": {"tracker": "Site A"}}
+
+
 def test_a_prefix_names_who_reports_it():
     error = TowError("client.managed.missing", prefix="Transmission")
     assert error.text("en") == "Transmission: the torrent is not in the client"

@@ -319,10 +319,11 @@ def summary_record(record: Mapping[str, Any] | None) -> Mapping[str, Any] | None
     if not isinstance(params, Mapping):
         return record
     primary = {"code": "mirrors.all_failed", "params": {"error": params.get("error")}}
+    # A failed connection alone keeps its own words ("no connection"): it may be this computer's
+    # network, not the site limiting access.
     if set(codes_in(primary)) & {
         "mirrors.cloudflare",
         "mirrors.rate_limited",
-        "mirrors.transport",
         "mirrors.maintenance",
     }:
         return {"code": "mirrors.access_retry", "params": {"tracker": params.get("tracker")}}
