@@ -336,6 +336,10 @@
     }
   })();
 
+  // The session of this page's messages: a new one once the owner signs out (or TOW signs the
+  // owner out). An answer, a poll or an announcement of the old one does nothing any more.
+  let session = 0;
+  const saying = new Set();
   const announce = (item, said) => {
     const region = document.getElementById(item.kind === "err" ? "announce-alert" : "announce");
     if (!region) return;
@@ -343,7 +347,24 @@
     const sentenceSaid = prefix + format(pattern, said.subject, said.text);
     region.textContent = "";
     // A moment later: a live region changed while the page opens is not said by every reader.
-    window.setTimeout(() => { region.textContent = sentenceSaid; }, 400);
+    const mine = session;
+    const timer = window.setTimeout(() => {
+      saying.delete(timer);
+      if (mine === session) region.textContent = sentenceSaid;
+    }, 400);
+    saying.add(timer);
+  };
+  // Signed out: a new session; nothing of the old one is said, kept or shown.
+  const signOut = () => {
+    session += 1;
+    saying.forEach((timer) => window.clearTimeout(timer));
+    saying.clear();
+    ["announce", "announce-alert"].forEach((name) => {
+      const region = document.getElementById(name);
+      if (region) region.textContent = "";
+    });
+    center.clearStorage();
+    render();
   };
 
   let render = () => {};
@@ -665,7 +686,7 @@
   if (document.hidden) center.hold("hidden");
   // Signing out ends this tab's history with the session.
   document.addEventListener("submit", (event) => {
-    if (event.target?.getAttribute?.("action") === "/logout") center.clearStorage(); // checks.js stops too
+    if (event.target?.getAttribute?.("action") === "/logout") signOut(); // checks.js stops too
   });
 
   // The page as the server drew it: its message, its undo; then the address no longer names the
@@ -709,10 +730,8 @@
     dismiss: (id) => center.dismiss(id),
     remove: (id) => center.remove(id),
     // The session ended: this tab's history goes (checks.js stops following its checks too).
-    signOut: () => {
-      center.clearStorage();
-      render();
-    },
+    signOut,
+    session: () => session,
     refresh: () => render(),
     center,
   };

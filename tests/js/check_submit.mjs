@@ -20,6 +20,7 @@ const page = (reply) => {
   const sent = [];
   const assigned = [];
   const checks = { begun: [], acknowledged: [], forgotten: [], delivered: new Set() };
+  const session = { generation: 0 }; // messages.js's: a new one once the owner signed out
   class FormData {
     constructor() { this.fields = {}; }
     set(name, value) { this.fields[name] = value; }
@@ -39,7 +40,7 @@ const page = (reply) => {
   context.window = {
     ...context, addEventListener() {}, confirm: () => true,
     location: { ...context.location, assign: (url) => assigned.push(String(url)) },
-    towMessages: { showMessage: (record) => shown.push(record) },
+    towMessages: { showMessage: (record) => shown.push(record), session: () => session.generation },
     towChecks: {
       begin: (meta) => { checks.begun.push(meta); return `act${checks.begun.length}xyz`; },
       acknowledge: (action, ack) => checks.acknowledged.push([action, ack.job]),
@@ -66,7 +67,7 @@ const page = (reply) => {
     await settle();
     return { form, button };
   };
-  return { shown, sent, assigned, checks, submit, cancel };
+  return { shown, sent, assigned, checks, session, submit, cancel };
 };
 const json = (body) => Promise.resolve({ ok: true, status: 200, headers: { get: () => "application/json" }, json: async () => body });
 const verdict = {};
@@ -172,5 +173,25 @@ verdict.scriptedCancelSaysNothing = true;
   assert.equal(test.shown.length, 0);
 }
 verdict.lateBrokenBodySaysNothing = true;
+
+// Signed out while a Check's answer was on its way: what it brings is not shown (it would name
+// its topic in the next session's history), not acknowledged, not followed.
+for (const reply of [
+  () => json({ accepted: true, action: "act1xyz", job: "J1", status: "queued", message: { id: "check-J1", kind: "info", subject: "Show A", text: "queued" } }),
+  () => Promise.reject(new TypeError("Failed to fetch")),
+  () => Promise.resolve({ ok: false, status: 409, headers: { get: () => "application/json" }, text: async () => JSON.stringify({ error: "busy" }) }),
+]) {
+  let answer;
+  const test = page(() => new Promise((resolve, reject) => { answer = () => reply().then(resolve, reject); }));
+  const submitted = test.submit();
+  await new Promise((resolve) => setImmediate(resolve));
+  test.session.generation += 1; // signed out
+  answer();
+  await submitted;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(test.shown.length, 0);
+  assert.equal(test.checks.acknowledged.length, 0);
+}
+verdict.signedOutAnswersSayNothing = true;
 
 console.log(JSON.stringify(verdict));
