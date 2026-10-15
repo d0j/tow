@@ -97,6 +97,9 @@ def test_one_form_layout_with_rows_that_wrap_by_the_forms_own_width():
     assert gap
     assert 8 <= 16 * float("." + gap.group(1)) <= 10
     assert "gap: .1875rem" in _first(".form-grid .field")  # 3 px
+    # The older "next field" margins (.field + .field, the compact Settings one) pushed the second
+    # field of a row 11 px down (seen in a browser); in the form the gap alone spaces groups.
+    assert _first(".form-grid :is(.field, .field-grid) + .field.field").strip() == "margin-top: 0;"
     assert "max-width: 68ch" in _first(
         ".form-grid :is(.field-hint, .action-hint, .section-note, .support-note, .check-field p)"
     )

@@ -275,6 +275,9 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { he
 .form-grid > *, .field-row > * { min-width: 0; }
 .form-grid label { margin: 0; }
 .form-grid .field { display: grid; gap: .1875rem; align-content: start; }
+/* The gap spaces the groups: no older "next field" margin, which pushed the second field of a row
+   down (the doubled class outranks `.settings-page-compact .field + .field`). */
+.form-grid :is(.field, .field-grid) + .field.field { margin-top: 0; }
 .form-grid :is(.field-hint, .action-hint, .section-note, .support-note, .check-field p) { max-width: 68ch; }
 /* Fields that belong together (address and port, user and password) share a line once their
    form is 38 rem wide - the form's width, not the window's: two cards side by side stack their
