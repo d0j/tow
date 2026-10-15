@@ -348,7 +348,12 @@ const healthPoll = (() => {
       plan();
     }
   });
-  return { add: (reader) => { readers.push(reader); plan(); }, plan };
+  return {
+    add: (reader) => { readers.push(reader); plan(); },
+    plan,
+    // Now (a check has ended: the header's health and "Needs attention" are asked at once).
+    now: () => { if (!inFlight && !document.hidden) poll(); },
+  };
 })();
 
 const clock = document.getElementById("next-check");
@@ -437,6 +442,10 @@ if (clock) {
 
 // Dates of the personal timers come from the supervisor, not a browser-side reset after a
 // check or a page reload.
+// A Home row checks.js has drawn again when its check ended: the header asks for its health at
+// once, and the search below takes the new row in place of the old one.
+window.towRows = { health: () => healthPoll.now(), replaced: () => {} };
+
 const topicTimerNodes = Array.from(document.querySelectorAll("[data-topic-timer]"));
 if (topicTimerNodes.length) {
   let serverNow = Number(topicTimerNodes[0].dataset.timerNow) * 1000;
@@ -1228,6 +1237,19 @@ if (q) {
   }
   sortRows();
   announce();
+  // The search, the filters and the order know the new row; one that no longer matches hides.
+  window.towRows.replaced = (old, row) => {
+    for (const rows of [searchable, originalOrder]) {
+      const index = rows.indexOf(old);
+      if (index >= 0) rows[index] = row;
+    }
+    haystacks.delete(old);
+    marked.delete(old);
+    tones.delete(old);
+    haystacks.set(row, fold(row.dataset.q));
+    marked.set(row, [...row.querySelectorAll("[data-hl]")]);
+    announce();
+  };
 }
 
 const paintLog = (body, rows) => {

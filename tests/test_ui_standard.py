@@ -88,7 +88,7 @@ def test_long_site_names_and_sign_in_pills_stay_in_their_columns():
     phones = [block for block in CSS.split("@media (max-width: 720px) {")[1:] if ".topic-tracker" in block]
     assert phones
     assert "white-space: normal" in dict(_rules(phones[0]))[".topic-tracker"]
-    home = (Path(__file__).parents[1] / "src" / "tow" / "templates" / "index.html").read_text(encoding="utf-8")
+    home = (Path(__file__).parents[1] / "src" / "tow" / "templates" / "_topic_row.html").read_text(encoding="utf-8")
     assert 'class="topic-tracker" data-label="{{ t(\'home.row.site\') }}" title="{{ site_title(topic.tracker)' in home
     sites = first(".list-head.sites, details.row-edit.sites > summary")
     assert "minmax(10rem,1fr) 8rem 6.4rem" in sites

@@ -211,6 +211,14 @@ def test_every_check_this_tab_started_is_followed_within_bounds_to_exactly_one_r
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_a_row_whose_check_ended_is_drawn_again_but_never_under_the_owners_hands():
+    verdict = _verdict("row_refresh.mjs")
+    assert verdict == dict.fromkeys(verdict, True), verdict
+    assert len(verdict) == 5
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_a_check_is_sent_with_its_kept_action_id_and_followed_where_the_page_is():
     verdict = _verdict("check_submit.mjs")
     assert verdict == dict.fromkeys(verdict, True), verdict
