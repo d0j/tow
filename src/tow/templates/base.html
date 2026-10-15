@@ -28,6 +28,16 @@
         <ul class="attention-list" data-attention-list>{% for item in h.attention.entries %}<li data-issue-id="{{ item.id }}"><a class="attention-link {{ item.severity }}" href="{{ item.href }}"><span>{{ item.text }}</span>{{ icon('next', 'sm') }}</a></li>{% endfor %}</ul>
       </div>
     </details>
+    {# The results of the owner's own actions, after their message collapsed (messages.js shows it). #}
+    <details class="msg-menu muted" id="recent-messages" data-messages hidden>
+      <summary class="ico" data-messages-toggle aria-label="{{ t('js.messages.title') }}" title="{{ t('js.messages.title') }}">{{ icon('message', 'sm') }}<span class="msg-count" data-messages-count aria-hidden="true" hidden></span></summary>
+      <div class="msg-panel" role="region" aria-labelledby="recent-messages-title" data-messages-panel>
+        <div class="msg-panel-head"><strong id="recent-messages-title">{{ t('js.messages.title') }}</strong>
+          <span class="msg-panel-tools"><button type="button" class="ghost sm" data-messages-read>{{ t('js.messages.mark_read') }}</button><button type="button" class="ghost sm" data-messages-clear>{{ t('js.messages.clear') }}</button></span></div>
+        <p class="msg-empty" data-messages-empty>{{ t('js.messages.empty') }}</p>
+        <ol class="msg-list" data-messages-list></ol>
+      </div>
+    </details>
     {% if path == '/' %}
     <a href="#new" class="ico plus" title="{{ t('base.new_topic') }}" aria-label="{{ t('base.new_topic') }}">{{ icon('plus') }}</a>
     {% elif path.startswith('/sites') %}
@@ -55,8 +65,9 @@
     {% set clock_words = t('timer.global_title') if h.check_ok else t('js.clock.last_attempt_failed') %}
     <span class="hdr-clock{% if not h.check_ok %} bad{% endif %}" id="next-check" data-last="{{ h.next_from_ts }}" data-interval="{{ h.interval_sec }}" data-check-ok="{{ '1' if h.check_ok else '0' }}" data-error="{{ h.check_error }}" data-error-text="{{ h.check_error_text }}" title="{{ clock_words }}"><span class="sr-only" data-clock-words>{{ clock_words }} </span><span class="clock-v" data-clock-value>—</span></span>
     <div class="hdr-controls">
-    {#- The undo of the action whose message is shown sits in that message (9); the header
-        keeps it only for a later page while it lasts. -#}
+    {#- The undo of the action whose message is shown sits in that message (9). Without a script
+        the header keeps it for a later page while it lasts; messages.js puts it into the
+        message's entry of the recent messages instead. -#}
     {% set undo_in_flash = undo_in_message(flash) %}
     {% if can_undo() and not undo_in_flash %}
     <form method="post" action="/undo" id="undo-form" data-ttl="{{ undo_left_sec() }}">
@@ -84,15 +95,16 @@
 </header>
 <main id="main"{% if request.url.path == '/' %} class="home-page"{% endif %} aria-labelledby="page-title">
   {% if request.url.path == '/' %}<a class="release-notice" href="/settings?open=updates#acc-updates" data-release-notice aria-live="polite" hidden></a>{% endif %}
-  {#- A failed check is shown too while "Needs attention" lists its topic: the message is the
-      click's result, the triangle what is still wrong. -#}
-  {% if flash and not check_activity_requested|default(false) %}<div class="flash{% if flash.kind == 'err' %} error{% elif flash.kind == 'warn' %} warn{% endif %}" id="flash" role="{{ 'alert' if flash.kind == 'err' else 'status' }}"{% if flash.kind == 'ok' %} data-ttl="{{ undo_left_sec() if undo_in_flash else flash_ttl_sec() }}"{% endif %} data-message-id="{{ flash.id or '' }}"><span>{{ message_text(flash) }}</span>
-  {%- if flash.result_job %}<a href="/?check_result={{ flash.result_job|urlencode }}#check-result">{{ t('web.check_all.results') }}</a>{% endif -%}
-  {%- if undo_in_flash %}<form method="post" action="/undo" class="flash-undo" id="undo-form" data-ttl="{{ undo_left_sec() }}"><input type="hidden" name="stamp" value="{{ undo_stamp() }}"><button class="ghost sm" type="submit" data-keep title="{{ t('base.undo.title', what=undo_label()) }}">{{ t('base.undo.button') }} <span class="undo-left" data-undo-left aria-hidden="true"></span></button></form>{% endif -%}
-  <button type="button" class="flash-x" aria-label="{{ t('base.close') }}">{{ icon('close', 'sm') }}</button></div>{% endif %}
+  {#- The one message strip (_message.html, messages.js). A failed check is shown too while
+      "Needs attention" lists its topic: the message is the click's result, the triangle what is
+      still wrong. -#}
+  {% from "_message.html" import message_strip %}
+  <div class="msg-host" id="msg-host" data-namespace="{{ messages_namespace(request) }}" data-subject-format="{{ t('web.message.subject_result', subject='{subject}', result='{result}') }}" data-undo-stamp="{{ undo_stamp() }}" data-undo-left="{{ undo_left_sec() }}"{% if can_undo() %} data-undo-text="{{ t('js.messages.undo_available', what=undo_label()) }}"{% endif %}>
+  {%- if flash and not check_activity_requested|default(false) %}{{ message_strip(flash, undo_in_flash) }}{% endif -%}
+  </div>
   {% block body %}{% endblock %}
-  {#- Empty live regions: app.js puts an action's message here a moment after the page opens,
-      so a screen reader says it (A8). -#}
+  {#- Empty live regions: messages.js says each new message here once, a moment after it
+      arrives (an error in the alert one), so a screen reader says it (A8). -#}
   <div class="sr-only" id="announce" role="status"></div>
   <div class="sr-only" id="announce-alert" role="alert"></div>
 </main>
@@ -112,6 +124,7 @@
 </dialog>
 <script type="application/json" id="tow-i18n">{{ js_texts()|tojson }}</script>
 <script type="application/json" id="tow-content-i18n">{{ content_texts()|tojson }}</script>
+<script src="/static/messages.js?v={{ static_version }}" defer></script>
 <script src="/static/app.js?v={{ static_version }}" defer></script>
 <script src="/static/attention.js?v={{ static_version }}" defer></script>
 <script src="/static/content.js?v={{ static_version }}" defer></script>

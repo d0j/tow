@@ -646,7 +646,7 @@ def test_a_message_is_shown_as_a_sentence(client):
     from tow.web.views import flash_location
 
     page = client.get(flash_location("/", "web.common.saved", "ok")).text
-    assert "<span>Сохранено" in page
+    assert '<span class="msg-text">Сохранено' in page
 
 
 @pytest.mark.parametrize(
@@ -694,7 +694,7 @@ def test_the_undo_button_sits_in_the_message_of_its_action(client):
     page = client.get(flash_location("/", "web.topics.added_nothing_new", "ok")).text
     flash = page[page.index('id="flash"') : page.index("</div>", page.index('id="flash"'))]
     assert '<form method="post" action="/undo" class="flash-undo" id="undo-form" data-ttl="' in flash
-    assert "data-undo-left" in flash
+    assert ' data-undo="' in flash  # messages.js keeps it in this message's entry, with its countdown
     assert page.count('action="/undo"') == 1  # not in the header too
     assert "можно отменить" not in page
 
@@ -746,9 +746,12 @@ def test_without_the_message_the_header_keeps_the_undo(client):
 
 
 def test_the_undo_counts_down_and_settings_shows_a_result_once():
-    block = JS[JS.index('const undoForm = document.getElementById("undo-form");') :]
-    assert "left.textContent = `${Math.floor(s / 60)}:" in block
-    assert "panel.prepend(flash)" in JS
+    # The countdown is messages.js's (tests/js/messages_page.mjs runs it); a Settings result is the
+    # one message strip at the top of the page, no longer moved into the card it is about.
+    messages = (SRC / "static" / "messages.js").read_text(encoding="utf-8")
+    assert '`${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`' in messages
+    assert "panel.prepend(flash)" not in JS
+    assert "settings-result" not in JS
     assert "inlineStatus" not in JS
 
 

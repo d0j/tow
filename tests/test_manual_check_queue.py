@@ -653,7 +653,7 @@ def test_a_result_has_one_address_rendered_from_its_job(client, monkeypatch, con
     page = BeautifulSoup(client.get(done["redirect"]).text, "html.parser")
     # Shown as after a check at once, also while "Needs attention" shows the topic's error.
     assert done["flash"][1:] in page.select_one("#flash.error").get_text()
-    assert page.select_one("#flash").get_text().startswith("Show A — ")
+    assert page.select_one("#flash .msg-text").get_text().startswith("Show A — ")
     assert not page.select("#check-result")
     other = BeautifulSoup(client.get(gone["redirect"]).text, "html.parser")
     assert "удалена из очереди" in other.select_one("#flash").get_text()

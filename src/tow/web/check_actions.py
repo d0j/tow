@@ -47,7 +47,9 @@ def enqueue_check(*, topic_id: str, apply: bool, adopted: bool = False) -> Redir
     # A topic's check comes here only when it has to wait; one of every topic may start at once.
     starts_now = added and not topic_id and job["position"] == 1
     return flash_redirect(
-        "/?check_job=" + quote(job["id"]), "web.check_all.started" if starts_now else "web.check_all.queued"
+        "/?check_job=" + quote(job["id"]),
+        "web.check_all.started" if starts_now else "web.check_all.queued",
+        "info",
     )
 
 

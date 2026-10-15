@@ -1,0 +1,12 @@
+{#- One message after an action (a record of tow.web.views: id, kind, subject, text, at; its
+    Undo when it carries the live one). Without a script it is the page's message; messages.js
+    takes it over from its data-* (the strip, its timer, the header's recent messages). -#}
+{% from "_icons.html" import icon %}
+{% macro message_strip(record, with_undo=false) -%}
+{%- set kind = record.kind if record.kind in ('ok', 'info', 'warn', 'err') else 'ok' -%}
+{%- set words = {'ok': t('js.messages.kind_ok'), 'info': t('js.messages.kind_info'), 'warn': t('js.messages.kind_warn'), 'err': t('js.messages.kind_err')} -%}
+<div class="flash {{ {'ok': 'ok', 'info': 'info', 'warn': 'warn', 'err': 'error'}[kind] }}" id="flash" role="{{ 'alert' if kind == 'err' else 'status' }}" data-message-id="{{ record.id or '' }}" data-kind="{{ kind }}" data-subject="{{ record.subject or '' }}" data-text="{{ record.text or '' }}" data-at="{{ record.at or '' }}"{% if with_undo %} data-undo="{{ undo_stamp() }}"{% endif %}>
+  <span class="msg-ico" role="img" aria-label="{{ words[kind] }}">{{ icon({'ok': 'check', 'info': 'info', 'warn': 'alert', 'err': 'error'}[kind], 'sm') }}</span><span class="msg-text">{{ message_text(record) }}</span>
+  {%- if with_undo %}<form method="post" action="/undo" class="flash-undo" id="undo-form" data-ttl="{{ undo_left_sec() }}"><input type="hidden" name="stamp" value="{{ undo_stamp() }}"><button class="ghost sm" type="submit" data-keep title="{{ t('base.undo.title', what=undo_label()) }}">{{ t('base.undo.button') }}</button></form>{% endif -%}
+  <button type="button" class="flash-x" aria-label="{{ t('js.messages.collapse') }}" title="{{ t('js.messages.collapse') }}">{{ icon('close', 'sm') }}</button></div>
+{%- endmacro %}

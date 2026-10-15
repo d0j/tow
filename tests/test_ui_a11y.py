@@ -221,23 +221,18 @@ def test_the_focus_comes_back_to_the_row_or_control_after_an_action(client):
 
 
 def test_an_actions_message_is_announced_and_stays_while_in_use(client):
-    """A8: a message drawn with role=status at load is not announced; app.js copies its words into
-    an empty live region a moment later. A9: the message and its undo vanished under the pointer
-    or the focus; they now go once both have left."""
+    """A8: a message drawn with role=status at load is not announced; messages.js says its words
+    once in an empty live region a moment later (never again on a reload). A9: a message must not
+    vanish under the pointer or the focus: its time stops while either is on it (and while the tab
+    is hidden). tests/js/messages_center.mjs and messages_page.mjs run both."""
     _seed()
     page = client.get("/").text
     assert '<div class="sr-only" id="announce" role="status"></div>' in page
     assert '<div class="sr-only" id="announce-alert" role="alert"></div>' in page
-    flash = JS[JS.index('const flash = document.getElementById("flash");') : JS.index("// One /health.json poll")]
-    assert '"announce-alert" : "announce"' in flash
-    assert 'flash.removeAttribute("role");' in flash  # said once
-    assert "live.textContent = words;" in flash
-    assert "window.setTimeout(whenUnused(flash, hideFlash), ttl * 1000);" in flash
-    assert 'whenUnused(undoForm.closest("#flash") || undoForm' in flash
-    unused = JS[JS.index("const whenUnused") : JS.index('const flash = document.getElementById("flash");')]
-    assert 'element.matches(":hover") || element.contains(document.activeElement)' in unused
-    assert '"pointerleave"' in unused
-    assert '"focusout"' in unused
+    messages = (SRC / "static" / "messages.js").read_text(encoding="utf-8")
+    assert '"announce-alert" : "announce"' in messages
+    for hold in ('center.hold("pointer")', 'center.hold("focus")', 'center.hold("hidden")'):
+        assert hold in messages
 
 
 def test_a_theme_choice_is_saved_in_the_background_without_a_reload(client):

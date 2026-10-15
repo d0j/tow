@@ -1,0 +1,62 @@
+/* Recent messages (messages.js): the one strip at the top of <main> (.flash, _message.html), the
+   header's message icon and its panel. The kinds keep the status colours: ok green (a confirmed
+   action), info neutral (accepted, queued, skipped), warn amber (transport trouble or a real
+   caution), err red (an actionable failure) - one red, the status contract's. */
+.flash.ok { background: var(--pill-ok-bg); border-color: var(--ok); }
+.flash.warn { background: var(--pill-warn-bg); border-color: var(--warn); }
+.flash.error { background: var(--pill-bad-bg); border-color: var(--bad); }
+.flash > .msg-ico { display: inline-flex; flex: 0 0 auto; color: var(--mut); }
+.flash.ok > .msg-ico { color: var(--ok); }
+.flash.warn > .msg-ico { color: var(--warn); }
+.flash.error > .msg-ico { color: var(--bad); }
+.flash > .msg-text { overflow-wrap: anywhere; }
+.flash { flex-wrap: wrap; scroll-margin-top: 5.5rem; }
+
+/* The header icon: coloured by the worst unread message, with their count; muted when all are
+   read (the history stays one click away). */
+.msg-menu { flex: 0 0 auto; }
+.msg-menu[hidden] { display: none; }
+.msg-menu > summary::-webkit-details-marker { display: none; }
+header.app .msg-menu > summary.ico { position: relative; list-style: none; }
+header.app .msg-menu.muted > summary.ico { color: var(--trk-mut); }
+header.app .msg-menu.ok > summary.ico { color: var(--ok); }
+header.app .msg-menu.warn > summary.ico { color: var(--warn); }
+header.app .msg-menu.err > summary.ico { color: var(--bad); }
+.msg-count {
+  position: absolute; top: 0; right: 0; min-width: .7rem; padding: 0 .12rem;
+  border-radius: 999px; line-height: .85rem; font-size: 9px; text-align: center;
+  color: var(--panel); background: var(--nav-fg); font-variant-numeric: tabular-nums;
+}
+.msg-count[hidden] { display: none; }
+.msg-menu.ok .msg-count { background: var(--ok); }
+.msg-menu.warn .msg-count { background: var(--warn); }
+.msg-menu.err .msg-count { background: var(--bad); }
+.msg-panel {
+  position: absolute; top: calc(100% + .3rem); left: .7rem; z-index: 12;
+  box-sizing: border-box; width: min(28rem, calc(100% - 1.4rem)); max-height: min(26rem, 60dvh);
+  overflow: auto; overscroll-behavior: contain; padding: .7rem;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel);
+  box-shadow: var(--shadow); font-size: 13px;
+}
+.msg-panel-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .4rem; }
+.msg-panel-tools { display: flex; flex-wrap: wrap; gap: .4rem; }
+.msg-empty { margin: .5rem 0 0; color: var(--mut); }
+.msg-empty[hidden] { display: none; }
+.msg-list { list-style: none; margin: .4rem 0 0; padding: 0; }
+.msg-entry {
+  margin: .35rem 0 0; padding: .4rem .5rem .45rem .6rem; border-left: 3px solid var(--line); border-radius: 6px;
+}
+.msg-entry.ok { border-left-color: var(--ok); }
+.msg-entry.warn { border-left-color: var(--warn); }
+.msg-entry.err { border-left-color: var(--bad); }
+.msg-entry.unread { background: var(--panel2); }
+.msg-entry.unread .msg-entry-text { font-weight: 600; }
+.msg-entry-head { display: flex; align-items: center; gap: .35rem; color: var(--mut); font-size: 12px; }
+.msg-entry-head time { margin-left: auto; font-variant-numeric: tabular-nums; }
+.msg-entry.ok .msg-entry-head > svg { color: var(--ok); }
+.msg-entry.warn .msg-entry-head > svg { color: var(--warn); }
+.msg-entry.err .msg-entry-head > svg { color: var(--bad); }
+.msg-entry-text { margin: .15rem 0 0; overflow-wrap: anywhere; }
+.msg-entry-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; margin-top: .3rem; }
+.msg-entry-actions form { margin: 0; }
+.msg-entry-actions a, .flash > .msg-link { text-decoration: underline; }
