@@ -32,10 +32,13 @@ def topic_feedback(tid: str, row: CheckRow | None, *, adopted: bool) -> dict[str
     return check_feedback(row, topic_id=tid, adopted=adopted, tracker_name=tracker_name)
 
 
-def enqueue_check(*, topic_id: str, apply: bool, adopted: bool = False) -> RedirectResponse:
+def enqueue_check(
+    *, topic_id: str, apply: bool, adopted: bool = False, follow_up: check_jobs.FollowUp | None = None
+) -> RedirectResponse:
     """Queue a manual check (``topic_id`` "": every topic) and open the page that follows it.
     The job keeps what its message is about as the request named it (a topic deleted while the
-    check waits is still named)."""
+    check waits is still named); ``follow_up``: what the caller would have done with the result
+    of a check at once (``check_jobs.FOLLOW_UPS``)."""
     job, added = check_jobs.submit(
         topic_id=topic_id,
         apply=apply,
@@ -43,6 +46,7 @@ def enqueue_check(*, topic_id: str, apply: bool, adopted: bool = False) -> Redir
         perform=perform_check,
         adopted=adopted,
         subject=_context.subject() if topic_id else "",
+        follow_up=follow_up,
     )
     if job is None:
         return flash_redirect("/", "web.check_all.queue_full", "warn")
@@ -119,10 +123,14 @@ def perform_check(job: dict[str, Any]) -> None:
         if job["apply"]:  # a preview writes nothing, its failures included (AGENTS.md)
             services.record_check_failure(exc, how="manual", whole=not topic_id)
         flash, status, kind = i18n.t("web.check.blocked", lang), "failed", "err"
+        if followed := _followed(job, None, exc):
+            flash, kind, feedback = followed["text"], followed["kind"], followed
     except Exception as exc:  # noqa: BLE001 - the background job's boundary: the page polls for its result
         if job["apply"]:
             services.log_event("check_blocked", how="manual", reason="result_unconfirmed", **error_fields(exc))
         flash, status, kind = i18n.t("web.check_all.not_run", lang, error=type(exc).__name__), "failed", "err"
+        if followed := _followed(job, None, exc):
+            flash, kind, feedback = followed["text"], followed["kind"], followed
     else:
         try:
             flash, status, kind, feedback = _job_result(job, out)
@@ -130,9 +138,24 @@ def perform_check(job: dict[str, Any]) -> None:
             if job["apply"]:
                 services.log_event("check_report_failed", how="manual", **error_fields(exc))
             flash, status, kind = i18n.t("web.check_all.report_failed", lang, error=type(exc).__name__), "done", "warn"
+        if followed := _followed(job, out, None):
+            flash, kind, feedback = followed["text"], followed["kind"], followed
     # The page follows the job, then opens its result (views.result_location), shown from the job.
     with check_jobs.LOCK:
         job.update({"status": status, "flash": flash, "kind": kind, "feedback": feedback})
+
+
+def _followed(job: dict[str, Any], out: dict[str, Any] | None, error: BaseException | None) -> dict[str, str] | None:
+    """What the job's caller does with its check's result (``check_jobs.FOLLOW_UPS``), once:
+    its words for the job, or None. A follow-up that fails leaves the check's own words."""
+    follow_up = check_jobs.take_follow_up(str(job.get("id") or ""))
+    if follow_up is None:
+        return None
+    try:
+        return follow_up(out, error)
+    except Exception as exc:  # noqa: BLE001 - the check ran; only what follows it failed (logged)
+        services.log_event("check_report_failed", how="manual", **error_fields(exc))
+        return None
 
 
 def _job_result(job: dict[str, Any], out: dict[str, Any]) -> tuple[str, str, str, dict[str, str]]:

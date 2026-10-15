@@ -804,3 +804,47 @@ def test_the_same_click_again_says_its_check_started_not_queued(client, consumer
     assert _json.loads(again.body)["job"] == _json.loads(first.body)["job"]
     behind = check_actions.accept_check(topic_id="b", apply=True, action="click-2")
     assert _json.loads(behind.body)["message"]["text"] == i18n.t("web.check_all.queued")
+
+
+@pytest.mark.parametrize("refused", [False, True])
+def test_a_sign_in_checked_from_the_queue_is_confirmed_or_put_back(client, monkeypatch, consumers, refused):
+    # The queued check of a new password never said the site was signed in (its other topics kept
+    # asking for a sign-in), and a password the site refused stayed saved.
+    from tow import i18n
+
+    monkeypatch.setattr("tow.web.services.load_config", lambda: {"trackers": {"nnmclub": NNM}})
+    save_state({"topics": [{"id": "t1", "title": "Show A", "url": "https://nnmclub.to/forum/viewtopic.php?t=1234567"}]})
+    secrets = {"trackers": {"nnmclub": {"username": "old", "password": "old-pass"}}}
+    monkeypatch.setattr("tow.web.services.load_secrets", lambda: copy.deepcopy(secrets))
+    monkeypatch.setattr("tow.web.services.save_secrets", lambda value: secrets.update(copy.deepcopy(value)))
+    monkeypatch.setattr("tow.web.services.log_event", lambda *_a, **_kw: None)
+    signed_in = []
+    monkeypatch.setattr("tow.web.services.note_signed_in", signed_in.append)
+    calls = []
+    row = (
+        {"id": "t1", "title": "Show A", "ok": False, "error": "nnmclub: sign-in refused", "error_class": "tracker_auth"}
+        if refused
+        else {"id": "t1", "title": "Show A", "ok": True}
+    )
+
+    def check(**kw):
+        calls.append(kw["ids"])
+        if len(calls) == 1:
+            raise CheckBusyError("a scheduled check holds the lock")
+        return {"results": [row]}
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    job = _job(
+        client.post("/topics/t1/tracker-login", data={"username": "user", "password": "pass"}, follow_redirects=False)
+    )
+    consumers[0].run()
+    ended = _status(client, job)
+    if refused:
+        assert secrets["trackers"]["nnmclub"]["password"] == "old-pass"  # put back
+        assert signed_in == []
+        assert "credential_topic=t1" in ended["redirect"]
+    else:
+        assert secrets["trackers"]["nnmclub"]["password"] == "pass"
+        assert signed_in == ["nnmclub"]
+        assert ended["flash"] == i18n.t("web.login_retry.ok", site="NNM-Club")
+    assert check_jobs.FOLLOW_UPS == {}  # no password kept beside a finished job

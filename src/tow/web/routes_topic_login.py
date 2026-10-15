@@ -78,58 +78,84 @@ def topics_tracker_login(tid: str, username: str = Form(""), password: str = For
         return home_redirect("web.topics.login_not_saved", "err", credential_topic=tid)
     old_entry = copy.deepcopy((old_secrets.get("trackers") or {}).get(tracker.name))
     services.log_event("site_login", tracker=tracker.name, status="saved", how="manual")
+    login = _SignIn(str(tid), tracker, old_entry, username.strip(), password.strip())
     # Another applying check runs or waits: the check that confirms the sign-in waits in the
-    # queue (its result asks for the sign-in again when the site still refuses it).
+    # queue, and its result is followed up as here (the password confirmed or put back).
     if check_jobs.has_pending(apply=True):
-        return enqueue_check(topic_id=str(tid), apply=True)
+        return enqueue_check(topic_id=str(tid), apply=True, follow_up=login.follow_up)
     try:
         out = services.run_check(apply=True, notify=True, ids=[str(tid)], ignore_cool=True, how="manual", wait=False)
     except CheckBusyError:
-        return enqueue_check(topic_id=str(tid), apply=True)
+        return enqueue_check(topic_id=str(tid), apply=True, follow_up=login.follow_up)
     except SecretStoreError as exc:
         services.record_check_failure(exc, how="manual")
-        try:
-            restore_unverified_password(tracker.name, old_entry, username.strip(), password.strip())
-        except SecretStoreError:
-            services.log_event(
-                "site_login_restore_failed", tracker=tracker.name, topic=tid, status="failed", how="manual"
-            )
+        login.restore()
         return home_redirect("web.topics.login_blocked", "err", credential_topic=tid)
     except Exception as exc:  # noqa: BLE001 - the check after a saved login: any failure is shown, never a 500
         # A failed check of a topic TOW has (History: "check failed"), not of a new one ("add failed").
         services.log_event("check_fail", topic=tid, tracker=tracker.name, **error_fields(exc), how="manual")
         if error_class(exc) == "tracker_auth":
-            try:
-                restore_unverified_password(tracker.name, old_entry, username.strip(), password.strip())
-            except SecretStoreError:
-                services.log_event(
-                    "site_login_restore_failed", tracker=tracker.name, topic=tid, status="failed", how="manual"
-                )
+            login.restore()
         return home_redirect("web.login_retry.failed", "err", site=_title(tracker), error=exc, credential_topic=tid)
-    row = topic_check_row(str(tid), out)
-    flash, prompt, kind = _tracker_login_retry_flash(row, _title(tracker))
-    if kind == "ok":
-        _signed_in(tracker.name)
-    if (
-        prompt
-        and row
-        and (
-            row_class(row) == "tracker_auth"
-            or row.get("fallback_reason") == "tracker_auth"
-            or row.get("source") in {"magnet", "matching_magnet"}
-        )
-    ):
+    flash, kind, prompt = login.checked(out)
+    return home_redirect(flash, kind, credential_topic=str(tid) if prompt else None)
+
+
+class _SignIn:
+    """A login typed on Home and the check that confirms it: ``checked`` says what the check
+    found (and puts the earlier password back when the site still refused the new one),
+    ``follow_up`` does the same for a check that had to wait in the queue."""
+
+    def __init__(self, tid: str, tracker: GenericHttpTracker, old_entry: Any, username: str, password: str) -> None:
+        self.tid, self.tracker, self.old_entry = tid, tracker, old_entry
+        self.username, self.password = username, password
+
+    def restore(self) -> bool | None:
+        """The password saved before this one, back (False: not, it changed meanwhile; None: the
+        store refused, logged)."""
         try:
-            restored = restore_unverified_password(tracker.name, old_entry, username.strip(), password.strip())
-            if not restored:
-                flash += t("web.topics.password_not_restored")
-                kind = "err"
+            return bool(restore_unverified_password(self.tracker.name, self.old_entry, self.username, self.password))
         except SecretStoreError:
             services.log_event(
-                "site_login_restore_failed", tracker=tracker.name, topic=tid, status="failed", how="manual"
+                "site_login_restore_failed", tracker=self.tracker.name, topic=self.tid, status="failed", how="manual"
             )
-            flash, kind = t("web.topics.restore_failed", site=_title(tracker)), "err"
-    return home_redirect(flash, kind, credential_topic=str(tid) if prompt else None)
+            return None
+
+    def checked(self, out: dict[str, Any]) -> tuple[str, str, bool]:
+        """(message, its kind, ask for the login again) after the check ran."""
+        row = topic_check_row(self.tid, out)
+        flash, prompt, kind = _tracker_login_retry_flash(row, _title(self.tracker))
+        if kind == "ok":
+            _signed_in(self.tracker.name)
+        if (
+            prompt
+            and row
+            and (
+                row_class(row) == "tracker_auth"
+                or row.get("fallback_reason") == "tracker_auth"
+                or row.get("source") in {"magnet", "matching_magnet"}
+            )
+        ):
+            restored = self.restore()
+            if restored is False:
+                flash += t("web.topics.password_not_restored")
+                kind = "err"
+            elif restored is None:
+                flash, kind = t("web.topics.restore_failed", site=_title(self.tracker)), "err"
+        return flash, kind, prompt
+
+    def follow_up(self, out: dict[str, Any] | None, error: BaseException | None) -> dict[str, str]:
+        """The queued check's result, as ``checked`` says it (``check_jobs.FOLLOW_UPS``)."""
+        if out is not None and error is None:
+            flash, kind, prompt = self.checked(out)
+            return {"text": flash, "kind": kind, "credential_topic": self.tid if prompt else ""}
+        if isinstance(error, SecretStoreError):
+            self.restore()
+            return {"text": t("web.topics.login_blocked"), "kind": "err", "credential_topic": self.tid}
+        if error is not None and error_class(error) == "tracker_auth":
+            self.restore()
+        failed = t("web.login_retry.failed", site=_title(self.tracker), error=error)
+        return {"text": failed, "kind": "err", "credential_topic": self.tid}
 
 
 def _signed_in(tracker_name: str) -> None:
