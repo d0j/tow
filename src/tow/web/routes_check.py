@@ -2,25 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Any
-from urllib.parse import quote
-
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse, Response
 
-from tow import i18n
 from tow.check import blocked_by_previous_revision
-from tow.log import error_fields, owner_language
-from tow.records import CheckRow, shown_title
 from tow.store import CheckBusyError, SecretStoreError
-from tow.trackers import load_trackers, match_tracker
 from tow.web import check_jobs, services
+from tow.web.check_actions import enqueue_check, topic_feedback
 from tow.web.text import t
 from tow.web.views import (
-    check_feedback,
     check_job_message,
     check_progress,
-    check_report,
     feedback_redirect,
     flash_redirect,
     result_location,
@@ -90,103 +82,20 @@ def _check_topic(tid: str, *, adopted: bool = False) -> Response:
     """Check one topic now and say what it found; ``adopted``: the owner has just adopted its
     torrent into TOW, which a check that changes nothing else confirms."""
     if check_jobs.has_pending(apply=True):  # never ahead of an applying check that waits
-        return _enqueue(topic_id=tid, apply=True, adopted=adopted)
+        return enqueue_check(topic_id=tid, apply=True, adopted=adopted)
     try:
         out = services.run_check(apply=True, notify=True, ids=[tid], ignore_cool=True, how="manual", wait=False)
     except CheckBusyError:
-        return _enqueue(topic_id=tid, apply=True, adopted=adopted)
+        return enqueue_check(topic_id=tid, apply=True, adopted=adopted)
     except SecretStoreError as exc:
         services.record_check_failure(exc, how="manual")
         return flash_redirect("/", "web.check.blocked", "err")
-    return feedback_redirect(_topic_feedback(tid, topic_check_row(tid, out), adopted=adopted))
-
-
-def _topic_feedback(tid: str, row: CheckRow | None, *, adopted: bool) -> dict[str, str]:
-    """``check_feedback`` with what a failed row needs: the topic's title, and its site when the
-    site signs in (its sign-in prompt)."""
-    tracker_name = title = ""
-    if row is not None and not row.get("ok") and not row.get("note"):
-        state = services.load_state()
-        topic = next((item for item in state.get("topics") or [] if str(item.get("id")) == str(tid)), None)
-        tracker = match_tracker(load_trackers(services.load_config()), str((topic or {}).get("url") or ""))
-        tracker_name = tracker.name if tracker and tracker.spec.get("login_path") else ""
-        title = shown_title(topic or {})
-    return check_feedback(row, topic_id=tid, adopted=adopted, tracker_name=tracker_name, topic_title=title)
-
-
-def _perform_check(job: dict[str, Any]) -> None:
-    # A plain thread does not inherit the request's language: the job carries it.
-    lang = str(job.get("lang") or owner_language())
-    i18n.use(lang)
-    topic_id = str(job.get("topic_id") or "")
-    feedback: dict[str, str] = {}
-    try:
-        out = services.run_check(
-            apply=job["apply"],
-            notify=True,
-            ignore_cool=True,
-            how="manual",
-            wait=False,
-            ids=[topic_id] if topic_id else None,
-        )
-    except CheckBusyError:
-        raise  # the FIFO retries the head without duplicating work or consuming a failure
-    except SecretStoreError as exc:
-        if job["apply"]:  # a preview writes nothing, its failures included (AGENTS.md)
-            services.record_check_failure(exc, how="manual")
-        flash, status, kind = i18n.t("web.check.blocked", lang), "failed", "err"
-    except Exception as exc:  # noqa: BLE001 - the background job's boundary: the page polls for its result
-        if job["apply"]:
-            services.log_event("check_blocked", how="manual", reason="result_unconfirmed", **error_fields(exc))
-        flash, status, kind = i18n.t("web.check_all.not_run", lang, error=type(exc).__name__), "failed", "err"
-    else:
-        try:
-            flash, status, kind, feedback = _job_result(job, out)
-        except Exception as exc:  # noqa: BLE001 - the check ran and saved what it found; only its words failed
-            if job["apply"]:
-                services.log_event("check_report_failed", how="manual", **error_fields(exc))
-            flash, status, kind = i18n.t("web.check_all.report_failed", lang, error=type(exc).__name__), "done", "warn"
-    # The page follows the job, then opens its result (result_location), shown from the job.
-    with check_jobs.LOCK:
-        job.update({"status": status, "flash": flash, "kind": kind, "feedback": feedback})
-
-
-def _job_result(job: dict[str, Any], out: dict[str, Any]) -> tuple[str, str, str, dict[str, str]]:
-    """(message, status, kind, a topic's feedback) of a check that ran; its report goes with the job."""
-    topic_id = str(job.get("topic_id") or "")
-    report = check_report(out, apply=job["apply"])
-    feedback: dict[str, str] = {}
-    if topic_id:
-        # A topic's check says what a check of it at once says; deleted meanwhile, it was never
-        # checked ("not found"), and there is no result of it to show.
-        row = topic_check_row(topic_id, out)
-        feedback = _topic_feedback(topic_id, row, adopted=bool(job.get("adopted")))
-        flash, status, kind = feedback["text"], "done" if row is not None else "failed", feedback["kind"]
-    else:
-        waiting_or_failed = report["counts"]["fail"] or report["counts"]["pending"]
-        flash, status, kind = report["summary"], "done", "warn" if waiting_or_failed else "ok"
-    if status == "done":
-        with check_jobs.LOCK:
-            job["report"] = report
-    return flash, status, kind, feedback
+    return feedback_redirect(topic_feedback(tid, topic_check_row(tid, out), adopted=adopted))
 
 
 @router.post("/check")
 def check(mode: str = Form("dry")) -> Response:
-    return _enqueue(topic_id="", apply=mode == "apply")
-
-
-def _enqueue(*, topic_id: str, apply: bool, adopted: bool = False) -> Response:
-    job, added = check_jobs.submit(
-        topic_id=topic_id, apply=apply, lang=owner_language(), perform=_perform_check, adopted=adopted
-    )
-    if job is None:
-        return flash_redirect("/", "web.check_all.queue_full", "warn")
-    # A topic's check comes here only when it has to wait; one of every topic may start at once.
-    starts_now = added and not topic_id and job["position"] == 1
-    return flash_redirect(
-        "/?check_job=" + quote(job["id"]), "web.check_all.started" if starts_now else "web.check_all.queued"
-    )
+    return enqueue_check(topic_id="", apply=mode == "apply")
 
 
 @router.get("/check/status")
