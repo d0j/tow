@@ -466,6 +466,37 @@ def test_a_tag_the_origin_does_not_have_is_refused_in_words(install):
     assert fake.calls == []  # nothing stopped
 
 
+@pytest.mark.parametrize("ref", ["main", "HEAD~1", "v1.21.0~1", ":/two", "--output=x", "v1.21.0^{tree}", "origin/main"])
+def test_a_ref_that_is_neither_a_release_tag_nor_a_commit_is_refused(install, ref):
+    """git rev-parse took any revision expression (a branch, HEAD~1, :/text, an option)."""
+    fake = Fake(install["app"])
+    before = head(install)
+    code, lines = run(fake, ref=ref)
+    assert code == 2
+    assert lines[-1].startswith(f"{ref} is neither a tag nor a commit")
+    assert head(install) == before
+    assert fake.calls == []
+
+
+def test_a_release_tag_is_resolved_as_a_tag_not_as_a_branch_of_the_same_name(install):
+    # A branch named like a release must not stand in for the release tag.
+    origin = install["origin"]
+    first = git(origin, "rev-parse", "v1.20.0")
+    git(install["app"], "branch", "v1.21.0", first)  # a local branch with the release's name
+    fake = Fake(install["app"])
+    code, lines = run(fake, ref="v1.21.0")
+    assert code == 0, lines
+    assert head(install) == git(origin, "rev-parse", "v1.21.0^{commit}")
+
+
+def test_a_commit_hash_is_still_accepted(install):
+    fake = Fake(install["app"])
+    target = git(install["origin"], "rev-parse", "v1.21.0^{commit}")
+    code, lines = run(fake, ref=target)
+    assert code == 0, lines
+    assert head(install) == target
+
+
 def test_an_origin_out_of_reach_is_refused_in_words(install):
     git(install["app"], "remote", "set-url", "origin", str(install["root"] / "no-such-origin"))
     fake = Fake(install["app"])
