@@ -438,15 +438,22 @@ def test_installers_run_the_release_smokes_before_a_tag():
     paths = triggers["pull_request"]["paths"]
     for path in ("scripts/**", "install/**", "src/tow/update*", "src/tow/web_update.py"):
         assert path in paths
-    # What the updater relies on in the code it installs (before: a change there ran no update test).
+    # What the updater relies on in the code it installs (before: a change there ran no update test;
+    # 1.31.0 broke the restore point an update from Settings makes first).
     for path in (
         "src/tow/store.py",
         "src/tow/storage/**",
-        "src/tow/supervisor/layout.py",
+        "src/tow/platform/locks.py",
+        "src/tow/paths.py",
+        "src/tow/supervisor/**",
+        "src/tow/restore_points.py",
+        "src/tow/snapshots/**",
         "src/tow/cli/**",
         "src/tow/locales/**",
     ):
         assert path in paths
+    for path in paths:  # no filter names a file that is gone
+        assert next(ROOT.glob(path.removesuffix("/**")), None), path
     assert triggers["schedule"]
     assert "workflow_dispatch" in triggers
     jobs = flow["jobs"]
