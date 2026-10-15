@@ -269,3 +269,17 @@ def test_a_failed_first_check_that_was_reported_is_closed_by_works_again(monkeyp
 
     notices.queue_recoveries(load_state(), [{"id": "t1", "ok": True, "tracker": "site-a"}], Run())
     assert Run.queued == ["recovered"]
+
+
+def test_messages_given_as_a_generator_are_all_counted(caplog):
+    night = datetime(2026, 10, 1, 2, 0).astimezone()
+    _sent, send = _sender()
+    outcome = delivery.deliver(
+        (item for item in [_error("1", "Show")]), cfg={"quiet_hours": "23-8"}, send=send, now=night
+    )
+    assert outcome == {"sent": 0, "deferred": 1}  # it said 0: the generator was read up by staging
+    state: dict = {}
+    for n in range(delivery.PENDING_LIMIT + 2):
+        delivery._pending(state, f"m{n}", "op", None)
+    assert len(state["notify_pending"]) == delivery.PENDING_LIMIT
+    assert caplog.text.count("1 staged message(s) dropped") == 2  # never silently

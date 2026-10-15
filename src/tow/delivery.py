@@ -20,6 +20,7 @@ once: a TOW stopped between a messenger's answer and the queue's write repeats t
 
 from __future__ import annotations
 
+import logging
 import re
 import uuid
 from collections.abc import Iterable
@@ -39,6 +40,7 @@ GROUP_MIN = 3
 QUEUE_LIMIT = 200
 PENDING_LIMIT = 200
 _NO_LINK = frozenset({"qbit_down", "qbit_up"})
+_LOG = logging.getLogger("tow.delivery")
 
 
 class Send(Protocol):
@@ -130,7 +132,10 @@ def _pending(state: dict[str, Any], text: str, operation_id: str, topic: Topic |
     pending.append(
         {"id": uuid.uuid4().hex[:12], "text": text, "operation_id": operation_id, "topic_id": (topic or {}).get("id")}
     )
-    del pending[:-PENDING_LIMIT]
+    if len(pending) > PENDING_LIMIT:
+        # Never silently: the oldest staged messages go, and the log says how many.
+        _LOG.warning("%d staged message(s) dropped: more than %d waiting", len(pending) - PENDING_LIMIT, PENDING_LIMIT)
+        del pending[:-PENDING_LIMIT]
 
 
 def _count(value: Any) -> int:
@@ -229,6 +234,7 @@ def deliver(
     items: Iterable[PendingNotification], *, cfg: dict[str, Any], send: Send, now: datetime | None = None
 ) -> dict[str, Any]:
     """Stage and dispatch at once (callers outside a check transaction)."""
+    items = list(items)  # composed twice below: a generator would be empty the second time
     with persistence_lock():
         state = load_state()
         before = list(state.get("notify_queue") or [])
