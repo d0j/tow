@@ -193,6 +193,7 @@ def candidates(
             return
         available = adapters()
         enabled = [item for item in enabled if item["kind"] in available]
+        store.correct_clock(site, origin, enabled, now=time.time())
         enabled = store.eligible_providers(site, origin, settings, enabled, now=time.time())[: call_budget.remaining]
         if not enabled:
             return

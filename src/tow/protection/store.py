@@ -135,6 +135,41 @@ def _service_key(provider: dict[str, Any]) -> str:
     return signature({"type": "service", "kind": provider["kind"], "url": provider["url"]})
 
 
+# The longest reservation: a recovery's 90-second limit and 5 seconds to finish it.
+_MAX_LEASE = 95
+
+
+def _clock_corrected(record: dict[str, Any], now: float) -> dict[str, Any] | None:
+    """``record`` with an anchor in the future (the clock was set back) moved to ``now`` and its
+    waits kept as long as they were meant to be; None when it needs no correction. Without it
+    a site or a service would wait until the old time came again - days or years."""
+    shift = max(0.0, record["attempt_at"] - now)
+    attempt_at = record["attempt_at"] - shift
+    lease_until = min(record["lease_until"] - shift, attempt_at + _MAX_LEASE)
+    if not shift and lease_until == record["lease_until"]:
+        return None
+    fixed = {**record, "attempt_at": attempt_at, "lease_until": max(attempt_at, lease_until)}
+    if fixed.get("service_retry_at"):
+        fixed["service_retry_at"] = record["service_retry_at"] - shift
+    return fixed
+
+
+def correct_clock(site: str, origin: str, providers: list[dict[str, Any]], *, now: float) -> None:
+    """Persist the correction of a future reservation or service pause once, on an applying
+    recovery: corrected only in memory it would move along with every later reading."""
+    if not _finite_time(now):
+        raise ValueError("invalid clearance observation time")
+    with persistence_lock():
+        records = _load()
+        changed = False
+        for key in (_key(site, origin), *(_service_key(provider) for provider in providers)):
+            if key in records and (fixed := _clock_corrected(records[key], now)) is not None:
+                records[key] = fixed
+                changed = True
+        if changed:
+            _save(records)
+
+
 def service_states(providers: list[dict[str, Any]], *, now: float) -> dict[str, dict[str, Any]]:
     """Read-only API observations, never clearance values or an assertion of site access."""
     if not _finite_time(now):
@@ -143,6 +178,8 @@ def service_states(providers: list[dict[str, Any]], *, now: float) -> dict[str, 
     result = {}
     for provider in providers:
         record = records.get(_service_key(provider), {})
+        if record:
+            record = _clock_corrected(record, now) or record  # shown as meant; written by a recovery
         retry = float(record.get("service_retry_at", 0))
         result[provider["id"]] = {
             "status": record.get("service_status", "unknown"),
@@ -254,8 +291,8 @@ def recovery_origins(site: str, origins: list[str]) -> list[str]:
 
 
 def _reserved(previous: dict[str, Any] | None, settings: dict[str, Any], now: float) -> bool:
-    # Configuration changes must not bypass single-flight/cooldown. A future timestamp
-    # after a clock correction refuses attempts until the original anchor is reached.
+    # Configuration changes must not bypass single-flight/cooldown. A future timestamp after
+    # the clock was set back refuses attempts until a recovery corrects it (correct_clock).
     if not previous:
         return False
     return bool(now < previous["lease_until"] or now - previous["attempt_at"] < settings["min_interval_sec"])

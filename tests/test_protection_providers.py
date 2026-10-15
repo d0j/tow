@@ -1168,3 +1168,58 @@ def test_a_refused_replay_names_the_sites_actual_answer(monkeypatch):
     refused = [fields for kind, fields in events if kind == "protection_replay_refused"]
     assert refused[0]["reason"] == "redirect_policy"
     assert refused[0]["phase"] == "resource"
+
+
+# --- a clock set back cannot pause site access until the old time comes again -------------------
+
+TEN_DAYS = 10 * 86400
+
+
+def _calls_to(monkeypatch):
+    calls = []
+
+    def solve(provider, origin, timeout):
+        calls.append(provider["id"])
+        raise AccessFailure("refused", "service", "synthetic")
+
+    monkeypatch.setattr(chain, "adapters", lambda: {"flaresolverr": solve})
+    return calls
+
+
+def test_a_future_site_reservation_is_corrected_once_and_kept(safe_dns, monkeypatch, clock):
+    calls = _calls_to(monkeypatch)
+    configured = settings(min_interval_sec=1800)
+    assert store.reserve_attempt("sample", ORIGIN, configured, now=clock[0] + TEN_DAYS) is not None
+    assert list(chain.candidates("sample", ORIGIN, configured)) == []  # the interval now starts now
+    corrected = store._load()[store._key("sample", ORIGIN)]
+    assert corrected["attempt_at"] == clock[0]
+    assert corrected["lease_until"] <= clock[0] + 95
+    clock[0] += 600
+    assert list(chain.candidates("sample", ORIGIN, configured)) == []
+    assert store._load()[store._key("sample", ORIGIN)]["attempt_at"] == corrected["attempt_at"]  # not moving
+    assert calls == []
+    clock[0] += 1201
+    assert list(chain.candidates("sample", ORIGIN, configured)) == []
+    assert calls == ["first"]
+
+
+def test_a_future_service_pause_is_corrected_for_every_site(safe_dns, monkeypatch, clock):
+    calls = _calls_to(monkeypatch)
+    configured = settings()
+    store.note_service(configured["providers"][0], "unavailable", now=clock[0] + TEN_DAYS)
+    shown = store.service_states(configured["providers"], now=clock[0])["first"]
+    assert shown["retry_at"] <= clock[0] + 30  # Settings shows the pause as it was meant
+    assert list(chain.candidates("sample", ORIGIN, configured)) == []
+    assert calls == []
+    clock[0] += 31
+    assert list(chain.candidates("other", "https://other.example", configured)) == []
+    assert calls == ["first"]
+
+
+def test_a_preview_never_writes_a_clock_correction(clock):
+    configured = settings()
+    store.note_service(configured["providers"][0], "unavailable", now=clock[0] + TEN_DAYS)
+    before = (data_dir() / "protection.enc").read_bytes()
+    store.service_states(configured["providers"], now=clock[0])
+    assert chain.cached("sample", ORIGIN, configured) is None
+    assert (data_dir() / "protection.enc").read_bytes() == before
