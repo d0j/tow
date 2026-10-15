@@ -36,6 +36,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   such cookies no longer replaces a working sign-in. A clearance an earlier version saved there is not sent and
   is removed at the next successful sign-in; sign-ins made in a browser window are kept as they are.
 
+### Fixed
+
+- When several mirrors of a site show a Cloudflare check, each mirror that can still be recovered gets a
+  site-access service call before one mirror gets its last-chance call. The shared call and time limits stay.
+
 ## [1.30.10] — 2026-10-15
 
 ### Fixed

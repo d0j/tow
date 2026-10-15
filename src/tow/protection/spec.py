@@ -72,15 +72,26 @@ class ProviderSpec:
 
 @dataclass
 class RecoveryBudget:
-    """One call limit shared by all origins in a recovery phase, not per mirror."""
+    """One call limit shared by all origins in a recovery phase, not per mirror.
+
+    ``for_origin`` is one origin's share of it: every call, the last-chance one too, also
+    spends the shared limit, and the share leaves one call for each later origin that can
+    still be recovered - a first mirror cannot take a later mirror's only call.
+    """
 
     remaining: int
+    shared: RecoveryBudget | None = field(default=None, repr=False, compare=False)
 
     def consume(self) -> bool:
-        if self.remaining <= 0:
+        if self.remaining <= 0 or (self.shared is not None and not self.shared.consume()):
             return False
         self.remaining -= 1
         return True
+
+    def for_origin(self, later: int) -> RecoveryBudget:
+        """The calls this origin may make, ``later`` origins still waiting: at least one."""
+        left = max(0, self.remaining)
+        return RecoveryBudget(max(min(1, left), left - max(0, later)), self)
 
 
 def service_url(value: object) -> str:

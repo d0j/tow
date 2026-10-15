@@ -115,6 +115,24 @@ def _finish_reservation(pending: store.PendingAttempt, last_called: str | None) 
         _LOG.debug("clearance reservation finalization unavailable")
 
 
+def waiting_origins(site: str, origins: list[str], settings: dict[str, Any]) -> int:
+    """How many of ``origins`` a recovery could still call a service for (no recent reservation
+    of their own, an installed and enabled service out of its pause): each keeps one call of
+    the shared limit (``RecoveryBudget.for_origin``). Read-only; unreadable storage keeps none."""
+    try:
+        settings = validate_settings(settings)
+        if not settings["enabled"]:
+            return 0
+        available = adapters()
+        enabled = [item for item in settings["providers"] if item["enabled"] and item["kind"] in available]
+        if not enabled:
+            return 0
+        targets = [target_origin(origin) for origin in origins]
+        return len(store.recoverable(site, targets, settings, enabled, now=time.time()))
+    except Exception:  # noqa: BLE001 - optional storage: the current origin keeps the whole remaining limit
+        return 0
+
+
 def candidates(
     site: str,
     origin: str,
