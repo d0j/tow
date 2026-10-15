@@ -199,6 +199,13 @@ def parse_episode_label(name: str) -> EpisodeLabel | None:
     return labels[0] if labels else None
 
 
+# What may not follow the last number of an episode marker: a fraction (S01E05.5 is a special,
+# ``_fractional_special``), audio channels glued to a codec (E01-5.1x264) or a bit depth. A
+# quality, a bit depth or a year after a dot (.1080p, .10bit, .4K, .2019) ends the marker.
+_NOT_FRACTION = r"(?!\.\d{1,2}(?:[xх]\d|(?![0-9a-zа-яё])))"
+_MARKER_END = r"(?!\w|[-_. ]\s*bits?\b)" + _NOT_FRACTION
+
+
 def _fractional_special(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, ...] | None:
     """Fractional specials (``S01E05.5``) need their own identity; never guess."""
     if re.search(
@@ -220,8 +227,7 @@ def _compact_sequence(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, ...
         episodes = [first]
         tail = text[compact_head.end() :]
         while next_episode := re.match(
-            rf"(?i)(?:\.s0*{season}|\.?)[ ._]*e(\d{{1,4}})"
-            r"(?!\.\d)(?=$|[ ._-]|e\d|v\d+\b)",
+            rf"(?i)(?:\.s0*{season}|\.?)[ ._]*e(\d{{1,4}})" + _NOT_FRACTION + r"(?=$|[ ._-]|e\d|v\d+\b)",
             tail,
         ):
             episodes.append(int(next_episode.group(1)))
@@ -259,17 +265,13 @@ def _season_episode_range(text: str, path: PurePosixPath) -> tuple[EpisodeLabel,
     """``S01E01``, ``S01E01-E05``, ``1x01``, ``1x01-05``."""
     match = re.search(
         r"(?i)\bs(\d{1,2})[ ._-]*e(\d{1,4})(?:"
-        r"\s*(?:-|–|—|~|to)\s*(?:s\1[ ._-]*)?e(\d{1,4})"
-        r"(?!\w|\.\d|[-_. ]\s*bits?\b)"
-        r"|(?:-|–|—|~)(\d{1,4})(?!\w|\.\d|[-_. ]\s*bits?\b))?",
+        r"\s*(?:-|–|—|~|to)\s*(?:s\1[ ._-]*)?e(\d{1,4})" + _MARKER_END + r"|(?:-|–|—|~)(\d{1,4})" + _MARKER_END + ")?",
         text,
     )
     if not match:
         match = re.search(
             r"(?i)(?<!\d\.)\b(\d{1,2})[xх](\d{1,4})(?:"
-            r"\s*(?:-|–|—|~|to)\s*\1[xх](\d{1,4})"
-            r"(?!\w|\.\d|[-_. ]\s*bits?\b)"
-            r"|(?:-|–|—|~)(\d{1,4})(?!\w|\.\d|[-_. ]\s*bits?\b))?",
+            r"\s*(?:-|–|—|~|to)\s*\1[xх](\d{1,4})" + _MARKER_END + r"|(?:-|–|—|~)(\d{1,4})" + _MARKER_END + ")?",
             text,
         )
     if match:
@@ -288,8 +290,7 @@ def _season_dash_episode(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, 
     """``S1 - 05`` / ``S1-Ep05``."""
     match = re.search(
         r"(?i)\bs[ ._-]*(\d{1,2})\s*(?:-|–|—)[ ._-]*"
-        r"(?:e(?:p(?:isode)?)?[ ._-]*)?(\d{1,4})"
-        r"(?!\w|\.\d|[-_. ]\s*bits?\b)",
+        r"(?:e(?:p(?:isode)?)?[ ._-]*)?(\d{1,4})" + _MARKER_END,
         text,
     )
     if match:
@@ -322,8 +323,7 @@ def _episode_word(text: str, path: PurePosixPath) -> tuple[EpisodeLabel, ...] | 
     match = re.search(
         r"(?i)(?:^|[^\w])(?:e(?:p(?:isode)?)?|серия|эпизод)\s*[._-]?(\d{1,4})"
         r"(?:v\d+)?(?!\w)"
-        r"(?:\s*([-&+,/])\s*(?:e(?:p(?:isode)?)?)?(\d{1,4})"
-        r"(?!\w|\.\d|[-_. ]\s*bits?\b))?",
+        r"(?:\s*([-&+,/])\s*(?:e(?:p(?:isode)?)?)?(\d{1,4})" + _MARKER_END + ")?",
         text,
     )
     if match:
