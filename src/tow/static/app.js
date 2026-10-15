@@ -184,7 +184,8 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
       if (action && data.accepted) {
         // Accepted: this tab follows it; the page stays.
         window.towChecks.acknowledge(action, data);
-        if (data.message) showMessage(data.message);
+        // Only while it is still followed: a result polling has shown already stays the last word.
+        if (data.message && window.towChecks.pending?.(action) !== false) showMessage(data.message);
         restoreForm(form, submitter);
         return;
       }
@@ -202,8 +203,11 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
     restoreForm(form, submitter);
     if (action && !definite) {
       // The answer was lost or broke off: TOW may have the check. It is looked up by its action id,
-      // never sent again.
-      showMessage({ id: `check-${action}`, kind: "info", subject: subjectOf(form), text: t("js.checks.sent") });
+      // never sent again - and said so only while it is still followed (its result may have come
+      // by polling while the answer's body was still on its way).
+      if (window.towChecks.pending?.(action) !== false) {
+        showMessage({ id: `check-${action}`, kind: "info", subject: subjectOf(form), text: t("js.checks.sent") });
+      }
       return;
     }
     if (action) window.towChecks.forget(action);

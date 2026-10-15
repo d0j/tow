@@ -306,4 +306,21 @@ verdict.coalescedFollowedAsOne = true;
 }
 verdict.repeatResultSuppressed = true;
 
+// Whether a click is still followed (app.js says "answer lost" only then): by its own id, or as
+// the alias of a click TOW took as the same job; no longer once its result is shown.
+{
+  const test = harness({ answer: () => ok({ status: "done", job: "PJ" }) });
+  const one = test.scheduler.begin({});
+  const two = test.scheduler.begin({});
+  test.scheduler.acknowledge(one, { job: "PJ" });
+  test.scheduler.acknowledge(two, { job: "PJ" });
+  assert.equal(test.scheduler.pending(one), true);
+  assert.equal(test.scheduler.pending(two), true);
+  await test.advance(6000);
+  assert.equal(test.terminal.length, 1);
+  assert.equal(test.scheduler.pending(one), false);
+  assert.equal(test.scheduler.pending(two), false);
+}
+verdict.pendingUntilDelivered = true;
+
 console.log(JSON.stringify(verdict));

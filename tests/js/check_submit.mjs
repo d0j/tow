@@ -19,7 +19,7 @@ const page = (reply) => {
   const shown = [];
   const sent = [];
   const assigned = [];
-  const checks = { begun: [], acknowledged: [], forgotten: [] };
+  const checks = { begun: [], acknowledged: [], forgotten: [], delivered: new Set() };
   class FormData {
     constructor() { this.fields = {}; }
     set(name, value) { this.fields[name] = value; }
@@ -44,6 +44,8 @@ const page = (reply) => {
       begin: (meta) => { checks.begun.push(meta); return `act${checks.begun.length}xyz`; },
       acknowledge: (action, ack) => checks.acknowledged.push([action, ack.job]),
       forget: (action) => checks.forgotten.push(action),
+      // Still followed: begun, not yet delivered (the test ends one with ``checks.delivered``).
+      pending: (action) => checks.begun.length > 0 && !checks.delivered.has(action) && !checks.forgotten.includes(action),
     },
   };
   vm.runInNewContext(source, context);
@@ -152,5 +154,23 @@ verdict.refusalForgets = true;
   assert.equal(JSON.stringify(late.shown.map((record) => record.kind)), JSON.stringify(["warn"]));
 }
 verdict.scriptedCancelSaysNothing = true;
+
+// The answer's body broke off only after polling had already delivered the check's result:
+// nothing more is said (no "answer lost" entry that nothing would ever take away).
+{
+  let breakBody;
+  const test = page(() => Promise.resolve({
+    ok: true, status: 200, headers: { get: () => "application/json" },
+    json: () => new Promise((_resolve, reject) => { breakBody = () => reject(new TypeError("network error")); }),
+  }));
+  const submitted = test.submit();
+  await new Promise((resolve) => setImmediate(resolve));
+  test.checks.delivered.add("act1xyz"); // the scheduler showed its result meanwhile
+  breakBody();
+  await submitted;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(test.shown.length, 0);
+}
+verdict.lateBrokenBodySaysNothing = true;
 
 console.log(JSON.stringify(verdict));
