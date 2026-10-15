@@ -2367,7 +2367,7 @@
       "outcome_pending": "Waiting",
       "outcome_skipped": "Skipped",
       "outcome_fail": "Failed",
-      "more": "{n} results in total. The first 100 are shown here; see History for the rest.",
+      "more": "{n} results in total; the first 100 are shown, problems first. Home shows every topic's current status.",
       "history": "Error history",
       "not_run": "could not confirm the check result ({error}); review topic status and error history before trying again",
       "internal_error": "the check stopped on an internal TOW error; its result is unknown — review topic status and error history before trying again",
