@@ -663,9 +663,13 @@ def _needs_selection_update(work: TopicCheck, plan: Any, h: str) -> bool:
         return True
     if as_dict(topic.get("verification_pending")).get("blocked") and not work.run.readd_removed:
         return False
-    return bool(
-        work.run.apply and work.client is not None and info_is_pending_tow_add(work.client.inspect_torrent(h), h)
-    )
+    client = work.client
+    if not work.run.apply or client is None:
+        return False
+    # An observation, not a read-back (the add itself reads the torrent again before it changes
+    # anything): a client that can answers it from one listing per run.
+    observe = getattr(client, "observe_torrent", None) or client.inspect_torrent
+    return info_is_pending_tow_add(observe(h), h)
 
 
 def _readds_removed(work: TopicCheck, *, h: str, needs_selection_update: bool) -> bool:

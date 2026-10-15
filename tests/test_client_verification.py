@@ -861,6 +861,26 @@ def test_a_limited_site_without_revision_evidence_is_not_asked_for_a_blocked_tor
     assert tracker.fetches == 2  # a check started by hand still fetches it
 
 
+@pytest.mark.parametrize("pending", [False, True])
+def test_the_unfinished_add_question_uses_the_runs_client_listing(pending):
+    """Whether TOW's own add is unfinished is an observation (qBittorrent answers it from one
+    listing per run), not a read-back: no full read of every topic's torrent for it."""
+    observed = []
+
+    class Listed:
+        def observe_torrent(self, h):
+            observed.append(h)
+            return {"hash": h, "tags": ["tow", "tow-pending"] if pending else ["tow"]}
+
+        def inspect_torrent(self, h):
+            raise AssertionError("a full read for an observation")
+
+    topic = {"hash": H, "selection_hash": H, "selection_verified": True}
+    work = SimpleNamespace(topic=topic, old=H, row={}, client=Listed(), run=SimpleNamespace(apply=True))
+    assert topic_step._needs_selection_update(work, SimpleNamespace(mode="files"), H) is pending
+    assert observed == [H]
+
+
 def test_terminal_failure_is_not_scheduled_every_five_minutes(world):
     client, _tracker, _sent = world
     _run()
