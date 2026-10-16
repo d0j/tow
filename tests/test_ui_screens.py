@@ -535,3 +535,16 @@ def test_the_open_row_says_its_last_event_in_full(client):
     assert not last_ok.endswith(".")
     summary = page.select_one("#row-t1 summary")
     assert not summary.select("a, button, input, select, textarea, [tabindex]")
+
+
+def test_the_picker_has_one_all_files_box_instead_of_two_buttons(client):
+    """1.32.1 H5: "Select all files" and "Clear selection" were two buttons over the tree. One
+    root box "All files" (ticked, mixed or clear: content.js) stands at the tree's top now; the
+    saved-copy note moved onto the status line, so its own line only says a copy that failed."""
+    picker = BeautifulSoup(client.get("/").text, "html.parser").select_one("#new [data-content-picker]")
+    box = picker.select_one("input[type=checkbox][data-content-all]")
+    assert box.find_parent("label").get_text(strip=True) == "Все файлы"
+    assert box.find_parent(attrs={"data-content-manual-actions": True}) is not None
+    assert picker.select_one("[data-content-none]") is None
+    assert not picker.select("button[data-content-all]")
+    assert "сохранить не удалось" in picker.select_one("[data-content-cached]").get_text()

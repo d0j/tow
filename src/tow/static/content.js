@@ -30,6 +30,9 @@
     const fresh = root.querySelector("[data-content-fresh]");
     const cachedHint = root.querySelector("[data-content-cached]");
     const magnet = root.querySelector("[data-content-magnet]");
+    // One box over the tree, "All files": ticked, mixed or clear for the whole snapshot - the
+    // files a search hides and the other pages too.
+    const allFiles = root.querySelector("[data-content-all]");
     let snapshot = null, selected = new Set(), generation = 0, ruleGeneration = 0, page = 0;
     let nodes = [], expanded = new Set();
     const PAGE_SIZE = 200;
@@ -79,6 +82,8 @@
       }
       nodes = [...top.children.values()];
       expanded = new Set(); page = 0;
+      // A torrent in one folder opens it: a single closed folder was all the picker showed.
+      if (nodes.length === 1 && !nodes[0].file) expanded.add(nodes[0].path);
     };
     const eachFile = (node, visit) => {
       if (node.file) visit(node.file);
@@ -88,7 +93,11 @@
       if (!snapshot) return;
       const chosen = snapshot.files.filter((row) => selected.has(row.id));
       const size = humanSize(chosen.reduce((sum, row) => sum + rowSize(row), 0n));
-      const summary = !manual() && ruleNotice || t(manual() ? "content.js.count" : "content.js.rule", { count: chosen.length, size });
+      // One status line: what is chosen, of how many, and (a routine fact, not a warning) that the
+      // list is the saved copy. Loading, errors and the quota stay messages of their own.
+      const routine = t(manual() ? "content.js.count" : "content.js.rule", { count: chosen.length, total: snapshot.files.length, size })
+        + (snapshot.cached === true ? " · " + t("content.cached_hint") : "");
+      const summary = !manual() && ruleNotice || routine;
       if (status.textContent !== summary) status.textContent = summary;
       indices.value = manual() ? JSON.stringify([...selected]) : "";
       showSpace();
@@ -211,6 +220,10 @@
       more.disabled = (page + 1) * PAGE_SIZE >= visible.length;
       root.querySelector("[data-content-page]").textContent = t("content.js.page", { page: page + 1, pages: Math.max(1, Math.ceil(visible.length / PAGE_SIZE)) });
       root.querySelector("[data-content-manual-actions]").hidden = !manual();
+      const total = snapshot.files.length, count = snapshot.files.filter((row) => selected.has(row.id)).length;
+      allFiles.checked = total > 0 && count === total;
+      allFiles.indeterminate = count > 0 && count < total;
+      allFiles.disabled = !manual();
       summarize();
       if (focused) [...tree.querySelectorAll("[data-content-key]")].find((element) => element.dataset.contentKey === focused)?.focus();
     };
@@ -258,6 +271,7 @@
       manualWanted = [];
       ruleNotice = "";
       token.value = ""; indices.value = ""; upload.value = "";
+      window.towFiles?.sync(upload); // the chooser's file name goes back to "No file chosen"
       results.hidden = true; loadButton.disabled = false; magnet.disabled = false;
       limited.disabled = false; limited.hidden = true;
       if (fresh) { fresh.hidden = true; fresh.disabled = false; }
@@ -305,9 +319,10 @@
         }
         snapshot = data;
         if (fresh) fresh.hidden = data.cached !== true;
+        // A saved copy is said on the status line; only a copy that could not be saved stays a line of its own.
         if (cachedHint) {
-          cachedHint.hidden = data.cached !== true && data.cache_failed !== true;
-          cachedHint.textContent = t(data.cache_failed ? "content.cache_failed" : "content.cached_hint");
+          cachedHint.hidden = data.cache_failed !== true;
+          cachedHint.textContent = t("content.cache_failed");
         }
         buildTree();
         token.value = data.token;
@@ -381,8 +396,10 @@
     search.addEventListener("input", () => { page = 0; render(); });
     more.addEventListener("click", () => { page++; render(); tree.scrollTop = 0; });
     previous.addEventListener("click", () => { page--; render(); tree.scrollTop = 0; });
-    root.querySelector("[data-content-all]").addEventListener("click", () => { selected = new Set(snapshot.files.map((row) => row.id)); render(); });
-    root.querySelector("[data-content-none]").addEventListener("click", () => { selected.clear(); render(); });
+    allFiles.addEventListener("change", () => {
+      selected = allFiles.checked ? new Set(snapshot.files.map((row) => row.id)) : new Set();
+      render();
+    });
     const help = root.querySelector("[data-content-help]"), helpText = root.querySelector("[data-content-help-text]");
     help.addEventListener("click", () => { helpText.hidden = !helpText.hidden; help.setAttribute("aria-expanded", String(!helpText.hidden)); });
     root.addEventListener("keydown", (event) => {

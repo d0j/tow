@@ -80,7 +80,7 @@ file is not kept as the topic's saved contents. A download-limited site asks for
 **From magnet (asks other users)** asks your torrent client for the file list without downloading anything; it
 needs qBittorrent 5.2+ or Deluge. Other clients need a `.torrent`.
 
-Search hides rows, not selections. Folder checkboxes and **Select all files** include files hidden by
+Search hides rows, not selections. Folder checkboxes and the **All files** box include files hidden by
 search; the selected count and size cover the whole torrent. A file with several episodes is downloaded
 whole, and the client may also write small parts of neighbouring files that are not chosen. Editing stores
 the choice for the next check; cancelling discards the draft. The **?** button explains these rules in the form.

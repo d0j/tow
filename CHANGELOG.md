@@ -68,6 +68,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   "e.g. D:\TV".
 - The hint under a topic's "Check every, min" names the interval an empty field uses: "Empty: use the global
   interval (60 min)."
+- The torrent contents list is calmer: one **All files** box at the top of the tree (ticked, partly ticked or
+  clear) replaces **Select all files** and **Clear selection**, a torrent in a single folder opens it, and the
+  saved-copy note joins the one status line ("Files selected: 2 of 6 · 3 GB · saved copy, no download limit
+  used").
 
 ### Fixed
 

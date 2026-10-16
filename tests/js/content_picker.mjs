@@ -77,6 +77,8 @@ function setup(saved = null, existing = [], before = () => {}) {
 const find = (tree, name) => tree.querySelectorAll("*").find((n) => n.attributes["aria-label"] === name);
 const reply = async (request, ...response) => { request.respond(...response); await tick(); };
 const snapshot = { token: "a".repeat(32), files };
+// The root "All files" box: ticked selects the whole snapshot, cleared selects nothing.
+const allFiles = (picker, on) => { picker.controls.all.checked = on; picker.controls.all.fire("change"); };
 const submitAllowed = (form) => {
   let prevented = false;
   for (const fn of form.listeners.submit) fn({ preventDefault: () => { prevented = true; }, stopImmediatePropagation() {} });
@@ -88,6 +90,8 @@ assert.equal(a.requests.length, 0, "no automatic tracker access");
 a.controls.load.fire("click");
 await reply(a.requests[0], snapshot);
 assert.equal(a.controls.tree.children.length, 2, "folders initially collapsed");
+assert.equal(a.controls.all.checked, false, "nothing chosen: the root box is clear");
+assert.equal(a.controls.all.indeterminate, false);
 find(a.controls.tree, "Season 1/A*.mkv"); // not rendered until expanded
 const folderToggle = a.controls.tree.querySelectorAll("*").find((n) => n.dataset.contentKey === "folder:Season 1");
 folderToggle.fire("click");
@@ -95,6 +99,8 @@ let file = find(a.controls.tree, "Season 1/A*.mkv"); file.checked = true; file.f
 assert.equal(a.fields.selection_indices.value, "[0]");
 let folder = a.controls.tree.querySelectorAll("*").find((n) => n.dataset.contentKey === "select:Season 1");
 assert.equal(folder.indeterminate, true, "tri-state folder");
+assert.equal(a.controls.all.indeterminate, true, "tri-state root: one file of many");
+assert.equal(a.controls.all.checked, false);
 a.controls.search.value = "B.mkv"; a.controls.search.fire("input");
 assert.equal(a.fields.selection_indices.value, "[0]", "search preserves hidden selection");
 assert.ok(find(a.controls.tree, "Season 1/B.mkv"));
@@ -106,8 +112,13 @@ a.controls.search.value = "note-123.txt"; a.controls.search.fire("input");
 folder = a.controls.tree.querySelectorAll("*").find((n) => n.dataset.contentKey === "select:Extras");
 folder.checked = true; folder.fire("change");
 assert.equal(JSON.parse(a.fields.selection_indices.value).length, 19999, "folder affects whole subtree, not search subset");
-a.controls.none.fire("click");
+allFiles(a, true);
+assert.equal(JSON.parse(a.fields.selection_indices.value).length, 20000, "the root box takes the files a search hides");
+assert.equal(a.controls.all.checked, true);
+assert.equal(a.controls.all.indeterminate, false);
+allFiles(a, false);
 assert.equal(a.fields.selection_indices.value, "[]");
+assert.equal(a.controls.all.checked, false);
 let prevented = false;
 for (const fn of a.form.listeners.submit) fn({ preventDefault: () => { prevented = true; }, stopImmediatePropagation() {} });
 assert.equal(prevented, true, "empty manual selection cannot save");
@@ -126,7 +137,7 @@ const pendingRule = c.requests.at(-1);
 c.fields.selection_mode.value = "exact"; c.fields.selection_mode.fire("change");
 await reply(pendingRule, { indices: [0, 1] });
 assert.equal(c.fields.selection_indices.value, "[1]", "late rules never override manual choice");
-c.controls.all.fire("click");
+allFiles(c, true);
 assert.equal(JSON.parse(c.fields.selection_indices.value).length, 20000);
 c.fields.client_id.value = "other"; c.fields.client_id.fire("change");
 assert.equal(c.fields.content_token.value, "", "client edits invalidate preparation");
@@ -153,7 +164,7 @@ const f = setup(null, [files[0]]);
 assert.equal(submitAllowed(f.form), true, "unchanged existing choice needs no metadata request");
 f.controls.load.fire("click");
 await reply(f.requests[0], snapshot);
-f.controls.none.fire("click");
+allFiles(f, false);
 f.controls.search.value = "B.mkv"; f.controls.search.fire("input");
 file = find(f.controls.tree, "Season 1/B.mkv"); file.checked = true; file.fire("change");
 assert.equal(f.fields.selection_indices.value, "[1]");
@@ -226,7 +237,9 @@ assert.equal(g.controls.results.hidden, true);
 const cached = setup();
 cached.controls.load.fire("click");
 await reply(cached.requests[0], { ...snapshot, cached: true });
-assert.equal(cached.controls.cached.hidden, false);
+// The saved copy is part of the one status line, not a second line under it.
+assert.equal(cached.controls.cached.hidden, true);
+assert.equal(cached.controls.status.textContent, "content.js.count · content.cached_hint");
 assert.equal(cached.controls.fresh.hidden, false);
 cached.controls.fresh.fire("click");
 assert.equal(cached.requests.at(-1).options.body.get("source"), "fresh");
@@ -242,6 +255,12 @@ await tick();
 assert.equal(cached.requests.at(-1).options.body.get("allow_limited"), "true");
 await reply(cached.requests.at(-1), { ...snapshot, cached: false });
 assert.equal(cached.controls.cached.hidden, true);
+assert.equal(cached.controls.status.textContent, "content.js.count");
+const unsaved = setup();
+unsaved.controls.load.fire("click");
+await reply(unsaved.requests[0], { ...snapshot, cache_failed: true });
+assert.equal(unsaved.controls.cached.hidden, false, "a copy that could not be saved stays a line of its own");
+assert.equal(unsaved.controls.cached.textContent, "content.cache_failed");
 assert.equal(cached.controls.fresh.hidden, true);
 // A local file chosen for one link is never prepared for an edited link.
 const local = setup();
@@ -258,7 +277,7 @@ assert.equal(local.controls.upload.value, "", "cancel drops the chosen local fil
 const abandoned = setup();
 abandoned.controls.load.fire("click");
 await reply(abandoned.requests[0], snapshot);
-abandoned.controls.all.fire("click");
+allFiles(abandoned, true);
 assert.equal(abandoned.fields.content_token.value, snapshot.token);
 abandoned.form.fire("reset");
 assert.equal(abandoned.fields.content_token.value, "", "cancel discards an abandoned preparation");
@@ -268,7 +287,7 @@ const draft = setup({ token: snapshot.token });
 await reply(draft.requests[0], snapshot);
 draft.controls.load.fire("click");
 await reply(draft.requests[1], { ...snapshot, token: "b".repeat(32) });
-draft.controls.none.fire("click");
+allFiles(draft, false);
 draft.form.fire("reset");
 assert.equal(draft.fields.content_token.value, snapshot.token, "cancel restores the refused form's preparation");
 assert.equal(draft.fields.selection_indices.value, "[1]");
@@ -327,15 +346,26 @@ followed.fields.tracking_mode.checked = false; followed.fields.tracking_mode.fir
 assert.equal(followed.requests.at(-1).options.body.get("tracking_mode"), "once", "a cleared box previews a one-time add");
 
 // Sizes are rounded as the server rounds them: eight files of 1.4 GB are 11.2 GB, not 11.1 GB.
-globalThis.pickerMessages = JSON.stringify({ "web.bytes.gb": "{size} GB", "content.js.count": "{count} · {size}" });
+globalThis.pickerMessages = JSON.stringify({ "web.bytes.gb": "{size} GB", "content.js.count": "{count} of {total} · {size}" });
 const sized = setup();
 sized.controls.load.fire("click");
 const gib = 1024n ** 3n;
 await reply(sized.requests[0], { token: "c".repeat(32), files: Array.from({ length: 8 }, (_, n) => ({ id: n, path: `E${n}.mkv`, size: String(gib * 14n / 10n) })) });
-sized.controls.all.fire("click");
+allFiles(sized, true);
 // The decimal sign is the locale's ("11,2" in Russian).
-assert.match(sized.controls.status.textContent, /^8 · 11[.,]2 GB$/, "the total is rounded, not cut");
+assert.match(sized.controls.status.textContent, /^8 of 8 · 11[.,]2 GB$/, "the total is rounded, not cut");
 assert.match(sized.controls.tree.querySelectorAll("*").find((n) => n.tagName === "small").textContent, /^1[.,]4 GB$/);
 globalThis.pickerMessages = "";
 
-console.log(JSON.stringify({ pickerViews: true, followCheckbox: true, roundedSizes: true, exactNeedsScript: true, plainTextRefusals: true, localFileFollowsLink: true, cancelRestoresHidden: true, safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true, ruleContext: true, cacheLabel: true, explicitFresh: true, quotaConsent: true }));
+// A torrent in a single folder opens it: the folder and its files show at once.
+const single = setup();
+single.controls.load.fire("click");
+await reply(single.requests[0], { token: "d".repeat(32), files: [
+  { id: 0, path: "Show S02/E01.mkv", size: "10" }, { id: 1, path: "Show S02/E02.mkv", size: "10" },
+] });
+assert.equal(single.controls.tree.children.length, 3, "the only top folder is expanded");
+assert.ok(find(single.controls.tree, "Show S02/E01.mkv"));
+const toggle = single.controls.tree.querySelectorAll("*").find((n) => n.dataset.contentKey === "folder:Show S02");
+assert.equal(toggle.attributes["aria-expanded"], "true");
+
+console.log(JSON.stringify({ rootBox: true, soleFolderOpen: true, oneStatusLine: true, pickerViews: true, followCheckbox: true, roundedSizes: true, exactNeedsScript: true, plainTextRefusals: true, localFileFollowsLink: true, cancelRestoresHidden: true, safeSelection: true, boundedTree: true, staleResponses: true, restoredDraft: true, refreshSubmission: true, ruleContext: true, cacheLabel: true, explicitFresh: true, quotaConsent: true }));
