@@ -21,7 +21,7 @@ document.body.append(
         ["form", { action: "/settings/password", class: "settings-form form-grid", "data-return-target": "acc-access" },
           ["input", { id: "lan-password", name: "lan_password", type: "password" }],
           ["input", { id: "lan-hint", name: "hint", type: "text", value: "horse", "aria-describedby": "lan-hint-help" }],
-          ["p", { class: "field-error", id: "lan-hint-error", role: "alert", hidden: "" }, "To change the reminder, enter a new password too"],
+          ["p", { class: "field-error", id: "lan-hint-error", hidden: "" }, "To change the reminder, enter a new password too"],
           ["button", { type: "submit" }, "Save password"]]]]]),
 );
 const password = document.getElementById("lan-password");
@@ -53,6 +53,7 @@ hint.value = "a different reminder";
 const refused = submit();
 assert.equal(refused.defaultPrevented, true);
 assert.equal(error.hidden, false);
+assert.equal(error.getAttribute("role"), "alert"); // a refused submit is announced
 assert.equal(hint.value, "a different reminder");
 assert.equal(hint.getAttribute("aria-invalid"), "true");
 assert.equal(hint.getAttribute("aria-describedby"), "lan-hint-help lan-hint-error");

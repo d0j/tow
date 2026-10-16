@@ -1199,6 +1199,7 @@ if (settingsPage) {
         return;
       }
       event.preventDefault();
+      hintError.setAttribute("role", "alert");
       hintError.hidden = false;
       hintField.setAttribute("aria-invalid", "true");
       hintField.setAttribute("aria-describedby", `${described} ${hintError.id}`.trim());
