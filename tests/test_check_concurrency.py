@@ -530,6 +530,31 @@ def test_current_files_alone_too_large_start_the_topics_record_over_and_say_so(m
     restore_points.create_restore_point()
 
 
+def test_a_first_scan_that_grows_a_small_history_past_the_limit_is_trimmed(monkeypatch, small_bundles):
+    """The limit is measured on the history being written, not on the file it replaces: a
+    first scan of large torrents grew a tiny file past what a restore point holds."""
+    from tow import restore_points
+    from tow.paths import download_history_path
+    from tow.store import save_download_history
+
+    lately = iso_now()
+    save_state({"topics": [{**TOPIC, "hash": "HASH-NEW"}, {**TOPIC, "id": "small", "hash": "HASH-2"}]})
+    save_download_history({"schema_version": 1, "topics": {}})
+    _wire_fake_check(monkeypatch, FakeClient())
+
+    def reconcile(topic, adapter, history, now):
+        count = 900 if topic["id"] == "t" else 20
+        items = _history_items(str(topic["id"]), count, first_seen_at=lately)
+        history.setdefault("topics", {})[topic["id"]] = {"last_scan_at": now, "baseline_at": now, "items": items}
+        return {"events": [], "summary": {}}
+
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", reconcile)
+    check.run_check(apply=True, notify=False)
+
+    assert download_history_path().stat().st_size <= 160 * 1024
+    restore_points.create_restore_point()
+
+
 def test_a_history_quarantined_earlier_with_nothing_to_record_is_still_written(monkeypatch):
     from tow.paths import download_history_path
 

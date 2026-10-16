@@ -90,15 +90,21 @@ def _load_history(*, quarantine: bool) -> tuple[DownloadHistory, bool]:
         return {"schema_version": 1, "topics": {}}, True
 
 
-def _fit_history(history: DownloadHistory, watched: set[str], run: CheckRun) -> bool:
-    """The history within what a restore point holds (``download_history.fit``); True when
-    anything was dropped. Measured only once the file on disk is half that big."""
-    try:
-        size = download_history_path().stat().st_size
-    except OSError:
-        size = 0
-    if size <= download_history.MAX_BYTES // 2:
-        return False
+def _fit_history(history: DownloadHistory, watched: set[str], run: CheckRun, *, changed: bool) -> bool:
+    """The history being written within what a restore point holds (``download_history.fit``);
+    True when anything was dropped.
+
+    A history this check changed is always measured: a first scan of large torrents can grow
+    a small file past the limit. One it left as it is on disk is measured only once that file
+    is half the limit (most progress passes change nothing, and serialising a large history
+    for nothing is the cost spared)."""
+    if not changed:
+        try:
+            size = download_history_path().stat().st_size
+        except OSError:
+            size = 0
+        if size <= download_history.MAX_BYTES // 2:
+            return False
     trimmed, started_over = download_history.fit(history, watched=watched)
     if trimmed:
         run.record(
@@ -136,7 +142,7 @@ def reconcile_and_commit(
             history = history_seen  # restored meanwhile: an empty-history reconcile must not overwrite it
         changed = _merge_history(disk_history, history_seen, history)
         pruned = download_history.prune(disk_history, watched=watched, keep_days=keep_days, max_items=max_items)
-        pruned = _fit_history(disk_history, watched, run) or pruned
+        pruned = _fit_history(disk_history, watched, run, changed=changed or disk_rebuilt) or pruned
         if disk_rebuilt:
             run.record("download_history_rebuilt", component="storage", status="rebuilt", how=run.how)
         if not disk_rebuilt and not changed and not pruned:
