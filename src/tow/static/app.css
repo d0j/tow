@@ -1380,6 +1380,8 @@ details.advanced > .form-grid { margin-top: .55rem; }
 /* History: the search as wide as a search needs beside the chips; "nothing found" is a sentence
    with the way back, in the page's font. */
 .history-filter > form[role="search"] { flex: 0 1 18rem; }
+/* On a phone it takes a full line, as every field there does (it stopped at 296 of 374 px, QA Q11). */
+@media (max-width: 720px) { .history-filter > form[role="search"] { flex: 1 1 100%; } }
 .history-empty { margin: .15rem 0; color: var(--mut); font: 13px/1.5 "Segoe UI", system-ui, sans-serif; }
 /* First start: the password fields only for a yes to "open TOW from other devices" (without
    :has() they stay in view, and a password typed with the box clear is saved as before). */
