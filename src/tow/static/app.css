@@ -863,6 +863,8 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
   .field-grid { grid-template-columns: 1fr; }
   .settings-actions { align-items: stretch; }
   .settings-actions button { width: 100%; }
+  /* The sign-in and first-start pages keep their buttons as wide as their words, as Settings does. */
+  .auth-card .settings-actions button { width: auto; }
   .check-field.nested, .nested-field { margin-left: 0; }
   .service-restart { align-items: stretch; flex-direction: column; }
   .service-restart button { width: 100%; }

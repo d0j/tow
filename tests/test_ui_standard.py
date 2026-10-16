@@ -266,3 +266,14 @@ def test_a_low_screen_keeps_its_height_for_the_page():
     assert CSS.rindex("@media (max-height: 520px) {") > CSS.rindex("--land-top: calc(")  # it wins
     messages = (ROOT / "src" / "tow" / "static" / "messages.css").read_text(encoding="utf-8")
     assert "@media (max-height: 520px) { .msg-host { position: static; } }" in messages
+
+
+def test_sign_in_and_first_start_buttons_keep_their_width_on_a_phone():
+    """1.32 QA N2: Login's and Setup's buttons went full width on a phone (.settings-actions
+    button), while Settings keeps them as wide as their words."""
+    phone = _block("@media (max-width: 720px) {\n  .row-two")
+    assert "width: auto" in _first(".auth-card .settings-actions button", phone)
+    for page in ("login.html", "setup.html"):  # both cards hold their buttons in .settings-actions
+        template = (ROOT / "src" / "tow" / "templates" / page).read_text(encoding="utf-8")
+        assert "auth-card" in template
+        assert 'class="settings-actions"' in template
