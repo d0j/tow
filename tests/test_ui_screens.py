@@ -756,3 +756,15 @@ def test_history_lines_mark_their_time_and_keep_code_for_raw_errors(client):
     assert line.select_one(".log-time > time[datetime]") is not None
     assert len(line.find_all("b", recursive=False)) == 1
     assert all(code.find_parent("details", class_="raw-error") for code in box.select("code"))
+
+
+def test_history_has_one_full_timestamps_toggle_for_its_list(client):
+    """1.32.1 C5: History's times are no tab stop each; one "Full timestamps" toggle beside the
+    search names the list (app.js shows every time of it in full while pressed)."""
+    page = BeautifulSoup(client.get("/history").text, "html.parser")
+    toggles = page.select(".history-filter > button[data-full-times]")
+    assert [b.get_text(strip=True) for b in toggles] == ["Полное время"]
+    toggle = toggles[0]
+    assert (toggle["data-full-times"], toggle["aria-controls"]) == ("history-log", "history-log")
+    assert (toggle["type"], toggle["aria-pressed"], toggle["class"]) == ("button", "false", ["ghost", "sm"])
+    assert page.select_one("#history-log.log-box") is not None

@@ -51,8 +51,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Confirmations (remove a topic or a site, restore a backup, install an update, use a site's download limit…) open in
   TOW's own window in the page's language, with the action on its button; for a destructive one Cancel is selected
   first. Without JavaScript the pages ask as before.
-- Times in the Log are no longer a tab stop each: one “Full timestamps” button shows every time of the list with its
-  seconds and time zone, and the tab remembers the choice; a tap on a time still shows it.
+- Times in the Log and in History are no longer a tab stop each: one “Full timestamps” button per list shows every
+  time of it with its seconds and time zone, and the tab remembers the choice; a tap on a time still shows it.
 - The header no longer ends in a bare “—” while no check is scheduled: the countdown appears once there is one, and a
   failed check is always shown.
 
