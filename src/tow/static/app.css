@@ -230,7 +230,11 @@ input, textarea, select {
   border: 1px solid var(--line); padding: .3rem .6rem; border-radius: 8px;
   font: inherit; font-size: 14px; line-height: 1.45;
 }
-textarea { padding-block: .4rem; }
+/* A rule or a list of mirrors starts as one line, as tall as a field, and grows with what is typed
+   (multiline rules keep their lines). */
+textarea {
+  padding-block: .4rem; field-sizing: content; min-height: var(--field-h); max-height: 16rem; resize: vertical;
+}
 /* A placeholder reads like a hint (the browser's grey was 3.6:1 in the dark theme). */
 ::placeholder { color: var(--mut); opacity: 1; }
 /* One field height everywhere (--field-h): 36 px, 44 px on a phone or a touch screen. */
@@ -239,23 +243,29 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { he
   :root { --field-h: 2.75rem; }
   input, textarea, select { font-size: 16px; }
 }
-/* A field as wide as what it holds, at most (it still shrinks with its form): ports, minutes and
-   days; phone numbers and short keys; names, passwords and IDs; hosts, addresses and tokens;
-   webhooks, paths, patterns and mirrors. A field without a class takes the whole line. A secret
-   field's wrapper (.secret) takes its field's width; a field with a unit beside it keeps the unit
-   next to it. */
-.w-xs { max-width: 6.5rem; }
+/* A field as wide as what it holds, at most (it still shrinks with its form): attempts, order and
+   short limits (72 px); ports, intervals, minutes and days - 65535, 10080 (88 px); short codes; names,
+   passwords, hosts and reminders (240 px: about 25 characters and the eye); addresses and tokens;
+   topic names, links, folders and rules. A field without a class takes the whole line. A secret
+   field's wrapper (.secret) and a folder's (.folder-input) take their field's width; a field with a
+   unit beside it keeps the unit next to it. */
+.w-2xs { max-width: 4.5rem; }
+.w-xs { max-width: 5.5rem; }
 .w-s { max-width: 12rem; }
-.w-m { max-width: 18rem; }
+.w-m { max-width: 15rem; }
 .w-l { max-width: 26rem; }
 .w-xl { max-width: 36rem; }
-.secret:has(> .w-xs) { max-width: 6.5rem; }
-.secret:has(> .w-s) { max-width: 12rem; }
-.secret:has(> .w-m) { max-width: 18rem; }
-.secret:has(> .w-l) { max-width: 26rem; }
-.secret:has(> .w-xl) { max-width: 36rem; }
-.input-unit:has(> .w-xs) { grid-template-columns: minmax(0, 6.5rem) auto; justify-content: start; }
+:is(.secret, .folder-input):has(> .w-2xs) { max-width: 4.5rem; }
+:is(.secret, .folder-input):has(> .w-xs) { max-width: 5.5rem; }
+:is(.secret, .folder-input):has(> .w-s) { max-width: 12rem; }
+:is(.secret, .folder-input):has(> .w-m) { max-width: 15rem; }
+:is(.secret, .folder-input):has(> .w-l) { max-width: 26rem; }
+:is(.secret, .folder-input):has(> .w-xl) { max-width: 36rem; }
+.input-unit:has(> .w-2xs) { grid-template-columns: minmax(0, 4.5rem) auto; justify-content: start; }
+.input-unit:has(> .w-xs) { grid-template-columns: minmax(0, 5.5rem) auto; justify-content: start; }
 .input-unit:has(> .w-s) { grid-template-columns: minmax(0, 12rem) auto; justify-content: start; }
+/* F3: on a phone a text, a select, a secret or a folder field fills its line (the phone rules,
+   below); numbers stay short. */
 /* A secret field and its eye (_secret.html): the eye sits inside the field's right end, a square
    icon button (exempt from the 26 px rule) a little smaller than the field, 28 px or 36 px. */
 .secret { position: relative; display: block; min-width: 0; }
@@ -282,25 +292,21 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { he
    down (the doubled class outranks `.settings-page-compact .field + .field`). */
 .form-grid :is(.field, .field-grid) + .field.field { margin-top: 0; }
 .form-grid :is(.field-hint, .action-hint, .section-note, .check-field p) { max-width: 68ch; }
-/* Fields that belong together (address and port, user and password) share a line once their
-   form is 38 rem wide - the form's width, not the window's: two cards side by side stack their
-   own rows. Each takes the width of its field's class; one without a class takes what is left. */
-.field-row { display: flex; flex-direction: column; gap: .55rem .75rem; min-width: 0; }
-/* An address and its port stay on one line on a phone too, while the address keeps 12 rem. */
-.field-row.keep { flex-direction: row; flex-wrap: wrap; align-items: start; }
-.field-row.keep > * { flex: 1 1 12rem; }
-.field-row.keep > :is(.w-xs, :has(.w-xs)) { flex: 0 0 6.5rem; }
-/* After .keep: in a wide form its fields take their classes' widths too. */
-@container (min-width: 38rem) {
-  .field-row { flex-direction: row; align-items: start; }
-  .field-row > * { flex: 1 1 0; }
-  .field-row > :is(.w-xs, :has(.w-xs)) { flex: 0 1 6.5rem; }
-  .field-row > :is(.w-s, :has(.w-s)) { flex: 0 1 12rem; }
-  .field-row > :is(.w-m, :has(.w-m)) { flex: 0 1 18rem; }
-  .field-row > :is(.w-l, :has(.w-l)) { flex: 0 1 26rem; }
-  .field-row > :is(.w-xl, :has(.w-xl)) { flex: 0 1 36rem; }
-}
+/* F4: fields that belong together (address and port, user and password) share a line whenever
+   they fit and wrap when they do not - each as wide as its field's class, one without a class
+   taking what is left. Two 240 px fields need 492 px; a narrower form or card stacks them. */
+.field-row { display: flex; flex-flow: row wrap; align-items: start; gap: .55rem .75rem; min-width: 0; }
+.field-row > * { flex: 1 1 12rem; max-width: 100%; }
+.field-row > :is(.w-2xs, .w-xs, :has(.w-2xs, .w-xs)) { flex: 0 1 auto; }
+.field-row > :is(.w-s, :has(.w-s)) { flex: 0 1 12rem; }
+.field-row > :is(.w-m, :has(.w-m)) { flex: 0 1 15rem; }
+.field-row > :is(.w-l, :has(.w-l)) { flex: 0 1 26rem; }
+.field-row > :is(.w-xl, :has(.w-xl)) { flex: 1 1 26rem; }
+/* A phone: an ordinary field fills its line (the phone rules, below). */
 input[type="checkbox"], input[type="radio"] { width: auto; }
+/* CB1: one checkbox, 16 px in the accent colour (a Settings box was 17.6 px, a Home one the
+   browser's 13 px). Its label is the target: at least 24 px high (below). */
+input[type="checkbox"] { width: 1rem; height: 1rem; margin: 0; accent-color: var(--acc); flex: 0 0 auto; }
 input:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
   outline: 2px solid var(--acc); outline-offset: 2px;
 }
@@ -834,6 +840,13 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .settings-accordion .settings-log-body { padding: .85rem .9rem 1rem; }
 @media (max-width: 720px) {
   .row-two, .row-three, .settings-grid { grid-template-columns: 1fr; }
+  /* F3: a phone has one field a line - a text, a select, a secret or a folder field fills it (a cap
+     left ragged right edges: 288, 306 and 346 px in one form); numbers stay short. In a row such a
+     field fills its line, or the line beside a short number: an address and its port stay paired
+     when they fit. */
+  :is(input, select, textarea):is(.w-s, .w-m, .w-l, .w-xl),
+  :is(.secret, .folder-input):has(> :is(.w-s, .w-m, .w-l, .w-xl)) { max-width: none; }
+  .field-row > :is(.w-s, .w-m, .w-l, .w-xl, :has(.w-s, .w-m, .w-l, .w-xl)) { flex: 1 1 12rem; }
   :root { --land-top: calc(var(--msg-top, 4.75rem) + var(--msg-h, 0px) + .75rem); } /* a two-row header */
   /* The site list takes the room the services leave (they keep their own width) and scrolls
      sideways; its end fades out, so a cut-off name never runs into the client's name. */
@@ -1362,11 +1375,8 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
   #topics .event-body { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
   #topics .row-progress { justify-content: flex-end; }
 }
-/* The add form and the edit panel: the folder's wrapper is as wide as its field, so the recent
-   folders button stays at the field's end. */
-.new-topic-form .folder-input, .edit-form .folder-input { max-width: 26rem; }
 /* The interval field is as wide as its label ("Check every, min") and hint, never squeezed into
-   its field's 6.5 rem; the checkbox beside it stands at the field's height. */
+   its field's 5.5 rem; the checkbox beside it stands at the field's height. */
 .field-row > .interval-field { flex: 0 0 auto; }
 .interval-field > label, .interval-field > .field-hint { white-space: nowrap; }
 .follow-row > .check-label { flex: 0 0 auto; min-height: var(--field-h); }
