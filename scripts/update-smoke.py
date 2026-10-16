@@ -211,7 +211,8 @@ class Smoke:
         self.previous = previous
         self.source = source
         self.port = port
-        self.folder = base / f"tow update smoke {os.getpid()}"
+        # A Cyrillic folder, as many owners have.
+        self.folder = base / f"tow update smoke Тест {os.getpid()}"
         self.work = self.folder / "archives"
         self.root = self.folder / "TOW"
         self.env = clean_environment()
@@ -466,7 +467,15 @@ class Smoke:
             time.sleep(1)
 
 
+def _utf8_output() -> None:
+    """The log in UTF-8: a Windows runner's pipe is in its ANSI code page, which has no Cyrillic."""
+    for stream in (sys.stdout, sys.stderr):
+        with contextlib.suppress(AttributeError, ValueError):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _utf8_output()
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--previous", type=Path, required=True, help="folder with the previous release's files")
     parser.add_argument("--source", type=Path, required=True, help=f"the source archive to update to ({SOURCE_NAME})")

@@ -23,7 +23,8 @@ port=${2:-18877}
 here=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)
 installer=$here/install/install.sh
 base=${RUNNER_TEMP:-${TMPDIR:-/tmp}}
-dir="$base/tow smoke $$"
+# Cyrillic folder names, as many owners have.
+dir="$base/tow smoke Тест $$"
 sums="$base/SHA256SUMS.smoke.$$"
 sentinel="$base/tow smoke temp $$"
 
@@ -103,7 +104,7 @@ temp_untouched "install, start, stop"
 say 'move the stopped install, keeping its old absolute-path environment'
 key_before=$(sha "$dir/keys/master.key")
 config_before=$(sha "$dir/config.yaml")
-moved="$base/tow relocated $$"
+moved="$base/tow relocated Тест $$"
 case $dir in "$base"/*) ;; *) fail 'move source is outside the owned test base' ;; esac
 case $moved in "$base"/*) ;; *) fail 'move destination is outside the owned test base' ;; esac
 [ ! -e "$moved" ] || fail 'move destination exists'

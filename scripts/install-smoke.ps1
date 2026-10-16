@@ -24,7 +24,10 @@ if ($Port -eq 8787) { throw 'install-smoke: never on 8787 (a real TOW may run th
 $installer = Join-Path (Split-Path -Parent $PSScriptRoot) 'install/install.ps1'
 $zip = (Resolve-Path $Zip).Path
 $sums = Join-Path $Base ('SHA256SUMS.install-smoke.' + [guid]::NewGuid().ToString('N').Substring(0, 6))
-$dir = Join-Path $Base ('TOW install test ' + [guid]::NewGuid().ToString('N').Substring(0, 6))
+# A Cyrillic folder, as many owners have: "Test" in Russian, made from its code points (this file
+# stays ASCII, as Windows PowerShell 5.1 reads a file without a BOM in the ANSI code page).
+$cyrillic = -join [char[]](0x0422, 0x0435, 0x0441, 0x0442)
+$dir = Join-Path $Base ("TOW install $cyrillic " + [guid]::NewGuid().ToString('N').Substring(0, 6))
 "$((Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant())  TOW-windows-x64.zip" | Set-Content -Encoding ascii $sums
 # The installer runs as on a new computer: no uv or TOW variables of this machine.
 Get-ChildItem env: | Where-Object { $_.Name -like 'UV_*' -or $_.Name -like 'TOW_*' } | ForEach-Object { Remove-Item "env:$($_.Name)" }
