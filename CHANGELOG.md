@@ -126,6 +126,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   error on a character the terminal lacks (such as “—”): it is printed as “?”.
 - On Windows, a process that ended with exit code 259 is no longer taken for one still running, so a stop or a
   start no longer waits for it until its time runs out.
+- On Linux, finding which program holds TOW's port asks `ss` first and no longer stops at a tool that gives no
+  answer: an installed `lsof` or `ss` that fails or cannot name the process passes the question on to the next
+  way, and `lsof`, which can hang on a lost network mount, is asked last and only while something does listen.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password

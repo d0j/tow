@@ -929,6 +929,73 @@ def test_without_lsof_and_ss_linux_reads_proc(monkeypatch):
     assert posix.proc_listening_inodes(tcp, 8787) == {"55501"}  # the connected socket is not a listener
 
 
+_TCP_8787 = (
+    "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+    "   0: 0100007F:2253 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 55501 1\n"
+)
+
+
+def _listener_world(monkeypatch, *, ss: str, lsof: str, tcp: str, owner_fd: bool, installed=("ss", "lsof")):
+    """A Linux or macOS machine for _listener: tool outputs, /proc, and which tools ran."""
+    ran: list[str] = []
+
+    def run(args, timeout=20):
+        assert timeout <= 10  # every probe stays bounded
+        ran.append(args[0])
+        return {"ss": ss, "lsof": lsof}.get(args[0], "")
+
+    monkeypatch.setattr(posix, "_run", run)
+    monkeypatch.setattr(posix, "_which", lambda name: f"/usr/bin/{name}" if name in installed else None)
+    monkeypatch.setattr(posix, "_read", lambda path: tcp if path == "/proc/net/tcp" else "")
+    monkeypatch.setattr(posix, "_listdir", lambda path: {"/proc": ["4321"], "/proc/4321/fd": ["6"]}.get(path, []))
+    links = {"/proc/4321/fd/6": "socket:[55501]"} if owner_fd else {}
+    monkeypatch.setattr(posix, "_readlink", lambda path: links.get(path, ""))
+    return ran
+
+
+_SS_4321 = 'LISTEN 0 2048 127.0.0.1:8787 0.0.0.0:* users:(("tow",pid=4321,fd=6))\n'
+_SS_NO_PID = "LISTEN 0 2048 127.0.0.1:8787 0.0.0.0:*\n"  # another account's: ss may not say whose
+
+
+@pytest.mark.parametrize(
+    ("ss", "lsof", "tcp", "owner_fd", "pid", "ran"),
+    [
+        # ss first on Linux: lsof can hang on a stale NFS mount.
+        (_SS_4321, "p999\n", _TCP_8787, True, 4321, ["ss"]),
+        # ss installed but no usable PID (or it failed): /proc next, still no lsof.
+        (_SS_NO_PID, "p999\n", _TCP_8787, True, 4321, ["ss"]),
+        ("", "p999\n", _TCP_8787, True, 4321, ["ss"]),
+        # A listener /proc cannot name (another account's): lsof is asked last.
+        (_SS_NO_PID, "p999\n", _TCP_8787, False, 999, ["ss", "lsof"]),
+        ("", "", _TCP_8787, False, None, ["ss", "lsof"]),
+        # /proc says nothing listens there: no lsof at all.
+        ("", "p999\n", _TCP_8787.splitlines()[0] + "\n", False, None, ["ss"]),
+        # /proc cannot be read: lsof decides.
+        ("", "p999\n", "", False, 999, ["ss", "lsof"]),
+    ],
+    ids=["ss", "ss-no-pid-proc", "ss-failed-proc", "lsof-last", "nobody-says", "nothing-listens", "no-proc"],
+)
+def test_linux_asks_each_tool_until_one_names_the_listener(monkeypatch, ss, lsof, tcp, owner_fd, pid, ran):
+    asked = _listener_world(monkeypatch, ss=ss, lsof=lsof, tcp=tcp, owner_fd=owner_fd)
+    assert PosixBackend("linux")._listener(8787) == pid
+    assert asked == ran
+
+
+def test_linux_with_an_unusable_lsof_and_no_ss_still_reads_proc(monkeypatch):
+    asked = _listener_world(monkeypatch, ss="", lsof="", tcp=_TCP_8787, owner_fd=True, installed=("lsof",))
+    assert PosixBackend("linux")._listener(8787) == 4321
+    assert asked == []
+
+
+def test_macos_asks_lsof_only(monkeypatch):
+    asked = _listener_world(monkeypatch, ss=_SS_4321, lsof="p999\n", tcp=_TCP_8787, owner_fd=True)
+    assert PosixBackend("macos")._listener(8787) == 999
+    assert asked == ["lsof"]
+    asked = _listener_world(monkeypatch, ss=_SS_4321, lsof="", tcp=_TCP_8787, owner_fd=True)
+    assert PosixBackend("macos")._listener(8787) is None  # no /proc and no ss guessed on macOS
+    assert asked == ["lsof"]
+
+
 # --- Linux and macOS: browsers and folders ------------------------------------------------------
 
 
