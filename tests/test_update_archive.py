@@ -607,6 +607,123 @@ def test_archive_unpack_preserves_executable_scripts(tmp_path):
         assert script.stat().st_mode & 0o111 == 0o111
 
 
+def _dir_member(tar: tarfile.TarFile, name: str, mode: int = 0o755) -> None:
+    info = tarfile.TarInfo(name)
+    info.type = tarfile.DIRTYPE
+    info.mode = mode
+    tar.addfile(info)
+
+
+def test_archive_unpack_leaves_out_what_an_install_never_runs(tmp_path):
+    # QA 16.10.2026: tests/ (paths up to 140 characters) was unpacked under .update-download, and an
+    # update failed in a folder Windows without long paths otherwise allows (over ~81 characters).
+    deep = "tests/journal_fixtures/" + "x" * 90 + "/secrets.enc"
+    extra = {deep: b"x", ".github/workflows/ci.yml": b"x", ".githooks/pre-commit": b"x", "docs/guide.md": b"x"}
+    archive = tmp_path / "source.tar.gz"
+    archive.write_bytes(tarball("1.23.0", extra=extra))
+    top = updater.unpack(archive, tmp_path / "unpacked")
+    assert (top / "docs" / "guide.md").is_file()
+    for name in ("tests", ".github", ".githooks"):
+        assert not (top / name).exists()
+    assert (top / "pyproject.toml").is_file()
+
+
+def test_the_updater_leaves_out_what_the_bundle_leaves_out():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("tow_bundle_left_out", SCRIPT.parent / "build-bundle.py")
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert updater.UNPACK_LEFT_OUT == module.LEFT_OUT
+
+
+@pytest.mark.parametrize("name", ["tests/a:b", "tests/../x", ".github/CON", "tests/x "])
+def test_a_left_out_entry_is_still_checked(tmp_path, name):
+    # Left out after the check, never instead of it: a bad name refuses the whole archive.
+    archive = tmp_path / "source.tar.gz"
+    archive.write_bytes(tarball("1.23.0", extra={name: b"x"}))
+    with pytest.raises(updater.UpdateError, match="refused entry"):
+        updater.unpack(archive, tmp_path / "unpacked")
+    assert not (tmp_path / "unpacked" / "tow-1.23.0" / "pyproject.toml").exists()  # nothing unpacked
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        ("README.md", "readme.MD"),  # one file on Windows and macOS
+        ("café.txt", "café.txt"),  # composed and decomposed é
+        ("src/Tow/x.py", "src/tow"),  # a file where another entry's parent folder is
+        ("Docs", "docs/guide.md"),
+    ],
+)
+def test_two_entries_that_would_be_one_file_are_refused_before_anything_is_written(tmp_path, first, second):
+    # The second silently replaced the first on Windows and macOS.
+    archive = tmp_path / "source.tar.gz"
+    archive.write_bytes(tarball("1.23.0", extra={first: b"1", second: b"2"}))
+    with pytest.raises(updater.UpdateError, match="clashes with another entry"):
+        updater.unpack(archive, tmp_path / "unpacked")
+    assert not (tmp_path / "unpacked" / "tow-1.23.0" / "pyproject.toml").exists()
+
+
+def test_folders_named_twice_or_in_another_case_than_their_files_are_fine(tmp_path):
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+        _dir_member(tar, "tow-1.23.0")
+        _dir_member(tar, "tow-1.23.0/src")
+        for name, data in (("tow-1.23.0/pyproject.toml", b"x"), ("tow-1.23.0/src/a.py", b"a")):
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+        _dir_member(tar, "tow-1.23.0/src")
+    archive = tmp_path / "source.tar.gz"
+    archive.write_bytes(buffer.getvalue())
+    top = updater.unpack(archive, tmp_path / "unpacked")
+    assert (top / "src" / "a.py").read_bytes() == b"a"
+
+
+def test_archive_unpack_gives_owner_only_write_whatever_the_archive_and_umask_say(tmp_path):
+    # QA 16.10.2026: GitHub's archive stores 0664/0775 and the umask was ignored: app/ became
+    # group-writable (macOS: group staff). On Windows nothing becomes read-only.
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+        _dir_member(tar, "tow-1.23.0", 0o777)
+        _dir_member(tar, "tow-1.23.0/scripts", 0o775)
+        for name, mode in (("pyproject.toml", 0o664), ("scripts/tow", 0o775), ("locked.txt", 0o444)):
+            info = tarfile.TarInfo(f"tow-1.23.0/{name}")
+            info.size, info.mode = 1, mode
+            tar.addfile(info, io.BytesIO(b"x"))
+    archive = tmp_path / "source.tar.gz"
+    archive.write_bytes(buffer.getvalue())
+    saved = os.umask(0)
+    try:
+        top = updater.unpack(archive, tmp_path / "unpacked")
+    finally:
+        os.umask(saved)
+    if os.name == "nt":
+        import stat
+
+        assert all(path.stat().st_mode & stat.S_IWRITE for path in top.rglob("*") if path.is_file())
+        return
+    modes = {path.relative_to(top).as_posix(): path.stat().st_mode & 0o777 for path in top.rglob("*")}
+    assert modes == {"pyproject.toml": 0o644, "scripts": 0o755, "scripts/tow": 0o755, "locked.txt": 0o644}
+    assert top.stat().st_mode & 0o777 == 0o755
+
+
+@pytest.mark.allow_git
+def test_an_archive_update_fits_a_windows_folder_without_long_paths():
+    # docs/PORTABLE.md 3: installers allow 110 characters without long paths. The update unpacks
+    # into <TOW>\.update-download\unpacked\<top>\ (top: tow-<version>, budgeted for any version).
+    listed = subprocess.run(
+        ["git", "-C", str(SCRIPT.parents[1]), "ls-files"], capture_output=True, text=True, check=True
+    ).stdout.splitlines()
+    kept = [name for name in listed if not name.startswith(updater.UNPACK_LEFT_OUT)]
+    staging = len("\\.update-download\\unpacked\\") + len("tow-99.99.99") + 1
+    assert 110 + staging + max(map(len, kept)) <= 259
+    assert 110 + len("\\app.new\\") + max(map(len, kept)) <= 259
+
+
 @pytest.mark.parametrize("limit", ["MAX_ARCHIVE_FILES", "MAX_MEMBER_BYTES", "MAX_UNPACKED_BYTES"])
 def test_archive_expansion_limits_apply_before_switch(install, github, monkeypatch, limit):
     github.release("v1.23.0", tarball("1.23.0"))

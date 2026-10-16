@@ -75,6 +75,7 @@ import subprocess
 import sys
 import tarfile
 import time
+import unicodedata
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterator, Mapping
 from datetime import datetime, timezone
@@ -104,6 +105,9 @@ MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024
 MAX_ARCHIVE_FILES = 10_000
 MAX_MEMBER_BYTES = 256 * 1024 * 1024
 MAX_UNPACKED_BYTES = 1024 * 1024 * 1024
+# What an archive update does not unpack: TOW never runs it (scripts/build-bundle.py LEFT_OUT, kept
+# in step by tests/test_update_archive.py; this file imports nothing of TOW).
+UNPACK_LEFT_OUT = ("tests/", ".github/", ".githooks/")
 WINDOWS_DEVICE_RE = re.compile(r"(?i)(?:CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9¹²³]|LPT[1-9¹²³])(?:\..*)?")
 # The oldest release an install without git can go to: older update.py needs git.
 MINIMUM_ARCHIVE_TARGET = (1, 22, 0)
@@ -892,12 +896,26 @@ def parse_sums(text: str) -> dict[str, str]:
     return sums
 
 
+def _comparable(part: str) -> str:
+    """A name as a case-insensitive file system (Windows, macOS) compares it: one composed form
+    of its letters, case folded."""
+    return unicodedata.normalize("NFC", part).casefold()
+
+
 def unpack(archive: Path, into: Path) -> Path:
     """Unpack a source tarball (one top folder, as GitHub's and ``git archive --prefix`` make
-    them) into ``into``; the top folder. Links and paths that leave it are refused."""
+    them) into ``into``; the top folder. Links, paths that leave it, and two entries that would be
+    one file or folder where letter case or composed letters are not told apart are refused - every
+    entry is checked and counted first. Then what an install does not run (``UNPACK_LEFT_OUT``, as
+    the Windows bundle leaves it out) is not unpacked: its deep test paths broke a folder Windows
+    without long paths otherwise allows. Files get 0644, or 0755 when the archive marks them
+    executable, and folders 0755, whatever the archive or the umask says (Windows: no change)."""
     with tarfile.open(archive, "r:gz") as tar:
         top = ""
         total = 0
+        members: list[tuple[tarfile.TarInfo, list[str]]] = []
+        kinds: dict[tuple[str, ...], str] = {}
+        written: set[tuple[str, ...]] = set()
         for files, member in enumerate(tar, start=1):
             name = member.name.rstrip("/") if member.isdir() else member.name
             parts = name.split("/")
@@ -922,19 +940,37 @@ def unpack(archive: Path, into: Path) -> Path:
             total += member.size
             if files > MAX_ARCHIVE_FILES or member.size > MAX_MEMBER_BYTES or total > MAX_UNPACKED_BYTES:
                 raise UpdateError("source archive exceeds its unpacked size or file-count limit")
+            key = tuple(_comparable(part) for part in parts)
+            for end in range(1, len(key)):  # every parent is a folder, never a file
+                if kinds.setdefault(key[:end], "dir") != "dir":
+                    raise UpdateError(f"refused entry {member.name}: it clashes with another entry")
+            kind = "dir" if member.isdir() else "file"
+            if kinds.setdefault(key, kind) != kind or (kind == "file" and key in written):
+                raise UpdateError(f"refused entry {member.name}: it clashes with another entry")
+            if kind == "file":
+                written.add(key)
+            members.append((member, parts))
+        if not top:
+            raise UpdateError("empty source archive")
+        posix = os.name != "nt"
+        for member, parts in members:
+            if "/".join(parts[1:]).startswith(UNPACK_LEFT_OUT) or "/".join(parts[1:]) + "/" in UNPACK_LEFT_OUT:
+                continue
             target = into.joinpath(*parts)
             if member.isdir():
                 target.mkdir(parents=True, exist_ok=True)
-            else:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                source = tar.extractfile(member)
-                if source is None:
-                    raise UpdateError(f"refused entry {member.name}")
-                with source, target.open("wb") as output:
-                    shutil.copyfileobj(source, output)
-                target.chmod(member.mode & 0o777)
-        if not top:
-            raise UpdateError("empty source archive")
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source = tar.extractfile(member)
+            if source is None:
+                raise UpdateError(f"refused entry {member.name}")
+            with source, target.open("wb") as output:
+                shutil.copyfileobj(source, output)
+            if posix:
+                target.chmod(0o755 if member.mode & 0o111 else 0o644)
+    if posix:
+        for folder, _dirs, _files in os.walk(into / top):
+            os.chmod(folder, 0o755)
     return into / top
 
 

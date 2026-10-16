@@ -96,6 +96,16 @@ def test_the_target_sums_name_the_asset_update_py_reads(smoke, tmp_path):
     assert sums == {"tow-source.tar.gz": smoke.sha256(archive)}
 
 
+def test_the_expected_tree_follows_what_the_updater_can_do(smoke, tmp_path):
+    # An updater before 1.32.1 unpacks the whole archive, a later one leaves tests/ and the like out.
+    target = {"pyproject.toml": "a", "tests/test_x.py": "b", ".github/ci.yml": "c", "docs/x.md": "d"}
+    old = tmp_path / "old.py"
+    old.write_text("import tarfile\n", encoding="utf-8")
+    assert smoke.installed_tree(target, old) == target
+    new = SCRIPT.parent / "update.py"
+    assert smoke.installed_tree(target, new) == {"pyproject.toml": "a", "docs/x.md": "d"}
+
+
 def test_the_app_is_compared_without_its_environment_and_bytecode(smoke, tmp_path):
     app = tmp_path / "app"
     for name, data in FILES.items():
