@@ -156,6 +156,18 @@ def test_a_malformed_question_is_refused(query):
     assert response.json() == {"ok": False, "error": "bad_request"}
 
 
+def test_a_check_another_process_committed_reaches_the_poll_after_one_second(clock):
+    # The scheduled check runs in another process: only the shared sample sees its write. With
+    # a 5 s poll a page shows it within 6 s (a 5 s sample made that 10 s).
+    _seed()
+    client = TestClient(app)
+    first = _poll(client)
+    path = services.sync_source_paths()["state"]
+    _write_elsewhere(path, path.read_bytes().replace(b"Show B", b"Show Q"))
+    clock.tick(1.0)
+    assert _poll(client, first.json()["rev"]).json()["areas"]["topics"]["changed"] == ["t2"]
+
+
 def test_a_change_made_in_one_tab_is_a_changed_row_for_another_device(monkeypatch, clock):
     _seed()
     lan = _lan(monkeypatch)
