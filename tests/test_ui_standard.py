@@ -99,7 +99,9 @@ LONG = {
     "provider_url",
 }
 TEMPLATES = ROOT / "src" / "tow" / "templates"
-FIELD = re.compile(r"<(input|select|textarea)\b(?:[^>{]|\{\{.*?\}\}|\{%.*?%\})*>", re.DOTALL)
+# One way to read each character (no nested lazy ".*?" that could take ">" or a brace two ways):
+# a tag's text, a {{ … }} or a {% … %} up to its own closing pair.
+FIELD = re.compile(r"<(input|select|textarea)\b(?:[^>{]|\{\{(?:[^}]|\}(?!\}))*\}\}|\{%(?:[^%]|%(?!\}))*%\})*>")
 
 
 def _fields() -> list[tuple[str, str, str]]:
