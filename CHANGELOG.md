@@ -53,6 +53,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   first. Without JavaScript the pages ask as before.
 - Times in the Log are no longer a tab stop each: one “Full timestamps” button shows every time of the list with its
   seconds and time zone, and the tab remembers the choice; a tap on a time still shows it.
+- The header no longer ends in a bare “—” while no check is scheduled: the countdown appears once there is one, and a
+  failed check is always shown.
 
 ## [1.32.0] — 2026-10-16
 

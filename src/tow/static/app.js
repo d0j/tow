@@ -801,12 +801,16 @@ if (clock) {
   };
   const tick = () => {
     if (!last) {
-      // Not checked yet is grey (unknown), not red: nothing has failed.
+      // Not checked yet is grey (unknown), not red: nothing has failed. With nothing scheduled
+      // and nothing failed there is nothing to count (H4: a bare "—" at the header's end): hidden,
+      // and back as soon as a schedule or a failure comes.
       showClock("—");
       clock.classList.toggle("bad", !checkOk);
       showWords(t("js.clock.never_checked"));
+      if (clock.hidden !== checkOk) clock.hidden = checkOk;
       return;
     }
+    if (clock.hidden) clock.hidden = false;
     const left = last + iv - Date.now();
     if (left <= 0) {
       showClock("00:00:00");

@@ -109,7 +109,11 @@ def test_header_states_are_said_in_words_not_only_by_colour(client, health, prob
     services = page[page.index('class="hdr-svc"') : page.index('id="next-check"')]
     assert re.search(rf'qBittorrent<span class="sr-only">: {client_words}</span></span>', services)
     clock = page[page.index('id="next-check"') : page.index("data-clock-value")]
-    assert f'title="{clock_words}"><span class="sr-only" data-clock-words>{clock_words} </span>' in clock
+    words = rf'<span class="sr-only" data-clock-words>{clock_words} </span>'
+    assert re.search(rf'title="{clock_words}"( hidden)?>{words}', clock)
+    # H4 (1.32.1): with nothing scheduled and nothing failed there is nothing to count - the clock
+    # (a bare "—") is hidden, still in the page for app.js; a failure is always said.
+    assert (" hidden>" in clock) == bool(health.get("check_ok", True))
     # app.js keeps the hidden words equal to the tooltip, and writes them only when they change.
     assert "if (clock.title !== words) clock.title = words;" in JS
     assert "clockLabel.textContent = `${words} `" in JS
