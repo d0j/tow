@@ -982,6 +982,103 @@ def test_a_queued_sign_in_that_never_runs_puts_the_previous_password_back(client
     assert not check_jobs.UNCHECKED
 
 
+@pytest.mark.parametrize("how", ["cancelled", "lock_timeout", "refused"])
+def test_a_password_is_put_back_without_holding_the_queues_lock(client, monkeypatch, consumers, how):
+    """Putting a password back writes the stores (their lock): never while the queue's lock is held."""
+    import threading
+
+    from tow.web import routes_topic_login
+
+    _sign_in_site(monkeypatch)
+    free = []
+
+    def take_and_give_back():
+        taken = check_jobs.LOCK.acquire(timeout=2)
+        free.append(taken)
+        if taken:
+            check_jobs.LOCK.release()  # an RLock: released by the thread that took it
+
+    def restore(*_args):
+        probe = threading.Thread(target=take_and_give_back)
+        probe.start()
+        probe.join(timeout=10)
+        return True
+
+    monkeypatch.setattr(routes_topic_login, "restore_unverified_password", restore)
+    calls = []
+
+    def check(**_kw):
+        calls.append(1)
+        if how != "refused" or len(calls) == 1:
+            raise CheckBusyError("busy")
+        return {"results": [{"id": "t1", "title": "Show A", "ok": False, "error": "x", "error_class": "tracker_auth"}]}
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    if how == "lock_timeout":
+        monkeypatch.setattr(check_jobs, "LOCK_WAIT_SEC", 0)
+    job = _job(_sign_in(client, "pass-b"))
+    if how == "cancelled":
+        client.post(f"/check/{job}/cancel", headers={"x-tow-fetch": "1"})
+    else:
+        consumers[0].run()
+    assert free == [True]
+
+
+def test_a_sign_in_the_full_queue_refuses_puts_the_password_back_and_says_so(client, monkeypatch, consumers):
+    """The queue was full: the sign-in's check never ran, and the owner heard only "queue full"."""
+    from helpers import flash_of
+
+    from tow import i18n
+
+    secrets = _sign_in_site(monkeypatch)
+    monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: (_ for _ in ()).throw(CheckBusyError("busy")))
+    monkeypatch.setattr(check_jobs, "MAX_PENDING", 0)
+    response = _sign_in(client, "pass-b")
+    assert secrets["trackers"]["nnmclub"]["password"] == "pass-a"
+    said = flash_of(response.headers["location"])
+    assert i18n.translate("web.check_all.queue_full", "en") in said
+    assert i18n.translate("web.topics.login_not_checked", "en", site="NNM-Club") in said
+    assert not check_jobs.UNCHECKED
+
+
+def test_unchecked_sign_ins_share_one_baseline_by_generation(monkeypatch):
+    """The password to put back is the one saved before the first unchecked sign-in of a site; a
+    confirmed sign-in starts a new generation with its own password; a sign-in no longer in the
+    current generation changes nothing; the table empties as sign-ins end and stays bounded."""
+    from types import SimpleNamespace
+
+    from tow.web.routes_topic_login import _SignIn
+
+    site = SimpleNamespace(name="nnmclub", spec={"title": "NNM-Club"})
+    entry = {"pass-a": {"username": "user", "password": "pass-a"}}
+    entry["pass-b"] = {"username": "user", "password": "pass-b"}
+    b = _SignIn("t1", site, entry["pass-a"], "user", "pass-b")
+    c = _SignIn("t1", site, entry["pass-b"], "user", "pass-c")
+    assert c.baseline() == entry["pass-a"]  # what was saved before the first, not the unchecked B
+    b.settle(confirmed=True)  # B worked: the next generation puts B back
+    assert c.baseline() == entry["pass-b"]
+    d = _SignIn("t1", site, {"username": "user", "password": "pass-c"}, "user", "pass-d")
+    assert d.baseline() == entry["pass-b"]
+    b.settle()  # no longer a member: it neither clears nor changes the generation
+    assert check_jobs.UNCHECKED["nnmclub"]["members"] == [c, d]
+    c.settle()
+    d.settle()
+    assert check_jobs.UNCHECKED == {}
+
+    # Bounded: a generation outlives no job (it expires) and the table holds at most its limit.
+    clock = [1000.0]
+    monkeypatch.setattr(check_jobs.time, "monotonic", lambda: clock[0])
+    stale = _SignIn("t1", site, entry["pass-a"], "user", "pass-x")
+    clock[0] += check_jobs.UNCHECKED_TTL + 1
+    fresh = _SignIn("t1", site, entry["pass-b"], "user", "pass-y")
+    assert fresh.baseline() == entry["pass-b"]
+    assert stale.baseline() == entry["pass-a"]  # its own, the generation gone
+    monkeypatch.setattr(check_jobs, "MAX_UNCHECKED", 3)
+    for n in range(5):
+        _SignIn("t1", SimpleNamespace(name=f"site{n}", spec={}), None, "user", "pass")
+    assert len(check_jobs.UNCHECKED) == 3
+
+
 def test_a_sign_in_typed_while_the_last_ones_check_runs_puts_back_the_password_before_both(
     client, monkeypatch, consumers
 ):

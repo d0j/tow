@@ -39,9 +39,14 @@ ACTIONS: dict[str, str] = {}
 # unchecked, and its words become the job's.
 type FollowUp = Callable[[dict[str, Any] | None, BaseException | None], dict[str, str] | None]
 FOLLOW_UPS: dict[str, FollowUp] = {}
-# Sign-ins saved but not checked yet, by site, oldest first (``routes_topic_login``): a later one
-# puts back what was saved before the first, also when the first one's check already runs.
-UNCHECKED: dict[str, list[Any]] = {}
+# Sign-ins saved but not checked yet (``routes_topic_login._SignIn``), one generation per site:
+# ``baseline``, the login to put back - set only by the sign-in that starts the generation (what
+# was saved before it) or by a sign-in the site then confirmed (a new generation, with its login);
+# ``members``, the sign-ins of it that still wait or run (only they read or change it); ``since``.
+# A generation ends with its last member; it outlives no job (UNCHECKED_TTL) and the table holds
+# at most MAX_UNCHECKED sites. Changed under LOCK; nothing is written to the stores there.
+UNCHECKED: dict[str, dict[str, Any]] = {}
+MAX_UNCHECKED = 64
 # The consumer of each lane, by the lane's ``apply``.
 _WORKERS: dict[bool, threading.Thread] = {}
 MAX_PENDING = 32  # per lane
@@ -53,6 +58,49 @@ RESULT_TTL = 3600
 # five minutes for its cleanup. Then it ends as not run; it is tried once a second until then.
 LOCK_WAIT_SEC = 3900
 LOCK_RETRY_SEC = 1.0
+UNCHECKED_TTL = LOCK_WAIT_SEC + RESULT_TTL  # longer than any job waits and keeps its follow-up
+
+
+def join_unchecked(site: str, member: object, saved_before: Any) -> None:
+    """``member``, a sign-in just saved for ``site``, joins the site's generation of unchecked
+    sign-ins, or starts one with ``saved_before`` as its baseline."""
+    with LOCK:
+        now = time.monotonic()
+        for key in [key for key, generation in UNCHECKED.items() if now - generation["since"] > UNCHECKED_TTL]:
+            del UNCHECKED[key]
+        generation = UNCHECKED.get(site)
+        if generation is None:
+            while len(UNCHECKED) >= MAX_UNCHECKED:
+                del UNCHECKED[next(iter(UNCHECKED))]  # the oldest site's
+            generation = UNCHECKED[site] = {"baseline": copy.deepcopy(saved_before), "members": [], "since": now}
+        generation["members"].append(member)
+
+
+def unchecked_baseline(site: str, member: object, own: Any) -> Any:
+    """The login ``member`` puts back: its generation's baseline, or ``own`` (what was saved before
+    it) once it is no longer in the site's generation (it expired)."""
+    with LOCK:
+        generation = UNCHECKED.get(site)
+        if generation is not None and any(item is member for item in generation["members"]):
+            return copy.deepcopy(generation["baseline"])
+        return copy.deepcopy(own)
+
+
+def leave_unchecked(site: str, member: object, *, confirmed: Any = None) -> None:
+    """``member`` was checked (or never will be): it leaves its generation, which ends with its last
+    member. ``confirmed``: the login the site took - the remaining members start a new generation
+    with it as their baseline. A sign-in no longer in the site's generation changes nothing."""
+    with LOCK:
+        generation = UNCHECKED.get(site)
+        if generation is None or not any(item is member for item in generation["members"]):
+            return
+        members = [item for item in generation["members"] if item is not member]
+        if not members:
+            del UNCHECKED[site]
+        elif confirmed is not None:
+            UNCHECKED[site] = {"baseline": copy.deepcopy(confirmed), "members": members, "since": time.monotonic()}
+        else:
+            generation["members"] = members
 
 
 def _lane(apply: bool) -> list[str]:
@@ -76,7 +124,8 @@ def submit(
     running); ``subject`` is what its message names (the topic, as it was when asked for);
     ``action``: the page's id of the click (one already registered is the same check again);
     ``follow_up``: what the caller does with the result (``FOLLOW_UPS``; the latest click's wins).
-    No job made (a full lane, or no consumer): the follow-up is dropped (``_drop``)."""
+    No job made: a full lane leaves ``follow_up`` to the caller (``drop``, its words said with the
+    refusal); no consumer drops it here, before the error goes on."""
     try:
         job, added = _submit(
             topic_id=topic_id,
@@ -89,10 +138,8 @@ def submit(
             follow_up=follow_up,
         )
     except RuntimeError:
-        _drop(follow_up, lang)
+        drop(follow_up, lang)
         raise
-    if job is None:
-        _drop(follow_up, lang)
     return job, added
 
 
@@ -247,7 +294,7 @@ def take_follow_up(job_id: str) -> FollowUp | None:
         return FOLLOW_UPS.pop(job_id, None)
 
 
-def _drop(follow_up: FollowUp | None, lang: str) -> dict[str, str] | None:
+def drop(follow_up: FollowUp | None, lang: str) -> dict[str, str] | None:
     """A follow-up whose check never ran, handed that (``dropped()``, when it has that method):
     its words for the job (in the job's language ``lang``, as its check would have said them),
     or None. Called without LOCK held: a sign-in writes the stores."""
@@ -277,7 +324,7 @@ def _said(job: dict[str, Any], words: dict[str, str] | None) -> None:
 def _finish(job: dict[str, Any]) -> None:
     with LOCK:
         follow_up = FOLLOW_UPS.pop(job["id"], None)  # a job that ended without its check keeps no password
-    words = _drop(follow_up, str(job.get("lang") or ""))
+    words = drop(follow_up, str(job.get("lang") or ""))
     with LOCK:
         _said(job, words)
         if job["status"] not in {"done", "failed"}:
@@ -325,7 +372,7 @@ def cancel(job_id: str) -> bool:
         PENDING.remove(job_id)
         follow_up = FOLLOW_UPS.pop(job_id, None)
         job.update(status="failed", finished_at=time.monotonic(), ended_at=time.time(), cancelled=True)
-    words = _drop(follow_up, str(job.get("lang") or ""))
+    words = drop(follow_up, str(job.get("lang") or ""))
     with LOCK:
         _said(job, words)
     return True

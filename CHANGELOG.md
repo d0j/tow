@@ -29,7 +29,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   of its own moment, and "today" follows a change to summer or winter time. Before, this worked only where TOW
   knew its zone's name, which is never the case on Windows.
 - A site password typed on Home while another check ran is no longer left saved unchecked when its check never
-  runs (you cancel it, or it waits past the time limit): the password saved before it comes back, and the message
+  runs (you cancel it, the queue is full, or it waits past the time limit): the password saved before it comes back, and the message
   says so. A password typed while the previous one's check was already running now puts back the last password
   that worked, not one the site had just refused.
 - A torrent you removed in the client in the same second as you clicked a topic's Check, while the check waited
