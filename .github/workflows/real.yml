@@ -14,7 +14,7 @@ name: real systems
 
 on:
   pull_request:
-    paths:
+    paths: &real_paths
       - "src/tow/clients/**"
       # The scan that finds the client modules (tow.clients.spec discovers them through it).
       - "src/tow/plugins.py"
@@ -44,34 +44,7 @@ on:
       - ".github/workflows/real.yml"
   push:
     branches: [main]
-    paths:
-      - "src/tow/clients/**"
-      # The scan that finds the client modules (tow.clients.spec discovers them through it).
-      - "src/tow/plugins.py"
-      - "src/tow/autostart/**"
-      - "src/tow/check/**"
-      - "src/tow/supervisor/**"
-      # What the client test runs through (torrents, folders, settings, state, `tow check`) and the
-      # install the autostart test makes (installers, bundle, launchers, the OS layer).
-      - "src/tow/torrent.py"
-      - "src/tow/folders.py"
-      - "src/tow/config.py"
-      - "src/tow/store.py"
-      - "src/tow/storage/**"
-      - "src/tow/platform/**"
-      - "src/tow/cli/**"
-      - "install/**"
-      - "scripts/build-bundle.py"
-      - "scripts/tow*"
-      # The tests' own helpers and guard (its real_system rule), and the locked dependencies (a
-      # qbittorrent-api bump).
-      - "tests/integration/**"
-      - "tests/helpers.py"
-      - "tests/conftest.py"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".python-version"
-      - ".github/workflows/real.yml"
+    paths: *real_paths
   schedule:
     - cron: "41 4 * * 2"
   workflow_dispatch:

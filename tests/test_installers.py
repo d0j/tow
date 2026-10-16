@@ -507,6 +507,7 @@ def test_real_systems_run_on_their_code_weekly_and_by_hand_never_unbounded():
         ".github/workflows/real.yml",
     }
     assert triggers["push"] == {"branches": ["main"], "paths": triggers["pull_request"]["paths"]}
+    assert "paths: *real_paths" in text  # one list (a YAML anchor): a path added once is in both
     for path in triggers["pull_request"]["paths"]:  # no filter names a file that is gone
         assert next(ROOT.glob(path.removesuffix("/**")), None), path
     jobs = flow["jobs"]
