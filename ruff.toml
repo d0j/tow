@@ -1,13 +1,14 @@
 line-length = 120
 
 # The detached updater and its lock module run on the install's base Python, which may be 3.11+: they must
-# keep 3.11 syntax even when formatted (parser tests enforce the same minimum).
+# keep 3.11 syntax even when formatted (parser tests enforce the same minimum), as must the updater's harness.
 [per-file-target-version]
 "src/tow/platform/_local_service_worker.py" = "py311"
 "scripts/update.py" = "py311"
 "scripts/root_files.py" = "py311"
 "src/tow/update_worker.py" = "py311"
 "src/tow/platform/locks.py" = "py311"
+"tests/updater_stdlib.py" = "py311"
 
 [lint]
 extend-select = ["E", "W", "I", "B", "UP", "SIM", "C4", "RUF", "PERF", "PT", "C90", "BLE"]
@@ -24,6 +25,8 @@ ignore = [
 [lint.per-file-ignores]
 # The start files' cmd lines: cmd.exe cannot continue a quoted PowerShell command or message on the next line.
 "scripts/root_files.py" = ["E501"]
+# The updater's harness is unittest: it runs on the install's base Python, which has no pytest.
+"tests/updater_stdlib.py" = ["PT009", "PT027"]
 
 [lint.mccabe]
 # No function may exceed this. The few that still do carry `# noqa: C901 - <reason>` and are

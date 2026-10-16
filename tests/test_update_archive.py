@@ -1612,3 +1612,16 @@ def test_a_release_too_old_or_missing_is_named_as_such(install, github, ref, mes
     assert leftovers(install) == []
     if ref == "v1.21.0":
         assert github.asked == []  # refused before any download
+
+
+@pytest.mark.allow_system  # tests/updater_stdlib.py in an isolated Python: temp folders only, no program
+def test_the_updater_harness_for_the_base_python_passes_here_too(tmp_path):
+    # ci.yml runs the harness with a real Python 3.11 (-I: no TOW, no pytest); here it runs on
+    # this Python, so a change that breaks it fails the gate first.
+    harness = Path(__file__).with_name("updater_stdlib.py")
+    env = {**os.environ, "TMP": str(tmp_path), "TEMP": str(tmp_path), "TMPDIR": str(tmp_path)}
+    done = subprocess.run(
+        [sys.executable, "-I", str(harness)], capture_output=True, text=True, env=env, timeout=120, check=False
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "\nOK" in done.stderr, done.stderr

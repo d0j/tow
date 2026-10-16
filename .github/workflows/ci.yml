@@ -87,12 +87,14 @@ jobs:
         run: uv python install --no-bin --no-registry
       # update.py, the web update worker and its lock module run on the install's base Python,
       # which may be any 3.11+. ast.parse(feature_version=(3, 11)) in the tests still accepts
-      # 3.12 syntax such as f"{d["a"]}"; Python 3.11 itself does not.
-      - name: Compile the base-Python files with Python 3.11
+      # 3.12 syntax such as f"{d["a"]}"; Python 3.11 itself does not. The updater's own harness
+      # then runs on that Python alone (-I: its standard library, no TOW, no pytest).
+      - name: Compile the base-Python files with Python 3.11 and run the updater on it
         if: env.RUN == 'true' && matrix.py311
         run: |
           uv python install 3.11 --no-bin --no-registry
-          "$(uv python find --no-project 3.11)" -m py_compile scripts/update.py scripts/root_files.py src/tow/update_worker.py src/tow/platform/locks.py src/tow/platform/_local_service_worker.py
+          "$(uv python find --no-project 3.11)" -m py_compile scripts/update.py scripts/root_files.py src/tow/update_worker.py src/tow/platform/locks.py src/tow/platform/_local_service_worker.py tests/updater_stdlib.py
+          "$(uv python find --no-project 3.11)" -I tests/updater_stdlib.py
       - name: Sync locked environment
         if: env.RUN == 'true'
         run: uv sync --frozen
