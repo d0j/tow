@@ -1,9 +1,9 @@
 // window.towTime (app.js): the one time rule of the server's short_time in the page scripts -
 // today "20:31", this year "15 Oct, 20:31", another year "15 Oct 2025, 20:31", to come dated - in
-// TOW's own zone (base.html: _tz_name when the server knows it, _tz_now). With the name each moment
-// has its own offset (summer time); without it the offset of now serves only times written now,
-// the server's words ({iso, short, full}) are shown as they are and the server's <time>s are never
-// written again. "Today" is written again when the tab is shown and at midnight. Prints a JSON verdict.
+// TOW's own zone (base.html: _tz_name when the server knows it, _tz_now). A time the server wrote
+// (a <time datetime>, its words {iso, short, full}) is read with the offset it carries (summer or
+// winter); other times with the name's rules, else the offset of now. Every short time is written
+// again when the tab is shown and at midnight, with or without the name. Prints a JSON verdict.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
@@ -107,19 +107,30 @@ verdict.fullTimeAndOffset = true;
 }
 verdict.namedZoneHasEachMomentsOffset = true;
 
-// Without the name: a <time> the server wrote is never written again (its own offset may differ
-// from today's), and an earlier time a script shows is the server's own words.
+// Without the name (Windows, most services): a <time> the server wrote is written again when the
+// tab is shown and at midnight, read with the offset its datetime carries (that moment's, summer or
+// winter), never with today's. The page was written yesterday evening: "20:31" was today then.
 {
-  const page = load("en", odd, [["time", { datetime: "2026-10-16T21:00:00+02:17", "data-short": "", title: "x" }, "stale"]]);
-  const node = page.document.root.querySelector("time[data-short]");
+  const page = load("en", odd, [
+    ["time", { id: "evening", datetime: "2026-10-15T20:31:00+02:17", "data-short": "", title: "x" }, "20:31"],
+    ["time", { id: "winter", datetime: "2026-01-10T12:00:00+01:17", "data-short": "", title: "x" }, "12:00"],
+    ["time", { id: "today", datetime: "2026-10-16T21:00:00+02:17", "data-short": "", title: "x" }, "stale"],
+  ]);
+  const node = (id) => page.document.root.querySelector(`#${id}`);
+  // 21:02 now: 2 h 58 min to midnight, then a second - kept for the server's times alone.
+  assert.ok(page.timers.includes((2 * 60 + 58) * 60000 + 1000), page.timers);
   page.document.dispatch(page.document.body, "visibilitychange");
-  assert.equal(node.textContent, "stale");
-  assert.deepEqual(page.timers, []); // no midnight timer for it either
-  const words = page.time.element({ iso: "2026-01-10T12:00:00+02:00", short: "10 Jan, 12:00", full: "2026-01-10 12:00:00 UTC+02:00" });
+  assert.equal(node("evening").textContent, "15 Oct, 20:31");
+  assert.equal(node("winter").textContent, "10 Jan, 12:00"); // its own +01:17, not today's +02:17
+  assert.equal(node("today").textContent, "21:00");
+  // The server's words for a time are shown as they are, and follow midnight like the others.
+  const words = page.time.element({ iso: "2026-01-10T12:00:00+02:00", short: "12:00", full: "2026-01-10 12:00:00 UTC+02:00" });
   assert.equal(words.getAttribute("datetime"), "2026-01-10T12:00:00+02:00");
-  assert.equal(words.textContent, "10 Jan, 12:00");
+  assert.equal(words.textContent, "12:00");
   assert.equal(words.title, "2026-01-10 12:00:00 UTC+02:00");
-  assert.ok(!words.hasAttribute("data-live"));
+  page.document.body.append(words);
+  page.document.dispatch(page.document.body, "visibilitychange");
+  assert.equal(words.textContent, "10 Jan, 12:00");
   assert.equal(page.time.element({ iso: "", short: "", full: "" }, "written").textContent, "written");
   // A time written now (a live message): TOW's offset of now, and it follows midnight.
   const made = page.time.element("2026-10-15T20:31:27+00:00");
@@ -127,17 +138,14 @@ verdict.namedZoneHasEachMomentsOffset = true;
   assert.equal(made.getAttribute("datetime"), "2026-10-15T22:48:27+02:17");
   assert.equal(made.title, "2026-10-15 22:48:27 UTC+02:17");
   assert.equal(made.textContent, "15 Oct, 22:48");
-  assert.ok(made.hasAttribute("data-short") && made.hasAttribute("data-live"));
-  // 21:02 now: 2 h 58 min to midnight, then a second.
-  assert.ok(page.timers.includes((2 * 60 + 58) * 60000 + 1000), page.timers);
+  assert.ok(made.hasAttribute("data-short"));
   page.document.body.append(made);
   made.textContent = "old";
   page.document.dispatch(page.document.body, "visibilitychange");
   assert.equal(made.textContent, "15 Oct, 22:48");
-  assert.equal(node.textContent, "stale");
   assert.equal(page.time.element("15.10.2026 22:48 CET", "15.10.2026 22:48 CET").textContent, "15.10.2026 22:48 CET");
 }
-verdict.withoutTheNameOnlyLiveTimesAreWrittenAgain = true;
+verdict.withoutTheNameEveryTimeIsWrittenAgainWithItsOwnOffset = true;
 
 // With the name: the server's <time>s are written again when the tab is shown and at TOW's
 // midnight, and a script computes the server's words itself.

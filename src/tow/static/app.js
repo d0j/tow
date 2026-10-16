@@ -14,16 +14,22 @@ const t = (key, vars = {}) => String(I18N[key] ?? key).replace(
 
 // The one time rule, as the server writes it (tow.web.text.short_time): today "20:31"; another day
 // of this year "15 Oct, 20:31"; another year "15 Oct 2025, 20:31"; a time still to come always
-// dated. 24 h, in TOW's own zone (its computer's), not the browser's. base.html gives the zone's
-// name when the server knows it (_tz_name, "Europe/Berlin": the browser's rules give every moment
-// its own offset, summer time included) and its UTC offset now (_tz_now). Without the name the
-// offset of now is right only for a time written now (a live message): a time the server wrote is
-// then never written again here, and a script writes an earlier time from the server's own words
-// ({iso, short, full}, tow.web.text.time_parts). ``value``: milliseconds or seconds since 1970 (a
-// number or digits), or an ISO text; ``now`` for the tests.
+// dated. 24 h, in TOW's own zone (its computer's), not the browser's. A time the server wrote
+// (a <time datetime>, or its words {iso, short, full}: tow.web.text.time_parts) carries the UTC
+// offset TOW's zone had at that moment, summer or winter: its wall clock is read with that offset.
+// Any other time, and "today", use the zone's name when the server knows it (_tz_name,
+// "Europe/Berlin": the browser's rules give every moment its own offset) or else its UTC offset now
+// (_tz_now). ``value``: milliseconds or seconds since 1970 (a number or digits), or an ISO text;
+// ``now`` for the tests; ``offset``: the minutes east of UTC to read ``value`` with (NaN: TOW's).
 const towTime = (() => {
   const DAY = 86400000;
   const offsetNow = String(I18N._tz_now ?? "").trim() ? Number(I18N._tz_now) : NaN;
+  // The offset a server's ISO time ends with ("+03:00", "-0500"), in minutes; NaN for none ("Z" is
+  // not the server's: a stamp in UTC is shown in TOW's zone, not as UTC).
+  const ownOffset = (text) => {
+    const match = /([+-])(\d{2}):?(\d{2})$/.exec(String(text ?? "").trim());
+    return match ? (match[1] === "-" ? -1 : 1) * (Number(match[2]) * 60 + Number(match[3])) : NaN;
+  };
   const calendar = (() => {
     const name = String(I18N._tz_name || "").trim();
     if (!name || typeof Intl === "undefined") return null;
@@ -36,7 +42,12 @@ const towTime = (() => {
       return null; // a name this browser does not know: the offset of now, as without one
     }
   })();
-  const parts = (ms) => {
+  const shifted = (ms, offset) => {
+    const d = new Date(ms + offset * 60000);
+    return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate(), h: d.getUTCHours(), min: d.getUTCMinutes(), s: d.getUTCSeconds(), offset };
+  };
+  const parts = (ms, offset = NaN) => {
+    if (Number.isFinite(offset)) return shifted(ms, offset);
     if (calendar) {
       const field = Object.fromEntries(calendar.formatToParts(new Date(ms)).map((part) => [part.type, part.value]));
       const at = { y: Number(field.year), m: Number(field.month), d: Number(field.day), h: Number(field.hour) % 24, min: Number(field.minute), s: Number(field.second) };
@@ -47,8 +58,7 @@ const towTime = (() => {
       const d = new Date(ms);
       return { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate(), h: d.getHours(), min: d.getMinutes(), s: d.getSeconds(), offset: -d.getTimezoneOffset() };
     }
-    const d = new Date(ms + offsetNow * 60000);
-    return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate(), h: d.getUTCHours(), min: d.getUTCMinutes(), s: d.getUTCSeconds(), offset: offsetNow };
+    return shifted(ms, offsetNow);
   };
   const msOf = (value) => {
     if (value === null || value === undefined || value === "" || typeof value === "boolean") return NaN;
@@ -58,29 +68,29 @@ const towTime = (() => {
   };
   const two = (n) => String(n).padStart(2, "0");
   const zone = (minutes) => (minutes ? `UTC${minutes > 0 ? "+" : "-"}${two(Math.floor(Math.abs(minutes) / 60))}:${two(Math.abs(minutes) % 60)}` : "UTC");
-  const short = (value, now = Date.now()) => {
+  const short = (value, now = Date.now(), offset = NaN) => {
     const ms = msOf(value);
     if (!Number.isFinite(ms)) return value === null || value === undefined ? "" : String(value);
-    const at = parts(ms);
+    const at = parts(ms, offset);
     const today = parts(now);
     const clock = `${two(at.h)}:${two(at.min)}`;
     if (at.y === today.y && at.m === today.m && at.d === today.d && ms <= now + 60000) return clock;
     return t(at.y === today.y ? "time.this_year" : "time.other_year", { day: at.d, month: t(`time.month_short.${at.m}`), year: at.y, time: clock });
   };
   // The full time (the tooltip): the language's date pattern with seconds, and the UTC offset.
-  const full = (value) => {
+  const full = (value, offset = NaN) => {
     const ms = msOf(value);
     if (!Number.isFinite(ms)) return "";
-    const at = parts(ms);
+    const at = parts(ms, offset);
     const fields = { Y: String(at.y), m: two(at.m), d: two(at.d), H: two(at.h), M: two(at.min), S: two(at.s) };
     const date = String(I18N._datetime || "%Y-%m-%d %H:%M:%S").replace(/%([YmdHMS])/g, (_, field) => fields[field]);
     return `${date} ${zone(at.offset)}`;
   };
   // The ISO time with TOW's offset (a <time>'s datetime); "" for no time.
-  const iso = (value) => {
+  const iso = (value, offset = NaN) => {
     const ms = msOf(value);
     if (!Number.isFinite(ms)) return "";
-    const at = parts(ms);
+    const at = parts(ms, offset);
     const sign = at.offset < 0 ? "-" : "+";
     return `${at.y}-${two(at.m)}-${two(at.d)}T${two(at.h)}:${two(at.min)}:${two(at.s)}${sign}${two(Math.floor(Math.abs(at.offset) / 60))}:${two(Math.abs(at.offset) % 60)}`;
   };
@@ -91,41 +101,34 @@ const towTime = (() => {
   };
   // A <time> by the rule, its full time the tooltip; a value with no time in it is shown as
   // ``fallback`` (the words the server sent). ``value`` may be the server's own words for it
-  // ({iso, short, full}): without the zone's name they are shown as they are.
+  // ({iso, short, full}): without the zone's name they are shown as they are at first, and read
+  // with the offset their ``iso`` carries when "today" changes.
   const element = (value, fallback = "") => {
     const node = document.createElement("time");
     const given = value !== null && typeof value === "object" ? value : null;
     const source = given ? given.iso : value;
-    const when = iso(source);
+    const offset = given ? ownOffset(given.iso) : NaN;
+    const when = iso(source, offset);
     if (!when) {
       node.textContent = fallback || (given || value === null || value === undefined ? "" : String(value));
       return node;
     }
     node.setAttribute("data-short", "");
-    if (given && !calendar) {
-      node.setAttribute("datetime", String(given.iso));
-      node.setAttribute("tabindex", "0");
-      node.title = String(given.full || "");
-      node.textContent = String(given.short || fallback || when);
-      return node;
-    }
     node.setAttribute("datetime", when);
     node.setAttribute("tabindex", "0"); // its full time on focus or a tap (timeTip below)
-    node.title = full(source);
-    node.textContent = short(source);
-    // Written now by TOW's offset of now: right for today, so it follows midnight too.
-    if (!calendar) node.setAttribute("data-live", "");
+    node.title = given && !calendar && given.full ? String(given.full) : full(source, offset);
+    node.textContent = given && !calendar && given.short ? String(given.short) : short(source, Date.now(), offset);
     keepToday();
     return node;
   };
-  // "Today" changes at midnight and while the tab sleeps: a time written by the rule is written
-  // again then, and when the tab is shown again - every one (time[data-short]) when the zone's
-  // rules are known, else only those a script wrote now (time[data-live]): an older time the
-  // server wrote has its summer or winter offset, which the offset of now would get wrong. Only a
-  // page that shows such a time keeps a midnight timer.
-  const LIVE = calendar ? "time[data-short][datetime]" : "time[data-live][datetime]";
-  const rewrite = () => document.querySelectorAll(LIVE).forEach((node) => {
-    const text = short(node.getAttribute("datetime"));
+  // "Today" changes at midnight and while the tab sleeps: every time written by the rule
+  // (time[data-short], the server's and a script's) is written again then, and when the tab is
+  // shown again, each read with the offset its datetime carries. Only a page that shows such a
+  // time keeps a midnight timer.
+  const SHORT = "time[data-short][datetime]";
+  const rewrite = () => document.querySelectorAll(SHORT).forEach((node) => {
+    const datetime = node.getAttribute("datetime");
+    const text = short(datetime, Date.now(), ownOffset(datetime));
     if (text && node.textContent !== text) node.textContent = text;
   });
   let midnight = 0;
@@ -138,7 +141,7 @@ const towTime = (() => {
     }, untilMidnight() + 1000) || -1;
   };
   document.addEventListener("visibilitychange", () => { if (!document.hidden) rewrite(); });
-  if (document.querySelector(LIVE)) keepToday();
+  if (document.querySelector(SHORT)) keepToday();
   return { short, full, iso, element, untilMidnight };
 })();
 window.towTime = towTime;

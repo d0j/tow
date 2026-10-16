@@ -19,6 +19,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - When an update to a version before 1.32.0 is refused because a new topic still waits for its first add, the
   message no longer says to wait a minute: it says to wait until the Undo button of a removed or edited topic is
   gone, which can take up to the undo time set in Settings.
+- A page left open overnight no longer shows yesterday's times as if they were today ("20:31" without a date):
+  every short time is written again at midnight and when the tab is shown again, with the summer or winter time
+  of its own moment. Before, this worked only where TOW knew its zone's name, which is never the case on Windows.
 
 ## [1.32.0] — 2026-10-16
 
