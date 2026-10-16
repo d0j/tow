@@ -981,6 +981,11 @@ def test_ci_compiles_the_base_python_files_with_a_real_python_3_11():
     ruff = tomllib.loads((ROOT / "ruff.toml").read_text(encoding="utf-8"))
     assert set(compiled.group(1).split()) == set(ruff["per-file-target-version"])
     assert set(ruff["per-file-target-version"].values()) == {"py311"}
+    # Compiling proves the syntax only: the updater's harness (import, unpack, uv's environment,
+    # retried renames, recovery) runs on that Python 3.11 alone, without TOW or pytest.
+    assert '"$(uv python find --no-project 3.11)" -I tests/updater_stdlib.py' in step["run"].splitlines()[-1]
+    harness = (ROOT / "tests" / "updater_stdlib.py").read_text(encoding="utf-8")
+    assert not re.search(r"^\s*(import|from)\s+(tow|pytest)\b", harness, re.MULTILINE)
 
 
 def test_the_release_workflow_tests_everything_before_it_uploads():
