@@ -1177,6 +1177,36 @@ if (settingsPage) {
     updateDirtyState();
   });
 
+  // §2 (QA Q6): on this computer a new reminder needs a new password with it. The server refuses
+  // one without, and the page came back with the saved reminder: what was typed was lost. Said
+  // under the reminder before anything is sent; keeping or clearing it needs no password.
+  const hintError = settingsPage.querySelector("#lan-hint-error");
+  const hintForm = hintError?.closest("form");
+  const hintField = hintForm?.querySelector("#lan-hint");
+  const newPassword = hintForm?.querySelector("#lan-password");
+  if (hintField && newPassword) {
+    const words = (value) => String(value || "").split(/\s+/).filter(Boolean).join(" ");
+    const described = hintField.getAttribute("aria-describedby") || "";
+    const settle = () => {
+      hintError.hidden = true;
+      hintField.removeAttribute("aria-invalid");
+      hintField.setAttribute("aria-describedby", described);
+    };
+    hintForm.addEventListener("submit", (event) => {
+      const typed = words(hintField.value);
+      if (newPassword.value || !typed || typed === words(hintField.defaultValue)) {
+        settle();
+        return;
+      }
+      event.preventDefault();
+      hintError.hidden = false;
+      hintField.setAttribute("aria-invalid", "true");
+      hintField.setAttribute("aria-describedby", `${described} ${hintError.id}`.trim());
+      newPassword.focus();
+    });
+    newPassword.addEventListener("input", settle);
+  }
+
   settingsPage.querySelectorAll("[data-auto-submit]").forEach((form) => {
     const control = form.querySelector("[data-auto-submit-control]");
     const status = form.querySelector("[data-auto-submit-status]");

@@ -727,3 +727,28 @@ def test_a_backup_folders_free_space_never_leaves_its_separator_behind(monkeypat
         free = hint.select_one("span.nowrap")
         assert re.fullmatch(r"· свободно \S+ ТБ", free.get_text())
         assert hint.get_text().endswith(" " + free.get_text())  # the line may break only before "·"
+
+
+def test_the_reminder_brings_its_own_note_for_a_new_password_on_this_computer(monkeypatch):
+    """QA Q6: app.js shows this note before a new reminder alone is sent from this computer (the
+    server refuses it there); another device changes it with the current password and has none."""
+    from bs4 import BeautifulSoup
+
+    from tow.auth import issue_session, lan_password_session_key
+    from tow.store import load_secrets
+
+    _with_lan_password()
+    access = BeautifulSoup(
+        _access_section(TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text), "html.parser"
+    )
+    note = access.select_one("#password-change form #lan-hint-error")
+    assert note.has_attr("hidden")
+    assert note.get_text() == "Чтобы изменить подсказку, задайте и новый пароль"
+    assert note.find_parent(class_="field").select_one("#lan-hint") is not None
+    lan = TestClient(
+        app,
+        client=("192.168.1.7", 50000),
+        headers={"Origin": "http://127.0.0.1"},
+        cookies={"tow_session": issue_session(lan_password_session_key(load_secrets()["lan_auth"]))},
+    )
+    assert 'id="lan-hint-error"' not in _access_section(lan.get("/settings").text)
