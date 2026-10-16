@@ -61,7 +61,7 @@ the `installers` workflow on 24.04). The legacy
   such names through their module ([docs/EXTENDING.md](docs/EXTENDING.md)).
 - `tests/integration/` tests real torrent clients and the OS autostart. They are marked
   `@pytest.mark.real_system("TOW_REAL_...")` and skipped unless that variable is 1, which only
-  `.github/workflows/real.yml` sets on a CI runner: never run them on your machine.
+  `.github/workflows/real.yml` and `autostart.yml` set on a CI runner: never run them on your machine.
 - Use fake clients, fake HTTP and injected platform backends (`tow.platform.use`); never a live client, site or
   messenger.
 - Guard tests keep the structure while code moves: `test_layers.py` (which module may import which),

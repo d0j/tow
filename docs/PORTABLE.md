@@ -882,11 +882,15 @@ Built so far (this workstream):
 - mypy is clean with `--platform linux` and `--platform darwin` too.
 - CI (`.github/workflows/ci.yml`): the full gate runs on Windows, Ubuntu 24.04, Ubuntu 26.04 and
   macOS for every push to `main` and every pull request, and all four must pass (green since
-  1.21.0); the dependency audit runs on one of them (uv.lock is the same everywhere), and
-  `install.sh` is smoke-tested on Ubuntu and macOS.
+  1.21.0); the dependency audit runs on one of them (uv.lock is the same everywhere), and so does
+  `tests/updater_stdlib.py`, the updater's own checks on a real Python 3.11 with its standard
+  library alone. `install.sh` is smoke-tested on Ubuntu and macOS, and the Windows bundle is built
+  and started offline, stopped, moved and started offline again ("Windows bundle smoke"); the
+  smokes fail when uv or TOW write into the tested programs' system temporary folder.
 - Installers (`.github/workflows/installers.yml`): on pull requests that touch `scripts/`,
-  `install/`, the updater, what it relies on (`store.py`, `storage/`, `platform/locks.py`, `paths.py`,
-  `supervisor/`, `restore_points.py`, `snapshots/`, `cli/`, the texts) or the dependencies, weekly
+  `install/`, the updater, what it relies on (`store.py`, `storage/`, `platform/`, `paths.py`,
+  `supervisor/`, `lifecycle.py`, `restore_points.py`, `snapshots/`, `cli/`, the texts) or the
+  dependencies, weekly
   and by hand, the Windows bundle is built from
   the commit and tested as on a tag (below), and `scripts/update-smoke.py` updates the latest
   published release (the bundle on Windows, install.sh on Ubuntu and macOS) to the commit's source
@@ -910,9 +914,12 @@ Built so far (this workstream):
   with `install.ps1`, `install.sh`), turns autostart on, finds the task, agent or unit with the
   OS's own tools, lets the OS start TOW (`schtasks /Run`, `launchctl kickstart`,
   `systemctl --user start`; lingering on for the runner's user), waits for `/healthz`, turns it
-  off and confirms the entry is gone and TOW stopped; "without signing in" too. These tests carry
-  `@pytest.mark.real_system("TOW_REAL_...")`: skipped unless that variable is 1, which only this
-  workflow sets; then the test guard lets them through.
+  off and confirms the entry is gone and TOW stopped; "without signing in" too, in a folder with
+  a Cyrillic name. That job is `.github/workflows/autostart.yml`, which the release workflow runs
+  as well, for the commit it checked: a release is published only after it passed on all three
+  systems, and there and in the weekly run a runner that cannot run it fails instead of skipping.
+  These tests carry `@pytest.mark.real_system("TOW_REAL_...")`: skipped unless that variable is 1,
+  which only these workflows set; then the test guard lets them through.
 - Releases (`.github/workflows/release.yml`, 1.22): a `v*` tag (or a dispatch with a tag) must be
   an annotated `TOW X.Y.Z` on `origin/main` whose content passed `ci` - on its commit or on any
   commit with the same tree, such as the head of the merged pull request (the gate is not run
@@ -924,7 +931,8 @@ Built so far (this workstream):
   unchanged) and `scripts/install-smoke.ps1` (`install.ps1` on Windows PowerShell 5.1 with
   uninstall, a reinstall around the data and purge); Ubuntu and macOS run
   `scripts/install-smoke.sh` (install.sh from the archive, the start and stop files, uninstall,
-  purge, nothing outside); the update test above runs against the tag. Only then the
+  purge, nothing outside); the update test above runs against the tag, and `autostart.yml` (real
+  systems, above) against the checked commit on all three systems. Only then the
   `publish` job (the only one with `contents: write`) creates the release as a draft if it is
   missing (notes from CHANGELOG.md; existing notes are never changed), uploads
   `TOW-windows-x64.zip`, `install.ps1`, `install.sh`, `tow-source.tar.gz` and `SHA256SUMS` with
