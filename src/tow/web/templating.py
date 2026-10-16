@@ -299,11 +299,15 @@ def _languages() -> list[dict[str, str]]:
     return [{"code": code, "name": name, "native": native} for code, name, native in i18n.available()]
 
 
-def js_texts() -> dict[str, str]:
+def js_texts(*, before_sign_in: bool = False) -> dict[str, str]:
     """The ``js.*`` texts of app.js in the current language (base.html hands them over as JSON),
     the secret fields' eye (``web.secret.*``), the time words (``time.*``), and - not catalog
     keys - the language's date pattern (``_datetime``) and TOW's zone for ``towTime``: its name
-    when known (``_tz_name``, "" else) and its UTC offset in minutes now (``_tz_now``)."""
+    when known (``_tz_name``, "" else) and its UTC offset in minutes now (``_tz_now``).
+    ``before_sign_in`` (the sign-in and first-start pages, which load app.js for the eye alone):
+    only the eye's texts - nothing of TOW's zone or of the pages behind the sign-in."""
+    if before_sign_in:
+        return i18n.texts_with_prefix("web.secret.")
     return {
         **i18n.texts_with_prefix("js."),
         **i18n.texts_with_prefix("web.secret."),

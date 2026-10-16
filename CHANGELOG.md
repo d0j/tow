@@ -5,6 +5,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Security
+
+- The sign-in and first-start pages no longer tell anyone on the network the time zone of the computer TOW runs
+  on: before sign-in they carry only the texts of the password field's eye.
+
 ### Fixed
 
 - A title like “73-176 серии из 176” now counts episodes 73–176, as “Серии 13-24 из 24” already did, and so does

@@ -364,6 +364,33 @@ def test_the_sign_in_page_has_the_eye_and_still_posts_a_form():
     assert wrong.select_one("#lan-password")["aria-invalid"] == "true"
 
 
+def _page_texts(html: str) -> dict:
+    import json
+
+    return json.loads(BeautifulSoup(html, "html.parser").select_one("script#tow-i18n").get_text())
+
+
+def test_the_sign_in_and_first_start_pages_hand_over_only_the_eyes_texts(client):
+    """Before sign-in nothing tells the network TOW's time zone (_tz_name, _tz_now) or the texts of
+    pages behind the sign-in: these two pages load app.js for the eye alone."""
+    from tow.auth import lan_password_record
+    from tow.config import load_config, save_config
+    from tow.store import load_secrets, save_secrets
+
+    _first_start()
+    pages = [_page_texts(client.get("/setup").text)]
+    secrets = load_secrets()
+    secrets["lan_auth"] = lan_password_record("old-horse-battery", "")
+    save_secrets(secrets)
+    cfg = load_config()
+    cfg.update(allow_lan=True, bind="0.0.0.0", setup_done=True)
+    save_config(cfg)
+    pages.append(_page_texts(TestClient(app, client=("192.168.1.7", 50000), headers=ORIGIN).get("/login").text))
+    for texts in pages:
+        assert texts
+        assert all(key.startswith("web.secret.") for key in texts), sorted(texts)
+
+
 def test_a_cleared_follow_box_is_saved_as_once_on_edit(client, monkeypatch):
     assert _add(client, monkeypatch).status_code == 303
     topic = load_state()["topics"][0]
