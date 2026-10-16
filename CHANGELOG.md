@@ -171,7 +171,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - On Diagnostics the torrent client's card has a heading like the other cards, and the notes are no wider than a
   form.
 - The backup deletion page showed the copy's time in raw form ("16.10.2026 11:00:02 UTC+03:00"); it uses the
-  short time like every other page, and Delete comes before Cancel.
+  short time like every other page, Delete comes before Cancel, and the page is as wide as Settings.
 - Settings → Updates no longer repeats "Automatic update checks are off" under the unticked box; a check asked by
   hand still says its result.
 

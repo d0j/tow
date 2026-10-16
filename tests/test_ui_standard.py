@@ -332,6 +332,16 @@ def test_the_language_segments_are_as_wide_as_their_buttons():
     assert "justify-self: start" in _first(".theme-field .theme-choice")
 
 
+def test_the_help_question_mark_is_a_28_px_target_and_the_copy_delete_page_a_settings_width():
+    """QA Q10: the Sites "?" help summary was the one disclosure under 28 px (A1: 24 px); the page
+    that deletes a backup copy spanned 1400 px while Settings, where it comes from, is 64rem."""
+    sizes = [body for selector, body in _rules(CSS) if selector == "details.help > summary"]
+    assert "width: 1.75rem; height: 1.75rem" in sizes[-1]  # the last one wins
+    assert _first(".backup-delete-page").strip() == "max-width: 64rem; margin-inline: auto;"
+    template = (ROOT / "src" / "tow" / "templates" / "backup_delete.html").read_text(encoding="utf-8")
+    assert '<div class="backup-delete-page">' in template
+
+
 def test_the_check_all_cards_title_is_a_card_title():
     """1.32 QA L8: "Results" used the browser's 1.5em (22 px); every card or dialog title is 1.05rem."""
     assert "font-size: 1.05rem" in _first(".check-results h2")
