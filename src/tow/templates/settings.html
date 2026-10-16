@@ -619,9 +619,10 @@
         <form method="post" action="/settings/language" class="settings-form language-form" data-return-target="acc-language">
           <fieldset class="theme-field" aria-describedby="language-note">
             <legend>{{ t('settings.language.choose') }}</legend>
-            <div class="settings-actions language-choice">
+            {#- The theme's segmented control, one submit button per language (the chosen one pressed). -#}
+            <div class="theme-choice">
               {%- set chosen = 'auto' if language_setting.auto else language_setting.chosen %}
-              {%- macro choice(value, label) %}<button type="submit" name="language" value="{{ value }}"{% if value != chosen %} class="ghost"{% endif %} aria-pressed="{{ 'true' if value == chosen else 'false' }}"{% if value == chosen and open_section == 'language' %} autofocus{% endif %}>{{ label }}</button>{% endmacro %}
+              {%- macro choice(value, label) %}<button type="submit" name="language" value="{{ value }}" aria-pressed="{{ 'true' if value == chosen else 'false' }}" class="theme-option"{% if value == chosen and open_section == 'language' %} autofocus{% endif %}>{{ label }}</button>{% endmacro %}
               {{ choice('auto', t('settings.language.auto', name=language_setting.current_name)) }}
               {% for l in languages() %}{{ choice(l.code, l.native) }}{% endfor %}
             </div>
