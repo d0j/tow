@@ -343,7 +343,9 @@ def test_windows_shutdown_reasons_query_the_system_log_for_the_window(monkeypatc
 
     assert [e["id"] for e in events] == [6008]
     args = asked[0]
-    assert args[:3] == ["wevtutil", "qe", "System"]
+    # By its full System32 path: a bare name is searched in the Python and current folders first.
+    assert args[:3] == [platform.windows_program("wevtutil.exe"), "qe", "System"]
+    assert args[0].lower().endswith("\\system32\\wevtutil.exe")
     query = next(a for a in args if a.startswith("/q:"))
     assert "EventID=1074 or EventID=41 or EventID=6008" in query
     assert "2026-09-21T" in query  # T0 in UTC

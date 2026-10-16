@@ -163,7 +163,7 @@ def shutdown_events(since_ts: float, until_ts: float) -> list[dict[str, Any]]:
         "*[System[(EventID=1074 or EventID=41 or EventID=6008)"
         f" and TimeCreated[@SystemTime>='{since}' and @SystemTime<='{until}']]]"
     )
-    raw = _run(["wevtutil", "qe", "System", f"/q:{query}", "/c:20", "/rd:true", "/f:xml"])
+    raw = _run([windows_program("wevtutil.exe"), "qe", "System", f"/q:{query}", "/c:20", "/rd:true", "/f:xml"])
     return parse_events(raw)
 
 
