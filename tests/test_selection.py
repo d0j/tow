@@ -1,3 +1,5 @@
+import unicodedata
+
 import pytest
 from helpers import raises_code
 
@@ -34,6 +36,35 @@ def test_episode_star_selects_only_recognized_episode_files():
 def test_file_masks_match_path_or_basename_case_insensitively():
     plan = resolve_selection(FILES, normalize_policy("files", "*.SRT, extras/*.MP4"))
     assert plan.selected_indices == (1, 3)
+
+
+def _nfd(text: str) -> str:
+    return unicodedata.normalize("NFD", text)
+
+
+@pytest.mark.parametrize(
+    ("mask", "path"),
+    [
+        (_nfd("*й.mkv"), "Сезон 1/Серия й.mkv"),  # a mask pasted from macOS (NFD), the torrent's name in NFC
+        ("*й.mkv", _nfd("Сезон 1/Серия й.mkv")),
+        (_nfd("сезон 1/*Й.MKV"), "Сезон 1/Серия й.mkv"),
+        (_nfd("*[йё].mkv"), "Сезон 1/Серия ё.mkv"),  # a class of composed letters
+        (_nfd("Café*"), "café.mkv"),
+    ],
+)
+def test_file_masks_match_whichever_unicode_form_mask_and_name_use(mask, path):
+    files = (TorrentFile(0, path, 100), TorrentFile(1, "Сезон 1/other.mkv", 100))
+    plan = resolve_selection(files, normalize_policy("files", mask))
+    assert plan.selected_files == (path,)  # the name as the torrent has it
+
+
+def test_names_that_differ_only_in_unicode_form_stay_two_files():
+    # Linux keeps "й" (NFC) and "й" (NFD) as two names: a mask may pick both, each stays itself.
+    nfc, nfd = "Серия й.mkv", _nfd("Серия й.mkv")
+    files = (TorrentFile(0, nfc, 100), TorrentFile(1, nfd, 200))
+    plan = resolve_selection(files, normalize_policy("files", "*й.mkv"))
+    assert plan.selected_indices == (0, 1)
+    assert plan.selected_files == (nfc, nfd)
 
 
 @pytest.mark.parametrize("value", ["../*.mkv", "/tmp/*", "C:/*", "foo//bar"])
