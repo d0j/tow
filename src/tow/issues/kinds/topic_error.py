@@ -10,9 +10,8 @@ from tow.clients import factory
 from tow.errors import as_value, summary_record
 from tow.issues import clients
 from tow.issues.model import Fix, Issue, Message, Snapshot, Target
-from tow.log import error_class
 from tow.records import shown_title
-from tow.status import TRACKER_WARNING_CLASSES, error_tone
+from tow.status import TRACKER_WARNING_CLASSES, error_tone, topic_error_class
 
 KIND = "topic_error"
 ORDER = 70
@@ -45,7 +44,9 @@ def collect(snapshot: Snapshot) -> list[Issue]:
         identity = str(topic.get("id") or "")
         if not identity or topic.get("paused") or not topic.get("last_error"):
             continue
-        cls = str(topic.get("last_error_class") or error_class(str(topic["last_error"]), topic.get("last_error_code")))
+        cls = topic_error_class(topic)
+        # A sign-in saved as such is site_needs_login's issue; one known only from an older TOW's
+        # text stays here, or nothing would say it (site_needs_login reads the saved class).
         if topic.get("last_error_class") == "tracker_auth":
             continue
         if cls == "qbit" and str(topic.get("client_id") or default) in clients_down:

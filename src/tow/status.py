@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -14,6 +15,15 @@ _SIGN_IN_CLASSES = frozenset({"tracker_auth", "auth"})
 SITE_WARNING_CLASSES = TRACKER_WARNING_CLASSES | {"quota"} | _SIGN_IN_CLASSES
 # Problems on the site's side about the topic (removed, not a torrent page, no site): red site icon.
 SITE_ERROR_CLASSES = frozenset({"gone", "no_tracker", "not_torrent"})
+
+
+def topic_error_class(topic: Mapping[str, Any]) -> str:
+    """The class of a topic's saved error ("" without one): the class saved with it, else the
+    one its code - or, for a record of an older TOW, its text - says."""
+    error = topic.get("last_error")
+    if not error:
+        return ""
+    return str(topic.get("last_error_class") or error_class(str(error), topic.get("last_error_code")))
 
 
 def error_tone(error_cls: str) -> str:
@@ -48,7 +58,6 @@ class HomeStatus:
     torrent_label: str
     tracker_label: str
     torrent_action: str | None = None
-    tracker_action: str | None = None
 
 
 def _last_event(history_record: dict[str, Any]) -> dict[str, Any]:
@@ -61,7 +70,7 @@ def _tracker_tone(topic: dict[str, Any]) -> str:
     fault - the site is green when it answered (in this check, or once before)."""
     error = str(topic.get("last_error") or "")
     if error:
-        cls = str(topic.get("last_error_class") or error_class(error))
+        cls = topic_error_class(topic)
         if cls in SITE_WARNING_CLASSES:
             return "warn"
         if cls in SITE_ERROR_CLASSES:
@@ -76,8 +85,7 @@ def site_check_tone(topic: dict[str, Any]) -> str | None:
     """What the topic's latest check says about its site, for the site's own colour (the
     header, Sites): "warn" for transport trouble, a sign-in or the day's limit, "ok" when the
     site answered, None when that check did not reach the site."""
-    error = str(topic.get("last_error") or "")
-    cls = str(topic.get("last_error_class") or error_class(error)) if error else ""
+    cls = topic_error_class(topic)
     if cls in SITE_WARNING_CLASSES:
         return "warn"
     checked = topic.get("last_check")
@@ -101,7 +109,7 @@ def project_home_status(topic: dict[str, Any], history_record: dict[str, Any] | 
     topic = topic if isinstance(topic, dict) else {}
     history_record = history_record if isinstance(history_record, dict) else {}
     error = str(topic.get("last_error") or "")
-    error_cls = str(topic.get("last_error_class") or error_class(error))
+    error_cls = topic_error_class(topic)
     tone = error_tone(error_cls) if error else None
     event = _last_event(history_record)
     action = str(event.get("kind") or "") or None
@@ -118,7 +126,6 @@ def project_home_status(topic: dict[str, Any], history_record: dict[str, Any] | 
         torrent_tone = "mut"
 
     tracker_tone = _tracker_tone(topic)
-    tracker_action = "tracker_check" if error or topic.get("last_ok") else None
     lang = owner_language()
     # Amber for a sign-in is not "down": the site answers and asks for a login.
     tracker_key = "status.tracker.sign_in" if error and error_cls in _SIGN_IN_CLASSES else _TRACKER_LABELS[tracker_tone]
@@ -133,5 +140,4 @@ def project_home_status(topic: dict[str, Any], history_record: dict[str, Any] | 
         ),
         tracker_label=t(tracker_key, lang),
         torrent_action=action,
-        tracker_action=tracker_action,
     )
