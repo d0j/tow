@@ -15,6 +15,7 @@
     <label class="sr-only" for="history-q">{{ t('history.search_label') }}</label>
     <input id="history-q" class="w-m" name="q" type="search" value="{{ q }}" placeholder="{{ t('history.search_placeholder') }}">
   </form>
+  <button type="button" class="ghost sm" data-full-times="history-log" aria-controls="history-log" aria-pressed="false">{{ t('web.time.full_toggle') }}</button>
 </div>
 {#- The list's id: the shared "Full timestamps" toggle names it (aria-controls). -#}
 <div class="card log-box history-box" id="history-log">
