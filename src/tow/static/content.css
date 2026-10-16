@@ -15,7 +15,13 @@
 /* A folder's expander is a borderless square icon (.ico), lighter than the checkbox after it: 24 px,
    the least a target may be (WCAG 2.5.8), 32 px under a finger. */
 .content-folder > button.ico.content-toggle { flex: none; width: 1.5rem; min-height: 0; height: 1.5rem; padding: 0; border: 0; background: transparent; color: var(--mut); }
-@media (pointer: coarse) { .content-folder > button.ico.content-toggle { width: 2rem; height: 2rem; } }
+/* A file has no expander: a spacer as wide as one keeps its box in the column of its sibling
+   folders' boxes, one step right of its parent's (it sat left of it, QA Q5). */
+.content-file::before { content: ""; flex: none; width: 1.5rem; }
+@media (pointer: coarse) {
+  .content-folder > button.ico.content-toggle { width: 2rem; height: 2rem; }
+  .content-file::before { width: 2rem; }
+}
 .content-folder { font-weight: 600; }
 .content-file input, .content-folder input { flex: none; width: 1rem; height: 1rem; }
 .content-unused { display: none; }

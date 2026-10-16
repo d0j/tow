@@ -262,6 +262,19 @@ def test_the_content_trees_folder_expander_is_a_24_px_icon():
     assert "width: 2rem; height: 2rem" in coarse
 
 
+def test_a_file_in_the_contents_list_sits_under_its_folder():
+    """QA Q5: a file row has no expander, so its checkbox sat left of its parent folder's (68 vs
+    92 px). A spacer as wide as the expander (24 px, 32 px under a finger) puts files in the
+    column of their sibling folders' boxes, one step right of their parent's."""
+    content = (ROOT / "src" / "tow" / "static" / "content.css").read_text(encoding="utf-8")
+    spacer = _first(".content-file::before", content)
+    assert 'content: ""' in spacer
+    assert "flex: none" in spacer
+    assert "width: 1.5rem" in spacer
+    coarse = content.partition("@media (pointer: coarse) {")[2]
+    assert ".content-file::before { width: 2rem; }" in coarse
+
+
 def test_the_edit_panels_buttons_wrap_whole_on_a_small_phone():
     """1.32 QA L2: at 320 px "Убрать из TOW" wrapped inside its button (32 px high, the rule is 26)."""
     actions = _first(".edit-actions")

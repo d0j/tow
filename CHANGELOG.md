@@ -48,7 +48,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   interval (60 min)."
 - The torrent contents list is calmer: one **All files** box at the top of the tree (ticked, partly ticked or clear)
   replaces **Select all files** and **Clear selection**, a torrent in a single folder opens it, and the saved-copy note
-  joins the one status line ("Files selected: 2 of 6 · 3 GB · saved copy, no download limit used").
+  joins the one status line ("Files selected: 2 of 6 · 3 GB · saved copy, no download limit used"). Files are now
+  indented under their folder; before, their boxes sat left of the folder's.
 - Sites no longer labels every row "No sign-in needed" or "Sign-in not set". A row says **Saved sign-in details** when
   a login is stored, and **Sign-in required** (amber) only after a check or a probe saw the site ask for it; otherwise
   it says nothing.
