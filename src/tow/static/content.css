@@ -1,13 +1,21 @@
-.content-picker { grid-column: 1 / -1; min-width: 0; border: 1px solid var(--line); border-radius: .4rem; padding: .5rem; }
+/* The content picker: a nested box, 9 px inside; its parts (the head, the help, other sources,
+   the status line, the files) 6 px apart; an empty status line (a live region) takes no room. */
+.content-picker {
+  grid-column: 1 / -1; min-width: 0; border: 1px solid var(--line); border-radius: .4rem; padding: var(--sp-3);
+  display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-2);
+}
+.content-picker > button { justify-self: start; }
 .content-picker .actions { flex-wrap: wrap; }
-/* Its parts (the head, the help, other sources, the status line, the search) stand apart; an empty
-   status line (a live region, kept in place) takes no room. */
-.content-picker > :not(:first-child):not(:empty) { margin-top: .45rem; }
-.content-picker > :empty { margin-block: 0; }
-.content-tree { max-height: 22rem; overflow: auto; margin-block: .4rem; }
-.content-file, .content-folder { display: flex; align-items: center; gap: .5rem; margin: 0; padding: .25rem; overflow-wrap: anywhere; }
-/* File names read as content, not as muted field labels (the global label rule). */
-.content-file label, .content-folder label { display: flex; align-items: center; flex: 1; min-width: 0; gap: .5rem; margin: 0; color: var(--fg); font-size: 13px; }
+/* The files: the search, the list (its rows 3 px apart), the pages' buttons 9 px apart. */
+[data-content-results] { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
+.content-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+.content-tree { max-height: 22rem; overflow: auto; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-1); }
+.content-file, .content-folder { display: flex; align-items: center; gap: var(--sp-2); overflow-wrap: anywhere; }
+/* File names read as content, not as muted field labels (the global label rule); the label itself
+   is a 24 px target. */
+.content-file label, .content-folder label { display: flex; align-items: center; flex: 1; min-width: 0; min-block-size: 24px; gap: var(--sp-2); color: var(--fg); font-size: 13px; }
+/* The tree scrolls, so it clips: an expander on its left edge keeps its ring inside. */
+.content-tree .content-toggle:focus-visible { outline-offset: -2px; }
 .content-file span, .content-folder span { flex: 1; min-width: 0; }
 .content-file small { white-space: nowrap; color: var(--mut); font-size: 12px; }
 /* A folder's expander is a borderless square icon (.ico), lighter than the checkbox after it: 24 px,
@@ -24,11 +32,12 @@
 .content-file input, .content-folder input { flex: none; width: 1rem; height: 1rem; }
 .content-unused { display: none; }
 .content-picker [hidden] { display: none; }
-.content-tree [data-depth="1"] { padding-inline-start: .75rem; }
-.content-tree [data-depth="2"] { padding-inline-start: 1.25rem; }
-.content-tree [data-depth="3"] { padding-inline-start: 1.75rem; }
-.content-tree [data-depth="4"] { padding-inline-start: 2.25rem; }
-.content-tree [data-depth="5"] { padding-inline-start: 2.75rem; }
-.content-tree [data-depth="6"] { padding-inline-start: 3.25rem; }
-.content-tree [data-depth="7"] { padding-inline-start: 3.75rem; }
-.content-tree [data-depth="8"] { padding-inline-start: 4.25rem; }
+/* A level of the tree: 8 px further in. */
+.content-tree [data-depth="1"] { padding-inline-start: .5rem; }
+.content-tree [data-depth="2"] { padding-inline-start: 1rem; }
+.content-tree [data-depth="3"] { padding-inline-start: 1.5rem; }
+.content-tree [data-depth="4"] { padding-inline-start: 2rem; }
+.content-tree [data-depth="5"] { padding-inline-start: 2.5rem; }
+.content-tree [data-depth="6"] { padding-inline-start: 3rem; }
+.content-tree [data-depth="7"] { padding-inline-start: 3.5rem; }
+.content-tree [data-depth="8"] { padding-inline-start: 4rem; }

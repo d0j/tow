@@ -39,8 +39,11 @@
     <div class="field"><label for="{{ search_id }}">{{ t('content.search') }}</label><input id="{{ search_id }}" type="search" class="w-m" data-content-search></div>
     {#- The tree's root: one box for every file of the torrent, ticked, mixed or clear (it also takes
         what a search hides and the other pages). -#}
-    <div class="content-folder content-all" data-content-manual-actions><label><input type="checkbox" data-content-all> <span>{{ t('content.all') }}</span></label></div>
-    <div class="content-tree" data-content-tree></div>
+    {#- The tree's root and its rows: one list, 3 px a row. -#}
+    <div class="content-list">
+      <div class="content-folder content-all" data-content-manual-actions><label><input type="checkbox" data-content-all> <span>{{ t('content.all') }}</span></label></div>
+      <div class="content-tree" data-content-tree></div>
+    </div>
     <div class="actions" data-content-pages hidden>
       <button type="button" class="ghost" data-content-prev>{{ t('content.previous') }}</button>
       <span class="field-hint" data-content-page></span>

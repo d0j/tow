@@ -123,7 +123,7 @@ def test_settings_ui_is_sectioned_and_explains_actions():
     # as its form (46 rem, its padding and border), not the page.
     assert ".edit-panel > .edit-actions { max-width: 46rem; }" in css
     assert ".edit-actions .danger { margin-left: auto; }" not in css
-    assert "details#new.add.card { max-width: calc(46rem + 2.2rem + 2px); }" in css
+    assert "details#new.add.card { max-width: calc(46rem + 2 * var(--sp-4) + 2px); }" in css
     # 1.32.3: a section's row is 6 px above and below its title, 12 px at the sides (the spacing scale).
     assert "padding: var(--sp-2) var(--sp-4); list-style: none;" in css
     assert 'action="/settings/client/add"' in page

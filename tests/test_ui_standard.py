@@ -405,7 +405,9 @@ def test_the_content_pickers_parts_stand_apart():
     """1.32 QA L4: the help sat right under "Get contents", and the status lines stuck to "Other
     sources" and to "Find a file"."""
     content = (ROOT / "src" / "tow" / "static" / "content.css").read_text(encoding="utf-8")
-    assert "margin-top: .45rem" in _first(".content-picker > :not(:first-child):not(:empty)", content)
+    # 1.32.3: one gap of the scale (6 px) spaces the parts; an empty status line takes no room.
+    assert "gap: var(--sp-2)" in _first(".content-picker", content)
+    assert ":not(:first-child)" not in content
 
 
 def test_the_language_is_one_segmented_choice_like_the_theme():
