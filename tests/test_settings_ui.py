@@ -679,3 +679,36 @@ def test_the_add_client_form_is_folded_behind_one_line():
     assert toggle.select_one("summary").get_text(strip=True) == "Добавить клиент"
     assert toggle.select_one('form[action="/settings/client/add"]') is not None
     assert not toggle.has_attr("open")  # the example config has a client (not set up yet): still folded
+
+
+@pytest.mark.parametrize("language", ["ru", "en"])
+def test_every_settings_section_is_found_by_the_words_of_its_titles(language):
+    """QA Q1: the header search finds a section by any word of its own title and of its cards'
+    titles ("Резервные копии", "Ночные копии", "Доступ к сайтам", "обновления", a client's own
+    name), not only by its keywords: what the owner reads is what the owner types."""
+    from bs4 import BeautifulSoup
+
+    from tow.config import load_config, save_config
+
+    cfg = load_config()
+    cfg.update(language=language, clients=[{"id": "main", "kind": "qbittorrent", "title": "Living room"}])
+    save_config(cfg)
+    page = BeautifulSoup(TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text, "html.parser")
+    sections = page.select("#settings-acc > [data-q]")
+    assert len(sections) >= 12  # ten sections, Diagnostics and the Guide
+
+    def fold(text: str) -> str:  # app.js's fold()
+        return text.lower().replace("ё", "е")
+
+    missing = []
+    for section in sections:
+        haystack = fold(section["data-q"])
+        titles = section.select(".settings-summary-title, .integration-head h2, legend:not(.sr-only)")
+        assert titles
+        for title in titles:
+            for meta in title.select(".card-meta"):
+                meta.decompose()  # an address and a count beside a card's name, not its title
+            missing += [
+                (section.get("id"), word) for word in re.findall(r"\w+", title.get_text()) if fold(word) not in haystack
+            ]
+    assert missing == []

@@ -159,8 +159,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
-- The search icon is back in the header of Settings, where it finds a section by its words. 1.32.0 removed it saying
-  it filtered nothing there; on Settings it did filter the sections.
+- The search icon is back in the header of Settings, where it finds a section by its words, also by any word of its
+  title or of its cards' titles ("Backups", "Nightly backups"). 1.32.0 removed it saying it filtered nothing there;
+  on Settings it did filter the sections.
 - An opened topic on Home starts with its last event and its full date and time ("Last event: S02E03,
   2026-10-16 11:00:02 UTC+03:00"): the row shows the time short, and a phone or a keyboard could not see
   the full one. "Last successful check" lost its stray full stop.
