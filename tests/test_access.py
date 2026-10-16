@@ -141,6 +141,7 @@ def test_the_local_only_routes_declare_it():
         ("POST", "/settings/access"),
         ("POST", "/settings/protection"),
         ("POST", "/settings/protection/reset"),
+        ("POST", "/settings/protection/remove"),
     }
 
 

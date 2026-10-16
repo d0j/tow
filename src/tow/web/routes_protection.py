@@ -99,3 +99,32 @@ def settings_protection(
     if refused := save_together(_TARGET, write):
         return refused
     return flash_redirect(_TARGET, "protection_ui.saved", "ok")
+
+
+@router.post("/settings/protection/remove", dependencies=[access.require_local(_TARGET, "protection_ui.local_only")])
+@services.locked_state_mutation
+def remove_protection_connection(provider_id: str = Form("")) -> Response:
+    """One saved connection removed by its own button (P1): nothing else of the form - a draft in
+    another card - is sent or saved. Enabled site access keeps at least one enabled connection."""
+    cfg = services.load_config()
+    try:
+        current = services.validate_protection_settings(cfg.get("protection"))
+        providers = [item for item in current["providers"] if item["id"] != provider_id]
+        configured = services.validate_protection_settings({**current, "providers": providers})
+    except ValueError, TypeError:
+        return flash_redirect(_TARGET, "protection_ui.invalid", "err")
+    if len(providers) == len(current["providers"]):
+        return flash_redirect(_TARGET, "web.common.no_changes", "ok")
+    if configured["enabled"] and not any(item["enabled"] for item in configured["providers"]):
+        return flash_redirect(_TARGET, "protection_ui.remove_last", "err")
+    cfg["protection"] = configured
+    state = services.load_state()
+
+    def write(txn: StoreTransaction) -> None:
+        undo.invalidate(state, txn=txn)
+        txn.save_config(cfg)
+        txn.save_state(state)
+
+    if refused := save_together(_TARGET, write):
+        return refused
+    return flash_redirect(_TARGET, "protection_ui.removed", "ok")
