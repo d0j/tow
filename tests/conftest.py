@@ -381,6 +381,28 @@ def _no_revoked_sessions():
 
 
 @pytest.fixture(autouse=True)
+def _edit_forms_opened_just_now(monkeypatch):
+    """Most tests post an edit form by hand, without the hidden ``base`` a rendered form carries:
+    such a post stands for a form opened just before it (its base is what is saved then), as
+    every form was before 1.33. TOW itself refuses a save without a base ("reload this form");
+    ``tests/test_edit_conflicts.py`` puts that rule back (``strict_edit_base``) and tests it."""
+    from tow.web import edit_base
+
+    monkeypatch.setattr(
+        edit_base, "_missing", lambda spec, ident, current: edit_base.Base(spec.kind, ident, dict(current))
+    )
+    edit_base.clear()
+
+
+@pytest.fixture
+def strict_edit_base(monkeypatch):
+    """A save without a base is refused, as in TOW itself."""
+    from tow.web import edit_base
+
+    monkeypatch.setattr(edit_base, "_missing", edit_base.refuse_missing)
+
+
+@pytest.fixture(autouse=True)
 def _fast_export_kdf(monkeypatch):
     """Bundles in tests use the lowest PBKDF2 cost the reader accepts (100k, ~6x faster).
 

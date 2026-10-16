@@ -11,9 +11,10 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from tow.guess import GuessError
-from tow.web import _context, services
+from tow.jsonish import as_dict
+from tow.web import _context, edit_base, services, site_merge
 from tow.web.messages import flash_redirect, request_flash
-from tow.web.site_actions import add_site, delete_site, edit_site, save_site
+from tow.web.site_actions import add_site, delete_site, edit_site, save_site, site_edit_base
 from tow.web.site_form import NewSite, SiteEdit
 from tow.web.site_store import with_login
 from tow.web.templating import TEMPLATES, site_tones
@@ -108,11 +109,21 @@ def sites(request: Request) -> Response:
             open_hosts[name] = next(
                 (host for host in hosts if status.get(host) is True), preferred or (hosts[0] if hosts else "")
             )
+    logins = _context.secrets().get("trackers") or {}
+    open_site = str(request.query_params.get("open") or "")
+    # Each card's base: the site as saved now (edit_base); a refused save's ?conflict= brings
+    # back the owner's draft and the base to save it against.
+    conflict = edit_base.conflict(request, "site", open_site)
+    bases = {name: site_edit_base(name, spec, as_dict(logins.get(name))) for name, spec in trackers.items()}
+    if conflict:
+        bases[open_site] = conflict["base"]
     return TEMPLATES.TemplateResponse(
         request,
         "sites.html",
         {
             "title": t("web.title.sites"),
+            "site_bases": bases,
+            "site_conflict": conflict,
             "trackers": trackers,
             "frozen": frozen,
             "probes": probes,
@@ -236,6 +247,9 @@ def sites_save(
     infohash_path: Annotated[str | None, Form()] = None,
     browser_auth: Annotated[str, Form()] = "",
     browser_auth_present: Annotated[str, Form()] = "",
+    base: Annotated[str, Form()] = "",
+    resolutions: dict[str, str] = edit_base.RESOLUTIONS,
+    fields: dict[str, str] = edit_base.FIELDS,
 ) -> Response:
     form = SiteEdit(
         fetch_hosts=fetch_hosts,
@@ -255,7 +269,7 @@ def sites_save(
         browser_auth=browser_auth,
         browser_auth_present=browser_auth_present,
     )
-    return edit_site(name, form)
+    return edit_site(name, form, base, resolutions, site_merge.password_intent(fields))
 
 
 @router.post("/sites/{name}/login")

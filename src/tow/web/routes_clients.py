@@ -18,7 +18,7 @@ from tow.clients.spec import DEFAULT_KIND
 from tow.clients.view import topics_using
 from tow.config import interval_sec_of, whole_number
 from tow.store_transaction import StoreTransaction
-from tow.web import services
+from tow.web import edit_base, services, settings_merge
 from tow.web.messages import flash_redirect, use_subject
 from tow.web.site_store import save_secrets_with_undo, save_together
 from tow.web.text import t
@@ -128,8 +128,11 @@ def settings_client(
     port: str = Form(""),  # empty: the client's own default port (Transmission 9091, not 8080)
     username: str = Form(""),
     password: str = Form(""),
+    base: str = Form(""),
+    resolutions: dict[str, str] = edit_base.RESOLUTIONS,
+    fields: dict[str, str] = edit_base.FIELDS,
 ) -> Response:
-    from tow.clients.factory import client_configuration, client_secret_block
+    from tow.clients.factory import client_configuration, client_name, client_secret_block
     from tow.clients.spec import get as client_get
 
     _name_client(client_id)
@@ -152,6 +155,28 @@ def settings_client(
     if host.strip() and not _client_host_ok(host.strip()):
         return flash_redirect(target, "web.settings.bad_client_host", "err")
     q = client_secret_block(cfg, s, str(configuration["id"]), ensure=True)
+    # The card's address, port, user name and password are one group (a saved password never
+    # goes to an address it was not typed for): changed here and on another device since the
+    # card was rendered is a conflict; unchanged here keeps what is saved now.
+    ident = str(configuration["id"])
+    now = settings_merge.client_now(ident, q, spec.default_port)
+    got = edit_base.read(settings_merge.CLIENT, ident, base, now)
+    if got is None:
+        return edit_base.reload_redirect(target)
+    wanted = settings_merge.client_wanted(ident, host, port_number, username, fields)
+    merged = edit_base.merge(settings_merge.CLIENT, got, now, wanted, resolutions)
+    if merged.conflicts:
+        rows = settings_merge.card_rows(settings_merge.CLIENT, client_name(configuration), now, wanted)
+        draft = {"host": host, "port": port, "username": username}
+        retype = ("password",) if password.strip() else ()
+        return edit_base.conflict_redirect(
+            settings_merge.CLIENT, ident, target, now=now, merged=merged, draft=draft, rows=rows, retype=retype
+        )
+    remove_password = False
+    if "connection" in merged.changed:
+        remove_password = edit_base.secret_intent(fields, "password")[0] == "remove"
+    else:  # this card changed nothing: the client stays as saved now
+        host, port_number, username, password = str(now["host"]), int(now["port"]), str(now["username"]), ""
     endpoint_changed = (str(q.get("host") or "").strip(), q.get("port"), str(q.get("username") or "").strip()) != (
         host.strip(),
         port_number,
@@ -165,6 +190,8 @@ def settings_client(
     q["username"] = username.strip()
     if password.strip():  # empty keeps the saved one; a typed one is kept as typed, spaces included
         q["password"] = password
+    elif remove_password:
+        q.pop("password", None)
     secret_scope = (
         ["clients", str(configuration.get("secrets_ref") or configuration["id"])]
         if cfg.get("clients")

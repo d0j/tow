@@ -3,6 +3,8 @@
 {% from "_issue_notes.html" import issue_notes_at %}
 {% from "_note.html" import note %}
 {% from "_secret.html" import reveal, saved_hint, keep_note %}
+{% from "_conflict.html" import base_field, conflict_box %}
+{#- A refused save of one form (edit_base) names it: its kind and what it is about. -#}
 {% from "_file.html" import file_input %}
 {% block body %}
 {% set hh = header_health() %}
@@ -68,16 +70,20 @@
             <form id="client-form-{{ c.form_id }}" method="post" action="/settings/client" class="settings-form form-grid" data-return-target="client-{{ c.id }}">
               <input type="hidden" name="client_id" value="{{ c.id }}">
               <input type="hidden" name="kind" value="{{ c.kind }}">
+              {%- set cc = edit_conflict if edit_conflict and edit_conflict.kind == 'client' and edit_conflict.ident == c.id else none %}
+              {%- set cd = cc.draft if cc else {} %}
+              {{ base_field(cc.base if cc else bases.get('client:' ~ c.id, '')) }}
+              {{ conflict_box(cc, 'client-form-' ~ c.form_id) }}
               <fieldset>
                 <legend class="sr-only">{{ t('settings.common.connection_legend', name=c.title) }}</legend>
                 <div class="field-row">
                   <div class="field">
                     <label for="q_host-{{ c.form_id }}">{{ c.labels.host }}</label>
-                    <input id="q_host-{{ c.form_id }}" name="host" value="{{ c.host }}" class="w-m" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="{{ t('common.example', example='127.0.0.1') }}">
+                    <input id="q_host-{{ c.form_id }}" name="host" value="{{ cd.get('host', c.host) }}" class="w-m" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="{{ t('common.example', example='127.0.0.1') }}">
                   </div>
                   <div class="field">
                     <label for="q_port-{{ c.form_id }}">{{ c.labels.port }}</label>
-                    <input id="q_port-{{ c.form_id }}" name="port" value="{{ c.port }}" class="w-xs" type="number" min="1" max="65535" inputmode="numeric">
+                    <input id="q_port-{{ c.form_id }}" name="port" value="{{ cd.get('port', c.port) }}" class="w-xs" type="number" min="1" max="65535" inputmode="numeric">
                   </div>
                 </div>
                 <div class="field">
@@ -85,7 +91,7 @@
                   {% if 'username' in c.fields %}
                   <div class="field">
                     <label for="q_user-{{ c.form_id }}">{{ c.labels.username }}</label>
-                    <input id="q_user-{{ c.form_id }}" name="username" value="{{ c.user }}" class="w-m" autocomplete="section-{{ c.form_id }} username" autocapitalize="off" spellcheck="false">
+                    <input id="q_user-{{ c.form_id }}" name="username" value="{{ cd.get('username', c.user) }}" class="w-m" autocomplete="section-{{ c.form_id }} username" autocapitalize="off" spellcheck="false">
                   </div>
                   {% endif %}
                   <div class="field">
@@ -202,6 +208,10 @@
               </div>
             </details>
             <form id="notifier-form-{{ n.kind }}" method="post" action="/settings/notifier/{{ n.kind }}" class="settings-form form-grid" data-return-target="acc-bots">
+              {%- set nc = edit_conflict if edit_conflict and edit_conflict.kind == 'notifier-' ~ n.kind and edit_conflict.ident == n.kind else none %}
+              {%- set nd = nc.draft if nc else {} %}
+              {{ base_field(nc.base if nc else bases.get('notifier:' ~ n.kind, '')) }}
+              {{ conflict_box(nc, 'notifier-form-' ~ n.kind) }}
               <fieldset>
                 <legend class="sr-only">{{ t('settings.common.connection_legend', name=n.title) }}</legend>
                 {% set keep_id = 'notifier-keep-' ~ n.kind %}
@@ -217,7 +227,7 @@
                   {#- A token, a webhook or a key: not a password to remember or to generate. #}
                   <span class="secret"><input id="{{ field_id }}" name="{{ f.name }}" type="password" class="w-{{ f.width }}" value="{{ f.suggestion }}"{% if f.saved %} placeholder="{{ t('web.secret.keep_placeholder') }}" aria-describedby="{{ field_id }}-saved {{ keep_id }}"{% elif example %} placeholder="{{ example }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">{{ reveal(field_id, f.label) }}</span>
                   {% else %}
-                  <input id="{{ field_id }}" name="{{ f.name }}" class="w-{{ f.width }}" value="{{ f.value or f.suggestion }}"{% if example %} placeholder="{{ example }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
+                  <input id="{{ field_id }}" name="{{ f.name }}" class="w-{{ f.width }}" value="{{ nd.get(f.name, f.value or f.suggestion) }}"{% if example %} placeholder="{{ example }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
                   {% endif %}
                 </div>
                 {% endfor %}
@@ -254,16 +264,20 @@
       </summary>
       <div class="settings-panel">
         <form method="post" action="/settings/interval" class="settings-form form-grid" data-return-target="acc-intervals">
+          {%- set ic = edit_conflict if edit_conflict and edit_conflict.kind == 'intervals' else none %}
+          {%- set idr = ic.draft if ic else {} %}
+          {{ base_field(ic.base if ic else bases.intervals) }}
+          {{ conflict_box(ic, 'intervals') }}
           {#- Two different things, one under the other, each with what it does (the undo time sat
               beside the check interval as if it were part of it). -#}
           <div class="field">
             <label for="interval_min">{{ t('settings.intervals.check_topics') }}</label>
-            <div class="input-unit"><input id="interval_min" name="interval_min" value="{{ interval_min }}" class="w-xs" type="number" min="1" step="1" inputmode="numeric" aria-describedby="interval-hint"><span>{{ t('settings.common.min') }}</span></div>
+            <div class="input-unit"><input id="interval_min" name="interval_min" value="{{ idr.get('interval_min', interval_min) }}" class="w-xs" type="number" min="1" step="1" inputmode="numeric" aria-describedby="interval-hint"><span>{{ t('settings.common.min') }}</span></div>
             <p class="field-hint" id="interval-hint">{{ t('settings.intervals.check_hint') }}</p>
           </div>
           <div class="field">
             <label for="flash_ttl_min">{{ t('settings.intervals.show_undo') }}</label>
-            <div class="input-unit"><input id="flash_ttl_min" name="flash_ttl_min" value="{{ flash_ttl_min }}" class="w-xs" type="number" min="1" step="1" inputmode="numeric"><span>{{ t('settings.common.min') }}</span></div>
+            <div class="input-unit"><input id="flash_ttl_min" name="flash_ttl_min" value="{{ idr.get('flash_ttl_min', flash_ttl_min) }}" class="w-xs" type="number" min="1" step="1" inputmode="numeric"><span>{{ t('settings.common.min') }}</span></div>
           </div>
           <div class="stack-2">
             <div class="settings-actions"><button type="submit">{{ t('settings.common.save') }}</button></div>
@@ -540,6 +554,7 @@
       <div class="settings-panel">
         <section id="updates" class="release-panel" aria-labelledby="settings-updates-title">
           <form method="post" action="/settings/updates" class="compact-form immediate-form" data-return-target="acc-updates" data-auto-submit>
+            {{ base_field(bases.updates) }}
             <input type="hidden" name="enabled" value="0">
             <div class="check-field">
               <input id="check-updates" name="enabled" value="1" type="checkbox"{% if check_updates %} checked{% endif %} aria-describedby="check-updates-hint" data-auto-submit-control>
@@ -665,6 +680,9 @@
       </summary>
       <div class="settings-panel appearance">
         <form method="post" action="/settings/language" class="settings-form language-form" data-return-target="acc-language">
+          {%- set lc = edit_conflict if edit_conflict and edit_conflict.kind == 'language' else none %}
+          {{ base_field(lc.base if lc else bases.language) }}
+          {{ conflict_box(lc, 'language') }}
           <fieldset class="theme-field" aria-describedby="language-note">
             <legend>{{ t('settings.language.choose') }}</legend>
             {#- The theme's segmented control, one submit button per language (the chosen one pressed). #}

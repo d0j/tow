@@ -30,7 +30,7 @@ from tow.notifiers import cards as notifier_cards
 from tow.restore_points import RestorePointError
 from tow.store import SecretStoreError
 from tow.store_transaction import StoreTransaction
-from tow.web import _context, services
+from tow.web import _context, edit_base, services, settings_merge
 from tow.web.messages import flash_redirect, request_flash
 from tow.web.site_store import save_together, settings_undo
 from tow.web.templating import TEMPLATES
@@ -104,8 +104,38 @@ def settings_page(request: Request) -> Response:
             ],
             # What needs the owner and is said in its card ("Needs attention" lands there).
             "notes": issue_notes(state, cfg, "settings"),
+            # Each form's base (edit_base): what it shows, saved now; a refused save's ?conflict=
+            # brings back the owner's draft, both values and the base to save it against.
+            "bases": _bases(cfg, s),
+            "edit_conflict": edit_base.any_conflict(request),
         },
     )
+
+
+def _bases(cfg: dict[str, Any], secrets: dict[str, Any]) -> dict[str, str]:
+    """The hidden ``base`` of each Settings form that merges its save (``settings_merge``)."""
+    from tow.clients.factory import client_configurations, client_secret_block
+    from tow.clients.spec import get as client_get
+    from tow.notifiers import kinds as notifier_kinds
+
+    bases = {
+        "intervals": edit_base.encode(settings_merge.INTERVALS, "intervals", settings_merge.intervals_now(cfg)),
+        "language": edit_base.encode(settings_merge.LANGUAGE, "language", settings_merge.language_now(cfg)),
+        "updates": edit_base.encode(settings_merge.UPDATES, "updates", settings_merge.updates_now(cfg)),
+    }
+    for row in client_configurations(cfg):
+        client_id = str(row["id"])
+        spec = client_get(str(row.get("kind") or "").lower())
+        try:
+            block = client_secret_block(cfg, secrets, client_id)
+        except RuntimeError, ValueError:
+            continue
+        now = settings_merge.client_now(client_id, block, spec.default_port if spec else 0)
+        bases[f"client:{client_id}"] = edit_base.encode(settings_merge.CLIENT, client_id, now)
+    for kind in notifier_kinds():
+        spec_n = settings_merge.notifier_spec(kind)
+        bases[f"notifier:{kind}"] = edit_base.encode(spec_n, kind, settings_merge.notifier_now(kind, secrets))
+    return bases
 
 
 def _search_words() -> dict[str, str]:
@@ -142,18 +172,65 @@ def _language_setting(cfg: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_UPDATES_TARGET = "/settings?open=updates#acc-updates"
+
+
+def _merged(
+    spec: edit_base.Spec,
+    target: str,
+    base: str,
+    now: dict[str, Any],
+    wanted: dict[str, Any],
+    resolutions: dict[str, str],
+    labels: dict[str, str],
+    draft: dict[str, str],
+) -> edit_base.Merge | RedirectResponse:
+    """A plain settings form merged with what is saved now: the merge, or the refusal (a missing
+    or invalid base: "reload"; a conflict: the form again with the draft and both values)."""
+    got = edit_base.read(spec, spec.kind, base, now)
+    if got is None:
+        return edit_base.reload_redirect(target)
+    merged = edit_base.merge(spec, got, now, wanted, resolutions)
+    if merged.conflicts:
+        rows = settings_merge.value_rows(spec, merged.conflicts, labels, now, wanted)
+        return edit_base.conflict_redirect(spec, spec.kind, target, now=now, merged=merged, draft=draft, rows=rows)
+    return merged
+
+
 @router.post("/settings/updates")
 @services.locked_state_mutation
-def settings_updates(enabled: str = Form("")) -> Response:
+def settings_updates(
+    enabled: str = Form(""),
+    base: str = Form(""),
+    resolutions: dict[str, str] = edit_base.RESOLUTIONS,
+) -> Response:
     cfg = services.load_config()
-    cfg["check_updates"] = as_bool(enabled)
+    merged = _merged(
+        settings_merge.UPDATES,
+        _UPDATES_TARGET,
+        base,
+        settings_merge.updates_now(cfg),
+        {"check_updates": as_bool(enabled)},
+        resolutions,
+        {"updates": t("releases.title")},
+        {"check_updates": "1" if as_bool(enabled) else ""},
+    )
+    if isinstance(merged, RedirectResponse):
+        return merged
+    cfg["check_updates"] = merged.values["check_updates"]
     services.save_config(cfg)
-    return flash_redirect("/settings?open=updates#acc-updates", "releases.preferences_saved", "ok")
+    return flash_redirect(_UPDATES_TARGET, "releases.preferences_saved", "ok")
 
 
 @router.post("/settings/language")
 @services.locked_state_mutation
-def settings_language(request: Request, auto: str = Form(""), language: str = Form("")) -> Response:
+def settings_language(
+    request: Request,
+    auto: str = Form(""),
+    language: str = Form(""),
+    base: str = Form(""),
+    resolutions: dict[str, str] = edit_base.RESOLUTIONS,
+) -> Response:
     """One list: "auto" (the browser's language) or a language. ``auto=1`` (the older form's
     checkbox) still means automatic."""
 
@@ -163,7 +240,20 @@ def settings_language(request: Request, auto: str = Form(""), language: str = Fo
         # form) was saved as automatic with "language saved": said instead, nothing changed.
         return flash_redirect("/settings?open=language", "settings.language.unknown", "err")
     cfg = services.load_config()
-    value = i18n.AUTO if as_bool(auto) or chosen is None else chosen
+    wanted = settings_merge.language_wanted(auto, language)
+    merged = _merged(
+        settings_merge.LANGUAGE,
+        "/settings?open=language",
+        base,
+        settings_merge.language_now(cfg),
+        wanted,
+        resolutions,
+        {"language": t("settings.language.title")},
+        {"language": str(wanted["language"])},
+    )
+    if isinstance(merged, RedirectResponse):
+        return merged
+    value = str(merged.values["language"])
     cfg["language"] = value
     services.save_config(cfg)
     # The message is in the language the next page has: "Auto" chosen on a Russian page of an
@@ -179,6 +269,8 @@ def settings_theme(theme: str = Form("")) -> Response:
     """Settings → Theme: the pages' colours for every device - as the system, light or dark."""
     if theme not in THEMES:  # was saved as "auto" with "theme saved"; the page sends only these
         return flash_redirect("/settings?open=theme", "settings.theme.unknown", "err")
+    # One instant choice, saved in the background as it is made (app.js): the last one made on
+    # any device is the theme, never a conflict with the page's own earlier choice.
     cfg = services.load_config()
     cfg["theme"] = theme
     services.save_config(cfg)
@@ -308,10 +400,31 @@ def _shown_minutes(seconds: int) -> int:
 # Empty defaults: a field sent empty is refused below, not taken as FastAPI's default value.
 @router.post("/settings/interval")
 @services.locked_state_mutation
-def settings_interval(interval_min: str = Form(""), flash_ttl_min: str = Form("")) -> Response:
+def settings_interval(
+    interval_min: str = Form(""),
+    flash_ttl_min: str = Form(""),
+    base: str = Form(""),
+    resolutions: dict[str, str] = edit_base.RESOLUTIONS,
+) -> Response:
     cfg_before = services.load_config()
     old_sec = interval_sec_of(cfg_before)
     old_ttl_sec = flash_ttl(cfg_before.get("flash_ttl_sec"))
+    # Only what this form changed since it was rendered: a field another device changed meanwhile
+    # comes back as this page showed it and must not put the old value back.
+    merged = _merged(
+        settings_merge.INTERVALS,
+        "/settings?open=intervals",
+        base,
+        {"interval_min": _shown_minutes(old_sec), "flash_ttl_min": _shown_minutes(old_ttl_sec)},
+        settings_merge.intervals_wanted(interval_min, flash_ttl_min),
+        resolutions,
+        {"interval": t("settings.intervals.check_topics"), "messages": t("settings.intervals.show_undo")},
+        {"interval_min": interval_min, "flash_ttl_min": flash_ttl_min},
+    )
+    if isinstance(merged, RedirectResponse):
+        return merged
+    interval_min = str(merged.values["interval_min"]).removeprefix("invalid:")
+    flash_ttl_min = str(merged.values["flash_ttl_min"]).removeprefix("invalid:")
     requested, requested_ttl = whole_number(interval_min), whole_number(flash_ttl_min)
     if requested is None or requested_ttl is None:
         # Nothing is guessed: "", "abc", "1.5" or "٦٠" is refused, not replaced by a default.

@@ -1,0 +1,27 @@
+{#- An edit form's base and a refused save's conflict (tow.web.edit_base).
+
+    ``base_field(base)`` is the hidden field with the values the form shows (never a password: a
+    saved one is an opaque token). ``conflict_box(conflict, prefix)`` goes inside the form: what
+    another device saved meanwhile and what the owner typed, for each group changed on both
+    sides, with a required choice - the save waits for it. Works without scripts. -#}
+{% from "_note.html" import note %}
+{% macro base_field(base) -%}
+<input type="hidden" name="base" value="{{ base }}">
+{%- endmacro %}
+{% macro conflict_box(conflict, prefix) -%}
+{%- if conflict %}
+<div class="stack-2 edit-conflict" role="group" aria-labelledby="{{ prefix }}-conflict-title">
+  {{ note(t('web.edit.conflict_note'), 'warn', id=prefix ~ '-conflict-title') }}
+  {% for row in conflict.rows %}
+  <fieldset class="stack-1">
+    <legend>{{ row.label }}</legend>
+    <p class="sub">{{ t('web.edit.now_saved', value=row.current) }}</p>
+    <p class="sub">{{ t('web.edit.yours', value=row.mine) }}</p>
+    <label class="check-label" for="{{ prefix }}-keep-{{ row.group }}"><input id="{{ prefix }}-keep-{{ row.group }}" type="radio" name="resolve_{{ row.group }}" value="current" required> {{ t('web.edit.keep_saved') }}</label>
+    <label class="check-label" for="{{ prefix }}-mine-{{ row.group }}"><input id="{{ prefix }}-mine-{{ row.group }}" type="radio" name="resolve_{{ row.group }}" value="mine"> {{ t('web.edit.use_mine') }}</label>
+  </fieldset>
+  {% endfor %}
+  {% if conflict.retype %}<p class="field-hint">{{ t('web.edit.retype_secret') }}</p>{% endif %}
+</div>
+{%- endif %}
+{%- endmacro %}

@@ -15,7 +15,7 @@ from tow.errors import TowError
 from tow.folders import recent_save_roots
 from tow.records import shown_title
 from tow.topic_form import TopicForm
-from tow.web import _context, services, topic_actions
+from tow.web import _context, edit_base, services, topic_actions
 from tow.web.messages import flash_redirect, home_redirect, request_flash
 from tow.web.templating import TEMPLATES
 from tow.web.text import t, time_parts
@@ -80,14 +80,19 @@ def topic_downloads(tid: str, limit: int = 100, offset: int = 0) -> dict[str, An
     }
 
 
-def _topic_edit_context(tid: str) -> dict[str, Any] | None:
-    """M2: one topic's edit panel, rendered on demand instead of 200 forms inside Home."""
+def _topic_edit_context(request: Request, tid: str) -> dict[str, Any] | None:
+    """M2: one topic's edit panel, rendered on demand instead of 200 forms inside Home. Its
+    ``base`` is the topic as saved now (``edit_base``); a refused save's ``?conflict=`` brings
+    back the owner's draft, both values of what conflicts, and the base to save it against."""
     state = _context.state()
     topic = next((item for item in state.get("topics") or [] if str(item.get("id")) == tid), None)
     if topic is None:
         return None
     cfg = _context.config()
+    conflict = edit_base.conflict(request, "topic", tid)
     return {
+        "edit_base": conflict["base"] if conflict else topic_actions.edit_base_of(topic),
+        "conflict": conflict,
         "topic": topic_rows({**state, "topics": [topic]})[0],
         "client_options": [row for row in client_configurations(cfg) if row.get("enabled", True)],
         "default_client_id": default_client_id(cfg),
@@ -98,7 +103,7 @@ def _topic_edit_context(tid: str) -> dict[str, Any] | None:
 
 @router.get("/topics/{tid}/edit-panel", response_class=HTMLResponse)
 def topics_edit_panel(request: Request, tid: str) -> Response:
-    context = _topic_edit_context(tid)
+    context = _topic_edit_context(request, tid)
     if context is None:
         from markupsafe import escape
 
@@ -129,7 +134,7 @@ def topics_row(request: Request, tid: str) -> Response:
 @router.get("/topics/{tid}/edit", response_class=HTMLResponse)
 def topics_edit_page(request: Request, tid: str) -> Response:
     """The edit panel as a page of its own: the no-script way to open it."""
-    context = _topic_edit_context(tid)
+    context = _topic_edit_context(request, tid)
     if context is None:
         return home_redirect("web.topics.not_found", "err")
     return TEMPLATES.TemplateResponse(
@@ -215,6 +220,8 @@ def topics_edit(
     check_interval_min: str | None = Depends(_interval_form),
     content_token: str = Form(""),
     selection_indices: str = Form(""),
+    base: str = Form(""),
+    resolutions: dict[str, str] = edit_base.RESOLUTIONS,
 ) -> Response:
     form = TopicForm(
         url=url,
@@ -228,7 +235,7 @@ def topics_edit(
         content_token=content_token,
         selection_indices=selection_indices,
     )
-    return topic_actions.edit_topic(tid, form)
+    return topic_actions.edit_topic(tid, form, base, resolutions)
 
 
 @router.post("/topics/{tid}/pause")
