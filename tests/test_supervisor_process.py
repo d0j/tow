@@ -91,6 +91,48 @@ def test_closing_the_terminal_of_tow_run_stops_it_cleanly(run_env, monkeypatch, 
     assert handlers == dict.fromkeys((signal.SIGTERM, hangup, brk), signal.SIG_DFL)  # restored
 
 
+def test_tow_run_under_nohup_keeps_ignoring_the_closed_terminal(run_env, monkeypatch):
+    # `nohup tow run &`: the hangup is ignored on purpose; TOW's own handler must not undo that
+    # (it stopped TOW when the SSH session closed). SIGTERM still stops it cleanly.
+    import signal
+
+    hangup = getattr(signal, "SIGHUP", 1)
+    brk = getattr(signal, "SIGBREAK", 21)
+    monkeypatch.setattr(signal, "SIGHUP", hangup, raising=False)
+    monkeypatch.setattr(signal, "SIGBREAK", brk, raising=False)
+    handlers: dict[int, object] = {hangup: signal.SIG_IGN}
+    installed = []
+
+    def fake_signal(number, handler):
+        installed.append((number, handler))
+        previous = handlers.get(number, signal.SIG_DFL)
+        handlers[number] = handler
+        return previous
+
+    monkeypatch.setattr(signal, "signal", fake_signal)
+    monkeypatch.setattr(signal, "getsignal", lambda number: handlers.get(number, signal.SIG_DFL))
+    world = World(clock=Clock())
+    deps = world.deps()
+    ticks = {"n": 0}
+    seen_hangup = []
+
+    def sleep(seconds):
+        ticks["n"] += 1
+        world.clock.advance(seconds)
+        if ticks["n"] == 3:
+            seen_hangup.append(handlers[hangup])  # the terminal closes: still ignored
+        if ticks["n"] == 5:
+            handlers[signal.SIGTERM](signal.SIGTERM, None)
+
+    deps.sleep = sleep
+    assert run_supervisor(deps) == 0
+    assert seen_hangup == [signal.SIG_IGN]
+    assert ticks["n"] >= 5  # the hangup did not stop it; SIGTERM did
+    assert world.stopped == [world.servers()[0].pid]
+    assert hangup not in {number for number, _ in installed}
+    assert handlers == {hangup: signal.SIG_IGN, signal.SIGTERM: signal.SIG_DFL, brk: signal.SIG_DFL}
+
+
 def test_variables_that_lead_a_portable_install_elsewhere_are_named(monkeypatch, tmp_path):
     # A TOW_HOME / TOW_CONFIG / TOW_MASTER_KEY_FILE set for the whole account (left from another
     # install) wins in every start - launcher, Task Scheduler, systemd: said in run.log.

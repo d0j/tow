@@ -384,11 +384,16 @@ def run_supervisor(deps: Deps | None = None) -> int:
 
         # SIGHUP: the terminal of `tow run` was closed (Linux, macOS); SIGBREAK: Ctrl+Break in its
         # console (Windows) - a clean stop like SIGTERM, not the default of ending at once with
-        # the web server and a job left behind. Each only where the system has it.
+        # the web server and a job left behind. Each only where the system has it. A hangup that
+        # comes ignored (`nohup tow run &`) stays ignored: the owner asked for TOW to outlive the
+        # terminal or SSH session.
         stop_signals = [
             signal.SIGTERM,
             *(getattr(signal, name) for name in ("SIGHUP", "SIGBREAK") if hasattr(signal, name)),
         ]
+        hangup = getattr(signal, "SIGHUP", None)
+        if hangup is not None and signal.getsignal(hangup) is signal.SIG_IGN:
+            stop_signals.remove(hangup)
         previous = {number: signal.getsignal(number) for number in stop_signals}
         for number in stop_signals:
             with contextlib.suppress(ValueError, OSError):  # not the main thread
