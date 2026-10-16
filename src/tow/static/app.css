@@ -307,9 +307,11 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { he
    taking what is left. Two 240 px fields need 492 px; a narrower form or card stacks them. */
 .field-row { display: flex; flex-flow: row wrap; align-items: start; gap: .55rem .75rem; min-width: 0; }
 .field-row > * { flex: 1 1 12rem; max-width: 100%; }
-.field-row > :is(.w-xs, :has(.w-xs)) { flex: 0 1 auto; }
+/* A short field keeps its 88 px beside a label and hint narrower than that; a long one shares a
+   line only where its 576 px fit, or takes a line of its own. */
+.field-row > :is(.w-xs, :has(.w-xs)) { flex: 0 1 auto; min-width: 5.5rem; }
 .field-row > :is(.w-m, :has(.w-m)) { flex: 0 1 15rem; }
-.field-row > :is(.w-xl, :has(.w-xl)) { flex: 1 1 26rem; }
+.field-row > :is(.w-xl, :has(.w-xl)) { flex: 1 1 36rem; }
 /* A phone: an ordinary field fills its line (the phone rules, below). */
 input[type="checkbox"], input[type="radio"] { width: auto; }
 /* CB1: one checkbox, 16 px in the accent colour (a Settings box was 17.6 px, a Home one the

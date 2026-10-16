@@ -214,7 +214,11 @@ def test_one_form_layout_with_rows_that_wrap_by_the_forms_own_width():
     assert "min-width: 0" in _first(".form-grid > *, .field-row > *")
     assert "flex: 0 1 auto" in _first(".field-row > :is(.w-xs, :has(.w-xs))")
     assert "flex: 0 1 15rem" in _first(".field-row > :is(.w-m, :has(.w-m))")
-    assert "flex: 1 1 26rem" in _first(".field-row > :is(.w-xl, :has(.w-xl))")
+    # 1.32.2 browser QA: a number whose label and hint are narrower than 88 px ("От 1 до 4.") was
+    # 84 px in its row, and ntfy's server shared a 768 px card's line with the topic at 447 px. A
+    # short field keeps its 88 px; a long one needs its 576 px or takes a line of its own.
+    assert "min-width: 5.5rem" in _first(".field-row > :is(.w-xs, :has(.w-xs))")
+    assert "flex: 1 1 36rem" in _first(".field-row > :is(.w-xl, :has(.w-xl))")
     # No form-width switch for rows any more, and no "keep" variant: a pair wraps on its own.
     assert ".field-row.keep" not in CSS
     assert ".field-row {" not in "".join(CSS.split("@container (min-width: 38rem) {")[1:])
