@@ -34,7 +34,8 @@ def test_local_broker_transports_environment_only_in_stdin(tmp_path, monkeypatch
     argv = [str(tmp_path / "with space" / "python.exe"), "-I", "worker.py", 'quoted"value']
     system.spawn_broker(argv)
     args, options = calls[0]
-    assert args[:4] == ["powershell", "-NoProfile", "-NonInteractive", "-Command"]
+    powershell = module.windows_program("WindowsPowerShell", "v1.0", "powershell.exe")  # never by PATH
+    assert args[:4] == [powershell, "-NoProfile", "-NonInteractive", "-Command"]
     assert "Win32_ProcessStartup" in args[-1]
     assert "0x09000400" in args[-1]
     assert "-ComputerName" not in args[-1]
