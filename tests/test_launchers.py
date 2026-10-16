@@ -64,8 +64,11 @@ def test_generic_cli_launcher_uses_runtime_env():
     assert last.startswith('if /i "%~1"=="setup" (call "%%~dp0tow-setup.cmd" %*)')
     assert last.index('if exist "%TOW_EXE%" ("%TOW_EXE%" %*)') < last.index('"%TOW_UV%" run --frozen --no-dev')
     exits = [line for line in text.splitlines() if "exit /b" in line and not line.startswith("rem ")]
-    # The refusals, before TOW runs: a moved folder, an update cut off while it replaced the code.
-    assert exits == ["if defined TOW_MOVED exit /b 3", "if defined TOW_CUT exit /b 3"]
+    # The refusals, before TOW runs: a moved folder, an update cut off while it replaced the code,
+    # no folder for uv's temporary files where uv runs TOW before setup.
+    assert exits[:2] == ["if defined TOW_MOVED exit /b 3", "if defined TOW_CUT exit /b 3"]
+    assert len(exits) == 3
+    assert exits[2].endswith(r'mkdir "%TOW_ROOT%\runtime\uv-tmp" || exit /b 3')
 
 
 @pytest.mark.allow_system  # the launcher in a temp install whose environment was left behind by a move
@@ -726,6 +729,48 @@ def test_setup_gives_uv_a_temp_folder_inside_and_none_of_the_accounts_python_set
         assert seen["UV_OFFLINE"] == "1"  # the owner's own choice stays
         names = ("TMP", "TEMP") if os.name == "nt" else ("TMPDIR",)
         assert {seen[name] for name in names} == {temp}
+        assert seen["temp_is_dir"] is True
+
+
+@pytest.mark.allow_system  # the launcher of a temp install not set up yet; uv a Python probe recording its env
+@pytest.mark.parametrize("layout", ["install", "checkout"])
+def test_uv_run_before_setup_keeps_its_temp_inside_too(tmp_path, layout):
+    # Without an environment the launcher runs TOW through `uv run`, which wrote its lock files
+    # into the system TEMP as setup did before (X4).
+    import json
+    import shutil
+    import subprocess
+    import sys
+
+    root = tmp_path / "TOW"
+    app = root / "app" if layout == "install" else root
+    shutil.copytree(ROOT / "scripts", app / "scripts")
+    if layout == "install":
+        (root / "data").mkdir()
+    record = tmp_path / "uv-env.jsonl"
+    probe = _UV_PROBE.replace("RECORD", repr(str(record)))
+    env = {key: value for key, value in os.environ.items() if not key.upper().startswith(("TOW_", "UV_"))}
+    env.update(TMP=str(tmp_path), TEMP=str(tmp_path), TMPDIR=str(tmp_path))
+    bin_dir = app / "runtime" / "bin" if layout == "checkout" else root / "runtime" / "bin"
+    bin_dir.mkdir(parents=True)
+    if os.name == "nt":
+        # uv: a venv launcher of this Python, which runs the file "run" of the folder it starts in.
+        shutil.copy2(Path(sys.prefix) / "Scripts" / "python.exe", bin_dir / "uv.exe")
+        (bin_dir.parent / "pyvenv.cfg").write_text(f"home = {sys.base_prefix}\n", encoding="utf-8")
+        (tmp_path / "run").write_text(probe, encoding="utf-8")
+        argv = ["cmd.exe", "/d", "/c", str(app / "scripts" / "tow.cmd"), "status"]
+    else:
+        (bin_dir / "uv").write_text(f"#!{sys.executable}\n{probe}", encoding="utf-8")
+        (bin_dir / "uv").chmod(0o755)
+        argv = ["/bin/sh", str(app / "scripts" / "tow"), "status"]
+    done = subprocess.run(argv, capture_output=True, text=True, env=env, cwd=tmp_path, timeout=120, check=False)
+    assert done.returncode == 0, done.stdout + done.stderr
+    [seen] = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
+    names = ("TMP", "TEMP") if os.name == "nt" else ("TMPDIR",)
+    if layout == "checkout":
+        assert {seen[name] for name in names} == {str(tmp_path)}
+    else:
+        assert {seen[name] for name in names} == {str(root / "runtime" / "uv-tmp")}
         assert seen["temp_is_dir"] is True
 
 

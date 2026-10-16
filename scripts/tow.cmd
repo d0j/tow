@@ -22,6 +22,11 @@ if exist "%TOW_ROOT%\.update-switch.json" if not exist "%TOW_EXE%" set "TOW_CUT=
 if defined TOW_CUT "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$d = $env:TOW_ROOT; try { $j = Get-Content -LiteralPath (Join-Path $d '.update-switch.json') -Raw | ConvertFrom-Json; if ($j.phase -eq 'accepted' -or $j.restored -eq $true) { exit 0 } } catch {}; try { $f = [IO.File]::Open((Join-Path $d '.update.lock'), 'Open', 'ReadWrite', 'ReadWrite') } catch { exit 3 }; try { $f.Lock(0, 1) } catch { $f.Close(); exit 0 }; $f.Unlock(0, 1); $f.Close(); exit 3" >nul 2>&1 && set "TOW_CUT="
 if defined TOW_CUT echo TOW cannot run: an update was cut off while it replaced the code in "%TOW_ROOT%". Run "Update TOW.cmd" there again: it puts the previous version back first.
 if defined TOW_CUT exit /b 3
+rem Without an environment uv runs TOW (below): uv's own temporary files stay in runtime\uv-tmp, as in
+rem setup (tow-setup.cmd), never in the system's temporary folder.
+if /i not "%~1"=="setup" if not exist "%TOW_EXE%" if /i not "%TOW_ROOT%"=="%TOW_APP%" if not exist "%TOW_ROOT%\runtime\uv-tmp\" mkdir "%TOW_ROOT%\runtime\uv-tmp" || exit /b 3
+if /i not "%~1"=="setup" if not exist "%TOW_EXE%" if /i not "%TOW_ROOT%"=="%TOW_APP%" set "TMP=%TOW_ROOT%\runtime\uv-tmp"
+if /i not "%~1"=="setup" if not exist "%TOW_EXE%" if /i not "%TOW_ROOT%"=="%TOW_APP%" set "TEMP=%TOW_ROOT%\runtime\uv-tmp"
 rem One last line, so its exit code is TOW's (`exit /b` inside a block would lose it): the
 rem environment's own tow.exe; without one (not set up yet) uv runs TOW from the locked environment.
 if /i "%~1"=="setup" (call "%%~dp0tow-setup.cmd" %*) else if exist "%TOW_EXE%" ("%TOW_EXE%" %*) else ("%TOW_UV%" run --frozen --no-dev --project "%TOW_APP%" tow %*)
