@@ -419,6 +419,64 @@ def test_a_client_file_check_refuses_only_a_target_that_does_not_know_it(install
     work.refuse_pending_receipts(f"v{version}")  # nothing waits: any version
 
 
+def _prepared_for_first_add(install, *, where: str, undo_age: int = 0) -> None:
+    """state.json with a picker-prepared topic waiting for its first add (``content_ref``, the
+    name 1.32 writes), in the topic list or in the undo record of its deletion."""
+    from datetime import UTC, datetime, timedelta
+
+    prepared = {"id": "a", "title": "Harbour Clock", "content_ref": "0" * 32}
+    state: dict[str, Any] = {"schema_version": 2, "topics": [{"id": "b", "title": "Quiet Topic"}]}
+    if where == "topics":
+        state["topics"].append(prepared)
+    else:
+        stamped = (datetime.now(UTC) - timedelta(seconds=undo_age)).isoformat(timespec="seconds")
+        state["undo"] = {"kind": "topic", "ts": stamped, "item": prepared}
+    (install["root"] / "data" / "state.json").write_text(json.dumps(state), encoding="utf-8")
+
+
+def test_an_expired_undo_of_a_prepared_topic_refuses_nothing(install):
+    """An expired undo stays in state.json until the next undoable action: nothing brings it back."""
+    _prepared_for_first_add(install, where="undo", undo_age=120)
+    work = _target(install, b"STATE_SCHEMA_VERSION = 2\n", "1.31.2")
+    work.refuse_pending_content_refs("v1.31.2")
+    (install["root"] / "config.yaml").write_text("flash_ttl_sec: 600\n", encoding="utf-8")
+    with pytest.raises(updater.UpdateError, match="Harbour Clock"):
+        work.refuse_pending_content_refs("v1.31.2")  # a longer undo window is still open
+
+
+@pytest.mark.parametrize("where", ["topics", "undo"])
+@pytest.mark.parametrize(("version", "refused"), [("1.31.2", True), ("1.32.0", False)])
+def test_a_prepared_topic_refuses_a_target_that_reads_only_the_old_name(install, where, version, refused):
+    """1.31.2 and older read the prepared torrent's id only as ``content_token``: going back
+    while a topic (or the undo of one) waits for its first add lost it, and the older check
+    fetched the torrent again and could fall back to the page's magnet link."""
+    _prepared_for_first_add(install, where=where)
+    work = _target(install, b"STATE_SCHEMA_VERSION = 2\n", version)
+    if refused:
+        with pytest.raises(updater.UpdateError, match="Harbour Clock") as caught:
+            work.refuse_pending_content_refs(f"v{version}")
+        assert "Quiet Topic" not in str(caught.value)
+        assert "v1.32.0" in str(caught.value)
+    else:
+        work.refuse_pending_content_refs(f"v{version}")
+    (install["root"] / "data" / "state.json").write_text('{"schema_version": 2, "topics": []}', encoding="utf-8")
+    work.refuse_pending_content_refs(f"v{version}")  # nothing waits: any version
+
+
+def test_going_back_while_a_topic_waits_for_its_first_add_is_refused_before_tow_stops(install, github):
+    _prepared_for_first_add(install, where="topics")
+    github.release("v1.31.2", tarball("1.31.2", extra={"src/tow/store.py": b"STATE_SCHEMA_VERSION = 2\n"}))
+    machine = Machine(install["app"], github)
+
+    code, lines = run(machine, "v1.31.2")
+
+    assert code == 2
+    assert machine.calls == []  # TOW was never stopped
+    assert "Harbour Clock" in lines[-1]
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+    assert leftovers(install) == []
+
+
 def test_every_state_format_names_the_first_version_that_reads_it():
     from tow.store import STATE_SCHEMA_VERSION
 
