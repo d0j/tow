@@ -87,3 +87,48 @@ def test_no_paragraph_holds_a_button_row_and_every_disclosure_has_one_body():
                 path.name,
                 after[:80],
             )
+
+
+def test_forms_space_their_groups_by_the_gap_alone():
+    """A form's groups 9 px apart, a label 3 px above its field, the buttons 9 px under the last field on
+    every screen (Settings had 10.4, the add forms 21.6, the sign-in dialog 27): no group adds a margin."""
+    assert "gap: var(--sp-3)" in _rule(".form-grid")
+    assert "gap: var(--sp-3)" in _rule(".settings-form")
+    assert "padding" not in _rule(".settings-form")
+    for selector in (".settings-actions", ".actions", ".edit-actions", ".check-field", ".form-error", ".field-error"):
+        assert "margin" not in _rule(selector), selector
+    for selector in (".settings-actions", ".actions", ".edit-actions", ".inline-save", ".client-add-row"):
+        assert "gap: var(--sp-2)" in _rule(selector), selector
+    label = _rule("label")
+    assert "margin: 0" in label
+    assert "line-height: 1.45" in label  # the hints' line height
+    assert "margin" not in _rule(".unsaved-state")
+
+
+def test_a_check_field_is_a_24px_target_without_padding():
+    check = _rule(".check-field")
+    assert "padding" not in check
+    assert "column-gap: var(--sp-2)" in check
+    assert "row-gap: var(--sp-1)" in check
+    assert "min-block-size: 24px" in _rule("label.check-field")
+    assert not [sel for sel, _ in _rules(CSS) if sel.startswith(".check-field + .check-field")]
+
+
+def test_a_hint_about_a_row_of_fields_is_grouped_with_it():
+    """The hint or "leave empty to keep" under a row of fields sits 3 px under it (it was a whole group gap
+    away: 8.8 px in Settings and Setup, 14.4 px in the sign-in dialog)."""
+    from bs4 import BeautifulSoup
+
+    page = BeautifulSoup((ROOT / "tests" / "golden" / "settings-page.html").read_text(encoding="utf-8"), "html.parser")
+    rows = page.select(".field-row")
+    assert rows
+    for row in rows:
+        after = row.find_next_sibling()
+        if after is not None and set(after.get("class") or []) & {"field-hint", "keep-note"}:
+            assert "field" in (row.parent.get("class") or []), str(after)[:80]
+    setup = (TEMPLATES / "setup.html").read_text(encoding="utf-8")
+    assert re.search(r'<div class="field">\s*<div class="field-row">', setup)
+    dialog = (TEMPLATES / "index.html").read_text(encoding="utf-8")
+    assert re.search(
+        r'<div class="field">\s*<div class="field-row">\s*<div class="field"><label for="tracker-username', dialog
+    )

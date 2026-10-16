@@ -37,6 +37,7 @@
             password is neither sent nor checked; the server takes a clear box as "this computer
             only" whatever comes with it. One password field (1.32.1): its eye shows what was typed. -#}
         <div class="form-grid lan-password" data-enabled-by="allow-lan">
+          <div class="field">
           <div class="field-row">
             <div class="field">
               <label for="lan-password">{{ t('settings.access.password') }}</label>
@@ -50,6 +51,7 @@
             </div>
           </div>
           <p class="field-hint"><span id="lan-password-hint">{{ t('settings.access.password_hint') }}</span> <span id="lan-hint-help">{{ t('settings.access.hint_help') }}</span></p>
+          </div>
         </div>
         <div class="settings-actions">
           <button type="submit" name="action" value="save">{{ t('setup.save') }}</button>

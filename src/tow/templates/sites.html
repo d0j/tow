@@ -155,15 +155,19 @@
         <form id="ed-site-{{ name }}" method="post" action="/sites/{{ name|urlencode }}" class="form-grid site-form">
           <div class="sign-in">
             <input type="hidden" name="browser_auth_present" value="1">
-            <label class="check-label" for="site-browser-{{ name }}"><input id="site-browser-{{ name }}" name="browser_auth" value="1" type="checkbox" aria-describedby="site-browser-hint-{{ name }}"{% if (d.get('browser_auth') if d else spec.browser_auth) %} checked{% endif %}> {{ t('sites.browser_auth') }}</label>
-            <p class="field-hint browser-note" id="site-browser-hint-{{ name }}">{{ t('sites.browser_auth_hint') }}</p>
+            <div class="field">
+              <label class="check-label" for="site-browser-{{ name }}"><input id="site-browser-{{ name }}" name="browser_auth" value="1" type="checkbox" aria-describedby="site-browser-hint-{{ name }}"{% if (d.get('browser_auth') if d else spec.browser_auth) %} checked{% endif %}> {{ t('sites.browser_auth') }}</label>
+              <p class="field-hint browser-note" id="site-browser-hint-{{ name }}">{{ t('sites.browser_auth_hint') }}</p>
+            </div>
             {#- Browser sign-in replaces the password: the fields step aside (CSS) and are disabled
                 (app.js), the server ignores them then, and what is saved stays. -#}
+            <div class="field password-pair">
             <div class="field-row password-group" data-enabled-by="site-browser-{{ name }}" data-enabled-when="unchecked">
               <div class="field"><label for="site-user-{{ name }}">{{ t('sites.login') }}</label><input id="site-user-{{ name }}" class="w-m" name="username" value="{{ d.get('username', login.user) }}" autocomplete="section-site-{{ name }} username"{{ fix_attrs('site_login', name) }}></div>
               <div class="field"><label for="site-pass-{{ name }}">{{ t('sites.password') }}{% if login.password_saved %}{{ saved_hint('site-pass-saved-' ~ name) }}{% endif %}</label><span class="secret"><input id="site-pass-{{ name }}" class="w-m" name="password" type="password" autocomplete="section-site-{{ name }} current-password"{% if login.password_saved %} placeholder="{{ t('web.secret.keep_placeholder') }}" aria-describedby="site-pass-saved-{{ name }} site-keep-{{ name }}"{% endif %}{{ mark('password', bad) }}>{{ reveal('site-pass-' ~ name, t('sites.password')) }}</span></div>
             </div>
             {% if login.password_saved %}{{ keep_note('site-keep-' ~ name) }}{% endif %}
+            </div>
           </div>
           <div class="field"><label for="site-hosts-{{ name }}">{{ t('sites.mirrors') }}</label><textarea id="site-hosts-{{ name }}" class="w-xl" name="fetch_hosts" rows="{{ [[(spec.fetch_hosts or [])|length, 2]|max, 4]|min }}" {{ tech }}{{ mark('fetch_hosts', bad) }}>{{ d.get('fetch_hosts', (spec.fetch_hosts or []) | join('\n')) }}</textarea></div>
           {% set advanced_fields = ('new_name', 'url_regex', 'login_hosts', 'download_path', 'login_path', 'topic_path', 'download_href_regex', 'protection', 'infohash_path') %}

@@ -79,6 +79,7 @@
                     <input id="q_port-{{ c.form_id }}" name="port" value="{{ c.port }}" class="w-xs" type="number" min="1" max="65535" inputmode="numeric">
                   </div>
                 </div>
+                <div class="field">
                 <div class="field-row">
                   {% if 'username' in c.fields %}
                   <div class="field">
@@ -95,7 +96,9 @@
                   </div>
                 </div>
                 {% if c.pass_set %}{{ keep_note('client-keep-' ~ c.form_id) }}{% endif %}
+                </div>
               </fieldset>
+              <div class="stack-2">
               <div class="settings-actions">
                 <button type="submit">{{ t('settings.common.save') }}</button>
                 <button class="ghost" type="submit" form="ping-{{ c.form_id }}" data-keep data-check-saved data-busy-label="{{ t('common.busy.checking') }}"{% if not c.host %} data-needs-address disabled title="{{ t('js.settings.save_address_first') }}"{% endif %}{{ fix_attrs('check_client', c.id) }}>{{ t('settings.common.check') }}</button>
@@ -106,6 +109,7 @@
               </div>
               {% if c.multi and c.default %}<p class="action-hint">{{ t('settings.clients.main_note') }}</p>{% endif %}
               <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved_save_first') }}</p>
+              </div>
             </form>
             <form id="ping-{{ c.form_id }}" method="post" action="/settings/client/ping" data-return-target="client-{{ c.id }}">
               <input type="hidden" name="client_id" value="{{ c.id }}">
@@ -198,6 +202,7 @@
               <fieldset>
                 <legend class="sr-only">{{ t('settings.common.connection_legend', name=n.title) }}</legend>
                 {% set keep_id = 'notifier-keep-' ~ n.kind %}
+                <div class="field">
                 <div class="field-row">
                 {% for f in n.fields %}
                 <div class="field">
@@ -215,7 +220,9 @@
                 {% endfor %}
                 </div>
                 {% if n.fields | selectattr('saved') | list %}{{ keep_note(keep_id) }}{% endif %}
+                </div>
               </fieldset>
+              <div class="stack-2">
               <div class="settings-actions">
                 <button type="submit">{{ t('settings.common.save') }}</button>
                 {% if n.connected %}
@@ -224,6 +231,7 @@
                 {% endif %}
               </div>
               <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved_save_first') }}</p>
+              </div>
             </form>
             {% if n.connected %}
             <form id="notifier-test-{{ n.kind }}" method="post" action="/settings/notifier/{{ n.kind }}/test" data-return-target="acc-bots"></form>
@@ -253,8 +261,10 @@
             <label for="flash_ttl_min">{{ t('settings.intervals.show_undo') }}</label>
             <div class="input-unit"><input id="flash_ttl_min" name="flash_ttl_min" value="{{ flash_ttl_min }}" class="w-xs" type="number" min="1" step="1" inputmode="numeric"><span>{{ t('settings.common.min') }}</span></div>
           </div>
-          <div class="settings-actions"><button type="submit">{{ t('settings.common.save') }}</button></div>
-          <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved') }}</p>
+          <div class="stack-2">
+            <div class="settings-actions"><button type="submit">{{ t('settings.common.save') }}</button></div>
+            <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved') }}</p>
+          </div>
         </form>
       </div>
     </details>
@@ -294,6 +304,7 @@
               <p id="allow-lan-hint">{{ t('settings.access.allow_hint') }}</p>
             </div>
             <div class="form-grid lan-password" data-enabled-by="allow-lan">
+              <div class="field">
               <div class="field-row">
                 <div class="field">
                   <label for="lan-password">{{ t('settings.access.password') }}</label>
@@ -305,6 +316,7 @@
                 </div>
               </div>
               <p class="field-hint"><span id="lan-password-hint">{{ t('settings.access.password_hint') }}</span> <span id="lan-hint-help">{{ t('settings.access.hint_help') }}</span></p>
+              </div>
               <div class="settings-actions"><button type="submit">{{ t('settings.access.save_enable') }}</button></div>
             </div>
           </form>
@@ -325,6 +337,7 @@
                   <span class="secret"><input id="current-password" name="current_password" type="password" class="w-m" autocomplete="current-password" required>{{ reveal('current-password', t('settings.access.current_password')) }}</span>
                 </div>
                 {% endif %}
+                <div class="field">
                 <div class="field-row">
                   <div class="field">
                     {% set new_label = t('settings.access.new_password') %}
@@ -341,13 +354,16 @@
                   </div>
                 </div>
                 <p class="field-hint"><span id="lan-password-hint">{{ t('settings.access.password_hint') }}</span> <span id="lan-hint-help">{{ t('settings.access.hint_help') }}</span></p>
+                </div>
               </fieldset>
               <p class="action-hint">{{ t('settings.access.reset_here') if access_local else t('settings.access.reset_elsewhere') }}</p>
+              <div class="stack-2">
               <div class="settings-actions">
                 <button type="submit">{{ t('settings.access.save_password') }}</button>
                 {% if lan_password_set %}<button type="submit" class="ghost" form="sign-out-everywhere" title="{{ t('settings.access.sign_out_hint') }}">{{ t('settings.access.sign_out_all') }}</button>{% endif %}
               </div>
               <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved') }}</p>
+              </div>
             </form>
             {% if lan_password_set %}<form id="sign-out-everywhere" method="post" action="/settings/sessions/sign-out" data-return-target="acc-access" hidden></form>{% endif %}
             </div>
@@ -489,8 +505,10 @@
               <button type="submit">{{ t('settings.backups.file_save') }}</button>
             </form>
             <form method="post" action="/settings/portable/import" enctype="multipart/form-data" data-return-target="acc-transfer" class="portable-import-form">
-              <label for="portable-backup-file">{{ t('settings.backups.file_choose') }} <code>.towx</code></label>
-              {{ file_input('portable-backup-file', 'backup_file', accept='.towx,application/octet-stream', required=true) }}
+              <div class="field">
+                <label for="portable-backup-file">{{ t('settings.backups.file_choose') }} <code>.towx</code></label>
+                {{ file_input('portable-backup-file', 'backup_file', accept='.towx,application/octet-stream', required=true) }}
+              </div>
               <div class="settings-actions">
                 <button class="ghost" type="submit" name="operation" value="check" data-busy-label="{{ t('common.busy.checking') }}" data-needs-file>{{ t('settings.common.check') }}</button>
                 <button class="ghost" type="submit" name="operation" value="restore" data-confirm="{{ t('settings.backups.file_restore_confirm') }} {{ t('settings.backups.night_restore_access') }}" data-confirm-label="{{ t('settings.common.restore') }}" data-confirm-danger data-busy-label="{{ t('common.busy.restoring') }}" data-needs-file>{{ t('settings.common.restore') }}</button>

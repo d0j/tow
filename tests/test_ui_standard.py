@@ -33,6 +33,11 @@ def _rules(css: str) -> list[tuple[str, str]]:
     return rules
 
 
+def _token(name: str) -> str:
+    """A spacing token's value in rem, from :root (``--sp-3`` -> ``.5625``)."""
+    return re.search(rf"{name}: ([.\d]+)rem;", CSS).group(1)
+
+
 def test_button_height_is_26px_and_text_12_5px():
     assert "--btn-h: 1.625rem;" in CSS  # 26 px
     assert "--btn-h-sm: 1.625rem;" in CSS
@@ -223,13 +228,14 @@ def test_one_form_layout_with_rows_that_wrap_by_the_forms_own_width():
     grid = _first(".form-grid")
     for declaration in ("display: grid", "max-width: 46rem", "container-type: inline-size"):
         assert declaration in grid
-    gap = re.search(r"(?<![\w-])gap: \.(\d+)rem", grid)
-    assert gap
-    assert 8 <= 16 * float("." + gap.group(1)) <= 10
-    assert "gap: .1875rem" in _first(".form-grid .field")  # 3 px
+    # 1.32.3: the spacing tokens (tests/test_ui_spacing.py) - 9 px between groups, 3 px label to field.
+    assert "gap: var(--sp-3)" in grid
+    assert 8 <= 16 * float(_token("--sp-3")) <= 10
+    assert "gap: var(--sp-1)" in _first(".form-grid .field")
+    assert 16 * float(_token("--sp-1")) == 3
     # The older "next field" margins (.field + .field, the compact Settings one) pushed the second
     # field of a row 11 px down (seen in a browser); in the form the gap alone spaces groups.
-    assert _first(".form-grid .field + .field.field").strip() == "margin-top: 0;"
+    assert not [selector for selector, body in _rules(CSS) if ".field + .field" in selector and "margin" in body]
     assert "max-width: 68ch" in _first(".form-grid :is(.field-hint, .action-hint, .section-note, .check-field p)")
     # A panel's intro and notes end where its widest field ends (1.32 QA L1: 440 px beside 576 px).
     assert _first(".settings-panel > p, .support-note").strip() == "max-width: 36rem;"
@@ -615,10 +621,11 @@ def test_one_label_gap_and_one_pair_gap_everywhere():
     """1.32.2: a label sits 3 px above its field on every screen (Settings had its own 2.6 px, a
     field outside a form 4.5 px), a search's label too (it wrapped its field); fields that share a
     line are 12 px apart (the three site-access limits were spread over the whole card)."""
-    assert "gap: .1875rem" in _first(".field")
+    assert "gap: var(--sp-1)" in _first(".field")
     gaps = [(selector, body) for selector, body in _rules(CSS) if re.search(r"\.field$", selector) and "gap" in body]
-    assert all("gap: .1875rem" in body for _, body in gaps), gaps
-    assert "gap: .55rem .75rem" in _first(".field-row")
+    assert all("gap: var(--sp-1)" in body for _, body in gaps), gaps
+    assert "gap: var(--sp-3) var(--sp-4)" in _first(".field-row")  # 9 px when it wraps, 12 px between fields
+    assert (16 * float(_token("--sp-3")), 16 * float(_token("--sp-4"))) == (9, 12)
     assert ".protection-limits .field-row > .field" not in CSS
     for path in sorted(TEMPLATES.glob("*.html")):
         source = path.read_text(encoding="utf-8")
