@@ -68,7 +68,7 @@ def _normalised(page: str) -> str:
     # A time by the one rule (short_time: "20:31" today, "15 Oct, 20:31" another day); the page
     # script's TOW zone, whose offset changes with summer time.
     page = re.sub(r'<time datetime="[^"]*" title="[^"]*" data-short>[^<]*</time>', "<short-time>", page)
-    page = re.sub(r'"_tz_(now|half)": "-?\d+"', r'"_tz_\1": "<offset>"', page)
+    page = re.sub(r'"_tz_now": "-?\d+"', '"_tz_now": "<offset>"', page)
     page = re.sub(r"[\d.,]+ (B|KB|MB|GB|TB) free", "<size> free", page)
     page = re.sub(r'value="tow-[0-9a-f]{12}"', 'value="tow-<random>"', page)
     # Where the tab keeps its recent messages: a hash of this install's folders.

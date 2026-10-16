@@ -31,7 +31,7 @@ from tow.log import check_error_label
 from tow.status import site_check_tone
 from tow.web import _context, services
 from tow.web.messages import message_text, starts_with_name, topic_subject
-from tow.web.text import short_time, t, tm, zone_minutes
+from tow.web.text import short_time, t, tm, zone_minutes, zone_name
 from tow.web.views import attention_view, stored_ui_time
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
@@ -302,15 +302,15 @@ def _languages() -> list[dict[str, str]]:
 def js_texts() -> dict[str, str]:
     """The ``js.*`` texts of app.js in the current language (base.html hands them over as JSON),
     the secret fields' eye (``web.secret.*``), the time words (``time.*``), and - not catalog
-    keys - the language's date pattern (``_datetime``) and TOW's zone for ``towTime``: its UTC
-    offset in minutes now (``_tz_now``) and half a year ago (``_tz_half``)."""
+    keys - the language's date pattern (``_datetime``) and TOW's zone for ``towTime``: its name
+    when known (``_tz_name``, "" else) and its UTC offset in minutes now (``_tz_now``)."""
     return {
         **i18n.texts_with_prefix("js."),
         **i18n.texts_with_prefix("web.secret."),
         **i18n.texts_with_prefix("time."),
         "_datetime": i18n.datetime_pattern(),
+        "_tz_name": zone_name(),
         "_tz_now": str(zone_minutes()),
-        "_tz_half": str(zone_minutes(182 * 86400)),
     }
 
 
