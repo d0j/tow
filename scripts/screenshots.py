@@ -1,11 +1,13 @@
 """The README pictures: Home of a throwaway install with made-up topics, in English and Russian,
 dark and light, 1200 px wide at scale 2.
 
-    uv run --frozen --with playwright python scripts/screenshots.py [--port 18893] [--keep]
+    uv run --frozen --with playwright python scripts/screenshots.py [--port 18893] [--out DIR] [--keep]
 
 The install is a new folder in the temp folder (TOW_ROOT), with config.example.yaml, a fresh
 master key and synthetic topics, history and health only - never a real install, never port
-8787. `tow serve` runs on --port and is stopped at the end; the folder is removed unless --keep.
+8787. Its update checks are off and the browser reaches nothing but the install, so taking the
+pictures asks no one on the internet. `tow serve` runs on --port and is stopped at the end; the
+folder is removed unless --keep.
 Writes docs/images/home-{en,ru}-{dark,light}.png. Playwright needs a Chromium it already has
 (`playwright install chromium` downloads one); without it the script says so and exits 2.
 """
@@ -190,6 +192,11 @@ def shoot(base: str, out: Path, env: dict[str, str]) -> list[Path]:
                     color_scheme=scheme,
                     timezone_id="Europe/Berlin",
                 )
+                # Only the throwaway install: no font, update check or anything else from outside.
+                context.route(
+                    "**/*",
+                    lambda route: route.continue_() if route.request.url.startswith(base + "/") else route.abort(),
+                )
                 page = context.new_page()
                 page.goto(base + "/", wait_until="networkidle")
                 page.add_style_tag(
@@ -225,7 +232,9 @@ def main(argv: list[str] | None = None) -> int:
     env = {key: value for key, value in os.environ.items() if not key.startswith("TOW_")}
     env.update(TOW_ROOT=str(root), PYTHONUTF8="1", TZ="CET-1")  # one made-up zone, not this computer's
     config = (REPO / "config.example.yaml").read_text(encoding="utf-8")
-    (root / "config.yaml").write_text(config + "\nsetup_done: true\nlanguage: auto\n", encoding="utf-8")
+    (root / "config.yaml").write_text(
+        config + "\nsetup_done: true\nlanguage: auto\ncheck_updates: false\n", encoding="utf-8"
+    )
     server = None
     log = None
     try:
