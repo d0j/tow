@@ -23,6 +23,7 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from tow import access
 from tow.config import ConfigError
+from tow.releases import ReleaseProducer
 from tow.snapshots import SnapshotError
 from tow.store import StoreCorruptionError, StoreWriteError
 from tow.web import (
@@ -85,7 +86,13 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     use_private_files()
     use_private_temp()
     protect_install_folders()
-    yield
+    # Release discovery goes on while the server runs, whether or not a page asks (tow.releases).
+    producer = ReleaseProducer()
+    producer.start()
+    try:
+        yield
+    finally:
+        producer.stop()
 
 
 async def _store_corruption(_request: Request, exc: StoreCorruptionError) -> Response:

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import threading
 from concurrent.futures import ThreadPoolExecutor
+from types import MappingProxyType
 
 import httpx
 import pytest
@@ -209,3 +211,41 @@ def test_manual_release_check_does_not_hold_the_site_write_lock(monkeypatch):
     )
     TestClient(app, headers={"Origin": "http://127.0.0.1"}).post("/updates/check")
     assert held == [False]
+
+
+def test_the_cached_answer_never_waits_for_a_check_and_cannot_be_changed(monkeypatch):
+    """A page's poll reads the last published answer: a check waiting for GitHub (its lock held)
+    does not hold it up, and nobody can change the answer another reader holds."""
+    checker = releases.ReleaseChecker()
+    monkeypatch.setattr(releases, "_fetch_latest", lambda: "99.0.0")
+    with checker._lock, ThreadPoolExecutor(1) as pool:
+        found = pool.submit(checker.cached).result(timeout=2)
+    assert found["latest"] == ""
+    assert found["available"] is False
+    assert isinstance(found, MappingProxyType)
+    with pytest.raises(TypeError):
+        found["latest"] = "1.0.0"  # type: ignore[index]
+    checker.check()
+    assert checker.cached()["latest"] == "99.0.0"
+    assert checker.cached()["available"] is True
+    assert found["latest"] == ""  # the earlier answer stays what it was
+    assert checker.cached(enabled=False)["checks_enabled"] is False
+
+
+def test_the_producer_asks_on_its_schedule_until_stopped():
+    asked = threading.Semaphore(0)
+    producer = releases.ReleaseProducer(asked.release, interval=0.01, first_delay=0)
+    producer.start()
+    try:
+        assert asked.acquire(timeout=10)
+        assert asked.acquire(timeout=10)  # again, without any page asking
+    finally:
+        producer.stop()
+    failing = releases.ReleaseProducer(lambda: 1 / 0, interval=0.01, first_delay=0)
+    failing.start()  # a failed turn is logged; the producer goes on
+    try:
+        assert failing._thread is not None
+        threading.Event().wait(0.05)
+        assert failing._thread.is_alive()
+    finally:
+        failing.stop()
