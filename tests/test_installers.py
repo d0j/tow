@@ -1160,6 +1160,9 @@ def test_a_passed_bundle_smoke_ends_with_exit_0():
     code = [line.strip() for line in _code_lines((ROOT / "scripts" / "bundle-smoke.ps1").read_text(encoding="utf-8"))]
     code = [line for line in code if line]
     assert code[-2:] == ["if ($failed) { throw $failed }", "exit 0"]
+    # The refusal run ends early: with exit 0 too (a return ended the script with that code).
+    refused = code.index("Step 'passed: refused before setup, nothing written'")
+    assert code[refused + 1] == "exit 0"
 
 
 @pytest.mark.allow_system
