@@ -25,8 +25,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Settings is one column in the middle of the page instead of the whole window, and the add forms on Home and Sites
   are as wide as their fields.
 - Fields stand out from grey cards; every checkbox has one size and the accent colour; every fold-out (How to connect,
-  Advanced, Technical details…) has the same arrow and a larger target; an intro above the cards runs as wide as the
-  fields; the Log and History read in the page's font; the sign-in field fills its card, also on a small phone.
+  Advanced, Technical details…) has the same arrow and a larger target; an intro above the cards and a hint under a
+  wide field run as wide as the fields; the Log and History read in the page's font; the sign-in field fills its card,
+  also on a small phone.
 - An opened topic or site has one solid button, **Save**. Its buttons stay beside its form; **Remove from TOW** and
   **Remove** sit next to Cancel as quiet red outline buttons, and its other actions (Check access now, Sign in to the
   site, Adopt into TOW) are outline buttons too. Restore buttons in Settings are no longer red.

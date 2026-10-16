@@ -388,6 +388,8 @@ code, .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 }
 .sub { color: var(--mut); font-size: 13px; margin: .2rem 0 .15rem; overflow-wrap: anywhere; }
 .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
+/* A piece of text that never breaks inside (a free space with its " · ", Q4). */
+.nowrap { white-space: nowrap; }
 .card.list { padding: 0; overflow: visible; }
 .list-head, details.row-edit > summary {
   display: grid;
@@ -1270,6 +1272,9 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 /* B1: an intro that is a hint (.action-hint) too: the hints' 68ch rule above outranked the 36 rem
    one (0,2,1 against 0,1,1), so such an intro stopped at 440 px in two lines. */
 .settings-panel > p:is(.action-hint, .support-note) { max-width: 36rem; }
+/* QA Q4: a hint under a .w-xl field (a backup or topic folder) ends where its field ends, not at
+   440 px under a 576 px field (it outranks the 68ch rules above). */
+.field:has(> .w-xl, > .folder-input > .w-xl) > .field-hint { max-width: 36rem; }
 .settings-panel .notice { max-width: 46rem; }
 /* Clients and connected messengers: two open cards side by side on a wide screen, in their own
    order; a folded card takes the whole line. */
