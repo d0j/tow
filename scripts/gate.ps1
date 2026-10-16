@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Runs from any location; works on the checkout that contains this script.
-    Full gate: uv.lock, ruff format + check, mypy, compileall, whitespace of every tracked file,
+    Full gate: uv.lock, ruff format + check, mypy (as this system, Linux and macOS), compileall, whitespace of every tracked file,
     pytest on every core (pytest-xdist) in a random order (the seed is printed) with branch
     coverage and its threshold (pyproject [tool.coverage]), then the wheel smoke. On success it
     records the tree it passed on, so the pre-push hook lets exactly that content through
@@ -236,6 +236,10 @@ try {
     Step 'ruff format' { Invoke-Tool ruff format --check src tests }
     Step 'ruff check' { Invoke-Tool ruff check src tests }
     Step 'mypy' { Invoke-Tool mypy }
+    # The type stubs differ per system (ctypes.WinDLL exists only on Windows): CI's Linux and macOS
+    # gates failed on code this system's mypy passed.
+    Step 'mypy (as Linux)' { Invoke-Tool mypy --platform linux }
+    Step 'mypy (as macOS)' { Invoke-Tool mypy --platform darwin }
     Step 'compileall' { Invoke-Tool python -m compileall -q src tests }
     if ($Staged) {
         Step 'whitespace (staged files)' { git -C $Root diff --cached --check $EmptyTree }
