@@ -90,10 +90,35 @@ class Shortfall:
         )
 
 
-def _on_disk(candidates: Iterable[Path], size: int) -> int:
-    """How many bytes one candidate already reserves; sparse logical length is no proof."""
+def _save_folder(dest: str) -> Path | None:
+    """The save folder as it lies on disk (links and junctions followed), the one every file
+    credited as already there must lie in; None when it cannot be resolved (nothing is credited)."""
+    try:
+        return platform.ordinary_path(platform.long_path(Path(dest)).resolve())
+    except OSError, RuntimeError, ValueError:
+        return None
+
+
+def _inside(folder: Path | None, candidate: Path) -> bool:
+    """``candidate`` lies beneath the resolved save folder once its own path is resolved: a folder
+    link or junction on the way that leads elsewhere (another drive) lends it no bytes. Its name
+    alone is checked before (``safe_relative_path``); a link that stays inside still counts."""
+    if folder is None:
+        return False
+    try:
+        platform.ordinary_path(platform.long_path(candidate).resolve()).relative_to(folder)
+    except OSError, RuntimeError, ValueError:
+        return False
+    return True
+
+
+def _on_disk(candidates: Iterable[Path], size: int, folder: Path | None) -> int:
+    """How many bytes one candidate already reserves; sparse logical length is no proof. Only a
+    candidate inside the resolved save folder ``folder`` is looked at."""
     allocated = 0
     for candidate in candidates:
+        if not _inside(folder, candidate):
+            continue
         known = platform.allocated_file_bytes(candidate)
         if known is not None:
             allocated = max(allocated, min(known, size))
@@ -118,7 +143,8 @@ def _measured(dest: str, wanted: Iterable[tuple[tuple[Path, ...], int, int]]) ->
         return True, None
     if not seen_from_here(dest):
         return False, None  # /downloads of a remote client, or a drive this PC does not have
-    needed -= sum(min(size, max(done, _on_disk(where, size))) for where, size, done in items)
+    folder = _save_folder(dest) if any(where for where, _size, _done in items) else None
+    needed -= sum(min(size, max(done, _on_disk(where, size, folder))) for where, size, done in items)
     if needed <= 0:
         return True, None
     probe = Path(dest)

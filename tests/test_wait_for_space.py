@@ -551,6 +551,56 @@ def test_unsafe_client_file_names_never_credit_bytes_outside_the_folder(tmp_path
     assert probed == [dest / "Show" / "e01.mkv"]
 
 
+def _link_folder(target, link) -> None:
+    """``link`` leads to the folder ``target``: a junction on Windows (no privilege needed), a
+    symbolic link elsewhere."""
+    import os
+    import sys
+
+    if sys.platform == "win32":
+        import _winapi
+
+        _winapi.CreateJunction(str(target), str(link))
+        return
+    try:
+        os.symlink(target, link, target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"symbolic links unavailable: {exc}")
+
+
+@pytest.mark.parametrize("add", [False, True], ids=["client", "add"])
+def test_a_folder_link_that_leads_out_of_the_save_folder_lends_no_bytes(tmp_path, monkeypatch, add):
+    # Final review of 1.32.1: the name "Show/e01.mkv" is a plain one, but Show is a link (a junction
+    # on Windows) to another drive's folder: its e01.mkv there counted as already downloaded, and
+    # a torrent waiting for room could start without it. A link that stays inside still counts.
+    from tow.check.apply import free_space_problem
+
+    dest = tmp_path / "TV"
+    dest.mkdir()
+    elsewhere = tmp_path / "other drive"
+    elsewhere.mkdir()
+    (elsewhere / "e01.mkv").write_bytes(b"0" * 8192)
+    _link_folder(elsewhere, dest / "Show")
+    (dest / "Real").mkdir()
+    (dest / "Real" / "e02.mkv").write_bytes(b"0" * 4096)
+    _link_folder(dest / "Real", dest / "Alias")
+    monkeypatch.setattr("shutil.disk_usage", lambda _path: SimpleNamespace(free=0))
+    if add:
+        files = (TorrentFile(0, "Show/e01.mkv", 8192), TorrentFile(1, "Alias/e02.mkv", 4096))
+        short = free_space_problem(str(dest), files, {0, 1})
+    else:
+        info = {
+            "files": [
+                {"index": 0, "name": "Show/e01.mkv", "size": 8192, "priority": 1, "progress": 0},
+                {"index": 1, "name": "Alias/e02.mkv", "size": 4096, "priority": 1, "progress": 0},
+            ]
+        }
+        known, short = space._measured(str(dest), space._client_wanted(info, str(dest)))
+        assert known
+    assert short is not None
+    assert short.needed == 8192  # the file elsewhere is still to download; the one inside is there
+
+
 # --- the add and edit forms' free-space hint ------------------------------------------------------
 
 
