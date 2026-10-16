@@ -243,7 +243,53 @@ def test_a_sign_in_target_on_a_site_without_a_sign_in_page_opens_advanced(client
 def test_the_regex_placeholders_show_single_backslashes(client):
     page = BeautifulSoup(client.get("/sites").text, "html.parser")
     for field in page.select('[name="download_href_regex"]'):
-        assert field["placeholder"] == r"download\.php\?id=(\d+)"
+        assert field["placeholder"] == r"Напр. download\.php\?id=(\d+)"
+
+
+TECHNICAL_SITE_FIELDS = (
+    "from_url",
+    "name",
+    "new_name",
+    "fetch_hosts",
+    "url_regex",
+    "download_path",
+    "login_path",
+    "topic_path",
+    "download_href_regex",
+    "login_hosts",
+    "infohash_path",
+)
+
+
+def test_site_forms_say_the_code_rule_in_the_label_and_mark_examples(client):
+    """1.32.1 T1-u, PH1, §4.4: the site code had a long sentence under it; its label now carries the
+    rule ("Site code · a–z, 0–9, _"), the sentence stays for screen readers, the pattern's title and
+    the server's refusal. Example placeholders say "e.g."; the download path's real default is
+    said as text, not shown as a grey value. Technical fields switch off phone corrections."""
+    page = BeautifulSoup(client.get("/sites?open=rutor").text, "html.parser")
+    for code in ("site-name", "site-new-name-rutor"):
+        field = page.select_one(f"#{code}")
+        assert page.select_one(f'label[for="{code}"]').get_text() == "Код сайта · a–z, 0–9, _"
+        hint = page.select_one(f"#{field['aria-describedby']}")
+        assert "sr-only" in hint["class"]
+        assert hint.get_text() == field["title"]
+        assert "латинские" in field["title"]
+    assert page.select_one("#site-name")["placeholder"] == "Напр. rutor"
+    examples = ("site-hosts", "site-regex", "site-login-path", "site-topic-path", "site-href-rx")
+    examples += ("site-login-path-rutor", "site-topic-path-rutor", "site-href-rx-rutor", "site-infohash-rutor")
+    for name in examples:
+        assert page.select_one(f"#{name}")["placeholder"].startswith("Напр. "), name
+    download = page.select_one("#site-dl")
+    assert not download.has_attr("placeholder")
+    assert page.select_one(f"#{download['aria-describedby']}").get_text() == "По умолчанию: /download/{id}"
+    fields = page.select(", ".join(f'[name="{name}"]' for name in TECHNICAL_SITE_FIELDS))
+    assert len(fields) >= 2 * len(TECHNICAL_SITE_FIELDS) - 3  # the add form has no login hosts/new name/hash path
+    for field in fields:
+        assert (field.get("autocapitalize"), field.get("autocorrect"), field.get("spellcheck")) == (
+            "off",
+            "off",
+            "false",
+        ), field["id"]
 
 
 def test_an_empty_history_search_offers_the_way_back_and_no_storage_note(client):

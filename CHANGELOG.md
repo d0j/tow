@@ -75,6 +75,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Sites no longer labels every row "No sign-in needed" or "Sign-in not set". A row says **Saved sign-in
   details** when a login is stored, and **Sign-in required** (amber) only after a check or a probe saw the site
   ask for it; otherwise it says nothing.
+- The Sites forms say less: the site code's label carries its rule ("Site code · a–z, 0–9, _") instead of a
+  sentence under the field, example placeholders start with "e.g.", the torrent file path says "Default:
+  /download/{id}" instead of showing it as a grey value, and a phone no longer capitalises or corrects addresses,
+  paths and patterns.
 
 ### Fixed
 

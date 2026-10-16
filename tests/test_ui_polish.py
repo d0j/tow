@@ -334,7 +334,10 @@ def test_site_download_path_starts_empty_so_a_pasted_link_fills_it(client, monke
     field = re.search(r'<input id="site-dl"[^>]*>', page)
     assert field is not None
     assert 'value=""' in field.group(0)
-    assert 'placeholder="/download/{id}"' in field.group(0)
+    # 1.32.1 PH1: the default is said as text under the field, not shown as a grey value.
+    assert "placeholder" not in field.group(0)
+    assert 'aria-describedby="site-dl-hint"' in field.group(0)
+    assert '<p class="field-hint" id="site-dl-hint">По умолчанию: /download/{id}</p>' in page
     # What the browser posts after the guess fills it, and an empty field without a link.
     client.post("/sites/new", data={"from_url": "https://tracker-qa.example/viewtopic.php?t=101", "download_path": ""})
     assert load_config()["trackers"]["tracker_qa"]["download_path"] == "/download.php?id={id}"
@@ -353,7 +356,10 @@ def test_site_name_field_says_its_rule_before_the_browser_refuses_it(client):
     assert field is not None
     assert f'title="{rule}"' in field.group(0)
     assert 'aria-describedby="site-name-hint"' in field.group(0)
-    assert f'<p class="field-hint" id="site-name-hint">{rule}</p>' in page
+    # 1.32.1 T1-u: the label says the rule short ("a–z, 0–9, _"); the sentence stays for a screen
+    # reader (aria-describedby), the browser's refusal (title) and the server's.
+    assert f'<p class="sr-only" id="site-name-hint">{rule}</p>' in page
+    assert '<label for="site-name">Код сайта · a–z, 0–9, _</label>' in page
     edit = re.search(r'<input id="site-new-name-[^"]+"[^>]*>', page)
     assert edit is not None
     assert f'title="{rule}"' in edit.group(0)
