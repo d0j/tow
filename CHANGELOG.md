@@ -178,6 +178,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   looked only at the old folder, then said "pyvenv.cfg is missing", and a copy used the original's Python.
 - `install.sh` run in a Terminal under Rosetta on an Apple silicon Mac installs the Apple silicon uv and
   Python, not the Intel ones that needed the Intel Mac's developer tools.
+- `install.sh` on a system whose only `wget` is BusyBox's says at once to install `curl`, before it writes
+  anything: before, every download failed as "has no SHA256SUMS" or "could not find the latest release".
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password

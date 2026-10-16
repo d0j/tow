@@ -98,13 +98,29 @@ main() {
 
     # --- helpers -----------------------------------------------------------------------------------
 
-    fetch() { # URL FILE
+    # curl, else a wget that has the options below (GNU wget); BusyBox's has neither, and TOW
+    # does not download with less. Asked once, before anything is written.
+    downloader() {
+        getter=
         if command -v curl >/dev/null 2>&1; then
-            curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$2" "$1"
+            getter=curl
         elif command -v wget >/dev/null 2>&1; then
-            wget -q --https-only -O "$2" "$1"
+            wget_help=$(wget --help 2>&1 || true)
+            case $wget_help in
+                *--https-only*) case $wget_help in *--max-redirect*) getter=wget ;; esac ;;
+            esac
+            [ -n "$getter" ] ||
+                die "this wget (BusyBox?) cannot keep the downloads to HTTPS: install curl, then run the installer again"
         else
             die "curl or wget is needed"
+        fi
+    }
+
+    fetch() { # URL FILE
+        if [ "$getter" = curl ]; then
+            curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$2" "$1"
+        else
+            wget -q --https-only -O "$2" "$1"
         fi
     }
 
@@ -126,7 +142,7 @@ main() {
 
     latest_tag() {
         url=https://github.com/$REPO/releases/latest
-        if command -v curl >/dev/null 2>&1; then
+        if [ "$getter" = curl ]; then
             location=$(curl -fsSLI --proto '=https' -o /dev/null -w '%{url_effective}' "$url")
         else
             location=$(wget -q -S --max-redirect=0 -O /dev/null "$url" 2>&1 | sed -n 's/^ *[Ll]ocation: *//p' | tr -d '\r' | tail -n 1)
@@ -229,6 +245,7 @@ main() {
         die "$dir has data without a TOW install marker: use --adopt-data only if it is your old TOW folder"
     [ "$kept" = no ] || say "found the data of an earlier TOW in $dir: it is kept"
     command -v tar >/dev/null 2>&1 || die "tar is needed"
+    downloader
 
     arch=$(uname -m)
     # A Terminal under Rosetta says x86_64 on an Apple silicon Mac: its native uv and Python run

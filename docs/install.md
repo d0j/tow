@@ -91,7 +91,8 @@ Keep the `TOW` folder and the folders your torrents download into out of **Docum
 
 ## Linux
 
-Any 64-bit distribution (x86-64 or ARM, a Raspberry Pi with a 64-bit system too) with `curl` (or `wget`) and `tar`.
+Any 64-bit distribution (x86-64 or ARM, a Raspberry Pi with a 64-bit system too) with `curl` (or GNU `wget`; BusyBox's
+`wget` is not enough) and `tar`.
 
 1. Open a terminal: on Ubuntu press **Ctrl + Alt + T**; elsewhere find **Terminal** in the applications menu.
 2. Paste this line and press **Enter**:

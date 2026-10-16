@@ -252,6 +252,50 @@ def _sh_uv_version() -> str:
     return match.group(1)
 
 
+_BUSYBOX_WGET = (
+    'case $1 in --help) echo "BusyBox v1.36.1 (2024-06-10) multi-call binary."\n'
+    'echo "Usage: wget [-cqS] [--spider] [-O FILE] [-o LOGFILE] [--header STR] [-T SEC] URL..." ;;\n'
+    '*) printf "%s\\n" "$*" >>"$(dirname "$0")/../wget.log"; echo "wget: unrecognized option" >&2; exit 1 ;; esac'
+)
+_GNU_WGET = (
+    'case $1 in --help) echo "GNU Wget 1.24.5, a non-interactive network retriever."\n'
+    'echo "       --max-redirect              maximum redirections allowed per page"\n'
+    'echo "       --https-only                only follow secure HTTPS links" ;;\n'
+    '*) printf "%s\\n" "$*" >>"$(dirname "$0")/../wget.log"\n'
+    'case "$*" in *--max-redirect=0*)\n'
+    'echo "  Location: https://github.com/d0j/tow/releases/tag/v9.9.9" >&2; exit 8 ;; esac\n'
+    "exit 8 ;; esac"
+)
+
+
+@pytest.mark.allow_system  # install.sh with a stub wget and no curl in a temp folder; no download happens
+@pytest.mark.parametrize("version", [("--version", "v9.9.8"), ()], ids=["release-files", "latest-tag"])
+def test_install_sh_asks_for_curl_when_wget_cannot_keep_to_https(tmp_path, version):
+    # BusyBox wget has no --https-only and no --max-redirect: every download failed as "release
+    # ... has no SHA256SUMS" or "could not find the latest release", which pointed nowhere.
+    stubs = {"uname": _MAC_UNAME.format(arch="arm64"), "wget": _BUSYBOX_WGET}
+    done = _install_sh(tmp_path, stubs, *version, source=False)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert "install curl" in done.stderr, done.stdout + done.stderr
+    assert not (tmp_path / "wget.log").exists()  # refused before any download, with no weaker one
+    assert not (tmp_path / "TOW").exists()
+
+
+@pytest.mark.allow_system  # install.sh with a stub GNU wget and no curl in a temp folder; downloads fail
+@pytest.mark.parametrize("version", [("--version", "v9.9.8"), ()], ids=["release-files", "latest-tag"])
+def test_install_sh_keeps_gnu_wget_on_https(tmp_path, version):
+    done = _install_sh(tmp_path, {"uname": _MAC_UNAME.format(arch="arm64"), "wget": _GNU_WGET}, *version, source=False)
+    assert done.returncode == 1, done.stdout + done.stderr
+    tag = version[1] if version else "v9.9.9"  # the latest one from its redirect
+    assert f"release {tag} has no SHA256SUMS" in done.stderr, done.stdout + done.stderr
+    calls = (tmp_path / "wget.log").read_text(encoding="utf-8").splitlines()
+    if not version:
+        assert calls[0] == "-q -S --max-redirect=0 -O /dev/null https://github.com/d0j/tow/releases/latest"
+    assert calls[-1].startswith("-q --https-only -O ")
+    assert calls[-1].endswith(f" https://github.com/d0j/tow/releases/download/{tag}/SHA256SUMS")
+    assert not (tmp_path / "TOW").exists()
+
+
 @pytest.fixture
 def stub_install(tmp_path) -> Path:
     """An install whose tow launcher only writes down what it was asked."""
