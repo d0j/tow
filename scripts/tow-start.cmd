@@ -15,6 +15,11 @@ if exist "%TOW_ROOT%\.update-switch.json" set "TOW_CUT=1"
 if defined TOW_CUT "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$d = $env:TOW_ROOT; try { $j = Get-Content -LiteralPath (Join-Path $d '.update-switch.json') -Raw | ConvertFrom-Json; if ($j.phase -eq 'accepted' -or $j.restored -eq $true) { exit 0 } } catch {}; try { $f = [IO.File]::Open((Join-Path $d '.update.lock'), 'Open', 'ReadWrite', 'ReadWrite') } catch { exit 3 }; try { $f.Lock(0, 1) } catch { $f.Close(); exit 0 }; $f.Unlock(0, 1); $f.Close(); exit 3" >nul 2>&1 && set "TOW_CUT="
 if defined TOW_CUT echo TOW was not started: an update was cut off while it replaced the code in "%TOW_ROOT%". Run "Update TOW.cmd" there again: it puts the previous version back first.
 if defined TOW_CUT exit /b 3
+rem docs/PORTABLE.md 3: Windows loads no program or library (.exe, .dll, .pyd) whose full path reaches
+rem 251 characters, long paths on or off; the deepest one TOW loads lies 76 characters below the folder
+rem (scripts/bundle-smoke.ps1 measures it). Said before any Python of the folder runs; no setup then.
+if not "%TOW_ROOT:~172,1%"=="" echo TOW cannot run from "%TOW_ROOT%": the path of this folder is longer than 172 characters, and Windows cannot load TOW's programs from there, even with long paths on. Move the folder to a shorter path such as C:\TOW (docs/PORTABLE.md, section 3).
+if not "%TOW_ROOT:~172,1%"=="" exit /b 3
 set "TOW_READY="
 set "TOW_PREPARED="
 set "TOW_HERE=%TOW_ROOT%"
@@ -34,7 +39,7 @@ if not defined TOW_READY set "UV_OFFLINE=1"
 if not defined TOW_READY call "%%~dp0tow-setup.cmd"
 if not defined TOW_READY if not errorlevel 1 set "TOW_READY=1"
 set "UV_OFFLINE="
-if not defined TOW_READY echo The packages inside this folder were not enough: downloading them from the internet...
+if not defined TOW_READY echo Preparing TOW without the internet did not work (the reason is above): trying again with the internet...
 if not defined TOW_READY call "%%~dp0tow-setup.cmd"
 if not defined TOW_READY if not errorlevel 1 set "TOW_READY=1"
 if not defined TOW_READY echo TOW could not be prepared: the reason is above.

@@ -143,6 +143,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The Windows start, stop and setup files work in a folder whose path has `%`, `^` or `!` (for example
   `TOW 50%`), also when delayed expansion is turned on for the command prompt. The installer refuses only a folder
   Windows itself cannot start a file from (two `%`, two `!`, or a `^` with a `!`) before it writes anything.
+- On Windows a TOW folder whose path is longer than 172 characters is refused at once, with the reason, by the
+  start file, `tow.cmd setup` and the installer, also with long paths turned on: Windows cannot load programs from
+  there. Before, setup failed deep inside, blamed "the packages" and went to the internet. A failed setup without
+  the internet no longer blames the packages, and the installer no longer needs room for a staging folder.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password

@@ -447,6 +447,74 @@ def test_the_windows_start_script_warns_of_a_long_folder_without_long_paths(tmp_
         assert (warning in done.stdout) is long, done.stdout + done.stderr
 
 
+WINDOWS_ROOT_LIMIT = 172  # docs/PORTABLE.md 3; measured by scripts/bundle-smoke.ps1
+
+
+def _root_of_length(base: Path, length: int) -> Path:
+    """A folder ``<base>\\<padding>\\TOW`` whose path is exactly ``length`` characters."""
+    padding = length - len(str(base)) - len("\\TOW") - 1
+    assert padding > 0, "the temp folder itself is too long"
+    root = base / ("L" * padding) / "TOW"
+    assert len(str(root)) == length
+    return root
+
+
+@pytest.mark.allow_system  # the Windows start and setup scripts in temp installs; no uv, no Python
+@pytest.mark.skipif(os.name != "nt", reason="cmd.exe")
+@pytest.mark.parametrize("length", [WINDOWS_ROOT_LIMIT, WINDOWS_ROOT_LIMIT + 1])
+def test_the_windows_scripts_refuse_a_folder_too_long_for_windows_programs_before_python(tmp_path, length):
+    # QA 16.10.2026: with long paths on, a folder of 185 characters passed every check; setup then
+    # failed inside uv (0xc0000106), "the packages were not enough", and TOW went to the internet.
+    # Windows loads no program or library whose full path reaches 251 characters (measured).
+    import shutil
+    import subprocess
+
+    refusal = f"the path of this folder is longer than {WINDOWS_ROOT_LIMIT} characters"
+    root = _root_of_length(tmp_path, length)
+    shutil.copytree(ROOT / "scripts", root / "app" / "scripts")
+    (root / "data").mkdir()
+    (root / "config.yaml").write_text("port: 18999\n", encoding="utf-8")
+    output = _start_script(root)  # exit 3 either way: refused, or no uv to prepare with
+    too_long = length > WINDOWS_ROOT_LIMIT
+    assert (refusal in output) is too_long, output
+    assert ("Preparing TOW" in output) is not too_long, output  # nothing of the folder ran
+    assert ("uv was not found" in output) is not too_long, output  # setup was never started
+    assert ("internet" in output) is not too_long, output  # no download tried for a refused folder
+    env = {key: value for key, value in os.environ.items() if not key.startswith(("TOW_", "UV_"))}
+    env["PATH"] = os.path.join(os.environ.get("SYSTEMROOT", r"C:\Windows"), "System32")
+    argv = ["cmd.exe", "/d", "/c", str(root / "app" / "scripts" / "tow.cmd"), "setup"]
+    done = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=120, check=False)
+    assert done.returncode == 3, done.stdout + done.stderr
+    assert (refusal in done.stdout + done.stderr) is too_long, done.stdout + done.stderr
+    assert ("uv was not found" in done.stdout + done.stderr) is not too_long
+
+
+def test_the_windows_folder_limit_is_one_number_everywhere():
+    start = (ROOT / "scripts" / "tow-start.cmd").read_text(encoding="utf-8")
+    setup = (ROOT / "scripts" / "tow-setup.cmd").read_text(encoding="utf-8")
+    check = f'if not "%TOW_ROOT:~{WINDOWS_ROOT_LIMIT},1%"=="" '
+    for text in (start, setup):
+        assert f"{check}echo TOW cannot run from" in text
+        assert f"{check}exit /b 3" in text
+    # before any Python of the folder runs: the readiness probe, setup's uv and Python
+    assert start.index(f"{check}exit /b 3") < start.index('.venv\\Scripts\\python.exe" -c')
+    assert setup.index(f"{check}exit /b 3") < setup.index('"%TOW_UV%" --version')
+    installer = (ROOT / "install" / "install.ps1").read_text(encoding="utf-8")
+    assert f"$Dir.Length -gt {WINDOWS_ROOT_LIMIT})" in installer
+    assert installer.index(f"$Dir.Length -gt {WINDOWS_ROOT_LIMIT})") < installer.index("New-Item -ItemType Directory")
+    smoke = (ROOT / "scripts" / "bundle-smoke.ps1").read_text(encoding="utf-8")
+    assert "TOW_ROOT:~(\\d+),1" in smoke  # the smoke reads the limit from the bundle's own start file
+    for doc in ("docs/PORTABLE.md", "docs/install.md", "docs/ru/install.md"):
+        assert f"{WINDOWS_ROOT_LIMIT} " in (ROOT / doc).read_text(encoding="utf-8"), doc
+
+
+def test_an_offline_setup_that_failed_is_not_blamed_on_the_packages():
+    # A failed offline setup said "the packages inside this folder were not enough" whatever failed.
+    text = (ROOT / "scripts" / "tow-start.cmd").read_text(encoding="utf-8")
+    assert "were not enough" not in text
+    assert "Preparing TOW without the internet did not work" in text
+
+
 @pytest.mark.allow_system  # the platform's launcher in a temp install; it ends before uv (none on PATH)
 @pytest.mark.parametrize(
     ("record", "args", "refused"),

@@ -7,6 +7,9 @@ setlocal DisableDelayedExpansion
 if /i "%~1"=="setup" shift /1
 if not "%~1"=="" (echo Usage: tow.cmd setup ^(no options^): Python and TOW's environment inside the install; run it with TOW stopped.& exit /b 2)
 call "%%~dp0tow-env.cmd"
+rem The folder limit of tow-start.cmd (docs/PORTABLE.md 3): uv and Python would fail inside.
+if not "%TOW_ROOT:~172,1%"=="" echo TOW cannot run from "%TOW_ROOT%": the path of this folder is longer than 172 characters, and Windows cannot load TOW's programs from there, even with long paths on. Move the folder to a shorter path such as C:\TOW (docs/PORTABLE.md, section 3).
+if not "%TOW_ROOT:~172,1%"=="" exit /b 3
 set "TOW_REBUILD="
 "%TOW_UV%" --version >nul 2>&1 || echo TOW setup: uv was not found. Put uv.exe into "%TOW_ROOT%\runtime\bin" or on PATH.
 "%TOW_UV%" --version >nul 2>&1 || exit /b 3

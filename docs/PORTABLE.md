@@ -383,6 +383,14 @@ gone, so Diagnostics, Settings → TOW service, `tow status` and `tow doctor` sa
   110 characters lets paths deep in `app\.venv` pass the 260-character limit, and setup or a
   package import fails. Choose a shorter folder, or enable long paths. `install.ps1` refuses such
   a folder before it writes anything, and the Windows start file says so before it prepares TOW.
+- Windows, long paths on or off: no program or library (`.exe`, `.dll`, `.pyd`) loads from a full
+  path of 251 characters or more (measured on Windows 11), and the deepest one TOW loads lies 76
+  characters below the folder (`runtime\python\cpython-3.14.8-…\DLLs\_remote_debugging.pyd`), so
+  the folder path must stay within 172 characters. `install.ps1`, the start file and
+  `tow.cmd setup` refuse a longer folder before any of its Python runs (exit 3, no download);
+  `scripts/bundle-smoke.ps1` measures the deepest library of every built bundle against that
+  limit. `install.ps1` unpacks the zip straight into the folder, so unpacking needs no more room
+  than the install itself.
 - Windows reads the path of a start file it is given (a double-click, `install.ps1`'s start, a
   full path typed in a terminal) before the file runs: two `%` signs may name a variable, and with
   delayed expansion on (`DelayedExpansion` in the registry) two `!` signs too, or a `!` turns a `^`
