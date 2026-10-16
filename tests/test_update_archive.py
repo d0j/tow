@@ -756,6 +756,109 @@ def test_a_new_version_that_does_not_answer_puts_the_previous_code_back(install,
     assert "the previous version is back and answers" in lines
 
 
+@pytest.fixture(autouse=True)
+def paused(monkeypatch) -> list[float]:
+    """The pauses between rename attempts, recorded instead of slept."""
+    pauses: list[float] = []
+    monkeypatch.setattr(updater, "_pause", pauses.append, raising=False)
+    return pauses
+
+
+def _held(monkeypatch, times: int, matches) -> list[str]:
+    """os.replace refuses a matching rename ``times`` times, as Windows does for a held file."""
+    real = updater.os.replace
+    refused: list[str] = []
+
+    def held(source, destination):
+        if matches(Path(source), Path(destination)) and len(refused) < times:
+            refused.append(Path(source).name)
+            error = PermissionError(13, "The process cannot access the file")
+            error.winerror = 32  # type: ignore[attr-defined]
+            raise error
+        return real(source, destination)
+
+    monkeypatch.setattr(updater.os, "replace", held)
+    return refused
+
+
+def test_a_file_held_for_a_moment_during_the_switch_is_waited_for(install, github, monkeypatch, paused):
+    # QA 16.10.2026: each rename of the switch ran once; an antivirus scan of a file made the whole
+    # update fail and roll back (the git switch tries six times).
+    github.release("v1.23.0", tarball("1.23.0"))
+    machine = Machine(install["app"], github)
+    refused = _held(monkeypatch, 2, lambda source, _to: source.parent.name == "app.new")
+    code, lines = run(machine, "v1.23.0")
+    assert code == 0, lines
+    assert len(refused) == 2
+    assert paused == [updater.REPLACE_PAUSE] * 2
+    assert "marker-1.23.0" in names(install["app"])
+    assert leftovers(install) == []
+
+
+@pytest.mark.parametrize("held", ["journal", "staging", "runtime copy"])
+def test_the_switch_record_staging_and_updater_copy_wait_for_a_held_file(install, github, monkeypatch, held, paused):
+    github.release("v1.23.0", tarball("1.23.0"))
+    machine = Machine(install["app"], github)
+    matches = {
+        "journal": lambda _source, target: target.name == ".update-switch.json",
+        "staging": lambda _source, target: target.name == "app.new",
+        "runtime copy": lambda _source, target: target.parent.name == "runtime" and target.name == "update.py",
+    }[held]
+    refused = _held(monkeypatch, 2, matches)
+    code, lines = run(machine, "v1.23.0")
+    assert code == 0, lines
+    assert len(refused) == 2
+    assert len(paused) == 2
+
+
+def test_a_recovery_waits_for_a_held_file_and_can_run_again(install, github, monkeypatch, paused):
+    # A switch cut off after two moves; the recovery's renames are refused twice, then go through.
+    github.release("v1.23.0", tarball("1.23.0"))
+    machine = Machine(install["app"], github)
+    monkeypatch.setenv(updater.TEST_CUT_SWITCH, "4")
+
+    def exit_now(_code: int) -> None:
+        raise Crash()
+
+    monkeypatch.setattr(updater.os, "_exit", exit_now)
+    killed(monkeypatch)
+    with pytest.raises(Crash):
+        run(machine, "v1.23.0")
+    monkeypatch.delenv(updater.TEST_CUT_SWITCH)
+    assert names(install["root"] / "app.prev") == [".venv", "marker-1.22.0", "pyproject.toml"]
+    refused = _held(monkeypatch, 2, lambda source, _to: source.parent.name == "app.prev")
+    code = _archive_code(machine).recover_pending()
+    assert code == "restored"
+    assert len(refused) == 2
+    assert len(paused) == 2
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+    assert _archive_code(machine).recover_pending() is None  # again: nothing left to do
+
+
+def _archive_code(machine):
+    return updater.ArchiveCode(updater.Update(machine, "v1.23.0", say=lambda _line: None))
+
+
+def test_a_rename_held_too_long_gives_up_with_its_own_error(tmp_path, monkeypatch, paused):
+    source, target = tmp_path / "a", tmp_path / "b"
+    source.write_text("x", encoding="utf-8")
+    with pytest.raises(FileNotFoundError):  # another error is not waited for
+        updater.replace(tmp_path / "missing", target)
+    assert paused == []
+    refused = _held(monkeypatch, 1000, lambda *_paths: True)
+    with pytest.raises(PermissionError):
+        updater.replace(source, target)
+    assert len(refused) == updater.REPLACE_TRIES
+    assert len(paused) == updater.REPLACE_TRIES - 1
+    # the run's budget bounds every rename together
+    monkeypatch.setattr(updater, "_replace_waited", [updater.REPLACE_BUDGET])
+    paused.clear()
+    refused.clear()
+    with pytest.raises(PermissionError):
+        updater.replace(source, target)
+    assert (len(refused), paused) == (1, [])
+
+
 def test_a_switch_cut_off_halfway_is_undone_exactly(install, github, monkeypatch):
     github.release("v1.23.0", tarball("1.23.0"))
     machine = Machine(install["app"], github)
