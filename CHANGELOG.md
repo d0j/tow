@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.32.1] — 2026-10-16
+
 ### Security
 
 - The sign-in and first-start pages no longer tell anyone on the network the time zone of the computer TOW runs
