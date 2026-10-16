@@ -88,7 +88,11 @@ TOW itself on every start, not only by `tow-env.cmd`). `secret_store_status()["k
 Temp (built): `tow.paths.use_private_temp()` at process start — `tow.cli.main` (every command,
 `tow serve` included) and the web app's lifespan (for `uvicorn tow.web:app` started by something
 else) — sets `tempfile.tempdir = <data>/tmp` and `TMP`/`TEMP`/`TMPDIR` for child processes, and
-removes entries older than a day. Other writers use `dir=` inside data/ (store, the autostart
+removes TOW's own leftovers there (a browser backup or restore folder, a task XML, a protection
+reset, the content cache, Python's `tmp*` files) unchanged for a day; other programs' files there
+are never removed, since age does not prove they are unused. uv's own temporary files (its lock
+files) go to `<TOW>/runtime/uv-tmp` instead, during setup and an update's `uv sync` only, and are
+never swept. Other writers use `dir=` inside data/ (store, the autostart
 task XML, the browser bundle routes).
 
 Permissions (1.21): at the same place `tow.platform.use_private_files()` sets umask 077 on Linux
@@ -297,7 +301,8 @@ blocks for long.
   operation on `data/service-restart.json`: stopping → starting → ready/failed; a new server that
   exits three times before it answers is "failed"); `tow stop` and the updater stop TOW. A stop
   lets a running job finish (up to 10 minutes, then it is stopped), then stops the web server and
-  exits 0. SIGTERM (systemd, launchd), SIGHUP (its terminal closed), Ctrl+C and, on Windows,
+  exits 0. SIGTERM (systemd, launchd), SIGHUP (its terminal closed; a hangup that is already ignored, as under `nohup tow run &`,
+  stays ignored and TOW keeps running), Ctrl+C and, on Windows,
   Ctrl+Break (SIGBREAK) stop it the same
   way with a 20-second job limit (all in all about 50 s: `SIGNAL_STOP_BUDGET_SEC`, which systemd's `TimeoutStopSec` and launchd's
   `ExitTimeOut` exceed).
