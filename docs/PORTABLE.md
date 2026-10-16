@@ -138,7 +138,8 @@ Prerequisites (1.22):
   are inside; the first start is offline). `install.ps1` refuses 32-bit Windows and Windows on
   ARM (also from an x64-emulated or 32-bit PowerShell there) before it writes anything: the zip
   holds x64 programs. `install.ps1` / `install.sh`: the network once (GitHub; on Linux and macOS also
-  Python's and the wheels' downloads by uv), `curl` or `wget`, `tar` and a SHA-256 tool on
+  Python's and the wheels' downloads by uv), `curl` or GNU `wget` (BusyBox's `wget` cannot keep the downloads to
+  HTTPS: the installer asks for `curl`), `tar` and a SHA-256 tool on
   Linux and macOS.
 - a git install: `git` (`tow update` switches tags), `uv` ≥ 0.12 (`[tool.uv]
   required-version`; on PATH or `<TOW>/runtime/bin/uv`), the network once for `tow setup`
