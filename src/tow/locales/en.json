@@ -2267,6 +2267,10 @@
     }
   },
   "web": {
+    "file": {
+      "choose": "Choose a file",
+      "none": "No file chosen"
+    },
     "data_unavailable": "TOW data is unavailable; check the installation on this computer",
     "data_busy": "TOW could not write its data file just now — another program may be keeping it open (an antivirus or a backup tool). Try again in a moment.",
     "config_unreadable": {

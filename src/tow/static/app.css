@@ -1037,6 +1037,19 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
   cursor: pointer; font: inherit;
 }
 .portable-import-form .settings-actions { margin-top: 0; }
+/* B2: a file field in the page's language (_file.html): the browser's own field until app.js is
+   ready, then a button-like label and the file's name; the field itself still takes the focus. */
+.file-pick { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; min-width: 0; max-width: 100%; }
+.file-pick > .file-button, .file-pick > .file-name { display: none; }
+.file-pick[data-ready] { position: relative; }
+.file-pick[data-ready] > .file-native {
+  position: absolute; left: 0; top: 0; width: 1px; height: 1px; padding: 0; margin: 0; border: 0;
+  opacity: 0; overflow: hidden; clip-path: inset(50%);
+}
+.file-pick[data-ready] > .file-button { display: inline-flex; margin: 0; }
+.file-pick[data-ready] > .file-name { display: inline; min-width: 0; color: var(--mut); font-size: 12.5px; overflow-wrap: anywhere; }
+.file-pick[data-ready] > .file-name.chosen { color: var(--fg); }
+.file-pick[data-ready]:has(> .file-native:focus-visible) > .file-button { outline: 2px solid var(--acc); outline-offset: 2px; }
 @media (max-width: 720px) {
   .settings-page-compact .settings-section { padding: 0; }
   .settings-page-compact .settings-accordion > summary,
