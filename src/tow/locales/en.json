@@ -1832,7 +1832,7 @@
   "settings": {
     "language": {
       "title": "Language",
-      "auto": "Automatic — the browser's language (now: {name})",
+      "auto": "Browser's language ({name})",
       "choose": "Language",
       "saved": "language saved",
       "messages_note": "Messenger messages use it too.",

@@ -249,6 +249,12 @@ def test_the_language_select_takes_its_own_line_on_a_small_phone():
     small = CSS.partition("@media (max-width: 420px) {")[2]
     assert small
     assert "flex-basis: 100%" in _first(".inline-save > select", small)
+    # And the automatic choice says itself in a few words ("Автоматически — язык браузера (сейчас:
+    # Ру…" was still cut off at 390 px on its own line).
+    from tow import i18n
+
+    for lang in ("en", "ru"):
+        assert len(i18n.translate("settings.language.auto", lang, name="Русский")) <= 30  # about 33 fit at 390 px
 
 
 def test_the_check_all_cards_title_is_a_card_title():
