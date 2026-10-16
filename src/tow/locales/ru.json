@@ -846,6 +846,7 @@
   "common": {
     "save": "Сохранить",
     "details": "Подробности",
+    "example": "Напр. {example}",
     "busy": {
       "checking": "Проверка…",
       "copying": "Создание копии…",

@@ -50,12 +50,12 @@
     {% macro invalid(field, bad, hint='') %}{% if bad == field %} aria-invalid="true" aria-describedby="add-error{{ ' ' ~ hint if hint }}"{% elif hint %} aria-describedby="{{ hint }}"{% endif %}{% endmacro %}
     <div class="field">
       <label for="topic-url">{{ t('home.add.url') }}</label>
-      <input id="topic-url" class="w-xl" name="url" required placeholder="https://…" value="{{ draft.get('url', '') }}" inputmode="url"{{ invalid('topic-url', bad_field) }}>
+      <input id="topic-url" class="w-xl" name="url" required placeholder="https://…" value="{{ draft.get('url', '') }}" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"{{ invalid('topic-url', bad_field) }}>
     </div>
-    <div class="field-row">
-      <div class="field"><label for="topic-title">{{ t('home.add.name') }}</label><input id="topic-title" class="w-m" name="title" placeholder="{{ t('home.add.name_placeholder') }}" value="{{ draft.get('title', '') }}"><input type="hidden" id="topic-guessed-title" name="guessed_title" value="{{ draft.get('guessed_title', '') }}"><span id="guess-msg" class="field-hint" aria-live="polite"></span></div>
-      <div class="field"><label for="topic-save-path">{{ t('home.add.folder') }}</label><div class="folder-input"><input id="topic-save-path" class="w-l" name="save_path" list="save-roots" value="{{ draft.get('save_path') or (save_roots[0] if save_roots else '') }}" placeholder="{{ os_example_folder() }}" autocomplete="off"{{ invalid('topic-save-path', bad_field) }}><button type="button" class="ghost ico folder-toggle" data-save-folders aria-label="{{ t('home.add.recent_folders') }}" tabindex="-1" hidden><span aria-hidden="true">▾</span></button></div><p class="field-hint space-hint" data-space-hint aria-live="polite" hidden></p></div>
-    </div>
+    {#- 1.32.1: link, name, folder, client, what - the edit panel's order too; a long title and a
+        long path each get a row of their own. -#}
+    <div class="field"><label for="topic-title">{{ t('home.add.name') }}</label><input id="topic-title" class="w-xl" name="title" placeholder="{{ t('home.add.name_placeholder') }}" value="{{ draft.get('title', '') }}"><input type="hidden" id="topic-guessed-title" name="guessed_title" value="{{ draft.get('guessed_title', '') }}"><span id="guess-msg" class="field-hint" aria-live="polite"></span></div>
+    <div class="field"><label for="topic-save-path">{{ t('home.add.folder') }}</label><div class="folder-input"><input id="topic-save-path" class="w-xl" name="save_path" list="save-roots" value="{{ draft.get('save_path') or (save_roots[0] if save_roots else '') }}" placeholder="{{ t('common.example', example=os_example_folder()) }}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"{{ invalid('topic-save-path', bad_field) }}><button type="button" class="ghost ico folder-toggle" data-save-folders aria-label="{{ t('home.add.recent_folders') }}" tabindex="-1" hidden><span aria-hidden="true">▾</span></button></div><p class="field-hint space-hint" data-space-hint aria-live="polite" hidden></p></div>
     {% set mode = draft.get('selection_mode', 'all') %}
     <div class="field-row">
       {% if client_options|length > 1 %}
@@ -79,7 +79,7 @@
     </div>
     <div class="field" data-content-expression>
       <label for="topic-selection-value">{{ t('home.add.selection') }}</label>
-      <textarea id="topic-selection-value" class="w-xl" name="selection_value" rows="2" placeholder="{{ t('home.add.selection_placeholder') }}"{{ invalid('topic-selection-value', bad_field, 'topic-selection-hint') }}>{{ draft.get('selection_value', '') }}</textarea>
+      <textarea id="topic-selection-value" class="w-xl" name="selection_value" rows="1" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="{{ t('home.add.selection_placeholder') }}"{{ invalid('topic-selection-value', bad_field, 'topic-selection-hint') }}>{{ draft.get('selection_value', '') }}</textarea>
       <p class="field-hint" id="topic-selection-hint">{{ t('home.add.selection_hint') }}</p>
     </div>
     {% set topic = none %}{% include '_content_picker.html' %}

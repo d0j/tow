@@ -435,6 +435,38 @@ def test_the_add_form_and_the_edit_panel_keep_one_order(client):
         assert row.select_one(f"#{prefix}check-interval{suffix}")
 
 
+def test_the_add_form_and_the_edit_panel_share_the_whole_order_and_widths(client):
+    """1.32.1 H1: the edit panel put the name before the link and the folder beside the client;
+    a 92-character title got 241 px. Both forms now go link, name, folder, client, what, rule,
+    files, follow and timer; the name and the folder are long fields on rows of their own, and
+    the technical fields keep a phone from capitalising or correcting them (§4.4)."""
+    from tow.store import save_state
+
+    save_state({"topics": [{"id": "t1", "title": "Show", "url": "http://rutor.info/torrent/1", "save_path": "M:/TV"}]})
+    home = BeautifulSoup(client.get("/").text, "html.parser").select_one("#new form")
+    panel = BeautifulSoup(client.get("/topics/t1/edit-panel").text, "html.parser").select_one("form.edit-form")
+    for form, prefix, suffix, path in (
+        (home, "topic-", "", "topic-save-path"),
+        (panel, "edit-", "-t1", "edit-path-t1"),
+    ):
+        ids = [node["id"] for node in form.select("[id]")]
+        order = [f"{prefix}url{suffix}", f"{prefix}title{suffix}", path, f"{prefix}client{suffix}"]
+        order += [f"{prefix}selection-mode{suffix}", f"{prefix}selection-value{suffix}"]
+        order += [f"{prefix}tracking-mode{suffix}", f"{prefix}check-interval{suffix}"]
+        assert [ids.index(name) for name in order] == sorted(ids.index(name) for name in order), prefix
+        for wide in (f"{prefix}url{suffix}", f"{prefix}title{suffix}", path):
+            field = form.select_one(f"#{wide}")
+            assert "w-xl" in field["class"], wide
+            assert field.find_parent(class_="field-row") is None, wide  # a row of its own
+        rule = form.select_one(f"#{prefix}selection-value{suffix}")
+        assert (rule.name, rule["rows"]) == ("textarea", "1")
+        for technical in (f"{prefix}url{suffix}", path, f"{prefix}selection-value{suffix}"):
+            field = form.select_one(f"#{technical}")
+            assert (field["autocapitalize"], field["autocorrect"], field["spellcheck"]) == ("off", "off", "false")
+        assert not form.select_one(f"#{prefix}title{suffix}").has_attr("autocapitalize")  # a name stays natural
+        assert "w-xs" in form.select_one(f"#{prefix}check-interval{suffix}")["class"]
+
+
 def test_the_sign_in_password_is_as_wide_as_a_password():
     """1.32 QA N1: the sign-in page's password field had no width class (379 px at 768, the card's
     width); Setup's are w-m (288 px)."""
