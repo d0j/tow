@@ -75,7 +75,7 @@ def test_pending_verification_is_not_a_failure_or_a_confirmed_add(client, monkey
     result = BeautifulSoup(client.get(finished["redirect"]).text, "html.parser")
     assert len(result.select(".check-result-row")) == 4
     assert "Клиент проверяет существующие файлы" in result.get_text()
-    assert "Это результат данного запуска" in result.get_text()
+    assert "Итоги этой проверки" in result.get_text()
     assert result.select_one('a[href="/?open=d&spot=row-d#row-d"]')
     assert not result.select_one("[data-check-result-pending]")
 
@@ -699,7 +699,8 @@ def test_a_result_is_dated_when_its_check_ended_not_when_it_was_asked_for(client
     monkeypatch.setattr("tow.web.services.run_check", check)
     job = _job(client.post("/check", data={"mode": "apply"}, follow_redirects=False))
     consumers[0].run()
-    when = BeautifulSoup(client.get(f"/?check_result={job}").text, "html.parser").select_one("#check-result .sub")
+    # 1.32.1 CR1: the time sits in the title line ("Results · 20:31"), not on a line of its own.
+    when = BeautifulSoup(client.get(f"/?check_result={job}").text, "html.parser").select_one("#check-result h2 time")
     assert when.get_text() == at(clock.wall)
     assert at(asked) != at(clock.wall)
 

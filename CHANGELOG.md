@@ -82,6 +82,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - An opened topic or site has one solid button, **Save**; **Remove from TOW** and **Remove** are quiet red
   outline buttons, and its other actions (Check access now, Sign in to the site, Adopt into TOW) are outline
   buttons too.
+- The results of checking all topics show the run's time beside their title ("Results · 20:31") and one short line
+  instead of two sentences: "Results from this check. Current status is in each topic's row." The sign-in
+  dialog of a site says only "Stored encrypted." under the password.
 
 ### Fixed
 

@@ -1101,7 +1101,7 @@
       "browser_where": "A browser window opens on the computer running TOW.",
       "username": "User name",
       "password": "Password",
-      "password_note": "Stored encrypted; never shown or logged.",
+      "password_note": "Stored encrypted.",
       "save_retry": "Save and retry"
     },
     "tools": {
@@ -2418,7 +2418,7 @@
       "queue_full": "the check queue is full; wait for the current jobs to finish, then try again",
       "results": "Results",
       "unconfirmed": "The result is unavailable: TOW restarted or the record expired. Review topic status and run the check again if needed.",
-      "observation": "This is the result of that run, not the current status. Open a topic to see its current status and available actions.",
+      "observation": "Results from this check. Current status is in each topic's row.",
       "outcome_new": "Updated",
       "outcome_same": "Unchanged",
       "outcome_pending": "Waiting",

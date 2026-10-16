@@ -85,7 +85,7 @@ def test_the_sign_in_dialog_names_the_site_and_says_where_the_password_goes(clie
     assert (eye["type"], eye["data-reveal"], eye["aria-controls"]) == ("button", password["id"], password["id"])
     assert eye["aria-pressed"] == "false"
     note = dialog.select_one(f"#{password['aria-describedby']}").get_text()
-    assert note == "Хранится зашифрованным, не показывается и не пишется в журнал."
+    assert note == "Хранится зашифрованным."  # 1.32.1 T1-v: the rest goes without saying
 
 
 @pytest.mark.parametrize(
@@ -660,3 +660,33 @@ def test_edit_panels_have_one_primary_and_a_quiet_confirmed_delete(client):
     assert delete["class"] == ["ghost", "danger"]
     form = row.select_one("form#del-site-rutor")
     assert (form["data-confirm-label"], form.has_attr("data-confirm-danger")) == ("Удалить", True)
+
+
+def test_check_results_put_their_time_beside_the_title_and_say_less(client):
+    """1.32.1 CR1, T1-y: the run's time stood on a line of its own under "Results", and two long
+    sentences explained that the report is not the current state. The time is in the title line
+    now ("Results · 20:31", its full time in the tooltip), and one short line says the rest."""
+    import time
+
+    from tow.web import check_jobs
+    from tow.web.check_actions import _job_result
+
+    rows = [{"id": "t1", "title": "Сериал А", "ok": False, "error": "qBittorrent: connection refused"}]
+    job = {"id": "job-cr1", "topic_id": "", "apply": True, "adopted": False, "lang": "ru", "status": "running"}
+    job.update(requested_at=time.time(), subject="")
+    flash, status, kind, feedback = _job_result(job, {"results": rows})
+    job.update(status=status, flash=flash, kind=kind, feedback=feedback, finished_at=time.monotonic())
+    job["ended_at"] = time.time()
+    with check_jobs.LOCK:
+        check_jobs.JOBS[job["id"]] = job
+    try:
+        card = BeautifulSoup(client.get("/?check_result=job-cr1").text, "html.parser").select_one("#check-result")
+    finally:
+        with check_jobs.LOCK:
+            check_jobs.JOBS.pop(job["id"], None)
+    title = card.select_one(".check-results-head h2")
+    assert title.select_one("time[datetime]") is not None
+    assert title.get_text(" ", strip=True).startswith("Результаты ·")
+    assert not card.select("p.sub > time")  # no line of its own
+    assert "Итоги этой проверки. Текущее состояние — в строке раздачи." in card.get_text()
+    assert "Нажмите на раздачу" not in card.get_text()
