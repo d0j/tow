@@ -374,3 +374,20 @@ def test_the_add_form_and_the_edit_panel_keep_one_order(client):
         row = form.select_one(".follow-row")
         assert row.select_one(f"#{prefix}tracking-mode{suffix}")
         assert row.select_one(f"#{prefix}check-interval{suffix}")
+
+
+def test_the_sign_in_password_is_as_wide_as_a_password():
+    """1.32 QA N1: the sign-in page's password field had no width class (379 px at 768, the card's
+    width); Setup's are w-m (288 px)."""
+    from tow.auth import lan_password_record
+    from tow.config import load_config, save_config
+    from tow.store import load_secrets, save_secrets
+
+    secrets = load_secrets()
+    secrets["lan_auth"] = lan_password_record("old-horse-battery", "")
+    save_secrets(secrets)
+    cfg = load_config()
+    cfg["allow_lan"] = True
+    save_config(cfg)
+    page = BeautifulSoup(TestClient(app).get("/login").text, "html.parser")
+    assert "w-m" in page.select_one("#lan-password")["class"]
