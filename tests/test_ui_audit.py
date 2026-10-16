@@ -236,7 +236,7 @@ def test_the_add_error_is_scrolled_clear_of_the_header_and_focused():
     js = (Path(__file__).parents[1] / "src" / "tow" / "static" / "app.js").read_text(encoding="utf-8")
     assert 'document.getElementById("add-error")' in js
     assert "(field || addError).focus(" in js
-    assert re.search(r"#new, #add-error \{ scroll-margin-top: [\d.]+rem; \}", CSS)
+    assert re.search(r"#new, #add-error \{ scroll-margin-top: var\(--land-top\); \}", CSS)
 
 
 # --- M2: Home without 200 inline edit forms ------------------------------------------------

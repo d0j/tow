@@ -11,7 +11,7 @@
 .flash > .msg-text { overflow-wrap: anywhere; }
 /* Icon, words, then the link, Undo and x on the same line; on a phone the link and Undo go under
    the words. */
-.flash[data-kind] { flex-wrap: nowrap; scroll-margin-top: 5.5rem; }
+.flash[data-kind] { flex-wrap: nowrap; scroll-margin-top: var(--land-top); }
 .flash[data-kind] > .msg-link, .flash[data-kind] > .flash-undo { flex: 0 0 auto; white-space: nowrap; }
 /* The script's strip keeps its link and buttons in one group it updates in place. */
 .flash[data-kind] > .msg-actions { display: inline-flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; white-space: nowrap; }
