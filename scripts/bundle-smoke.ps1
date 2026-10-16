@@ -169,12 +169,14 @@ try {
     Step "healthz: ok=$($health.ok) version=$($health.version)"
     if (-not (Test-Path -LiteralPath (Join-Path $root 'keys\master.key'))) { throw 'no keys\master.key after the first start' }
     if (Test-Path -LiteralPath (Join-Path $root 'app\.venv\Scripts\python.exe')) { Step 'app\.venv was built' } else { throw 'no app\.venv' }
-    # The deepest program or library TOW may load (pip's own launchers and CPython's test modules
-    # are never loaded; links are not followed): from a folder of $limit characters its full path
-    # must stay within 250 (Windows refuses 251 and more, long paths on or off).
+    # The deepest program or library TOW loads: uv, CPython's own programs, DLLs and modules (not
+    # its test modules), and the environment (not uv's cache, templates or pip; links are not
+    # followed). From a folder of $limit characters its full path must stay within 250: Windows
+    # refuses 251 and more, long paths on or off.
+    $loaded = '^(runtime\\bin\\|runtime\\python\\cpython-[^\\]+\\(DLLs\\)?[^\\]+$|app\\\.venv\\)'
     $binaries = @(Get-ChildItem -LiteralPath $root -Recurse -File -Force -Include *.exe, *.dll, *.pyd |
             ForEach-Object { $_.FullName.Substring($root.Length + 1) } |
-            Where-Object { $_ -notmatch '\\Lib\\site-packages\\pip\\' -and $_ -notmatch '\\_test[^\\]*\.pyd$' } |
+            Where-Object { $_ -match $loaded -and $_ -notmatch '\\_test[^\\]*\.pyd$' } |
             Sort-Object Length -Descending)
     Step "deepest program or library: $($binaries[0].Length) $($binaries[0]) (then $($binaries[1].Length) $($binaries[1]))"
     if ($limit + 1 + $binaries[0].Length -gt 250) { throw "bundle-smoke: $($binaries[0]) does not load from a folder of $limit characters: lower the limit" }
@@ -209,7 +211,8 @@ try {
         foreach ($relative in 'config.yaml', 'keys/master.key') {
             $original[$relative] = (Get-FileHash -LiteralPath (Join-Path $root $relative)).Hash
         }
-        $movedRoot = Join-Path $folder "relocated $cyrillic TOW"
+        # A folder of the same length for -RootLength ("TOW" with a Cyrillic T).
+        $movedRoot = if ($RootLength) { Join-Path $folder ([string][char]0x0422 + 'OW') } else { Join-Path $folder "relocated $cyrillic TOW" }
         $owned = [IO.Path]::GetFullPath($folder).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
         foreach ($target in $root, $movedRoot) {
             if (-not [IO.Path]::GetFullPath($target).StartsWith($owned, [StringComparison]::OrdinalIgnoreCase)) {
