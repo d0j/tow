@@ -17,8 +17,9 @@
       <h2 class="add-title">{{ t('setup.access_title') }}</h2>
       <p class="sub">{{ t('setup.intro') }}</p>
       {% if error %}<p class="form-error" id="setup-error" role="alert">{{ error|sentence }}</p>{% endif %}
-      {#- Sent as a form (data-native-submit): app.js is here for the eyes only. -#}
-      <form method="post" action="/setup" class="form-grid setup-form" data-native-submit>
+      {#- Sent as a form (data-native-submit): app.js is here for the eyes only. novalidate: without
+          app.js a hidden short password must not block Start; the server checks the choice. -#}
+      <form method="post" action="/setup" class="form-grid setup-form" data-native-submit novalidate>
         <div class="check-field">
           <input id="allow-lan" name="allow_lan" value="1" type="checkbox" aria-describedby="allow-lan-hint"{% if allow_lan %} checked{% endif %}>
           <label for="allow-lan">{{ t('settings.access.allow') }}</label>
