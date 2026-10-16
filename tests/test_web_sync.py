@@ -536,6 +536,17 @@ def test_the_event_log_changes_the_messages_revision(clock):
     assert after["topics"] == before["topics"]
 
 
+def test_a_routine_log_line_that_is_no_message_leaves_the_messages_revision(clock):
+    # The revision is the shared feed's own: every open page would otherwise fetch the feed
+    # again after each routine check line.
+    _seed()
+    client = TestClient(app)
+    before = _revs(client)
+    assert services.log_event("tracker_checked", topic="t1", how="schedule") is True
+    clock.tick()
+    assert _revs(client)["messages"] == before["messages"]
+
+
 def test_the_settings_page_follows_its_backup_inventory(monkeypatch, clock):
     _seed()
     client = TestClient(app)

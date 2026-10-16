@@ -563,14 +563,31 @@ def _timers(sample: Sample, now: float) -> Computed:
     return AREAS_MEMO.get("timers", (), key, now, build)
 
 
+FEED_WAIT_SEC = 0.3
+
+
 def _messages(sample: Sample, who: Viewer, now: float) -> Computed:
-    key = sample.key("log", "config")
+    """Recent messages: the shared feed's own revision (entries, words, read state), so a routine
+    log line that is no message changes nothing; due again when its oldest entry expires. Without
+    the feed (its reader not started yet) the log's tail stands in for it."""
+    from tow.web.messages import feed_payload
 
-    def build() -> Computed:
-        value = {"log": sample.digests.get("log", ""), "config": sample.digests.get("config", "")}
-        return Computed(value, revision("messages", value, {"lang": who.lang}), None)
+    try:
+        # Up to 0.3 s for the feed's own reader (it takes no lock), so a new message is in this very
+        # poll rather than the next one, five seconds later.
+        feed = feed_payload(wait=FEED_WAIT_SEC)
+    except Exception:  # noqa: BLE001 - the poll answers with the stand-in rather than failing
+        key = sample.key("log", "config")
 
-    return AREAS_MEMO.get("messages", (who.lang,), key, now, build)
+        def build() -> Computed:
+            value = {"log": sample.digests.get("log", ""), "config": sample.digests.get("config", "")}
+            return Computed(value, revision("messages", value, {"lang": who.lang}), None)
+
+        return AREAS_MEMO.get("messages", (who.lang,), key, now, build)
+    value = {"feed": str(feed.get("revision") or "")}
+    expires = feed.get("expires_at")
+    deadline = float(expires) if isinstance(expires, int | float) and expires > 0 else None
+    return Computed(value, revision("messages", value, {"lang": who.lang}), deadline)
 
 
 def _undo(sample: Sample, who: Viewer, now: float) -> Computed:
