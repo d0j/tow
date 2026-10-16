@@ -688,7 +688,9 @@ def test_the_default_backup_folder_is_shown_once(client):
     field = re.search(r'<input id="backup-path-night"[^>]*>', night).group(0)
     assert "placeholder" not in field
     assert 'value=""' in field
-    default = re.search(r'id="backup-path-night-where">По умолчанию: ([^<·]+?)( · |</p>)', night).group(1)
+    # The free space follows in its own unbreakable piece (QA Q4): '<path> <span class="nowrap">· …'.
+    default = re.search(r'id="backup-path-night-where">По умолчанию: ([^<·]+?)( <span class="nowrap">· |</p>)', night)
+    default = default.group(1)
     assert night.count(default) == 1  # once, no "Now: <same path>"
 
 

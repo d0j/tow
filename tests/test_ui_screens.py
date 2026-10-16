@@ -527,9 +527,10 @@ def test_the_add_form_and_the_edit_panel_share_the_whole_order_and_widths(client
         assert "w-xs" in form.select_one(f"#{prefix}check-interval{suffix}")["class"]
 
 
-def test_the_sign_in_password_is_as_wide_as_a_password():
-    """1.32 QA N1: the sign-in page's password field had no width class (379 px at 768, the card's
-    width); Setup's are w-m (288 px)."""
+def test_the_sign_in_password_fills_its_card():
+    """1.32 QA N1 gave the sign-in password w-m (288 px) like Setup's. 1.32.1 AU1 asks the opposite:
+    the one field of the card fills it; with w-m it stopped at 240 px in a 380 px card on a desktop
+    (QA Q3). No width class: .auth-form .secret lifts the cap on every screen."""
     from tow.auth import lan_password_record
     from tow.config import load_config, save_config
     from tow.store import load_secrets, save_secrets
@@ -541,7 +542,9 @@ def test_the_sign_in_password_is_as_wide_as_a_password():
     cfg["allow_lan"] = True
     save_config(cfg)
     page = BeautifulSoup(TestClient(app).get("/login").text, "html.parser")
-    assert "w-m" in page.select_one("#lan-password")["class"]
+    field = page.select_one("#lan-password")
+    assert not [name for name in field.get("class", []) if name.startswith("w-")]
+    assert field.find_parent("form")["class"] == ["form-grid", "auth-form"]
 
 
 def test_the_log_dialogs_title_is_one_word(client):
