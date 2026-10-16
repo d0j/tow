@@ -80,7 +80,7 @@
  },
  "tow.notifiers": {
   "DeliveryError": "class(reason: 'str | Msg', *, transient: 'bool', drop: 'bool' = False) -> 'None'",
-  "Field": "class(name: 'str', label: 'str', kind: 'str' = 'text', placeholder: 'str' = '', pattern: 'str' = '', error: 'str' = '', required: 'bool' = True, default: 'str' = '', width: 'str' = '') -> None",
+  "Field": "class(name: 'str', label: 'str', kind: 'str' = 'text', placeholder: 'str' = '', pattern: 'str' = '', error: 'str' = '', required: 'bool' = True, default: 'str' = '', width: 'str' = 'm') -> None",
   "OUTBOX_LIMIT": "value int",
   "cards": "def(secrets: 'dict[str, Any]', state: 'dict[str, Any]') -> 'list[dict[str, Any]]'",
   "check_message": "def(lang: 'str | None' = None) -> 'str'",
