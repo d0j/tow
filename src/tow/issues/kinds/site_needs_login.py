@@ -34,7 +34,7 @@ def _title(config: Mapping[str, Any], name: str) -> str:
 
 def _no_sign_in(config: Mapping[str, Any], topic_id: str, tracker: GenericHttpTracker) -> Issue:
     """The site asks for a sign-in TOW has no way to make: its row on Sites, the user name
-    focused (the row itself says "No sign-in needed", so the page shows why it is open)."""
+    focused (the row itself says "Sign-in required", and the page shows why it is open)."""
     name = tracker.name
     spot = Target("sites", open=name, anchor=f"site-row-{name}", note=True)
     return Issue(

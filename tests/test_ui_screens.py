@@ -548,3 +548,39 @@ def test_the_picker_has_one_all_files_box_instead_of_two_buttons(client):
     assert picker.select_one("[data-content-none]") is None
     assert not picker.select("button[data-content-all]")
     assert "сохранить не удалось" in picker.select_one("[data-content-cached]").get_text()
+
+
+def test_sites_show_a_sign_in_pill_only_when_it_says_something(client):
+    """1.32.1 ST1: every Sites row said "No sign-in needed" or "Sign-in not set" - a third line
+    per site on a phone, and "not needed" was a guess (a sign-in path proves a form exists, not
+    that the site refuses guests). Now a row says nothing by default, "Saved sign-in details"
+    (neutral) when a login is stored, and "Sign-in required" (a warning) only when a check or a
+    probe saw the site ask for it - also over stored details the site refused."""
+    from tow.store import load_secrets, save_secrets, save_state
+
+    secrets = load_secrets()
+    secrets.setdefault("trackers", {})["rutor"] = {"username": "fixture-user", "password": "x"}
+    secrets["trackers"]["kinozal"] = {"username": "fixture-user", "password": "x"}
+    save_secrets(secrets)
+    url = "https://rutracker.org/forum/viewtopic.php?t=1234567"
+    kinozal = "https://kinozal.tv/details.php?id=1234567"
+    save_state(
+        {
+            "topics": [
+                {"id": "rt", "title": "Сериал А", "url": url, "last_error_class": "tracker_auth"},
+                {"id": "kz", "title": "Сериал Б", "url": kinozal, "last_error_class": "tracker_auth"},
+            ]
+        }
+    )
+    page = BeautifulSoup(client.get("/sites").text, "html.parser")
+
+    def pills(name: str) -> list[tuple[str, str]]:
+        summary = page.select_one(f"#site-row-{name} summary")
+        return [(" ".join(p["class"]), p.get_text()) for p in summary.find_all("span", class_="pill", recursive=False)]
+
+    assert pills("rutor") == [("pill mut", "Реквизиты сохранены")]
+    assert pills("rutracker") == [("pill warn", "Нужен вход")]
+    assert pills("kinozal") == [("pill warn", "Нужен вход")]
+    assert pills("nnmclub") == []
+    assert "Вход не нужен" not in page.get_text()
+    assert "Вход не задан" not in page.get_text()
