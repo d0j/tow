@@ -108,6 +108,5 @@ def test_git_records_the_hook_as_executable():
         text=True,
         check=False,
     )
-    if not done.stdout.strip():
-        pytest.skip("the hook is not committed in this checkout yet")
+    assert done.stdout.strip(), ".githooks/commit-msg is not tracked"
     assert done.stdout.startswith("100755 ")

@@ -30,8 +30,9 @@ def test_git_records_every_hook_as_executable():
         [git, "-C", str(ROOT), "ls-files", "-s", ".githooks"], capture_output=True, text=True, check=False
     )
     modes = {line.rsplit("\t", 1)[1]: line.split(" ", 1)[0] for line in done.stdout.splitlines()}
-    if not modes:
-        pytest.skip("the hooks are not committed in this checkout yet")
+    # A hook renamed or dropped fails here instead of skipping the mode check.
+    hooks = {f".githooks/{name}" for name in ("commit-msg", "pre-commit", "pre-push", "post-commit", "post-rewrite")}
+    assert set(modes) >= hooks, sorted(hooks - set(modes))
     assert {name: mode for name, mode in modes.items() if mode != "100755"} == {}
 
 
