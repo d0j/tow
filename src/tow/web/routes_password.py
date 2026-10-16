@@ -91,9 +91,9 @@ def setup_save(
 ) -> Response:
     cfg = services.load_config()
     lan = as_bool(allow_lan)
-    # The page asks "open TOW from other devices?" first: Start with the box clear and no password
-    # typed is the same as "later - this computer only".
-    if action == "skip" or not (lan or lan_password or lan_password2):
+    # The page asks "open TOW from other devices?" first: Start with the box clear is "later - this
+    # computer only", whatever a hidden password field still sent (a browser without app.js).
+    if action == "skip" or not lan:
         cfg["setup_done"] = True
         services.save_config(cfg)
         services.log_event("setup_skipped", how="manual")

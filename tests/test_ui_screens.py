@@ -267,6 +267,23 @@ def test_first_start_asks_about_other_devices_first(client):
     assert "lan_auth" not in load_secrets()
 
 
+def test_first_start_with_the_box_clear_is_this_computer_only_whatever_was_typed(client):
+    """The password group is disabled with the box clear (app.js: a short hidden password blocked
+    Start), and the server takes a clear box as "this computer only" even when passwords come."""
+    from tow.config import load_config
+    from tow.store import load_secrets
+
+    _first_start()
+    page = BeautifulSoup(client.get("/setup").text, "html.parser")
+    assert page.select_one(".lan-password")["data-enabled-by"] == "allow-lan"
+    data = {"action": "save", "lan_password": "short", "lan_password2": "other-pass-9", "hint": "x"}
+    started = client.post("/setup", data=data, follow_redirects=False)
+    assert (started.status_code, started.headers["location"].split("?")[0]) == (303, "/")
+    assert load_config()["setup_done"] is True
+    assert load_config().get("allow_lan") is not True
+    assert "lan_auth" not in load_secrets()
+
+
 def test_the_sign_in_page_has_the_eye_and_still_posts_a_form():
     """The sign-in page offers the shared eye; it loads app.js only for it, so its form keeps
     being sent as a form (data-native-submit), and the script finds its icons and texts."""

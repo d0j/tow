@@ -61,7 +61,9 @@ def test_first_start_offers_the_password_and_this_pc_sets_it():
     # 1.32: one "Start" - with the box clear and no password it does what "Later" did.
     assert 'name="action" value="save"' in page
 
-    mismatch = local.post("/setup", data={"lan_password": "first-pass-1", "lan_password2": "other-pass-2"})
+    mismatch = local.post(
+        "/setup", data={"lan_password": "first-pass-1", "lan_password2": "other-pass-2", "allow_lan": "1"}
+    )
     assert mismatch.status_code == 400
     assert "пароли не совпадают" in mismatch.text.lower()
 
@@ -92,11 +94,13 @@ def test_a_second_first_start_window_is_told_its_password_was_not_saved():
     first, second = TestClient(app, headers=ORIGIN), TestClient(app, headers=ORIGIN)
     assert "Добро пожаловать в TOW" in first.get("/setup").text
     assert "Добро пожаловать в TOW" in second.get("/setup").text  # both opened before either saved
-    data = {"lan_password": "pony-river-lamp", "lan_password2": "pony-river-lamp"}
+    data = {"lan_password": "pony-river-lamp", "lan_password2": "pony-river-lamp", "allow_lan": "1"}
     first.post("/setup", data=data, follow_redirects=False)
 
     late = second.post(
-        "/setup", data={"lan_password": "other-pass-99", "lan_password2": "other-pass-99"}, follow_redirects=False
+        "/setup",
+        data={"lan_password": "other-pass-99", "lan_password2": "other-pass-99", "allow_lan": "1"},
+        follow_redirects=False,
     )
 
     assert late.headers["location"].startswith("/settings?open=access")

@@ -24,9 +24,10 @@
           <label for="allow-lan">{{ t('settings.access.allow') }}</label>
           <p id="allow-lan-hint">{{ t('settings.access.allow_hint') }}</p>
         </div>
-        {#- Shown once the box is ticked (CSS); without that support, always - a password typed
-            with the box clear is saved as before. -#}
-        <div class="form-grid lan-password">
+        {#- Shown once the box is ticked (CSS) and disabled while it is clear (app.js), so a hidden
+            password is neither sent nor checked; the server takes a clear box as "this computer
+            only" whatever comes with it. -#}
+        <div class="form-grid lan-password" data-enabled-by="allow-lan">
           <div class="field-row">
             <div class="field">
               <label for="lan-password">{{ t('settings.access.password') }}</label>
