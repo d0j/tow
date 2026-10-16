@@ -288,6 +288,10 @@ class SiteEdit:
     browser_auth: str = ""
     browser_auth_present: str = ""
 
+    def browser_sign_in(self) -> bool:
+        """The card chose browser sign-in (a card without that box chooses nothing)."""
+        return self.browser_auth_present == "1" and self.browser_auth in {"1", "true", "on"}
+
     def chosen_login_hosts(self, mirrors: list[str]) -> list[str] | None:
         """The sign-in mirrors as typed (None: the form had no such field); each must be a mirror."""
         value = self.login_hosts if self.login_hosts is not None else "" if self.login_hosts_present == "1" else None
@@ -338,7 +342,7 @@ def edit_site_paths(spec: dict[str, Any], form: SiteEdit) -> None:
             raise FieldRefused(t("protection.invalid_site"), "protection")
         spec["protection"] = form.protection
     if form.browser_auth_present == "1":
-        spec["browser_auth"] = form.browser_auth in {"1", "true", "on"}
+        spec["browser_auth"] = form.browser_sign_in()
     if form.infohash_path is not None:
         with _about("infohash_path"):
             spec["infohash_path"] = valid_tracker_path(

@@ -1521,6 +1521,23 @@ const hideRevealed = (form) => form?.querySelectorAll?.('[data-reveal][aria-pres
 document.addEventListener("submit", (event) => hideRevealed(event.target), true);
 document.addEventListener("reset", (event) => hideRevealed(event.target), true);
 
+// Fields that count only with a box in one state (data-enabled-by="<box id>", and
+// data-enabled-when="unchecked" for a box that turns them off): disabled otherwise, so the browser
+// neither sends nor validates what the page hides - a password typed before browser sign-in was
+// chosen, a too short network password once the box is clear. The server ignores them the same way.
+const syncEnabledGroups = () => document.querySelectorAll("[data-enabled-by]").forEach((group) => {
+  const box = document.getElementById(group.dataset.enabledBy);
+  if (!box) return;
+  const on = group.dataset.enabledWhen === "unchecked" ? !box.checked : Boolean(box.checked);
+  group.querySelectorAll("input, select, textarea, button").forEach((control) => { control.disabled = !on; });
+});
+document.addEventListener("change", (event) => {
+  if (event.target?.type === "checkbox") syncEnabledGroups();
+});
+// A reset (Cancel) puts the boxes back after its event: the groups follow once it has.
+document.addEventListener("reset", () => setTimeout(syncEnabledGroups, 0));
+syncEnabledGroups();
+
 // Editable recent folders: the arrow shows every recent path, even when the input is filled.
 // Keep native text editing; a highlighted suggestion changes the value only when accepted.
 let openFolders = null;

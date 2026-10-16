@@ -244,6 +244,13 @@ def test_a_secret_fields_eye_shows_and_hides_what_was_typed_and_nothing_else():
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_fields_a_box_turns_off_are_disabled_with_it():
+    verdict = _verdict("enabled_groups.mjs")
+    assert verdict == {"atStart": True, "followsTheBox": True, "followsAReset": True}
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_page_scripts_write_times_by_the_servers_rule_in_tows_zone():
     verdict = _verdict("time_short.mjs")
     assert verdict == dict.fromkeys(verdict, True), verdict
