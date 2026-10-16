@@ -9,6 +9,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - The sign-in and first-start pages no longer tell anyone on the network the time zone of the computer TOW runs
   on: before sign-in they carry only the texts of the password field's eye.
+- On Windows, TOW reads the shutdown records of the event log with `wevtutil` by its full path in System32, as it
+  starts every other Windows tool: a file of that name in TOW's Python folder or the current folder is never
+  started instead.
 
 ### Changed
 
