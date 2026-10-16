@@ -140,6 +140,11 @@ jobs:
       - name: Unpack, start offline, stop, move with its existing environment, start offline again
         shell: pwsh
         run: ./scripts/bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Offline -Move
+      - name: A folder of exactly the Windows limit starts offline and moves; one more character is refused
+        shell: pwsh
+        run: |
+          ./scripts/bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Offline -Move -RootLength 172
+          ./scripts/bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -RootLength 173 -ExpectTooLong
       - name: install.ps1 on Windows PowerShell 5.1, uninstall, reinstall around the data, purge
         shell: pwsh
         run: ./scripts/install-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Port 18878

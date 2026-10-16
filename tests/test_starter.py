@@ -504,6 +504,9 @@ def test_the_windows_folder_limit_is_one_number_everywhere():
     assert installer.index(f"$Dir.Length -gt {WINDOWS_ROOT_LIMIT})") < installer.index("New-Item -ItemType Directory")
     smoke = (ROOT / "scripts" / "bundle-smoke.ps1").read_text(encoding="utf-8")
     assert "TOW_ROOT:~(\\d+),1" in smoke  # the smoke reads the limit from the bundle's own start file
+    workflow = (ROOT / ".github" / "workflows" / "installers.yml").read_text(encoding="utf-8")
+    assert f"-Offline -Move -RootLength {WINDOWS_ROOT_LIMIT}\n" in workflow  # the boundary starts
+    assert f"-RootLength {WINDOWS_ROOT_LIMIT + 1} -ExpectTooLong" in workflow  # one more is refused
     for doc in ("docs/PORTABLE.md", "docs/install.md", "docs/ru/install.md"):
         assert f"{WINDOWS_ROOT_LIMIT} " in (ROOT / doc).read_text(encoding="utf-8"), doc
 
