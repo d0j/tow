@@ -298,7 +298,7 @@ def _languages() -> list[dict[str, str]]:
     """The languages in the order Settings offers them after Auto: the translations by their own
     name, English (the fallback) last - the same order on every page (Auto · Русский · English)."""
     found = [{"code": code, "name": name, "native": native} for code, name, native in i18n.available()]
-    return sorted(found, key=lambda item: item["code"].lower() == i18n.DEFAULT)
+    return found[1:] + found[:1]  # available() lists English first
 
 
 def js_texts(*, before_sign_in: bool = False) -> dict[str, str]:
