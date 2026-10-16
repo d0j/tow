@@ -280,6 +280,7 @@ def _no_background_check_outlives_its_test():
             module.PENDING.clear()
             module.ACTIONS.clear()
             module.FOLLOW_UPS.clear()  # a queued sign-in's follow-up holds a password: never into the next test
+            module.UNCHECKED.clear()
     alive = [thread for thread in stray if thread.is_alive()]
     if alive:
         pytest.fail(f"manual check thread still running 10 s after the test: {alive}")

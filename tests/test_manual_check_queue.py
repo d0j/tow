@@ -882,6 +882,131 @@ def test_sign_ins_queued_one_after_another_put_back_the_password_before_the_firs
     assert secrets["trackers"]["nnmclub"]["password"] == "pass-a"  # the last one known to work
 
 
+def _sign_in_site(monkeypatch, password: str = "pass-a") -> dict:
+    """One NNM-Club topic and a working password ``password``, the stores in memory."""
+    monkeypatch.setattr("tow.web.services.load_config", lambda: {"trackers": {"nnmclub": NNM}})
+    save_state({"topics": [{"id": "t1", "title": "Show A", "url": "https://nnmclub.to/forum/viewtopic.php?t=1234567"}]})
+    secrets = {"trackers": {"nnmclub": {"username": "user", "password": password}}}
+    monkeypatch.setattr("tow.web.services.load_secrets", lambda: copy.deepcopy(secrets))
+    monkeypatch.setattr("tow.web.services.save_secrets", lambda value: secrets.update(copy.deepcopy(value)))
+    monkeypatch.setattr("tow.web.services.log_event", lambda *_a, **_kw: None)
+    monkeypatch.setattr("tow.web.services.record_check_failure", lambda *_a, **_kw: None)
+    return secrets
+
+
+def _sign_in(client, password: str):
+    data = {"username": "user", "password": password}
+    return client.post("/topics/t1/tracker-login", data=data, follow_redirects=False)
+
+
+@pytest.mark.parametrize("ends", ["store", "refused"])
+def test_a_queued_sign_in_whose_check_fails_puts_the_previous_password_back(client, monkeypatch, consumers, ends):
+    """The check after a queued sign-in raised instead of answering: a store that cannot be read
+    blocks it, or the site refused the new password. Either way the new one is not left saved."""
+    from tow import i18n
+    from tow.errors import TowError
+    from tow.web.text import t as web_t
+
+    secrets = _sign_in_site(monkeypatch)
+    calls = []
+
+    def check(**kw):
+        calls.append(kw["ids"])
+        if len(calls) == 1:
+            raise CheckBusyError("a scheduled check holds the lock")
+        if ends == "store":
+            raise SecretStoreError("the store cannot be opened")
+        raise TowError("mirrors.not_torrent_login", cls="tracker_auth")
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    job = _job(_sign_in(client, "pass-b"))
+    assert secrets["trackers"]["nnmclub"]["password"] == "pass-b"
+    consumers[0].run()
+    assert secrets["trackers"]["nnmclub"]["password"] == "pass-a"
+    ended = check_jobs.get(job)
+    assert ended["feedback"]["credential_topic"] == "t1"
+    assert ended["kind"] == "err"
+    if ends == "store":
+        assert ended["flash"] == i18n.t("web.topics.login_blocked")
+    else:
+        refusal = TowError("mirrors.not_torrent_login", cls="tracker_auth")
+        assert ended["flash"] == web_t("web.login_retry.failed", site="NNM-Club", error=refusal)
+    assert job not in check_jobs.FOLLOW_UPS
+
+
+def test_a_follow_up_that_fails_keeps_the_checks_own_words(client, monkeypatch, consumers):
+    """What follows a check failed itself: the check's own message stays, and the failure is logged."""
+    from tow import i18n
+
+    events = []
+    monkeypatch.setattr("tow.web.services.log_event", lambda kind, **kw: events.append(kind))
+    monkeypatch.setattr("tow.web.services.record_check_failure", lambda *_a, **_kw: None)
+
+    def blocked(**_kw):
+        raise SecretStoreError("the store cannot be opened")
+
+    def broken(_out, _error):
+        raise RuntimeError("the follow-up broke")
+
+    monkeypatch.setattr("tow.web.services.run_check", blocked)
+    job, _ = check_jobs.submit(
+        topic_id="t1", apply=True, lang="ru", perform=check_actions.perform_check, follow_up=broken
+    )
+    consumers[0].run()
+    ended = check_jobs.get(job["id"])
+    assert ended["flash"] == i18n.t("web.check.blocked", "ru")
+    assert "check_report_failed" in events
+
+
+@pytest.mark.parametrize("how", ["cancelled", "lock_timeout"])
+def test_a_queued_sign_in_that_never_runs_puts_the_previous_password_back(client, monkeypatch, consumers, how):
+    """A sign-in waiting for its check was cancelled, or never got the check lock: its password,
+    never checked, is not left saved in place of the one that worked - and the owner is told."""
+    from tow import i18n
+
+    secrets = _sign_in_site(monkeypatch)
+    monkeypatch.setattr("tow.web.services.run_check", lambda **_kw: (_ for _ in ()).throw(CheckBusyError("busy")))
+    if how == "lock_timeout":
+        monkeypatch.setattr(check_jobs, "LOCK_WAIT_SEC", 0)
+    job = _job(_sign_in(client, "pass-b"))
+    assert secrets["trackers"]["nnmclub"]["password"] == "pass-b"
+    if how == "cancelled":
+        assert client.post(f"/check/{job}/cancel", headers={"x-tow-fetch": "1"}).json()["cancelled"] is True
+    else:
+        consumers[0].run()
+    assert secrets["trackers"]["nnmclub"]["password"] == "pass-a"
+    message = _status(client, job)
+    lang = check_jobs.get(job)["lang"]  # said as its check would have said it
+    assert message["flash"] == i18n.translate("web.topics.login_not_checked", lang, site="NNM-Club")
+    assert job not in check_jobs.FOLLOW_UPS
+    assert not check_jobs.UNCHECKED
+
+
+def test_a_sign_in_typed_while_the_last_ones_check_runs_puts_back_the_password_before_both(
+    client, monkeypatch, consumers
+):
+    """A works; B is typed and its check already runs when C is typed (a check of its own). Both
+    refused: what comes back is A, not B - a password the site had already refused."""
+    secrets = _sign_in_site(monkeypatch)
+    refused = {"id": "t1", "title": "Show A", "ok": False, "error": "refused", "error_class": "tracker_auth"}
+    seen = {}
+
+    def check(**_kw):
+        if not seen:
+            seen["first"] = True
+            raise CheckBusyError("a scheduled check holds the lock")
+        if "c" not in seen:  # B's check runs: C is typed now
+            seen["c"] = _job(_sign_in(client, "pass-c"))
+        return {"results": [refused]}
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    first = _job(_sign_in(client, "pass-b"))
+    consumers[0].run()
+    assert seen["c"] != first
+    assert secrets["trackers"]["nnmclub"]["password"] == "pass-a"
+    assert not check_jobs.UNCHECKED
+
+
 @pytest.mark.parametrize("ends", ["added", "crash"])
 def test_a_new_topics_first_check_from_the_queue_says_what_a_check_at_once_says(client, monkeypatch, consumers, ends):
     # Queued behind another check, a new topic's first check lost "topic added; ..." and a crash of

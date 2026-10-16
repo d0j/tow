@@ -74,11 +74,11 @@ def topics_tracker_login(tid: str, username: str = Form(""), password: str = For
                 return home_redirect("web.topics.site_gone", "err", credential_topic=tid)
             old_secrets = copy.deepcopy(services.load_secrets())
             save_tracker_login(tracker.name, username, password, base=old_secrets)
+            old_entry = copy.deepcopy((old_secrets.get("trackers") or {}).get(tracker.name))
+            login = _SignIn(str(tid), tracker, old_entry, username.strip(), password.strip())
     except SecretStoreError:
         return home_redirect("web.topics.login_not_saved", "err", credential_topic=tid)
-    old_entry = copy.deepcopy((old_secrets.get("trackers") or {}).get(tracker.name))
     services.log_event("site_login", tracker=tracker.name, status="saved", how="manual")
-    login = _SignIn(str(tid), tracker, old_entry, username.strip(), password.strip())
     # Another applying check runs or waits: the check that confirms the sign-in waits in the
     # queue, and its result is followed up as here (the password confirmed or put back).
     if check_jobs.has_pending(apply=True):
@@ -96,6 +96,8 @@ def topics_tracker_login(tid: str, username: str = Form(""), password: str = For
         services.log_event("check_fail", topic=tid, tracker=tracker.name, **error_fields(exc), how="manual")
         if error_class(exc) == "tracker_auth":
             login.restore()
+        else:
+            login.settle()
         return home_redirect("web.login_retry.failed", "err", site=_title(tracker), error=exc, credential_topic=tid)
     flash, kind, prompt = login.checked(out)
     return home_redirect(flash, kind, credential_topic=str(tid) if prompt else None)
@@ -104,24 +106,57 @@ def topics_tracker_login(tid: str, username: str = Form(""), password: str = For
 class _SignIn:
     """A login typed on Home and the check that confirms it: ``checked`` says what the check
     found (and puts the earlier password back when the site still refused the new one),
-    ``follow_up`` (the instance called) does the same for a check that had to wait in the queue."""
+    ``follow_up`` (the instance called) does the same for a check that had to wait in the queue,
+    and ``dropped`` for one that never ran. Until then it is one of the site's unchecked sign-ins
+    (``check_jobs.UNCHECKED``): what any of them puts back is what was saved before the first."""
 
     def __init__(self, tid: str, tracker: GenericHttpTracker, old_entry: Any, username: str, password: str) -> None:
         self.tid, self.tracker, self.old_entry = tid, tracker, old_entry
         self.username, self.password = username, password
+        with check_jobs.LOCK:
+            unchecked = check_jobs.UNCHECKED.setdefault(tracker.name, [])
+            if unchecked:  # an earlier one still waits or runs: its password is not known to work
+                self.old_entry = copy.deepcopy(unchecked[0].old_entry)
+            unchecked.append(self)
 
     def __call__(self, out: dict[str, Any] | None, error: BaseException | None) -> dict[str, str]:
         return self.follow_up(out, error)
+
+    def settle(self, *, confirmed: bool = False) -> None:
+        """Checked (or never to be): no longer one of the site's unchecked sign-ins. ``confirmed``:
+        the site took this password, so it is what a later unchecked one puts back."""
+        with check_jobs.LOCK:
+            unchecked = check_jobs.UNCHECKED.get(self.tracker.name, [])
+            if self in unchecked:
+                unchecked.remove(self)
+            if confirmed:
+                for later in unchecked:
+                    later.old_entry = {"username": self.username, "password": self.password}
+            if not unchecked:
+                check_jobs.UNCHECKED.pop(self.tracker.name, None)
 
     def succeeds(self, earlier: object) -> None:
         """This sign-in replaces ``earlier``'s, still waiting in the queue unchecked: what to put
         back is what was saved before that one, the last password not refused yet."""
         if isinstance(earlier, _SignIn) and earlier.tracker.name == self.tracker.name:
             self.old_entry = copy.deepcopy(earlier.old_entry)
+            earlier.settle()
+
+    def dropped(self) -> dict[str, str]:
+        """Its check never ran (cancelled, never given the check lock): the password it saved,
+        never checked, is put back, and the owner is told (``check_jobs._drop``)."""
+        restored = self.restore()
+        text, kind = t("web.topics.login_not_checked", site=_title(self.tracker)), "warn"
+        if restored is False:
+            text, kind = text + t("web.topics.password_not_restored"), "err"
+        elif restored is None:
+            text, kind = t("web.topics.restore_failed", site=_title(self.tracker)), "err"
+        return {"text": text, "kind": kind, "credential_topic": self.tid}
 
     def restore(self) -> bool | None:
         """The password saved before this one, back (False: not, it changed meanwhile; None: the
         store refused, logged)."""
+        self.settle()
         try:
             return bool(restore_unverified_password(self.tracker.name, self.old_entry, self.username, self.password))
         except SecretStoreError:
@@ -134,6 +169,7 @@ class _SignIn:
         """(message, its kind, ask for the login again) after the check ran."""
         row = topic_check_row(self.tid, out)
         flash, prompt, kind = _tracker_login_retry_flash(row, _title(self.tracker))
+        self.settle(confirmed=kind == "ok")
         if kind == "ok":
             _signed_in(self.tracker.name)
         if (
@@ -163,6 +199,8 @@ class _SignIn:
             return {"text": t("web.topics.login_blocked"), "kind": "err", "credential_topic": self.tid}
         if error is not None and error_class(error) == "tracker_auth":
             self.restore()
+        else:
+            self.settle()
         failed = t("web.login_retry.failed", site=_title(self.tracker), error=error)
         return {"text": failed, "kind": "err", "credential_topic": self.tid}
 

@@ -27,6 +27,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A page left open overnight no longer shows yesterday's times as if they were today ("20:31" without a date):
   every short time is written again at midnight and when the tab is shown again, with the summer or winter time
   of its own moment. Before, this worked only where TOW knew its zone's name, which is never the case on Windows.
+- A site password typed on Home while another check ran is no longer left saved unchecked when its check never
+  runs (you cancel it, or it waits past the time limit): the password saved before it comes back, and the message
+  says so. A password typed while the previous one's check was already running now puts back the last password
+  that worked, not one the site had just refused.
 - First start in a browser without JavaScript is no longer stopped by a short password typed and then hidden by
   clearing "Open TOW from other devices": Start goes on, for this computer only.
 

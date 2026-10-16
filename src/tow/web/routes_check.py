@@ -152,6 +152,10 @@ def cancel_check(request: Request, job: str) -> Response:
             {"cancelled": cancelled, "job": job, "message": message}, headers={"Cache-Control": "no-store"}
         )
     if check_jobs.cancel(job):
+        # What its caller said of a check that never ran (a sign-in: the password put back).
+        said = (check_jobs.get(job) or {}).get("feedback") or {}
+        if said.get("text"):
+            return flash_redirect("/", said["text"], str(said.get("kind") or "warn"))
         return flash_redirect("/", "web.check_all.cancelled")
     if check_jobs.get(job) is None:  # never started here, or its record is gone: nothing to say it did
         return flash_redirect("/", "web.check_all.cancel_unknown", "warn")
