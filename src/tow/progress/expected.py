@@ -74,12 +74,8 @@ def _season_relative_expected(
         and min(int(match.group(2)) for match in season_relative if match) == 1
         and max(int(match.group(2)) for match in season_relative if match) <= int(expected["total"])
     ):
-        return {
-            **expected,
-            "episode_min": 1,
-            "episode_max": int(expected["total"]),
-            "numbering": "season-relative",
-        }
+        # The title's own range stays: the topic still shows 24/24 (tow.episodes.shown_progress).
+        return {**expected, "numbering": "season-relative"}
     episodes = [int(match.group(1)) for key in observed_episode_keys if (match := re.search(r"e(\d+)$", key))]
     below = sum(episode < int(expected["episode_min"]) for episode in episodes)
     if below * 2 > len(episodes):

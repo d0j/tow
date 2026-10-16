@@ -21,7 +21,7 @@ from tow.adopt import unmarked_hash
 from tow.check import PREVIOUS_REVISION_ACTIVE, blocked_by_previous_revision
 from tow.clock import format_ui_timestamp
 from tow.config import as_bool, flash_ttl, interval_sec_of
-from tow.episodes import expected_for_topic
+from tow.episodes import expected_for_topic, shown_progress
 from tow.errors import render_stored
 from tow.issues import Issue, Snapshot, fingerprint, worst
 from tow.issues import attention as needing_attention
@@ -830,9 +830,13 @@ def topic_progress_summary(topic: Mapping[str, Any], history: Mapping[str, Any])
     expected = expected_for_topic(topic)
     if not expected or not expected.get("total"):
         return summary
+    completed, total = shown_progress(
+        expected, int(summary.get("completed") or 0), int(expected["total"]), complete=False
+    )
     return {
         **summary,
-        "expected": int(expected["total"]),
+        "completed": completed,
+        "expected": total,
         "completion_known": False,
         "is_complete": False,
     }

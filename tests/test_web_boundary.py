@@ -82,7 +82,8 @@ PURE: dict[str, set[str]] = {
     },
     "tow.content": {"describe"},
     "tow.diagnostic_json": {"epoch"},
-    "tow.episodes": {"parse_season_hint"},
+    # shown_progress: the progress figure a topic's expected episodes give (24/24 for 13-24); no I/O.
+    "tow.episodes": {"parse_season_hint", "shown_progress"},
     "tow.errors": {"TowError"},
     # Save folders: the one a form names and the recent ones kept in the state (a dict).
     "tow.folders": {"paths_equal", "recent_save_roots", "remember_save_root", "resolve_save_path"},

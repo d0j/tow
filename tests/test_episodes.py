@@ -442,6 +442,43 @@ def test_title_range_not_from_one_is_its_episodes_in_every_form(title, window):
     assert _window(title) == window
 
 
+def _shown(title, keys, **extra):
+    expected = {**parse_expected_count(title), **extra}
+    items = {key: {"episode_key": key, "status": "completed"} for key in keys}
+    summary = summarize_completion(items, expected)
+    return summary["completed"], summary["expected"], summary["is_complete"]
+
+
+def _keys(first, last, season=None):
+    return [f"episode:e{n:02d}" if season is None else f"episode:s{season:02d}e{n:02d}" for n in range(first, last + 1)]
+
+
+def test_title_range_progress_counts_by_its_last_episode():
+    assert _shown("Show [Серии 13-24 из 24]", _keys(13, 24)) == (24, 24, True)
+    assert _shown("Show [Серии 13-24 из 24]", _keys(13, 17)) == (17, 24, False)
+    assert _shown("Show [Серии 13-24 из 24]", []) == (12, 24, False)
+    assert _shown("Show (73-176 серии из 176)", _keys(73, 176)) == (176, 176, True)
+    assert _shown("Show (73-176 серии из 176)", _keys(73, 175)) == (175, 176, False)
+    # Season-relative files (S02E01..E12 for 13-24) and restarted numbering show the same.
+    assert _shown("Show [Серии 13-24 из 24]", _keys(1, 12, 2), numbering="season-relative") == (24, 24, True)
+    restarted = [key for season in range(2, 6) for key in _keys(1, 26, season)]
+    assert _shown("Show (73-176 серии из 176)", restarted, numbering="restarted") == (176, 176, True)
+    assert _shown("Show (73-176 серии из 176)", restarted[:-1], numbering="restarted") == (175, 176, False)
+
+
+def test_title_range_never_shows_its_last_episode_unless_complete():
+    # Two seasons' E13..E24 under a seasonless title: 24 found for 12, inconsistent, not complete.
+    assert _shown("Show [Серии 13-24 из 24]", _keys(13, 24, 1) + _keys(13, 24, 2)) == (23, 24, False)
+    restarted = [key for season in range(2, 7) for key in _keys(1, 26, season)]
+    assert _shown("Show (73-176 серии из 176)", restarted, numbering="restarted") == (175, 176, False)
+
+
+def test_title_count_from_episode_one_shows_what_it_showed_before():
+    assert _shown("Show [5 из 12]", _keys(1, 5)) == (5, 12, False)
+    assert _shown("Show [Серии 1-12 из 12]", _keys(1, 12)) == (12, 12, True)
+    assert _shown("Show [Серии 1-12 из 12]", _keys(1, 12, 1) + _keys(1, 12, 2)) == (12, 12, False)
+
+
 def test_russian_plural_episode_range_and_extended_season_folders():
     assert [label.episode for label in parse_episode_coverage("Show 1-5 серии.mkv")] == [1, 2, 3, 4, 5]
     coverages = resolve_episode_coverages(("Season 02 (2020)/01.mkv", "2 сезон/02.mkv"))

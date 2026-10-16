@@ -9,6 +9,7 @@ from tow.progress import reconcile_topic, safe_relative_path
 from tow.progress.expected import preferred_season_for
 from tow.progress.labels import latest_item_label
 from tow.progress.reconcile import _file_progress
+from tow.web.views import topic_progress_summary
 
 
 def test_completed_auxiliary_file_does_not_replace_latest_episode_label():
@@ -615,10 +616,15 @@ def test_season_relative_files_complete_absolute_title_window(tmp_path: Path):
     }
     history: dict = {"topics": {}}
     result = reconcile_topic(topic, SeasonTwoClient(), history, "2026-09-12T21:00:00+03:00")
-    assert result["summary"]["completed"] == 12
-    assert result["summary"]["expected"] == 12
+    # Progress counts by the title's last episode: E01..E12 of season 2 are episodes 13-24.
+    assert result["summary"]["completed"] == 24
+    assert result["summary"]["expected"] == 24
     assert result["summary"]["is_complete"] is True
     assert history["topics"]["cour"]["expected"]["numbering"] == "season-relative"
+    # A record kept by 1.32.0 lost the title's first episode (1..12); the next pass restores it.
+    history["topics"]["cour"]["expected"].update(episode_min=1, episode_max=12)
+    result = reconcile_topic(topic, SeasonTwoClient(), history, "2026-09-12T22:00:00+03:00")
+    assert (result["summary"]["completed"], result["summary"]["expected"]) == (24, 24)
 
 
 def _range_progress(tmp_path: Path, title: str, names: list[str]) -> dict:
@@ -645,40 +651,48 @@ _RESTARTED_104 = [f"Show.S{season:02d}E{episode:02d}.mkv" for season in range(2,
 @pytest.mark.parametrize("title", ["Show (73-176 серии из 176)", "Show (Серии 73-176 из 176)"])
 def test_cumulative_files_complete_a_title_range_in_both_word_orders(tmp_path: Path, title: str):
     names = [f"Show - {episode:03d}.mkv" for episode in range(73, 177)]
-    assert _range_progress(tmp_path, title, names) == {"completed": 104, "expected": 104, "is_complete": True}
+    assert _range_progress(tmp_path, title, names) == {"completed": 176, "expected": 176, "is_complete": True}
 
 
 @pytest.mark.parametrize("title", ["Show (73-176 серии из 176)", "Show (Серии 73-176 из 176)"])
 def test_cumulative_range_ignores_a_stray_low_episode(tmp_path: Path, title: str):
     # E176 is missing; a recap numbered E01 must not stand in for it.
     names = ["Show - 001.mkv", *(f"Show - {episode:03d}.mkv" for episode in range(73, 176))]
-    assert _range_progress(tmp_path, title, names) == {"completed": 103, "expected": 104, "is_complete": False}
+    assert _range_progress(tmp_path, title, names) == {"completed": 175, "expected": 176, "is_complete": False}
 
 
 @pytest.mark.parametrize("title", ["Show (73-176 серии из 176)", "Show (Серии 73-176 из 176)"])
 def test_files_restarting_each_season_count_the_range_length(tmp_path: Path, title: str):
-    assert _range_progress(tmp_path, title, _RESTARTED_104) == {"completed": 104, "expected": 104, "is_complete": True}
+    assert _range_progress(tmp_path, title, _RESTARTED_104) == {"completed": 176, "expected": 176, "is_complete": True}
 
 
 @pytest.mark.parametrize("title", ["Show (73-176 серии из 176)", "Show (Серии 73-176 из 176)"])
 def test_restarted_numbering_missing_one_episode_is_not_complete(tmp_path: Path, title: str):
     names = _RESTARTED_104[:-1]
-    assert _range_progress(tmp_path, title, names) == {"completed": 103, "expected": 104, "is_complete": False}
+    assert _range_progress(tmp_path, title, names) == {"completed": 175, "expected": 176, "is_complete": False}
 
 
 @pytest.mark.parametrize("title", ["Show [13-24 серии из 24]", "Show [Серии 13-24 из 24]", "Show [13-24 из 24]"])
 def test_second_cour_split_over_two_seasons_counts_its_twelve_episodes(tmp_path: Path, title: str):
     names = [f"Show.S{season:02d}E{episode:02d}.mkv" for season in (1, 2) for episode in range(1, 7)]
-    assert _range_progress(tmp_path, title, names) == {"completed": 12, "expected": 12, "is_complete": True}
+    assert _range_progress(tmp_path, title, names) == {"completed": 24, "expected": 24, "is_complete": True}
 
 
 def test_season_x_range_title_counts_its_own_episodes(tmp_path: Path):
     names = [f"Show 2x{episode:02d}.mkv" for episode in range(13, 25)]
     assert _range_progress(tmp_path, "Show [2x13-24 из 24]", names) == {
-        "completed": 12,
-        "expected": 12,
+        "completed": 24,
+        "expected": 24,
         "is_complete": True,
     }
+
+
+def test_a_range_title_without_history_yet_shows_its_last_episode():
+    topic = {"id": "new", "title": "Show [Серии 13-24 из 24]"}
+    summary = topic_progress_summary(topic, {"topics": {}})
+    assert (summary["completed"], summary["expected"], summary["is_complete"]) == (12, 24, False)
+    summary = topic_progress_summary({"id": "new", "title": "Show [Серии 1-12 из 20]"}, {"topics": {}})
+    assert (summary["completed"], summary["expected"], summary["is_complete"]) == (0, 20, False)
 
 
 def test_unknown_tracker_total_keeps_original_season_and_repairs_old_event(tmp_path: Path):
@@ -769,8 +783,9 @@ def test_season_number_in_files_resolves_title_window_without_title_season(tmp_p
         (tmp_path / f"Show S2 - {episode:02d}.mkv").write_bytes(b"x")
     topic = {"id": "implicit-cour", "title": "Show [13-25 из 25]", "hash": "ABC", "save_path": str(tmp_path)}
     result = reconcile_topic(topic, SeasonTwoClient(), {"topics": {}}, "2026-09-12T21:00:00+03:00")
-    assert result["summary"]["completed"] == 13
-    assert result["summary"]["expected"] == 13
+    # Counted by the title's last episode: S2 01..13 are episodes 13-25 of 25.
+    assert result["summary"]["completed"] == 25
+    assert result["summary"]["expected"] == 25
     assert result["summary"]["is_complete"] is True
 
 
@@ -1703,7 +1718,8 @@ def test_dual_numbering_rekey_is_silent_and_does_not_overcount(tmp_path: Path):
     }
     result = reconcile_topic(topic, Client(), history, now="2026-01-01T01:00:00+00:00")
     assert result["events"] == []
-    assert result["summary"]["completed"] == 2
+    # Two episodes of the range 2..74, counted by the last episode: 3 of 74.
+    assert (result["summary"]["completed"], result["summary"]["expected"]) == (3, 74)
     assert result["summary"]["completion_inconsistent"] is False
 
 
