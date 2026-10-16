@@ -122,6 +122,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   longer reports a save that succeeded as failed when that file system cannot flush folders.
 - In a Linux or macOS terminal with a KOI8-R or ISO-8859 locale, `tow` commands no longer stop with an encoding
   error on a character the terminal lacks (such as “—”): it is printed as “?”.
+- On Windows, a process that ended with exit code 259 is no longer taken for one still running, so a stop or a
+  start no longer waits for it until its time runs out.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password

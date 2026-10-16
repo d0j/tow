@@ -13,6 +13,7 @@ import signal
 import stat
 import struct
 import subprocess
+import sys
 from types import SimpleNamespace
 from typing import Any, ClassVar
 
@@ -469,42 +470,90 @@ def test_windows_terminate_waits_for_the_process_to_go(monkeypatch):
 
 
 class _Kernel32Processes:
-    def __init__(self, *, handle: int, last_error: int = 0, code: int = 259, ok: bool = True) -> None:
-        self.handle, self.last_error, self.code, self.ok = handle, last_error, code, ok
-        self.closed: list[int] = []
+    """kernel32 as process_alive asks it: OpenProcess for SYNCHRONIZE, a zero-time wait."""
 
-    def OpenProcess(self, access, inherit, pid):
-        assert access == 0x1000
+    def __init__(self, *, handle: int, last_error: int = 0, wait: int = 0x102) -> None:
+        self.handle, self.last_error, self.wait = handle, last_error, wait
+        self.closed: list[int] = []
+        self.waited: list[tuple[int, int]] = []
+        self.OpenProcess = self._open  # attributes, so the code can set argtypes/restype on them
+        self.WaitForSingleObject = self._wait
+        self.CloseHandle = self._close
+
+    def _open(self, access, inherit, pid):
+        assert access == 0x00100000  # SYNCHRONIZE: enough to wait, the least an account is refused
         assert inherit is False
         return self.handle
 
-    def GetLastError(self):
-        return self.last_error
+    def _wait(self, handle, milliseconds):
+        self.waited.append((handle, milliseconds))
+        return self.wait
 
-    def GetExitCodeProcess(self, handle, ref):
-        ref._obj.value = self.code
-        return 1 if self.ok else 0
+    def _close(self, handle):
+        self.closed.append(handle)
+        return 1
 
-    def CloseHandle(self, handle):
-        self.closed.append(getattr(handle, "value", handle))
+
+def _use_kernel32(monkeypatch, kernel) -> list[tuple[str, bool]]:
+    """ctypes as on Windows, with ``kernel`` as kernel32; the libraries loaded are recorded."""
+    loaded: list[tuple[str, bool]] = []
+
+    def win_dll(name, use_last_error=False):
+        loaded.append((name, use_last_error))
+        return kernel
+
+    monkeypatch.setattr(ctypes, "windll", SimpleNamespace(kernel32=kernel), raising=False)
+    monkeypatch.setattr(ctypes, "WinDLL", win_dll, raising=False)
+    monkeypatch.setattr(ctypes, "get_last_error", lambda: kernel.last_error, raising=False)
+    return loaded
 
 
 @pytest.mark.parametrize(
     ("kernel", "alive"),
     [
-        (_Kernel32Processes(handle=5), True),
-        (_Kernel32Processes(handle=5, code=0), False),  # exited
-        (_Kernel32Processes(handle=5, ok=False), False),
+        (_Kernel32Processes(handle=5), True),  # the wait timed out: running
+        (_Kernel32Processes(handle=5, wait=0), False),  # signalled: it has ended (whatever its exit code)
+        (_Kernel32Processes(handle=5, wait=0xFFFFFFFF), True),  # the wait failed: not known to be gone
         (_Kernel32Processes(handle=0, last_error=87), False),  # no such process
         (_Kernel32Processes(handle=0, last_error=5), True),  # another user's
+        (_Kernel32Processes(handle=0, last_error=0), False),
     ],
 )
 def test_windows_process_alive_asks_the_kernel_never_kills(monkeypatch, kernel, alive):
-    monkeypatch.setattr(ctypes, "windll", SimpleNamespace(kernel32=kernel), raising=False)
+    loaded = _use_kernel32(monkeypatch, kernel)
     monkeypatch.setattr(windows.os, "kill", lambda *_a: pytest.fail("os.kill terminates on Windows"))
     assert WindowsBackend().process_alive(1234) is alive
-    assert kernel.closed == ([5] if kernel.handle else [])
+    assert loaded == [("kernel32", True)]  # GetLastError through ctypes is unreliable; the kept one is not
+    assert kernel.closed == ([5] if kernel.handle else [])  # always closed
+    assert kernel.waited == ([(5, 0)] if kernel.handle else [])  # never blocks
     assert WindowsBackend().process_alive(0) is False
+
+
+def test_windows_process_alive_closes_the_handle_when_the_wait_raises(monkeypatch):
+    kernel = _Kernel32Processes(handle=5)
+
+    def broken(*_args):
+        raise OSError("synthetic")
+
+    kernel.WaitForSingleObject = broken
+    _use_kernel32(monkeypatch, kernel)
+    assert WindowsBackend().process_alive(1234) is True  # not known to be gone
+    assert kernel.closed == [5]
+
+
+@pytest.mark.allow_system  # one short-lived Python child of this test, waited for and reaped
+@pytest.mark.skipif(platform.this_os() != "windows", reason="a real Windows process")
+def test_a_windows_process_that_exited_with_259_is_not_alive():
+    # 259 is STILL_ACTIVE: a process that ends with that code read as running for ever. The
+    # Popen keeps its handle, so the PID cannot be reused before the question.
+    child = subprocess.Popen([sys.executable, "-c", "raise SystemExit(259)"])
+    try:
+        assert child.wait(timeout=60) == 259
+        assert windows.process_alive(child.pid) is False
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait(timeout=60)
 
 
 class _FakePopen:
