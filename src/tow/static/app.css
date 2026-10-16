@@ -655,6 +655,9 @@ time[data-short][tabindex]:focus-visible { outline: 2px solid var(--acc); outlin
   min-width: 0; padding: .9rem; background: var(--panel2);
   border: 1px solid var(--line); border-radius: 10px;
 }
+/* A grey pill ("Main", "Not checked") is --panel2, the card's own colour: on a card it takes the
+   page's panel colour, or it reads as plain bold text. */
+.integration-card .pill.mut { background: var(--panel); }
 .integration-head {
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: .75rem; padding-bottom: .7rem; border-bottom: 1px solid var(--line);
