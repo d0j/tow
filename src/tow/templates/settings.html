@@ -409,7 +409,7 @@
         <div class="integration-list backup-list">
           <article class="integration-card backup-card" id="backup-night" aria-labelledby="backup-night-title">
             <div class="integration-head">
-              <div><h2 id="backup-night-title">{{ t('settings.backups.night_title') }}</h2><p>{{ t('settings.backups.night_hint') }}</p></div>
+              <div class="stack-1"><h2 id="backup-night-title">{{ t('settings.backups.night_title') }}</h2><p>{{ t('settings.backups.night_hint') }}</p></div>
               {% if backups.cleanup_pending or (night_cleanup_unknown and backups.snapshots) %}<span class="pill warn">{{ t('settings.backups.pill_cleanup' if backups.cleanup_pending else 'settings.backups.pill_unknown') }}</span>{% endif %}
             </div>
             <div class="card-body">
@@ -468,7 +468,7 @@
 
           <article class="integration-card backup-card" id="backup-manual" aria-labelledby="backup-manual-title">
             <div class="integration-head">
-              <div><h2 id="backup-manual-title">{{ t('settings.backups.manual_title') }}</h2><p>{{ t('settings.backups.manual_note') }}</p></div>
+              <div class="stack-1"><h2 id="backup-manual-title">{{ t('settings.backups.manual_title') }}</h2><p>{{ t('settings.backups.manual_note') }}</p></div>
               {% if backups.point_cleanup_pending or point_cleanup_unknown %}<span class="pill warn">{{ t('settings.backups.pill_cleanup' if backups.point_cleanup_pending else 'settings.backups.pill_unknown') }}</span>{% elif not restore_points and not restore_points_error %}<span class="pill mut">{{ t('settings.backups.manual_empty') }}</span>{% endif %}
             </div>
             <div class="card-body">
@@ -509,7 +509,7 @@
 
           <article class="integration-card backup-card portable-transfer" id="backup-file" aria-labelledby="backup-file-title">
             <div class="integration-head">
-              <div><h2 id="backup-file-title">{{ t('settings.backups.file_title') }}</h2><p>{{ t('settings.backups.file_intro') }}</p></div>
+              <div class="stack-1"><h2 id="backup-file-title">{{ t('settings.backups.file_title') }}</h2><p>{{ t('settings.backups.file_intro') }}</p></div>
             </div>
             <div class="card-body">
             <form method="post" action="/settings/portable/export" data-native-submit class="settings-actions backup-make">

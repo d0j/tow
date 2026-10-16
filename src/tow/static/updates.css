@@ -36,6 +36,3 @@ body:has(> .app-version) { box-sizing: border-box; padding-bottom: 2.2rem; }
 .release-panel code { white-space: normal; overflow-wrap: anywhere; }
 .release-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18rem; overflow-y: auto; }
 .release-panel [hidden], [data-release-badge][hidden] { display: none !important; }
-@media (max-width: 480px) {
-  .hdr-sites { min-height: 1rem; }
-}
