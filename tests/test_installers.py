@@ -153,6 +153,105 @@ def _posix(path: Path) -> str:
     return f"/{match.group(1).lower()}/{match.group(2)}" if match else text
 
 
+# What install.sh runs before its first download, besides the stubs a test puts first on PATH.
+_SH_TOOLS = ("mkdir", "rm", "mv", "cp", "cat", "cut", "tr", "find", "head", "tail", "sed", "awk", "grep", "tar")
+_SH_TOOLS += ("gzip", "chmod", "dirname", "basename", "ls", "sha256sum", "shasum", "openssl")
+
+
+def _sh_with_stubs(tmp_path: Path, stubs: dict[str, str]) -> tuple[str, str]:
+    """The shell and a PATH of only `stubs` (shell scripts by name) and the plain tools: no real
+    curl, wget, sysctl or uname, so a test decides which of them exist and what they say."""
+    shell = shutil.which("dash") or shutil.which("sh")
+    if shell is None:
+        pytest.skip("no sh on this machine")
+    stub_dir = tmp_path / "stubs"
+    stub_dir.mkdir()
+    for name, body in stubs.items():
+        (stub_dir / name).write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8", newline="\n")
+        (stub_dir / name).chmod(0o755)
+    if os.name == "nt":
+        # Git for Windows: its usr\bin holds the plain tools, and no curl, wget or sysctl.
+        tools = Path(shell).parent
+        if any((tools / f"{name}.exe").exists() for name in ("curl", "wget", "sysctl")):
+            pytest.skip("this sh's own folder has a curl, wget or sysctl")
+    else:
+        tools = tmp_path / "tools"
+        tools.mkdir()
+        for name in _SH_TOOLS:
+            found = shutil.which(name)
+            if found:
+                (tools / name).symlink_to(found)
+    return shell, os.pathsep.join([str(stub_dir), str(tools)])
+
+
+def _source_tar(path: Path) -> Path:
+    """A source archive of one folder whose scripts/tow only ends."""
+    import io
+    import tarfile
+
+    with tarfile.open(path, "w:gz") as archive:
+        data = b"#!/bin/sh\nexit 0\n"
+        info = tarfile.TarInfo("tow-x/scripts/tow")
+        info.size = len(data)
+        info.mode = 0o755
+        archive.addfile(info, io.BytesIO(data))
+    return path
+
+
+def _install_sh(tmp_path: Path, stubs: dict[str, str], *options: str, source: bool = True):
+    shell, path = _sh_with_stubs(tmp_path, stubs)
+    env = {**os.environ, "PATH": path, "HOME": _posix(tmp_path / "home"), "TOW_INSTALL_DIR": _posix(tmp_path / "TOW")}
+    for name in ("TOW_INSTALL_SOURCE", "TOW_INSTALL_SUMS", "TOW_VERSION", "TOW_INSTALL_PORT"):
+        env.pop(name, None)
+    if source:
+        env["TOW_INSTALL_SOURCE"] = _posix(_source_tar(tmp_path / "tow-source.tar.gz"))
+    return subprocess.run(
+        [shell, _posix(SH), *options],
+        capture_output=True,
+        text=True,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        timeout=120,
+        check=False,
+    )
+
+
+_MAC_UNAME = "case $1 in -s) echo Darwin ;; -m) echo {arch} ;; *) echo Darwin ;; esac"
+_FAILED_CURL = 'printf "%s\\n" "$*" >>"$(dirname "$0")/../curl.log"; exit 22'
+
+
+@pytest.mark.allow_system  # install.sh with stub uname/sysctl/curl in a temp folder; stops at the uv download
+@pytest.mark.parametrize(
+    ("arch", "sysctl", "target", "intel_note"),
+    [
+        ("x86_64", "echo 1", "aarch64-apple-darwin", False),  # a Terminal under Rosetta on Apple silicon
+        ("x86_64", "echo 0", "x86_64-apple-darwin", True),  # a real Intel Mac
+        ("x86_64", 'echo "sysctl: unknown oid" >&2; exit 1', "x86_64-apple-darwin", True),  # older macOS
+        ("x86_64", None, "x86_64-apple-darwin", True),  # no sysctl at all
+        ("arm64", "echo 0", "aarch64-apple-darwin", False),
+    ],
+)
+def test_install_sh_takes_apple_silicon_uv_under_rosetta(tmp_path, arch, sysctl, target, intel_note):
+    # uname -m says x86_64 in a shell Rosetta translates: the Intel uv and Python, slower, and an
+    # Intel-only build step for one package, on a Mac that runs the native ones.
+    stubs = {"uname": _MAC_UNAME.format(arch=arch), "curl": _FAILED_CURL}
+    if sysctl is not None:
+        stubs["sysctl"] = f'[ "$*" = "-n sysctl.proc_translated" ] || exit 1\n{sysctl}'
+    done = _install_sh(tmp_path, stubs)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert f"uv {_sh_uv_version()} ({target})" in done.stdout, done.stdout + done.stderr
+    assert f"/uv-{target}.tar.gz" in (tmp_path / "curl.log").read_text(encoding="utf-8")
+    assert ("an Intel Mac needs a Rust toolchain" in done.stdout) is intel_note
+    assert ("Rosetta" in done.stdout) is (arch == "x86_64" and target.startswith("aarch64"))
+    assert not (tmp_path / "TOW").exists()  # the failed download leaves nothing
+
+
+def _sh_uv_version() -> str:
+    match = re.search(r"^UV_VERSION=(\S+)$", SH.read_text(encoding="utf-8"), re.MULTILINE)
+    assert match is not None
+    return match.group(1)
+
+
 @pytest.fixture
 def stub_install(tmp_path) -> Path:
     """An install whose tow launcher only writes down what it was asked."""
