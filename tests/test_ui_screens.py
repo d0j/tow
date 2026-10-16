@@ -527,10 +527,10 @@ def test_the_add_form_and_the_edit_panel_share_the_whole_order_and_widths(client
         assert "w-xs" in form.select_one(f"#{prefix}check-interval{suffix}")["class"]
 
 
-def test_the_sign_in_password_fills_its_card():
-    """1.32 QA N1 gave the sign-in password w-m (288 px) like Setup's. 1.32.1 AU1 asks the opposite:
-    the one field of the card fills it; with w-m it stopped at 240 px in a 380 px card on a desktop
-    (QA Q3). No width class: .auth-form .secret lifts the cap on every screen."""
+def test_the_sign_in_password_is_a_standard_password():
+    """1.32 QA N1 gave the sign-in password w-m like Setup's; 1.32.1 AU1 made it fill its card (no
+    class, an override in app.css). 1.32.2: every password looks the same on every screen - the
+    standard 240 px with its eye, the sign-in's too (it fills its line on a phone, as all do)."""
     from tow.auth import lan_password_record
     from tow.config import load_config, save_config
     from tow.store import load_secrets, save_secrets
@@ -543,7 +543,8 @@ def test_the_sign_in_password_fills_its_card():
     save_config(cfg)
     page = BeautifulSoup(TestClient(app).get("/login").text, "html.parser")
     field = page.select_one("#lan-password")
-    assert not [name for name in field.get("class", []) if name.startswith("w-")]
+    assert field["class"] == ["w-m"]
+    assert field.find_parent(class_="secret").select_one("button.ico.reveal")["data-reveal"] == "lan-password"
     assert field.find_parent("form")["class"] == ["form-grid", "auth-form"]
 
 

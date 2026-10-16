@@ -41,7 +41,7 @@ FIELDS = (
         error="notifier.ntfy.server_error",
         required=False,
         default="https://ntfy.sh",
-        width="l",
+        width="xl",
     ),
 )
 # The fields that name a server TOW posts to by itself: one in the home network is refused

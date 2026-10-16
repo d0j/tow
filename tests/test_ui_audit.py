@@ -522,13 +522,14 @@ def test_chips_take_size_from_the_shared_button_rule():
 
 
 def test_sort_select_and_file_field_are_fields_of_the_shared_height():
-    assert "height" not in _rule("#list-sort")
+    # 1.32.2: no rule of its own at all - a select is a standard field (w-m) like every other.
+    assert "#list-sort" not in CSS
     file_rule = _rule('.portable-import-form input[type="file"]')
     assert "height: var(--field-h);" in file_rule
 
 
 def test_add_client_select_sits_next_to_its_button():
-    assert "flex: 0 1 20rem;" in _rule(".client-add-row select")
+    assert "flex: 0 1 15rem;" in _rule(".client-add-row select")  # the standard size (1.32.2)
     assert "align-items: center;" in _rule(".client-add-row")
 
 

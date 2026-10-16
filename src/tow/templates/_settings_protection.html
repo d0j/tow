@@ -43,9 +43,9 @@
             {% if p.on_demand %}<p class="action-hint">{{ t('protection_ui.on_demand_details') }}</p>{% endif %}
             <label class="check-field"><input type="checkbox" name="provider_enabled" value="{{ p.id }}"{% if p.enabled %} checked{% endif %}><span>{{ t('protection_ui.provider_enabled') }}</span></label>
             <div class="field-row">
-              <div class="field"><label for="protection-url-{{ p.id }}">{{ t('protection_ui.address') }}</label><input id="protection-url-{{ p.id }}" name="provider_url" value="{{ p.url }}" class="w-l" placeholder="{{ t('common.example', example='http://127.0.0.1:8191') }}" maxlength="256" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="protection-url-hint-{{ p.id }}"><p class="field-hint" id="protection-url-hint-{{ p.id }}">{{ t('protection_ui.address_hint') }}</p></div>
+              <div class="field"><label for="protection-url-{{ p.id }}">{{ t('protection_ui.address') }}</label><input id="protection-url-{{ p.id }}" name="provider_url" value="{{ p.url }}" class="w-xl" placeholder="{{ t('common.example', example='http://127.0.0.1:8191') }}" maxlength="256" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="protection-url-hint-{{ p.id }}"><p class="field-hint" id="protection-url-hint-{{ p.id }}">{{ t('protection_ui.address_hint') }}</p></div>
               {% if saved_count > 1 %}
-              <div class="field"><label for="protection-order-{{ p.id }}">{{ t('protection_ui.order') }}</label><input id="protection-order-{{ p.id }}" name="provider_order" value="{{ p.order }}" class="w-2xs" type="number" min="1" max="16" inputmode="numeric"></div>
+              <div class="field"><label for="protection-order-{{ p.id }}">{{ t('protection_ui.order') }}</label><input id="protection-order-{{ p.id }}" name="provider_order" value="{{ p.order }}" class="w-xs" type="number" min="1" max="16" inputmode="numeric"></div>
               {% else %}<input type="hidden" name="provider_order" value="{{ p.order }}">{% endif %}
             </div>
             {#- P1: a saved connection is removed by its own button (its own form below, with only its
@@ -58,9 +58,9 @@
         <details class="technical-details protection-limits">
           <summary>{{ t('protection_ui.limits') }}</summary>
           <div class="field-row">
-            <div class="field"><label for="protection-timeout">{{ t('protection_ui.timeout') }}</label><input id="protection-timeout" name="timeout_sec" value="{{ protection.timeout_sec }}" class="w-2xs" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">{{ t('protection_ui.timeout_hint') }}</p></div>
+            <div class="field"><label for="protection-timeout">{{ t('protection_ui.timeout') }}</label><input id="protection-timeout" name="timeout_sec" value="{{ protection.timeout_sec }}" class="w-xs" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">{{ t('protection_ui.timeout_hint') }}</p></div>
             <div class="field"><label for="protection-interval">{{ t('protection_ui.interval') }}</label><input id="protection-interval" name="min_interval_sec" value="{{ protection.min_interval_sec }}" class="w-xs" type="number" min="60" max="86400" inputmode="numeric" aria-describedby="protection-interval-hint"><p class="field-hint" id="protection-interval-hint">{{ t('protection_ui.interval_hint') }}</p></div>
-            <div class="field"><label for="protection-attempts">{{ t('protection_ui.attempts') }}</label><input id="protection-attempts" name="max_attempts" value="{{ protection.max_attempts }}" class="w-2xs" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">{{ t('protection_ui.attempts_hint') }}</p></div>
+            <div class="field"><label for="protection-attempts">{{ t('protection_ui.attempts') }}</label><input id="protection-attempts" name="max_attempts" value="{{ protection.max_attempts }}" class="w-xs" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">{{ t('protection_ui.attempts_hint') }}</p></div>
           </div>
         </details>
         <div class="settings-actions"><button type="submit">{{ t('common.save') }}</button></div>

@@ -56,7 +56,7 @@
     <details class="hdr-search">
       <summary title="Search" aria-label="Search"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-search"/></svg></summary>
       <label class="sr-only" for="q">Search</label>
-      <input id="q" type="search" placeholder="search…" autocomplete="off">
+      <input id="q" class="w-m" type="search" placeholder="search…" autocomplete="off">
       <span id="search-status" class="sr-only" aria-live="polite"></span>
     </details>
 
@@ -318,7 +318,7 @@
 
                   <label for="nf-telegram-token">Bot token <span class="saved-tag" id="nf-telegram-token-saved">saved</span></label>
 
-                  <span class="secret"><input id="nf-telegram-token" name="token" type="password" class="w-l" value="" placeholder="Leave empty to keep" aria-describedby="nf-telegram-token-saved notifier-keep-telegram" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off"><button type="button" class="ico reveal" data-reveal="nf-telegram-token" data-reveal-name="Bot token" aria-controls="nf-telegram-token" aria-pressed="false" aria-label="Show “Bot token”" title="Show “Bot token”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
+                  <span class="secret"><input id="nf-telegram-token" name="token" type="password" class="w-m" value="" placeholder="Leave empty to keep" aria-describedby="nf-telegram-token-saved notifier-keep-telegram" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off"><button type="button" class="ico reveal" data-reveal="nf-telegram-token" data-reveal-name="Bot token" aria-controls="nf-telegram-token" aria-pressed="false" aria-label="Show “Bot token”" title="Show “Bot token”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
 
                 </div>
 
@@ -418,7 +418,7 @@
 
                   <label for="nf-whatsapp-phone">Your WhatsApp number</label>
 
-                  <input id="nf-whatsapp-phone" name="phone" class="w-s" value="" placeholder="e.g. +15551234567" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
+                  <input id="nf-whatsapp-phone" name="phone" class="w-m" value="" placeholder="e.g. +15551234567" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
 
                 </div>
 
@@ -426,7 +426,7 @@
 
                   <label for="nf-whatsapp-apikey">apikey from CallMeBot</label>
 
-                  <span class="secret"><input id="nf-whatsapp-apikey" name="apikey" type="password" class="w-s" value="" placeholder="e.g. 123456" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off"><button type="button" class="ico reveal" data-reveal="nf-whatsapp-apikey" data-reveal-name="apikey from CallMeBot" aria-controls="nf-whatsapp-apikey" aria-pressed="false" aria-label="Show “apikey from CallMeBot”" title="Show “apikey from CallMeBot”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
+                  <span class="secret"><input id="nf-whatsapp-apikey" name="apikey" type="password" class="w-m" value="" placeholder="e.g. 123456" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off"><button type="button" class="ico reveal" data-reveal="nf-whatsapp-apikey" data-reveal-name="apikey from CallMeBot" aria-controls="nf-whatsapp-apikey" aria-pressed="false" aria-label="Show “apikey from CallMeBot”" title="Show “apikey from CallMeBot”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
 
                 </div>
 
@@ -477,7 +477,7 @@
 
                   <label for="nf-ntfy-server">Server (optional)</label>
 
-                  <input id="nf-ntfy-server" name="server" class="w-l" value="https://ntfy.sh" placeholder="e.g. https://ntfy.sh" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
+                  <input id="nf-ntfy-server" name="server" class="w-xl" value="https://ntfy.sh" placeholder="e.g. https://ntfy.sh" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
 
                 </div>
 
@@ -723,7 +723,7 @@
             <p class="action-hint">Web updates support published stable versions from 1.22.21. Data is kept; an incompatible data schema refuses the change. Older releases require the terminal and may not understand current data.</p>
             <div class="field">
               <label for="rollback-version">Release version</label>
-              <input id="rollback-version" class="w-s" data-update-version inputmode="text" placeholder="e.g. 1.22.21" maxlength="32" autocomplete="off">
+              <input id="rollback-version" class="w-m" data-update-version inputmode="text" placeholder="e.g. 1.22.21" maxlength="32" autocomplete="off">
             </div>
             <div class="settings-actions"><button type="button" class="ghost" data-update-apply>Install version</button><button type="button" class="ghost" data-update-previous hidden></button></div>
           </details>
@@ -866,7 +866,7 @@
 
             <label class="check-field"><input type="checkbox" name="provider_enabled" value="new-connection-1"><span>Use this connection</span></label>
             <div class="field-row">
-              <div class="field"><label for="protection-url-new-connection-1">Service address</label><input id="protection-url-new-connection-1" name="provider_url" value="" class="w-l" placeholder="e.g. http://127.0.0.1:8191" maxlength="256" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="protection-url-hint-new-connection-1"><p class="field-hint" id="protection-url-hint-new-connection-1">127.0.0.1 is this computer; /v1 is optional.</p></div>
+              <div class="field"><label for="protection-url-new-connection-1">Service address</label><input id="protection-url-new-connection-1" name="provider_url" value="" class="w-xl" placeholder="e.g. http://127.0.0.1:8191" maxlength="256" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="protection-url-hint-new-connection-1"><p class="field-hint" id="protection-url-hint-new-connection-1">127.0.0.1 is this computer; /v1 is optional.</p></div>
               <input type="hidden" name="provider_order" value="1">
             </div>
           </details>
@@ -876,9 +876,9 @@
         <details class="technical-details protection-limits">
           <summary>Attempt limits</summary>
           <div class="field-row">
-            <div class="field"><label for="protection-timeout">Time limit, s</label><input id="protection-timeout" name="timeout_sec" value="30" class="w-2xs" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">5–90, for the whole recovery.</p></div>
+            <div class="field"><label for="protection-timeout">Time limit, s</label><input id="protection-timeout" name="timeout_sec" value="30" class="w-xs" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">5–90, for the whole recovery.</p></div>
             <div class="field"><label for="protection-interval">Retry after, s</label><input id="protection-interval" name="min_interval_sec" value="1800" class="w-xs" type="number" min="60" max="86400" inputmode="numeric" aria-describedby="protection-interval-hint"><p class="field-hint" id="protection-interval-hint">60–86400 per site; 1800 = 30 min.</p></div>
-            <div class="field"><label for="protection-attempts">Calls per recovery</label><input id="protection-attempts" name="max_attempts" value="2" class="w-2xs" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">From 1 to 4.</p></div>
+            <div class="field"><label for="protection-attempts">Calls per recovery</label><input id="protection-attempts" name="max_attempts" value="2" class="w-xs" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">From 1 to 4.</p></div>
           </div>
         </details>
         <div class="settings-actions"><button type="submit">Save</button></div>

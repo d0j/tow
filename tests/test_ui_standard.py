@@ -76,34 +76,116 @@ def test_fields_are_36px_on_a_desktop_and_44px_on_phones_and_touch_screens():
     assert "stay 40 px" not in agents
 
 
-@pytest.mark.parametrize(
-    ("name", "width"),
-    [("w-2xs", "4.5rem"), ("w-xs", "5.5rem"), ("w-s", "12rem"), ("w-m", "15rem"), ("w-l", "26rem"), ("w-xl", "36rem")],
-)
-def test_a_field_is_as_wide_as_what_it_holds_at_most(name, width):
+# 1.32.2: exactly three field sizes (the owner: "all the same, clear, compact"). Short: every number;
+# standard: passwords, names, tokens, keys, chat IDs, hosts, reminders, site codes, searches and every
+# select; long: links, webhooks, folders, site paths, rules, host lists and a topic's name.
+SIZES = {"w-xs": "5.5rem", "w-m": "15rem", "w-xl": "36rem"}  # 88, 240 and 576 px
+GONE = ("w-2xs", "w-s", "w-l")
+LONG = {
+    "url",
+    "from_url",
+    "title",
+    "save_path",
+    "path",
+    "selection_value",
+    "fetch_hosts",
+    "login_hosts",
+    "url_regex",
+    "download_href_regex",
+    "download_path",
+    "topic_path",
+    "login_path",
+    "infohash_path",
+    "provider_url",
+}
+TEMPLATES = ROOT / "src" / "tow" / "templates"
+FIELD = re.compile(r"<(input|select|textarea)\b(?:[^>{]|\{\{.*?\}\}|\{%.*?%\})*>", re.DOTALL)
+
+
+def _fields() -> list[tuple[str, str, str]]:
+    """Every visible field of every template: (template, its tag, the tag's text)."""
+    found = []
+    for path in sorted(TEMPLATES.glob("*.html")):
+        source = re.sub(r"\{#.*?#\}", "", path.read_text(encoding="utf-8"), flags=re.DOTALL)
+        for match in FIELD.finditer(source):
+            tag = match.group()
+            kind = re.search(r'\stype="([^"]+)"', tag)
+            if kind and kind.group(1) in ("hidden", "checkbox", "radio", "file", "submit"):
+                continue
+            found.append((path.name, match.group(1), tag))
+    return found
+
+
+@pytest.mark.parametrize(("name", "width"), list(SIZES.items()))
+def test_a_field_is_one_of_three_sizes_at_most(name, width):
     """A port, a password and a webhook were all 1354 px wide at 1440 px. A width class is a
-    maximum: the field still shrinks with its form; a secret field's wrapper and a folder field's
-    take their field's class. 1.32.1 (F2): 72 px for attempts and order, 88 px for ports and
-    intervals (65535, 10080), 240 px for names, passwords and hosts (288 px held 20 characters)."""
+    maximum: the field still shrinks with a narrower form. 1.32.2 keeps three of 1.32.1's six:
+    88 px for numbers (65535, 10080 and 86400 fit), 240 px for what one types or picks, 576 px for
+    links, paths and rules; a secret field's wrapper and a folder field's take their field's."""
     assert _first(f".{name}").strip() == f"max-width: {width};"
-    assert f"max-width: {width}" in _first(f":is(.secret, .folder-input):has(> .{name})")
+    if name != "w-xs":  # no secret or folder holds a number
+        assert f"max-width: {width}" in _first(f":is(.secret, .folder-input):has(> .{name})")
+
+
+def test_no_other_field_size_is_left():
+    """1.32.1 had 72, 192 and 416 px too, and the sign-in page's password filled its card: the
+    same kind of field had three widths on three screens."""
+    for gone in GONE:
+        assert not re.search(rf"\.{gone}\b", CSS), gone
+        for page, _, tag in _fields():
+            assert not re.search(rf"\b{gone}\b", tag), (page, tag)
+    assert ".auth-form .secret" not in CSS
+    for name in ("#list-sort", "#list-tracker"):
+        assert f"{name} {{" not in CSS  # a select is a select: the standard size
+
+
+def test_every_field_has_its_size_by_what_it_holds():
+    """Every field on every screen (Home, Sites, Settings, Setup, Login, the dialogs and the edit
+    panels) carries exactly one of the three classes, chosen by what it holds."""
+    seen = set()
+    for page, _, tag in _fields():
+        sizes = [size for size in SIZES if re.search(rf'class="[^"]*\b{size}\b', tag)]
+        if 'class="w-{{ f.width }}"' in tag:  # a messenger's field: its module says (test below)
+            continue
+        name = re.search(r'\sname="([^"]+)"', tag) or re.search(r'\sid="([^"]+)"', tag)
+        key = name.group(1) if name else tag
+        kind = re.search(r'\stype="([^"]+)"', tag)
+        if kind and kind.group(1) == "number":
+            want = "w-xs"
+        elif key in LONG:
+            want = "w-xl"
+        else:  # a password, a name, a host, a reminder, a code, a search, every select
+            want = "w-m"
+        assert sizes == [want], (page, key, sizes)
+        seen.add(want)
+    assert seen == set(SIZES)
+
+
+def test_a_messengers_fields_have_their_size_too():
+    """Telegram's token was 416 px, WhatsApp's phone and key 192 px, ntfy's server 416 px: a
+    messenger's field says its size by the same three, and a secret is standard - but for the
+    Discord webhook, which is a link (long)."""
+    from tow.notifiers import kinds
+
+    template = (TEMPLATES / "settings.html").read_text(encoding="utf-8")
+    assert template.count('class="w-{{ f.width }}"') == 2  # always one class: no field without
+    for kind, module in kinds().items():
+        for field in module.FIELDS:
+            link = field.placeholder.startswith("http") or field.pattern.startswith("https://")
+            want = "xl" if link else "m"
+            assert field.width == want, (kind, field.name, field.width)
 
 
 def test_a_phone_field_fills_its_line_and_a_number_stays_short():
     """1.32.1 F3: at 360-390 px the classes still capped fields, so one form ended at 288, 306 and
     346 px. On a phone a text, select, secret or folder field has no cap and fills its line in a
-    row; ports, intervals and attempts keep theirs."""
+    row; numbers keep theirs."""
     blocks = CSS.split("@media (max-width: 720px) {")[1:]
     phone = next(block.split("\n}")[0] for block in blocks if ".field-row >" in block.split("\n}")[0])
-    caps = (
-        ":is(input, select, textarea):is(.w-s, .w-m, .w-l, .w-xl), "
-        ":is(.secret, .folder-input):has(> :is(.w-s, .w-m, .w-l, .w-xl))"
-    )
+    caps = ":is(input, select, textarea):is(.w-m, .w-xl), :is(.secret, .folder-input):has(> :is(.w-m, .w-xl))"
     assert _first(caps, phone).strip() == "max-width: none;"
-    row = ".field-row > :is(.w-s, .w-m, .w-l, .w-xl, :has(.w-s, .w-m, .w-l, .w-xl))"
-    assert "flex: 1 1 12rem" in _first(row, phone)
+    assert "flex: 1 1 12rem" in _first(".field-row > :is(.w-m, .w-xl, :has(.w-m, .w-xl))", phone)
     assert "w-xs" not in caps
-    assert "w-2xs" not in caps
 
 
 def test_one_form_layout_with_rows_that_wrap_by_the_forms_own_width():
@@ -130,7 +212,7 @@ def test_one_form_layout_with_rows_that_wrap_by_the_forms_own_width():
     assert "flex-direction: column" not in row
     assert "flex: 1 1 12rem" in _first(".field-row > *")
     assert "min-width: 0" in _first(".form-grid > *, .field-row > *")
-    assert "flex: 0 1 auto" in _first(".field-row > :is(.w-2xs, .w-xs, :has(.w-2xs, .w-xs))")
+    assert "flex: 0 1 auto" in _first(".field-row > :is(.w-xs, :has(.w-xs))")
     assert "flex: 0 1 15rem" in _first(".field-row > :is(.w-m, :has(.w-m))")
     assert "flex: 1 1 26rem" in _first(".field-row > :is(.w-xl, :has(.w-xl))")
     # No form-width switch for rows any more, and no "keep" variant: a pair wraps on its own.
@@ -346,11 +428,12 @@ def test_the_help_question_mark_is_a_28_px_target_and_the_copy_delete_page_a_set
 
 def test_the_history_search_fills_its_line_on_a_phone():
     """QA Q11: at 390 px the History search stopped at 296 of 374 px (its 18rem basis), the one
-    ragged phone edge left after F3. On a phone it takes its own full line."""
+    ragged phone edge left after F3. On a phone it takes its own full line; on a desktop it is the
+    standard 240 px field (1.32.2)."""
     rule = '.history-filter > form[role="search"]'
     phone = "@media (max-width: 720px) { " + rule + " { flex: 1 1 100%; } }"
     assert phone in CSS
-    assert CSS.index(phone) > CSS.index(rule + " { flex: 0 1 18rem; }")  # it wins
+    assert CSS.index(phone) > CSS.index(rule + " { flex: 0 1 15rem; }")  # it wins (the standard size)
 
 
 def test_the_check_all_cards_title_is_a_card_title():

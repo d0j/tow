@@ -30,7 +30,7 @@ FIELDS = (
         placeholder="123456789:AA…",
         pattern=r"\d{5,12}:[A-Za-z0-9_-]{30,}",
         error="notifier.telegram.token_error",
-        width="l",
+        width="m",
     ),
     Field(
         "chat_ids",

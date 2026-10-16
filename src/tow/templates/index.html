@@ -150,7 +150,7 @@
     <button type="button" class="chip" data-filter="paused" aria-pressed="false">{{ t('home.tools.paused') }}</button>
   </span>
   <label class="sr-only" for="list-tracker">{{ t('home.tools.site') }}</label>
-  <select id="list-tracker">
+  <select id="list-tracker" class="w-m">
     <option value="">{{ t('home.tools.all_sites') }}</option>
     {% for name in tracker_options %}<option value="{{ name }}">{{ site_title(name) }}</option>{% endfor %}
   </select>
@@ -171,7 +171,7 @@
   </div>
   </div>
   <label class="sr-only" for="list-sort">{{ t('home.tools.order') }}</label>
-  <select id="list-sort">
+  <select id="list-sort" class="w-m">
     <option value="">{{ t('home.sort.added') }}</option>
     <option value="name">{{ t('home.sort.name') }}</option>
     <option value="event">{{ t('home.sort.event') }}</option>

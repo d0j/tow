@@ -319,7 +319,7 @@ def test_site_form_starts_with_the_link_and_folds_the_patterns(client):
     advanced = form[form.index('<details class="advanced"') :]
     for field in ("site-regex", "site-dl", "site-login-path", "site-topic-path", "site-href-rx"):
         assert f'id="{field}"' in advanced
-    assert 'id="site-name" class="w-s"' in form  # a short name: the shared width class (1.32)
+    assert 'id="site-name" class="w-m"' in form  # a site code: the standard size (1.32.2)
     assert "details.add > summary" in _rules(CSS)
     assert "details.add summary" not in _rules(CSS)
 

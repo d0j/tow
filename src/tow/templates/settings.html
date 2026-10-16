@@ -201,9 +201,9 @@
                   <label for="{{ field_id }}">{{ f.label }}{% if not f.required %} {{ t('settings.common.optional') }}{% endif %}{% if f.kind == 'secret' and f.saved %}{{ saved_hint(field_id ~ '-saved') }}{% endif %}</label>
                   {% if f.kind == 'secret' %}
                   {#- A token, a webhook or a key: not a password to remember or to generate. #}
-                  <span class="secret"><input id="{{ field_id }}" name="{{ f.name }}" type="password"{% if f.width %} class="w-{{ f.width }}"{% endif %} value="{{ f.suggestion }}"{% if f.saved %} placeholder="{{ t('web.secret.keep_placeholder') }}" aria-describedby="{{ field_id }}-saved {{ keep_id }}"{% elif example %} placeholder="{{ example }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">{{ reveal(field_id, f.label) }}</span>
+                  <span class="secret"><input id="{{ field_id }}" name="{{ f.name }}" type="password" class="w-{{ f.width }}" value="{{ f.suggestion }}"{% if f.saved %} placeholder="{{ t('web.secret.keep_placeholder') }}" aria-describedby="{{ field_id }}-saved {{ keep_id }}"{% elif example %} placeholder="{{ example }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">{{ reveal(field_id, f.label) }}</span>
                   {% else %}
-                  <input id="{{ field_id }}" name="{{ f.name }}"{% if f.width %} class="w-{{ f.width }}"{% endif %} value="{{ f.value or f.suggestion }}"{% if example %} placeholder="{{ example }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
+                  <input id="{{ field_id }}" name="{{ f.name }}" class="w-{{ f.width }}" value="{{ f.value or f.suggestion }}"{% if example %} placeholder="{{ example }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
                   {% endif %}
                 </div>
                 {% endfor %}
@@ -528,7 +528,7 @@
             <p class="action-hint">{{ t('releases.rollback_policy') }}</p>
             <div class="field">
               <label for="rollback-version">{{ t('releases.target_label') }}</label>
-              <input id="rollback-version" class="w-s" data-update-version inputmode="text" placeholder="{{ t('common.example', example='1.22.21') }}" maxlength="32" autocomplete="off">
+              <input id="rollback-version" class="w-m" data-update-version inputmode="text" placeholder="{{ t('common.example', example='1.22.21') }}" maxlength="32" autocomplete="off">
             </div>
             <div class="settings-actions"><button type="button" class="ghost" data-update-apply>{{ t('releases.apply_version') }}</button><button type="button" class="ghost" data-update-previous hidden></button></div>
           </details>
