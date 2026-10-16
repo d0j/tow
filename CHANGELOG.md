@@ -153,6 +153,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - An update of an install without git no longer unpacks TOW's tests (paths up to 140 characters), so it works in
   any folder the installers allow on Windows without long paths. Its code is no longer writable by the group on
   Linux and macOS, and an archive with two names a Windows or macOS folder cannot tell apart is refused.
+- An update of an install without git on Windows no longer fails, and rolls back, because an antivirus or indexer
+  held a file of the new code for a moment: each move of the switch, its record and its recovery is tried again
+  for a short while.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password

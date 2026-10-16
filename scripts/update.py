@@ -297,6 +297,39 @@ def durable_copy(source: Path, destination: Path) -> None:
     shutil.copystat(source, destination)
 
 
+# A file another program holds for a moment (an antivirus scan of the new .venv, an indexer)
+# refuses a rename on Windows: each rename of the switch, its record and its recovery is tried
+# again, with one budget for the whole run so the retries never stretch an update unnoticed.
+REPLACE_TRIES = 10
+REPLACE_PAUSE = 0.5
+REPLACE_BUDGET = 30.0
+_replace_waited = [0.0]
+_pause = time.sleep
+
+
+def _held_for_a_moment(error: OSError) -> bool:
+    """A sharing violation or a denied access, as Windows reports a file held by another program."""
+    return isinstance(error, PermissionError) or getattr(error, "winerror", None) in (5, 32, 33)
+
+
+def replace(source: Path, target: Path) -> None:
+    """``os.replace``, tried again while the file is held (``REPLACE_TRIES``, within the run's
+    ``REPLACE_BUDGET``); any other error, and the last one, is raised as it is."""
+    for attempt in range(1, REPLACE_TRIES + 1):
+        try:
+            os.replace(source, target)
+            return
+        except OSError as exc:
+            if (
+                not _held_for_a_moment(exc)
+                or attempt == REPLACE_TRIES
+                or _replace_waited[0] + REPLACE_PAUSE > REPLACE_BUDGET
+            ):
+                raise
+        _replace_waited[0] += REPLACE_PAUSE
+        _pause(REPLACE_PAUSE)
+
+
 def replace_durably(source: Path, target: Path) -> None:
     """``target`` becomes a copy of ``source`` through a flushed temporary file beside it and a
     rename, and only when it differs: a power cut leaves the old copy or the new one, whole."""
@@ -306,7 +339,7 @@ def replace_durably(source: Path, target: Path) -> None:
     temporary = target.with_name(f".{target.name}.tmp")
     try:
         durable_copy(source, temporary)
-        os.replace(temporary, target)
+        replace(temporary, target)
     except BaseException:
         with contextlib.suppress(OSError):
             temporary.unlink()  # never left beside the copy (missing when the copy failed)
@@ -1159,7 +1192,7 @@ class ArchiveCode:
             handle.write(json.dumps(record))
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, self.journal)
+        replace(temporary, self.journal)
         _sync_folder(self.journal.parent)  # the folder entry too, where the system can (not Windows)
 
     def recover_pending(self, *, finalize: bool = True) -> str | None:
@@ -1176,14 +1209,14 @@ class ArchiveCode:
         for name in record["new"]:
             if name not in record["old"] and (self.app / name).exists():
                 remove_tree(self.failed / name)
-                os.replace(self.app / name, self.failed / name)
+                replace(self.app / name, self.failed / name)
         for name in record["old"]:
             if not (self.prev / name).exists():
                 continue  # already in app, or not yet moved out when the process died
             if (self.app / name).exists():
                 remove_tree(self.failed / name)
-                os.replace(self.app / name, self.failed / name)
-            os.replace(self.prev / name, self.app / name)
+                replace(self.app / name, self.failed / name)
+            replace(self.prev / name, self.app / name)
         remove_tree(self.failed)
         remove_tree(self.prev)
         remove_tree(self.new)
@@ -1326,7 +1359,7 @@ class ArchiveCode:
         parsed = version_tuple(version)
         if parsed is not None and parsed < MINIMUM_ARCHIVE_TARGET:
             raise UpdateError(self.work.text("archive_too_old", ref=ref, version=version))
-        os.replace(top, self.new)
+        replace(top, self.new)
         remove_tree(self.downloads)
         return ref
 
@@ -1356,11 +1389,11 @@ class ArchiveCode:
                 }
             )
             for entry in sorted(os.listdir(self.app)):
-                os.replace(self.app / entry, self.prev / entry)
+                replace(self.app / entry, self.prev / entry)
                 self.moved_out.append(entry)
                 self._test_cut()
             for entry in sorted(os.listdir(self.new)):
-                os.replace(self.new / entry, self.app / entry)
+                replace(self.new / entry, self.app / entry)
                 self.moved_in.append(entry)
                 self._test_cut()
         except OSError as exc:
@@ -2138,6 +2171,7 @@ class Update:
 
 def update(ref: str, *, system: System | None = None, app: Path = APP, **options: Any) -> int:
     """Run one update; the exit code (0 ok, 1 failed or rolled back, 2 refused)."""
+    _replace_waited[0] = 0.0  # the retry budget of renames is per run
     system = system or System(app)
     work = Update(system, ref, **options)
     lock_path = system.root / ".update.lock"
