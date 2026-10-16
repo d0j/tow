@@ -490,3 +490,23 @@ def test_the_log_dialogs_title_is_one_word(client):
     head = BeautifulSoup(client.get("/").text, "html.parser").select_one("#log-pop .log-pop-head")
     assert head.select_one("#log-title").get_text() == "Журнал"
     assert head.select_one("a.log-history-link")["href"] == "/history"
+
+
+def test_the_interval_hint_names_the_global_interval_in_minutes(client):
+    """1.32.1 H2: "Empty: global interval." did not say how often that is. The hint names it, in
+    both forms; the field stays genuinely empty (no grey number that reads as a value)."""
+    from tow.config import load_config, save_config
+    from tow.store import save_state
+
+    cfg = load_config()
+    cfg["interval_sec"] = 1800
+    save_config(cfg)
+    save_state({"topics": [{"id": "t1", "title": "Show", "url": "http://rutor.info/torrent/1", "save_path": "M:/TV"}]})
+    home = BeautifulSoup(client.get("/").text, "html.parser")
+    panel = BeautifulSoup(client.get("/topics/t1/edit-panel").text, "html.parser")
+    for page, field in ((home, "topic-check-interval"), (panel, "edit-check-interval-t1")):
+        box = page.select_one(f"#{field}")
+        assert not box.has_attr("placeholder")
+        assert box.get("value", "") == ""
+        hint = page.select_one(f"#{box['aria-describedby'].split()[-1]}")
+        assert hint.get_text() == "Пусто — общий интервал (30 мин)."

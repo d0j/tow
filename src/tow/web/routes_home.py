@@ -22,6 +22,7 @@ from tow.web.views import (
     check_result_flash,
     credential_prompt,
     first_run,
+    global_interval_minutes,
     topic_rows,
 )
 
@@ -109,6 +110,8 @@ def index(request: Request) -> Response:
             "save_roots": recent_save_roots(state),
             "client_options": client_options,
             "default_client_id": default_client_id(cfg),
+            # What an empty timer field means, said under it (the add form and an opened row).
+            "global_interval_min": global_interval_minutes(cfg),
             "credential_prompt": credential_prompt(request),
             "add_draft": add_draft(request),
             "flash": request_flash(request) or said,

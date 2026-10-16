@@ -139,7 +139,7 @@
   },
   "timer": {
     "field": "Check every, min",
-    "hint": "Empty: global interval.",
+    "hint": "Empty: use the global interval ({minutes} min).",
     "invalid_minutes": "Enter a whole number of minutes from 1 to {maximum}, or leave empty for the global interval.",
     "title": "Personal timer: every {minutes} min",
     "every": "{minutes} min",
