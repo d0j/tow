@@ -409,7 +409,9 @@ def test_install_ps1_runs_from_irm_iex_on_windows_powershell():
     assert not re.search(r"(?im)^\s*exit\b", code)  # under iex an exit closes the owner's window
     assert "??" not in code  # Windows PowerShell 5.1 has no ?? and no ternary
     assert not re.search(r"\s\?\s.*\s:\s", code)
-    assert "-UseBasicParsing" in code
+    # One download for 5.1 and 7 to a literal path (test_install_ps1_downloads_into_a_folder_with_brackets).
+    assert "Invoke-WebRequest" not in code
+    assert "$client.DownloadFile($Uri, $Path)" in code
     assert "SecurityProtocolType]::Tls12" in code
     assert "function Install-Tow" in code  # its settings stay inside the function
 
@@ -437,7 +439,7 @@ def test_install_ps1_closes_the_install_folder_before_anything_is_written_in_it(
     assert "if (-not $New -and $owner -ne $sid) { return $false }" in text
     assert "[IO.FileAttributes]::ReparsePoint) { return $false }" in text
     close_root = text.index("$rootClosed = Close-Folder $Dir $created")
-    assert close_root < text.index("Invoke-WebRequest") < text.index("ExtractToFile")
+    assert close_root < text.index('Save-Download "$base/SHA256SUMS"') < text.index("ExtractToFile")
     # keys\ and data\ on their own when the folder stays open (another account's).
     assert "foreach ($name in @('keys', 'data'))" in text
     assert "if (-not (Close-Folder $folder $new))" in text
@@ -453,7 +455,7 @@ def test_install_ps1_refuses_a_long_folder_before_writing_anything():
     assert "-Name LongPathsEnabled" in text
     assert "longer than about\n  110 characters" in (ROOT / "docs" / "PORTABLE.md").read_text(encoding="utf-8")
     assert long < first_write
-    assert long < text.index("Invoke-WebRequest")
+    assert long < text.index('Save-Download "$base/SHA256SUMS"')
 
 
 def test_install_ps1_refuses_windows_on_arm_before_writing_anything():
@@ -614,6 +616,100 @@ def test_install_ps1_refuses_a_zip_entry_outside_its_tow_folder(tmp_path):
     assert "unexpected entry" in done.stderr, done.stdout + done.stderr
     assert not (tmp_path / "outside.txt").exists()
     assert not folder.exists()  # a folder this run created goes again
+
+
+@pytest.mark.allow_system  # install.ps1 downloading from a loopback test server into a temp folder
+@pytest.mark.skipif(os.name != "nt", reason="install.ps1 installs on Windows")
+@pytest.mark.parametrize("shell", ["powershell", "pwsh"])
+@pytest.mark.parametrize("matching", [True, False], ids=["checked", "mismatch"])
+def test_install_ps1_downloads_into_a_folder_with_brackets(tmp_path, shell, matching, loopback_http_server):
+    # QA: Windows PowerShell 5.1 reads Invoke-WebRequest -OutFile as a wildcard, so in a folder like
+    # "D:\[x] TOW" the download failed (and an escaped path would be a different file on 7).
+    import http.server
+    import threading
+    import zipfile
+
+    program = shutil.which(shell)
+    if program is None:
+        pytest.skip(f"no {shell} here")
+    zip_path = tmp_path / "served" / "TOW-windows-x64.zip"
+    zip_path.parent.mkdir()
+    sums = _stub_zip(zip_path)
+    if not matching:
+        sums = ("0" * 64) + sums[64:]
+    served = {"/v9.9.9/SHA256SUMS": sums.encode(), "/v9.9.9/TOW-windows-x64.zip": zip_path.read_bytes()}
+    asked: list[str] = []
+
+    class Release(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            asked.append(self.path)
+            body = served.get(self.path)
+            self.send_response(200 if body is not None else 404)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(body or b"")))
+            self.end_headers()
+            self.wfile.write(body or b"")
+
+        def log_message(self, *args):
+            pass
+
+    server = loopback_http_server(Release)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        parent = tmp_path / "case" / "[x] TOW"
+        parent.mkdir(parents=True)
+        folder = parent / "TOW"
+        env = {
+            **os.environ,
+            "TOW_INSTALL_URL": f"http://127.0.0.1:{server.server_address[1]}/v9.9.9",
+            "TOW_NO_BROWSER": "1",
+        }
+        for name in ("TOW_INSTALL_SOURCE", "TOW_INSTALL_SUMS", "TOW_VERSION", "TOW_INSTALL_DIR"):
+            env.pop(name, None)
+        argv = [program, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(PS1)]
+        done = subprocess.run(
+            [*argv, "-Dir", str(folder), "-Yes"], capture_output=True, text=True, env=env, timeout=180, check=False
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert asked == ["/v9.9.9/SHA256SUMS", "/v9.9.9/TOW-windows-x64.zip"], done.stdout + done.stderr
+    assert os.listdir(tmp_path / "case") == ["[x] TOW"]  # no file under another name
+    if matching:
+        assert done.returncode == 0, done.stdout + done.stderr
+        assert "the download matches the release's SHA256SUMS" in done.stdout
+        assert os.listdir(parent) == ["TOW"]
+        with zipfile.ZipFile(zip_path) as archive:
+            for entry in archive.namelist():
+                if not entry.endswith("/"):
+                    assert (parent / entry).read_bytes() == archive.read(entry), entry
+        assert not (folder / ".install").exists()
+    else:
+        assert done.returncode != 0
+        assert "TOW: TOW-windows-x64.zip does not match the release's SHA256SUMS" in done.stderr, done.stderr
+        assert os.listdir(parent) == []  # the folder this run made goes again
+
+
+@pytest.mark.allow_system
+@pytest.mark.parametrize("shell", ["pwsh", "powershell"])
+def test_install_ps1_takes_test_downloads_only_from_this_computer(tmp_path, shell):
+    program = shutil.which(shell)
+    if program is None:
+        pytest.skip(f"no {shell} here")
+    folder = tmp_path / "TOW"
+    env = {**os.environ, "TOW_INSTALL_URL": "http://example.com/v9.9.9", "TOW_NO_BROWSER": "1"}
+    env.pop("TOW_INSTALL_SOURCE", None)
+    done = subprocess.run(
+        [program, "-NoProfile", "-NonInteractive", "-File", str(PS1), "-Dir", str(folder), "-Yes"],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=120,
+        check=False,
+    )
+    assert done.returncode != 0
+    assert "TOW_INSTALL_URL" in done.stderr, done.stdout + done.stderr
+    assert not folder.exists()
 
 
 def test_install_ps1_prints_a_runnable_autostart_hint_and_the_real_port():

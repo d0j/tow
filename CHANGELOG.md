@@ -180,6 +180,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   Python, not the Intel ones that needed the Intel Mac's developer tools.
 - `install.sh` on a system whose only `wget` is BusyBox's says at once to install `curl`, before it writes
   anything: before, every download failed as "has no SHA256SUMS" or "could not find the latest release".
+- `install.ps1` in Windows PowerShell 5.1 installs into a folder whose path has `[` or `]` (for example
+  `D:\[x] TOW`): its download stopped with "Unable to find the specified file".
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password
