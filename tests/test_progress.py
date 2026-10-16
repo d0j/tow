@@ -4,8 +4,9 @@ from typing import ClassVar
 import pytest
 from helpers import raises_code
 
+from tow import platform
 from tow.episodes import item_identity, summarize_completion
-from tow.progress import reconcile_topic, safe_relative_path
+from tow.progress import filesystem_confirmation, reconcile_topic, safe_relative_path
 from tow.progress.expected import preferred_season_for
 from tow.progress.labels import latest_item_label
 from tow.progress.reconcile import _file_progress
@@ -131,6 +132,25 @@ def test_a_pass_looks_at_the_disk_only_for_files_it_must_confirm(tmp_path: Path,
     again = reconcile_topic(topic, client, history, "2026-09-12T21:30:00+03:00")
     assert again["summary"]["completed"] == 1
     assert resolved == []  # confirmed within the day and still complete: no disk access at all
+
+
+@pytest.mark.skipif(platform.this_os() != "windows", reason="the Windows file API's 260-character limit")
+def test_a_client_file_past_260_characters_is_looked_at_in_the_extended_form(tmp_path: Path, monkeypatch):
+    # With long paths off (Windows' default) only \\?\C:\... reaches it; a runner with them on
+    # reaches it either way, so the form handed to the file API is checked as well.
+    rel = "/".join(f"folder {n:02d} of a long season" for n in range(9)) + "/S01E01.mkv"
+    extended = Path("\\\\?\\" + str(tmp_path)).joinpath(*rel.split("/"))
+    extended.parent.mkdir(parents=True)
+    extended.write_bytes(b"0123456789")
+    assert len(str(tmp_path / rel)) >= 260
+    looked: list[str] = []
+    real_stat = Path.stat
+    monkeypatch.setattr(Path, "stat", lambda self, **kw: looked.append(str(self)) or real_stat(self, **kw))
+
+    assert filesystem_confirmation(str(tmp_path), rel, 10) is True
+    assert filesystem_confirmation(str(tmp_path), rel, 11) is False  # short: still downloading
+    assert looked
+    assert all(entry.startswith("\\\\?\\") for entry in looked)
 
 
 @pytest.mark.parametrize("seen", [True, False])

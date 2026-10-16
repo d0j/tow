@@ -1222,3 +1222,60 @@ def test_child_path_keeps_a_plain_name_inside_its_folder_also_on_a_share(root, n
 def test_child_path_refuses_anything_but_a_plain_name(name):
     with pytest.raises(ValueError, match="plain name"):
         platform.child_path("C:\\TOW\\night" if _WINDOWS else "/srv/night", name)
+
+
+# --- long paths on Windows (client files of 260 characters or more) ------------------------------
+
+_DEEP = "\\".join(f"folder {n:02d} of a long season" for n in range(10))  # 259 characters
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("C:\\TV\\Show\\e01.mkv", "\\\\?\\C:\\TV\\Show\\e01.mkv"),
+        ("C:/TV/Show/../e01.mkv", "\\\\?\\C:\\TV\\e01.mkv"),  # that form takes every character literally
+        ("d:\\TV\\.\\e01.mkv", "\\\\?\\d:\\TV\\e01.mkv"),
+        ("\\\\nas\\share\\TV\\e01.mkv", "\\\\?\\UNC\\nas\\share\\TV\\e01.mkv"),
+        ("//nas/share/TV", "\\\\?\\UNC\\nas\\share\\TV"),
+        ("\\\\?\\C:\\TV", "\\\\?\\C:\\TV"),  # already extended
+        ("\\\\?\\UNC\\nas\\share", "\\\\?\\UNC\\nas\\share"),
+        ("\\\\.\\PhysicalDrive0", "\\\\.\\PhysicalDrive0"),  # a device: never
+        ("TV\\e01.mkv", "TV\\e01.mkv"),  # not a full path: never
+        ("C:TV\\e01.mkv", "C:TV\\e01.mkv"),
+        ("\\TV\\e01.mkv", "\\TV\\e01.mkv"),
+        ("/srv/tv/e01.mkv", "/srv/tv/e01.mkv"),
+    ],
+)
+def test_the_extended_form_of_a_full_windows_path(text, expected):
+    assert platform.extended_windows_path(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "ordinary"),
+    [
+        ("C:\\TV\\e01.mkv", "C:\\TV\\e01.mkv"),
+        ("C:/TV/e01.mkv", "C:\\TV\\e01.mkv"),
+        ("\\\\nas\\share\\TV\\e01.mkv", "\\\\nas\\share\\TV\\e01.mkv"),
+        ("/srv/tv", "/srv/tv"),
+        ("TV\\e01.mkv", "TV\\e01.mkv"),
+        ("\\\\.\\PhysicalDrive0", "\\\\.\\PhysicalDrive0"),
+    ],
+)
+def test_the_ordinary_form_takes_the_extended_one_back(text, ordinary):
+    assert platform.ordinary_windows_path(platform.extended_windows_path(text)) == ordinary
+
+
+def test_only_a_long_full_path_on_windows_gets_the_extended_form():
+    long_file = f"C:\\TV\\{_DEEP}\\e01.mkv"
+    long_share = f"\\\\nas\\share\\{_DEEP}"
+    assert len(long_file) >= 260
+    with platform.use(platform.backend_for("windows")):
+        assert os.fspath(platform.long_path(long_file)) == "\\\\?\\" + long_file
+        assert os.fspath(platform.long_path(long_share)) == "\\\\?\\UNC\\" + long_share[2:]
+        assert os.fspath(platform.long_path("C:\\TV\\e01.mkv")) == os.fspath(platform.Path("C:\\TV\\e01.mkv"))
+        assert os.fspath(platform.ordinary_path(platform.long_path(long_file))) == long_file
+    for system in ("linux", "macos"):
+        with platform.use(platform.backend_for(system)):
+            deep = "/srv/tv/" + _DEEP.replace("\\", "/")
+            assert platform.long_path(deep) == platform.Path(deep)  # as this host writes it
+            assert platform.ordinary_path(deep) == platform.Path(deep)

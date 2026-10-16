@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from tow import platform
 from tow.clients.spec import TorrentClientAdapter
 from tow.clock import iso_from_epoch
 from tow.episodes import expected_for_topic, item_identity
@@ -169,7 +170,7 @@ class _ReconcilePass:
         """The save folder resolved once per pass, and only when a file is looked at on disk."""
         if self._evidence_base is None:
             try:
-                self._evidence_base = (Path(self.evidence_save_path).resolve(),)
+                self._evidence_base = (platform.long_path(self.evidence_save_path).resolve(),)
             except OSError, ValueError:
                 self._evidence_base = (None,)
         return self._evidence_base[0]

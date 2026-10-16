@@ -166,6 +166,23 @@ def test_a_partly_written_sparse_file_on_windows_counts_what_it_holds(monkeypatc
         assert space._on_disk([path], 10 * GIB) == 6 * GIB
 
 
+def test_a_long_windows_path_is_probed_in_its_extended_form(monkeypatch):
+    # Long paths are off by default: a client's file of 260+ characters is reachable only as \\?\...
+    deep = "C:\\TV\\" + "\\".join(f"folder {n:02d} of a long season" for n in range(10)) + "\\e01.mkv"
+    looked: list[str] = []
+
+    def lstat(entry, *_args, **_kwargs):
+        looked.append(str(entry))
+        return _windows_file(4096, stat.FILE_ATTRIBUTE_SPARSE_FILE)
+
+    monkeypatch.setattr(Path, "lstat", lstat)
+    backend = AllocatingWindows(2048)
+    with platform.use(backend):
+        assert platform.allocated_file_bytes(deep) == 2048
+    assert looked == ["\\\\?\\" + deep]
+    assert [str(path) for path in backend.asked] == looked  # the sparse-file call too
+
+
 def test_a_failed_allocation_probe_never_credits_logical_size(monkeypatch, tmp_path):
     def refused(_path):
         raise PermissionError("synthetic refusal")

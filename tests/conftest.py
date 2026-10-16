@@ -509,7 +509,13 @@ def _guard_file_writes(monkeypatch, deny) -> None:
     def outside(path) -> bool:
         if isinstance(path, int):  # an already open descriptor
             return False
-        full = os.path.normcase(os.path.realpath(os.fspath(path))) + os.sep
+        full = os.path.realpath(os.fspath(path))
+        # The extended form of a Windows path (\\?\C:\..., \\?\UNC\host\...) names the same place.
+        if full.startswith("\\\\?\\UNC\\"):
+            full = "\\\\" + full[len("\\\\?\\UNC\\") :]
+        elif full.startswith("\\\\?\\"):
+            full = full[len("\\\\?\\") :]
+        full = os.path.normcase(full) + os.sep
         # Python's own bytecode cache (first import of a module) is not a TOW write.
         return not full.startswith(roots) and f"{os.sep}__pycache__{os.sep}" not in full
 
