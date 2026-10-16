@@ -738,15 +738,15 @@ def _runs(job):
 
 def test_every_workflow_is_checked_here():
     found = sorted(path.stem for path in (ROOT / ".github" / "workflows").glob("*.yml"))
-    assert found == ["ci", "installers", "real", "release"]
+    assert found == ["autostart", "ci", "installers", "real", "release"]
 
 
-@pytest.mark.parametrize("name", ["ci", "installers", "real"])
+@pytest.mark.parametrize("name", ["ci", "installers", "real", "autostart"])
 def test_only_main_gate_writes_shared_uv_cache(name):
     _text, flow = _workflow(name)
     found = 0
     for job_id, job in flow["jobs"].items():
-        for step in job["steps"]:
+        for step in job.get("steps", []):  # a job that calls a reusable workflow has none
             if not step.get("uses", "").startswith("astral-sh/setup-uv@"):
                 continue
             found += 1
@@ -756,15 +756,18 @@ def test_only_main_gate_writes_shared_uv_cache(name):
                 assert options["save-cache"] == "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
             else:
                 assert options["save-cache"] is False
-    assert found == {"ci": 2, "installers": 3, "real": 2}[name]
+    assert found == {"ci": 2, "installers": 3, "real": 1, "autostart": 1}[name]
 
 
-@pytest.mark.parametrize("name", ["ci", "release", "installers", "real"])
+@pytest.mark.parametrize("name", ["ci", "release", "installers", "real", "autostart"])
 def test_every_workflow_pins_its_actions_and_only_reads_by_default(name):
     text, flow = _workflow(name)
     # Every action pinned to a commit (the repository requires it); checkout and setup-uv to the
     # very ones CI uses.
-    uses = re.findall(r"uses: (\S+)", text)
+    # A reusable workflow of this repository (./.github/workflows/...) is this commit's own file.
+    local = re.findall(r"uses: (\./\.github/workflows/\S+)", text)
+    assert all((ROOT / use).is_file() for use in local), local
+    uses = [use for use in re.findall(r"uses: (\S+)", text) if use not in local]
     assert uses
     assert all(re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", use) for use in uses), uses
     ci_pins = set(re.findall(r"uses: (\S+@[0-9a-f]{40})", _workflow("ci")[0]))
@@ -850,6 +853,7 @@ def test_real_systems_run_on_their_code_weekly_and_by_hand_never_unbounded():
         "uv.lock",
         ".python-version",
         ".github/workflows/real.yml",
+        ".github/workflows/autostart.yml",
     }
     assert triggers["push"] == {"branches": ["main"], "paths": triggers["pull_request"]["paths"]}
     assert "paths: *real_paths" in text  # one list (a YAML anchor): a path added once is in both
@@ -857,24 +861,60 @@ def test_real_systems_run_on_their_code_weekly_and_by_hand_never_unbounded():
         assert next(ROOT.glob(path.removesuffix("/**")), None), path
     jobs = flow["jobs"]
     assert set(jobs) == {"clients", "autostart"}
-    assert all(job["timeout-minutes"] <= 40 for job in jobs.values())
-    assert all(
-        step.get("timeout-minutes") for job in jobs.values() for step in job["steps"] if "pytest" in step.get("run", "")
-    )
+    # The autostart job lives in autostart.yml, which release.yml runs too (TC-03).
+    assert jobs["autostart"]["uses"] == "./.github/workflows/autostart.yml"
+    reusable_text, reusable = _workflow("autostart")
+    autostart = reusable["jobs"]["autostart"]
+    for job in (jobs["clients"], autostart):
+        assert job["timeout-minutes"] <= 40
+        assert all(step.get("timeout-minutes") for step in job["steps"] if "pytest" in step.get("run", ""))
     assert jobs["clients"]["runs-on"] == "ubuntu-24.04"
     assert jobs["clients"]["env"]["TOW_REAL_CLIENTS"] == "1"
     assert "tests/integration/test_real_clients.py" in _runs(jobs["clients"])
-    assert set(jobs["autostart"]["strategy"]["matrix"]["os"]) == {"windows-latest", "macos-latest", "ubuntu-24.04"}
-    assert jobs["autostart"]["env"]["TOW_REAL_AUTOSTART"] == "1"
-    assert jobs["autostart"]["env"]["TOW_REAL_AUTOSTART_PORT"] != "8787"
-    assert "tests/integration/test_real_autostart.py" in _runs(jobs["autostart"])
+    assert set(autostart["strategy"]["matrix"]["os"]) == {"windows-latest", "macos-latest", "ubuntu-24.04"}
+    assert autostart["env"]["TOW_REAL_AUTOSTART"] == "1"
+    assert autostart["env"]["TOW_REAL_AUTOSTART_PORT"] != "8787"
+    assert "tests/integration/test_real_autostart.py" in _runs(autostart)
     # Autostart is registered only for a runtime install made as the owner makes one.
-    assert "install/install.sh --dir" in _runs(jobs["autostart"])
-    assert "install/install.ps1 -Dir" in _runs(jobs["autostart"])
-    # The variables that let these tests through the guard are set by this workflow only.
+    assert "install/install.sh --dir" in _runs(autostart)
+    assert "install/install.ps1 -Dir" in _runs(autostart)
+    # The variables that let these tests through the guard are set by these workflows only.
     for other in ("ci", "installers", "release"):
         assert "TOW_REAL_" not in _workflow(other)[0], other
     assert "8787" not in text
+    assert "8787" not in reusable_text
+
+
+def test_a_release_waits_for_the_real_autostart_of_its_commit_and_never_for_a_skip():
+    """TC-03: real.yml was optional and passed with a skip; a release never waited for it. The
+    autostart job is one reusable workflow: the release runs it for the commit it checked, and
+    publishes only after it passed on all three systems; there and weekly, a runner that cannot
+    run it fails instead of skipping."""
+    _text, flow = _workflow("autostart")
+    call = flow[True]["workflow_call"]  # YAML 1.1 reads the key `on` as True
+    assert set(flow[True]) == {"workflow_call"}
+    assert call["inputs"]["ref"] == {
+        "description": "The commit to install and test",
+        "required": True,
+        "type": "string",
+    }
+    assert call["inputs"]["strict"]["type"] == "boolean"
+    assert call["inputs"]["strict"]["default"] is False
+    job = flow["jobs"]["autostart"]
+    assert job["steps"][0]["with"] == {"ref": "${{ inputs.ref }}", "persist-credentials": False}
+    systemd = next(step for step in job["steps"] if "loginctl enable-linger" in step.get("run", ""))
+    assert systemd["env"] == {"STRICT": "${{ inputs.strict }}"}
+    run = systemd["run"]
+    assert run.index('if [ "$STRICT" = true ]; then') < run.index("exit 1") < run.index("TOW_REAL_AUTOSTART_SKIP=")
+    release = _workflow("release")[1]["jobs"]
+    assert release["autostart"] == {
+        "needs": ["source"],
+        "uses": "./.github/workflows/autostart.yml",
+        "with": {"ref": "${{ needs.source.outputs.commit }}", "strict": True},
+    }
+    assert "autostart" in release["publish"]["needs"]
+    real = _workflow("real")[1]["jobs"]["autostart"]
+    assert real["with"] == {"ref": "${{ github.sha }}", "strict": "${{ github.event_name == 'schedule' }}"}
 
 
 def test_real_clients_run_when_the_client_discovery_changes():
@@ -1026,8 +1066,8 @@ def test_the_release_workflow_tests_everything_before_it_uploads():
     writers = [name for name, job in jobs.items() if job.get("permissions", {}).get("contents") == "write"]
     assert writers == ["publish"]
     assert jobs["publish"]["permissions"] == {"contents": "write"}
-    assert set(jobs["publish"]["needs"]) == {"source", "windows", "posix", "update"}
-    for job_id in ("windows", "posix", "update"):
+    assert set(jobs["publish"]["needs"]) == {"source", "windows", "posix", "update", "autostart"}
+    for job_id in ("windows", "posix", "update", "autostart"):
         assert jobs[job_id]["needs"] == ["source"]
     windows = _runs(jobs["windows"])
     assert "scripts/build-bundle.py --out dist --source tow-source.tar.gz" in windows
@@ -1211,8 +1251,12 @@ def test_release_jobs_build_and_publish_the_commit_the_source_job_checked():
     assert jobs["source"]["outputs"] == {"commit": "${{ steps.tag.outputs.commit }}"}
     assert any(step.get("id") == "tag" and "GITHUB_OUTPUT" in step["run"] for step in jobs["source"]["steps"])
     checkouts = setups = 0
+    called = {name: job for name, job in jobs.items() if "uses" in job}
+    assert set(called) == {"autostart"}  # a reusable workflow: it checks out the commit it is given
+    assert called["autostart"]["with"]["ref"] == "${{ needs.source.outputs.commit }}"
+    assert "source" in called["autostart"]["needs"]
     for name, job in jobs.items():
-        for step in job["steps"]:
+        for step in job.get("steps", []):
             uses = step.get("uses", "")
             if uses.startswith("actions/checkout@"):
                 checkouts += 1
@@ -1223,7 +1267,7 @@ def test_release_jobs_build_and_publish_the_commit_the_source_job_checked():
             if uses.startswith("astral-sh/setup-uv@"):
                 setups += 1
                 assert step["with"]["enable-cache"] is False, name
-    assert checkouts == len(jobs)
+    assert checkouts == len(jobs) - len(called)
     assert setups == 2
     publish = "\n".join(step.get("run", "") for step in jobs["publish"]["steps"])
     assert "--latest=$latest" in publish
