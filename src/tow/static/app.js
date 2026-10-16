@@ -115,8 +115,7 @@ const towTime = (() => {
     }
     node.setAttribute("data-short", "");
     node.setAttribute("datetime", when);
-    node.setAttribute("tabindex", "0"); // its full time on focus or a tap (timeTip below)
-    node.title = given && !calendar && given.full ? String(given.full) : full(source, offset);
+    node.title = given && !calendar && given.full ? String(given.full) : full(source, offset); // its full time on a tap (timeTip) or by its list's toggle (fullTimes)
     node.textContent = given && !calendar && given.short ? String(given.short) : short(source, Date.now(), offset);
     keepToday();
     return node;
@@ -129,7 +128,9 @@ const towTime = (() => {
   const rewrite = () => document.querySelectorAll(SHORT).forEach((node) => {
     const datetime = node.getAttribute("datetime");
     const text = short(datetime, Date.now(), ownOffset(datetime));
-    if (text && node.textContent !== text) node.textContent = text;
+    // A time its list shows in full keeps that; its short words wait for the toggle.
+    if (text && node.hasAttribute("data-full")) node.dataset.shortText = text;
+    else if (text && node.textContent !== text) node.textContent = text;
   });
   let midnight = 0;
   const keepToday = () => {
@@ -169,21 +170,15 @@ const towTime = (() => {
 })();
 window.towTime = towTime;
 
-// The full time of a short one (time[data-short]: its seconds and UTC offset) for a keyboard and a
-// touch screen, not only a mouse's tooltip: such a time takes the focus, and its focus or a tap
-// shows the full time in one shared tip beside it (role="tooltip", the time described by it);
-// Escape, a tap elsewhere, leaving it or a scroll hides it. A time inside a control - a row's
-// summary, a link, a button, a label - is left as it is: the control has the focus there, and the
-// tooltip still has the full time. ``towTime.prepare(root)`` readies times a script put in later.
+// The full time of a short one (time[data-short]: its seconds and UTC offset) on a touch screen,
+// not only a mouse's tooltip: a tap shows it in one shared tip beside the time (role="tooltip", the
+// time described by it); Escape, a tap elsewhere or a scroll hides it. A time is not a tab stop of
+// its own (C5: a History of 300 lines had 300 of them): a list of times has one "Full timestamps"
+// toggle instead (fullTimes below). A time inside a control - a row's summary, a link, a button, a
+// label - is left as it is: the control takes the tap there, and the tooltip still has it.
 const timeTip = (() => {
   const TIMES = "time[data-short][title]";
   const usable = (node) => Boolean(node?.matches?.(TIMES)) && !node.closest("summary, a, button, label");
-  const prepare = (root = document) => {
-    const nodes = [...(root.matches?.(TIMES) ? [root] : []), ...root.querySelectorAll(TIMES)];
-    nodes.forEach((node) => {
-      if (usable(node) && !node.hasAttribute("tabindex")) node.setAttribute("tabindex", "0");
-    });
-  };
   let tip = null;
   let owner = null;
   const hide = () => {
@@ -233,10 +228,64 @@ const timeTip = (() => {
   });
   window.addEventListener("scroll", hide, { passive: true, capture: true });
   window.addEventListener("resize", hide);
-  prepare();
+  return { hide };
+})();
+
+// C5: one "Full timestamps" toggle per list of times (History, the Log: a button
+// data-full-times="<the list's id>", aria-pressed). Pressed, every short time of that list shows its
+// full time (seconds and UTC offset) - also lines the list gets later; pressed again, the short
+// ones. This tab keeps the choice for the next page (session storage; without it, short).
+const fullTimes = (() => {
+  const KEY = "tow.times.full";
+  const TIMES = "time[data-short][title]";
+  const remembered = () => {
+    try {
+      return sessionStorage.getItem(KEY) === "1";
+    } catch {
+      return false;
+    }
+  };
+  const show = (list, on) => {
+    if (!list) return;
+    if (on) list.setAttribute("data-times-full", "");
+    else list.removeAttribute("data-times-full");
+    list.querySelectorAll(TIMES).forEach((node) => {
+      if (on && !node.hasAttribute("data-full")) {
+        node.dataset.shortText = node.textContent;
+        node.setAttribute("data-full", "");
+        node.textContent = node.title;
+      } else if (!on && node.hasAttribute("data-full")) {
+        node.textContent = node.dataset.shortText ?? node.textContent;
+        delete node.dataset.shortText;
+        node.removeAttribute("data-full");
+      }
+    });
+  };
+  const set = (button, on) => {
+    button.setAttribute("aria-pressed", String(on));
+    show(document.getElementById(button.dataset.fullTimes), on);
+  };
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest?.("[data-full-times]");
+    if (!button) return;
+    const on = button.getAttribute("aria-pressed") !== "true";
+    document.querySelectorAll("[data-full-times]").forEach((each) => set(each, on));
+    try {
+      sessionStorage.setItem(KEY, on ? "1" : "0");
+    } catch {
+      // no storage: this page keeps the choice
+    }
+  });
+  // Times a script put in later (a Log refresh, a loaded panel) follow their list.
+  const prepare = (root = document) => {
+    const list = root.closest?.("[data-times-full]");
+    if (list) show(list, true);
+    else root.querySelectorAll?.("[data-times-full]").forEach((each) => show(each, true));
+  };
+  if (remembered()) document.querySelectorAll("[data-full-times]").forEach((button) => set(button, true));
   return { prepare };
 })();
-towTime.prepare = timeTip.prepare;
+towTime.prepare = fullTimes.prepare;
 
 const formActionUrl = (form, submitter = null) => new URL(
   submitter?.getAttribute("formaction") || form.getAttribute("action") || form.action || location.href,
@@ -1652,6 +1701,7 @@ const paintLog = (body, rows) => {
       return div;
     }),
   );
+  towTime.prepare(body);
 };
 
 const liveLog = (body, isOpen) => {

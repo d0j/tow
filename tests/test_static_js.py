@@ -258,9 +258,13 @@ def test_a_link_lands_below_the_header_and_the_message_strip():
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
-def test_a_short_times_full_time_opens_by_keyboard_and_by_a_tap():
+def test_a_lists_times_show_in_full_by_one_toggle_and_by_a_tap():
+    """1.32.1 (C5): a time is no tab stop of its own (History's 300 lines were 300 stops); one
+    "Full timestamps" toggle per list shows them all in full, also lines loaded later, and the tab
+    keeps the choice; a tap still shows one time's full time."""
     verdict = _verdict("time_disclosure.mjs")
-    assert verdict == dict.fromkeys(("focusable", "focusShows", "escapeHides", "tapShowsAndHides", "laterTimes"), True)
+    keys = ("noTabStops", "tapShowsAndHides", "toggleShowsFull", "laterLinesFollow", "toggleBack", "choiceKept")
+    assert verdict == dict.fromkeys(keys, True)
 
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes

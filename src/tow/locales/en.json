@@ -2656,6 +2656,9 @@
       "saved_sign_in_again": "Password saved. Sign in again on this device: TOW could not write its sign-in file data/sessions.json.",
       "sign_out_failed": "No device was signed out: TOW could not write its sign-in file data/sessions.json. Check that TOW's data can be changed, then try again."
     },
+    "time": {
+      "full_toggle": "Full timestamps"
+    },
     "secret": {
       "show": "Show “{field}”",
       "hide": "Hide “{field}”",

@@ -1241,7 +1241,12 @@ header.app .attention-menu.bad > summary.ico { color: var(--bad); }
 .history-filter input { width: 100%; }
 .chip:hover, .chip:focus-visible { text-decoration: none; }
 .history-box { max-height: none; padding: .6rem .9rem; }
-.log-history-link { margin-left: auto; margin-right: .8rem; font-size: 12px; font-weight: 400; }
+.log-history-link { margin-left: auto; margin-right: .6rem; font-size: 12px; font-weight: 400; }
+.log-pop-head .log-full-times { margin-right: .5rem; font-weight: 400; white-space: nowrap; }
+/* A phone: the head wraps whole parts (the button kept "Full timestamps" on one line). */
+.log-pop-head:has(.log-full-times) { flex-wrap: wrap; row-gap: .3rem; }
+/* C5: a list's "Full timestamps" toggle shows when it is on. */
+button[data-full-times][aria-pressed="true"] { color: var(--fg); border-color: var(--acc2); background: var(--panel2); }
 
 /* 1.14: secondary text, error messages, small screens, accessibility */
 .mut { color: var(--mut); }
