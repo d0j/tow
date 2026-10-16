@@ -2,6 +2,8 @@
 {% block body %}
 <p class="sub help-back"><a href="/settings">{{ t('help.back') }}</a></p>
 <h1 id="page-title">{{ t('doctor.title') }}</h1>
+{#- One wrapper: the stylesheet keeps its paragraphs to a readable width (1.32.1 DG1). -#}
+<div class="doctor-page">
 <p class="lead">{{ t('doctor.lead') }}</p>
 {% if report %}
 <div class="grid stats">
@@ -11,7 +13,10 @@
   <div class="card stat"><div class="k">{{ t('doctor.python') }}</div><div class="v">{{ report.python }}</div></div>
 </div>
 {% if report.qbit is not none %}
-<div class="card"><div class="k">{{ t('doctor.client') }}</div><div><span class="pill {{ 'ok' if report.qbit_ok else 'bad' }} pill-wrap" title="{{ report.qbit }}">{{ report.qbit_text }}</span></div></div>
+<div class="card">
+  <h2 class="section-title">{{ t('doctor.client') }}</h2>
+  <p><span class="pill {{ 'ok' if report.qbit_ok else 'bad' }} pill-wrap" title="{{ report.qbit }}">{{ report.qbit_text }}</span></p>
+</div>
 {% endif %}
 <div class="card">
   <h2 class="section-title">{{ t('doctor.sites_title') }}</h2>
@@ -52,4 +57,5 @@
 <form method="post" action="/doctor/run" class="actions">
   <button type="submit" data-busy-label="{{ t('common.busy.checking') }}">{{ t('doctor.run') }}</button>
 </form>
+</div>
 {% endblock %}
