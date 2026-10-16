@@ -847,7 +847,7 @@ def test_a_sign_in_checked_from_the_queue_is_confirmed_or_put_back(client, monke
         assert secrets["trackers"]["nnmclub"]["password"] == "pass"
         assert signed_in == ["nnmclub"]
         assert ended["flash"] == i18n.t("web.login_retry.ok", site="NNM-Club")
-    assert check_jobs.FOLLOW_UPS == {}  # no password kept beside a finished job
+    assert job not in check_jobs.FOLLOW_UPS  # no password kept beside a finished job
 
 
 @pytest.mark.parametrize("ends", ["added", "crash"])
@@ -905,3 +905,13 @@ def test_a_direct_row_check_that_crashes_says_so_instead_of_a_500(client, monkey
     assert response.status_code == 303
     assert "CheckTransactionError" in flash_of(response.headers["location"])
     assert events == [("check_blocked", "result_unconfirmed")]
+
+
+def test_the_action_ids_kept_are_bounded(consumers):
+    # Every click on a waiting check registered its action id for as long as the check lived:
+    # a page clicking again and again grew the table without bound.
+    for n in range(check_jobs.MAX_ACTIONS + 50):
+        check_jobs.submit(topic_id="a", apply=True, lang="ru", perform=lambda _job: None, action=f"click-{n}")
+    assert len(check_jobs.ACTIONS) == check_jobs.MAX_ACTIONS
+    assert f"click-{check_jobs.MAX_ACTIONS + 49}" in check_jobs.ACTIONS  # the newest are kept
+    assert "click-0" not in check_jobs.ACTIONS
