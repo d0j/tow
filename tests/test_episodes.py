@@ -403,9 +403,43 @@ def test_postposed_episode_word_gives_a_safe_growing_total():
     assert expected is not None
     assert expected["total"] == 52
     assert expected["episode_min"] == 1
-    # A later-starting mixed-season pack needs the global-to-season mapping
-    # before its title range can be used as an exact completion target.
-    assert parse_expected_count("Show (73-176 серии из 176)") is None
+
+
+def _window(title):
+    expected = parse_expected_count(title)
+    return expected and (expected["episode_min"], expected["episode_max"], expected["total"])
+
+
+@pytest.mark.parametrize(
+    ("title", "window"),
+    [
+        # A range is its episodes wherever the word stands: before, after or absent.
+        ("Show (73-176 серии из 176)", (73, 176, 104)),
+        ("Show (Серии 73-176 из 176)", (73, 176, 104)),
+        ("Show [13-24 серии из 24]", (13, 24, 12)),
+        ("Show [Серии 13-24 из 24]", (13, 24, 12)),
+        ("Show [13-24 из 24]", (13, 24, 12)),
+        ("Show [13-24 episodes of 24]", (13, 24, 12)),
+        ("Show [Episodes 13-24 of 24]", (13, 24, 12)),
+        ("Show S02 13-24 из 24", (13, 24, 12)),
+        # "2x" names the season: the range after it is the episodes, as without it.
+        ("Show [2x13-24 из 24]", (13, 24, 12)),
+        ("Show [2х13-24 из 24]", (13, 24, 12)),
+        ("Show [1x01-12 из 24]", (1, 24, 24)),
+        # One number is a count from the first episode.
+        ("Show [2x13 из 24]", (1, 24, 24)),
+        ("Show [13 из 24]", (1, 24, 24)),
+        # A reversed range or one past the total is no count at all.
+        ("Show [176-73 серии из 176]", None),
+        ("Show [Серии 24-13 из 24]", None),
+        ("Show [2x24-13 из 24]", None),
+        ("Show [73-180 серии из 176]", None),
+        ("Show [Серии 13-30 из 24]", None),
+        ("Show [2x13-30 из 24]", None),
+    ],
+)
+def test_title_range_not_from_one_is_its_episodes_in_every_form(title, window):
+    assert _window(title) == window
 
 
 def test_russian_plural_episode_range_and_extended_season_folders():

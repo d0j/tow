@@ -52,8 +52,12 @@ def preferred_season_for(topic: Topic, selected_episode_keys: list[str]) -> int 
 def _season_relative_expected(
     expected: dict[str, Any] | None, observed_episode_keys: list[str], preferred_season: int | None
 ) -> dict[str, Any] | None:
-    """A title total like "из 12" with numbering from E13 on is season-relative when the
-    files are S0xE01..E12 of one season; return the corrected expectation, else None."""
+    """A title range like "13-24 из 24" or "73-176 серии из 176" whose files do not number
+    from its first episode: S0xE01..E12 of one season are that season's 1..12 (season-relative);
+    files that mostly lie below the range restart numbering (each season from E01, or the
+    subset from 01), so the range cannot be mapped onto them and its length is counted instead
+    (restarted). Return the corrected expectation, else None: the files fit the range, or most
+    of them do (a stray recap E01 in E73..E176 must not complete a missing E176)."""
     if not (
         expected
         and expected.get("source") == "title"
@@ -76,6 +80,10 @@ def _season_relative_expected(
             "episode_max": int(expected["total"]),
             "numbering": "season-relative",
         }
+    episodes = [int(match.group(1)) for key in observed_episode_keys if (match := re.search(r"e(\d+)$", key))]
+    below = sum(episode < int(expected["episode_min"]) for episode in episodes)
+    if below * 2 > len(episodes):
+        return {**expected, "numbering": "restarted"}
     return None
 
 

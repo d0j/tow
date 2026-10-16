@@ -70,23 +70,18 @@ def parse_expected_count(title: str) -> dict[str, Any] | None:
         if not explicit_episode and film_title:
             continue
         total = int(match.group("total"))
-        numbers = [int(value) for value in re.findall(r"\d{1,4}", match.group("current"))]
-        if total <= 0 or not numbers or numbers[-1] > total:
+        # "13", "13-24", "2x13" or "2x13-24" (the "2x" names the season, not an episode).
+        current = re.fullmatch(r"(?i)(?:\d{1,4}[xх])?(\d{1,4})(?:\s*[-–—]\s*(\d{1,4}))?", match.group("current"))
+        if current is None:
             continue
-        if (
-            len(numbers) > 1
-            and "x" not in match.group("current").casefold()
-            and "х" not in match.group("current").casefold()
-            and numbers[-1] < numbers[0]
-        ):
+        first, last = int(current.group(1)), int(current.group(2) or current.group(1))
+        if total <= 0 or last > total or last < first:
             continue
-        current = match.group("current")
-        range_start = numbers[0] if re.match(r"\d{1,4}\s*[-–—]", current) else 1
-        # "73-176 серии из 176" can describe a mixed-season subset whose files
-        # restart numbering each season. Without the cumulative-to-season map,
-        # applying 73..176 to SxxEyy would invent a false completion target.
-        if match.group("episode_word") and range_start > 1:
-            continue
+        # A range is episodes first..last wherever the word "серии" stands and with or without
+        # "2x": "73-176 серии из 176" as "Серии 13-24 из 24". "13 из 24" alone is a count from 1.
+        # Files that restart numbering each season (S02E01, S03E01... for 73-176) do not fit
+        # that window; tow.progress.expected then counts last - first + 1 episodes instead.
+        range_start = first if current.group(2) else 1
         candidates.append((total, explicit_episode, range_start))
     preferred = {(total, start) for total, explicit, start in candidates if explicit}
     totals = preferred or {(total, start) for total, _explicit, start in candidates}
@@ -888,11 +883,14 @@ def summarize_completion(items: Mapping[str, Mapping[str, Any]], expected: Mappi
         minimum = int(expected.get("episode_min") or 1)
         maximum = int(expected.get("episode_max") or expected.get("total") or 0)
         season = expected.get("season")
+        # Restarted numbering (tow.progress.expected): the files number each season from E01,
+        # so the title's range is a count of regular episodes, not a window on their numbers.
+        restarted = expected.get("numbering") == "restarted"
         completed_episodes = {
             key
             for key in completed_episodes
             if (match := re.fullmatch(r"episode:(?:s(\d+))?e(\d+)", key))
-            and minimum <= int(match.group(2)) <= maximum
+            and (restarted or minimum <= int(match.group(2)) <= maximum)
             and (match.group(1) is None or int(match.group(1)) > 0)
             and (season is None or match.group(1) is None or int(match.group(1)) == int(season))
         }
