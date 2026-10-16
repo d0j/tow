@@ -164,7 +164,9 @@ def test_the_site_card_starts_with_the_sign_in(client):
 @pytest.mark.parametrize("stored", [True, False])
 def test_the_site_password_says_it_is_saved_only_when_it_is(client, stored):
     """The page gets whether a site's password is saved (never its value) as ``password_saved``:
-    the field is then linked to the "leave empty to keep" hint; with none saved there is no hint."""
+    the field is then linked to the "leave empty to keep" hint; with none saved there is no hint.
+    1.32.1 S1: the hint is a "saved" tag in the label, a "Leave empty to keep" placeholder and the
+    form's one note under the sign-in, as on Settings."""
     from tow.store import load_secrets, save_secrets
 
     secrets = load_secrets()
@@ -173,8 +175,15 @@ def test_the_site_password_says_it_is_saved_only_when_it_is(client, stored):
     row = BeautifulSoup(client.get("/sites?open=rutor").text, "html.parser").select_one("#ed-site-rutor")
     field = row.select_one("#site-pass-rutor")
     assert field.get("value") is None
-    assert (row.select_one("#site-pass-saved-rutor") is not None) is stored
-    assert field.get("aria-describedby") == ("site-pass-saved-rutor" if stored else None)
+    tag = row.select_one('label[for="site-pass-rutor"] > span.saved-tag#site-pass-saved-rutor')
+    assert (tag is not None) is stored
+    assert field.get("aria-describedby") == ("site-pass-saved-rutor site-keep-rutor" if stored else None)
+    assert field.get("placeholder") == ("Пусто — не менять" if stored else None)
+    note = row.select_one("p.keep-note#site-keep-rutor")
+    assert (note is not None) is stored
+    if stored:
+        assert note.find_previous_sibling(class_="password-group") is not None
+    assert "Сохранён · оставьте пустым" not in row.get_text()
 
 
 def test_browser_sign_in_keeps_the_saved_login_whatever_the_hidden_fields_send(client):

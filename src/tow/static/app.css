@@ -1358,9 +1358,10 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 .content-picker[data-view="rule"] .picker-title, .content-picker[data-view="rule"] .picker-help { display: none; }
 .content-picker[data-view="rule"] .picker-head { margin-top: 0; }
 /* Sites: a card starts with its sign-in. Browser sign-in replaces the password: the user name and
-   password step aside (what is saved stays saved) and the note says where the window opens. */
+   password step aside with their "leave empty to keep" note (what is saved stays saved) and the
+   note says where the window opens. */
 .sign-in { display: grid; gap: .45rem; }
-.site-form:has(input[name="browser_auth"]:checked) .password-group { display: none; }
+.site-form:has(input[name="browser_auth"]:checked) :is(.password-group, .keep-note) { display: none; }
 .site-form:not(:has(input[name="browser_auth"]:checked)) .browser-note { display: none; }
 details.advanced > .form-grid { margin-top: .55rem; }
 .new-site-form .add-head { margin-bottom: .2rem; }
