@@ -920,6 +920,8 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .restore-point-row b { font-size: 13px; font-weight: 600; }
 .restore-point-row span { color: var(--mut); font-size: 12px; }
 .restore-point-row .backup-copy-actions { align-items: center; justify-content: flex-end; gap: .35rem; margin: 0; }
+/* Settings' width, the page it comes from (it spanned 1400 px, QA Q10). */
+.backup-delete-page { max-width: 64rem; margin-inline: auto; }
 .backup-delete-confirm h2 { font-size: .95rem; }
 .backup-inventory, .backup-location { min-width: 0; border: 1px solid var(--line); border-radius: 6px; }
 .backup-inventory > summary, .backup-location > summary { padding: .35rem .5rem; font-size: 12.5px; cursor: pointer; }
@@ -1155,7 +1157,8 @@ button[data-full-times][aria-pressed="true"] { color: var(--fg); border-color: v
 /* 1.14: secondary text, error messages, small screens, accessibility */
 .mut { color: var(--mut); }
 .table-wrap { overflow-x: auto; max-width: 100%; }
-details.help > summary { width: 1.5rem; height: 1.5rem; font-size: 12px; }
+/* A1: a disclosure is a 28 px target, the "?" too (it was the one 24 px summary left, QA Q10). */
+details.help > summary { width: 1.75rem; height: 1.75rem; font-size: 12px; }
 /* L2: field borders 3.6:1 against the field (was 2.06:1). */
 input, textarea, select { border-color: var(--field-line); }
 /* A refused field (aria-invalid; the refusal's words describe it) is red, focused or not - not only
