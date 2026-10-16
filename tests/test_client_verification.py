@@ -1037,6 +1037,25 @@ def test_a_new_file_selection_never_readds_a_torrent_the_owner_removed(world, qu
     assert row["error_record"]["code"] == "check.removed_from_client"
 
 
+def test_a_removal_noted_in_the_clicks_own_second_is_not_before_the_click():
+    """``client_removed_at`` (and a receipt's ``missing_since``) is stored to the whole second: a
+    removal another check saw at :40.8, after a click at :40.3, is stored as :40 and read as seen
+    before the click - and the queued row check added the torrent back."""
+    from datetime import datetime, timedelta, timezone
+
+    from tow.check.rows import removal_seen_by
+
+    second = datetime(2026, 10, 16, 10, 0, 40, tzinfo=timezone(timedelta(hours=3)))
+    stamp = second.isoformat(timespec="seconds")
+    click = second.timestamp() + 0.3
+    assert removal_seen_by({"client_removed_at": stamp}, click) is False
+    assert removal_seen_by({"verification_pending": {"missing_since": stamp}}, click) is False
+    assert removal_seen_by({"client_removed_at": stamp}, click + 1) is True  # a click a second later
+    # A time stored to the microsecond is exact.
+    assert removal_seen_by({"client_removed_at": second.replace(microsecond=100000).isoformat()}, click) is True
+    assert removal_seen_by({"client_removed_at": second.replace(microsecond=800000).isoformat()}, click) is False
+
+
 def test_a_manual_check_started_at_once_still_readds_a_removed_torrent(world):
     client, _tracker, _sent = world
     _watch()
