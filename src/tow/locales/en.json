@@ -2663,7 +2663,6 @@
     "secret": {
       "show": "Show “{field}”",
       "hide": "Hide “{field}”",
-      "saved_keep": "Saved · leave empty to keep",
       "saved_tag": "saved",
       "keep_placeholder": "Leave empty to keep",
       "keep_note": "Leave passwords and keys empty to keep them."

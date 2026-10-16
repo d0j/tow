@@ -351,17 +351,21 @@ def _render(source: str, lang: str = "ru") -> str:
 def test_a_saved_secret_says_so_in_its_label():
     """1.32.1 (S1): "Saved · leave empty to keep" under every stored secret (twice in one row of
     messengers, and under "New password", where it was wrong) is a small "saved" tag in the label,
-    a placeholder and one note per form. The older sentence stays for a caller without ``tag``."""
+    a placeholder and one note per form. Every caller uses the tag now, so the older sentence and
+    its key are gone."""
     page = _render(
         '{% from "_secret.html" import saved_hint, keep_note %}'
-        '<label for="x">Токен{{ saved_hint("x-saved", tag=true) }}</label>'
-        '|{{ saved_hint("y-saved") }}|{{ keep_note("f-keep") }}'
+        '<label for="x">Токен{{ saved_hint("x-saved") }}</label>'
+        '|{{ keep_note("f-keep") }}'
     )
-    tag, old, note = page.split("|")
+    tag, note = page.split("|")
     assert tag == '<label for="x">Токен <span class="saved-tag" id="x-saved">сохранён</span></label>'
-    assert old == '<p class="field-hint" id="y-saved">Сохранён · оставьте пустым, чтобы не менять</p>'
     assert note == '<p class="field-hint keep-note" id="f-keep">Оставьте пароли и ключи пустыми, чтобы не менять.</p>'
     from tow import i18n
+
+    for lang in ("en", "ru"):
+        assert "web.secret.saved_keep" not in i18n.texts_with_prefix("web.secret.", lang)
+        assert "web.secret.saved_tag" in i18n.texts_with_prefix("web.secret.", lang)
 
     assert i18n.translate("web.secret.keep_placeholder", "ru") == "Пусто — не менять"
     assert i18n.translate("web.secret.keep_placeholder", "en") == "Leave empty to keep"
