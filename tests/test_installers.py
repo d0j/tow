@@ -1154,6 +1154,14 @@ def test_the_windows_installer_smoke_covers_powershell_5_and_the_data():
     assert "the reinstall replaced keys\\master.key" in text
 
 
+def test_a_passed_bundle_smoke_ends_with_exit_0():
+    # CI 16.10.2026: -ExpectTooLong passed, but the refused start file's exit code 3 stayed in
+    # $LASTEXITCODE, and a pwsh CI step ends with it: the step failed after "passed".
+    code = [line.strip() for line in _code_lines((ROOT / "scripts" / "bundle-smoke.ps1").read_text(encoding="utf-8"))]
+    code = [line for line in code if line]
+    assert code[-2:] == ["if ($failed) { throw $failed }", "exit 0"]
+
+
 @pytest.mark.allow_system
 @pytest.mark.parametrize("name", ["bundle-smoke.ps1", "install-smoke.ps1"])
 def test_the_windows_smoke_scripts_parse(name):

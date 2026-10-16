@@ -283,3 +283,6 @@ finally {
     }
 }
 if ($failed) { throw $failed }
+# A refusal this run expected (-ExpectTooLong) leaves its start file's exit code in
+# $LASTEXITCODE, and a CI step in pwsh ends with that code: a passed smoke says so itself.
+exit 0
