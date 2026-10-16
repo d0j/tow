@@ -23,16 +23,20 @@ on:
       - "src/tow/check/**"
       - "src/tow/supervisor/**"
       # What the client test runs through (torrents, folders, settings, state, `tow check`) and the
-      # install the autostart test makes (installers, bundle, launchers, the OS layer).
+      # install the autostart test makes (installers, bundle and its start files, launchers, the OS
+      # layer, the install's folders, what `tow run` reads at start).
       - "src/tow/torrent.py"
       - "src/tow/folders.py"
       - "src/tow/config.py"
       - "src/tow/store.py"
       - "src/tow/storage/**"
       - "src/tow/platform/**"
+      - "src/tow/paths.py"
+      - "src/tow/lifecycle.py"
       - "src/tow/cli/**"
       - "install/**"
       - "scripts/build-bundle.py"
+      - "scripts/root_files.py"
       - "scripts/tow*"
       # The tests' own helpers and guard (its real_system rule), and the locked dependencies (a
       # qbittorrent-api bump).

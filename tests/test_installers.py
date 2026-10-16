@@ -788,10 +788,13 @@ def test_installers_run_the_release_smokes_before_a_tag():
         assert path in paths
     # What the updater relies on in the code it installs (before: a change there ran no update test;
     # 1.31.0 broke the restore point an update from Settings makes first).
+    # TC-08: the bundle starts and stops TOW through the whole OS layer (platform/windows.py,
+    # posix.py), and `tow run` reads lifecycle.py at start.
     for path in (
         "src/tow/store.py",
         "src/tow/storage/**",
-        "src/tow/platform/locks.py",
+        "src/tow/platform/**",
+        "src/tow/lifecycle.py",
         "src/tow/paths.py",
         "src/tow/supervisor/**",
         "src/tow/restore_points.py",
@@ -842,9 +845,12 @@ def test_real_systems_run_on_their_code_weekly_and_by_hand_never_unbounded():
         "src/tow/store.py",
         "src/tow/storage/**",
         "src/tow/platform/**",
+        "src/tow/paths.py",  # TC-08: the install's folders, which autostart reads
+        "src/tow/lifecycle.py",  # read by `tow run` at start
         "src/tow/cli/**",
         "install/**",
         "scripts/build-bundle.py",
+        "scripts/root_files.py",  # the bundle's start files the Windows autostart install uses
         "scripts/tow*",
         "tests/integration/**",
         "tests/helpers.py",
