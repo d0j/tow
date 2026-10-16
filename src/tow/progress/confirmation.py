@@ -42,12 +42,20 @@ def safe_relative_path(save_path: str, client_file_name: str) -> str | None:
 
 
 def filesystem_confirmation(
-    save_path: str, relative_path: str, expected_size: int | None, *, base: Path | None = None
+    save_path: str,
+    relative_path: str,
+    expected_size: int | None,
+    *,
+    base: Path | None = None,
+    seen: bool | None = None,
 ) -> bool | None:
+    """Whether the file is in its folder in full (True), missing or short (False), or unknown
+    (None). ``seen``: the caller already asked ``seen_from_here`` of this folder - a pass asks
+    once, since a share, a sleeping NAS or a lost drive can take its timeout for each look."""
     from tow.folders import seen_from_here
 
     folder = Path(save_path)
-    if not seen_from_here(save_path):
+    if not (seen_from_here(save_path) if seen is None else seen):
         return None  # /downloads of a remote client, or a drive this PC does not see
     try:
         base = base or folder.resolve()

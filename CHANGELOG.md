@@ -106,6 +106,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   Windows gets backslashes.
 - A file mask with a letter like “й” or “é” pasted from macOS (where it is stored as two characters) now matches
   the torrent's files; before, “Files by pattern” said that the selection matches no file.
+- A check of a topic whose folder is on a network share, a sleeping NAS or a lost mapped drive asks once whether
+  that folder can be reached, not once per file: each question could wait for the network's timeout.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password
