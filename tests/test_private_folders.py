@@ -263,6 +263,38 @@ def test_a_new_key_folder_is_made_private(tmp_path):
     assert key.is_file()
 
 
+def test_a_new_key_folder_that_stays_open_is_said_and_the_key_is_still_made(tmp_path, capsys):
+    # The change of its permissions failed (icacls refused): `tow generate-key` says so, as a
+    # start does, instead of leaving the key in an open folder without a word.
+    from tow.i18n import t
+    from tow.store import generate_master_key
+
+    key = tmp_path / "elsewhere" / "master.key"
+    backend = FolderBackend(shared={key.parent}, fixable=set())
+    with platform.use(backend):  # type: ignore[arg-type]
+        generate_master_key(key)
+    assert key.is_file()
+    assert t("cli.folder_shared", path=str(key.parent)) in capsys.readouterr().err
+
+
+def test_a_key_folder_made_private_or_already_there_is_not_said(tmp_path, capsys):
+    from tow.store import generate_master_key
+
+    made = tmp_path / "made" / "master.key"
+    backend = FolderBackend(shared={made.parent}, fixable={made.parent})
+    with platform.use(backend):  # type: ignore[arg-type]
+        generate_master_key(made)
+    (tmp_path / "home").mkdir()  # `--key-file ~/tow.key`: the folder keeps its own permissions
+    existing = tmp_path / "home" / "tow.key"
+    backend = FolderBackend(shared={existing.parent}, fixable=set())
+    with platform.use(backend):  # type: ignore[arg-type]
+        generate_master_key(existing)
+    assert backend.repaired == []
+    assert made.is_file()
+    assert existing.is_file()
+    assert capsys.readouterr().err == ""
+
+
 def test_doctor_warns_when_other_accounts_can_open_the_folders(tmp_path):
     from tow.doctor import doctor_report, doctor_text
     from tow.i18n import t

@@ -142,13 +142,19 @@ def master_fernet() -> Fernet:
 def _key_folder(path: Path) -> None:
     """Create the folder of a key file; a folder TOW creates is readable by this user only
     (POSIX 0700; Windows: this account, SYSTEM and Administrators, nothing inherited). An
-    existing folder - $HOME for `--key-file ~/tow.key` - keeps its permissions."""
+    existing folder - $HOME for `--key-file ~/tow.key` - keeps its permissions. A new folder
+    that other accounts can still open (the change failed) is named on stderr, as a start
+    names keys/ (``protect_install_folders``); the key is still made."""
     if path.parent.is_dir():
         return
+    import sys
+
+    from tow.i18n import t
     from tow.platform import private_folders
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    private_folders([path.parent], created=True)
+    for folder in private_folders([path.parent], created=True):
+        print(t("cli.folder_shared", path=str(folder)), file=sys.stderr)
 
 
 _NEW_KEY_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
