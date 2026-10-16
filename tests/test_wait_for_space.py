@@ -521,6 +521,36 @@ def test_the_shortfall_says_what_to_free():
     assert space.Shortfall(needed=1, free=space.FREE_SPACE_MARGIN, path="D:\\").error().params["missing"] == 0.1
 
 
+def test_unsafe_client_file_names_never_credit_bytes_outside_the_folder(tmp_path, monkeypatch):
+    # The client names its files relative to its save folder: a name that climbs out of it or
+    # names a drive is neither looked at nor counted as bytes already there.
+    from pathlib import Path
+
+    dest = tmp_path / "TV"
+    (dest / "Show").mkdir(parents=True)
+    (dest / "Show" / "e01.mkv").write_bytes(b"0" * 4096)
+    (tmp_path / "outside.bin").write_bytes(b"0" * 8192)
+    probed: list[Path] = []
+    real = space.platform.allocated_file_bytes
+    monkeypatch.setattr("tow.platform.allocated_file_bytes", lambda path, **kw: probed.append(Path(path)) or real(path))
+    monkeypatch.setattr("shutil.disk_usage", lambda _path: SimpleNamespace(free=0))
+    info = {
+        "files": [
+            {"index": 0, "name": "Show/e01.mkv", "size": 4096, "priority": 1, "progress": 0},
+            {"index": 1, "name": "../outside.bin", "size": 8192, "priority": 1, "progress": 0},
+            {"index": 2, "name": "Show\\..\\..\\outside.bin", "size": 8192, "priority": 1, "progress": 0},
+            {"index": 3, "name": "Z:/outside.bin", "size": 100, "priority": 1, "progress": 0},
+        ]
+    }
+
+    known, short = space._measured(str(dest), space._client_wanted(info, str(dest)))
+
+    assert known
+    assert short is not None
+    assert short.needed == 8192 + 8192 + 100  # only the file inside the folder is there already
+    assert probed == [dest / "Show" / "e01.mkv"]
+
+
 # --- the add and edit forms' free-space hint ------------------------------------------------------
 
 

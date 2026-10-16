@@ -98,6 +98,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   a NAS saves them) are now tracked: before, they were silently left out of progress, completions and episode
   events. Under a Windows folder a colon is still refused in any part of a file's path, since Windows reads it as
   a drive or a hidden stream.
+- Waiting for disk space no longer counts a file the torrent client names outside its save folder (`../x`, a
+  drive) as already downloaded, and no longer looks at such a file at all.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password
