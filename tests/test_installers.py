@@ -294,7 +294,7 @@ def test_install_ps1_closes_the_install_folder_before_anything_is_written_in_it(
     assert "if (-not $New -and $owner -ne $sid) { return $false }" in text
     assert "[IO.FileAttributes]::ReparsePoint) { return $false }" in text
     close_root = text.index("$rootClosed = Close-Folder $Dir $created")
-    assert close_root < text.index("Invoke-WebRequest") < text.index("ExtractToDirectory")
+    assert close_root < text.index("Invoke-WebRequest") < text.index("ExtractToFile")
     # keys\ and data\ on their own when the folder stays open (another account's).
     assert "foreach ($name in @('keys', 'data'))" in text
     assert "if (-not (Close-Folder $folder $new))" in text
@@ -395,6 +395,82 @@ def test_install_ps1_refuses_only_a_folder_cmd_cannot_start_from(tmp_path, shell
     assert not folder.exists()  # refused before anything was written; an accepted one cleaned up
     text = PS1.read_text(encoding="utf-8")
     assert text.index("Windows cannot start TOW from") < text.index("New-Item -ItemType Directory -Force -Path $Dir")
+
+
+def _stub_zip(path: Path, extra: dict[str, str] | None = None) -> str:
+    """A TOW-windows-x64.zip whose start file only ends: its SHA256SUMS line."""
+    import hashlib
+    import zipfile
+
+    files = {
+        "TOW/Start TOW.cmd": "@exit /b 0\r\n",
+        "TOW/config.yaml": "port: 18996\n",
+        "TOW/README.txt": "TOW\n",
+        "TOW/app/scripts/tow.cmd": "@exit /b 0\r\n",
+        "TOW/runtime/python/cpython-3.14.8-windows-x86_64-none/Lib/deep/file.txt": "x\n",
+        **(extra or {}),
+    }
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("TOW/runtime/", "")
+        for name, text in files.items():
+            archive.writestr(name, text)
+    return f"{hashlib.sha256(path.read_bytes()).hexdigest()}  TOW-windows-x64.zip\n"
+
+
+@pytest.mark.allow_system  # install.ps1 on a local stub zip in a temp folder; its start file only ends
+@pytest.mark.skipif(os.name != "nt", reason="install.ps1 installs on Windows")
+@pytest.mark.parametrize("shell", ["pwsh", "powershell"])
+def test_install_ps1_unpacks_each_file_into_its_place_and_keeps_what_is_there(tmp_path, shell):
+    # QA 16.10.2026: the zip went to <folder>\.install\unpacked\TOW first, 22 characters deeper
+    # than the install itself, so a folder the length check allowed could fail while unpacking.
+    program = shutil.which(shell)
+    if program is None:
+        pytest.skip(f"no {shell} here")
+    assert "unpacked" not in "\n".join(_code_lines(PS1.read_text(encoding="utf-8")))
+    zip_path = tmp_path / "TOW-windows-x64.zip"
+    sums = tmp_path / "SHA256SUMS"
+    sums.write_text(_stub_zip(zip_path), encoding="utf-8")
+    folder = tmp_path / "Мой TOW (1)"
+    folder.mkdir()
+    (folder / ".tow-install").write_text("TOW portable install v1\n", encoding="utf-8")
+    (folder / "config.yaml").write_text("port: 18995\n", encoding="utf-8")  # an earlier TOW's settings
+    env = {**os.environ, "TOW_INSTALL_SOURCE": str(zip_path), "TOW_INSTALL_SUMS": str(sums), "TOW_NO_BROWSER": "1"}
+    argv = [program, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(PS1)]
+    done = subprocess.run(
+        [*argv, "-Dir", str(folder), "-Yes"], capture_output=True, text=True, env=env, timeout=180, check=False
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert (folder / "config.yaml").read_text(encoding="utf-8") == "port: 18995\n"
+    assert (folder / "app" / "scripts" / "tow.cmd").is_file()
+    deep = folder / "runtime" / "python" / "cpython-3.14.8-windows-x86_64-none" / "Lib" / "deep" / "file.txt"
+    assert deep.is_file()
+    assert not (folder / ".install").exists()
+    assert not (folder / "TOW").exists()
+
+
+@pytest.mark.allow_system  # install.ps1 on a local stub zip in a temp folder; refused before the start
+@pytest.mark.skipif(os.name != "nt", reason="install.ps1 installs on Windows")
+def test_install_ps1_refuses_a_zip_entry_outside_its_tow_folder(tmp_path):
+    program = shutil.which("pwsh")
+    if program is None:
+        pytest.skip("no pwsh here")
+    zip_path = tmp_path / "TOW-windows-x64.zip"
+    sums = tmp_path / "SHA256SUMS"
+    sums.write_text(_stub_zip(zip_path, {"TOW/../outside.txt": "x"}), encoding="utf-8")
+    folder = tmp_path / "TOW"
+    env = {**os.environ, "TOW_INSTALL_SOURCE": str(zip_path), "TOW_INSTALL_SUMS": str(sums), "TOW_NO_BROWSER": "1"}
+    done = subprocess.run(
+        [program, "-NoProfile", "-NonInteractive", "-File", str(PS1), "-Dir", str(folder), "-Yes"],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=180,
+        check=False,
+    )
+    assert done.returncode != 0
+    assert "unexpected entry" in done.stderr, done.stdout + done.stderr
+    assert not (tmp_path / "outside.txt").exists()
+    assert not folder.exists()  # a folder this run created goes again
 
 
 def test_install_ps1_prints_a_runnable_autostart_hint_and_the_real_port():

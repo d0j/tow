@@ -135,8 +135,13 @@ function Install-Tow {
     if ($Dir -match '%.*%|!.*!|\^.*!|!.*\^') {
         throw "TOW: Windows cannot start TOW from $Dir`: a folder path with two % signs, two ! signs, or a ^ and a ! is read as a variable or an escape. Choose another folder with -Dir."
     }
-    # docs/PORTABLE.md 3: without Windows long paths, a folder path over 110 characters lets files
-    # deep in app\.venv and runtime\ pass 260 characters, and the first start fails inside uv or Python.
+    # docs/PORTABLE.md 3: Windows loads no program or library whose full path reaches 251 characters,
+    # long paths on or off (the limit of app\scripts\tow-start.cmd, measured by bundle-smoke.ps1).
+    if ($Dir.Length -gt 172) {
+        throw "TOW: the folder path $Dir is longer than 172 characters: Windows cannot load TOW's programs from there, even with long paths on. Choose a shorter folder with -Dir (for example C:\TOW)."
+    }
+    # Without Windows long paths, a folder path over 110 characters lets files deep in app\.venv
+    # and runtime\ pass 260 characters, and the first start fails inside uv or Python.
     $longPaths = (Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled -ErrorAction SilentlyContinue).LongPathsEnabled
     if ($Dir.Length -gt 110 -and $longPaths -ne 1) {
         throw "TOW: the folder path $Dir is longer than 110 characters and Windows long paths are off, so TOW could not be prepared there. Choose a shorter folder with -Dir (for example C:\TOW), or turn long paths on (LongPathsEnabled)."
@@ -200,17 +205,35 @@ function Install-Tow {
             Say 'the download matches the release''s SHA256SUMS'
         }
 
+        # Each file straight to its place in $Dir: a staging folder (.install\unpacked\TOW) would add
+        # 22 characters to the deepest path (docs/PORTABLE.md 3). What exists stays (the settings of
+        # an earlier TOW); only the zip's own TOW\ entries, never a path that leaves $Dir.
         Add-Type -AssemblyName System.IO.Compression.FileSystem
-        $unpacked = Join-Path $work 'unpacked'
-        [IO.Compression.ZipFile]::ExtractToDirectory($zip, $unpacked)
-        $top = Join-Path $unpacked 'TOW'
-        if (-not (Test-Path -LiteralPath (Join-Path $top 'Start TOW.cmd'))) { throw "TOW: $asset holds no TOW\Start TOW.cmd" }
-        foreach ($item in @(Get-ChildItem -LiteralPath $top -Force)) {
-            $target = Join-Path $Dir $item.Name
-            if (Test-Path -LiteralPath $target) { continue }  # the settings of an earlier TOW stay
-            Move-Item -LiteralPath $item.FullName -Destination $target
-            $moved.Add($target)
+        $archive = [IO.Compression.ZipFile]::OpenRead($zip)
+        try {
+            if (-not ($archive.Entries | Where-Object { $_.FullName -eq 'TOW/Start TOW.cmd' })) { throw "TOW: $asset holds no TOW\Start TOW.cmd" }
+            $inside = $Dir.TrimEnd('\') + '\'
+            $skipped = @{}
+            foreach ($entry in $archive.Entries) {
+                $parts = $entry.FullName.TrimEnd('/') -split '/'
+                if ($parts.Count -lt 2 -or $parts[0] -ne 'TOW' -or @($parts | Where-Object { $_ -in @('', '.', '..') -or $_ -match '[:\\]' }).Count) {
+                    throw "TOW: $asset holds an unexpected entry $($entry.FullName)"
+                }
+                $name = $parts[1]
+                $first = Join-Path $Dir $name
+                if (-not $skipped.ContainsKey($name)) {
+                    $skipped[$name] = Test-Path -LiteralPath $first
+                    if (-not $skipped[$name]) { $moved.Add($first) }
+                }
+                if ($skipped[$name]) { continue }
+                $target = [IO.Path]::GetFullPath((Join-Path $Dir ($parts[1..($parts.Count - 1)] -join '\')))
+                if (-not $target.StartsWith($inside, [StringComparison]::OrdinalIgnoreCase)) { throw "TOW: $asset holds an unexpected entry $($entry.FullName)" }
+                if ($entry.FullName.EndsWith('/')) { [void][IO.Directory]::CreateDirectory($target); continue }
+                [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target))
+                [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $false)
+            }
         }
+        finally { $archive.Dispose() }
         Remove-Item -LiteralPath $work -Recurse -Force
         if ($Port) {
             $config = Join-Path $Dir 'config.yaml'

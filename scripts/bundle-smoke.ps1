@@ -13,7 +13,13 @@
     where uv or Python could write (uv's own folders, the Python registry keys, the top of the
     profile folders) are compared before and after. At the top of the profile folders only names
     TOW, uv or Python could make count (uv, python, pip, tow, the test folder's name); other
-    programs of a CI runner come and go there, and what was ignored is printed.
+    programs of a CI runner come and go there, and what was ignored is printed. TEMP and TMP of
+    every TOW process point at an empty folder of the test, which must still be empty at the end.
+
+    The Windows folder limit (docs/PORTABLE.md 3) is read from the bundle's own tow-start.cmd: the
+    deepest program or library of the prepared folder must load from a folder of that length
+    (a full path of at most 250 characters). -RootLength makes the install folder exactly that long;
+    with -ExpectTooLong the start file must refuse it before anything of the folder runs.
 
 .EXAMPLE
     pwsh scripts/bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Offline
@@ -24,7 +30,9 @@ param(
     [string]$Base = $(if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }),
     [switch]$Offline,
     [switch]$Move,
-    [switch]$Keep
+    [switch]$Keep,
+    [int]$RootLength = 0,
+    [switch]$ExpectTooLong
 )
 
 $ErrorActionPreference = 'Stop'
@@ -94,9 +102,17 @@ function Test-Health {
 
 $cyrillic = -join [char[]](0x0422, 0x0435, 0x0441, 0x0442)  # "Test" in Russian: the file stays ASCII
 $folder = Join-Path $Base ("tow smoke $cyrillic " + [guid]::NewGuid().ToString('N').Substring(0, 6))
+if ($RootLength) {
+    $pad = $RootLength - $folder.Length - '\TOW'.Length
+    if ($pad -lt 0 -or $pad -gt 200) { throw "bundle-smoke: cannot make a $RootLength-character folder under $Base" }
+    $folder += 'L' * $pad
+}
 $root = Join-Path $folder 'TOW'
+if ($RootLength -and $root.Length -ne $RootLength) { throw "bundle-smoke: the folder is $($root.Length) characters, not $RootLength" }
+# TEMP and TMP of the TOW processes only (restored at the end): nothing may be left there.
+$sentinel = Join-Path $folder 'system-temp'
 $installName = Split-Path -Leaf $folder
-$saved = @{ TOW_NO_BROWSER = $env:TOW_NO_BROWSER; HTTP_PROXY = $env:HTTP_PROXY; HTTPS_PROXY = $env:HTTPS_PROXY; ALL_PROXY = $env:ALL_PROXY; NO_PROXY = $env:NO_PROXY }
+$saved = @{ TEMP = $env:TEMP; TMP = $env:TMP; TOW_NO_BROWSER = $env:TOW_NO_BROWSER; HTTP_PROXY = $env:HTTP_PROXY; HTTPS_PROXY = $env:HTTPS_PROXY; ALL_PROXY = $env:ALL_PROXY; NO_PROXY = $env:NO_PROXY }
 # The bundle runs as on a new computer: no TOW or uv variables of this machine (a developer's
 # machine may name its own install's master key in TOW_MASTER_KEY_FILE; setup-uv sets UV_*).
 foreach ($name in @(Get-ChildItem env: | Where-Object { $_.Name -like 'TOW_*' -or $_.Name -like 'UV_*' } | ForEach-Object Name)) {
@@ -112,8 +128,26 @@ try {
     $config = Join-Path $root 'config.yaml'
     $text = (Get-Content -LiteralPath $config -Raw) -replace '(?m)^port:.*$', "port: $Port"
     [IO.File]::WriteAllText($config, $text, [Text.UTF8Encoding]::new($false))
+    $limit = [int][regex]::Match((Get-Content -LiteralPath (Join-Path $root 'app\scripts\tow-start.cmd') -Raw), 'TOW_ROOT:~(\d+),1').Groups[1].Value
+    if (-not $limit) { throw 'bundle-smoke: no folder limit in app\scripts\tow-start.cmd' }
+    Step "the install folder has $($root.Length) characters; the limit is $limit"
+    New-Item -ItemType Directory -Path $sentinel | Out-Null
+    $env:TEMP = $sentinel; $env:TMP = $sentinel
 
     $env:TOW_NO_BROWSER = '1'
+    if ($ExpectTooLong) {
+        if ($root.Length -le $limit) { throw "bundle-smoke: -ExpectTooLong needs a folder over $limit characters" }
+        Step 'a folder over the limit: Start TOW.cmd must refuse it before anything runs'
+        $env:HTTP_PROXY = 'http://127.0.0.1:9'; $env:HTTPS_PROXY = 'http://127.0.0.1:9'; $env:ALL_PROXY = 'http://127.0.0.1:9'
+        $output = '' | & (Join-Path $root 'Start TOW.cmd') 2>&1 | Out-String
+        $code = $LASTEXITCODE
+        Write-Host $output
+        if ($code -ne 3 -or $output -notmatch "longer than $limit characters") { throw "bundle-smoke: no refusal of a long folder (exit $code)" }
+        if ($output -match 'Preparing TOW|internet' -or (Test-Path -LiteralPath (Join-Path $root 'app\.venv'))) { throw 'bundle-smoke: the refused folder was prepared' }
+        if (@(Get-ChildItem -LiteralPath $sentinel -Force).Count) { throw 'bundle-smoke: the refusal wrote into TEMP' }
+        Step 'passed: refused before setup, nothing written'
+        return
+    }
     if ($Offline) {
         # Any download would go to a closed port and fail: the first start must not need one.
         $env:HTTP_PROXY = 'http://127.0.0.1:9'; $env:HTTPS_PROXY = 'http://127.0.0.1:9'; $env:ALL_PROXY = 'http://127.0.0.1:9'
@@ -126,7 +160,7 @@ try {
     $watch.Stop()
     Write-Host $output
     if ($code -ne 0) { throw "Start TOW.cmd exited with $code" }
-    if ($output -match 'were not enough') { throw 'the first start needed the internet' }
+    if ($output -match 'internet') { throw 'the first start needed the internet' }
     Step ("first start took {0:n0} s" -f $watch.Elapsed.TotalSeconds)
     foreach ($name in 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY') { Set-Item "env:$name" $saved[$name] }
 
@@ -135,6 +169,15 @@ try {
     Step "healthz: ok=$($health.ok) version=$($health.version)"
     if (-not (Test-Path -LiteralPath (Join-Path $root 'keys\master.key'))) { throw 'no keys\master.key after the first start' }
     if (Test-Path -LiteralPath (Join-Path $root 'app\.venv\Scripts\python.exe')) { Step 'app\.venv was built' } else { throw 'no app\.venv' }
+    # The deepest program or library TOW may load (pip's own launchers and CPython's test modules
+    # are never loaded; links are not followed): from a folder of $limit characters its full path
+    # must stay within 250 (Windows refuses 251 and more, long paths on or off).
+    $binaries = @(Get-ChildItem -LiteralPath $root -Recurse -File -Force -Include *.exe, *.dll, *.pyd |
+            ForEach-Object { $_.FullName.Substring($root.Length + 1) } |
+            Where-Object { $_ -notmatch '\\Lib\\site-packages\\pip\\' -and $_ -notmatch '\\_test[^\\]*\.pyd$' } |
+            Sort-Object Length -Descending)
+    Step "deepest program or library: $($binaries[0].Length) $($binaries[0]) (then $($binaries[1].Length) $($binaries[1]))"
+    if ($limit + 1 + $binaries[0].Length -gt 250) { throw "bundle-smoke: $($binaries[0]) does not load from a folder of $limit characters: lower the limit" }
 
     $status = & (Join-Path $root 'app\scripts\tow.cmd') status --json | ConvertFrom-Json
     Step "tow status: running=$($status.running) version=$($status.version)"
@@ -177,6 +220,9 @@ try {
         Step 'moving the stopped install, including its existing absolute-path environment'
         Move-Item -LiteralPath $root -Destination $movedRoot
         $root = $movedRoot
+        $output = & (Join-Path $root 'app\scripts\tow.cmd') status --json 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 3 -or $output -notmatch 'moved or copied') { throw "bundle-smoke: the moved install ran its old environment (exit $LASTEXITCODE)" }
+        Step 'before setup the moved install refuses to run its old environment'
         if ($Offline) {
             $env:HTTP_PROXY = 'http://127.0.0.1:9'; $env:HTTPS_PROXY = 'http://127.0.0.1:9'; $env:ALL_PROXY = 'http://127.0.0.1:9'
             $env:NO_PROXY = ''
@@ -184,7 +230,7 @@ try {
         $output = '' | & (Join-Path $root 'Start TOW.cmd') 2>&1 | Out-String
         $code = $LASTEXITCODE
         Write-Host $output
-        if ($code -ne 0 -or ($Offline -and $output -match 'were not enough')) {
+        if ($code -ne 0 -or ($Offline -and $output -match 'internet')) {
             throw "bundle-smoke: relocated start failed, exit $code"
         }
         if (-not (Wait-Until { Test-Health } 30)) { throw 'bundle-smoke: moved install is unhealthy' }
@@ -205,6 +251,8 @@ try {
         Step 'relocated install rebuilt offline, kept its key and config, started and stopped'
     }
 
+    $left = @(Get-ChildItem -LiteralPath $sentinel -Force -Name)
+    if ($left.Count) { throw "bundle-smoke: TOW wrote into the system TEMP: $($left -join ', ')" }
     $after = Get-Outside
     $changed = Compare-Outside $before $after
     foreach ($place in $changed) { Write-Host "  outside the folder: $place`n    before: $($before[$place])`n    after:  $($after[$place])" -ForegroundColor Yellow }
