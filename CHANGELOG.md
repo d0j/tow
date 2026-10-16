@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.32.3] — 2026-10-16
+
 ### Changed
 
 - Every distance in the interface follows one scale (3, 6, 9, 12 and 18 px): a label and its hint sit 3 px from
