@@ -12,6 +12,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - On Windows, TOW reads the shutdown records of the event log with `wevtutil` by its full path in System32, as it
   starts every other Windows tool: a file of that name in TOW's Python folder or the current folder is never
   started instead.
+- `tow generate-key` (and the first start) now says so when the new folder of the master key could not be closed
+  to other accounts, as every start already does for `keys/`; before, the key was made there without a word.
 
 ### Changed
 
