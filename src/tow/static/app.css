@@ -561,6 +561,7 @@ details.row-edit.is-new { background: var(--new-row); }
   font-family: ui-monospace, Consolas, monospace;
 }
 .hdr-clock.bad { color: var(--bad); }
+.hdr-clock[hidden] { display: none; }
 .row-ops { display: inline-flex; align-items: center; justify-content: flex-end; gap: .05rem; }
 .row-ops form { margin: 0; display: inline-flex; }
 .row-ico {
