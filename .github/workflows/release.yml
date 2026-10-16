@@ -12,8 +12,9 @@ name: release
 # The quality gate is not run again: the tag must be an annotated "TOW X.Y.Z" on origin/main
 # whose content passed the `ci` workflow (its four-OS gate) - on that commit or on any commit with
 # the same tree, such as the head of the pull request it merged. Nothing is uploaded unless the
-# bundle, both installers and the update of the latest published release to this tag
-# (scripts/update-smoke.py) passed on the runners.
+# bundle, both installers, the update of the latest published release to this tag
+# (scripts/update-smoke.py) and the real autostart of Windows, macOS and Linux (autostart.yml, no
+# skip allowed) passed on the runners.
 
 on:
   push:
@@ -214,9 +215,18 @@ jobs:
         shell: bash
         run: uv run --no-project python scripts/update-smoke.py --previous "$RUNNER_TEMP/previous" --source tow-source.tar.gz
 
+  # The OS autostart of the three systems for the checked commit, as real.yml runs it; a runner
+  # that cannot run it fails the release instead of skipping.
+  autostart:
+    needs: [source]
+    uses: ./.github/workflows/autostart.yml
+    with:
+      ref: ${{ needs.source.outputs.commit }}
+      strict: true
+
   publish:
     name: upload to the release
-    needs: [source, windows, posix, update]
+    needs: [source, windows, posix, update, autostart]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

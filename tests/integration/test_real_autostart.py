@@ -1,13 +1,15 @@
 """`tow autostart` for real: the OS entry of a throwaway install is made, the OS starts TOW from
 it, and `tow autostart off` removes it again.
 
-Skipped unless TOW_REAL_AUTOSTART=1: .github/workflows/real.yml installs the commit on a runner
-the way the owner does (install.sh on Linux and macOS, the bundle with install.ps1 on Windows;
-TOW refuses autostart for a development checkout) and sets
+Skipped unless TOW_REAL_AUTOSTART=1: .github/workflows/autostart.yml (run by real.yml, and by
+release.yml before a release is published) installs the commit on a runner the way the owner
+does (install.sh on Linux and macOS, the bundle with install.ps1 on Windows; TOW refuses
+autostart for a development checkout) and sets
 
     TOW_REAL_AUTOSTART_ROOT   the install's folder
     TOW_REAL_AUTOSTART_PORT   its port (never 8787)
     TOW_REAL_AUTOSTART_SKIP   (Linux) why systemd --user cannot work on this runner: skipped so
+                              (never in a release or weekly run: autostart.yml fails there)
 
 Never on a development machine: the task, unit and agent names are one per user and would take
 over the owner's TOW. The OS is asked directly (schtasks, launchctl, systemctl), not only TOW.
