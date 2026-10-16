@@ -9,7 +9,9 @@
 # with --uninstall --yes (data, keys and config stay), installs again around them (same key),
 # starts, checks and stops it again, uninstalls, then --purge (nothing stays). uv's and Python's
 # places outside the folder are compared before and after; at the top of the home folder only
-# names TOW, uv or Python could make count, and what was ignored is printed. Never port 8787.
+# names TOW, uv or Python could make count, and what was ignored is printed. The installer and
+# every TOW command get TMPDIR (and TMP, TEMP) of a sentinel folder of their own, which must stay
+# empty: uv's lock files and TOW's temporary files belong inside the install. Never port 8787.
 set -eu
 
 archive=$1
@@ -23,6 +25,7 @@ installer=$here/install/install.sh
 base=${RUNNER_TEMP:-${TMPDIR:-/tmp}}
 dir="$base/tow smoke $$"
 sums="$base/SHA256SUMS.smoke.$$"
+sentinel="$base/tow smoke temp $$"
 
 say() { printf '%s\n' "install-smoke: $*"; }
 fail() {
@@ -31,6 +34,12 @@ fail() {
     exit 1
 }
 sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d ' ' -f 1; }
+# The tested programs only: this script's own tools keep the runner's temporary folder.
+tested() { env TMPDIR="$sentinel" TMP="$sentinel" TEMP="$sentinel" "$@"; }
+temp_untouched() {
+    left=$(ls -A "$sentinel")
+    [ -z "$left" ] || fail "written into TMPDIR ($1): $(printf '%s' "$left" | tr '\n' ' ')"
+}
 healthy() { curl -fsS --noproxy '*' --max-time 3 "http://127.0.0.1:$port/healthz" >/dev/null 2>&1; }
 # Names TOW, uv or Python could make at the top of the home folder (the test folders are named
 # "tow ..."); other programs of a CI runner come and go there on their own.
@@ -51,17 +60,18 @@ noise() { # entries of one of two listings, not of both, that are not ours
 }
 cleanup() {
     [ ! -x "$dir/app/scripts/tow" ] || "$dir/app/scripts/tow" stop >/dev/null 2>&1 || true
-    rm -rf "$dir" "$sums"
+    rm -rf "$dir" "$sums" "$sentinel"
 }
 trap cleanup EXIT
 
 if healthy; then fail "something already answers on port $port"; fi
 before=$(outside)
 home_before=$(ls -A "$HOME")
+mkdir "$sentinel"
 printf '%s  tow-source.tar.gz\n' "$(sha "$archive")" >"$sums"
 
 say "install.sh into $dir"
-TOW_INSTALL_SOURCE=$archive TOW_INSTALL_SUMS=$sums sh "$installer" --dir "$dir" --port "$port"
+tested env TOW_INSTALL_SOURCE="$archive" TOW_INSTALL_SUMS="$sums" sh "$installer" --dir "$dir" --port "$port"
 case $(uname -s) in
     Darwin) start="$dir/Start TOW.command" stop="$dir/Stop TOW.command" ;;
     *) start="$dir/start-tow" stop="$dir/stop-tow" ;;
@@ -70,24 +80,25 @@ esac
 [ -f "$dir/keys/master.key" ] || fail "no keys/master.key"
 
 say "start: $start"
-TOW_NO_BROWSER=1 "$start" </dev/null || fail "the start file exited with $?"
+tested env TOW_NO_BROWSER=1 "$start" </dev/null || fail "the start file exited with $?"
 healthy || fail "/healthz does not answer on $port"
 curl -fsS --noproxy '*' "http://127.0.0.1:$port/healthz"
 echo
-"$dir/app/scripts/tow" status
-"$dir/app/scripts/tow" status --json | grep -q '"running": true' || fail "tow status: not running"
+tested "$dir/app/scripts/tow" status
+tested "$dir/app/scripts/tow" status --json | grep -q '"running": true' || fail "tow status: not running"
 
 say "second start: it finds TOW running"
-TOW_NO_BROWSER=1 "$start" </dev/null || fail "the second start exited with $?"
+tested env TOW_NO_BROWSER=1 "$start" </dev/null || fail "the second start exited with $?"
 
 say "stop: $stop"
-"$stop" </dev/null || fail "the stop file exited with $?"
+tested "$stop" </dev/null || fail "the stop file exited with $?"
 tries=0
 while healthy; do
     tries=$((tries + 1))
     [ "$tries" -lt 60 ] || fail "TOW still answers after the stop file"
     sleep 1
 done
+temp_untouched "install, start, stop"
 
 say 'move the stopped install, keeping its old absolute-path environment'
 key_before=$(sha "$dir/keys/master.key")
@@ -102,46 +113,48 @@ case $(uname -s) in
     Darwin) start="$dir/Start TOW.command" stop="$dir/Stop TOW.command" ;;
     *) start="$dir/start-tow" stop="$dir/stop-tow" ;;
 esac
-UV_OFFLINE=1 UV_PYTHON_DOWNLOADS=never TOW_NO_BROWSER=1 "$start" </dev/null || fail 'relocated start failed offline'
+tested env UV_OFFLINE=1 UV_PYTHON_DOWNLOADS=never TOW_NO_BROWSER=1 "$start" </dev/null || fail 'relocated start failed offline'
 healthy || fail 'relocated service is unhealthy'
 [ "$(sha "$dir/keys/master.key")" = "$key_before" ] || fail 'move replaced the master key'
 [ "$(sha "$dir/config.yaml")" = "$config_before" ] || fail 'move changed config'
 TOW_MOVE_ROOT=$dir "$dir/app/.venv/bin/python" -c 'import os, sys, tow; from pathlib import Path; root=Path(os.environ["TOW_MOVE_ROOT"]).resolve(); assert Path(sys.base_prefix).resolve().is_relative_to(root); assert Path(tow.__file__).resolve().is_relative_to(root)' || fail 'moved Python or module belongs to the old folder'
-"$stop" </dev/null || fail 'moved service did not stop'
+tested "$stop" </dev/null || fail 'moved service did not stop'
 tries=0
 while healthy; do
     tries=$((tries + 1))
     [ "$tries" -lt 60 ] || fail 'moved service still answers after stop'
     sleep 1
 done
+temp_untouched "offline setup and start of the moved install"
 say 'relocated install rebuilt offline, preserved its key and config, started and stopped'
 
 say "uninstall --yes (keeps data, keys, config.yaml, backup)"
-sh "$installer" --uninstall --yes --dir "$dir" </dev/null
+tested sh "$installer" --uninstall --yes --dir "$dir" </dev/null
 left=$(ls -A "$dir" | tr '\n' ' ')
 [ "$left" = ".tow-install backup config.yaml data keys " ] ||
     [ "$left" = ".tow-install config.yaml data keys " ] || fail "left after uninstall: $left"
 key_before=$(sha "$dir/keys/master.key")
 
 say "install again around the kept data (same key, same settings)"
-TOW_INSTALL_SOURCE="$archive" TOW_INSTALL_SUMS="$sums" sh "$installer" --dir "$dir" --port "$port" </dev/null
+tested env TOW_INSTALL_SOURCE="$archive" TOW_INSTALL_SUMS="$sums" sh "$installer" --dir "$dir" --port "$port" </dev/null
 [ "$(sha "$dir/keys/master.key")" = "$key_before" ] || fail "the reinstall replaced keys/master.key"
-TOW_NO_BROWSER=1 "$start" </dev/null || fail "the start file after the reinstall exited with $?"
+tested env TOW_NO_BROWSER=1 "$start" </dev/null || fail "the start file after the reinstall exited with $?"
 healthy || fail "/healthz does not answer after the reinstall"
-"$dir/app/scripts/tow" status --json | grep -q '"running": true' || fail "tow status after the reinstall: not running"
-"$stop" </dev/null || fail "the stop file after the reinstall exited with $?"
+tested "$dir/app/scripts/tow" status --json | grep -q '"running": true' || fail "tow status after the reinstall: not running"
+tested "$stop" </dev/null || fail "the stop file after the reinstall exited with $?"
 tries=0
 while healthy; do
     tries=$((tries + 1))
     [ "$tries" -lt 60 ] || fail "TOW still answers after the stop file (reinstall)"
     sleep 1
 done
-sh "$installer" --uninstall --yes --dir "$dir" </dev/null
+tested sh "$installer" --uninstall --yes --dir "$dir" </dev/null
 
 say "--purge of what an uninstall kept (no app left)"
 [ ! -e "$dir/app" ] || fail "app/ is still there"
-sh "$installer" --uninstall --yes --purge --dir "$dir" </dev/null
+tested sh "$installer" --uninstall --yes --purge --dir "$dir" </dev/null
 [ ! -e "$dir" ] || fail "--purge left $dir"
+temp_untouched "reinstall, start, stop, uninstall"
 
 after=$(outside)
 ignored=$(noise "$home_before" "$(ls -A "$HOME")")
