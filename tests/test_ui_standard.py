@@ -277,3 +277,8 @@ def test_sign_in_and_first_start_buttons_keep_their_width_on_a_phone():
         template = (ROOT / "src" / "tow" / "templates" / page).read_text(encoding="utf-8")
         assert "auth-card" in template
         assert 'class="settings-actions"' in template
+
+
+def test_the_download_list_is_as_wide_as_its_lines():
+    """1.32 QA N3: the downloads popover was 92 vw wide for three short lines."""
+    assert _first("dialog#download-pop").strip() == "width: min(92vw, 40rem);"

@@ -448,6 +448,8 @@ dialog.log-pop {
   background: var(--bg); color: inherit;
 }
 dialog.log-pop[open] { display: flex; flex-direction: column; }
+/* A topic's download list is a few short lines: not the Log's 92 % of the screen. */
+dialog#download-pop { width: min(92vw, 40rem); }
 dialog.log-pop::backdrop { background: rgba(0,0,0,.55); }
 .log-pop-head {
   display: flex; align-items: center; justify-content: space-between;
