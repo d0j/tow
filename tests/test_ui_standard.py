@@ -342,6 +342,15 @@ def test_the_help_question_mark_is_a_28_px_target_and_the_copy_delete_page_a_set
     assert '<div class="backup-delete-page">' in template
 
 
+def test_the_history_search_fills_its_line_on_a_phone():
+    """QA Q11: at 390 px the History search stopped at 296 of 374 px (its 18rem basis), the one
+    ragged phone edge left after F3. On a phone it takes its own full line."""
+    rule = '.history-filter > form[role="search"]'
+    phone = "@media (max-width: 720px) { " + rule + " { flex: 1 1 100%; } }"
+    assert phone in CSS
+    assert CSS.index(phone) > CSS.index(rule + " { flex: 0 1 18rem; }")  # it wins
+
+
 def test_the_check_all_cards_title_is_a_card_title():
     """1.32 QA L8: "Results" used the browser's 1.5em (22 px); every card or dialog title is 1.05rem."""
     assert "font-size: 1.05rem" in _first(".check-results h2")
