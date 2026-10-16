@@ -526,7 +526,7 @@ details.advanced > summary { width: fit-content; color: var(--acc); font-size: 1
 /* First start: what TOW is and the next steps (setup page, empty Home). */
 .first-steps { text-align: left; max-width: 44rem; margin-inline: auto; }
 .steps { padding-left: var(--sp-5); display: grid; gap: var(--sp-2); }
-.steps .step-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); font-weight: 600; }
+.steps .step-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); font-weight: 600; }
 .steps .field-hint { display: block; margin-top: var(--sp-1); }
 .table { width: 100%; border-collapse: collapse; }
 /* A table's cells: 6 px above and below, its columns 12 px apart, its first and last on the card's edges. */
@@ -847,7 +847,11 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
   /* The site list takes the room the services leave (they keep their own width) and scrolls
      sideways; its end fades out, so a cut-off name never runs into the client's name. */
   header.app { grid-template-columns: minmax(0, 1fr) minmax(0, max-content) auto; grid-template-areas: "nav nav right" "sites services clock"; row-gap: var(--sp-1); }
-  header.app nav { grid-area: nav; }
+  /* Too many icons for a small phone's line (an Undo and a message beside them): the icons wrap as a
+     group, 3 px apart, never smaller. The search field opens under the header, on the page's edges. */
+  header.app nav { grid-area: nav; flex-wrap: wrap; row-gap: var(--sp-1); }
+  .hdr-search { position: static; }
+  .hdr-search input { left: var(--gutter); width: min(15rem, calc(100% - 2 * var(--gutter))); }
   .hdr-sites {
     grid-area: sites; min-width: 0; max-width: 100%; justify-self: stretch; overflow-x: auto; justify-content: flex-start;
     padding-right: 2.5rem; mask-image: linear-gradient(to right, black calc(100% - 2.5rem), transparent);

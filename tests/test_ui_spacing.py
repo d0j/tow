@@ -346,3 +346,14 @@ def test_the_text_after_a_chevron_starts_18px_from_it_and_menu_rings_stay_inside
         "_settings_protection.html",
     ):
         assert "link-row" in (TEMPLATES / name).read_text(encoding="utf-8"), name
+
+
+def test_a_small_phone_header_wraps_its_icons_and_keeps_the_search_on_the_page():
+    """At 320 px with an Undo and a message the header's icons ran 16 px under its controls, and the
+    search field (240 px from its icon) 2 px past the screen. The icons wrap as a group (3 px), never
+    smaller; on a phone the search field opens under the header between the page's edges."""
+    phone = CSS.split("/* Too many icons for a small phone's line", 1)[1].split("}", 3)
+    assert "flex-wrap: wrap; row-gap: var(--sp-1);" in phone[0]
+    assert ".hdr-search { position: static; }" in CSS
+    assert "width: min(15rem, calc(100% - 2 * var(--gutter)))" in CSS
+    assert "gap: var(--sp-1) var(--sp-2)" in _rule(".steps .step-head")  # a wrapped pill 3 px under its link
