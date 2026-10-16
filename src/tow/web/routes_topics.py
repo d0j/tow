@@ -186,18 +186,19 @@ def topics_delete(tid: str) -> Response:
     if gone:
         # M5: undo puts the topic back where it was, not at the top.
         undo.stamp(state, "topic", item=gone, index=topics.index(gone))
-        services.log_event(
-            "topic_delete",
-            topic=tid,
-            title=gone.get("title"),
-            url=gone.get("url"),
-            path=gone.get("save_path"),
-            history="retained",
-            client_torrent="untouched",
-            how="manual",
-        )
     state["topics"] = [item for item in topics if str(item.get("id")) != tid]
     services.save_state(state)
+    # Logged once the removal is saved: a failed save is no "removed" (Recent messages).
+    services.log_event(
+        "topic_delete",
+        topic=tid,
+        title=gone.get("title"),
+        url=gone.get("url"),
+        path=gone.get("save_path"),
+        history="retained",
+        client_torrent="untouched",
+        how="manual",
+    )
     services.cleanup_secret_undo()  # the secrets of an undo this one replaced, if their removal was postponed
     try:
         services.forget_cached_content(str(gone.get("url") or ""))

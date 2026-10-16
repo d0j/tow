@@ -393,7 +393,6 @@ def apply(*, local: bool = True, expected: str = "") -> Outcome:
             return Outcome("web.undo.stale", "warn")  # nothing written: the newer undo stays
         if not is_live(record):
             return _expired(state, record)
-        log_event("undo", how="manual")
         kind = KINDS.get(str(record.get("kind")))
         if kind is None:
             return _nothing(state, record)
@@ -425,6 +424,8 @@ def _commit(kind: Kind, record: dict[str, Any], restore: Restore, state: dict[st
         if incomplete:
             return Outcome("web.common.rollback_incomplete", "err", kind.target)
         return restore.failed or Outcome(kind.failed, "err", kind.target)
+    # Logged once the undo is committed: a refused or failed one is no "undone" (Recent messages).
+    log_event("undo", undo=record.get("kind"), how="manual")
     done = restore.done
     note = "web.undo.cleanup_later" if postponed else ""  # done; its secrets go a little later
     if restore.after_commit is not None:

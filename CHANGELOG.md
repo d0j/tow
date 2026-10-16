@@ -11,6 +11,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   by another device's timer-only save, which said "saved"): a save changes only what you changed in that form. A
   field changed on both devices comes back with both values and what you typed (never a password) until you
   choose; a form opened before the update asks to be opened again.
+- History and Recent messages no longer say a topic was edited or removed, or a change undone, when saving it
+  failed or was refused.
 
 ## [1.32.3] — 2026-10-16
 
