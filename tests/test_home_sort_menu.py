@@ -19,7 +19,7 @@ def test_sort_menu_has_labelled_radio_choices_and_native_backing(language):
     save_config(config)
     page = TestClient(app).get("/").text
     assert 'class="home-page"' in page
-    assert '<select id="list-sort">' in page
+    assert '<select id="list-sort" class="w-m">' in page  # a select: the standard size (1.32.2)
     assert 'id="sort-picker" hidden' in page
     assert 'aria-haspopup="menu" aria-expanded="false" aria-controls="sort-menu"' in page
     assert 'id="sort-menu" role="menu"' in page

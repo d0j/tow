@@ -40,7 +40,7 @@
       {#- The rule is in the label (1.32.1); the sentence stays for a screen reader, the pattern's
           title (the browser's refusal) and the server's. -#}
       <label for="site-name">{{ t('sites.name_label') }}</label>
-      <input id="site-name" class="w-s" name="name" pattern="[a-z0-9_]+" title="{{ t('sites.name_hint') }}" placeholder="{{ t('common.example', example='rutor') }}" autocomplete="off" {{ tech }} value="{{ draft.get('name', '') }}"{{ invalid('site-name', 'site-name-hint') }}>
+      <input id="site-name" class="w-m" name="name" pattern="[a-z0-9_]+" title="{{ t('sites.name_hint') }}" placeholder="{{ t('common.example', example='rutor') }}" autocomplete="off" {{ tech }} value="{{ draft.get('name', '') }}"{{ invalid('site-name', 'site-name-hint') }}>
       <p class="sr-only" id="site-name-hint">{{ t('sites.name_hint') }}</p>
     </div>
     <div class="field">
@@ -57,17 +57,15 @@
       <div class="form-grid">
       <div class="field"><label for="site-regex">{{ t('sites.url_regex') }}</label>
         <input id="site-regex" class="w-xl" name="url_regex" placeholder="{{ t('common.example', example='^https?://rutor\\.info/torrent/(\\d+)') }}" value="{{ draft.get('url_regex', '') }}" {{ tech }}{{ invalid('site-regex') }}></div>
-      <div class="field-row">
-        {#- Empty, the default is said (not a grey value): a pasted link fills in the site's own path,
-            and an empty field is saved as /download/{id} (routes_sites.sites_new). -#}
-        <div class="field"><label for="site-dl">{{ t('sites.download_path') }}</label>
-          <input id="site-dl" class="w-l" name="download_path" value="{{ draft.get('download_path', '') }}" {{ tech }}{{ invalid('site-dl', 'site-dl-hint') }}>
-          <p class="field-hint" id="site-dl-hint">{{ t('common.default_path', path='/download/{id}') }}</p></div>
-        <div class="field"><label for="site-login-path">{{ t('sites.login_path') }}</label>
-          <input id="site-login-path" class="w-m" name="login_path" value="{{ draft.get('login_path', '') }}" placeholder="{{ t('common.example', example='/login.php') }}" {{ tech }}{{ invalid('site-login-path') }}></div>
-      </div>
+      {#- Empty, the default is said (not a grey value): a pasted link fills in the site's own path,
+          and an empty field is saved as /download/{id} (routes_sites.sites_new). -#}
+      <div class="field"><label for="site-dl">{{ t('sites.download_path') }}</label>
+        <input id="site-dl" class="w-xl" name="download_path" value="{{ draft.get('download_path', '') }}" {{ tech }}{{ invalid('site-dl', 'site-dl-hint') }}>
+        <p class="field-hint" id="site-dl-hint">{{ t('common.default_path', path='/download/{id}') }}</p></div>
+      <div class="field"><label for="site-login-path">{{ t('sites.login_path') }}</label>
+        <input id="site-login-path" class="w-xl" name="login_path" value="{{ draft.get('login_path', '') }}" placeholder="{{ t('common.example', example='/login.php') }}" {{ tech }}{{ invalid('site-login-path') }}></div>
       <div class="field"><label for="site-topic-path">{{ t('sites.topic_path') }}</label>
-        <input id="site-topic-path" class="w-l" name="topic_path" value="{{ draft.get('topic_path', '') }}" placeholder="{{ t('common.example', example='/forum/viewtopic.php?t={id}') }}" {{ tech }}{{ invalid('site-topic-path') }}></div>
+        <input id="site-topic-path" class="w-xl" name="topic_path" value="{{ draft.get('topic_path', '') }}" placeholder="{{ t('common.example', example='/forum/viewtopic.php?t={id}') }}" {{ tech }}{{ invalid('site-topic-path') }}></div>
       <label class="check-label" for="site-page-dl"><input id="site-page-dl" name="page_download" value="1" type="checkbox"{% if draft.get('page_download') %} checked{% endif %}> {{ t('sites.page_download') }}</label>
       <div class="field"><label for="site-href-rx">{{ t('sites.href_regex') }}</label>
         <input id="site-href-rx" class="w-xl" name="download_href_regex" value="{{ draft.get('download_href_regex', '') }}" placeholder="{{ t('common.example', example='download\\.php\\?id=(\\d+)') }}" {{ tech }}{{ invalid('site-href-rx') }}></div>
@@ -168,17 +166,13 @@
           <details class="advanced"{% if bad in advanced_fields %} open{% elif not spec.login_path %}{{ fix_open('site_login', name) }}{% endif %}>
             <summary>{{ t('sites.advanced') }}</summary>
             <div class="form-grid">
-            <div class="field-row">
-              <div class="field"><label for="site-new-name-{{ name }}">{{ t('sites.name_label') }}</label><input id="site-new-name-{{ name }}" class="w-s" name="new_name" value="{{ d.get('new_name') or name }}" pattern="[a-z0-9_]+" title="{{ t('sites.name_hint') }}" required {{ tech }} aria-describedby="site-new-name-hint-{{ name }}"{{ mark('new_name', bad) }}><p class="sr-only" id="site-new-name-hint-{{ name }}">{{ t('sites.name_hint') }}</p></div>
-              <div class="field"><label for="site-login-path-{{ name }}">{{ t('sites.login_path') }}</label><input id="site-login-path-{{ name }}" class="w-m" name="login_path" value="{{ d.get('login_path', spec.login_path or '') }}" placeholder="{{ t('common.example', example='/forum/login.php') }}" {{ tech }}{{ mark('login_path', bad) }}></div>
-            </div>
+            <div class="field"><label for="site-new-name-{{ name }}">{{ t('sites.name_label') }}</label><input id="site-new-name-{{ name }}" class="w-m" name="new_name" value="{{ d.get('new_name') or name }}" pattern="[a-z0-9_]+" title="{{ t('sites.name_hint') }}" required {{ tech }} aria-describedby="site-new-name-hint-{{ name }}"{{ mark('new_name', bad) }}><p class="sr-only" id="site-new-name-hint-{{ name }}">{{ t('sites.name_hint') }}</p></div>
+            <div class="field"><label for="site-login-path-{{ name }}">{{ t('sites.login_path') }}</label><input id="site-login-path-{{ name }}" class="w-xl" name="login_path" value="{{ d.get('login_path', spec.login_path or '') }}" placeholder="{{ t('common.example', example='/forum/login.php') }}" {{ tech }}{{ mark('login_path', bad) }}></div>
             <div class="field"><label for="site-url-rx-{{ name }}">{{ t('sites.url_regex') }}</label><input id="site-url-rx-{{ name }}" class="w-xl" name="url_regex" value="{{ d.get('url_regex') or spec.url_regex }}" {{ tech }}{{ mark('url_regex', bad) }}></div>
             <input type="hidden" name="login_hosts_present" value="1">
             <div class="field"><label for="site-login-hosts-{{ name }}">{{ t('sites.login_hosts') }}</label><textarea id="site-login-hosts-{{ name }}" class="w-xl" name="login_hosts" rows="2" {{ tech }} aria-describedby="site-login-hosts-hint-{{ name }}"{{ mark('login_hosts', bad) }}>{{ d.get('login_hosts', (spec.login_hosts or []) | join('\n')) }}</textarea><p class="field-hint" id="site-login-hosts-hint-{{ name }}">{{ t('sites.login_hosts_hint') }}</p></div>
-            <div class="field-row">
-              <div class="field"><label for="site-download-path-{{ name }}">{{ t('sites.download_path') }}</label><input id="site-download-path-{{ name }}" class="w-l" name="download_path" value="{{ d.get('download_path') or spec.download_path }}" {{ tech }}{{ mark('download_path', bad) }}></div>
-              <div class="field"><label for="site-topic-path-{{ name }}">{{ t('sites.topic_path') }}</label><input id="site-topic-path-{{ name }}" class="w-l" name="topic_path" value="{{ d.get('topic_path', spec.topic_path or '') }}" placeholder="{{ t('common.example', example='/forum/viewtopic.php?t={id}') }}" {{ tech }}{{ mark('topic_path', bad) }}></div>
-            </div>
+            <div class="field"><label for="site-download-path-{{ name }}">{{ t('sites.download_path') }}</label><input id="site-download-path-{{ name }}" class="w-xl" name="download_path" value="{{ d.get('download_path') or spec.download_path }}" {{ tech }}{{ mark('download_path', bad) }}></div>
+            <div class="field"><label for="site-topic-path-{{ name }}">{{ t('sites.topic_path') }}</label><input id="site-topic-path-{{ name }}" class="w-xl" name="topic_path" value="{{ d.get('topic_path', spec.topic_path or '') }}" placeholder="{{ t('common.example', example='/forum/viewtopic.php?t={id}') }}" {{ tech }}{{ mark('topic_path', bad) }}></div>
             <label class="check-label" for="site-page-dl-{{ name }}"><input id="site-page-dl-{{ name }}" name="page_download" value="1" type="checkbox"{% if (d.get('page_download') if d else spec.page_download) %} checked{% endif %}> {{ t('sites.page_download') }}</label>
             <div class="field"><label for="site-href-rx-{{ name }}">{{ t('sites.href_regex') }}</label><input id="site-href-rx-{{ name }}" class="w-xl" name="download_href_regex" value="{{ d.get('download_href_regex', spec.download_href_regex or '') }}" placeholder="{{ t('common.example', example='download\\.php\\?id=(\\d+)') }}" {{ tech }}{{ mark('download_href_regex', bad) }}></div>
             <div class="field"><label for="site-protection-{{ name }}">{{ t('sites.protection') }}</label>
@@ -187,7 +181,7 @@
                 <option value="off"{% if (d.get('protection') or spec.protection) == 'off' %} selected{% endif %}>{{ t('sites.protection_off') }}</option>
               </select>
               <p class="field-hint" id="site-protection-hint-{{ name }}">{{ t('sites.protection_hint') }}</p></div>
-            <div class="field"><label for="site-infohash-{{ name }}">{{ t('sites.infohash_path') }}</label><input id="site-infohash-{{ name }}" class="w-l" name="infohash_path" value="{{ d.get('infohash_path', spec.infohash_path or '') }}" placeholder="{{ t('common.example', example='/revision?id={id}') }}" {{ tech }} aria-describedby="site-infohash-hint-{{ name }}"{{ mark('infohash_path', bad) }}><p class="field-hint" id="site-infohash-hint-{{ name }}">{{ t('sites.infohash_hint') }}</p></div>
+            <div class="field"><label for="site-infohash-{{ name }}">{{ t('sites.infohash_path') }}</label><input id="site-infohash-{{ name }}" class="w-xl" name="infohash_path" value="{{ d.get('infohash_path', spec.infohash_path or '') }}" placeholder="{{ t('common.example', example='/revision?id={id}') }}" {{ tech }} aria-describedby="site-infohash-hint-{{ name }}"{{ mark('infohash_path', bad) }}><p class="field-hint" id="site-infohash-hint-{{ name }}">{{ t('sites.infohash_hint') }}</p></div>
             </div>
           </details>
         </form>

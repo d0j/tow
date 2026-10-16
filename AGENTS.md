@@ -46,11 +46,12 @@ tracker degradation from a client or TOW failure before changing state.
   button itself, and there is no inline `style=`. Square icon buttons (`.ico`, `.row-ico`, `.flash-x`) are the only
   exception. Inputs and selects are 36 px with 14 px text, 44 px with 16 px text on phones and touch
   screens (`--field-h`, also from `app.css` only).
-- **Fields are as wide as what they hold**, by one class from `app.css`: `.w-2xs` 72 px (attempts, order), `.w-xs`
-  88 px (ports, intervals, days), `.w-s` 192 px, `.w-m` 240 px (user name, password, reminder, host), `.w-l` 416 px,
-  `.w-xl` 576 px (a topic's name or folder, each on its own row). Fields that belong together share a `.field-row`,
-  which wraps by those widths; on a phone (≤ 720 px) text fields fill the row and numbers stay short. A rule field is
-  a one-row textarea that grows. Links, paths and rules carry `autocapitalize="off"`, `autocorrect="off"` and
+- **Every field is one of three sizes**, by one class from `app.css` (no other width class, no field's own width
+  rule): short `.w-xs` 88 px for every number (ports, intervals, minutes, days, attempts, order, limits); standard
+  `.w-m` 240 px for every password, user name, token, API key, chat ID, host, reminder, site code, search and every
+  select; long `.w-xl` 576 px for links and webhooks, folders, site paths, rules, host lists and a topic's name (each
+  on its own row). Fields that belong together share a `.field-row`, which wraps by those widths; on a phone
+  (≤ 720 px) every other field fills the row and numbers stay short. A rule field is a one-row textarea that grows. Links, paths and rules carry `autocapitalize="off"`, `autocorrect="off"` and
   `spellcheck="false"`; an example in a field is `common.example` ("e.g. …"), a real default is said under it with
   `common.default_path` ("Default: …").
 - **At most one solid button per card or form**; the others are `ghost`. Remove, Delete and Disconnect are

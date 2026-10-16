@@ -145,7 +145,7 @@ header.app .ico.on, header.app .ico:hover, header.app .ico:focus-visible {
 .hdr-search[open] > summary { background: var(--panel2); color: var(--nav-fg-hi); }
 .hdr-search input {
   position: absolute; top: calc(100% + .3rem); left: 0; z-index: 12;
-  width: min(18rem, 70vw); box-shadow: var(--shadow);
+  width: 15rem; box-shadow: var(--shadow); /* the standard field (.w-m) */
 }
 a.plus { font-size: 1.35rem; font-weight: 600; line-height: 1; }
 details#new:not([open]) {
@@ -170,8 +170,6 @@ main.auth-shell {
 .auth-card > p { margin: .35rem 0 .7rem; }
 .auth-form { display: grid; gap: .3rem; }
 .auth-form label { margin-top: 0; }
-/* AU1: the sign-in page's one field fills its card (288 px in a 416 px card). */
-.auth-form .secret, .auth-form .secret > input { max-width: none; }
 .auth-card .technical-details { margin-top: 1rem; }
 .lead { color: var(--mut); margin: 0 0 1.2rem; }
 .flash {
@@ -254,27 +252,21 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { he
   :root { --field-h: 2.75rem; }
   input, textarea, select { font-size: 16px; }
 }
-/* A field as wide as what it holds, at most (it still shrinks with its form): attempts, order and
-   short limits (72 px); ports, intervals, minutes and days - 65535, 10080 (88 px); short codes; names,
-   passwords, hosts and reminders (240 px: about 25 characters and the eye); addresses and tokens;
-   topic names, links, folders and rules. A field without a class takes the whole line. A secret
-   field's wrapper (.secret) and a folder's (.folder-input) take their field's width; a field with a
-   unit beside it keeps the unit next to it. */
-.w-2xs { max-width: 4.5rem; }
+/* Three field sizes, every field one of them (AGENTS.md, "UI standard"); each is a maximum (a field
+   still shrinks with a narrower form):
+   short (.w-xs, 88 px) - every number: ports, intervals, minutes, days, attempts, order, limits
+     (65535, 10080 and 86400 fit);
+   standard (.w-m, 240 px: about 25 characters and the eye) - passwords, user names, tokens, keys,
+     chat IDs, hosts, reminders, site codes, searches and every select;
+   long (.w-xl, 576 px) - links, webhooks, folders, site paths, rules, host lists, a topic's name.
+   A secret field's wrapper (.secret) and a folder's (.folder-input) take their field's width; a
+   number with a unit beside it keeps the unit next to it. */
 .w-xs { max-width: 5.5rem; }
-.w-s { max-width: 12rem; }
 .w-m { max-width: 15rem; }
-.w-l { max-width: 26rem; }
 .w-xl { max-width: 36rem; }
-:is(.secret, .folder-input):has(> .w-2xs) { max-width: 4.5rem; }
-:is(.secret, .folder-input):has(> .w-xs) { max-width: 5.5rem; }
-:is(.secret, .folder-input):has(> .w-s) { max-width: 12rem; }
 :is(.secret, .folder-input):has(> .w-m) { max-width: 15rem; }
-:is(.secret, .folder-input):has(> .w-l) { max-width: 26rem; }
 :is(.secret, .folder-input):has(> .w-xl) { max-width: 36rem; }
-.input-unit:has(> .w-2xs) { grid-template-columns: minmax(0, 4.5rem) auto; justify-content: start; }
 .input-unit:has(> .w-xs) { grid-template-columns: minmax(0, 5.5rem) auto; justify-content: start; }
-.input-unit:has(> .w-s) { grid-template-columns: minmax(0, 12rem) auto; justify-content: start; }
 /* F3: on a phone a text, a select, a secret or a folder field fills its line (the phone rules,
    below); numbers stay short. */
 /* A secret field and its eye (_secret.html): the eye sits inside the field's right end, a square
@@ -315,10 +307,8 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { he
    taking what is left. Two 240 px fields need 492 px; a narrower form or card stacks them. */
 .field-row { display: flex; flex-flow: row wrap; align-items: start; gap: .55rem .75rem; min-width: 0; }
 .field-row > * { flex: 1 1 12rem; max-width: 100%; }
-.field-row > :is(.w-2xs, .w-xs, :has(.w-2xs, .w-xs)) { flex: 0 1 auto; }
-.field-row > :is(.w-s, :has(.w-s)) { flex: 0 1 12rem; }
+.field-row > :is(.w-xs, :has(.w-xs)) { flex: 0 1 auto; }
 .field-row > :is(.w-m, :has(.w-m)) { flex: 0 1 15rem; }
-.field-row > :is(.w-l, :has(.w-l)) { flex: 0 1 26rem; }
 .field-row > :is(.w-xl, :has(.w-xl)) { flex: 1 1 26rem; }
 /* A phone: an ordinary field fills its line (the phone rules, below). */
 input[type="checkbox"], input[type="radio"] { width: auto; }
@@ -376,7 +366,7 @@ button.ghost.danger:hover, .btn.ghost.danger:hover { background: var(--pill-bad-
 .watchdog-lines { margin: .3rem 0 0; padding-left: 1.2rem; font-size: 13px; display: grid; gap: .2rem; }
 .integration-pills { display: inline-flex; gap: .35rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .client-add-row { display: flex; gap: .5rem; align-items: center; }
-.client-add-row select { flex: 0 1 20rem; min-width: 0; }
+.client-add-row select { flex: 0 1 15rem; min-width: 0; }
 .notifier-steps ol { margin: .45rem 0 .3rem; padding-left: 1.2rem; display: grid; gap: .25rem; color: var(--fg); font-size: 13px; }
 .row { display: grid; gap: .55rem; }
 .actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .8rem; }
@@ -813,9 +803,9 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
      left ragged right edges: 288, 306 and 346 px in one form); numbers stay short. In a row such a
      field fills its line, or the line beside a short number: an address and its port stay paired
      when they fit. */
-  :is(input, select, textarea):is(.w-s, .w-m, .w-l, .w-xl),
-  :is(.secret, .folder-input):has(> :is(.w-s, .w-m, .w-l, .w-xl)) { max-width: none; }
-  .field-row > :is(.w-s, .w-m, .w-l, .w-xl, :has(.w-s, .w-m, .w-l, .w-xl)) { flex: 1 1 12rem; }
+  :is(input, select, textarea):is(.w-m, .w-xl),
+  :is(.secret, .folder-input):has(> :is(.w-m, .w-xl)) { max-width: none; }
+  .field-row > :is(.w-m, .w-xl, :has(.w-m, .w-xl)) { flex: 1 1 12rem; }
   :root { --land-top: calc(var(--msg-top, 4.75rem) + var(--msg-h, 0px) + .75rem); } /* a two-row header */
   /* The site list takes the room the services leave (they keep their own width) and scrolls
      sideways; its end fades out, so a cut-off name never runs into the client's name. */
@@ -1070,8 +1060,6 @@ svg.i.xs { width: .75rem; height: .75rem; stroke-width: 2.4; }
   border-radius: 999px; padding: 0 .6rem;
 }
 .chip.on, .chip:hover { color: var(--fg); border-color: var(--acc2); background: var(--panel2); }
-/* L1: the sort select is a field like every other select (--field-h). */
-#list-sort { width: auto; max-width: 100%; }
 .sort-picker { position: relative; }
 .sort-picker[hidden], .sort-menu[hidden] { display: none; }
 .sort-toggle.ico { width: 2.5rem; height: var(--btn-h); padding: 0; gap: .15rem; }
@@ -1088,7 +1076,6 @@ svg.i.xs { width: .75rem; height: .75rem; stroke-width: 2.4; }
 .sort-option:hover, .sort-option:focus-visible { background: var(--panel2); }
 .sort-selected { margin-left: auto; visibility: hidden; }
 .sort-option[aria-checked="true"] .sort-selected { visibility: visible; }
-#list-tracker { width: auto; max-width: 100%; }
 .tracker-picker[hidden] { display: none; }
 .tracker-toggle { max-width: 10rem; }
 .tracker-toggle svg { flex-shrink: 0; }
@@ -1141,7 +1128,7 @@ header.app .attention-menu.bad > summary.ico { color: var(--bad); }
 
 /* G7: history page */
 .history-filter { display: flex; flex-wrap: wrap; gap: .5rem .8rem; align-items: center; margin: .4rem 0 .7rem; }
-.history-filter form { margin: 0; flex: 0 1 22rem; }
+.history-filter form { margin: 0; }
 .history-filter input { width: 100%; }
 .chip:hover, .chip:focus-visible { text-decoration: none; }
 .history-box { max-height: none; padding: .6rem .9rem; }
@@ -1377,7 +1364,7 @@ details.advanced > .form-grid { margin-top: .55rem; }
 .by-hand code { overflow-wrap: anywhere; }
 /* History: the search as wide as a search needs beside the chips; "nothing found" is a sentence
    with the way back, in the page's font. */
-.history-filter > form[role="search"] { flex: 0 1 18rem; }
+.history-filter > form[role="search"] { flex: 0 1 15rem; }
 /* On a phone it takes a full line, as every field there does (it stopped at 296 of 374 px, QA Q11). */
 @media (max-width: 720px) { .history-filter > form[role="search"] { flex: 1 1 100%; } }
 .history-empty { margin: .15rem 0; color: var(--mut); font: 13px/1.5 "Segoe UI", system-ui, sans-serif; }

@@ -9,6 +9,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - Settings spans the whole page on a computer again, as before 1.32.1 (its forms keep their own width), and
   so does the page that deletes a backup copy.
+- Every field is one of three sizes on every screen: short for numbers (88 px), standard for passwords, names,
+  tokens, keys, addresses and every list to choose from (240 px), long for links, folders, site paths and rules
+  (576 px). The sign-in password, a Telegram token, a WhatsApp phone and the site paths had other widths.
 
 ## [1.32.1] — 2026-10-16
 

@@ -28,7 +28,7 @@ FIELDS = (
         placeholder="notifier.whatsapp.phone_placeholder",
         pattern=r"\+?\d{8,15}",
         error="notifier.whatsapp.phone_error",
-        width="s",
+        width="m",
     ),
     Field(
         "apikey",
@@ -37,7 +37,7 @@ FIELDS = (
         placeholder="123456",
         pattern=r"\d{4,12}",
         error="notifier.whatsapp.apikey_error",
-        width="s",
+        width="m",
     ),
 )
 

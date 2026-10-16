@@ -94,10 +94,11 @@ def test_the_log_reads_in_the_pages_font():
     assert "tabular-nums" in _rules()[".log-line time"]
 
 
-def test_the_sign_in_card_fits_a_phone_and_its_field_fills_it():
-    """AU1: the password was 288 px in a 416 px card, and at 360 px the card left 290 px for its
-    content. A refusal about one field goes under it."""
-    assert _rules()[".auth-form .secret, .auth-form .secret > input"].strip() == "max-width: none;"
+def test_the_sign_in_card_fits_a_phone_and_its_field_is_a_standard_one():
+    """AU1: at 360 px the card left 290 px for its content. A refusal about one field goes under
+    it. 1.32.2: its password is the standard 240 px of every password (1.32.1 made it fill the
+    card, the one password of another width)."""
+    assert not [selector for selector in _rules() if ".auth-form .secret" in selector]
     small = _block("@media (max-width: 420px) {")
     small_rules = _rules(small)
     assert small_rules["main.auth-shell"].strip() == "padding: .5rem;"

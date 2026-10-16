@@ -2588,7 +2588,7 @@ def test_home_list_tools_and_row_data_for_search():
     assert 'id="list-tools" hidden' in page  # shown by app.js (progressive enhancement)
     for filter_name in ('data-filter="problem"', 'data-filter="new"', 'data-filter="paused"'):
         assert filter_name in page
-    assert '<select id="list-sort">' in page
+    assert '<select id="list-sort" class="w-m">' in page  # a select: the standard size (1.32.2)
     assert 'data-tracker="' in page
     assert 'data-name="show"' in page
     assert "data-hl>Show</span>" in page

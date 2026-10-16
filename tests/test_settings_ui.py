@@ -360,7 +360,8 @@ def test_the_guide_calls_the_master_key_by_its_name():
 
 def test_settings_fields_are_as_wide_as_what_they_hold():
     """At 1440 px a port was 470 px wide and a password, a token or a webhook 1354 px: every field
-    filled its card. Each field has its width class; related fields share a row."""
+    filled its card. Each field has its width class, one of three (1.32.2: a number short, what one
+    types or picks standard, a link or a folder long); related fields share a row."""
     from tow.store import save_secrets
 
     save_secrets({"qbittorrent": {"host": "127.0.0.1", "port": 8080, "username": "admin", "password": "pw"}})
@@ -377,22 +378,23 @@ def test_settings_fields_are_as_wide_as_what_they_hold():
         "q_port-client-0": "w-xs",
         "q_user-client-0": "w-m",
         "q_pass-client-0": "w-m",
-        "nf-telegram-token": "w-l",
+        "nf-telegram-token": "w-m",
         "nf-telegram-chat_ids": "w-m",
         "nf-discord-webhook_url": "w-xl",
-        "nf-whatsapp-phone": "w-s",
-        "nf-whatsapp-apikey": "w-s",
+        "nf-whatsapp-phone": "w-m",
+        "nf-whatsapp-apikey": "w-m",
         "nf-ntfy-topic": "w-m",
-        "nf-ntfy-server": "w-l",
+        "nf-ntfy-server": "w-xl",
         "interval_min": "w-xs",
         "flash_ttl_min": "w-xs",
         "lan-password": "w-m",
         "lan-hint": "w-m",
         "backup-days": "w-xs",
         "backup-path-night": "w-xl",
-        "protection-timeout": "w-2xs",
+        "protection-timeout": "w-xs",
         "protection-interval": "w-xs",
-        "protection-attempts": "w-2xs",
+        "protection-attempts": "w-xs",
+        "rollback-version": "w-m",
     }
     for field_id, width in widths.items():
         assert width in classes(field_id).split(), (field_id, classes(field_id))
