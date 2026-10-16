@@ -5,6 +5,37 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.32.0] — 2026-10-16
+
+### Security
+
+- A download folder written without a drive letter, such as `/Windows/System32` or
+  `/Users/<name>/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup`, is refused like the same folder
+  with `C:`: a torrent client on a Windows PC opens such a path on its own drive, so a file could have landed in
+  a system or Startup folder. Folders of a client on Linux or in a container (`/downloads`) are still accepted.
+- The passwords of Transmission, Deluge and qBittorrent, and the site cookies the sign-in browser hands to TOW,
+  no longer go through a proxy set in Windows or in `HTTP_PROXY`: TOW talks to the torrent client and to the
+  sign-in browser directly, and qBittorrent's answers are no longer followed to another address. (Requests to
+  trackers already ignored such a proxy.)
+- A tracker mirror that sends its answer a byte at a time can no longer hold a check for hours (and with it
+  every other check waiting for it): each request to a site now ends within two and a half minutes, connecting
+  and the answer's headers included; before, only the body of the answer had a time limit.
+- When a site refuses the `.torrent` and a check takes the page's magnet link instead, the torrent client now
+  gets only its info-hash and the trackers a site may be at, as the preview of a new topic already did: trackers,
+  peers and web seeds in the home network that a page put into the link are left out.
+- `tow import --apply` no longer takes a file's security settings as they are: this TOW keeps its own network
+  access, password for other devices, backup folders, opt-ins for shares and the home network and access
+  providers. The preview lists those the file holds otherwise; `--accept-security-settings` takes the file's
+  (moving your own TOW to another computer). A file someone handed you could open TOW to the network with their
+  password or send its backups to their computer.
+- Restoring a backup, a restore point or a TOW file - also from another device - now keeps this computer's
+  opt-ins for shares and the home network and its access providers too, as it already kept network access, the
+  password and the backup folders.
+- The updater (`Update TOW.cmd`, `tow update`, `deploy.ps1`) takes as `--ref` only an exact release name such
+  as `v1.32.0` or a commit's hash: something that merely starts like a release, a branch or another git
+  expression is refused before anything is downloaded or stopped, and a release name means the release tag
+  even where a branch has the same name. Downloads follow redirects only within GitHub.
+
 ### Changed
 
 - Fields are smaller: 36 px high with 14 px text on a computer (they were 40 px with 15 px text), and 44 px
@@ -93,8 +124,6 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A torrent client with no saved password no longer says “Empty — keep as is” in its password field: there
   was nothing to keep. A saved password, token or webhook is said under its field (“Saved · leave empty to
   keep”) instead of by a green “Saved” beside its label.
-### Fixed
-
 - Restore points, and so updates from Settings and every restore, no longer fail while a topic added with the
   file picker waits for its first add (for example while its torrent client is offline): TOW kept the prepared
   torrent's id under a name the backup check takes for a password. It now has another name, and what older
@@ -124,36 +153,6 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   records of topics no longer watched, then the oldest files of older versions, whatever their age; if the
   current files alone are still too many, the history of the topic with the most files starts over and Needs
   attention says so (never single files, which would be announced as new again).
-### Security
-
-- A download folder written without a drive letter, such as `/Windows/System32` or
-  `/Users/<name>/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup`, is refused like the same folder
-  with `C:`: a torrent client on a Windows PC opens such a path on its own drive, so a file could have landed in
-  a system or Startup folder. Folders of a client on Linux or in a container (`/downloads`) are still accepted.
-- The passwords of Transmission, Deluge and qBittorrent, and the site cookies the sign-in browser hands to TOW,
-  no longer go through a proxy set in Windows or in `HTTP_PROXY`: TOW talks to the torrent client and to the
-  sign-in browser directly, and qBittorrent's answers are no longer followed to another address. (Requests to
-  trackers already ignored such a proxy.)
-- A tracker mirror that sends its answer a byte at a time can no longer hold a check for hours (and with it
-  every other check waiting for it): each request to a site now ends within two and a half minutes, connecting
-  and the answer's headers included; before, only the body of the answer had a time limit.
-- When a site refuses the `.torrent` and a check takes the page's magnet link instead, the torrent client now
-  gets only its info-hash and the trackers a site may be at, as the preview of a new topic already did: trackers,
-  peers and web seeds in the home network that a page put into the link are left out.
-- `tow import --apply` no longer takes a file's security settings as they are: this TOW keeps its own network
-  access, password for other devices, backup folders, opt-ins for shares and the home network and access
-  providers. The preview lists those the file holds otherwise; `--accept-security-settings` takes the file's
-  (moving your own TOW to another computer). A file someone handed you could open TOW to the network with their
-  password or send its backups to their computer.
-- Restoring a backup, a restore point or a TOW file - also from another device - now keeps this computer's
-  opt-ins for shares and the home network and its access providers too, as it already kept network access, the
-  password and the backup folders.
-- The updater (`Update TOW.cmd`, `tow update`, `deploy.ps1`) takes as `--ref` only an exact release name such
-  as `v1.32.0` or a commit's hash: something that merely starts like a release, a branch or another git
-  expression is refused before anything is downloaded or stopped, and a release name means the release tag
-  even where a branch has the same name. Downloads follow redirects only within GitHub.
-### Fixed
-
 - A file holding several episodes followed by a quality tag (`Show.S01E01-E02.1080p.mkv`, also `.10bit`, `.4K`
   or a year) now counts every episode, not only the first: progress and episode rules no longer wait for an
   episode that is already there.
