@@ -79,6 +79,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   sentence under the field, example placeholders start with "e.g.", the torrent file path says "Default:
   /download/{id}" instead of showing it as a grey value, and a phone no longer capitalises or corrects addresses,
   paths and patterns.
+- An opened topic or site has one solid button, **Save**; **Remove from TOW** and **Remove** are quiet red
+  outline buttons, and its other actions (Check access now, Sign in to the site, Adopt into TOW) are outline
+  buttons too.
 
 ### Fixed
 
