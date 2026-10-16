@@ -16,7 +16,7 @@ def _root_key(root: str) -> str:
     """How two save roots compare when the list is de-duplicated: a Windows path ignores case
     (as Windows does); a POSIX path only where the system does - macOS by default - and
     exactly on Linux (and from Windows, where it is a Linux client's: a container, a NAS)."""
-    if _windows_shaped(root):
+    if windows_shaped(root):
         return ntpath.normcase(ntpath.normpath(root))
     root = posixpath.normpath(root)
     return root.casefold() if platform.current().name == "macos" else root
@@ -106,12 +106,14 @@ def _protected_roots_by_kind() -> tuple[tuple[str, list[str], bool], ...]:
     return (("windows", windows_roots, False), ("system", system_roots, backend.name != "linux"))
 
 
-def _windows_shaped(path: str) -> bool:
+def windows_shaped(path: str) -> bool:
+    """``path`` is written as a Windows path (``D:\\TV``, ``D:/TV``, ``\\\\nas\\tv``, a backslash):
+    a client's folder is judged by its own system, never by the one TOW runs on."""
     return bool(_DRIVE_ABSOLUTE.match(path)) or path.startswith(("\\\\", "//")) or "\\" in path
 
 
 def _normalized(path: str, *, fold: bool = False) -> str:
-    if _windows_shaped(path):
+    if windows_shaped(path):
         return ntpath.normcase(ntpath.normpath(path))
     value = posixpath.normpath(path)
     return value.casefold() if fold else value
@@ -119,10 +121,10 @@ def _normalized(path: str, *, fold: bool = False) -> str:
 
 def _inside(path: str, root: str, *, fold: bool = False) -> bool:
     """``path`` is ``root`` or below it, compared the way the path's own system compares."""
-    if _windows_shaped(path) != _windows_shaped(root):
+    if windows_shaped(path) != windows_shaped(root):
         return False
     path, root = _normalized(path, fold=fold), _normalized(root, fold=fold)
-    separator = "\\" if _windows_shaped(root) else "/"
+    separator = "\\" if windows_shaped(root) else "/"
     return path == root or path.startswith(root.rstrip("\\/") + separator)
 
 
@@ -140,7 +142,7 @@ def _ambiguous_component(path: str) -> str | None:
     ``AppData.`` and ``AppData `` are ``AppData`` (trailing dots and spaces are dropped), and
     ``APPDAT~1`` is the 8.3 short name of ``AppData``: compared as text they slip past the rule.
     """
-    if not (_windows_shaped(path) or (_root_relative(path) and platform.current().name == "windows")):
+    if not (windows_shaped(path) or (_root_relative(path) and platform.current().name == "windows")):
         return None
     for part in re.split(r"[\\/]+", path):
         if not part or (len(part) == 2 and part[1] == ":"):
@@ -200,7 +202,7 @@ def _protected_by(path: str) -> str | None:
     candidates += [real for real in map(_real_path, list(candidates)) if real is not None]
     # Any profile's AppData of a Windows client (C:\Users\<name>\AppData), also when TOW runs on
     # Linux or macOS and knows no Windows profile of its own.
-    if any(_windows_shaped(candidate) and windows.is_profile_appdata(candidate) for candidate in candidates):
+    if any(windows_shaped(candidate) and windows.is_profile_appdata(candidate) for candidate in candidates):
         return "windows"
     for kind, roots, fold in _protected_roots_by_kind():
         # The real folder of each root too: C:\Users\user\AppData may itself be a link elsewhere.
@@ -265,7 +267,7 @@ def _comparable(path: str) -> str:
     value = (path or "").strip()
     if not value:
         return ""
-    if _windows_shaped(value):
+    if windows_shaped(value):
         return ntpath.normcase(ntpath.normpath(value))
     return posixpath.normpath(value)
 

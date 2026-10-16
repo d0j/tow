@@ -2,28 +2,40 @@
 
 from __future__ import annotations
 
+import re
 import stat
-from pathlib import Path, PurePath
+from pathlib import Path, PurePosixPath, PureWindowsPath
+
+from tow.folders import windows_shaped
 
 # How long a file seen on disk counts as confirmed (see reconcile_topic).
 CONFIRMATION_REUSE_SEC = 24 * 3600
+_DRIVE_ABSOLUTE = re.compile(r"[A-Za-z]:/")
 
 
 def safe_relative_path(save_path: str, client_file_name: str) -> str | None:
     """The client's name of a file as a path inside its save folder, or None when it is not one.
+
+    Judged by the system of the save folder, not the one TOW runs on: under a Windows folder
+    (``D:\\TV``, ``\\\\nas\\tv``) a colon in any part is a drive (``C:x``) or an alternate data
+    stream (``a:b``); under a POSIX one (``/downloads`` of a NAS) it is an ordinary character
+    (``Star Trek: Discovery``). An absolute name is never one inside the folder.
 
     Decided from the text alone: it runs for every file of every torrent on every pass, and
     resolving each path woke sleeping drives and a NAS for nothing. A link inside the folder
     that leads out of it is caught where a file is looked at on disk (filesystem_confirmation).
     """
     raw = str(client_file_name or "").replace("\\", "/")
-    if raw.startswith("/"):
+    if raw.startswith("/") or _DRIVE_ABSOLUTE.match(raw):
         return None
     parts = [part for part in raw.split("/") if part not in ("", ".")]
-    if not parts or any(part == ".." for part in parts) or ":" in parts[0]:
+    if not parts or any(part == ".." for part in parts):
         return None
-    folder = PurePath(save_path)
-    # Each part must stay one plain name below the folder ("C:x" is a drive on Windows).
+    windows = windows_shaped(save_path)
+    if windows and any(":" in part for part in parts):
+        return None
+    folder = PureWindowsPath(save_path) if windows else PurePosixPath(save_path)
+    # Each part must stay one plain name below the folder.
     if folder.joinpath(*parts).parts != (*folder.parts, *parts):
         return None
     return "/".join(parts)
