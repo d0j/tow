@@ -69,6 +69,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The hint under a topic's "Check every, min" names the interval an empty field uses: "Empty: use the global
   interval (60 min)."
 
+### Fixed
+
+- An opened topic on Home starts with its last event and its full date and time ("Last event: S02E03,
+  2026-10-16 11:00:02 UTC+03:00"): the row shows the time short, and a phone or a keyboard could not see
+  the full one. "Last successful check" lost its stray full stop.
+
 ## [1.32.0] — 2026-10-16
 
 ### Security

@@ -510,3 +510,28 @@ def test_the_interval_hint_names_the_global_interval_in_minutes(client):
         assert box.get("value", "") == ""
         hint = page.select_one(f"#{box['aria-describedby'].split()[-1]}")
         assert hint.get_text() == "Пусто — общий интервал (30 мин)."
+
+
+def test_the_open_row_says_its_last_event_in_full(client):
+    """1.32.1 C5: a row's event time is the short form inside its <summary> (a button), so a phone
+    or a keyboard could never see the full time, and the open panel did not say it either. The
+    panel's top line now gives the last event with its full time (seconds and offset); the summary
+    keeps no link, button, field or tab stop. H3: "Last successful check: {at}" has no stray full
+    stop before the separator."""
+    from tow.store import save_download_history, save_state
+
+    at = "2026-09-12T22:58:40+03:00"
+    topic = {"id": "t1", "title": "Show", "url": "http://rutor.info/torrent/1", "save_path": "M:/TV"}
+    save_state({"topics": [{**topic, "last_ok": True, "last_ok_at": at, "last_check": at}]})
+    event = {"kind": "torrent_completed", "label": "S01E01", "at": at}
+    save_download_history({"schema_version": 1, "topics": {"t1": {"last_event": event}}})
+    page = BeautifulSoup(client.get("/?open=t1").text, "html.parser")
+    top = page.select_one("#row-t1 .panel-top").get_text(" ", strip=True)
+    assert "Последнее событие: S01E01, " in top
+    assert "22:58:40" in top  # the full time, not "12 сен, 22:58"
+    assert "UTC" in top
+    last_ok = top.split("Последняя успешная проверка: ")[1].split(" · ")[0]
+    assert last_ok
+    assert not last_ok.endswith(".")
+    summary = page.select_one("#row-t1 summary")
+    assert not summary.select("a, button, input, select, textarea, [tabindex]")
