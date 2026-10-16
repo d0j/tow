@@ -66,10 +66,19 @@ def record_check_failure(error: str | BaseException, *, how: str = "auto", whole
         previous = health_of(state)
         # A blocked check learned nothing about qBit or the bot: keep what the last real
         # check saw. Writing qbit_ok=False showed "связи нет" and swallowed the next
-        # real "торрент-клиент недоступен" notification. Nor did it see the history rebuilt
-        # (the week's note), Settings' "Check" of a client, or a client listing nothing.
+        # real "торрент-клиент недоступен" notification. Nor did it see the history rebuilt or
+        # trimmed (the week's notes), Settings' "Check" of a client, or a client listing nothing.
         health = Health()
-        for kept in ("qbit", "client", "qbit_ok", "clients_ok", "history_rebuilt_at", "ping_failed", "clients_empty"):
+        for kept in (
+            "qbit",
+            "client",
+            "qbit_ok",
+            "clients_ok",
+            "history_rebuilt_at",
+            "history_trimmed_at",
+            "ping_failed",
+            "clients_empty",
+        ):
             if kept in previous:
                 health[kept] = previous[kept]
         if not says_checks_fail:

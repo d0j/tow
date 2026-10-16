@@ -2563,7 +2563,12 @@ def test_a_failed_partial_run_keeps_what_the_last_whole_check_said():
     # A crashed progress pass (or one topic's check) said "The last scheduled check did not
     # complete" until the next scheduled check, and dropped the week's history note, Settings'
     # client marks and the empty-client counts.
-    kept = {"history_rebuilt_at": 1000, "ping_failed": {"tr": 900}, "clients_empty": {"nas": 1}}
+    kept = {
+        "history_rebuilt_at": 1000,
+        "history_trimmed_at": 1100,
+        "ping_failed": {"tr": 900},
+        "clients_empty": {"nas": 1},
+    }
     save_state({"topics": [], "health": {"check_ok": True, "qbit_ok": True, **kept}})
     for how in ("progress", "timer", "retry", "manual"):
         health = check.record_check_failure(RuntimeError("synthetic"), how=how)
@@ -2572,6 +2577,7 @@ def test_a_failed_partial_run_keeps_what_the_last_whole_check_said():
         assert {key: health.get(key) for key in kept} == kept
     health = check.record_check_failure(RuntimeError("synthetic"), how="manual", whole=True)  # Check all
     assert (health["check_ok"], health["check_error"]) == (False, "error")
+    assert health["history_trimmed_at"] == 1100  # the week's note survives a failed whole check too
     save_state({"topics": [], "health": {"check_ok": True}})
     health = check.record_check_failure(RuntimeError("synthetic"), how="auto")
     assert health["check_ok"] is False
