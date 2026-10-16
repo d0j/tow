@@ -131,43 +131,47 @@ the `installers` workflow on 24.04). The legacy
   `docs/ru/`, in the same commit.
 - Keep pull requests small and focused; fill in the template. Do not include personal data in code, tests,
   screenshots or logs.
+- A pull request that changes only `docs/`, the READMEs, the changelogs, `LICENSE` or the issue templates still
+  reports every `ci` check, but only the Ubuntu gate does its work (the docs have tests: links, twins, facts); the
+  other gates and the `install.sh` jobs pass without running. Pushes to `main` and runs started by hand run
+  everything.
 
 ## Publishing a release
 
-A release is one pull request from a work branch. It holds the area commits (`web: …`, `clients: …`), each
-with its tests and its lines under `## [Unreleased]` in both changelogs, and ends with one release commit
+A release is one pull request from a work branch. It holds the area commits (`web: …`, `clients: …`), each with its
+tests and its lines under `## [Unreleased]` in both changelogs, and ends with one release commit
 `release: vX.Y.Z - <summary>` that changes nothing but the version (`pyproject.toml`, `uv.lock`) and turns
-`[Unreleased]` into the dated section of that version in `CHANGELOG.md` and `CHANGELOG.ru.md`. Code never goes
-into the release commit.
-Pull requests that touch the installers, the updater or the dependencies also run the `installers` workflow: the
-Windows bundle and `install.ps1`, and the update of the latest release to the pull request
+`[Unreleased]` into the dated section of that version in `CHANGELOG.md` and `CHANGELOG.ru.md`. Code never goes into the
+release commit. When Home changed, a `docs:` commit before the release commit retakes the README pictures
+(`uv run --frozen --with playwright python scripts/screenshots.py`, a throwaway install on port 18893); open each
+picture before committing. Pull requests that touch the installers, the updater or the dependencies also run the
+`installers` workflow: the Windows bundle and `install.ps1`, and the update of the latest release to the pull request
 (`scripts/update-smoke.py`: a broken copy must roll back, then the real update) on Windows, Linux and macOS.
 
-Merge the pull request with **Rebase and merge** once it is up to date with `main` (its last `ci` run then
-covers the merge; otherwise wait for `ci` on `main`): `main` gets every commit as it is, with no merge commit,
-and the release commit is its tip. GitHub cannot rebase-merge more than 100 commits; split a longer branch.
-GitHub deletes the merged head branch (the repository setting); delete the local one. Fetch `origin/main` and create an annotated tag on the release commit with the message `TOW X.Y.Z`
-(`git tag -a vX.Y.Z -m "TOW X.Y.Z" origin/main`). Publish it with:
+Merge the pull request with **Rebase and merge** once it is up to date with `main` (its last `ci` run then covers the
+merge; otherwise wait for `ci` on `main`): `main` gets every commit as it is, with no merge commit, and the release
+commit is its tip. GitHub cannot rebase-merge more than 100 commits; split a longer branch. GitHub deletes the merged
+head branch (the repository setting); delete the local one. Fetch `origin/main` and create an annotated tag on the
+release commit with the message `TOW X.Y.Z` (`git tag -a vX.Y.Z -m "TOW X.Y.Z" origin/main`). Publish it with:
 
 ```sh
 uv run --frozen python scripts/publish-release.py vX.Y.Z
 ```
 
-It refuses a tag that is not annotated, whose message is not `TOW X.Y.Z`, that does not match
-`pyproject.toml`, that is not on `origin/main`, or that has no release commit. When a `backup` remote is
-configured, it first atomically synchronizes its `main` and the release tag, then confirms both by reading
-them back. Only then is the tag sent to `origin`; existing remote history is never overwritten. The
-post-commit mirror alone is not enough: it cannot copy a later GitHub merge or a tag created after the
-commit. Git's full pre-push gate still applies.
+It refuses a tag that is not annotated, whose message is not `TOW X.Y.Z`, that does not match `pyproject.toml`, that is
+not on `origin/main`, or that has no release commit. When a `backup` remote is configured, it first atomically
+synchronizes its `main` and the release tag, then confirms both by reading them back. Only then is the tag sent to
+`origin`; existing remote history is never overwritten. The post-commit mirror alone is not enough: it cannot copy a
+later GitHub merge or a tag created after the commit. Git's full pre-push gate still applies.
 
-The release workflow does not run the gate again: it requires the tag on `origin/main` and a passed `ci` run of
-its content (on its commit or any commit with the same tree, such as the head of the merged pull request: the
-run of the same content on `main` is not waited for), builds and tests the bundle and the installers, updates
-the latest release to the tag, then uploads everything to a draft release, reads it back and only then
-publishes it. Wait for it to finish before updating a runtime installation.
+The release workflow does not run the gate again: it requires the tag on `origin/main` and a passed `ci` run of its
+content (on its commit or any commit with the same tree, such as the head of the merged pull request: the run of the
+same content on `main` is not waited for), builds and tests the bundle and the installers, updates the latest release to
+the tag, then uploads everything to a draft release, reads it back and only then publishes it. Wait for it to finish
+before updating a runtime installation.
 
 Before a public-history audit, scan a separate complete clone holding only the public refs
-(`uv run --frozen python scripts/history-scan.py --repo /path/to/public-clone`); exit 0 is a complete
-scan without candidates, 1 needs review, 2 is incomplete. What it covers and its budgets: `--help`.
+(`uv run --frozen python scripts/history-scan.py --repo /path/to/public-clone`); exit 0 is a complete scan without
+candidates, 1 needs review, 2 is incomplete. What it covers and its budgets: `--help`.
 
 By contributing you agree that your contribution is licensed under the [MIT License](LICENSE).

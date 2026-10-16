@@ -87,10 +87,11 @@ Step by step, with what each screen shows: [docs/install.md](docs/install.md). A
 
 ## Usage
 
-1. **Settings → Torrent clients.** Turn on the Web UI in your client; enter address, port, login, password; **Save**,
-   then **Check**.
-2. **Settings → Notifications** (optional). Follow *How to connect* for a messenger; **Save**, then **Check**.
-3. **Home → +.** Paste a topic link, choose the folder and what to download, **Add**.
+1. **Settings → Torrent clients.** Turn on the Web UI in your client; enter address, port, user name and password;
+   **Save**, then **Check**.
+2. **Settings → Notifications** (optional). Follow *How to connect* for a messenger; **Save**, then **Send a test**.
+3. **Home → +.** Paste a topic link, choose the folder and what to download, **Add**. Keep **Add new versions**
+   ticked to follow the topic, or clear it to add it once.
 4. **Read the dot.** Green — confirmed. Blue — something new. Yellow — the site is unreachable for now. Red — open
    the row for the reason.
 
@@ -113,7 +114,7 @@ Linux and macOS. `tow --help` lists all commands.
 
 Exit codes: `0` done · `1` wrong command or option · `2` done in part (for `tow doctor`: something does not
 answer, or no client is set up) · `3` cannot run · `130` interrupted. Commands answer in the language chosen in
-Settings → Language, or, when it is automatic, in the operating system's language.
+Settings → Language and theme, or, when it is automatic, in the operating system's language.
 
 ## Remote access
 
@@ -121,7 +122,7 @@ TOW listens on `127.0.0.1:8787`. On the computer itself it asks no password.
 
 | From | How |
 |---|---|
-| Phone or laptop at home, or over a VPN (WireGuard, Tailscale) | `tow access on` — asks for a password if none is set — then `tow restart`; open `http://<IP address>:8787` |
+| Phone or laptop at home, or over a VPN (WireGuard, Tailscale) | Settings → Network access → **Open TOW from other devices** (set the password there, **Save and enable**), or `tow access on` — asks for a password if none is set; then `tow restart` and open `http://<IP address>:8787` |
 | Anywhere over SSH | `ssh -L 8787:127.0.0.1:8787 user@server`, then open <http://127.0.0.1:8787> |
 
 Use the computer's IP address on the home network or the VPN (`http://192.168.1.10:8787`, `http://100.64.1.1:8787`).

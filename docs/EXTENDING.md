@@ -93,11 +93,12 @@ with a reason that holds no tokens or addresses. Optional: `STORAGE`, `targets(s
 `MAX_UTF16`, `CHUNK_PAUSE`, `suggestion(field)`, `SERVER_FIELDS` (the fields that name a server TOW posts to, such
 as ntfy's own server: the settings page refuses one in the home network) — see the `Notifier` docstring.
 
-Everything else is shared: the settings card, encrypted storage, **Check** and **Disconnect** with undo, the bell
-in the header, and delivery (`notifiers/outbox.py`): retries on a refused connection, 429 (honouring `Retry-After`)
-and 5xx, never after a request that went out without an answer (it may have arrived; it waits in the queue);
-a 2xx answer is a delivered message, whatever its body; a per-channel queue of up to 50 messages; long messages split by lines; one channel failing never blocks the
-others. Use `notifiers.base.request()` for HTTP. Tests replace HTTP; no test talks to a real service.
+Everything else is shared: the settings card, encrypted storage, **Send a test** and **Disconnect** with undo, the bell
+in the header, and delivery (`notifiers/outbox.py`): retries on a refused connection, 429 (honouring `Retry-After`) and
+5xx, never after a request that went out without an answer (it may have arrived; it waits in the queue); a 2xx answer is
+a delivered message, whatever its body; a per-channel queue of up to 50 messages; long messages split by lines; one
+channel failing never blocks the others. Use `notifiers.base.request()` for HTTP. Tests replace HTTP; no test talks to a
+real service.
 
 ## Site
 
@@ -164,11 +165,11 @@ not sandboxed; keep browser implementations in a separately operated service. Se
 
 ## Language
 
-**Today:** English (reference and fallback) and Russian. The language follows the browser (`Accept-Language`,
-RFC 4647 matching: `zh-Hant-TW` → `zh-Hant` → `zh`) or is chosen in Settings → Language. Messenger messages and
-background jobs use the chosen language, or in automatic mode the one the owner's browser last used. A command
-typed in a terminal (`tow status`, `tow stop`, `tow doctor`…) uses the chosen language, or in automatic mode the
-operating system's (Windows display language; `LC_ALL`/`LC_MESSAGES`/`LANG` on Linux and macOS).
+**Today:** English (reference and fallback) and Russian. The language follows the browser (`Accept-Language`, RFC 4647
+matching: `zh-Hant-TW` → `zh-Hant` → `zh`) or is chosen in Settings → Language and theme. Messenger messages and
+background jobs use the chosen language, or in automatic mode the one the owner's browser last used. A command typed in
+a terminal (`tow status`, `tow stop`, `tow doctor`…) uses the chosen language, or in automatic mode the operating
+system's (Windows display language; `LC_ALL`/`LC_MESSAGES`/`LANG` on Linux and macOS).
 
 One language is one file, `src/tow/locales/<code>.json` (regional: `pt-BR.json`; case does not matter), with nested
 sections and `_meta`:
@@ -183,6 +184,9 @@ sections and `_meta`:
 2. Translate the values; never change the keys.
 3. Set `_meta.plural`: `one_other`, `east_slavic`, `west_slavic`, `polish`, `french` or `none`. Optionally
    `datetime` (numeric `%d %m %Y %y %H %I %M %S %p` only), `datetime_short` and `decimal`.
+4. Translate the time words: `time.month_short.1` … `12`, `time.this_year` and `time.other_year` write the short
+   times (“15 Oct, 20:31”); `_meta.datetime` is used for full times. In Settings the new language sits after Auto,
+   with English (the fallback) last.
 
 The language appears in the list by itself; a missing key falls back to English. A damaged file is skipped with a
 warning and never breaks a page.
@@ -237,11 +241,12 @@ The web package (`src/tow/web/`):
    a `*_actions.py` module) imports only the pure helpers `tests/test_web_boundary.py` lists; a new way out goes
    into `services`. A form with more than a few checks is handed to an action module, so the route only reads
    the form and answers.
-3. Answer an action with `flash_redirect(url, "text.key", "ok" | "info" | "warn" | "err")` from `tow.web.messages`:
-   the text stays on the server, only a token goes into the URL. A topic, site or client route gets its subject
-   ("Harbour Clock — …") by itself; a background job passes `subject=`. In the page, `window.towMessages.showMessage`,
-   from `static/messages.js`, shows a message the same way; a lasting problem is a note (`_note.html`), not a message. A page is a template in `src/tow/templates/` rendered with
-   `TEMPLATES.TemplateResponse(request, "name.html", {...})`; its texts are catalog keys.
+3. Answer an action with `flash_redirect(url, "text.key", "ok" | "info" | "warn" | "err")` from `tow.web.messages`: the
+   text stays on the server, only a token goes into the URL. A topic, site or client route gets its subject ("Harbour
+   Clock — …") by itself; a background job passes `subject=`. In the page, `window.towMessages.showMessage`, from
+   `static/messages.js`, shows a message the same way; a lasting problem is a note (`_note.html`), not a message. A page
+   is a template in `src/tow/templates/` rendered with `TEMPLATES.TemplateResponse(request, "name.html", {...})`; its
+   texts are catalog keys.
 4. A new module goes into `ROUTERS` in `app.py`. Order is matching order: a fixed path before a parameterized one
    that would also match it (`/sites/new` before `/sites/{name}`), GET before POST for the same path.
 5. Add the path to `ROUTES` in `tests/test_routes.py`; the test checks the set of paths and that none is shadowed.

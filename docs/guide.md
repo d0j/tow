@@ -24,7 +24,7 @@ How TOW thinks, what each screen and colour means, and what to do about each mes
 | Term | Meaning |
 |---|---|
 | **Topic** | A page on a torrent site that holds one torrent, for example a series. TOW remembers its link, a name, a folder and a torrent client. |
-| **Follow the topic** | *Yes, add new versions*: TOW checks the topic on a schedule and adds every new version. *No, add once*: TOW adds it one time and then only follows the download progress. |
+| **Add new versions** | A box in the add form and in the topic's edit panel. Ticked: TOW checks the topic on a schedule and adds every new version. Clear: TOW adds it one time and then only follows the download progress. |
 | **Version** | One `.torrent` of a topic. Sites replace the `.torrent` when episodes are added; each replacement is a new version with a new hash. |
 | **Site** | A torrent site TOW knows how to read: how to recognise its links, where the `.torrent` is, how to sign in. Known sites come preconfigured. |
 | **Mirror** | Another address of the same site. TOW tries them in order and remembers the one that worked. |
@@ -38,16 +38,20 @@ client to add, start, stop or move a torrent. It only ever changes torrents it a
 
 | Screen | What is there |
 |---|---|
-| **Home** | Your topics: status dot, site icon, name, folder, latest event, progress. **+** adds a topic. Click a row to edit it. A name you type there or when adding the topic is shown instead of the site's title (Home, messages, History); the title TOW fills in itself, or an empty name, follows the site. Filters and search hide rows; when nothing matches, **Show all topics** clears them. **Sort**: *As added*, *By name*, *By latest event* or *Errors first*; this device remembers the choice. Until the first topic is added, Home shows three first steps: the torrent client, a messenger (optional), a topic link. |
-| **Sites** | Sites and their mirrors, sign-in state, pause and check per site (the icons in its row). **+** adds a site: paste a link to any topic of it first, the rest fills in; patterns and paths are under **Advanced**. |
-| **Settings** | **Site access** (optional services for sites behind a Cloudflare browser check, off by default: [Site access](PROTECTION.md)), language, theme (as the system, light or dark), torrent clients, notifications, checks, network access and password, version and updates, the TOW service, backups, the log; below them **Diagnostics**, the **Guide** and, on a device signed in over the network, **Sign out on this device**. |
-| **Log** | The scroll icon in the header: the latest events, live. |
+| **Home** | Your topics: status dot, site icon, name, folder, latest event with its progress at the end (on a phone a topic takes two or three lines; on a tablet the folder is in the edit panel). **+** adds a topic. Click a row to edit it: the panel starts with the last event and its full date and time. A name you type there or when adding the topic is shown instead of the site's title (Home, messages, History); the title TOW fills in itself, or an empty name, follows the site. Filters and search hide rows; when nothing matches, **Show all topics** clears them. **Sort**: *As added*, *By name*, *By latest event* or *Errors first*; this device remembers the choice. Until the first topic is added, Home shows three first steps: the torrent client, a messenger (optional), a topic link. |
+| **Sites** | Sites and their mirrors, pause and check per site (the icons in its row). The **Sign-in** column says **Saved sign-in details** when a user name and password are stored, and **Sign-in required** (amber) only after a check saw the site ask for it. A site's card starts with its sign-in (user name and password, or **Sign in through a browser window**), then its mirrors; the site code, patterns and paths are under **Advanced**. **+** adds a site: paste a link to any topic of it first, the rest fills in. |
+| **Settings** | Torrent clients, notifications, checks, network access and password, backups, version and updates, the TOW service, language and theme (Auto, Русский or English; the theme as the system, light or dark, for every device), **Site access** (optional services for sites behind a Cloudflare browser check, off by default: [Site access](PROTECTION.md)) and the log; below them **Diagnostics**, the **Guide** and, on a device signed in over the network, **Sign out on this device**. A torrent client that answers folds to one line with its address; it opens when it needs setting up or does not answer. The search icon in the header finds a section by any word of its title or of its cards' titles. |
+| **Log** | The scroll icon in the header: the latest events, live. **Full timestamps** shows every time of the list with its seconds and time zone. |
 | **History** | Downloads, errors, changes and notifications, with filters and search. It has no icon in the header: the link **History of downloads and changes** in the Log window opens it. |
 | **Diagnostics** | At the end of Settings: the connection to the torrent client, to every site and to the running TOW service. The in-app **Guide** is next to it. |
 
 The ↻ in the header depends on the page: on Home it is **Check all topics now**, on **Sites** **Check the connection
-to the sites** (Diagnostics). The clock in the header counts down to the next scheduled check; before the first check
-it shows “—”, and its tooltip says “No check has run yet”.
+to the sites** (Diagnostics). The clock in the header counts down to the next scheduled check; it appears once a
+check is scheduled, and turns red with “The last attempt failed” when the last scheduled check failed.
+
+Times are short: “20:31” today, “15 Oct, 20:31” this year, “15 Oct 2025, 20:31” before; a time still to come always
+has its date. They are in the time zone of the computer running TOW; a tap on a time shows it in full with its
+seconds and UTC offset, and so does the pointer resting on it.
 
 The **warning triangle** in the header counts current problems, including failed topic checks. Click it to open
 **Needs attention**: the list is closed by default and opens over the page without moving the content. Each link
@@ -57,8 +61,10 @@ automatically after TOW confirms that no current problems remain; old History en
 ## Adding a topic
 
 1. **Home → +**, paste the link to the *topic page* (not a magnet link).
-2. Keep the suggested name, or type your own. Pick the folder where the client should save the files.
-3. Choose **what to download** and whether to **follow the topic**.
+2. Keep the suggested name, or type your own. Pick the folder where the client should save the files, and the
+   torrent client if you have several.
+3. Choose **what to download**; keep **Add new versions** ticked to follow the topic, or clear it to add it once.
+   **Check every, min** left empty uses the global interval (its hint names it).
 4. **Add.** TOW checks the topic at once (the button says “Checking…”, up to a minute): the message
    “… — added to the torrent client” means the client confirmed it. If the add is refused, the form opens again
    with everything you typed and the reason above it.
@@ -74,10 +80,11 @@ If the site is not known yet, add it first on **Sites** — pasting any topic li
 | Episodes by number | `S01E03-E05, S01E07` · `04x01-03` · `5-8` | Video and its subtitles count as one episode. Use `S01E05` when an episode number exists in several seasons. |
 | Files by pattern | `*.mkv` · `Subs/*.srt` | Glob patterns: `*`, `?` and `[]` are special. A pattern cannot leave the torrent's folder. |
 
-**Get contents** reads the file list from the site, or choose a local `.torrent`. A local file only previews
+**Get contents** reads the file list from the site, or pick a local file under **.torrent file** with **Choose a
+file**. A local file only previews
 the contents: the first check still gets the torrent from the site and refuses a different one, and the
 file is not kept as the topic's saved contents. A download-limited site asks for confirmation first.
-**From magnet (asks other users)** asks your torrent client for the file list without downloading anything; it
+**From magnet** asks your torrent client for the file list without downloading anything; it
 needs qBittorrent 5.2+ or Deluge. Other clients need a `.torrent`.
 
 Search hides rows, not selections. Folder checkboxes and the **All files** box include files hidden by
@@ -87,6 +94,10 @@ the choice for the next check; cancelling discards the draft. The **?** button e
 
 If nothing matches, or the match is unclear, nothing is started. A range of episodes that are not out yet is
 *waiting for episodes*, not an error.
+
+Episode progress counts by the last episode of the topic's title: “Серии 13-24 из 24” shows 17/24 with episodes
+13–17 and 24/24 once 13–24 are there; “73-176 серии из 176” shows 176/176 when they are all there. When the files
+number each season from episode 1 again, TOW counts the episodes it finds.
 
 Specials (`Season 00`, `S00`, OVA and bonus folders) stay separate files, not ordinary season episodes.
 They can be downloaded with **All files of the torrent** or **Files by pattern**, without inflating the episode counter.
@@ -180,8 +191,8 @@ manual checks and progress checks do not reset it.
 ## Sites, mirrors and sign-in
 
 - **Mirrors.** TOW starts with the main mirror and moves on until one returns the `.torrent`; that one becomes the
-  main mirror. To choose it yourself, open the site's row on **Sites** and press a mirror under “Main mirror — TOW
-  tries it first”.
+  main mirror. To choose it yourself, open the site's row on **Sites** and press a mirror under **Main mirror** (TOW
+  tries it first).
 - **Cooldown.** A mirror that fails three times in a row rests for an hour (Rutor: 30 minutes); the others keep
   working. A site's `fail_threshold` and `cooldown_sec` in `config.yaml` change the count and the pause. A check you
   start (the row's ↻ on Home, **Check all topics now**) tries resting mirrors too, and a mirror that answers ends its
@@ -194,17 +205,18 @@ manual checks and progress checks do not reset it.
 - **Daily limit.** When a site says the download limit for today is reached, scheduled checks leave that site alone
   until tomorrow and do not try other mirrors (they share the limit). A check you start (the row's ↻, **Check all
   topics now**) still tries it.
-- **Sign-in.** Sites that need it get a user name and password on **Sites**, stored encrypted. A site that only allows
-  signing in through a browser (NNM-Club) opens a browser window (Chrome, Chromium or Edge) on the computer
-  running TOW; the session is saved after you sign in. When the saved session has expired (the site answers with a
-  page instead of the `.torrent`, or shows the topic without its download link), TOW signs in again with the saved
-  password: scheduled checks at most once in ten minutes per site, the row's ↻ every time.
+- **Sign-in.** Sites that need it get a user name and password at the top of their card on **Sites**, stored encrypted;
+  a stored password shows a **saved** tag in its label. A site that only allows signing in through a browser (NNM-Club,
+  **Sign in through a browser window**) opens a browser window (Chrome, Chromium or Edge) on the computer running TOW;
+  the session is saved after you sign in. When the saved session has expired (the site answers with a page instead of
+  the `.torrent`, or shows the topic without its download link), TOW signs in again with the saved password: scheduled
+  checks at most once in ten minutes per site, the row's ↻ every time.
 - **Site pause** stops scheduled checks of every topic on that site.
 
 ## Notifications
 
-Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. Each card has “How to connect” steps,
-**Check** sends a test message.
+Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. Each card has “How to connect” steps;
+once it is connected, **Send a test** sends a test message and **Disconnect** removes it.
 
 - One message per topic per check: added, new version, new episodes, download complete, removed, back in the
   client. An error in the same check is added to the message, not hidden.
@@ -226,7 +238,8 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
 
 ## History and undo
 
-- **History** shows downloads, errors, changes and notifications, filterable and searchable. The file history
+- **History** shows downloads, errors, changes and notifications, filterable and searchable; **Full timestamps**
+  shows every time of the list in full, and the tab remembers the choice. The file history
   of a topic (the row's files link) lists every file of every version; files of older versions are kept for
   `history_keep_days` (730 by default), files of the current version are never dropped. The history also
   goes into every restore point, which holds at most 64 MiB: past 40 MiB the check drops, in this order, the
@@ -247,7 +260,7 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
 |---|---|---|---|
 | Nightly backup | Daily schedule (03:30 by default), or **Back up now** in that card; keep 7 days by default | Settings → Backups → Nightly backups | settings, topics, history, encrypted passwords |
 | Restore point | **Create a backup** in Settings, and automatically before risky changes; last 10 kept | Settings → Backups → Backups made by hand | the same |
-| TOW file (`.towx`) | Settings → Backups → TOW file → **Save file** | Same card, **Choose a file** | the same, in one encrypted file |
+| TOW file (`.towx`) | Settings → Backups → TOW file → **Save file** | Same card: **Choose a file**, then **Restore** (**Check** only tests it) | the same, in one encrypted file |
 | Export | `tow export --output tow.towx` (asks a passphrase, 12+ characters) | `tow import --input tow.towx --apply` | the same, protected by your passphrase |
 
 - None of them contains the master key, downloaded files or the torrent client's own data.
@@ -277,9 +290,9 @@ Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. E
   folders stay as they are (when the settings in force cannot be read, a nightly backup restore leaves network
   access off and says so, and takes the folders from the copy).
   Restoring a nightly backup keeps the event log (History) as it is: what happened after the copy stays listed.
-- Folders: Settings → Backups → Nightly backups or Backups made by hand → **Folder for …**. Another drive or a
-  network share (`\\server\share`) is fine; a network share is chosen on the computer running TOW, not from
-  another device.
+- Folders: Settings → Backups → Nightly backups or Backups made by hand → **Folder**; an empty field says where the
+  copies go (“Default: …”). Another drive or a network share (`\\server\share`) is fine; a network share is chosen on
+  the computer running TOW, not from another device.
 
 **Keep a copy of `keys/master.key` away from the computer.** TOW creates it on the first start (`tow keys ensure`
 does it on its own) and says once to back it up. Without it, saved passwords and tokens cannot be read and copies
@@ -321,24 +334,31 @@ Settings → **Version and updates**; the version in the corner of every page op
 ## Password and network access
 
 - On the computer running TOW, it opens **without a password**.
-- Other devices (a phone, a laptop, over a VPN) can sign in only with the **password**, and only after network access
-  is turned on (Settings → Network access, or `tow access on`, which asks for a password when none is set; it takes
-  effect after a restart; `tow access off` closes it again, at once). A device stays
-  signed in for 90 days. Open TOW there by the computer's IP address, its plain name or `name.local`
+- Other devices (a phone, a laptop, over a VPN) can sign in only with the **password**, and only after network access is
+  turned on (Settings → Network access → **Open TOW from other devices**, or `tow access on`, which asks for a password
+  when none is set; it takes effect after a restart; `tow access off` closes it again, at once). A device stays signed
+  in for 90 days. Open TOW there by the computer's IP address, its plain name or `name.local`
   ([Remote access](../README.md#remote-access)).
+- Settings → Network access is one card. Without a password, ticking **Open TOW from other devices** shows the
+  password and its reminder, and **Save and enable** saves the password and opens access together (one **Undo**
+  takes both back); the box alone opens nothing. Once a password is set, the box saves on its own and the password
+  is one line, **Password set · Change**, that unfolds the new password, the reminder, **Save password** and
+  **Sign out everywhere**. The password is typed once; the eye in its field shows what was typed.
 - The password has at least 8 characters. After 5 wrong passwords in 10 minutes a device has to wait 30 seconds,
   and twice as long after each further wrong one, up to an hour; after 30 wrong passwords from all devices
   together, every device waits (up to 15 minutes). The computer running TOW needs no password and is not affected.
 - Turning network access on or off, and the first-start page, work only on the computer itself, so nobody on the
   network can lock you out.
 - **Forgot the password?** On the computer running TOW set a new one without the old one: Settings → Network access
-  → Password, or `tow password`. Other devices then sign in again.
+  → **Password set · Change**, or `tow password` (it asks twice). Other devices then sign in again; from another
+  device, a change needs the current password.
 - **Sign out on this device** at the end of Settings (shown only on a device signed in over the network) ends
   this device's session.
 - **Sign out everywhere** (Settings → Network access) ends every network session; the password stays.
 - The reminder you set is visible to anyone who opens the sign-in page — never write the password into it. TOW
-  refuses a reminder that shares four letters or digits in a row with the password; to change only the reminder,
-  type the current password (also on the computer running TOW).
+  refuses a reminder that shares four letters or digits in a row with the password, so a new reminder needs a new
+  password with it on the computer running TOW (keeping or clearing the reminder needs none); from another device
+  type the current password with it.
 - Requests from public internet addresses are always refused. See [Remote access](../README.md#remote-access)
   for SSH tunnels and the reverse-proxy caveat.
 
@@ -357,7 +377,7 @@ record.
 | Message | Meaning | What to do |
 |---|---|---|
 | The torrent client is unavailable: new versions are not added. · torrent client unreachable | TOW cannot reach the client's Web UI. | Start the client, check its Web UI is on; Settings → Torrent clients → **Check**. |
-| Sign in to *site* (topics: *n*): open the topic's row. · the page has no torrent link — sign in to the site | The site wants a signed-in user for the `.torrent`. | Open the row → **Sign in**, or enter the user name and password on **Sites**. |
+| Sign in to *site* (topics: *n*) · the page has no torrent link — sign in to the site | The site wants a signed-in user for the `.torrent`. | Open the row → **Sign in to the site**, or enter the user name and password on **Sites**. |
 | *site*: … · no connection | No mirror provided the requested answer; the short text says why. This does not stop an existing client torrent. | Usually temporary. Per-mirror evidence is under **Details** in the topic and History. Try a working mirror on **Sites**; respect a site's rate-limit pause. |
 | *site*: all mirrors are paused · *site*: the site is paused | Mirrors are resting after failures, or you paused the site. | Wait for the pause to end (an hour; Rutor: 30 minutes), or start a check yourself (the row's ↻ on Home): it tries resting mirrors too. A site you paused: resume it on **Sites**. |
 | the site requires a Cloudflare check; check access on Sites | The site shows a browser challenge, not a wrong password. | Try another mirror, wait or use the site's supported browser sign-in. Opening a separate browser alone does not verify access for TOW. Optional external providers can be configured on this computer in Settings → Site access; they are off by default. See [Site access](PROTECTION.md). |
@@ -376,7 +396,8 @@ record.
 | TOW is not started: port 8787 is already in use by another program. · … already in use by another TOW (another TOW folder, or a copy of this one). | Another program, or a second TOW, uses the port. | Stop that program or that TOW, or set another `port:` in `config.yaml` and start TOW again. |
 | TOW is not started: port 8787 is already in use by a web server of this TOW that tow run did not start … | A `tow serve` started by hand holds the port. | Stop that web server, then start TOW again. |
 | Scheduled checks have not run since … | TOW was not running, or checks keep failing. | `tow autostart status`; look at `data/logs/run.log`. |
-| The last scheduled check is blocked: saved passwords and tokens cannot be opened. … · The master key is missing … | The master key is missing or wrong. | `tow keys status`; put back `keys/master.key` from your copy, or `tow keys adopt --from FILE`. |
+| Checks do not complete: saved passwords and tokens cannot be opened. · The master key is missing … | The master key is missing or wrong. | `tow keys status`; put back `keys/master.key` from your copy, or `tow keys adopt --from FILE`. |
+| The last check of every topic did not complete. | A scheduled check or **Check all topics now** failed inside TOW. | Open the Log (the scroll icon) for the reason; `tow doctor`. It clears after the next check of every topic completes. |
 | state.json was written by a newer TOW … | You went back to an older version. | Update TOW again, or restore a backup made by this version. |
 | TOW was not started: an update was cut off while it replaced the code … | An update stopped half-way (the computer turned off, the updater was killed). | Run the update again (`Update TOW`): it puts the previous version back first. |
 | TOW could not write its data file just now — another program may be keeping it open … | An antivirus or a backup tool holds a file in `data/` open. | Try again in a moment; if it keeps happening, exclude the TOW folder from that program. |
@@ -409,8 +430,8 @@ every one. The others:
 | `tow import-rollback --checkpoint FOLDER` | puts back what an import replaced (a preview unless `--apply`) |
 | `tow secrets status` | where the passwords and tokens are and which key opens them (`migrate` and `generate-key`: see `--help`) |
 
-Commands typed in a terminal answer in the language chosen in Settings → Language, or, when it is automatic, in
-the operating system's language. Messages and the texts scheduled checks record use the language of messages: the
+Commands typed in a terminal answer in the language chosen in Settings → Language and theme, or, when it is automatic,
+in the operating system's language. Messages and the texts scheduled checks record use the language of messages: the
 chosen one, or the one your browser last asked for.
 
 ## Where things are
@@ -427,4 +448,5 @@ chosen one, or the one your browser last asked for.
 | `backup/` | Nightly backups and pre-update snapshots. |
 | `data/restore-points/` | Restore points (**Create a backup**, and before risky changes), unless Settings → Backups names another folder. |
 
-An empty password field in any form means “keep the saved one”; saved passwords are never shown.
+A saved password, token or key shows a **saved** tag in its label and “Leave empty to keep” in its field: an empty
+field keeps the saved one. Saved passwords are never shown.

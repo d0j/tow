@@ -46,9 +46,27 @@ tracker degradation from a client or TOW failure before changing state.
   button itself, and there is no inline `style=`. Square icon buttons (`.ico`, `.row-ico`, `.flash-x`) are the only
   exception. Inputs and selects are 36 px with 14 px text, 44 px with 16 px text on phones and touch
   screens (`--field-h`, also from `app.css` only).
+- **Fields are as wide as what they hold**, by one class from `app.css`: `.w-2xs` 72 px (attempts, order), `.w-xs`
+  88 px (ports, intervals, days), `.w-s` 192 px, `.w-m` 240 px (user name, password, reminder, host), `.w-l` 416 px,
+  `.w-xl` 576 px (a topic's name or folder, each on its own row). Fields that belong together share a `.field-row`,
+  which wraps by those widths; on a phone (≤ 720 px) text fields fill the row and numbers stay short. A rule field is
+  a one-row textarea that grows. Links, paths and rules carry `autocapitalize="off"`, `autocorrect="off"` and
+  `spellcheck="false"`; an example in a field is `common.example` ("e.g. …"), a real default is said under it with
+  `common.default_path` ("Default: …").
+- **At most one solid button per card or form**; the others are `ghost`. Remove, Delete and Disconnect are
+  `ghost danger`; Restore is `ghost`.
+- **Confirmations** use TOW's own dialog, never `window.confirm`: `data-confirm="<text>"` and
+  `data-confirm-label="<action>"` on the form or its submit button (`data-confirm-danger` for a destructive one: Cancel
+  has the focus first), or `towConfirm({text, confirmLabel, danger})` in a script. Without JavaScript the form submits
+  as before; a server confirmation page stays where one exists.
+- A file is chosen with `file_input` from `_file.html` (buttons that need the file carry `data-needs-file`). A
+  password, token or key field has the eye (`reveal`); a stored one gets `saved_hint` in its label, the placeholder
+  `web.secret.keep_placeholder`, and one `keep_note` per form.
 - `tests/test_ui_standard.py` enforces this; a new screen is also measured in a real browser before release.
-- Settings cards follow one pattern: status pill, "How to connect" steps, fields, then the buttons. Messengers that
-  are not connected are collapsed to one line; connected ones are expanded.
+- Settings is one column of at most 64rem. Its cards follow one pattern: a status pill (only when it says something
+  the section does not), fields, then the buttons; "How to connect" steps sit above the fields and are open while the
+  card is not set up. Messengers that are not connected and torrent clients that answer are folded to one line; the
+  others are open.
 
 ## Changes and rollback
 
