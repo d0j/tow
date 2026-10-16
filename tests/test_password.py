@@ -275,6 +275,14 @@ def test_the_sign_in_page_puts_the_cursor_in_the_password_field():
     assert re.search(r'<input id="lan-password"[^>]*\bautofocus\b', wrong.text)
 
 
+def test_the_sign_in_field_fills_its_card():
+    """AU1 (QA Q3): on a desktop the password field stopped at 240 px (w-m) in a 380 px card; it
+    has no width class, so it fills the card as on a phone."""
+    _with_password("old-horse-battery")
+    field = re.search(r'<input id="lan-password"[^>]*>', TestClient(app, client=LAN).get("/login").text).group()
+    assert not re.search(r'class="[^"]*\bw-', field)
+
+
 def test_password_change_can_be_undone():
     _with_password("old-horse-battery", hint="old")
     local = TestClient(app, headers=ORIGIN)
