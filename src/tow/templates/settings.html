@@ -362,7 +362,7 @@
             <input id="backup-path-{{ f.kind }}" name="path" value="{{ f.value }}" class="w-xl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="backup-path-{{ f.kind }}-where{% if hint %} backup-path-{{ f.kind }}-hint{% endif %}">
             {#- Where the copies go, always: an empty field is the default folder, not "no copies". -#}
             {% set where = t('common.default_path', path=f.default_path) if not f.value else (t('settings.backups.now', path=f.path) if f.path != f.value else '') %}
-            <p class="field-hint" id="backup-path-{{ f.kind }}-where">{{ where }}{% if where and f.free %} · {% endif %}{% if f.free %}{{ t('settings.backups.free', free=f.free) }}{% endif %}</p>
+            <p class="field-hint" id="backup-path-{{ f.kind }}-where">{{ where }}{% if f.free %}{% if where %} <span class="nowrap">· {% else %}<span class="nowrap">{% endif %}{{ t('settings.backups.free', free=f.free) }}</span>{% endif %}</p>
             {% if hint %}<p class="field-hint" id="backup-path-{{ f.kind }}-hint">{{ hint }}</p>{% endif %}
           </div>
           <div class="settings-actions">

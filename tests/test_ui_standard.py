@@ -415,3 +415,13 @@ def test_a_file_field_is_in_the_pages_language_and_works_without_a_script():
     assert "display: none" not in hidden  # still focusable
     focus = ".file-pick[data-ready]:has(> .file-native:focus-visible) > .file-button"
     assert "outline: 2px solid var(--acc)" in _first(focus)
+
+
+def test_a_hint_under_a_wide_field_runs_as_wide_as_the_field():
+    """QA Q4: hints stopped at 68ch (440 px) under 576 px folder fields; under a .w-xl field the
+    hint ends where the field ends, outranking the hints' 68ch rules. An unbreakable piece of a
+    hint (.nowrap: a backup folder's free space with its separator) keeps together."""
+    wide = ".field:has(> .w-xl, > .folder-input > .w-xl) > .field-hint"
+    assert _first(wide).strip() == "max-width: 36rem;"
+    assert CSS.index(wide) > CSS.index(".settings-panel :is(.field-hint, .action-hint, .section-note")
+    assert _first(".nowrap").strip() == "white-space: nowrap;"

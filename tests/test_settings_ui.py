@@ -712,3 +712,18 @@ def test_every_settings_section_is_found_by_the_words_of_its_titles(language):
                 (section.get("id"), word) for word in re.findall(r"\w+", title.get_text()) if fold(word) not in haystack
             ]
     assert missing == []
+
+
+def test_a_backup_folders_free_space_never_leaves_its_separator_behind(monkeypatch):
+    """QA Q4: "По умолчанию: <folder> ·" broke with the separator at the line's end and
+    "свободно 1,0 ТБ" alone below it. The free space and its " · " are one unbreakable piece."""
+    from bs4 import BeautifulSoup
+
+    monkeypatch.setattr("tow.web.services.free_bytes", lambda _path: 2**40)
+    page = BeautifulSoup(TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text, "html.parser")
+    for kind in ("night", "manual"):
+        hint = page.select_one(f"#backup-path-{kind}-where")
+        assert hint.get_text().startswith("По умолчанию: ")
+        free = hint.select_one("span.nowrap")
+        assert re.fullmatch(r"· свободно \S+ ТБ", free.get_text())
+        assert hint.get_text().endswith(" " + free.get_text())  # the line may break only before "·"
