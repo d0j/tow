@@ -717,12 +717,13 @@ def test_checking_an_unsigned_copy_with_hostile_settings_is_bounded_and_said(bac
     manifest["files"]["config.yaml"] = {"sha256": hashlib.sha256(config).hexdigest(), "size": len(config)}
     (snapshot / "MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
 
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
     started = time.monotonic()
-    response = TestClient(app, headers={"Origin": "http://127.0.0.1"}).post(
-        f"/settings/backup/night/{snapshot.name}/check", follow_redirects=False
-    )
+    response = client.post(f"/settings/backup/night/{snapshot.name}/check", follow_redirects=False)
 
-    assert time.monotonic() - started < 2
+    # The YAML guard counts the work (tests/test_yaml_guard.py); this only catches a check that
+    # takes minutes again, with room for a loaded runner under coverage.
+    assert time.monotonic() - started < 10
     assert response.status_code == 303
     expected = t("web.backup.check_failed", "ru") if refused else t("backup.snapshot.unsigned", "ru")
     assert expected in flash_of(response.headers["location"])
