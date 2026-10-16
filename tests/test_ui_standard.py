@@ -204,6 +204,13 @@ def test_long_site_names_and_sign_in_pills_stay_in_their_columns():
     assert "justify-self: start" in first("details.row-edit.sites > summary > .pill")
 
 
+def test_browser_sign_in_puts_the_keep_note_aside_with_the_password():
+    """1.32.1 S1: a site with a saved password says "leave empty to keep" once under its sign-in;
+    with browser sign-in chosen the password steps aside, and its note goes with it."""
+    hidden = _first('.site-form:has(input[name="browser_auth"]:checked) :is(.password-group, .keep-note)')
+    assert hidden.strip() == "display: none;"
+
+
 def test_the_copy_command_button_stays_one_line_in_the_master_key_note():
     """Qa10: "Скопировать команду" wrapped into two lines (32 px) inside the note, at 1280 px too:
     the note's text column shrank it. It keeps its width and one line, and goes under the text
