@@ -216,6 +216,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   was not run" and logs it, as a queued check does, instead of an error page.
 - A spare mirror that failed a couple of times long ago is no longer paused for an hour by its next single failure:
   failures older than the cooldown no longer count towards it.
+- A torrent client still loading its torrents after a start is no longer announced as "unavailable" and then
+  "available again": its topics simply wait for the next check.
 
 ## [1.31.2] — 2026-10-15
 

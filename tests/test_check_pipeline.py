@@ -8,7 +8,7 @@ from typing import Any, ClassVar
 
 import pytest
 
-from tow import check
+from tow import check, delivery
 from tow.check import apply as check_apply
 from tow.check import reconcile as check_reconcile
 from tow.check import run as check_run
@@ -212,6 +212,29 @@ def test_a_client_that_lists_nothing_yet_is_not_read_as_removed_or_added_to(monk
     client.loading = False  # loaded: the next check works as always
     check.run_check(apply=True, notify=False, how="test")
     assert client.adds == [(NEW, "/media/tv")]
+
+
+def test_a_client_still_loading_is_not_announced_down_and_then_up(monkeypatch, stores):
+    # A client still loading its torrents after a start went through the "unreachable" path:
+    # "torrent client unavailable", then "available again" at the next check.
+    client = StartingClient()
+    client.put(OLD, "/media/tv", tags=["tow"])
+    save_state({"topics": [_topic(hash=OLD, last_ok=True)], "health": {"qbit_ok": True}})
+    _wire(monkeypatch, {"main": client}, Tracker())
+    monkeypatch.setattr("tow.check.notices._audited_send", lambda *_a, **_kw: True)
+    staged = []
+    real_stage = delivery.stage
+
+    def stage(state, items, **kw):
+        staged.extend(item.kind for item in items)
+        return real_stage(state, items, **kw)
+
+    monkeypatch.setattr(delivery, "stage", stage)
+    check.run_check(apply=True, notify=True, how="test")
+    client.loading = False
+    check.run_check(apply=True, notify=True, how="test")
+    assert "qbit_down" not in staged
+    assert "qbit_up" not in staged
 
 
 def test_a_finished_one_time_topic_does_not_hold_an_emptied_client(monkeypatch, stores):
