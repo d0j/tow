@@ -265,6 +265,25 @@ def test_a_short_times_full_time_opens_by_keyboard_and_by_a_tap():
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_a_question_is_asked_in_the_pages_own_dialog():
+    """1.32.1 (UI:C1): the browser's confirm ("127.0.0.1 says", OK in the browser's language) is the
+    page's dialog: the action's words, Cancel first for a destructive one, Escape and the backdrop
+    cancel, the focus goes back, and the confirmed form goes once with its own button."""
+    verdict = _verdict("confirm_dialog.mjs")
+    keys = (
+        "dangerAsksWithCancelFirst",
+        "noDoubleSubmit",
+        "cancelRestoresFocus",
+        "escapeAndBackdropCancel",
+        "confirmedSendsOnceWithSubmitter",
+        "labelAndFocusForAPlainQuestion",
+        "scriptApi",
+    )
+    assert verdict == dict.fromkeys(keys, True)
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_the_updates_card_writes_its_times_by_the_one_rule():
     verdict = _verdict("update_times.mjs")
     assert verdict == {"timesByTheOneRule": True, "olderServerKeepsItsLabel": True}

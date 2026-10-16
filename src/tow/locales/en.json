@@ -373,6 +373,7 @@
     "doctor": "Check the connection to the sites",
     "check_all": {
       "title": "Check all topics now",
+      "button": "Check all",
       "confirm": "Check all topics and add what is found to the torrent client?"
     },
     "flash": {},
@@ -1261,6 +1262,10 @@
       "no_next_page": "the server did not say which page comes next",
       "failed": "Could not do this: {error}",
       "unknown_error": "unknown error"
+    },
+    "confirm": {
+      "ok": "Continue",
+      "cancel": "Cancel"
     },
     "browser_auth": {
       "start": "Sign in",
