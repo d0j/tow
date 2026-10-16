@@ -772,6 +772,10 @@ def test_a_transaction_in_progress_is_503_and_its_recovery_runs_apart(monkeypatc
         assert response.json()["error"] == "recovering"
         assert response.headers["retry-after"] == str(sync.RETRY_AFTER_SEC)
         assert not recovered.is_set()  # it waits for the lock in its own thread, not in the poll
+        # Recent messages are polled by every open page too: the same read-only path, not a
+        # recovery under the data lock inside the request.
+        messages = _within(lambda: client.get("/messages.json"))  # at once: it reads the log, not the stores
+        assert messages.status_code == 200
     assert recovered.wait(10)
     sync._recovery.join(10)
     clock.tick()

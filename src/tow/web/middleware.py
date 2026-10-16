@@ -41,7 +41,8 @@ _PUBLIC_PATHS = {"/favicon.ico", "/healthz", "/login"}
 # What every open page polls and fetches to stay in step (tow.web.sync): read-only all the way -
 # no recovery, cleanup or folder made on their way, no wait for the site lock - and refused as
 # JSON (a script asked: never the sign-in page as "rows").
-SYNC_PATHS = frozenset({"/sync.json", "/topics/rows"})
+# Polled by every open page: a read-only path without recovery, cleanup or the site lock.
+SYNC_PATHS = frozenset({"/sync.json", "/topics/rows", "/messages.json"})
 _SITE_HTTP_LOCK = asyncio.Lock()
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 # Signing in has its own atomic throttle. Content previews never change topics or transfer
