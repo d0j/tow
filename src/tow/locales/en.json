@@ -1221,7 +1221,6 @@
     },
     "releases": {
       "badge": "New {version}",
-      "disabled": "Automatic update checks are off",
       "unknown_build": "A stable release was found, but this build's version cannot be compared",
       "available": "TOW {version} is available",
       "current": "You have the latest version",

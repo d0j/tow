@@ -26,9 +26,11 @@ assert.match(badge.textContent, /99\.0\.0/);
 result = { available: false, latest: "", ok: false, checks_enabled: false };
 interval(); await flush();
 assert.equal(badge.hidden, true);
-assert.match(status.textContent, /js.releases.disabled/);
-assert.doesNotMatch(status.textContent, /unavailable|current/);
+// U1: automatic checks off and never checked: nothing under the unticked box (it said "off" twice).
+assert.equal(status.textContent, "");
 events.click(); await flush();
 assert.equal(requests.at(-1).url, "/updates/check");
 assert.equal(requests.at(-1).options.method, "POST");
-console.log(JSON.stringify({ footerBadge: true, badgeHidesWhenCurrent: true, disabledStatus: true, manualCheck: true }));
+// A check asked by hand still says its result, a failed one too.
+assert.match(status.textContent, /js.releases.unavailable/);
+console.log(JSON.stringify({ footerBadge: true, badgeHidesWhenCurrent: true, disabledStatusQuiet: true, manualCheck: true }));

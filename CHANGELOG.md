@@ -97,6 +97,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Site access: a saved connection is removed by its own Remove button (with a confirmation), and the order field
   shows only when there are two or more connections.
 
+### Fixed
+
+- Settings → Updates no longer repeats "Automatic update checks are off" under the unticked box; a check asked by
+  hand still says its result.
+
 ## [1.32.0] — 2026-10-16
 
 ### Security
