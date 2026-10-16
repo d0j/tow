@@ -154,3 +154,17 @@ def test_the_cut_off_switch_uses_the_updaters_test_hook(smoke):
 def test_never_on_the_live_port(smoke, tmp_path):
     with pytest.raises(SystemExit):
         smoke.main(["--previous", str(tmp_path), "--source", str(tmp_path / "a.tar.gz"), "--port", "8787"])
+
+
+def test_the_test_install_is_in_a_cyrillic_folder_and_the_log_can_say_so(smoke, tmp_path, monkeypatch):
+    # TC-06: no smoke used a Cyrillic folder; a Windows runner's pipe has no Cyrillic in its code page.
+    import sys
+
+    folder = smoke.Smoke(tmp_path, tmp_path / "a.tar.gz", 18879, tmp_path).folder
+    assert "Тест" in folder.name
+    out = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", newline="\n")
+    monkeypatch.setattr(sys, "stdout", out)
+    smoke._utf8_output()
+    print("update-smoke: Тест")
+    out.flush()
+    assert out.buffer.getvalue().decode("utf-8") == "update-smoke: Тест\n"

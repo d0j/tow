@@ -57,7 +57,7 @@ jobs:
         if: runner.os != 'Windows'
         timeout-minutes: 10
         run: |
-          dir="$RUNNER_TEMP/tow autostart"
+          dir="$RUNNER_TEMP/tow autostart Тест"  # a Cyrillic folder, as many owners have
           printf '%s  tow-source.tar.gz\n' "$(shasum -a 256 "$RUNNER_TEMP/tow-source.tar.gz" | cut -d ' ' -f 1)" >"$RUNNER_TEMP/SHA256SUMS"
           # The installer runs as on a new computer: no uv variables of this job.
           for name in $(env | sed -n 's/^\(UV_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$name"; done
@@ -74,7 +74,8 @@ jobs:
           $zip = (Resolve-Path dist/TOW-windows-x64.zip).Path
           $sums = Join-Path $env:RUNNER_TEMP 'SHA256SUMS'
           "$((Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant())  TOW-windows-x64.zip" | Set-Content -Encoding ascii $sums
-          $dir = Join-Path $env:RUNNER_TEMP 'TOW autostart'
+          # A Cyrillic folder, as many owners have ("Test" in Russian, made from its code points).
+          $dir = Join-Path $env:RUNNER_TEMP ('TOW autostart ' + (-join [char[]](0x0422, 0x0435, 0x0441, 0x0442)))
           $port = [int]$env:TOW_REAL_AUTOSTART_PORT
           # The installer runs as on a new computer: no uv or TOW variables of this job.
           Get-ChildItem env: | Where-Object { $_.Name -like 'UV_*' -or $_.Name -like 'TOW_*' } | ForEach-Object { Remove-Item "env:$($_.Name)" }

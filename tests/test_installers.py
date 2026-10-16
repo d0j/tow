@@ -1283,6 +1283,24 @@ def test_release_jobs_build_and_publish_the_commit_the_source_job_checked():
     assert "git get-tar-commit-id" in text
 
 
+def test_the_smokes_and_real_autostart_install_into_cyrillic_folders():
+    """TC-06: Cyrillic folders (many owners have them) were used by the Windows bundle smoke only.
+    The Windows PowerShell scripts stay ASCII and make the name from its code points."""
+    sh = (ROOT / "scripts" / "install-smoke.sh").read_text(encoding="utf-8")
+    assert 'dir="$base/tow smoke Тест $$"' in sh
+    assert 'moved="$base/tow relocated Тест $$"' in sh
+    ps1 = (ROOT / "scripts" / "install-smoke.ps1").read_text(encoding="utf-8")
+    assert ps1.isascii()
+    assert "$cyrillic = -join [char[]](0x0422, 0x0435, 0x0441, 0x0442)" in ps1
+    assert '("TOW install $cyrillic "' in ps1
+    assert "".join(map(chr, (0x0422, 0x0435, 0x0441, 0x0442))) == "Тест"
+    smoke = (ROOT / "scripts" / "update-smoke.py").read_text(encoding="utf-8")
+    assert 'self.folder = base / f"tow update smoke Тест {os.getpid()}"' in smoke
+    runs = _runs(_workflow("autostart")[1]["jobs"]["autostart"])
+    assert 'dir="$RUNNER_TEMP/tow autostart Тест"' in runs
+    assert "('TOW autostart ' + (-join [char[]](0x0422, 0x0435, 0x0441, 0x0442)))" in runs
+
+
 def test_the_smoke_scripts_never_use_the_live_port():
     for name in ("bundle-smoke.ps1", "install-smoke.sh", "install-smoke.ps1", "update-smoke.py"):
         text = (ROOT / "scripts" / name).read_text(encoding="utf-8")
