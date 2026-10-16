@@ -293,6 +293,8 @@ def test_the_check_all_cards_title_is_a_card_title():
     """1.32 QA L8: "Results" used the browser's 1.5em (22 px); every card or dialog title is 1.05rem."""
     assert "font-size: 1.05rem" in _first(".check-results h2")
     assert "font-size: 1.05rem" in _first(".add-title")
+    # 1.32.1 CR1: the run's time beside it ("Results · 20:31") is not bold like the title.
+    assert _first(".check-results h2 .sub").strip() == "font-weight: 400;"
 
 
 def test_a_low_screen_keeps_its_height_for_the_page():
