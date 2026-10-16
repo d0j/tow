@@ -296,6 +296,53 @@ def test_handoff_failure_is_terminal_and_does_not_replace_another_job(tmp_path):
     assert json.loads(path.read_text())["error"] == "releases.launch_failed"
 
 
+def _sharing_violations(monkeypatch, count: int) -> tuple[list[float], list[int]]:
+    """os.replace refused ``count`` times (the update page reads job.json on Windows), sleeps recorded."""
+    slept: list[float] = []
+    calls: list[int] = []
+    real_replace = os.replace
+
+    def replace(source, target):
+        calls.append(1)
+        if len(calls) <= count:
+            raise PermissionError(13, "synthetic sharing violation")
+        real_replace(source, target)
+
+    monkeypatch.setattr(update_worker.os, "replace", replace)
+    monkeypatch.setattr(update_worker.time, "sleep", slept.append)
+    return slept, calls
+
+
+def test_a_job_write_waits_out_a_reader_of_job_json(tmp_path, monkeypatch):
+    (tmp_path / "web-update").mkdir()
+    path = tmp_path / "web-update" / "job.json"
+    path.write_text(json.dumps({"id": "owned", "status": "queued"}))
+    slept, calls = _sharing_violations(monkeypatch, 2)
+
+    update_worker.write_job(path, {"id": "owned", "status": "preparing"})
+
+    assert json.loads(path.read_text())["status"] == "preparing"
+    assert len(calls) == 3
+    assert len(slept) == 2
+    assert sorted(p.name for p in path.parent.iterdir()) == ["job.json"]  # no temporary file left
+
+
+def test_a_job_write_gives_up_after_a_bounded_wait_and_keeps_the_previous_job(tmp_path, monkeypatch):
+    (tmp_path / "web-update").mkdir()
+    path = tmp_path / "web-update" / "job.json"
+    path.write_text(json.dumps({"id": "owned", "status": "queued"}))
+    slept, calls = _sharing_violations(monkeypatch, 10_000)
+
+    with pytest.raises(PermissionError, match="synthetic sharing violation"):
+        update_worker.write_job(path, {"id": "owned", "status": "preparing"})
+
+    assert json.loads(path.read_text())["status"] == "queued"
+    assert sorted(p.name for p in path.parent.iterdir()) == ["job.json"]
+    assert 2 <= len(calls) <= 30
+    assert len(slept) == len(calls) - 1
+    assert sum(slept) <= 5.0  # well inside the web page's wait for a progress step
+
+
 def test_handoff_failure_does_not_overwrite_a_running_job(tmp_path):
     path = tmp_path / "job.json"
     path.write_text(json.dumps({"id": "owned", "status": "preparing"}))
