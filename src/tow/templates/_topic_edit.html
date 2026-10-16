@@ -55,7 +55,7 @@
     <div class="field-row follow-row">
       <input type="hidden" name="tracking_unchecked" value="once">
       <label class="check-label" for="edit-tracking-mode-{{ topic.id }}"><input id="edit-tracking-mode-{{ topic.id }}" name="tracking_mode" value="watch" type="checkbox"{% if topic.tracking_mode != 'once' %} checked{% endif %}> {{ t('home.add.follow') }}</label>
-      <div class="field interval-field"><label for="edit-check-interval-{{ topic.id }}">{{ t('timer.field') }}</label><input id="edit-check-interval-{{ topic.id }}" class="w-xs" name="check_interval_min" type="number" min="1" max="10080" step="1" value="{{ topic.check_interval_min or '' }}" aria-describedby="edit-check-interval-hint-{{ topic.id }}"><p class="field-hint" id="edit-check-interval-hint-{{ topic.id }}">{{ t('timer.hint') }}</p></div>
+      <div class="field interval-field"><label for="edit-check-interval-{{ topic.id }}">{{ t('timer.field') }}</label><input id="edit-check-interval-{{ topic.id }}" class="w-xs" name="check_interval_min" type="number" min="1" max="10080" step="1" value="{{ topic.check_interval_min or '' }}" aria-describedby="edit-check-interval-hint-{{ topic.id }}"><p class="field-hint" id="edit-check-interval-hint-{{ topic.id }}">{{ t('timer.hint', minutes=global_interval_min) }}</p></div>
     </div>
   </form>
   {% if (topic.download_summary or {}).is_complete and not topic.paused %}

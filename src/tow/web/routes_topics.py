@@ -19,7 +19,7 @@ from tow.web import _context, services, topic_actions
 from tow.web.messages import flash_redirect, home_redirect, request_flash
 from tow.web.templating import TEMPLATES
 from tow.web.text import t, time_parts
-from tow.web.views import event_output, topic_progress_summary, topic_rows, ui_time
+from tow.web.views import event_output, global_interval_minutes, topic_progress_summary, topic_rows, ui_time
 
 router = APIRouter()
 
@@ -92,6 +92,7 @@ def _topic_edit_context(tid: str) -> dict[str, Any] | None:
         "client_options": [row for row in client_configurations(cfg) if row.get("enabled", True)],
         "default_client_id": default_client_id(cfg),
         "save_roots": recent_save_roots(state),
+        "global_interval_min": global_interval_minutes(cfg),
     }
 
 

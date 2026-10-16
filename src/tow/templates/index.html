@@ -91,7 +91,7 @@
       <label class="check-label" for="topic-tracking-mode"><input id="topic-tracking-mode" name="tracking_mode" value="watch" type="checkbox"{% if draft.get('tracking_mode') != 'once' %} checked{% endif %}> {{ t('home.add.follow') }}</label>
       <div class="field interval-field"><label for="topic-check-interval">{{ t('timer.field') }}</label>
         <input id="topic-check-interval" class="w-xs" name="check_interval_min" type="number" min="1" max="10080" step="1" value="{{ draft.get('check_interval_min', '') }}"{{ invalid('topic-check-interval', bad_field, 'topic-check-interval-hint') }}>
-        <p id="topic-check-interval-hint" class="field-hint">{{ t('timer.hint') }}</p></div>
+        <p id="topic-check-interval-hint" class="field-hint">{{ t('timer.hint', minutes=global_interval_min) }}</p></div>
     </div>
     <p class="field-hint busy-note" data-busy-note role="status" hidden>{{ t('home.add.checking_note') }}</p>
     <div class="actions">

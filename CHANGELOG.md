@@ -66,6 +66,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   what to download. The name and the folder each get a wide row of their own, the rule field is one line that
   grows, and a phone no longer capitalises or corrects links, folders and rules. The folder example reads
   "e.g. D:\TV".
+- The hint under a topic's "Check every, min" names the interval an empty field uses: "Empty: use the global
+  interval (60 min)."
 
 ## [1.32.0] — 2026-10-16
 

@@ -718,6 +718,12 @@ def _with_site_title(params: Any, tracker: Any, title: str) -> Any:
     return {**params, "tracker": title}
 
 
+def global_interval_minutes(cfg: Mapping[str, Any]) -> int:
+    """The global check interval in whole minutes, as a topic's empty timer field means it (the
+    add form and the edit panel say it: "Empty: use the global interval (60 min).")."""
+    return max(1, interval_sec_of(cfg) // 60)
+
+
 def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
     cfg = _context.config()
     _context.trackers()  # a site whose link pattern is broken fails the page, as it always did
