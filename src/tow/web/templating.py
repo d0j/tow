@@ -295,7 +295,10 @@ def theme() -> str:
 
 
 def _languages() -> list[dict[str, str]]:
-    return [{"code": code, "name": name, "native": native} for code, name, native in i18n.available()]
+    """The languages in the order Settings offers them after Auto: the translations by their own
+    name, English (the fallback) last - the same order on every page (Auto · Русский · English)."""
+    found = [{"code": code, "name": name, "native": native} for code, name, native in i18n.available()]
+    return sorted(found, key=lambda item: item["code"].lower() == i18n.DEFAULT)
 
 
 def js_texts(*, before_sign_in: bool = False) -> dict[str, str]:
