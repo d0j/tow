@@ -282,6 +282,7 @@ class _Edit(NamedTuple):
     candidate: dict[str, Any]
     dest: str
     form: TopicForm
+    edited: dict[str, Any]  # the topic_edit event, logged by _save_edit once the edit is saved
 
 
 # The topics whose folder a save is moving in the client now: a second move of the same topic
@@ -372,7 +373,7 @@ def edit_topic(
         old_dest = str(topic.get("save_path") or "")
         old_hash = str(topic.get("hash") or "")
         if not old_hash or paths_equal(old_dest, edit.dest):
-            return _save_edit(state, topic, edit.before, edit.candidate, edit.dest, None)
+            return _save_edit(state, topic, edit.before, edit.candidate, edit.dest, None, edited=edit.edited)
         if not _reserve_move(tid):  # another save moves this topic's folder now
             return flash_redirect("/", "web.edit.move_busy", "warn")
     try:
@@ -390,21 +391,21 @@ def _decide(state: dict[str, Any], topic: dict[str, Any], form: TopicForm) -> _E
         raise Refused("web.topics.need_folder_short")
     if problem := _folder_refusal(dest, current=str(topic.get("save_path") or "")):
         raise Refused(problem)
-    services.log_event(
-        "topic_edit",
-        topic=str(topic.get("id") or ""),
-        title=candidate.get("title"),
-        url=candidate.get("url"),
-        path=dest,
-        client_id=candidate["client_id"],
-        selection_mode=policy["mode"],
-        selection_value=policy["value"],
-        tracking_mode=policy["tracking_mode"],
-        selection_changed=selection_changed,
-        check_interval_min=candidate.get("check_interval_min"),
-        how="manual",
-    )
-    return _Edit(copy.deepcopy(topic), candidate, dest, form)
+    # Logged by _save_edit once the edit is saved: a save refused or failed is no "edited".
+    edited = {
+        "topic": str(topic.get("id") or ""),
+        "title": candidate.get("title"),
+        "url": candidate.get("url"),
+        "path": dest,
+        "client_id": candidate["client_id"],
+        "selection_mode": policy["mode"],
+        "selection_value": policy["value"],
+        "tracking_mode": policy["tracking_mode"],
+        "selection_changed": selection_changed,
+        "check_interval_min": candidate.get("check_interval_min"),
+        "how": "manual",
+    }
+    return _Edit(copy.deepcopy(topic), candidate, dest, form, edited)
 
 
 def _after_move(
@@ -435,9 +436,20 @@ def _after_move(
         if again.conflicts:
             if moved.outcome != "error":  # the folder the client moved the torrent to
                 folder_only = {**copy.deepcopy(topic), "save_path": edit.dest}
-                _save_edit(state, topic, copy.deepcopy(topic), folder_only, edit.dest, moved, old_dest=old_dest)
+                _save_edit(
+                    state,
+                    topic,
+                    copy.deepcopy(topic),
+                    folder_only,
+                    edit.dest,
+                    moved,
+                    old_dest=old_dest,
+                    edited={"topic": tid, "how": "manual"},  # only the folder was saved
+                )
             return _conflict(tid, topic, edit.form, again, said=moved.suffix)
-        return _save_edit(state, topic, edit.before, edit.candidate, edit.dest, moved, old_dest=old_dest)
+        return _save_edit(
+            state, topic, edit.before, edit.candidate, edit.dest, moved, old_dest=old_dest, edited=edit.edited
+        )
 
 
 def _save_edit(
@@ -449,9 +461,11 @@ def _save_edit(
     moved: _Moved | None,
     *,
     old_dest: str = "",
+    edited: dict[str, Any] | None = None,
 ) -> RedirectResponse:
     """The form's changes (``before`` -> ``candidate``) on ``topic`` as it is now, with the new
-    folder unless its move failed; the caller holds the persistence lock."""
+    folder unless its move failed; the caller holds the persistence lock. ``edited``: the
+    ``topic_edit`` event, logged after the save with the folder the topic really has."""
     undo.stamp(state, "topic_put", item=copy.deepcopy(topic))
     for key in before.keys() | candidate.keys():
         if key not in candidate:
@@ -467,6 +481,8 @@ def _save_edit(
         else:
             topic.pop("move_pending", None)
     services.save_state(state)
+    if edited is not None:
+        services.log_event("topic_edit", **{**edited, "path": topic.get("save_path")})
     services.cleanup_secret_undo()
     suffix, kind = (moved.suffix, moved.kind) if moved is not None else ("", "ok")
     return flash_redirect("/", t("web.common.saved") + suffix, kind)
