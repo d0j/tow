@@ -199,7 +199,13 @@ def _open_record(topic: Topic, history: DownloadHistory) -> tuple[HistoryRecord,
     expected = expected_for_topic(topic) if selection_is_current(topic) else None
     previous = record.get("expected")
     fingerprint = selection_fingerprint(topic)
-    if fingerprint and previous and previous.get("selection_fingerprint") == fingerprint:
+    if (
+        fingerprint
+        and previous
+        and previous.get("selection_fingerprint") == fingerprint
+        # 1.32.0 kept a season-relative 13..24 as 1..12, losing the range the topic shows.
+        and not (previous.get("numbering") == "season-relative" and int(previous.get("episode_min") or 1) == 1)
+    ):
         expected = previous
     if expected:
         record["expected"] = expected

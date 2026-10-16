@@ -882,6 +882,9 @@ def summarize_completion(items: Mapping[str, Mapping[str, Any]], expected: Mappi
     if expected and expected.get("source") == "title":
         minimum = int(expected.get("episode_min") or 1)
         maximum = int(expected.get("episode_max") or expected.get("total") or 0)
+        if expected.get("numbering") == "season-relative":
+            # The title's 13..24 are the season's E01..E12 (tow.progress.expected).
+            minimum, maximum = 1, int(expected.get("total") or 0)
         season = expected.get("season")
         # Restarted numbering (tow.progress.expected): the files number each season from E01,
         # so the title's range is a count of regular episodes, not a window on their numbers.
@@ -902,13 +905,32 @@ def summarize_completion(items: Mapping[str, Mapping[str, Any]], expected: Mappi
     raw_completed = len(completed)
     inconsistent = bool(total is not None and raw_completed > total)
     final_total_known = bool(expected and expected.get("source") != "files")
+    is_complete = bool(final_total_known and total is not None and raw_completed == total)
+    shown = min(raw_completed, total) if total is not None else raw_completed
+    if total is not None:
+        shown, total = shown_progress(expected, shown, total, complete=is_complete)
     return {
-        "completed": min(raw_completed, total) if total is not None else raw_completed,
+        "completed": shown,
         "expected": total,
         "completion_known": final_total_known,
-        "is_complete": bool(final_total_known and total is not None and raw_completed == total),
+        "is_complete": is_complete,
         "completion_inconsistent": inconsistent,
     }
+
+
+def shown_progress(
+    expected: Mapping[str, Any] | None, completed: int, total: int, *, complete: bool
+) -> tuple[int, int]:
+    """The progress figure ``completed/total`` as the topic shows it. A title range that does not
+    start at episode 1 counts by its last episode: "Серии 13-24 из 24" is 24/24 with all twelve,
+    17/24 with E13..E17 (restarted numbering: the episodes before the range plus those found).
+    It reaches its last episode only when complete, never a false 24/24; from episode 1 the
+    figure is the count itself."""
+    first = int(expected.get("episode_min") or 1) if expected and expected.get("source") == "title" else 1
+    if first <= 1:
+        return completed, total
+    last = first - 1 + total
+    return (last if complete else min(first - 1 + completed, last - 1)), last
 
 
 def _progress_identity(key: str, item: Mapping[str, Any]) -> str:
