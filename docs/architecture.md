@@ -72,7 +72,8 @@ flowchart TD
   `receipt`: 1.30.5-1.30.10 block it before any client change instead of reading it as an applied selection;
   versions before 1.30.5 know no receipts and would take a "once" topic for done while its torrent stays
   stopped, so `update.py` and the web update refuse a target below 1.30.5 while any topic has a
-  `verification_pending`) and applies the selection,
+  `verification_pending`; likewise below 1.32.0 while a topic, or the item of a live undo, has a
+  `content_ref`, which older versions read only as `content_token`) and applies the selection,
   stopped and read back, when it ends. The receipt keeps its first `since`; after 12 hours it shows a red
   `check.verification_overdue` (notified once) and is still finished later. Meanwhile the site is asked
   read-only on the normal schedule (revision probe or page magnet, never a `.torrent`), and a newer revision is

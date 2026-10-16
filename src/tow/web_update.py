@@ -28,6 +28,9 @@ MINIMUM_WEB_VERSION = (1, 22, 21)
 # Older versions take a topic whose torrent client still checks its files for done
 # (``verification_pending``, scripts/update.py RECEIPTS_SINCE).
 RECEIPTS_SINCE = (1, 30, 5)
+# Older versions read a prepared torrent's id only as ``content_token`` (scripts/update.py
+# CONTENT_REF_SINCE).
+CONTENT_REF_SINCE = (1, 32, 0)
 # Folders of earlier web updates (their copied updater and update.log) kept besides the current
 # job's; older ones are removed when the next update starts.
 JOB_FOLDERS_KEPT = 3
@@ -327,6 +330,21 @@ def _receipt_pending() -> bool:
     return any(topic.get("verification_pending") for topic in topics_of(load_state()))
 
 
+def _content_ref_pending() -> bool:
+    """A topic prepared when it was added waits for its first add, also one a live "Undo" would
+    bring back: its prepared torrent's id is ``content_ref``, a name 1.31.2 and older never read."""
+    from tow.records import topics_of
+    from tow.store import load_state
+    from tow.undo import can_undo
+
+    state = load_state()
+    waiting: list[Any] = list(topics_of(state))
+    undo = state.get("undo")
+    if isinstance(undo, dict) and isinstance(undo.get("item"), dict) and can_undo(state):
+        waiting.append(undo["item"])
+    return any(isinstance(topic.get("content_ref"), str) and topic["content_ref"] for topic in waiting)
+
+
 def start(version: str) -> dict[str, Any]:
     app = _runtime_app()
     parsed = releases.version_parts(version)
@@ -352,6 +370,8 @@ def start(version: str) -> dict[str, Any]:
             raise WebUpdateError("releases.no_python")
         if parsed < RECEIPTS_SINCE and _receipt_pending():
             raise WebUpdateError("releases.receipt_pending")
+        if parsed < CONTENT_REF_SINCE and _content_ref_pending():
+            raise WebUpdateError("releases.content_ref_pending")
         _prune_job_folders(str(old.get("id") or ""))
         # Archive creation is serialized with store writes and verified by export_bundle.
         try:

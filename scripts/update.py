@@ -133,6 +133,10 @@ STATE_FORMAT_SINCE = {1: "v1.18.0", 2: "v1.23.0"}
 # The first version that knows a torrent client's file check (a topic's ``verification_pending``):
 # an older one takes such a topic for done, never applies its file choice and never starts it.
 RECEIPTS_SINCE = (1, 30, 5)
+# The first version that reads a prepared torrent's id as ``content_ref`` (older ones read only
+# ``content_token``): an older one loses it for a topic waiting for its first add, fetches the
+# torrent again and can fall back to the page's magnet link.
+CONTENT_REF_SINCE = (1, 32, 0)
 # The Windows bundle's start files in <TOW> (scripts/root_files.py writes them).
 ROOT_FILE_NAMES = ("Start TOW.cmd", "Stop TOW.cmd", "Update TOW.cmd")
 TEST_CUT_EXIT = 97
@@ -203,6 +207,11 @@ TEXTS = {
         "{ref} does not know that a torrent client is still checking the files of {topics}: it would never"
         " apply their file choice nor start them. Let the client finish checking (Home shows these topics)"
         " and update then, or choose {since} or newer; nothing was updated"
+    ),
+    "content_ref_pending": (
+        "{ref} does not know the torrent prepared for {topics}, which wait for their first add: it would"
+        " fetch it again from the site. Let TOW add them first (or wait a minute after removing one) and"
+        " update then, or choose {since} or newer; nothing was updated"
     ),
     "data_unverified": (
         "this install's data/state.json cannot be read ({error}), so it is not known whether {ref} can read it;"
@@ -1853,29 +1862,76 @@ class Update:
                 raise UpdateError(self.text("data_newer_since", ref=self.ref, found=found, known=known, since=since))
             raise UpdateError(self.text("data_newer", ref=self.ref, found=found, known=known))
 
-    def refuse_pending_receipts(self, target: str) -> None:
-        """A target older than v1.30.5 is refused while a torrent client still checks a topic's files
-        (before TOW stops): that version would take the topic for done."""
+    def target_older_than(self, target: str, since: tuple[int, ...]) -> bool:
+        """The target's version is known and older than ``since``."""
         found = re.search(r'(?m)^version\s*=\s*"([^"]+)"', self.code.target_text(target, "pyproject.toml") or "")
         version = version_tuple(found[1]) if found else None
-        if version is None or version >= RECEIPTS_SINCE:
-            return
+        return version is not None and version < since
+
+    def state_for_refusal(self) -> dict[str, Any]:
+        """data/state.json as it is now ({} when there is none); unreadable: refused."""
         try:
             state = json.loads((self.root / "data" / "state.json").read_bytes().decode("utf-8"))
         except FileNotFoundError:
-            return
+            return {}
         except (OSError, ValueError, RecursionError) as exc:
             raise UpdateError(self.text("data_unverified", ref=self.ref, error=exc)) from exc
-        topics = state.get("topics") if isinstance(state, dict) else None
+        return state if isinstance(state, dict) else {}
+
+    def refuse_waiting(self, key: str, titles: list[str], since: tuple[int, ...]) -> None:
+        if titles:
+            shown = ", ".join(titles[:5]) + (f" (+{len(titles) - 5})" if len(titles) > 5 else "")
+            version = "v" + ".".join(str(part) for part in since)
+            raise UpdateError(self.text(key, ref=self.ref, topics=shown, since=version))
+
+    def refuse_pending_receipts(self, target: str) -> None:
+        """A target older than v1.30.5 is refused while a torrent client still checks a topic's files
+        (before TOW stops): that version would take the topic for done."""
+        if not self.target_older_than(target, RECEIPTS_SINCE):
+            return
+        topics = self.state_for_refusal().get("topics")
         waiting = [
             str(topic.get("title") or topic.get("id") or "?")
             for topic in (topics if isinstance(topics, list) else [])
             if isinstance(topic, dict) and topic.get("verification_pending")
         ]
-        if waiting:
-            since = "v" + ".".join(str(part) for part in RECEIPTS_SINCE)
-            shown = ", ".join(waiting[:5]) + (f" (+{len(waiting) - 5})" if len(waiting) > 5 else "")
-            raise UpdateError(self.text("receipt_pending", ref=self.ref, topics=shown, since=since))
+        self.refuse_waiting("receipt_pending", waiting, RECEIPTS_SINCE)
+
+    def undo_live(self, record: Mapping[str, Any]) -> bool:
+        """The "Undo" of ``record`` can still be pressed: younger than config.yaml's
+        ``flash_ttl_sec`` (tow.config.flash_ttl: 60 when absent or 0, within 15-3600). An expired
+        record stays in state.json until the next undoable action, and nothing brings it back."""
+        try:
+            stamped = datetime.fromisoformat(str(record.get("ts") or ""))
+        except ValueError:
+            return False
+        if stamped.tzinfo is None:
+            stamped = stamped.astimezone()  # naive means local time, as everywhere in TOW
+        ttl = 60
+        with contextlib.suppress(OSError, UnicodeError):
+            match = re.search(r"(?m)^flash_ttl_sec:\s*['\"]?(\d+)", (self.root / "config.yaml").read_text("utf-8"))
+            if match:
+                ttl = int(match[1]) or 60
+        return (datetime.now(timezone.utc) - stamped).total_seconds() < max(15, min(3600, ttl))
+
+    def refuse_pending_content_refs(self, target: str) -> None:
+        """A target older than v1.32.0 is refused while a topic prepared with the file picker
+        waits for its first add, also one an undo would bring back (before TOW stops): that
+        version reads the prepared torrent's id only under its old name ``content_token``."""
+        if not self.target_older_than(target, CONTENT_REF_SINCE):
+            return
+        state = self.state_for_refusal()
+        topics = state.get("topics")
+        candidates = [topic for topic in (topics if isinstance(topics, list) else []) if isinstance(topic, dict)]
+        undo = state.get("undo")
+        if isinstance(undo, dict) and isinstance(undo.get("item"), dict) and self.undo_live(undo):
+            candidates.append(undo["item"])
+        waiting = [
+            str(topic.get("title") or topic.get("id") or "?")
+            for topic in candidates
+            if isinstance(topic.get("content_ref"), str) and topic["content_ref"]
+        ]
+        self.refuse_waiting("content_ref_pending", waiting, CONTENT_REF_SINCE)
 
     def run(self) -> int:
         try:
@@ -1890,6 +1946,7 @@ class Update:
                 if target is not None:
                     self.refuse_unreadable_data(target)
                     self.refuse_pending_receipts(target)
+                    self.refuse_pending_content_refs(target)
             except BaseException:
                 code.discard()
                 raise

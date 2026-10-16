@@ -119,6 +119,29 @@ def test_going_below_1_30_5_while_a_client_checks_files_is_refused_before_the_re
     assert web_update.start("1.30.5")["ok"] is True  # a version that knows the check
 
 
+@pytest.mark.parametrize("where", ["topics", "undo"])
+def test_going_below_1_32_while_a_topic_waits_for_its_first_add_is_refused(install, monkeypatch, where):
+    """1.31.2 and older read a prepared torrent's id only under its old name: the topic (or the
+    undo of its deletion) would lose it, and the older check fetches the torrent again."""
+    monkeypatch.setattr(web_update, "__version__", "1.32.0")
+    monkeypatch.setattr(web_update, "create_restore_point", lambda: pytest.fail("no restore point for a refusal"))
+    from datetime import UTC, datetime
+
+    prepared = {"id": "a", "title": "Harbour Clock", "content_ref": "0" * 32}
+    if where == "topics":
+        save_state({"topics": [prepared]})
+    else:
+        now = datetime.now(UTC).isoformat(timespec="seconds")
+        save_state({"topics": [], "undo": {"kind": "topic", "ts": now, "item": prepared}})
+    with pytest.raises(web_update.WebUpdateError, match=r"releases\.content_ref_pending"):
+        web_update.start("1.31.2")
+    assert not install[1]
+
+    monkeypatch.setattr(web_update, "create_restore_point", lambda: {"id": "copy"})
+    monkeypatch.setattr(web_update, "__version__", "1.32.1")
+    assert web_update.start("1.32.0")["ok"] is True  # a version that reads the new name
+
+
 def test_backup_failure_never_launches_an_updater(install, monkeypatch):
     def failed():
         raise RestorePointError("synthetic backup failure")
