@@ -34,7 +34,7 @@ if defined TOW_LONG "%SystemRoot%\System32\reg.exe" query "HKLM\SYSTEM\CurrentCo
 if defined TOW_LONG echo The path of this folder is longer than 110 characters and Windows long paths are off: preparing TOW may fail. Move the folder to a shorter path such as C:\TOW, or turn long paths on (LongPathsEnabled; docs/PORTABLE.md, section 3).
 if not defined TOW_READY echo Preparing TOW in "%TOW_ROOT%" - the first time takes a minute or two...
 rem Files from a downloaded zip carry the "Mark of the Web", and Windows would ask about each one.
-if not defined TOW_READY powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-ChildItem -LiteralPath $env:TOW_HERE -Recurse -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue" >nul 2>&1
+if not defined TOW_READY "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-ChildItem -LiteralPath $env:TOW_HERE -Recurse -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue" >nul 2>&1
 if not defined TOW_READY set "UV_OFFLINE=1"
 if not defined TOW_READY call "%%~dp0tow-setup.cmd"
 if not defined TOW_READY if not errorlevel 1 set "TOW_READY=1"

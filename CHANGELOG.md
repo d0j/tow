@@ -156,6 +156,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - An update of an install without git on Windows no longer fails, and rolls back, because an antivirus or indexer
   held a file of the new code for a moment: each move of the switch, its record and its recovery is tried again
   for a short while.
+- An update no longer takes a TOW of another folder whose name starts the same (`/srv/tow-other` for
+  `/srv/tow`), or a TOW whose arguments merely name this folder, for its own, so it never stops another TOW. It
+  also finds this install's systemd or launchd autostart when the folder name has `%`, `$`, `&`, `<` or quotes,
+  and an install reached through a link or junction; BusyBox systems read leftovers from `/proc`.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password
