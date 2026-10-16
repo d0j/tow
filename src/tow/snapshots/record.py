@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from tow.backup_actions import added_names, cleanup_names, inventory_digest
+from tow.backup_actions import added_names, cleanup_names, inventory_digest, observed_in
 from tow.diagnostic_json import check_epochs, check_types, encode_object, read_object
 from tow.i18n import t
 from tow.log import log_event
@@ -40,6 +40,7 @@ def status() -> dict[str, Any]:
                 "last_error": str,
                 "last_snapshot": str,
                 "location": str,
+                "location_in_root": str,
                 "last_cleanup_pending": bool,
                 "last_bytes": int,
                 "last_missing": list,
@@ -109,7 +110,7 @@ def cleanup_status_in_lock(*, cfg: dict[str, Any] | None) -> dict[str, Any]:
             not isinstance(inventory, str) or re.fullmatch(r"[a-f0-9]{64}", inventory) is None
         ):
             raise ValueError("invalid cleanup inventory")
-        if state["location"] == result["location"]:
+        if observed_in(state, location, result["location"]):
             if "cleanup_inventory" not in state:
                 cleanup_names(location, bool)  # old metadata cannot hide a folder-access failure
                 result["legacy"] = True

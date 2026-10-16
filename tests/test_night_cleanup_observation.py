@@ -456,3 +456,107 @@ def test_settings_explain_pre_cleanup_metadata_without_claiming_inaccessible_fol
     assert t("backup.snapshot.cleanup_legacy", lang) in card
     assert t("backup.snapshot.cleanup_unknown", lang) not in card
     assert t("settings.backups.pill_unknown", lang) in card
+
+
+# --- a moved install (r1321 X3) ------------------------------------------------------------------
+
+
+@pytest.fixture
+def default_night(tmp_path, monkeypatch):
+    """The night copies in their default folder, backup/night inside the install (data/ beside it)."""
+    monkeypatch.setenv("TOW_HOME", str(tmp_path / "data"))
+    cfg = load_config()
+    cfg.update(language="en")
+    cfg.pop("backup_dir", None)
+    cfg.pop("heartbeat_url", None)
+    save_config(cfg)
+    save_secrets({})
+    save_state({"topics": [], "mirrors": {}, "health": {"auto_at_ts": NOW}})
+    return tmp_path / "backup" / "night"
+
+
+def _move_install(old: Path, tmp_path_factory, monkeypatch, *, keep_old: bool = False) -> Path:
+    """The documented move: the whole folder elsewhere, TOW started from there."""
+    new = tmp_path_factory.mktemp("moved") / "TOW"
+    shutil.copytree(old, new, symlinks=True)
+    if not keep_old:
+        shutil.rmtree(old / "backup")
+    monkeypatch.setenv("TOW_ROOT", str(new))
+    monkeypatch.setenv("TOW_HOME", str(new / "data"))
+    monkeypatch.setenv("TOW_CONFIG", str(new / "config.yaml"))
+    return new
+
+
+@pytest.mark.parametrize("keep_old", [False, True])
+def test_a_moved_or_copied_install_keeps_its_night_cleanup_result(
+    default_night, tmp_path, tmp_path_factory, monkeypatch, keep_old
+):
+    snapshots.create_snapshot()
+    assert snapshots.status()["location_in_root"] == "backup/night"
+    new = _move_install(tmp_path, tmp_path_factory, monkeypatch, keep_old=keep_old)
+    observed = snapshots.cleanup_status()
+    assert observed == {
+        "pending": False,
+        "read_error": False,
+        "legacy": False,
+        "location": str((new / "backup" / "night").resolve()),
+    }
+
+
+def test_a_record_from_before_the_move_binding_stays_unknown_after_a_move(
+    default_night, tmp_path, tmp_path_factory, monkeypatch
+):
+    # Written by 1.32.0 and older: an absolute location only. Nothing proves the folder it names
+    # is this one, so it stays unknown until the next night copy - as before.
+    snapshots.create_snapshot()
+    record = json.loads(snapshots.status_path().read_text(encoding="utf-8"))
+    record.pop("location_in_root")
+    snapshots.status_path().write_text(json.dumps(record), encoding="utf-8")
+    _move_install(tmp_path, tmp_path_factory, monkeypatch)
+    observed = snapshots.cleanup_status()
+    assert observed["pending"] is None
+    assert observed["read_error"] is False
+    snapshots.create_snapshot()  # the next copy binds again
+    assert snapshots.cleanup_status()["pending"] is False
+
+
+def test_the_install_binding_never_reaches_another_folder(default_night, tmp_path):
+    snapshots.create_snapshot()
+    cfg = load_config()
+    cfg["backup_dir"] = str(tmp_path / "backup" / "other")  # another folder of the same install
+    save_config(cfg)
+    (tmp_path / "backup" / "other").mkdir()
+    assert snapshots.cleanup_status()["pending"] is None
+    cfg["backup_dir"] = str(tmp_path.parent / f"{tmp_path.name}-outside")  # outside the install
+    save_config(cfg)
+    assert snapshots.cleanup_status()["pending"] is None
+
+
+@pytest.mark.parametrize("value", [1, ["backup/night"], True])
+def test_a_damaged_install_binding_is_read_only_unknown(default_night, value):
+    snapshots.create_snapshot()
+    record = json.loads(snapshots.status_path().read_text(encoding="utf-8"))
+    record["location_in_root"] = value
+    snapshots.status_path().write_text(json.dumps(record), encoding="utf-8")
+    observed = snapshots.cleanup_status()
+    assert observed["pending"] is None
+    assert observed["read_error"] is True
+
+
+def test_a_folder_outside_the_install_is_bound_by_its_full_path_only(night):
+    snapshots.create_snapshot()
+    assert snapshots.status()["location_in_root"] is None
+    assert snapshots.cleanup_status()["pending"] is False
+
+
+def test_deleting_a_copy_rebinds_with_the_install_binding(default_night, tmp_path, tmp_path_factory, monkeypatch):
+    first = Path(snapshots.create_snapshot()["snapshot"])
+    snapshots.create_snapshot()
+    record = json.loads(snapshots.status_path().read_text(encoding="utf-8"))
+    record.pop("location_in_root")  # as 1.32.0 wrote it
+    snapshots.status_path().write_text(json.dumps(record), encoding="utf-8")
+    view = night_create.snapshot_delete_view(first.name)
+    night_create.delete_snapshot(first.name, view["revision"])
+    assert snapshots.status()["location_in_root"] == "backup/night"
+    _move_install(tmp_path, tmp_path_factory, monkeypatch)
+    assert snapshots.cleanup_status()["pending"] is False

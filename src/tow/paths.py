@@ -233,6 +233,16 @@ def _subdir(name: str) -> Path:
     return p
 
 
+def in_root(path: Path) -> str | None:
+    """``path`` as a folder of the install (``backup/night``, ``/`` separators) when it lies
+    inside the install root, else None (also when either cannot be resolved). Both are
+    resolved: it names the same folder after the documented move or copy of the install."""
+    try:
+        return path.resolve().relative_to(root().resolve()).as_posix()
+    except OSError, RuntimeError, ValueError:
+        return None
+
+
 def tmp_dir(*, create: bool = True) -> Path:
     """``<data>/tmp``: TOW's temporary files (never the system temp folder)."""
     if not create:

@@ -478,3 +478,63 @@ def test_legacy_metadata_cannot_hide_an_inaccessible_folder(tmp_path, monkeypatc
     assert result["legacy"] is False
     assert _check(sent)["restore_point_cleanup_read_error"] is True
     assert sent == [t("watchdog.alert.point_cleanup_unreadable", "en")]
+
+
+# --- a moved install (r1321 X3) ------------------------------------------------------------------
+
+
+def _move_install(old: Path, tmp_path_factory, monkeypatch) -> Path:
+    import shutil
+
+    new = tmp_path_factory.mktemp("moved") / "TOW"
+    shutil.copytree(old, new, symlinks=True)
+    shutil.rmtree(old / "restore-points")
+    monkeypatch.setenv("TOW_ROOT", str(new))
+    monkeypatch.setenv("TOW_HOME", str(new))
+    monkeypatch.setenv("TOW_CONFIG", str(new / "config.yaml"))
+    return new
+
+
+@pytest.mark.parametrize("pending", [True, False])
+def test_a_moved_install_keeps_its_restore_point_cleanup_result(tmp_path, tmp_path_factory, monkeypatch, pending):
+    _seed()
+    folder = restore_points.restore_points_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    restore_points._record_cleanup(pending, folder)
+    record = json.loads((tmp_path / "restore-point-status.json").read_text(encoding="utf-8"))
+    assert record["location_in_root"] == "restore-points"
+    new = _move_install(tmp_path, tmp_path_factory, monkeypatch)
+    observed = restore_points.cleanup_status()
+    assert observed["pending"] is pending
+    assert observed["read_error"] is False
+    assert observed["location"] == str((new / "restore-points").resolve())
+
+
+def test_an_old_restore_point_record_stays_unknown_after_a_move(tmp_path, tmp_path_factory, monkeypatch):
+    _seed()
+    folder = restore_points.restore_points_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    restore_points._record_cleanup(False, folder)
+    path = tmp_path / "restore-point-status.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record.pop("location_in_root")  # as 1.32.0 wrote it
+    path.write_text(json.dumps(record), encoding="utf-8")
+    _move_install(tmp_path, tmp_path_factory, monkeypatch)
+    observed = restore_points.cleanup_status()
+    assert observed["pending"] is None
+    assert observed["read_error"] is False
+
+
+@pytest.mark.parametrize("value", [1, ["restore-points"], False])
+def test_a_damaged_restore_point_binding_is_unknown(tmp_path, value):
+    _seed()
+    folder = restore_points.restore_points_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    restore_points._record_cleanup(False, folder)
+    path = tmp_path / "restore-point-status.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["location_in_root"] = value
+    path.write_text(json.dumps(record), encoding="utf-8")
+    observed = restore_points.cleanup_status()
+    assert observed["pending"] is None
+    assert observed["read_error"] is True

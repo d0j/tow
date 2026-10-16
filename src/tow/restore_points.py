@@ -8,7 +8,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from tow.backup_actions import KEPT_SETTINGS, added_names, cleanup_names, copy_revision, inventory_digest
+from tow.backup_actions import (
+    KEPT_SETTINGS,
+    added_names,
+    cleanup_names,
+    copy_revision,
+    inventory_digest,
+    observed_in,
+)
 from tow.bundle import (
     MAX_BUNDLE_BYTES,
     ExportImportError,
@@ -21,7 +28,7 @@ from tow.config import load_config
 from tow.diagnostic_json import encode_object, read_object
 from tow.i18n import t
 from tow.log import log_event, owner_language
-from tow.paths import data_dir
+from tow.paths import data_dir, in_root
 from tow.platform import child_path, is_link_like, is_plain_file
 from tow.store import SecretStoreError, atomic_write_text, derive_local_secret, persistence_lock
 
@@ -123,7 +130,7 @@ def cleanup_status(*, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
             not isinstance(state["inventory"], str) or re.fullmatch(r"[a-f0-9]{64}", state["inventory"]) is None
         ):
             raise ValueError("invalid cleanup inventory")
-        if state["location"] == result["location"]:
+        if observed_in(state, location, result["location"]):
             if "inventory" not in state:
                 _point_names(location)  # legacy format cannot hide a real folder-access failure
                 result["legacy"] = True
@@ -151,6 +158,7 @@ def _record_cleanup(pending: bool, location: Path) -> None:
                 {
                     "cleanup_pending": pending,
                     "location": str(location.resolve()),
+                    "location_in_root": in_root(location),  # survives a move of the install
                     "inventory": inventory_digest(names),
                     "names": names,
                 }
