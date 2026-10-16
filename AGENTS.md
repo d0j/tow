@@ -65,7 +65,16 @@ tracker degradation from a client or TOW failure before changing state.
   password, token or key field is the same on every screen (Login and Setup too): standard size (a webhook, a link,
   long), `<span class="secret">`, the field, then its eye (`reveal`); a stored one gets `saved_hint` in its label,
   the placeholder `web.secret.keep_placeholder`, and one `keep_note` per form.
-- `tests/test_ui_standard.py` enforces this; a new screen is also measured in a real browser before release.
+- **One spacing scale**, the tokens `--sp-1`…`--sp-5` in `app.css` (3, 6, 9, 12, 18 px): 3 attaches (label →
+  field, field → hint, heading → its subtitle, list item → item), 6 relates (text parts, a group's buttons, a
+  disclosure's content under its summary, sections, icon ↔ text), 9 groups (form groups, the buttons under the
+  last field, a box's block padding, a nested box's inline padding), 12 separates blocks (a top-level box's
+  inline padding, fields in a row, columns, a new heading, the phone gutter `--gutter`), 18 is the text after a
+  chevron or a list marker. A container spaces its children by one gap (`.stack-N`, `.form-grid`, `.card-body`,
+  `.details-body`…) and the children carry no margins; any other value is a named exception with its reason in
+  `tests/test_ui_spacing.py`.
+- `tests/test_ui_standard.py` and `tests/test_ui_spacing.py` enforce this; a new screen is also measured in a
+  real browser before release.
 - Settings spans the page on a desktop (its forms keep their own width); the page that deletes a backup copy
   is as wide. Its cards follow one pattern: a status pill (only when it says something
   the section does not), fields, then the buttons; "How to connect" steps sit above the fields and are open while the
