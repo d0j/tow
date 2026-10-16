@@ -97,11 +97,23 @@ function Find-BasePython {
 # would read it in the console's old code page and garble every non-English letter and the ellipsis.
 $encoding = [Console]::OutputEncoding
 try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch { }
+# Python settings of the whole account would give the base Python another home or modules, and a
+# PYTHONHOME that does not fit stops every Python tried here before update.py runs (as the
+# launchers, app\scripts\tow-env.cmd). A PowerShell session that ran this script gets them back.
+$pythonSettings = @{}
+foreach ($name in @('PYTHONHOME', 'PYTHONPATH', 'UV_PYTHON')) {
+    # Removed, not set to "" ([Environment] with $null passes "", which PowerShell 7 keeps).
+    if (Test-Path -LiteralPath "Env:$name") {
+        $pythonSettings[$name] = (Get-Item -LiteralPath "Env:$name").Value
+        Remove-Item -LiteralPath "Env:$name"
+    }
+}
 try {
     $python = Find-BasePython
     & $python (Join-Path $PSScriptRoot 'update.py') --ref $Ref --health-timeout $HealthTimeoutSec --wait-minutes $CheckWaitMinutes --keep $KeepSnapshots
     $code = $LASTEXITCODE
 } finally {
+    foreach ($name in @($pythonSettings.Keys)) { Set-Item -LiteralPath "Env:$name" -Value $pythonSettings[$name] }
     try { [Console]::OutputEncoding = $encoding } catch { }
 }
 exit $code

@@ -179,6 +179,51 @@ def test_an_update_file_written_again_while_it_runs_ends_cleanly(tmp_path):
                 os.rmdir(link)  # the junction only, never the Python it points to
 
 
+@pytest.mark.allow_system  # cmd.exe runs the zip's "Update TOW.cmd" with a real base Python, update.py a probe
+@pytest.mark.skipif(sys.platform != "win32", reason="cmd.exe")
+def test_update_runs_its_python_without_the_accounts_python_settings(tmp_path):
+    # Final review of 1.32.1: Start cleared PYTHONHOME and PYTHONPATH, "Update TOW.cmd" did not,
+    # and an account-wide PYTHONHOME that does not fit stopped its Python before update.py ran.
+    import subprocess
+
+    root = tmp_path / "my TOW (1) & co"
+    python = root / "runtime" / "python"
+    python.mkdir(parents=True)
+    base = Path(sys.base_prefix)
+    link = python / base.name
+    subprocess.run(["cmd.exe", "/d", "/c", "mklink", "/J", str(link), str(base)], check=True, capture_output=True)
+    try:
+        (root / "app" / ".venv").mkdir(parents=True)
+        (root / "app" / ".venv" / "pyvenv.cfg").write_text(f"home = {base}\n", encoding="utf-8")
+        (root / "app" / "scripts").mkdir(parents=True)
+        (root / "app" / "scripts" / "update.py").write_text(
+            "import os, sys\n"
+            "print('seen:' + repr([os.environ.get(n) for n in ('PYTHONHOME', 'PYTHONPATH', 'UV_PYTHON')]))\n"
+            "sys.exit(7)\n",
+            encoding="utf-8",
+        )
+        script = root / "Update TOW.cmd"
+        script.write_bytes(bundle._ROOT.rendered()["Update TOW.cmd"])
+        env = dict(os.environ)
+        env.update(PYTHONHOME=str(tmp_path / "no-python"), PYTHONPATH=str(tmp_path / "lib"), UV_PYTHON="3.12")
+
+        done = subprocess.run(
+            f'cmd.exe /d /s /c ""{script}" v1.32.1"',
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            env=env,
+            timeout=120,
+            check=False,
+        )
+
+        output = (done.stdout + done.stderr).decode("mbcs", "replace")
+        assert done.returncode == 7, output  # update.py ran, and its exit code came through
+        assert "seen:[None, None, None]" in output, output
+    finally:
+        if link.exists():
+            os.rmdir(link)  # the junction only, never the Python it points to
+
+
 def test_start_files_written_again_settle_and_stay_small(tmp_path):
     # A real update wrote "Update TOW.cmd" again at every run, with a longer padding line each time.
     from test_update_archive import UPDATE_CMD_1_22_0

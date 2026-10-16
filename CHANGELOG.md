@@ -164,9 +164,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   there. Before, setup failed deep inside, blamed "the packages" and went to the internet. A failed setup without
   the internet no longer blames the packages, and the installer no longer needs room for a staging folder.
 - Setting up or updating TOW, or running a TOW command before the first setup, no longer leaves uv's lock files in the
-  system's temporary folder: uv keeps them in the install's `runtime/uv-tmp`. Account-wide `UV_PYTHON`, `PYTHONHOME` and
-  `PYTHONPATH` no longer reach an
-  install's Python or its setup (a development checkout keeps them).
+  system's temporary folder: uv keeps them in the install's `runtime/uv-tmp`. Account-wide `UV_PYTHON`,
+  `PYTHONHOME` and `PYTHONPATH` no longer reach an install's Python or its setup (a development checkout keeps
+  them), nor the Python that "Update TOW.cmd" and `scripts/deploy.ps1` run the update with: a `PYTHONHOME` that
+  does not fit no longer stops the update before it begins.
 - An update of an install without git no longer unpacks TOW's tests (paths up to 140 characters), so it works in
   any folder the installers allow on Windows without long paths. Its code is no longer writable by the group on
   Linux and macOS, and an archive with two names a Windows or macOS folder cannot tell apart is refused.
