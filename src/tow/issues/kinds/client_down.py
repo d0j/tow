@@ -7,8 +7,7 @@ from __future__ import annotations
 from tow.clients import factory
 from tow.issues import clients
 from tow.issues.model import Fix, Issue, Message, Snapshot, Target
-from tow.log import error_class
-from tow.status import error_tone
+from tow.status import error_tone, topic_error_class
 
 KIND = "client_down"
 ORDER = 40
@@ -30,8 +29,7 @@ def collect(snapshot: Snapshot) -> list[Issue]:
             and topic.get("last_error")
             and not topic.get("paused")
             and str(topic.get("client_id") or default) == client
-            and (topic.get("last_error_class") or error_class(str(topic["last_error"]), topic.get("last_error_code")))
-            == "qbit"
+            and topic_error_class(topic) == "qbit"
         )
         # With several clients each entry names its own ("Transmission (tr) does not answer").
         message = (
