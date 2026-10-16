@@ -372,7 +372,7 @@ def test_site_name_field_says_its_rule_before_the_browser_refuses_it(client):
 def test_a_phones_site_list_gets_the_free_room_and_fades_before_the_client():
     """QA 1.24.1 at 390 px: the site names got a third of the row, were cut off mid-name and ran
     into "qBittorrent" (two thirds of the row for one name and a bell)."""
-    phone = CSS[CSS.index("@media (max-width: 720px) {\n  .row-two") :]
+    phone = CSS[CSS.index("@media (max-width: 720px) {\n  /* F3") :]
     mobile = _rules(phone.partition("\n}\n")[0].partition("{")[2])
     assert "minmax(0, 1fr) minmax(0, max-content) auto" in mobile["header.app"]
     sites = mobile[".hdr-sites"]
