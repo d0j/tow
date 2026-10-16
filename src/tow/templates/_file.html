@@ -1,0 +1,19 @@
+{#- A file field in the page's language (B2): the browser's own one says "Choose File / No file
+    chosen" in the browser's language and its own size.
+
+      <label for="X">TOW file</label>
+      {{ file_input('X', 'backup_file', accept='.towx', required=true) }}
+      <button type="submit" data-needs-file>Check</button>
+
+    Without a script the browser's field shows as it is (the proxy is hidden). app.js marks the
+    wrapper ready: the field is then hidden but still takes the focus (the button-like label shows
+    it), its file's name is written beside it, and buttons with ``data-needs-file`` wait for a
+    file. Other keyword arguments become the field's attributes (``data_content_upload=true`` →
+    ``data-content-upload``). -#}
+{% macro file_input(field_id, name='', accept='', required=false) -%}
+<span class="file-pick" data-file-pick><input type="file" id="{{ field_id }}" class="file-native"
+  {%- if name %} name="{{ name }}"{% endif %}{% if accept %} accept="{{ accept }}"{% endif %}{% if required %} required{% endif %}
+  {%- for key, value in kwargs.items() %}{% if value is sameas true %} {{ key|replace('_', '-') }}{% elif value is not sameas false and value is not none %} {{ key|replace('_', '-') }}="{{ value }}"{% endif %}{% endfor %}>
+<label for="{{ field_id }}" class="btn ghost file-button" aria-hidden="true">{{ t('web.file.choose') }}</label>
+<span class="file-name" data-file-name>{{ t('web.file.none') }}</span></span>
+{%- endmacro %}

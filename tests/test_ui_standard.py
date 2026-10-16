@@ -317,3 +317,37 @@ def test_a_grey_pill_shows_as_a_pill_on_a_client_card():
     """1.32 QA N4: "Main" was a --panel2 pill on a --panel2 card: plain bold text."""
     assert "background: var(--panel2)" in _first(".integration-card")
     assert _first(".integration-card .pill.mut").strip() == "background: var(--panel);"
+
+
+def _render(source: str, lang: str = "ru") -> str:
+    from tow import i18n
+    from tow.web import app as _app  # noqa: F401 - configures the templates' globals
+    from tow.web.templating import TEMPLATES
+
+    i18n.use(lang)
+    try:
+        return TEMPLATES.env.from_string(source).render()
+    finally:
+        i18n.use("en")
+
+
+def test_a_file_field_is_in_the_pages_language_and_works_without_a_script():
+    """1.32.1 (B2): the browser's "Choose File / No file chosen" (its own language, 12.5 px) is a
+    button-like label and the file's name in the page's words; without a script the browser's field
+    shows (the proxy is hidden until app.js marks it ready) and keeps the keyboard's focus."""
+    page = _render(
+        '{% from "_file.html" import file_input %}'
+        '{{ file_input("f", "backup_file", accept=".towx", required=true, data_content_upload=true, title=false) }}'
+    )
+    field = '<input type="file" id="f" class="file-native" name="backup_file" accept=".towx" required '
+    field += "data-content-upload>"
+    assert field in page
+    assert '<label for="f" class="btn ghost file-button" aria-hidden="true">Выбрать файл</label>' in page
+    assert '<span class="file-name" data-file-name>Файл не выбран</span>' in page
+    assert "title" not in page
+    assert "display: none" in _first(".file-pick > .file-button, .file-pick > .file-name")
+    hidden = _first(".file-pick[data-ready] > .file-native")
+    assert "opacity: 0" in hidden
+    assert "display: none" not in hidden  # still focusable
+    focus = ".file-pick[data-ready]:has(> .file-native:focus-visible) > .file-button"
+    assert "outline: 2px solid var(--acc)" in _first(focus)

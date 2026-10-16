@@ -284,6 +284,15 @@ def test_a_question_is_asked_in_the_pages_own_dialog():
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_a_file_field_speaks_the_pages_language():
+    """1.32.1 (B2): "Choose a file" and the chosen file's name in the page's words; the buttons
+    that need a file wait for one only once the script runs."""
+    verdict = _verdict("file_chooser.mjs")
+    assert verdict == dict.fromkeys(("waitsForAFile", "showsTheName", "resetPutsWordsBack", "scriptSync"), True)
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_the_updates_card_writes_its_times_by_the_one_rule():
     verdict = _verdict("update_times.mjs")
     assert verdict == {"timesByTheOneRule": True, "olderServerKeepsItsLabel": True}

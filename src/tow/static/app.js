@@ -1777,6 +1777,50 @@ document.addEventListener("change", (event) => {
 document.addEventListener("reset", () => setTimeout(syncEnabledGroups, 0));
 syncEnabledGroups();
 
+// B2: a file field in the page's language (_file.html, data-file-pick). Once this runs, the
+// browser's own field is hidden but keeps the focus (its button-like label shows it), the chosen
+// file's name is written beside it as text, and the buttons that need a file (data-needs-file, in
+// its form or naming it with form=) wait for one. Without a script the browser's field is shown and
+// those buttons stay enabled. ``towFiles.sync(field)`` after a script emptied a field itself.
+const towFiles = (() => {
+  const needing = (form) => [...(form.elements || form.querySelectorAll("[data-needs-file]"))]
+    .filter((control) => control.hasAttribute?.("data-needs-file"));
+  const chosen = (form) => [...form.querySelectorAll('input[type="file"]')].some((field) => field.files?.length);
+  const sync = (field) => {
+    const name = field?.closest?.("[data-file-pick]")?.querySelector("[data-file-name]");
+    if (name) {
+      if (name.dataset.none === undefined) name.dataset.none = name.textContent;
+      const file = field.files?.[0];
+      name.textContent = file ? file.name : name.dataset.none;
+      name.classList.toggle("chosen", Boolean(file));
+    }
+    const form = field?.form;
+    if (form) {
+      const ready = chosen(form);
+      needing(form).forEach((button) => { button.disabled = !ready; });
+    }
+  };
+  const prepare = (root = document) => {
+    const picks = [...(root.matches?.("[data-file-pick]") ? [root] : []), ...root.querySelectorAll("[data-file-pick]")];
+    picks.forEach((pick) => {
+      const field = pick.querySelector('input[type="file"]');
+      if (!field) return;
+      pick.setAttribute("data-ready", "");
+      sync(field);
+    });
+  };
+  document.addEventListener("change", (event) => {
+    if (event.target?.closest?.("[data-file-pick]") && event.target.type === "file") sync(event.target);
+  });
+  // A reset (Cancel) empties the field after its event: the name and the buttons follow then.
+  document.addEventListener("reset", (event) => setTimeout(() => {
+    event.target?.querySelectorAll?.("[data-file-pick] input[type=\"file\"]").forEach(sync);
+  }, 0));
+  prepare();
+  return { sync, prepare };
+})();
+window.towFiles = towFiles;
+
 // Editable recent folders: the arrow shows every recent path, even when the input is filled.
 // Keep native text editing; a highlighted suggestion changes the value only when accepted.
 let openFolders = null;
@@ -1899,6 +1943,7 @@ const loadEditPanel = async (details) => {
     slot.replaceWith(panel);
     initSaveFolders(panel);
     towTime.prepare(panel);
+    towFiles.prepare(panel);
   } catch (error) {
     // Opening the row again tries again; the message offers the panel as a page of its own.
     delete slot.dataset.loading;
