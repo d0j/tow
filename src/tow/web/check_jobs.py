@@ -8,7 +8,9 @@ re-add; a missing job is explicitly reported as unconfirmed.
 
 from __future__ import annotations
 
+import contextvars
 import copy
+import logging
 import threading
 import time
 import uuid
@@ -16,6 +18,7 @@ from collections import deque
 from collections.abc import Callable
 from typing import Any
 
+from tow import i18n
 from tow.store import CheckBusyError
 
 LOCK = threading.RLock()
@@ -30,9 +33,15 @@ ACTIONS: dict[str, str] = {}
 # ``follow_up(result, error)`` gets the check's result or the error that ended it and returns the
 # job's feedback (``views.check_feedback``'s shape), or None to keep the check's own words. A
 # follow-up that replaces another one of a waiting job is first handed it (``succeeds(earlier)``,
-# when it has that method): a second sign-in keeps the first one's password to put back.
+# when it has that method): a second sign-in keeps the first one's password to put back. A
+# follow-up whose check never runs (cancelled, never given the check lock, its job not made) is
+# handed that (``dropped()``, when it has that method): a sign-in puts back the password it saved
+# unchecked, and its words become the job's.
 type FollowUp = Callable[[dict[str, Any] | None, BaseException | None], dict[str, str] | None]
 FOLLOW_UPS: dict[str, FollowUp] = {}
+# Sign-ins saved but not checked yet, by site, oldest first (``routes_topic_login``): a later one
+# puts back what was saved before the first, also when the first one's check already runs.
+UNCHECKED: dict[str, list[Any]] = {}
 # The consumer of each lane, by the lane's ``apply``.
 _WORKERS: dict[bool, threading.Thread] = {}
 MAX_PENDING = 32  # per lane
@@ -66,7 +75,38 @@ def submit(
     one FIFO consumer per lane. The returned job carries its ``position`` in its lane (1: next or
     running); ``subject`` is what its message names (the topic, as it was when asked for);
     ``action``: the page's id of the click (one already registered is the same check again);
-    ``follow_up``: what the caller does with the result (``FOLLOW_UPS``; the latest click's wins)."""
+    ``follow_up``: what the caller does with the result (``FOLLOW_UPS``; the latest click's wins).
+    No job made (a full lane, or no consumer): the follow-up is dropped (``_drop``)."""
+    try:
+        job, added = _submit(
+            topic_id=topic_id,
+            apply=apply,
+            lang=lang,
+            perform=perform,
+            adopted=adopted,
+            subject=subject,
+            action=action,
+            follow_up=follow_up,
+        )
+    except RuntimeError:
+        _drop(follow_up, lang)
+        raise
+    if job is None:
+        _drop(follow_up, lang)
+    return job, added
+
+
+def _submit(
+    *,
+    topic_id: str,
+    apply: bool,
+    lang: str,
+    perform: Callable[[dict[str, Any]], None],
+    adopted: bool,
+    subject: str,
+    action: str,
+    follow_up: FollowUp | None,
+) -> tuple[dict[str, Any] | None, bool]:
     with LOCK:
         now = time.monotonic()
         for key, job in list(JOBS.items()):
@@ -190,7 +230,7 @@ def _waited_too_long(job: dict[str, Any]) -> bool:
         started = job.setdefault("wait_started", now)
         job.setdefault("waiting_since", time.time())
         if now - started >= LOCK_WAIT_SEC:
-            job.update(status="failed", lock_timeout=True)
+            job["lock_timeout"] = True  # failed by _finish, once its follow-up has said its words
             return True
         job["status"] = "queued"
         return False
@@ -207,9 +247,39 @@ def take_follow_up(job_id: str) -> FollowUp | None:
         return FOLLOW_UPS.pop(job_id, None)
 
 
+def _drop(follow_up: FollowUp | None, lang: str) -> dict[str, str] | None:
+    """A follow-up whose check never ran, handed that (``dropped()``, when it has that method):
+    its words for the job (in the job's language ``lang``, as its check would have said them),
+    or None. Called without LOCK held: a sign-in writes the stores."""
+    dropped = getattr(follow_up, "dropped", None)
+    if not callable(dropped):
+        return None
+
+    def in_its_language() -> Any:
+        i18n.use(lang)
+        return dropped()
+
+    try:
+        words = contextvars.copy_context().run(in_its_language)
+    except Exception as exc:  # noqa: BLE001 - the job ends all the same; what failed is logged
+        logging.getLogger("tow.web").warning("a dropped check's follow-up failed: %s", type(exc).__name__)
+        return None
+    return words if isinstance(words, dict) and words.get("text") else None
+
+
+def _said(job: dict[str, Any], words: dict[str, str] | None) -> None:
+    """A dropped follow-up's words as the job's own (the caller holds LOCK)."""
+    if words is not None:
+        job["flash"] = words["text"]
+        job.update(kind=words.get("kind") or "warn", feedback=words)
+
+
 def _finish(job: dict[str, Any]) -> None:
     with LOCK:
-        FOLLOW_UPS.pop(job["id"], None)  # a job that ended without its check keeps no password
+        follow_up = FOLLOW_UPS.pop(job["id"], None)  # a job that ended without its check keeps no password
+    words = _drop(follow_up, str(job.get("lang") or ""))
+    with LOCK:
+        _said(job, words)
         if job["status"] not in {"done", "failed"}:
             job["status"] = "failed"
         # finished_at times the record's hour; the result page is dated by ended_at.
@@ -253,6 +323,9 @@ def cancel(job_id: str) -> bool:
         if job is None or job["status"] != "queued":
             return False
         PENDING.remove(job_id)
-        FOLLOW_UPS.pop(job_id, None)
+        follow_up = FOLLOW_UPS.pop(job_id, None)
         job.update(status="failed", finished_at=time.monotonic(), ended_at=time.time(), cancelled=True)
-        return True
+    words = _drop(follow_up, str(job.get("lang") or ""))
+    with LOCK:
+        _said(job, words)
+    return True

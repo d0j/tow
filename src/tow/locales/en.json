@@ -2496,6 +2496,7 @@
       "site_gone": "the site is already deleted",
       "login_not_saved": "sign-in not saved: saved passwords and tokens cannot be opened — see Settings",
       "login_blocked": "sign-in not confirmed: the check is blocked",
+      "login_not_checked": "sign-in to {site} not checked: its check did not run, so the previous password is back; sign in again",
       "password_not_restored": "; the previous password was not restored: the data has already changed",
       "restore_failed": "sign-in to {site} not confirmed; could not restore the previous password",
       "delete_not_found": "topic not found; nothing deleted",
