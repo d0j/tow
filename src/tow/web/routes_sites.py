@@ -81,6 +81,14 @@ def sites(request: Request) -> Response:
             "quota": t("sites.mirror_quota"),
         }
         row["short_reason"] = labels.get(str(row.get("error") or ""), row["reason"])
+    # A site seen asking for a sign-in - a mirror's answer, or a topic's check (also when the
+    # saved details were refused). A sign-in path alone proves a form, not that guests are refused.
+    sign_in_needed = {str(row["tracker"]) for row in probes if row.get("error") == "auth"}
+    for topic in state.get("topics") or []:
+        if isinstance(topic, dict) and topic.get("last_error_class") == "tracker_auth":
+            site = _context.site_name(str(topic.get("url") or ""))
+            if site is not None:
+                sign_in_needed.add(str(site))
     frozen = {k: bool(v.get("frozen")) for k, v in (state.get("mirrors") or {}).items() if isinstance(v, dict)}
     active = {
         k: (v or {}).get("active")
@@ -110,6 +118,7 @@ def sites(request: Request) -> Response:
             "probes": probes,
             "active": active,
             "open_hosts": open_hosts,
+            "sign_in_needed": sign_in_needed,
             # A site's colour follows its latest check as well as its mirrors' probes.
             "site_tones": site_tones()[0],
             "logins": {

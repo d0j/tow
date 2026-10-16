@@ -118,7 +118,10 @@
             <span class="mirror"{% if p %} title="{{ p.reason }}"{% endif %}>{% if p %}<span class="dot {{ 'ok' if p.ok else 'warn' }}" aria-hidden="true"></span><span class="sr-only">{{ p.reason }}</span>{% endif %}{{ h.replace('https://','').replace('http://','') }}{% if p and not p.ok %} <span class="pill warn">{{ p.short_reason }}</span>{% endif %}{% if (active.get(name) or '').rstrip('/') == h.rstrip('/') %} <span class="pill ok">{{ t('sites.main') }}</span>{% endif %}</span>
           {%- endfor %}
         </span>
-        {% if spec.login_path %}{% if logins.get(name) and logins[name].set %}<span class="pill ok">{{ t('sites.login_set') }}</span>{% else %}<span class="pill mut">{{ t('sites.login_not_set') }}</span>{% endif %}{% else %}<span class="pill mut">{{ t('sites.login_not_needed') }}</span>{% endif %}
+        {#- The sign-in only when it says something (1.32.1): a warning once the site was seen asking
+            for it, a neutral note over saved details, nothing otherwise. -#}
+        {% if name in sign_in_needed %}<span class="pill warn">{{ t('sites.login_needed') }}</span>
+        {%- elif logins.get(name) and logins[name].set %}<span class="pill mut">{{ t('sites.login_set') }}</span>{% endif %}
         {% set href = open_hosts.get(name) or '' %}
         <span class="row-ops-slot" aria-hidden="true"></span>
       </summary>
