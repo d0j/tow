@@ -422,6 +422,7 @@ code, .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 details.row-edit.sites > summary > .pill { justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .section-title { margin: 0 0 .6rem; font-size: 1rem; }
 .help-page { max-width: 42rem; }
+.doctor-page p { max-width: 46rem; } /* Diagnostics' notes end where a form ends */
 .help-back { margin: 0 0 .7rem; }
 .help-title { font-size: 1.1rem; margin: 0 0 .6rem; }
 .help-page h2 { font-size: 1rem; margin: 1rem 0 .35rem; }
