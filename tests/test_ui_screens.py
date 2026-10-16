@@ -115,6 +115,38 @@ def test_a_refused_site_save_reopens_the_site_at_its_field(client, form, field, 
     assert row.select_one("details.advanced").has_attr("open") is advanced
 
 
+def test_a_refused_site_save_keeps_what_was_typed_but_the_password(client):
+    """The refused card showed the saved pattern, not the "(unclosed" typed: the owner could not
+    see or correct the mistake. It now comes back with what was typed - never the password - for
+    that card only, and not from a link someone made (the server's own record, ?edit=)."""
+    from urllib.parse import parse_qs, urlsplit
+
+    form = {
+        "fetch_hosts": "http://rutor.info\nhttp://rutor.is",
+        "url_regex": "(unclosed",
+        "topic_path": "/typed/{id}",
+        "username": "typed-user",
+        "password": "typed-secret",
+        "page_download": "1",
+    }
+    location = client.post("/sites/rutor", data=form, follow_redirects=False).headers["location"]
+    assert parse_qs(urlsplit(location).query)["field"] == ["url_regex"]
+    page = client.get(location).text
+    assert "typed-secret" not in page
+    row = BeautifulSoup(page, "html.parser").select_one("#site-row-rutor")
+    assert row.select_one("#site-url-rx-rutor")["value"] == "(unclosed"
+    assert row.select_one("#site-topic-path-rutor")["value"] == "/typed/{id}"
+    assert row.select_one("#site-user-rutor")["value"] == "typed-user"
+    assert row.select_one("#site-hosts-rutor").get_text() == "http://rutor.info\nhttp://rutor.is"
+    assert row.select_one("#site-page-dl-rutor").has_attr("checked")
+    assert row.select_one("#site-pass-rutor").get("value") is None
+    # Another card, or the same card without the server's record, shows what is saved.
+    saved = BeautifulSoup(client.get("/sites?open=rutor&field=url_regex&edit=made-up").text, "html.parser")
+    assert saved.select_one("#site-url-rx-rutor")["value"] != "(unclosed"
+    other = BeautifulSoup(client.get(location.replace("open=rutor", "open=kinozal")).text, "html.parser")
+    assert other.select_one("#site-url-rx-rutor")["value"] != "(unclosed"
+
+
 def test_the_site_card_starts_with_the_sign_in(client):
     """The user name and password were the last of nine fields; what a preset fills in now waits
     under Advanced, closed, and the mirrors stay in view."""

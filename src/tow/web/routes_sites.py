@@ -18,7 +18,7 @@ from tow.web.site_form import NewSite, SiteEdit
 from tow.web.site_store import with_login
 from tow.web.templating import TEMPLATES, site_tones
 from tow.web.text import t
-from tow.web.views import add_draft, issue_notes, site_title_of
+from tow.web.views import add_draft, issue_notes, site_edit_draft, site_title_of
 
 router = APIRouter()
 
@@ -128,6 +128,8 @@ def sites(request: Request) -> Response:
             "open_site": str(request.query_params.get("open") or ""),
             # The field a refused save of that site was about (site_actions._edit_refused).
             "edit_field": str(request.query_params.get("field") or ""),
+            # And what was typed in that card (never the password).
+            "edit_draft": site_edit_draft(request) or {},
             "notes": issue_notes(state, _context.config(), "sites"),
         },
     )

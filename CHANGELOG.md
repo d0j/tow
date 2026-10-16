@@ -68,7 +68,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A torrent client's error on Home names the client once (“qBittorrent: connection refused”, not “Torrent
   client: qBittorrent: …”), and a row never writes it as “QBittorrent”.
 - A refused save of a site's card opens the site again at the refused field, marked and focused, with
-  “Advanced” open when the field is there, instead of closing the list.
+  “Advanced” open when the field is there, instead of closing the list, and with what was typed (never the
+  password) instead of the saved values.
 - The example of the `.torrent` link pattern on Sites shows `download\.php\?id=(\d+)`; it showed doubled
   backslashes, and a copied example did not work.
 - A site's password field no longer says “keep as is” when no password is saved; a saved one says
