@@ -112,7 +112,7 @@
   <div class="sr-only" id="announce-alert" role="alert"></div>
 </main>
   {#- The version is the page's footer (a landmark, A12); still `body > .app-version` for the CSS. -#}
-  <footer class="app-version" data-page-version="{{ h.ver }}">
+  <footer class="app-version" data-page-version="{{ h.ver }}" data-static-version="{{ static_version }}">
     <a href="/settings?open=updates#acc-updates" title="{{ t('releases.current', version=h.ver) }}">TOW {{ h.ver }}</a>
     <a href="/settings?open=updates#acc-updates" class="release-badge" data-release-badge hidden></a>
   </footer>
@@ -128,6 +128,7 @@
 </dialog>
 <script type="application/json" id="tow-i18n">{{ js_texts()|tojson }}</script>
 <script type="application/json" id="tow-content-i18n">{{ content_texts()|tojson }}</script>
+<script src="/static/sync.js?v={{ static_version }}" defer></script>
 <script src="/static/messages.js?v={{ static_version }}" defer></script>
 <script src="/static/checks.js?v={{ static_version }}" defer></script>
 <script src="/static/app.js?v={{ static_version }}" defer></script>

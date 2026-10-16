@@ -349,8 +349,27 @@
     }
   };
   logPanel?.addEventListener("toggle", refreshLog);
-  refresh();
-  pollJob();
-  // Long-running dashboards discover releases too, not only after a reload.
-  window.setInterval(() => { if (!document.hidden) { refresh(); pollJob(); } }, 60 * 60 * 1000);
+  const synced = window.towSync;
+  if (synced?.on) {
+    // The page's poll (sync.js) brings the published release answer and the update job: the badge
+    // follows at once on every page; Settings asks for its fuller words again, and follows a job
+    // another tab or device started.
+    let lastJob = null;
+    let first = true;
+    synced.on("release", (data) => {
+      if (!status) render(data);
+      else if (!first) refresh();
+      first = false;
+      const job = JSON.stringify(data.job ?? null);
+      if (lastJob !== null && job !== lastJob) pollJob();
+      lastJob = job;
+    });
+    if (status) refresh();
+    pollJob();
+  } else {
+    refresh();
+    pollJob();
+    // Long-running dashboards discover releases too, not only after a reload.
+    window.setInterval(() => { if (!document.hidden) { refresh(); pollJob(); } }, 60 * 60 * 1000);
+  }
 })();

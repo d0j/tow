@@ -345,3 +345,96 @@ def test_one_broken_health_reader_cannot_stall_or_spin_other_readers():
     script = Path(__file__).parent / "js" / "health_poll_reader_failure.mjs"
     result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=30, check=True)
     assert all(json.loads(result.stdout.strip()).values())
+
+
+# One state on every open page (sync.js): the poll, Home's rows, the reloads, the page's readers.
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_the_sync_poll_keeps_its_schedule_backoff_hints_and_sign_out():
+    verdict = _verdict("sync_client.mjs")
+    keys = (
+        "randomPhaseThenEveryFive",
+        "hiddenAsksNothingShownAsksOnce",
+        "deltaHaveEtagAndNotModified",
+        "failedReaderRetried",
+        "backoffFiveToSixty",
+        "jitterBounded",
+        "retryAfterHonoured",
+        "tenSecondTimeout",
+        "oneInFlightOnePending",
+        "hintsCoalescedNeverThroughBackoff",
+        "unauthorizedEnds",
+        "lateAnswerRejected",
+    )
+    assert verdict == dict.fromkeys(keys, True)
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_home_rows_follow_the_topics_area_without_touching_rows_in_use():
+    verdict = _verdict("sync_rows.mjs")
+    keys = (
+        "insertRemoveRedraw",
+        "ringMissManifest",
+        "protectedRowsWaitWithNote",
+        "protectionCheckedBeforeApply",
+        "staleDiscardedFailedRetried",
+        "olderAnswerDiscarded",
+        "batchesBoundedAndDeferredAgain",
+        "emptyHomeTransitions",
+        "jobsRedrawRows",
+        "signedOutStops",
+    )
+    assert verdict == dict.fromkeys(keys, True)
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_a_page_reloads_for_a_new_language_or_version_only_when_idle_and_never_loops():
+    verdict = _verdict("sync_reload.mjs")
+    keys = (
+        "idleReloadsAfterDelay",
+        "announcedAtOnce",
+        "activityCancels",
+        "busyPageToldThenReloaded",
+        "noReloadLoop",
+        "noStorageNoticeOnly",
+        "droppedReasonClears",
+    )
+    assert verdict == dict.fromkeys(keys, True)
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_the_page_follows_header_jobs_undo_preferences_version_and_new_rows():
+    verdict = _verdict("sync_page.mjs")
+    keys = (
+        "headerPatchedTogether",
+        "jobsElsewhereShownAndCleaned",
+        "undoLiveAndRemoteEligibility",
+        "themeFollows",
+        "languageNoticeThenIdleReload",
+        "rowInsertedAnchorKept",
+        "focusKeptFieldProtects",
+        "versionDeferredAndCancelled",
+        "hintScopedWithoutData",
+        "signOutStopsPolling",
+    )
+    assert verdict == dict.fromkeys(keys, True)
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_the_home_list_tools_follow_rows_another_device_changed():
+    verdict = _verdict("list_refresh.mjs")
+    keys = (
+        "membershipOrderAndSearch",
+        "trackerChoiceAdded",
+        "toneCacheFollowsRedraw",
+        "filterKeepsProtectedRow",
+        "reorderWaitsForTheOwner",
+        "localSortKept",
+    )
+    assert verdict == dict.fromkeys(keys, True)

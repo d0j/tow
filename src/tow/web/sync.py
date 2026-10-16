@@ -373,6 +373,12 @@ def _row_hash(projection: Mapping[str, Any]) -> str:
     return hashlib.sha256(_canonical(projection)).hexdigest()[:REV_HEX]
 
 
+def row_hash(row: Mapping[str, Any], *, site_title: str, now: float | None = None) -> str:
+    """The digest of a Home row's stable projection: the topics area's ``rows`` value, and the
+    ``data-row-hash`` a page draws the row with (``templating.row_hash``)."""
+    return _row_hash(row_projection(row, site_title=site_title, day=_today(time.time() if now is None else now)))
+
+
 @dataclass
 class _Memo:
     key: Any
@@ -497,7 +503,7 @@ def _topics(sample: Sample, who: Viewer, now: float) -> Computed:
                     row_projection(row, site_title=site_title(row["tracker"]) if row.get("tracker") else "", day=day)
                 )
                 for row in rows
-            }
+            }  # = row_hash(row, ...) for each row, the day computed once
         order = [str(row["id"]) for row in rows]
         value = {"order": order, "rows": hashes}
         rev = revision("topics", value, {"lang": who.lang})
@@ -524,10 +530,12 @@ def _health(sample: Sample, who: Viewer, now: float) -> Computed:
 
     def build() -> Computed:
         from tow.issues.kinds.check_stale import STALE_SLACK_SEC
-        from tow.web.templating import header_health
+        from tow.web.templating import header_health, site_title
 
         with sample.seeded():
             health = header_health()
+            # The header names a site by its title: a site a new topic brings is drawn with it.
+            health["site_titles"] = {name: site_title(name) for name in health.get("sites") or {}}
         attention = health.pop("attention")
         health.pop("ver", None)  # the version area
         header_rev = revision("header", health, {"lang": who.lang})

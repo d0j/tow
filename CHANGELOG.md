@@ -12,6 +12,15 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   also from scheduled checks and commands - up to 50 messages of the last seven days, and reading or clearing it
   on one device does so on all. Each tab's own results stay under **This tab** and no longer count as unread; the
   old per-tab list is removed once, with a notice.
+- Every open page keeps itself up to date, in every tab and on every device: within about 5 seconds Home shows a
+  topic added, paused, renamed or removed elsewhere, a scheduled check's result and a check started in another tab,
+  and the header its sites, torrent client and messenger, without a reload. A row you are working in is never
+  replaced, moved or hidden by a filter: it says that it was changed or removed elsewhere and follows once you are
+  done. A hidden tab asks nothing and asks at once when shown again.
+- The Undo of the last change appears and goes in every tab and on every device at once, counting the time it
+  really has left; a device that may not undo it is not offered it. The theme follows a change made elsewhere
+  (Auto stays each device's own); another language or a new TOW version reloads an open page once nothing is being
+  typed or chosen, and a page in use says so instead.
 
 ### Fixed
 
