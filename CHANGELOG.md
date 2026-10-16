@@ -111,6 +111,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - On Windows with long paths off (the default), a downloaded file whose full path has 260 characters or more is no
   longer shown as missing, and waiting for disk space counts it as already there: TOW now looks at such files the
   way the torrent client writes them (`\?\C:\…`).
+- On Windows an update started in Settings is no longer recorded as failed because the update page was reading its
+  progress at the moment the next step was written: that write now waits a few seconds for the page.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password

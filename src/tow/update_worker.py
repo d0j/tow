@@ -90,6 +90,23 @@ def _read_job(path: Path) -> dict[str, Any]:
     return job
 
 
+# A reader of job.json (the update page) makes Windows refuse its replacement for a moment.
+_REPLACE_ATTEMPTS = 10
+
+
+def _replace_job(source: Path, target: Path) -> None:
+    """os.replace, waiting out a reader that has the target open (a Windows sharing violation):
+    20 ms ... 1 s, about 4.3 s in all (as tow.storage.atomic, which this copy cannot import)."""
+    for attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(min(0.02 * 2**attempt, 1.0))
+
+
 def write_job(path: Path, job: dict[str, Any]) -> None:
     _check_job(job)
     raw = json.dumps(job, allow_nan=False).encode("utf-8")
@@ -103,7 +120,7 @@ def write_job(path: Path, job: dict[str, Any]) -> None:
             handle.write(raw)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        _replace_job(temporary, path)
     finally:
         with contextlib.suppress(OSError):
             temporary.unlink()
