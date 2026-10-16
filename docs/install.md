@@ -28,13 +28,17 @@ installer are made for x64.
 2. Optional, saves one question later: right-click the zip → **Properties** → tick **Unblock** → **OK**.
 3. Right-click the zip → **Extract All…** → choose where it goes, for example `C:\` or your user folder →
    **Extract**. The zip holds a folder `TOW`, so you get `C:\TOW` (or `TOW` in your user folder) with
-   `Start TOW.cmd` inside.
+   `Start TOW.cmd` inside. Spaces and Cyrillic letters in the path are fine; keep the path of the `TOW` folder short
+   (at most 172 characters, 110 while Windows long paths are off; see
+   [If something goes wrong](#if-something-goes-wrong)).
 4. Double-click **Start TOW.cmd**.
    - Windows may say **"Windows protected your PC"**. Click **More info**, then **Run anyway**. It says this about
      every program that is not from the Microsoft Store and has no paid signature.
    - It may also ask **"Do you want to run this file?"** — click **Run**.
 5. A black window opens and says **"Preparing TOW…"**. The first start takes a minute or two and needs no internet.
-6. Your browser opens **<http://127.0.0.1:8787>**. That is TOW.
+6. Your browser opens **<http://127.0.0.1:8787>** at **Welcome to TOW**. To use TOW on this computer only, leave
+   **Open TOW from other devices** clear and press **Start**. Tick it to set the password for a phone or a laptop now
+   (or later in Settings → Network access); access from other devices works after TOW restarts.
 7. The black window shows where your **master key** is and waits: copy that file now (see
    [Back up the master key](#back-up-the-master-key)), then press any key. The window closes; TOW keeps running.
 
@@ -77,7 +81,7 @@ A Mac with Apple silicon (M1 or newer). Intel Macs work only with developer tool
    end it shows where the **master key** is — copy it (see [Back up the master key](#back-up-the-master-key)).
 3. Start TOW: in Finder choose **Go → Home**, open **TOW**, double-click **Start TOW.command**. A Terminal window
    opens, TOW starts, and the browser opens **<http://127.0.0.1:8787>**. You can close the Terminal window; TOW keeps
-   running.
+   running. The first page is the same as in [Windows step 6](#the-zip-file-easiest).
 
 To start TOW whenever you sign in, add `-s -- --autostart` to the line in step 2 (after `sh`), or later run
 `~/TOW/app/scripts/tow autostart on`.
@@ -98,7 +102,7 @@ Any 64-bit distribution (x86-64 or ARM, a Raspberry Pi with a 64-bit system too)
 
    It installs into `~/TOW` and shows where the **master key** is — copy it.
 3. Start TOW: `~/TOW/start-tow`. The browser opens **<http://127.0.0.1:8787>** (on a server without a screen it
-   prints the address instead).
+   prints the address instead). The first page is the same as in [Windows step 6](#the-zip-file-easiest).
 
 Options go after `sh -s --`, for example:
 
@@ -135,7 +139,7 @@ TOW/
   keys/master.key  the master key
   backup/          nightly backups, snapshots taken before updates
   app/             the program
-  runtime/         its Python and libraries
+  runtime/         its Python and libraries (and uv's temporary files, in runtime/uv-tmp)
 ```
 
 Move or copy the whole folder: the start file prepares it again in the new place. If TOW starts with the computer,

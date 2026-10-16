@@ -35,20 +35,25 @@ otherwise.
   `keys/` and `data/` 0700, the folder itself 0700 when every account may write in it), and warns, also in
   `tow doctor`, when it cannot. A folder another account owns (an install made from an administrator terminal)
   is never changed at start; `tow permissions fix`, run once as administrator, gives it to your account and closes
-  it. Night copies are signed; a modified copy is not restored.
+  it. Nightly backups are signed; a modified copy is not restored.
 - **Outbound requests.** Site addresses entered in the UI may not point at this computer or the home network;
   download redirects may not leave the site's configured hosts.
   Automatic new-site previews always use a fresh public-only, IP-pinned client with no environment proxy,
   URL credentials or redirects. The explicit `allow_private_tracker_hosts` setting permits private requests
   for saved tracker origins (including their DNS answers); enable it only when those configured origins are
   trusted. It does not grant private-network access to an unsaved-site preview. Public sites on custom ports
-  remain supported.
+  remain supported. Requests to the torrent client and the sign-in browser never go through a system or
+  `HTTP_PROXY` proxy, and every request to a site ends within two and a half minutes, connecting included.
 - **Optional access providers.** Disabled by default and configured only from this computer. Their API endpoint
   must be a literal loopback/private address (or localhost), with no credentials, proxy or redirects. The service
   receives only an audited public page (root by default, Kinozal's catalog), not account cookies, passwords,
   passkeys or torrent links. Arbitrary probe paths and queries are refused. A bounded,
   validated response is not proof: TOW verifies it through its own same-origin guarded request. Clearance and its
   matching User-Agent are encrypted in the bounded `data/protection.enc` with expiry and durable attempt leases.
+- **Backups and transfer files.** Restoring a nightly backup, a restore point or a TOW file, and `tow import`, keep
+  this computer's network access, password, backup folders, opt-ins and access providers; only
+  `tow import --accept-security-settings` takes the file's. An import made while this computer's saved passwords
+  cannot be opened brings in no password for other devices and turns network access off.
 - **Your torrents and folders.** TOW changes only torrents it added (tag `tow`) and refuses system and profile
   folders as download or backup targets.
 

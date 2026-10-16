@@ -6,9 +6,10 @@ is disabled when `protection` is omitted. It does not install a browser, change 
 ## Connecting an optional service
 
 Use this only when ordinary mirrors are blocked by a Cloudflare browser challenge. A working site does not
-need an additional connection. The expanded instructions in Settings explain setup; hints beside each field
-distinguish the service address, order and recovery budgets from topic-check timers. The in-app Guide has the
-same explanation and troubleshooting. Top-level settings sections remain closed until opened.
+need an additional connection. Settings → Site access shows four short steps until a connection is saved; after
+that each connection shows its last answer as a pill (“Service responded” means the service answered, not that the
+site is reachable). This page and the in-app Guide have the full explanation and troubleshooting. Top-level
+settings sections remain closed until opened.
 
 If an existing card says **On demand**, its trusted module is already installed. Enable that connection and
 the overall switch, then Save; no manual startup or OS autostart is needed. The steps below apply when adding
@@ -20,10 +21,11 @@ a separately operated service. Selecting its type in TOW does not install it. An
    [Trawl](https://github.com/germondai/trawl) service separately. Keep its API private and isolate browser egress
    from LAN, link-local and cloud metadata destinations. The browser is outside TOW's network sandbox.
 2. On the TOW computer, open the local web address → Settings → Site access → Add a connection. Choose its type, enter
-   its loopback/private IP address and choose its order. Only `/v1` is accepted; localhost becomes 127.0.0.1.
-3. Enable that connection and the overall access layer, then Save. Saving does not contact or validate the service;
-   the API remains unchecked until a real applying check has a reason to use it. An API answer is not proof of site
-   access; its observed status and any service cooldown are shown separately.
+   its loopback/private IP address and, with two or more connections, its order. Only `/v1` is accepted; localhost
+   becomes 127.0.0.1. A saved connection is removed by its own **Remove** button.
+3. Tick **Use this connection** and **Use challenge recovery**, then Save. Saving does not contact or validate the
+   service; the API remains unchecked until a real applying check has a reason to use it. An API answer is not proof of
+   site access; its observed status and any service cooldown are shown separately.
 
 After saving, open a failed topic on Home and use **Check access now**, or wait for its scheduled retry.
 Only another ordinary Cloudflare refusal can start recovery; a working mirror does not call a service just
@@ -44,8 +46,9 @@ the library nodriver itself is not an HTTP service. FlareBypasser uses `request.
 name of their browser engine. TOW neither imports nor bundles nodriver, zendriver or Camoufox. Pin and review the
 external service's version and its browser dependencies; a compatible envelope does not prove challenge success.
 
-On Sites → the site's advanced options, **Automatic** permits the optional layer; **Off** disables it for that site.
-**Sign in through the browser** uses the existing explicit browser-auth flow instead: external providers do not
+On Sites → the site's **Advanced** → **Site-access services**, **As in Settings** permits the optional layer; **Off
+for this site** disables it for that site. **Sign in through a browser window** uses the existing explicit
+browser-auth flow instead: external providers do not
 replace that session's User-Agent. It is not an unattended browser solver. A password sign-in sent with verified
 access keeps only the account cookies the site's answer set: the clearance stays in the encrypted access store and
 is never saved with the site's sign-in (one an earlier version saved there is not sent and goes at the next
@@ -177,7 +180,7 @@ response deadline; unrelated browser events cannot extend either limit. Cancella
 its bounded close handshake (up to two seconds) and existing process/profile cleanup may finish after the deadline.
 
 If that store is unreadable, ordinary HTTP remains available and the damaged file is not silently replaced. On the
-TOW computer, Settings → Site access → Recovery → **Reset saved access** explicitly moves the old encrypted bytes
+TOW computer, Settings → Site access → **Reset saved access** explicitly moves the old encrypted bytes
 to TOW's private temporary folder, until normal cleanup. It does not remove site passwords or service settings;
 reset is refused while an applying check is active. The same action resets saved service cooldowns.
 

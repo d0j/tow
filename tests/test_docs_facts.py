@@ -128,11 +128,12 @@ def test_text_lines_fit_120_columns(doc):
     [
         ("README.md", ("[Site access](docs/PROTECTION.md) |", "**Site behind a browser check?**")),
         ("README.ru.md", ("[Доступ к сайтам](docs/ru/protection.md) |", "**Сайт за браузерной проверкой?**")),
-        ("docs/guide.md", ("| **Settings** | **Site access**", "| Site retry |", "checks you start wait for it too")),
+        # Since 1.32 Site access is near the end of Settings; the Settings row still names it.
+        ("docs/guide.md", ("**Site access** (optional services", "| Site retry |", "checks you start wait for it too")),
         (
             "docs/ru/guide.md",
             (
-                "| **Настройки** | **Доступ к сайтам**",
+                "**Доступ к сайтам** (необязательные сервисы",
                 "| Повтор по сайту |",
                 "проверки, запущенные вами, тоже его ждут",
             ),
@@ -140,7 +141,7 @@ def test_text_lines_fit_120_columns(doc):
     ],
 )
 def test_the_docs_name_site_access_and_site_retries(doc, words):
-    """Settings starts with Site access and checks are retried after an outage since 1.30, but the README and the
+    """Settings has Site access and checks are retried after an outage since 1.30, but the README and the
     guides did not say so; the guide still said a manual check ignores a site's own request to wait (1.30.0)."""
     text = " ".join((ROOT / doc).read_text(encoding="utf-8").split())
     for word in words:
