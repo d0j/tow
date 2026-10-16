@@ -245,7 +245,7 @@ plus ten regexes, never a Python dispatch per file and mask.
     logs/                  process and job output (including serve.log) — rotated
     run/                   supervisor lock, pid, status, schedule (with timer and site-retry reservations), control/
     torrent-metadata/      encrypted obtained torrent files for live topics (bounded)
-    tmp/                   private temp folder (cleaned after a day)
+    tmp/                   private temp folder (TOW's own leftovers cleaned after a day)
     browser-auth/          temporary browser profiles for site sign-in
   keys/master.key          the master key — outside data/, so no copy of data/ carries it
   backup/                  night/ copies, update-…-before-… snapshots
