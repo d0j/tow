@@ -1,4 +1,4 @@
-from pathlib import Path, PurePath
+from pathlib import Path
 from typing import ClassVar
 
 import pytest
@@ -42,14 +42,76 @@ def _count_resolves(monkeypatch) -> list[Path]:
 
 def test_client_file_names_are_checked_without_touching_the_disk(tmp_path: Path, monkeypatch):
     resolved = _count_resolves(monkeypatch)
-    folder = str(tmp_path / "asleep")  # need not exist: nothing is looked up
-    assert safe_relative_path(folder, r"Show\Season 1\./S01E01.mkv") == "Show/Season 1/S01E01.mkv"
-    assert safe_relative_path(folder, "Show/Pilot: Part 1.mkv") == "Show/Pilot: Part 1.mkv"
-    for name in ("Show/../../x.mkv", "", "./", "C:x.mkv"):
-        assert safe_relative_path(folder, name) is None
-    if PurePath("C:x.mkv").drive:  # a drive on this system: never a name inside the folder
-        assert safe_relative_path(folder, "Show/C:x.mkv") is None
+    for folder in (str(tmp_path / "asleep"), "/srv/media/asleep", "D:\\TV\\asleep"):  # need not exist
+        assert safe_relative_path(folder, r"Show\Season 1\./S01E01.mkv") == "Show/Season 1/S01E01.mkv"
+        for name in ("Show/../../x.mkv", "", "./"):
+            assert safe_relative_path(folder, name) is None
     assert resolved == []
+
+
+@pytest.mark.parametrize(
+    ("save_path", "name", "expected"),
+    [
+        # A folder on Linux, macOS or a NAS: a colon is an ordinary character of a name there.
+        ("/downloads", "Star Trek: Discovery/S01E01.mkv", "Star Trek: Discovery/S01E01.mkv"),
+        ("/downloads", "Show: Pilot.mkv", "Show: Pilot.mkv"),
+        ("/downloads", "Show/Ep: 1.mkv", "Show/Ep: 1.mkv"),
+        ("/downloads", "C:evil.mkv", "C:evil.mkv"),
+        ("/downloads", r"Show\Season 1/e01.mkv", "Show/Season 1/e01.mkv"),
+        ("/downloads", "../x.mkv", None),
+        ("/downloads", "/etc/x.mkv", None),
+        ("/downloads", r"C:\Show\e01.mkv", None),  # an absolute Windows path is no name in any folder
+        # A Windows folder: a colon in any part is a drive ("C:x") or an alternate data stream ("a:b").
+        ("D:\\TV", "Star Trek: Discovery/S01E01.mkv", None),
+        ("D:\\TV", "Show/Ep: 1.mkv", None),
+        ("D:\\TV", "Show/Season 1/e01.mkv:hidden", None),
+        ("D:\\TV", "C:evil.mkv", None),
+        ("D:\\TV", "Show/C:x.mkv", None),
+        ("D:/TV", r"Show\Season 1/e01.mkv", "Show/Season 1/e01.mkv"),
+        ("D:\\TV", r"Show\..\..\x.mkv", None),
+        ("\\\\nas\\tv", "a/b:stream", None),
+        ("\\\\nas\\tv", "Show/e01.mkv", "Show/e01.mkv"),
+        ("//nas/tv", "Show: Pilot.mkv", None),
+    ],
+)
+def test_a_colon_is_judged_by_the_save_folders_own_system(save_path, name, expected):
+    # Decided from the shape of the save path, never from the system TOW runs on.
+    assert safe_relative_path(save_path, name) == expected
+
+
+def test_a_nas_clients_file_with_a_colon_is_tracked():
+    class NasClient(FakeClient):
+        def inspect_torrent(self, infohash):
+            info = super().inspect_torrent(infohash)
+            info["files"] = [{"name": "Star Trek: Discovery/S01E01.mkv", "size": 10, "progress": 0.5}]
+            return info
+
+    topic = {"id": "nas", "title": "Show [1 из 1]", "hash": "ABC", "save_path": "/srv/media/tv"}
+    history = {"topics": {"nas": {"baseline_at": "2026-09-12T20:00:00+03:00", "items": {}}}}
+
+    reconcile_topic(topic, NasClient(), history, "2026-09-12T21:00:00+03:00")
+
+    items = list(history["topics"]["nas"]["items"].values())
+    assert [item["relative_path"] for item in items] == ["Star Trek: Discovery/S01E01.mkv"]
+
+
+def test_a_stream_name_under_a_windows_folder_is_not_tracked():
+    class StreamClient(FakeClient):
+        def inspect_torrent(self, infohash):
+            info = super().inspect_torrent(infohash)
+            info["files"] = [
+                {"name": "Show/S01E01.mkv:hidden", "size": 10, "progress": 0.5},
+                {"name": "Show/S01E02.mkv", "size": 10, "progress": 0.5},
+            ]
+            return info
+
+    topic = {"id": "win", "title": "Show [1 из 2]", "hash": "ABC", "save_path": "D:\\TV"}
+    history = {"topics": {"win": {"baseline_at": "2026-09-12T20:00:00+03:00", "items": {}}}}
+
+    reconcile_topic(topic, StreamClient(), history, "2026-09-12T21:00:00+03:00")
+
+    items = list(history["topics"]["win"]["items"].values())
+    assert [item["relative_path"] for item in items] == ["Show/S01E02.mkv"]
 
 
 def test_a_pass_looks_at_the_disk_only_for_files_it_must_confirm(tmp_path: Path, monkeypatch):
