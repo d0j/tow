@@ -160,6 +160,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   `/srv/tow`), or a TOW whose arguments merely name this folder, for its own, so it never stops another TOW. It
   also finds this install's systemd or launchd autostart when the folder name has `%`, `$`, `&`, `<` or quotes,
   and an install reached through a link or junction; BusyBox systems read leftovers from `/proc`.
+- `scripts/deploy.ps1` of a moved or copied git install runs the update with the install's own Python again: it
+  looked only at the old folder, then said "pyvenv.cfg is missing", and a copy used the original's Python.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password

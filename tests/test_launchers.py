@@ -387,9 +387,13 @@ def test_deploy_takes_only_a_python_the_updater_runs_on():
     code = " ".join(line.split("#", 1)[0] for line in finder.splitlines())
     assert "& $launcher.Source -0p" in code  # every Python the launcher knows
     assert "-3 " not in code
-    assert "sys.version_info >= (3, 11)" in code
-    assert "Select-Object" not in code
-    assert "@(& $path -X utf8 -c $check 2>$null)" in finder
+    assert "Test-Updater $path" in code
+    # every candidate (the install's own Pythons too) is run and must say 3.11 or newer
+    checker = deploy[deploy.index("function Test-Updater") : deploy.index("function Find-BasePython")]
+    checker_code = " ".join(line.split("#", 1)[0] for line in checker.splitlines())
+    assert "sys.version_info >= (3, 11)" in checker_code
+    assert "Select-Object" not in checker_code
+    assert "@(& $Path -X utf8 -c $check 2>$null)" in checker
     updater = (ROOT / "scripts" / "update.py").read_text(encoding="utf-8")
     assert "if sys.version_info < (3, 11):" in updater  # the same floor
 
@@ -723,3 +727,78 @@ def test_setup_gives_uv_a_temp_folder_inside_and_none_of_the_accounts_python_set
         names = ("TMP", "TEMP") if os.name == "nt" else ("TMPDIR",)
         assert {seen[name] for name in names} == {temp}
         assert seen["temp_is_dir"] is True
+
+
+@pytest.mark.allow_system  # deploy.ps1 in a temp install; every Python is a launcher of this one
+@pytest.mark.skipif(os.name != "nt", reason="deploy.ps1 and its Pythons are Windows ones")
+@pytest.mark.parametrize("shell", ["pwsh", "powershell"])
+@pytest.mark.parametrize(
+    ("case", "picked"),
+    [
+        ("moved", "cpython-3.14.8-windows-x86_64-none"),  # the cfg's folder by name, not the newest
+        ("copied", "cpython-3.14.8-windows-x86_64-none"),  # the original's Python is still there
+        ("no_cfg", "cpython-3.14.10-windows-x86_64-none"),  # 3.14.10 after 3.14.8, by number
+        ("old_layout", "external-python"),  # before 1.18: no runtime\python, a Python of its own
+    ],
+)
+def test_deploy_finds_the_installs_own_python_after_a_move(tmp_path, shell, case, picked):
+    # QA 16.10.2026: deploy.ps1 took the absolute pyvenv.cfg home: after a move it fell back to
+    # py -0p (which never lists uv's Pythons) and said "pyvenv.cfg is missing"; a copy whose
+    # original still existed ran the original's Python.
+    import shutil
+    import subprocess
+    import sys
+
+    program = shutil.which(shell)
+    if program is None:
+        pytest.skip(f"no {shell} here")
+    root = tmp_path / "TOW"
+    (root / "app" / "scripts").mkdir(parents=True)
+    shutil.copy2(ROOT / "scripts" / "deploy.ps1", root / "app" / "scripts" / "deploy.ps1")
+    # update.py: only says which Python runs it
+    (root / "app" / "scripts" / "update.py").write_text(
+        "import sys\nprint('picked:' + sys.executable)\n", encoding="utf-8"
+    )
+
+    def python(folder: Path) -> None:
+        folder.mkdir(parents=True)
+        shutil.copy2(Path(sys.prefix) / "Scripts" / "python.exe", folder / "python.exe")
+        (folder / "pyvenv.cfg").write_text(f"home = {sys.base_prefix}\n", encoding="utf-8")
+
+    if case != "old_layout":
+        for name in ("cpython-3.14.8-windows-x86_64-none", "cpython-3.14.10-windows-x86_64-none"):
+            python(root / "runtime" / "python" / name)
+        (root / "runtime" / "python" / "cpython-3.15.0a1-windows-x86_64-none").mkdir()  # a pre-release
+    home = {
+        "moved": tmp_path / "gone" / "cpython-3.14.8-windows-x86_64-none",
+        "copied": tmp_path / "original" / "runtime" / "python" / "cpython-3.14.8-windows-x86_64-none",
+        "old_layout": tmp_path / "external-python",
+    }.get(case)
+    if case in ("copied", "old_layout"):
+        python(home)
+    if home is not None:
+        (root / "app" / ".venv").mkdir()
+        (root / "app" / ".venv" / "pyvenv.cfg").write_text(f"home = {home}\nversion_info = 3.14.8\n", encoding="utf-8")
+    env = {key: value for key, value in os.environ.items() if not key.upper().startswith(("TOW_", "UV_"))}
+    done = subprocess.run(
+        [
+            program,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(root / "app" / "scripts" / "deploy.ps1"),
+            "-Ref",
+            "v1.32.1",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=180,
+        check=False,
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+    line = next(row for row in done.stdout.splitlines() if row.startswith("picked:"))
+    assert Path(line[len("picked:") :]).parent.name == picked, done.stdout
+    if case != "old_layout":
+        assert Path(line[len("picked:") :]).parent.parent == root / "runtime" / "python"
