@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.32.2] — 2026-10-16
+
 ### Changed
 
 - Settings spans the whole page on a computer again, as before 1.32.1 (its forms keep their own width), and
