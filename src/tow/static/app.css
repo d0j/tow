@@ -781,9 +781,9 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
   .settings-link-note { grid-column: 1; grid-row: 2; }
   .settings-link > :last-child { grid-column: 2; grid-row: 1 / span 2; }
 }
-/* D1: Settings - its title, sections and the links below - is one 64 rem column in the middle: at
-   1440 px a section's pill sat 1300 px from its title and the forms filled half of each card. */
-.settings-page.settings-page-compact { width: 100%; max-width: 64rem; margin-inline: auto; }
+/* Settings - its title, sections and the links below - spans the page on a desktop, as in 1.32.0
+   (the owner's choice over 1.32.1's 64 rem column); the forms inside keep their own width. */
+.settings-page.settings-page-compact { width: 100%; max-width: none; }
 .settings-page-compact .settings-title { margin-bottom: .7rem; }
 .settings-page-compact .settings-title h1 { margin: 0; font-size: 1.45rem; }
 .settings-page-compact .settings-content { width: 100%; max-width: none; gap: .55rem; }
@@ -920,8 +920,6 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .restore-point-row b { font-size: 13px; font-weight: 600; }
 .restore-point-row span { color: var(--mut); font-size: 12px; }
 .restore-point-row .backup-copy-actions { align-items: center; justify-content: flex-end; gap: .35rem; margin: 0; }
-/* Settings' width, the page it comes from (it spanned 1400 px, QA Q10). */
-.backup-delete-page { max-width: 64rem; margin-inline: auto; }
 .backup-delete-confirm h2 { font-size: .95rem; }
 .backup-inventory, .backup-location { min-width: 0; border: 1px solid var(--line); border-radius: 6px; }
 .backup-inventory > summary, .backup-location > summary { padding: .35rem .5rem; font-size: 12.5px; cursor: pointer; }

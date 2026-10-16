@@ -115,8 +115,10 @@ def test_settings_ui_is_sectioned_and_explains_actions():
     assert 'aria-describedby="lan-password-hint"' in page
     assert 'input[type="checkbox"], input[type="radio"] { width: auto; }' in css
     assert ".check-field" in css
-    # D1 (1.32.1): one 64 rem column in the middle, not the whole 1440 px window.
-    assert ".settings-page.settings-page-compact { width: 100%; max-width: 64rem; margin-inline: auto; }" in css
+    # 1.32.2: the accordion spans the page on a desktop again, as in 1.32.0 (the owner did not want
+    # 1.32.1's 64 rem column); its forms keep their own width (.form-grid, 46 rem).
+    assert ".settings-page.settings-page-compact { width: 100%; max-width: none; }" in css
+    assert "64rem" not in css
     # A row's actions stay in its form's column, Delete right after Cancel; an add card is as wide
     # as its form (46 rem, its padding and border), not the page.
     assert ".edit-panel > .edit-actions { max-width: 46rem; }" in css

@@ -63,7 +63,8 @@ tracker degradation from a client or TOW failure before changing state.
   password, token or key field has the eye (`reveal`); a stored one gets `saved_hint` in its label, the placeholder
   `web.secret.keep_placeholder`, and one `keep_note` per form.
 - `tests/test_ui_standard.py` enforces this; a new screen is also measured in a real browser before release.
-- Settings is one column of at most 64rem. Its cards follow one pattern: a status pill (only when it says something
+- Settings spans the page on a desktop (its forms keep their own width); the page that deletes a backup copy
+  is as wide. Its cards follow one pattern: a status pill (only when it says something
   the section does not), fields, then the buttons; "How to connect" steps sit above the fields and are open while the
   card is not set up. Messengers that are not connected and torrent clients that answer are folded to one line; the
   others are open.
