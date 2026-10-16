@@ -77,6 +77,14 @@
           <option value="files"{% if mode == 'files' %} selected{% endif %}>{{ t('home.add.mode_files') }}</option>
         </select></div>
     </div>
+    <div class="field" data-content-expression>
+      <label for="topic-selection-value">{{ t('home.add.selection') }}</label>
+      <textarea id="topic-selection-value" class="w-xl" name="selection_value" rows="2" placeholder="{{ t('home.add.selection_placeholder') }}"{{ invalid('topic-selection-value', bad_field, 'topic-selection-hint') }}>{{ draft.get('selection_value', '') }}</textarea>
+      <p class="field-hint" id="topic-selection-hint">{{ t('home.add.selection_hint') }}</p>
+    </div>
+    {% set topic = none %}{% include '_content_picker.html' %}
+    {#- What to download and its rule stay together; following and the timer come after them, as in
+        a topic's edit panel. -#}
     <div class="field-row follow-row">
       {#- A cleared box sends nothing: the hidden field says that means "once". -#}
       <input type="hidden" name="tracking_unchecked" value="once">
@@ -85,12 +93,6 @@
         <input id="topic-check-interval" class="w-xs" name="check_interval_min" type="number" min="1" max="10080" step="1" value="{{ draft.get('check_interval_min', '') }}"{{ invalid('topic-check-interval', bad_field, 'topic-check-interval-hint') }}>
         <p id="topic-check-interval-hint" class="field-hint">{{ t('timer.hint') }}</p></div>
     </div>
-    <div class="field" data-content-expression>
-      <label for="topic-selection-value">{{ t('home.add.selection') }}</label>
-      <textarea id="topic-selection-value" class="w-xl" name="selection_value" rows="2" placeholder="{{ t('home.add.selection_placeholder') }}"{{ invalid('topic-selection-value', bad_field, 'topic-selection-hint') }}>{{ draft.get('selection_value', '') }}</textarea>
-      <p class="field-hint" id="topic-selection-hint">{{ t('home.add.selection_hint') }}</p>
-    </div>
-    {% set topic = none %}{% include '_content_picker.html' %}
     <p class="field-hint busy-note" data-busy-note role="status" hidden>{{ t('home.add.checking_note') }}</p>
     <div class="actions">
       <button type="submit" data-busy-label="{{ t('home.add.checking') }}">{{ t('home.add.submit') }}</button>
