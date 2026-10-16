@@ -108,6 +108,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   the torrent's files; before, “Files by pattern” said that the selection matches no file.
 - A check of a topic whose folder is on a network share, a sleeping NAS or a lost mapped drive asks once whether
   that folder can be reached, not once per file: each question could wait for the network's timeout.
+- On Windows with long paths off (the default), a downloaded file whose full path has 260 characters or more is no
+  longer shown as missing, and waiting for disk space counts it as already there: TOW now looks at such files the
+  way the torrent client writes them (`\?\C:\…`).
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password

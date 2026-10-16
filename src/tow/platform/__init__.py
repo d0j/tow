@@ -230,6 +230,54 @@ def is_plain_dir(info: os.stat_result) -> bool:
     return stat.S_ISDIR(info.st_mode) and not is_link_like(info)
 
 
+# From this length on a full Windows path goes to the file API in its extended form: with long
+# paths off (Windows' default) a folder's path ends at 248 characters, a file's at 260.
+LONG_PATH_FROM = 248
+_EXTENDED = "\\\\?\\"
+_EXTENDED_UNC = "\\\\?\\UNC\\"
+
+
+def extended_windows_path(text: str) -> str:
+    """A full Windows path (``C:\\...``, ``\\\\host\\share\\...``) in the extended form that
+    lifts the length limit (``\\\\?\\C:\\...``, ``\\\\?\\UNC\\host\\share\\...``). That form takes
+    every character literally, so ``.``, ``..`` and slashes are resolved by text first. Any other
+    text - already extended, a device, a relative or POSIX path - is returned as it is. The same
+    on every system (``ntpath``)."""
+    if text.replace("/", "\\").startswith((_EXTENDED, "\\\\.\\")):
+        return text
+    drive = ntpath.splitdrive(text)[0]
+    if not drive or not ntpath.isabs(text):
+        return text
+    normal = ntpath.normpath(text)
+    return _EXTENDED_UNC + normal[2:] if normal.startswith("\\\\") else _EXTENDED + normal
+
+
+def ordinary_windows_path(text: str) -> str:
+    """The extended form of a path back as it is ordinarily written (any other text unchanged)."""
+    if text.startswith(_EXTENDED_UNC):
+        return "\\\\" + text[len(_EXTENDED_UNC) :]
+    if text.startswith(_EXTENDED) and ntpath.splitdrive(text[len(_EXTENDED) :])[0]:
+        return text[len(_EXTENDED) :]
+    return text
+
+
+def long_path(path: Path | str) -> Path:
+    """``path`` as this system's file API reaches it whatever its length: on Windows a full path
+    of ``LONG_PATH_FROM`` characters or more in its extended form (a torrent client writes such
+    files that way; without it they look missing), anything else as it is. Give it to ``stat``,
+    ``resolve`` and the like before they run, never after: they fail on the long ordinary form.
+    Compare such a path with an ordinary one through ``ordinary_path``."""
+    text = os.fspath(path)
+    if current().name == "windows" and len(text) >= LONG_PATH_FROM:
+        return Path(extended_windows_path(text))
+    return Path(path)
+
+
+def ordinary_path(path: Path | str) -> Path:
+    """``long_path`` undone: the path as it is ordinarily written, for comparing and showing."""
+    return Path(ordinary_windows_path(os.fspath(path))) if current().name == "windows" else Path(path)
+
+
 def allocated_file_bytes(path: Path | str, *, info: os.stat_result | None = None) -> int | None:
     """Bytes the regular file at ``path`` already reserves on disk, never its unallocated
     logical holes, and never more than its size; ``info`` is its ``lstat`` when the caller has
@@ -240,9 +288,10 @@ def allocated_file_bytes(path: Path | str, *, info: os.stat_result | None = None
     ``allocated_bytes``): a compressed file takes less than its size, a cautious credit. A file
     never receives a full-size credit just because its logical length is large.
     """
+    path = long_path(path)  # a client's file may be past Windows' 260 characters
     if info is None:
         try:
-            info = Path(path).lstat()
+            info = path.lstat()
         except OSError, ValueError:
             return None
     size = info.st_size
@@ -256,7 +305,7 @@ def allocated_file_bytes(path: Path | str, *, info: os.stat_result | None = None
         if not attributes & (stat.FILE_ATTRIBUTE_SPARSE_FILE | stat.FILE_ATTRIBUTE_COMPRESSED):
             return size
         try:
-            allocated = backend.allocated_bytes(Path(path))
+            allocated = backend.allocated_bytes(path)
         except AttributeError, OSError, ValueError:  # a backend without the question: unknown
             return None
         return min(size, allocated) if type(allocated) is int and allocated >= 0 else None

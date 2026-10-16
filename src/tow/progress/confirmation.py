@@ -6,6 +6,7 @@ import re
 import stat
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
+from tow import platform
 from tow.folders import windows_shaped
 
 # How long a file seen on disk counts as confirmed (see reconcile_topic).
@@ -58,9 +59,10 @@ def filesystem_confirmation(
     if not (seen_from_here(save_path) if seen is None else seen):
         return None  # /downloads of a remote client, or a drive this PC does not see
     try:
-        base = base or folder.resolve()
-        path = (base / Path(*relative_path.split("/"))).resolve()
-        path.relative_to(base)
+        # A client's file may be past Windows' 260 characters: the extended form before any look.
+        base = base or platform.long_path(folder).resolve()
+        path = platform.long_path(base / Path(*relative_path.split("/"))).resolve()
+        platform.ordinary_path(path).relative_to(platform.ordinary_path(base))
         details = path.stat()
         if not stat.S_ISREG(details.st_mode):
             return False
