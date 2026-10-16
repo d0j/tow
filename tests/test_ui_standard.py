@@ -282,3 +282,9 @@ def test_sign_in_and_first_start_buttons_keep_their_width_on_a_phone():
 def test_the_download_list_is_as_wide_as_its_lines():
     """1.32 QA N3: the downloads popover was 92 vw wide for three short lines."""
     assert _first("dialog#download-pop").strip() == "width: min(92vw, 40rem);"
+
+
+def test_a_grey_pill_shows_as_a_pill_on_a_client_card():
+    """1.32 QA N4: "Main" was a --panel2 pill on a --panel2 card: plain bold text."""
+    assert "background: var(--panel2)" in _first(".integration-card")
+    assert _first(".integration-card .pill.mut").strip() == "background: var(--panel);"
