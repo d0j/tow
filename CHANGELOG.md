@@ -113,6 +113,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   way the torrent client writes them (`\?\C:\…`).
 - On Windows an update started in Settings is no longer recorded as failed because the update page was reading its
   progress at the moment the next step was written: that write now waits a few seconds for the page.
+- On Linux and macOS, `nohup tow run &` keeps TOW running after the terminal or SSH session closes: TOW no longer
+  replaces the ignored hangup with its own stop. Without `nohup`, closing the terminal still stops it cleanly.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password
