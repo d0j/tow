@@ -127,6 +127,7 @@
 
               </span>
             </summary>
+            <div class="card-body">
 
 
             <details class="technical-details notifier-steps" >
@@ -180,7 +181,7 @@
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
               </div>
             </form>
-            <form id="ping-client-0" method="post" action="/settings/client/ping" data-return-target="client-main">
+            <form id="ping-client-0" method="post" action="/settings/client/ping" data-return-target="client-main" hidden>
               <input type="hidden" name="client_id" value="main">
             </form>
 
@@ -191,6 +192,7 @@
                 <div><dt>ID</dt><dd><code>main</code></dd></div>
               </dl>
             </details>
+            </div>
           </details>
 
           <details class="integration-card client-card" id="client-nas">
@@ -201,6 +203,7 @@
 
               </span>
             </summary>
+            <div class="card-body">
 
 
             <details class="technical-details notifier-steps" >
@@ -257,14 +260,14 @@
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
               </div>
             </form>
-            <form id="ping-client-1" method="post" action="/settings/client/ping" data-return-target="client-nas">
+            <form id="ping-client-1" method="post" action="/settings/client/ping" data-return-target="client-nas" hidden>
               <input type="hidden" name="client_id" value="nas">
             </form>
 
-            <form id="default-client-1" method="post" action="/settings/client/default" data-return-target="client-nas">
+            <form id="default-client-1" method="post" action="/settings/client/default" data-return-target="client-nas" hidden>
               <input type="hidden" name="client_id" value="nas">
             </form>
-            <form id="remove-client-1" method="post" action="/settings/client/remove" data-return-target="acc-clients" data-confirm="Remove the client “Transmission” from TOW? The client itself and its torrents stay as they are (you can bring it back with “Undo”)." data-confirm-label="Remove" data-confirm-danger>
+            <form id="remove-client-1" method="post" action="/settings/client/remove" data-return-target="acc-clients" data-confirm="Remove the client “Transmission” from TOW? The client itself and its torrents stay as they are (you can bring it back with “Undo”)." data-confirm-label="Remove" data-confirm-danger hidden>
               <input type="hidden" name="client_id" value="nas">
             </form>
 
@@ -275,6 +278,7 @@
                 <div><dt>ID</dt><dd><code>nas</code></dd></div>
               </dl>
             </details>
+            </div>
           </details>
 
         </div><details class="technical-details client-add-toggle">
@@ -312,6 +316,7 @@
               <span class="pill mut">Not checked</span>
 
             </summary>
+            <div class="card-body">
 
 
 
@@ -363,9 +368,10 @@
               </div>
             </form>
 
-            <form id="notifier-test-telegram" method="post" action="/settings/notifier/telegram/test" data-return-target="acc-bots"></form>
-            <form id="notifier-remove-telegram" method="post" action="/settings/notifier/telegram/remove" data-return-target="acc-bots" data-confirm="Disconnect Telegram? Its settings will be removed (you can bring them back with “Undo”)." data-confirm-label="Disconnect" data-confirm-danger></form>
+            <form id="notifier-test-telegram" method="post" action="/settings/notifier/telegram/test" data-return-target="acc-bots" hidden></form>
+            <form id="notifier-remove-telegram" method="post" action="/settings/notifier/telegram/remove" data-return-target="acc-bots" data-confirm="Disconnect Telegram? Its settings will be removed (you can bring them back with “Undo”)." data-confirm-label="Disconnect" data-confirm-danger hidden></form>
 
+            </div>
           </details>
 
           <details class="integration-card notifier-card" id="notifier-discord">
@@ -375,6 +381,7 @@
               <span class="pill mut">Not connected</span>
 
             </summary>
+            <div class="card-body">
 
 
 
@@ -415,6 +422,7 @@
               </div>
             </form>
 
+            </div>
           </details>
 
           <details class="integration-card notifier-card" id="notifier-whatsapp">
@@ -424,6 +432,7 @@
               <span class="pill mut">Not connected</span>
 
             </summary>
+            <div class="card-body">
 
 
 
@@ -472,6 +481,7 @@
               </div>
             </form>
 
+            </div>
           </details>
 
           <details class="integration-card notifier-card" id="notifier-ntfy">
@@ -481,6 +491,7 @@
               <span class="pill mut">Not connected</span>
 
             </summary>
+            <div class="card-body">
 
 
 
@@ -529,6 +540,7 @@
               </div>
             </form>
 
+            </div>
           </details>
 
         </div>
@@ -565,6 +577,7 @@
       </summary>
       <div class="settings-panel">
         <div class="integration-card access-card" id="access-card">
+          <div class="card-body">
           <form method="post" action="/settings/access" class="settings-form form-grid setup-form" data-return-target="acc-access">
             <div class="check-field">
               <input id="allow-lan" name="allow_lan" value="1" type="checkbox" aria-describedby="allow-lan-hint">
@@ -590,6 +603,7 @@
           </form>
 
 
+          </div>
         </div>
       </div>
     </details>
@@ -610,6 +624,7 @@
               <div><h2 id="backup-night-title">Nightly backups</h2><p>Settings, history and encrypted passwords, every night.</p></div>
 
             </div>
+            <div class="card-body">
 
 
 
@@ -654,6 +669,7 @@
         </form>
 
             </details>
+            </div>
           </article>
 
           <article class="integration-card backup-card" id="backup-manual" aria-labelledby="backup-manual-title">
@@ -661,6 +677,7 @@
               <div><h2 id="backup-manual-title">Backups made by hand</h2><p>The last 10 backups are kept.</p></div>
 
             </div>
+            <div class="card-body">
 
 
             <form method="post" action="/settings/restore-points" data-return-target="acc-transfer" class="settings-actions backup-make">
@@ -706,12 +723,14 @@
         </form>
 
             </details>
+            </div>
           </article>
 
           <article class="integration-card backup-card portable-transfer" id="backup-file" aria-labelledby="backup-file-title">
             <div class="integration-head">
               <div><h2 id="backup-file-title">TOW file</h2><p>A full encrypted copy to keep or to move together with the original master key.</p></div>
             </div>
+            <div class="card-body">
             <form method="post" action="/settings/portable/export" data-native-submit class="settings-actions backup-make">
               <button type="submit">Save file</button>
             </form>
@@ -728,6 +747,7 @@
               </div>
             </form>
             <p class="section-note">Restoring needs the original <code>keys/master.key</code> — keep it separately. <a href="/settings/help#export-import">More</a>.</p>
+            </div>
           </article>
         </div>
       </div>
@@ -852,8 +872,8 @@
               <button type="submit" name="language" value="auto" aria-pressed="false" class="theme-option">Auto (English)</button>
               <button type="submit" name="language" value="ru" aria-pressed="false" class="theme-option">Русский</button><button type="submit" name="language" value="en" aria-pressed="true" class="theme-option">English</button>
             </div>
+            <p id="language-note" class="field-hint">Messenger messages use this language too.</p>
           </fieldset>
-          <p id="language-note" class="field-hint">Messenger messages use this language too.</p>
         </form>
         <form method="post" action="/settings/theme" class="theme-form" id="acc-theme" data-return-target="acc-theme" data-theme-form>
           <fieldset class="theme-field">
@@ -909,6 +929,7 @@
               <h2>Add a connection</h2>
 
             </summary>
+            <div class="card-body">
             <input type="hidden" name="provider_id" value="new-connection-1">
 
             <div class="field"><label for="protection-kind-new-connection-1">Service type</label><select id="protection-kind-new-connection-1" name="provider_kind" class="w-m"><option value="">Choose a service</option><option value="byparr">Byparr</option><option value="flare_bypasser">FlareBypasser (zendriver)</option><option value="flaresolverr">FlareSolverr</option><option value="trawl">Trawl</option></select></div>
@@ -920,6 +941,7 @@
             <div class="field-row">
               <div class="field"><label for="protection-url-new-connection-1">Service address</label><input id="protection-url-new-connection-1" name="provider_url" value="" class="w-xl" placeholder="e.g. http://127.0.0.1:8191" maxlength="256" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="protection-url-hint-new-connection-1"><p class="field-hint" id="protection-url-hint-new-connection-1">127.0.0.1 is this computer; /v1 is optional.</p></div>
               <input type="hidden" name="provider_order" value="1">
+            </div>
             </div>
           </details>
 

@@ -255,9 +255,10 @@ dialog.confirm::backdrop { background: rgba(0,0,0,.42); }
 .stat .k { color: var(--mut); font-size: 12px; }
 .stat { display: grid; gap: var(--sp-1); }
 .stat .v { font-size: 1.05rem; font-weight: 650; overflow-wrap: anywhere; }
+/* One pill everywhere: 11 px words on a 17.6 px line, 6 px at the sides. */
 .pill {
-  display: inline-block; font-size: 11px; font-weight: 650;
-  padding: .15rem .5rem; border-radius: 999px; white-space: nowrap;
+  display: inline-block; font-size: 11px; font-weight: 650; line-height: 1.6;
+  padding: 0 var(--sp-2); border-radius: 999px; white-space: nowrap;
 }
 .pill.ok { background: var(--pill-ok-bg); color: var(--ok); }
 .pill.bad { background: var(--pill-bad-bg); color: var(--bad); }
@@ -385,13 +386,12 @@ button.ico, button.row-ico, button.flash-x { min-height: 0; }
    block next to the form's one solid button. */
 button.ghost.danger, .btn.ghost.danger { background: transparent; border-color: var(--line); color: var(--bad); }
 button.ghost.danger:hover, .btn.ghost.danger:hover { background: var(--pill-bad-bg); border-color: var(--bad); filter: none; }
-.backup-folder { padding-top: .2rem; }
 .notifier-card > summary { list-style: none; cursor: pointer; align-items: center; }
 .notifier-card > summary::-webkit-details-marker { display: none; }
 .settings-page-compact .notifier-card:not([open]) > summary { border-bottom: 0; padding-bottom: 0; }
-.watchdog-note { margin: .8rem 0; }
-.watchdog-lines { margin: .3rem 0 0; padding-left: 1.2rem; font-size: 13px; display: grid; gap: .2rem; }
-.integration-pills { display: inline-flex; gap: .35rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.watchdog-note { display: grid; gap: var(--sp-2); }
+.watchdog-lines { padding-left: var(--sp-5); font-size: 13px; display: grid; gap: var(--sp-1); }
+.integration-pills { display: inline-flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .client-add-row { display: flex; gap: var(--sp-2); align-items: center; }
 .client-add-row select { flex: 0 1 15rem; min-width: 0; }
 .notifier-steps ol { color: var(--fg); font-size: 13px; }
@@ -622,22 +622,27 @@ time[data-short][tabindex]:focus-visible { outline: 2px solid var(--acc); outlin
   overflow-wrap: anywhere; /* a long pattern wraps on a phone instead of running off the edge */
 }
 
-/* Settings: calm, explicit sections instead of an admin-table accordion. */
-.settings-page { max-width: 72rem; margin-inline: auto; }
-.settings-title { margin-bottom: 1.1rem; }
-.settings-title h1 { font-size: clamp(1.55rem, 3vw, 2rem); margin-bottom: .25rem; }
-.settings-content { display: grid; gap: .9rem; min-width: 0; }
+/* Settings: calm, explicit sections instead of an admin-table accordion. The title, a note and the
+   sections 9 px apart; the sections and the links below them 6 px. */
+.settings-page {
+  max-width: 72rem; margin-inline: auto;
+  display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3);
+}
+.settings-title h1 { font-size: clamp(1.55rem, 3vw, 2rem); }
+.settings-content { display: grid; gap: var(--sp-2); min-width: 0; }
 .settings-section {
   scroll-margin-top: var(--land-top);
   background: var(--panel); border: 1px solid var(--line);
   border-radius: var(--radius); box-shadow: var(--shadow);
-  padding: 1rem;
 }
-.integration-list { display: grid; gap: .75rem; }
+.integration-list { display: grid; gap: var(--sp-3); }
+/* A card: its head, the line, 6 px, then its body, whose parts are 9 px apart; 9 px all round. */
 .integration-card {
-  min-width: 0; padding: .9rem; background: var(--panel2);
+  display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-2);
+  min-width: 0; padding: var(--sp-3); background: var(--panel2);
   border: 1px solid var(--line); border-radius: 10px;
 }
+.card-body { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3); min-width: 0; }
 /* A grey pill ("Main", "Not checked") is --panel2, the card's own colour: on a card it takes the
    page's panel colour, or it reads as plain bold text. */
 .integration-card .pill.mut { background: var(--panel); }
@@ -648,12 +653,14 @@ time[data-short][tabindex]:focus-visible { outline: 2px solid var(--acc); outlin
   background: var(--panel);
 }
 :is(.integration-card, .edit-panel) .secret > button.ico.reveal:hover { background: var(--panel2); }
+/* A card's head: its title and pills at least 9 px apart, 6 px above its line; a title and its
+   subtitle 3 px. */
 .integration-head {
   display: flex; align-items: flex-start; justify-content: space-between;
-  gap: .75rem; padding-bottom: .7rem; border-bottom: 1px solid var(--line);
+  gap: var(--sp-3); padding-bottom: var(--sp-2); border-bottom: 1px solid var(--line);
 }
-.integration-head h3, .service-restart h3 { margin: 0; font-size: .98rem; }
-.integration-head p, .service-restart p { margin: .15rem 0 0; color: var(--mut); font-size: 13px; }
+.integration-head > div { display: grid; gap: var(--sp-1); min-width: 0; }
+.integration-head p { color: var(--mut); font-size: 13px; line-height: 1.45; }
 .integration-head > .pill { flex: 0 0 auto; }
 .settings-form { display: grid; gap: var(--sp-3); }
 .settings-form.compact-form { max-width: 42rem; }
@@ -668,6 +675,8 @@ time[data-short][tabindex]:focus-visible { outline: 2px solid var(--acc); outlin
    waits for room, stopped in the client). */
 .space-hint.warn { color: var(--warn); }
 .settings-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
+/* A row of buttons whose buttons are all hidden (Updates' Reload until it is needed) takes no place. */
+:is(.settings-actions, .actions):not(:has(> :not([hidden]))) { display: none; }
 
 /* A box, its words 6 px after it and its hint 3 px under them; the form's gap spaces it from the
    next group (no padding of its own). The box sits on the words' first line. */
@@ -690,8 +699,8 @@ label.check-field { min-block-size: 24px; align-content: center; color: var(--fg
    by default, amber (warn) as a .flash.warn, red (bad) as a .flash.error: one red for a failure,
    said now or kept. The text wraps beside the icon; controls after it (Copy) go under it on a phone. */
 .notice {
-  display: flex; flex-wrap: wrap; align-items: flex-start; gap: .35rem .5rem;
-  margin: 0; padding: .65rem .75rem; border-radius: 8px;
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--sp-1) var(--sp-2);
+  margin: 0; padding: var(--sp-2) var(--sp-3); border-radius: 8px;
   font-size: 13px; line-height: 1.45; overflow-wrap: anywhere;
   color: var(--notice-fg); background: var(--notice-bg); border: 1px solid var(--notice-line);
 }
@@ -706,16 +715,9 @@ label.check-field { min-block-size: 24px; align-content: center; color: var(--fg
 .flash.ok { background: var(--pill-ok-bg); border-color: var(--ok); }
 .flash.warn { background: var(--pill-warn-bg); border-color: var(--warn); }
 .flash.error { background: var(--flash-err-bg); border-color: var(--flash-err-line); }
-/* A note inside a card or a panel keeps clear of what follows it, and of the card's head. */
-:is(.settings-panel, .integration-card, .edit-panel) > .notice { margin-bottom: .6rem; }
-.integration-head + .notice { margin-top: .6rem; }
 .input-unit { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); }
 .input-unit span { color: var(--mut); font-size: 12px; }
-.service-restart {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: .75rem; margin-top: .85rem; padding-top: .85rem;
-  border-top: 1px solid var(--line);
-}
+.service-restart { display: flex; align-items: center; }
 .technical-details { color: var(--mut); font-size: 12px; }
 /* A disclosure's content is one body, 6 px under its summary, its parts 6 px apart. */
 .details-body { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-2); margin-top: var(--sp-2); }
@@ -723,8 +725,10 @@ label.check-field { min-block-size: 24px; align-content: center; color: var(--fg
 /* A1: one disclosure everywhere - a summary at least 28 px high (18 px "How to connect" was below
    the 24 px target) and one chevron, the Settings sections' own, pointing right when closed and
    down when open (there were the browser's triangles and two other chevrons). */
+/* Its text 18 px after the chevron's edge: the chevron fills a 12 px slot, then 6 px (the
+   accordions' and the cards' titles alike). */
 :is(.technical-details, details.advanced, .backup-inventory, .backup-location) > summary {
-  display: flex; align-items: center; gap: .45rem; min-height: 1.75rem; list-style: none; cursor: pointer;
+  display: flex; align-items: center; gap: var(--sp-2); min-height: 1.75rem; list-style: none; cursor: pointer;
 }
 :is(.technical-details, details.advanced, .backup-inventory, .backup-location) > summary::-webkit-details-marker { display: none; }
 :is(.notifier-card, .client-card, .protection-card) > summary { min-height: 1.75rem; }
@@ -735,7 +739,12 @@ label.check-field { min-block-size: 24px; align-content: center; color: var(--fg
   border-right: 1.5px solid var(--mut); border-bottom: 1.5px solid var(--mut);
   transform: rotate(-45deg); transition: transform .15s ease;
 }
-:is(.notifier-card, .client-card, .protection-card) > summary h2::before { margin: 0 .6rem .12rem .1rem; }
+:is(.technical-details, details.advanced, .backup-inventory, .backup-location) > summary::before {
+  margin-inline-end: calc(var(--sp-4) - .36rem);
+}
+:is(.notifier-card, .client-card, .protection-card) > summary h2::before {
+  margin-inline-end: calc(var(--sp-4) - .36rem + var(--sp-2)); vertical-align: .12rem;
+}
 :is(.technical-details, details.advanced, .backup-inventory, .backup-location)[open] > summary::before,
 :is(.notifier-card, .client-card, .protection-card)[open] > summary h2::before,
 .settings-accordion[open] > summary::before { transform: rotate(45deg); }
@@ -743,31 +752,21 @@ label.check-field { min-block-size: 24px; align-content: center; color: var(--fg
   outline: 2px solid var(--acc); outline-offset: 3px; border-radius: 4px;
 }
 .technical-details dl { display: grid; gap: var(--sp-1); }
-.technical-details dl > div { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: .6rem; }
+.technical-details dl > div { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: var(--sp-4); }
 .technical-details dt { color: var(--mut); }
 .technical-details dd { margin: 0; color: var(--fg); overflow-wrap: anywhere; }
-.settings-empty { color: var(--mut); padding: .85rem; border: 1px dashed var(--line); border-radius: 8px; }
+.settings-empty { color: var(--mut); padding: var(--sp-3); border: 1px dashed var(--line); border-radius: 8px; }
 .settings-log { padding: 0; overflow: hidden; }
-.settings-log > summary {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: .8rem; padding: 1rem; list-style: none;
-}
-.settings-log > summary::-webkit-details-marker { display: none; }
-.settings-log > summary > span:first-child { display: grid; gap: .12rem; }
-.settings-log > summary strong { font-size: 1.02rem; }
-.settings-log > summary small { color: var(--mut); font-size: 12px; }
-.settings-log-body { padding: 0 1rem 1rem; border-top: 1px solid var(--line); }
-.settings-log-body .section-note { margin-bottom: .55rem; }
 /* Settings → Theme and Language: one segmented choice; the chosen one is raised. A theme option is
    a label with a radio, an icon and a word; a language is a submit button (aria-pressed), which
    keeps the shared button's 26 px and only loses its fill here. */
 .theme-choice {
-  display: inline-flex; flex-wrap: wrap; gap: 2px; margin: 0 0 .5rem; padding: 2px; min-width: 0;
+  display: inline-flex; flex-wrap: wrap; gap: 2px; margin: 0; padding: 2px; min-width: 0;
   background: var(--panel2); border: 1px solid var(--line); border-radius: 9px;
 }
 .theme-option {
-  position: relative; display: inline-flex; align-items: center; gap: .4rem;
-  min-height: var(--btn-h); margin: 0; padding: 0 .75rem; border-radius: 7px;
+  position: relative; display: inline-flex; align-items: center; gap: var(--sp-2);
+  min-height: var(--btn-h); margin: 0; padding: 0 var(--sp-4); border-radius: 7px;
   color: var(--mut); background: transparent; border: 0; font-size: 12.5px; cursor: pointer; user-select: none;
 }
 .theme-option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
@@ -775,10 +774,11 @@ label.check-field { min-block-size: 24px; align-content: center; color: var(--fg
 .theme-option:has(input:checked), .theme-option[aria-pressed="true"] { color: var(--fg); background: var(--panel); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
 .theme-option:has(input:focus-visible), .theme-option:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }
 /* The rows below the sections (Diagnostics, Guide, Sign out): a section's look - title where the
-   section titles start, a muted note, a chevron or the row's button at the end. */
+   section titles start (12 + 18 px), a muted note, a chevron or the row's button at the end. */
 .settings-link {
   display: grid; grid-template-columns: max-content minmax(0, 1fr) auto; align-items: center;
-  gap: .2rem .7rem; margin: 0; padding: .38rem .62rem .38rem 1.85rem; line-height: 1.25;
+  gap: var(--sp-1) var(--sp-4); margin: 0; line-height: 1.25;
+  padding: var(--sp-2) var(--sp-4) var(--sp-2) calc(var(--sp-4) + var(--sp-5));
   color: var(--fg); background: var(--panel); border: 1px solid var(--line-soft); border-radius: 7px;
   text-decoration: none;
 }
@@ -787,37 +787,39 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .settings-link-note { min-width: 0; color: var(--mut); font-size: 12.5px; }
 .settings-link > svg.i { color: var(--mut); }
 @media (max-width: 720px) {
-  .settings-link { grid-template-columns: minmax(0, 1fr) auto; padding-left: 1.75rem; }
+  .settings-link { grid-template-columns: minmax(0, 1fr) auto; padding: var(--sp-2) var(--sp-3) var(--sp-2) calc(var(--sp-3) + var(--sp-5)); }
   .settings-link-note { grid-column: 1; grid-row: 2; }
   .settings-link > :last-child { grid-column: 2; grid-row: 1 / span 2; }
 }
 /* Settings - its title, sections and the links below - spans the page on a desktop, as in 1.32.0
    (the owner's choice over 1.32.1's 64 rem column); the forms inside keep their own width. */
 .settings-page.settings-page-compact { width: 100%; max-width: none; }
-.settings-page-compact .settings-title { margin-bottom: .7rem; }
-.settings-page-compact .settings-title h1 { margin: 0; font-size: 1.45rem; }
-.settings-page-compact .settings-content { width: 100%; max-width: none; gap: .55rem; }
+.settings-page-compact .settings-title h1 { font-size: 1.45rem; }
+.settings-page-compact .settings-content { width: 100%; max-width: none; }
 .settings-accordion {
   width: 100%; padding: 0; overflow: hidden;
 }
+/* A section's row: the chevron in a 12 px slot, its title 6 px after it (18 px from the edge), the
+   pills at least 6 px after the title; 6 px above and below, 12 px at the sides (9 on a phone). */
 .settings-accordion > summary {
-  display: grid; grid-template-columns: 1rem minmax(0, 1fr) auto;
-  align-items: center; gap: .65rem; min-height: 3.2rem;
-  padding: .7rem .9rem; list-style: none; cursor: pointer;
+  display: grid; grid-template-columns: var(--sp-4) minmax(0, 1fr) auto;
+  align-items: center; gap: var(--sp-2); line-height: 1.25;
+  padding: var(--sp-2) var(--sp-4); list-style: none; cursor: pointer;
 }
+/* The section clips its rounded corners (overflow: hidden): the ring goes inside the row. */
+.settings-accordion > summary:focus-visible { outline-offset: -3px; }
 .settings-accordion > summary::-webkit-details-marker { display: none; }
 .settings-accordion[open] > summary { background: var(--open-row); }
 .settings-accordion > summary:hover { background: var(--panel2); }
 .settings-summary-title { font-size: 14px; font-weight: 650; color: var(--fg); }
-.settings-panel { padding: .85rem .9rem 1rem; border-top: 1px solid var(--line); }
+/* A section's panel: 9 px above and below, 12 px at the sides (9 on a phone); its blocks 9 px apart. */
+.settings-panel {
+  display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--line);
+}
 .settings-accordion .integration-head { align-items: center; }
 .settings-accordion .integration-head h2 { margin: 0; font-size: .98rem; }
 .unsaved-state { color: var(--warn); font-size: 12px; line-height: 1.45; }
-.settings-accordion.settings-log > summary {
-  display: grid; grid-template-columns: 1rem minmax(0, 1fr) auto;
-  padding: .7rem .9rem;
-}
-.settings-accordion .settings-log-body { padding: .85rem .9rem 1rem; }
 @media (max-width: 720px) {
   /* F3: a phone has one field a line - a text, a select, a secret or a folder field fills it (a cap
      left ragged right edges: 288, 306 and 346 px in one form); numbers stay short. In a row such a
@@ -855,89 +857,59 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
     content: attr(data-label) / ""; color: var(--mut); margin-right: .3em; flex: 0 0 auto;
     font: 400 12px/1.5 "Segoe UI", system-ui, sans-serif;
   }
-  .settings-section { padding: .85rem; }
   .settings-actions { align-items: stretch; }
   .settings-actions button { width: 100%; }
   /* The sign-in and first-start pages keep their buttons as wide as their words, as Settings does. */
   .auth-card .settings-actions button { width: auto; }
   .service-restart { align-items: stretch; flex-direction: column; }
   .service-restart button { width: 100%; }
-  .technical-details dl > div { grid-template-columns: 1fr; gap: .05rem; }
-  .settings-accordion > summary { padding: .68rem .72rem; }
-  .settings-panel { padding: .72rem; }
+  .technical-details dl > div { grid-template-columns: 1fr; gap: var(--sp-1); }
+  .settings-accordion > summary { padding: var(--sp-2) var(--sp-3); }
+  .settings-panel { padding: var(--sp-3); }
   /* A long pill ("Nightly backup 2026-10-13 09:28:19 UTC+03:00") wraps instead of losing its end:
      a phone has no tooltip to show the rest. */
   .settings-accordion > summary .pill { max-width: 48vw; white-space: normal; text-align: end; border-radius: .7rem; }
 }
 
 /* Compact settings accordion: equal, thin rows at every viewport width. */
-.settings-page-compact .settings-title { margin-bottom: .45rem; }
 .settings-page-compact .settings-title h1 { font-size: 1.28rem; line-height: 1.25; }
-.settings-page-compact .settings-content { gap: .35rem; }
-.settings-page-compact .settings-section {
-  padding: 0; border-color: var(--line-soft); border-radius: 7px; box-shadow: none;
-}
-.settings-page-compact .settings-accordion > summary,
-.settings-page-compact .settings-accordion.settings-log > summary {
-  min-height: 0; padding: .38rem .62rem;
-  grid-template-columns: .75rem minmax(0, 1fr) auto;
-  gap: .48rem; line-height: 1.25;
-}
+.settings-page-compact .settings-section { border-color: var(--line-soft); border-radius: 7px; box-shadow: none; }
 /* A section title reads above its cards: 15 px against 13.5 px; pills stay legible (11 px). */
 .settings-page-compact .settings-summary-title { font-size: 15px; }
-.settings-page-compact .settings-accordion > summary .pill {
-  padding: .1rem .42rem; font-size: 11px;
-}
-.settings-page-compact .settings-panel,
-.settings-page-compact .settings-accordion .settings-log-body {
-  padding: .58rem .65rem .68rem; border-top-color: var(--line-soft);
-}
-.settings-page-compact .integration-list { gap: .5rem; }
-.settings-page-compact .integration-card {
-  padding: .55rem .65rem; border-color: var(--line-soft); border-radius: 7px;
-}
-.settings-page-compact .integration-head { padding-bottom: .42rem; }
+.settings-page-compact .settings-panel { border-top-color: var(--line-soft); }
+.settings-page-compact .integration-card { border-color: var(--line-soft); border-radius: 7px; }
 .settings-page-compact .integration-head h2,
 .settings-page-compact .service-restart h2,
 .settings-page-compact .backup-card h2 { font-size: 13.5px; }
-.settings-page-compact .service-restart {
-  margin-top: .58rem; padding-top: .58rem;
-}
-.settings-page-compact .notice { padding: .48rem .58rem; }
 .settings-page-compact button:not(.ico) { min-width: 0; }
 .immediate-form { margin: 0; }
 .service-restart { justify-content: flex-start; }
 .service-restart p { margin: 0; color: var(--mut); font-size: 12px; }
-.restart-result { margin: .55rem 0 0; color: var(--mut); font-size: 12px; line-height: 1.45; }
+.restart-result { color: var(--mut); font-size: 12px; line-height: 1.45; }
 .restart-result.error { color: var(--bad); }
-.restore-point-list { display: grid; gap: .38rem; margin-top: .55rem; }
+.restore-point-list { display: grid; gap: var(--sp-2); }
 .restore-point-row {
   display: grid; grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center; gap: .65rem; padding: .45rem .5rem;
+  align-items: center; gap: var(--sp-4); padding: var(--sp-2) var(--sp-3);
   background: var(--panel2); border: 1px solid var(--line); border-radius: 6px;
 }
-.restore-point-row > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: .5rem; min-width: 0; }
+.restore-point-row > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-2); min-width: 0; }
 .restore-point-row b { font-size: 13px; font-weight: 600; }
 .restore-point-row span { color: var(--mut); font-size: 12px; }
-.restore-point-row .backup-copy-actions { align-items: center; justify-content: flex-end; gap: .35rem; margin: 0; }
+.restore-point-row .backup-copy-actions { align-items: center; justify-content: flex-end; gap: var(--sp-2); }
 .backup-delete-confirm { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
 .backup-delete-confirm h2 { font-size: .95rem; }
 .backup-inventory, .backup-location { min-width: 0; border: 1px solid var(--line); border-radius: 6px; }
-.backup-inventory > summary, .backup-location > summary { padding: .35rem .5rem; font-size: 12.5px; cursor: pointer; }
-.backup-location > form { padding: .5rem; }
-.backup-inventory > .restore-point-list { padding: .35rem; max-height: 20rem; overflow-y: auto; overscroll-behavior: contain; }
-.settings-page-compact .settings-empty { margin: .55rem 0 0; padding: .55rem .65rem; }
-/* L6: backups are three cards: night copies, copies made by hand, a TOW file. */
-.backup-card { display: grid; gap: .6rem; }
-.backup-card .integration-head { padding-bottom: .5rem; }
+/* A folded list or folder inside a card: its row 6 px above and below, 9 px at the sides; open, its
+   content follows 6 px under the row's text (the row's own padding) with 9 px at the sides and end. */
+.backup-inventory > summary, .backup-location > summary { padding: var(--sp-2) var(--sp-3); font-size: 12.5px; cursor: pointer; }
+.backup-location > form { padding: 0 var(--sp-3) var(--sp-3); }
+.backup-inventory > .restore-point-list { padding: 0 var(--sp-3) var(--sp-3); max-height: 20rem; overflow-y: auto; overscroll-behavior: contain; }
 @media (max-width: 720px) {
   /* A phone has no room beside the card's text: its status pill goes under the title. */
-  .backup-card .integration-head { flex-direction: column; align-items: flex-start; gap: .3rem; }
+  .backup-card .integration-head { flex-direction: column; align-items: flex-start; gap: var(--sp-1); }
 }
-.backup-card h2 { margin: 0; font-size: .9rem; }
-.backup-card form { margin: 0; }
-.backup-card .restore-point-list { margin-top: 0; }
-.backup-card .section-note { margin: 0; }
+.backup-card h2 { font-size: .9rem; }
 .portable-import-form { display: grid; gap: var(--sp-3); max-width: 42rem; }
 /* L1: as tall as the other fields; its 26 px button sits centred inside. */
 .portable-import-form input[type="file"], .content-picker input[type="file"] {
@@ -962,11 +934,6 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .file-pick[data-ready] > .file-name.chosen { color: var(--fg); }
 .file-pick[data-ready]:has(> .file-native:focus-visible) > .file-button { outline: 2px solid var(--acc); outline-offset: 2px; }
 @media (max-width: 720px) {
-  .settings-page-compact .settings-section { padding: 0; }
-  .settings-page-compact .settings-accordion > summary,
-  .settings-page-compact .settings-accordion.settings-log > summary { padding: .4rem .52rem; }
-  .settings-page-compact .settings-panel,
-  .settings-page-compact .settings-accordion .settings-log-body { padding: .55rem; }
   .settings-page-compact .copy-command { width: 100%; }
   .restore-point-row { grid-template-columns: 1fr; }
   .restore-point-row .backup-copy-actions { justify-content: flex-start; }
@@ -1219,12 +1186,10 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 .secret-store a { text-decoration: underline; }
 /* The master-key note: its "Copy the command" stays one 26 px line, beside the text on a wide
    page and under it on a phone (the text column shrank it into two lines before). */
-.notice.secret-store { flex-wrap: wrap; margin-bottom: 1rem; }
+.notice.secret-store { flex-wrap: wrap; }
 /* Beside its icon on a phone too: never wider than the line left after the icon (1 rem + gap). */
 .notice.secret-store > .notice-text { flex: 1 1 min(24rem, calc(100% - 1.5rem)); }
-.secret-store-copy {
-  display: inline-flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: .4rem; margin-left: .4rem;
-}
+.secret-store-copy { display: inline-flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
 .secret-store-copy > button { white-space: nowrap; }
 /* Check all's report: below the sticky header when its link lands on it; closed by its x. Its
    title, sentences and list 6 px apart, the list's rows 3 px. */
@@ -1245,20 +1210,21 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 /* == settings == */
 /* Settings only; the shared field sizes (.w-*, .form-grid, .field-row, .secret) are above. */
 /* Language and theme: two small forms, side by side when there is room. */
-.settings-panel.appearance { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .6rem 2.5rem; }
-.settings-page .appearance > form { flex: 0 1 auto; min-width: 0; max-width: 100%; margin: 0; padding-top: 0; }
+.settings-panel.appearance { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--sp-3) var(--sp-4); }
+.settings-page .appearance > form { flex: 0 1 auto; min-width: 0; max-width: 100%; }
 .inline-save { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; }
 @media (max-width: 420px) {
   /* AU1: a small phone keeps the sign-in card's room for its fields (290 px of 360 were left). */
   main.auth-shell { padding: .5rem; }
   .card.auth-card { padding: .9rem; }
 }
-.theme-field { display: grid; gap: .16rem; min-width: 0; margin: 0; padding: 0; border: 0; }
-.theme-field > legend { margin: 0 0 .16rem; padding: 0; color: var(--mut); font-size: 12px; }
+/* A legend is no item of its fieldset's grid: its own 3 px place it above the choice. */
+.theme-field { display: grid; gap: var(--sp-1); min-width: 0; margin: 0; padding: 0; border: 0; }
+.theme-field > legend { margin: 0 0 var(--sp-1); padding: 0; color: var(--mut); font-size: 12px; line-height: 1.45; }
 /* As wide as its segments (it still wraps when the line is narrower): the language's track had
    stretched to its note's width, ending in empty space (QA Q7). */
 .theme-field .theme-choice { justify-self: start; margin: 0; }
-.appearance .field-hint { max-width: 68ch; margin-top: .16rem; }
+.appearance .field-hint { max-width: 68ch; }
 /* The forms (.form-grid): a fieldset's fields 9 px apart like the form's own groups; the compact
    page's per-field margins do not add to that gap. */
 .settings-page .form-grid > fieldset { display: grid; gap: var(--sp-3); min-width: 0; }
@@ -1287,13 +1253,13 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 :is(.client-card, .protection-card) > summary::-webkit-details-marker { display: none; }
 .settings-page-compact :is(.client-card, .protection-card):not([open]) > summary { border-bottom: 0; padding-bottom: 0; }
 .client-card > summary h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card-meta { margin-left: .35rem; color: var(--mut); font-size: 12px; font-weight: 400; }
+.card-meta { margin-left: var(--sp-2); color: var(--mut); font-size: 12px; font-weight: 400; }
 /* A connection's order number keeps its label on one line beside the address; the three limits
    share their line. */
 .protection-card .field-row > .field:has(.w-xs) { flex: 0 0 auto; }
 .protection-card .field-row > .field:has(.w-xs) > label { white-space: nowrap; }
 /* Version and updates: a section inside another reads as inside it. */
-.technical-details .technical-details { margin-left: 1rem; }
+.technical-details .technical-details { margin-left: var(--sp-5); }
 /* == screens == */
 /* Home rows (1.32): the event and its progress share one column (the Progress column was empty on
    most rows); a tablet leaves the folder out (the edit panel has it); a phone says a topic in two

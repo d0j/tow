@@ -52,6 +52,7 @@
                 {% if c.id in clients_down %}<span class="pill bad">{{ t('settings.clients.pill_not_answering') }}</span>{% elif not c.host and c.multi %}<span class="pill warn">{{ t('settings.clients.not_configured') }}</span>{% endif %}
               </span>
             </summary>
+            <div class="card-body">
             {% if c.id in clients_down %}{{ note(t('settings.clients.not_answering'), clients_down[c.id].severity, issue=clients_down[c.id].issue) }}{% endif %}
             {% if c.steps %}
             <details class="technical-details notifier-steps" {% if not c.host %}open{% endif %}>
@@ -111,14 +112,14 @@
               <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved_save_first') }}</p>
               </div>
             </form>
-            <form id="ping-{{ c.form_id }}" method="post" action="/settings/client/ping" data-return-target="client-{{ c.id }}">
+            <form id="ping-{{ c.form_id }}" method="post" action="/settings/client/ping" data-return-target="client-{{ c.id }}" hidden>
               <input type="hidden" name="client_id" value="{{ c.id }}">
             </form>
             {% if c.multi and not c.default %}
-            <form id="default-{{ c.form_id }}" method="post" action="/settings/client/default" data-return-target="client-{{ c.id }}">
+            <form id="default-{{ c.form_id }}" method="post" action="/settings/client/default" data-return-target="client-{{ c.id }}" hidden>
               <input type="hidden" name="client_id" value="{{ c.id }}">
             </form>
-            <form id="remove-{{ c.form_id }}" method="post" action="/settings/client/remove" data-return-target="acc-clients" data-confirm="{{ t('settings.clients.remove_confirm', title=c.title) }}" data-confirm-label="{{ t('settings.common.remove') }}" data-confirm-danger>
+            <form id="remove-{{ c.form_id }}" method="post" action="/settings/client/remove" data-return-target="acc-clients" data-confirm="{{ t('settings.clients.remove_confirm', title=c.title) }}" data-confirm-label="{{ t('settings.common.remove') }}" data-confirm-danger hidden>
               <input type="hidden" name="client_id" value="{{ c.id }}">
             </form>
             {% endif %}
@@ -129,6 +130,7 @@
                 <div><dt>ID</dt><dd><code>{{ c.id }}</code></dd></div>
               </dl>
             </details>
+            </div>
           </details>
           {% else %}
           <div class="settings-empty">{{ t('settings.clients.empty') }}</div>
@@ -180,6 +182,7 @@
               <span class="pill mut">{{ t('settings.notify.unchecked') }}</span>
               {% endif %}
             </summary>
+            <div class="card-body">
             {% if n.connected and n.error %}
             {{ note(n.error, 'bad') }}
             {% endif %}
@@ -234,9 +237,10 @@
               </div>
             </form>
             {% if n.connected %}
-            <form id="notifier-test-{{ n.kind }}" method="post" action="/settings/notifier/{{ n.kind }}/test" data-return-target="acc-bots"></form>
-            <form id="notifier-remove-{{ n.kind }}" method="post" action="/settings/notifier/{{ n.kind }}/remove" data-return-target="acc-bots" data-confirm="{{ t('settings.notify.remove_confirm', name=n.title) }}" data-confirm-label="{{ t('settings.notify.disconnect') }}" data-confirm-danger></form>
+            <form id="notifier-test-{{ n.kind }}" method="post" action="/settings/notifier/{{ n.kind }}/test" data-return-target="acc-bots" hidden></form>
+            <form id="notifier-remove-{{ n.kind }}" method="post" action="/settings/notifier/{{ n.kind }}/remove" data-return-target="acc-bots" data-confirm="{{ t('settings.notify.remove_confirm', name=n.title) }}" data-confirm-label="{{ t('settings.notify.disconnect') }}" data-confirm-danger hidden></form>
             {% endif %}
+            </div>
           </details>
           {% endfor %}
         </div>
@@ -283,6 +287,7 @@
             Change". Without one, ticking the box shows the password and its reminder, and "Save and
             enable" saves the three together - the box alone opens nothing. -#}
         <div class="integration-card access-card" id="access-card">
+          <div class="card-body">
           {% if not access_local %}
           {{ note(t('settings.access.local_only')) }}
           {% elif lan_password_set or allow_lan %}
@@ -369,6 +374,7 @@
             </div>
           </details>
           {% endif %}
+          </div>
         </div>
       </div>
     </details>
@@ -406,6 +412,7 @@
               <div><h2 id="backup-night-title">{{ t('settings.backups.night_title') }}</h2><p>{{ t('settings.backups.night_hint') }}</p></div>
               {% if backups.cleanup_pending or (night_cleanup_unknown and backups.snapshots) %}<span class="pill warn">{{ t('settings.backups.pill_cleanup' if backups.cleanup_pending else 'settings.backups.pill_unknown') }}</span>{% endif %}
             </div>
+            <div class="card-body">
             {{ issue_notes_at(notes, 'backup-night') }}{% if backups.read_error %}{{ note(backups.error, 'bad') }}{% elif backups.failed %}{{ note(tm('settings.backups.failed', at=backups.error_when | short_time if backups.error_when else backups.error_at, error=backups.error), 'bad') }}{% endif %}{# one note per condition: a lost data folder (its issue) and a failed copy are two #}
             {% if backups.cleanup_pending %}<p class="section-note" role="note">{{ t('backup.snapshot.cleanup_warning') }}</p>{% endif %}
             {% if backups.cleanup_legacy %}<p class="section-note" role="note">{{ t('backup.snapshot.cleanup_legacy') }}</p>{% elif night_cleanup_unknown %}<p class="section-note" role="note">{{ t('backup.snapshot.cleanup_unknown') }}</p>{% endif %}
@@ -456,6 +463,7 @@
               <summary>{{ t('settings.backups.folder_short') }}{% if backups.folders.night.is_default %} <span class="pill mut">{{ t('settings.backups.default_pill') }}</span>{% endif %}</summary>
               {{ folder_form(backups.folders.night, t('settings.backups.folders_hint')) }}
             </details>
+            </div>
           </article>
 
           <article class="integration-card backup-card" id="backup-manual" aria-labelledby="backup-manual-title">
@@ -463,6 +471,7 @@
               <div><h2 id="backup-manual-title">{{ t('settings.backups.manual_title') }}</h2><p>{{ t('settings.backups.manual_note') }}</p></div>
               {% if backups.point_cleanup_pending or point_cleanup_unknown %}<span class="pill warn">{{ t('settings.backups.pill_cleanup' if backups.point_cleanup_pending else 'settings.backups.pill_unknown') }}</span>{% elif not restore_points and not restore_points_error %}<span class="pill mut">{{ t('settings.backups.manual_empty') }}</span>{% endif %}
             </div>
+            <div class="card-body">
             {% if backups.point_cleanup_pending %}<p class="section-note" role="note">{{ t('backup.restore_point.cleanup_pending') }}</p>{% endif %}
             {% if point_cleanup_unknown %}<p class="section-note" role="note">{{ t('backup.restore_point.cleanup_legacy' if backups.point_cleanup_legacy else 'backup.restore_point.cleanup_unknown') }}</p>{% endif %}
             <form method="post" action="/settings/restore-points" data-return-target="acc-transfer" class="settings-actions backup-make">
@@ -495,12 +504,14 @@
               <summary>{{ t('settings.backups.folder_short') }}{% if backups.folders.manual.is_default %} <span class="pill mut">{{ t('settings.backups.default_pill') }}</span>{% endif %}</summary>
               {{ folder_form(backups.folders.manual, '') }}
             </details>
+            </div>
           </article>
 
           <article class="integration-card backup-card portable-transfer" id="backup-file" aria-labelledby="backup-file-title">
             <div class="integration-head">
               <div><h2 id="backup-file-title">{{ t('settings.backups.file_title') }}</h2><p>{{ t('settings.backups.file_intro') }}</p></div>
             </div>
+            <div class="card-body">
             <form method="post" action="/settings/portable/export" data-native-submit class="settings-actions backup-make">
               <button type="submit">{{ t('settings.backups.file_save') }}</button>
             </form>
@@ -515,6 +526,7 @@
               </div>
             </form>
             <p class="section-note">{{ tm('settings.backups.file_note', more='/settings/help#export-import') }}</p>
+            </div>
           </article>
         </div>
       </div>
@@ -662,8 +674,8 @@
               {{ choice('auto', t('settings.language.auto', name=language_setting.current_name)) }}
               {% for l in languages() %}{{ choice(l.code, l.native) }}{% endfor %}
             </div>
+            <p id="language-note" class="field-hint">{% if language_setting.auto %}{{ t('settings.language.messages_note_auto') }}{% else %}{{ t('settings.language.messages_note') }}{% endif %}</p>
           </fieldset>
-          <p id="language-note" class="field-hint">{% if language_setting.auto %}{{ t('settings.language.messages_note_auto') }}{% else %}{{ t('settings.language.messages_note') }}{% endif %}</p>
         </form>
         <form method="post" action="/settings/theme" class="theme-form" id="acc-theme" data-return-target="acc-theme" data-theme-form>
           <fieldset class="theme-field">

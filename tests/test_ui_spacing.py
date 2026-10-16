@@ -132,3 +132,46 @@ def test_a_hint_about_a_row_of_fields_is_grouped_with_it():
     assert re.search(
         r'<div class="field">\s*<div class="field-row">\s*<div class="field"><label for="tracker-username', dialog
     )
+
+
+def test_settings_sections_panels_and_cards_on_the_scale():
+    """One padding per box, no compact duplicates: a section's row 6/12 px, its panel 9/12 px (9 on a
+    phone), a card 9 px all round with its head 6 px above its line and its body 6 px under it, the
+    links below the sections with their titles where the section titles start (12 + 18 px)."""
+    summary = _rule(".settings-accordion > summary")
+    assert "grid-template-columns: var(--sp-4) minmax(0, 1fr) auto" in summary  # a 12 px chevron slot
+    assert "gap: var(--sp-2)" in summary
+    assert "padding: var(--sp-2) var(--sp-4)" in summary
+    assert "outline-offset: -3px" in _rule(".settings-accordion > summary:focus-visible")  # not clipped
+    panel = _rule(".settings-panel")
+    assert "padding: var(--sp-3) var(--sp-4)" in panel
+    assert "gap: var(--sp-3)" in panel
+    assert "  .settings-panel { padding: var(--sp-3); }" in CSS  # a phone
+    card = _rule(".integration-card")
+    assert "padding: var(--sp-3)" in card
+    assert "gap: var(--sp-2)" in card
+    assert "gap: var(--sp-3)" in _rule(".card-body")
+    head = _rule(".integration-head")
+    assert "padding-bottom: var(--sp-2)" in head
+    assert "gap: var(--sp-3)" in head  # a title and its pills at least 9 px apart
+    assert "calc(var(--sp-4) + var(--sp-5))" in _rule(".settings-link")
+    assert "padding: var(--sp-2) var(--sp-3)" in _rule(".backup-inventory > summary, .backup-location > summary")
+    assert "padding: 0 var(--sp-3) var(--sp-3)" in _rule(".backup-location > form")
+    for duplicate in (".settings-page-compact .settings-panel", ".settings-page-compact .integration-card"):
+        assert "padding" not in _rule(duplicate), duplicate
+    assert "margin" not in _rule(".backup-card h2")
+    assert ".backup-card form" not in CSS
+
+
+def test_settings_button_only_forms_and_empty_rows_take_no_place():
+    page = (ROOT / "tests" / "golden" / "settings-page.html").read_text(encoding="utf-8")
+    forms = re.findall(
+        r'<form id="(?:ping|default|remove|notifier-test|notifier-remove|protection-remove)-[^"]*"[^>]*>', page
+    )
+    assert forms
+    assert all(" hidden" in tag for tag in forms), forms
+    assert "display: none" in _rule(":is(.settings-actions, .actions):not(:has(> :not([hidden])))")
+    # The language note describes the choice it sits under (3 px), inside its fieldset.
+    settings = (TEMPLATES / "settings.html").read_text(encoding="utf-8")
+    fieldset = settings[settings.index('<fieldset class="theme-field" aria-describedby="language-note">') :]
+    assert fieldset.index('id="language-note"') < fieldset.index("</fieldset>")
