@@ -45,6 +45,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Settings is one column in the middle of the page instead of the whole window; the buttons of a topic's or a site's
   edit panel stay beside its form, with Delete next to Cancel as a quiet red outline; the add forms on Home and Sites
   are as wide as their fields.
+- Fields stand out from grey cards; every checkbox has one size and the accent colour; every fold-out (How to connect,
+  Advanced, Technical details…) has the same arrow and a larger target; an intro above the cards runs as wide as the
+  fields; the Log and History read in the page's font; the sign-in field fills its card, also on a small phone.
 
 ## [1.32.0] — 2026-10-16
 
