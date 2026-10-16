@@ -102,6 +102,18 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   for another one, is no longer added back by it.
 - First start in a browser without JavaScript is no longer stopped by a short password typed and then hidden by
   clearing "Open TOW from other devices": Start goes on, for this computer only.
+- The search icon is back in the header of Settings, where it finds a section by its words, also by any word of its
+  title or of its cards' titles ("Backups", "Nightly backups"). 1.32.0 removed it saying it filtered nothing there;
+  on Settings it did filter the sections.
+- An opened topic on Home starts with its last event and its full date and time ("Last event: S02E03,
+  2026-10-16 11:00:02 UTC+03:00"): the row shows the time short, and a phone or a keyboard could not see
+  the full one. "Last successful check" lost its stray full stop.
+- On Diagnostics the torrent client's card has a heading like the other cards, and the notes are no wider than a
+  form.
+- The backup deletion page showed the copy's time in raw form ("16.10.2026 11:00:02 UTC+03:00"); it uses the
+  short time like every other page, Delete comes before Cancel, and the page is as wide as Settings.
+- Settings → Version and updates no longer repeats "Automatic update checks are off" under the unticked box; a check
+  asked by hand still says its result.
 - Files whose first folder or name has a colon (`Star Trek: Discovery/…`, as a torrent client on Linux, macOS or
   a NAS saves them) are now tracked: before, they were silently left out of progress, completions and episode
   events. Under a Windows folder a colon is still refused in any part of a file's path, since Windows reads it as
@@ -162,40 +174,6 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   and an install reached through a link or junction; BusyBox systems read leftovers from `/proc`.
 - `scripts/deploy.ps1` of a moved or copied git install runs the update with the install's own Python again: it
   looked only at the old folder, then said "pyvenv.cfg is missing", and a copy used the original's Python.
-### Changed
-
-- Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password
-  or a host 240 px, a link or a folder up to 576 px), fields that belong together share a line whenever they fit
-  instead of only in a wide form, and on a phone every text field fills its line. A rule field starts as one line and
-  grows as you type.
-- Settings is one column in the middle of the page instead of the whole window; the buttons of a topic's or a site's
-  edit panel stay beside its form, with Delete next to Cancel as a quiet red outline; the add forms on Home and Sites
-  are as wide as their fields.
-- Fields stand out from grey cards; every checkbox has one size and the accent colour; every fold-out (How to connect,
-  Advanced, Technical details…) has the same arrow and a larger target; an intro above the cards runs as wide as the
-  fields; the Log and History read in the page's font; the sign-in field fills its card, also on a small phone.
-- Confirmations (remove a topic or a site, restore a backup, install an update, use a site's download limit…) open in
-  TOW's own window in the page's language, with the action on its button; for a destructive one Cancel is selected
-  first. Without JavaScript the pages ask as before.
-- Times in the Log are no longer a tab stop each: one “Full timestamps” button shows every time of the list with its
-  seconds and time zone, and the tab remembers the choice; a tap on a time still shows it.
-- The header no longer ends in a bare “—” while no check is scheduled: the countdown appears once there is one, and a
-  failed check is always shown.
-
-### Fixed
-
-- The search icon is back in the header of Settings, where it finds a section by its words, also by any word of its
-  title or of its cards' titles ("Backups", "Nightly backups"). 1.32.0 removed it saying it filtered nothing there;
-  on Settings it did filter the sections.
-- An opened topic on Home starts with its last event and its full date and time ("Last event: S02E03,
-  2026-10-16 11:00:02 UTC+03:00"): the row shows the time short, and a phone or a keyboard could not see
-  the full one. "Last successful check" lost its stray full stop.
-- On Diagnostics the torrent client's card has a heading like the other cards, and the notes are no wider than a
-  form.
-- The backup deletion page showed the copy's time in raw form ("16.10.2026 11:00:02 UTC+03:00"); it uses the
-  short time like every other page, Delete comes before Cancel, and the page is as wide as Settings.
-- Settings → Updates no longer repeats "Automatic update checks are off" under the unticked box; a check asked by
-  hand still says its result.
 
 ## [1.32.0] — 2026-10-16
 
@@ -320,7 +298,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   file picker waits for its first add (for example while its torrent client is offline): TOW kept the prepared
   torrent's id under a name the backup check takes for a password. It now has another name, and what older
   versions saved is accepted. If such a topic waits now, update to this version from the terminal once
-  (Settings → Updates → How to update).
+  (Settings → Version and updates → How to update).
 - A site whose name looks like a password field (a site on my-token.example is named "my_token", one on
   pass.example "pass") or a downloaded file so named no longer stops every restore point and update from
   Settings: such names are now told apart from real password fields.
