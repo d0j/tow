@@ -131,3 +131,36 @@ jobs:
       - name: Install, start with the start file, check, stop, reinstall, uninstall
         if: env.RUN == 'true'
         run: sh scripts/install-smoke.sh "$RUNNER_TEMP/tow-source.tar.gz" 18877
+
+  # Windows, the owner's system, on every commit: the bundle built once from git's archive of this
+  # commit, unpacked, started offline, stopped, moved with its environment, started offline again
+  # (bundle-smoke.ps1, which also fails on a write to the tested TEMP or outside the folder).
+  # install.ps1, the folder-limit runs and the update stay in installers.yml and release.yml.
+  bundle:
+    name: Windows bundle smoke
+    needs: changes
+    if: ${{ !cancelled() }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      RUN: ${{ needs.changes.outputs.code != 'false' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        if: env.RUN == 'true'
+        with:
+          save-cache: false
+      - name: Source archive of this commit
+        if: env.RUN == 'true'
+        shell: bash
+        run: git archive --format=tar.gz --prefix=tow/ -o "$RUNNER_TEMP/tow-source.tar.gz" HEAD
+      - name: Build the bundle
+        if: env.RUN == 'true'
+        shell: pwsh
+        run: uv run --no-project python scripts/build-bundle.py --out dist --source "$env:RUNNER_TEMP/tow-source.tar.gz"
+      - name: Unpack, start offline, stop, move with its existing environment, start offline again
+        if: env.RUN == 'true'
+        shell: pwsh
+        run: ./scripts/bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Offline -Move
