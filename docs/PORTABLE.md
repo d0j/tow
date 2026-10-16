@@ -283,7 +283,10 @@ blocks for long.
     what it saw like a scheduled pass); it never restarts anything either;
   - jobs run one at a time (a check also holds `check_run_lock` against a check from the web
     page), each with a time limit (check and timer 1 h, progress and space 10 min, night copy
-    30 min); output goes to
+    30 min). On Linux and macOS a job past its limit gets SIGTERM first; on Windows it is ended at
+    once with its whole process tree (`taskkill /T /F`). TOW's own files are written atomically and
+    the journals let the next run recover them, but a step the job had begun elsewhere (a request
+    to a site or to the torrent client) may stay half done; output goes to
     `data/logs/<job>-last.log` (`check`, `timer`, `progress`, `space`, `backup`).
 - **Sleep and wake.** A wall clock that jumped ahead of the monotonic one (or a loop that stood
   still for more than five minutes) means the machine slept: overdue jobs run at once, a server
@@ -398,6 +401,10 @@ gone, so Diagnostics, Settings → TOW service, `tow status` and `tow doctor` sa
   delayed expansion off (`setlocal DisableDelayedExpansion`, `call "%%~dp0..."`), so one `%`, `!`
   or `^`, spaces, `&`, `( )` and non-Latin letters work. `install.ps1` refuses a folder with two
   `%`, two `!`, or a `^` and a `!` before it writes anything; do not move an install into one.
+- `data/` belongs on a local file system. TOW's locks (`flock` on Linux and macOS, file locks on
+  Windows) on NFS or SMB depend on the protocol version, the kernel and the mount options, and may
+  not keep a second TOW on another computer out; TOW does not check this. Night copies and restore
+  points may go to a network folder: only the live `data/` must be local.
 - The folder needs a file system with links: uv links `runtime/python/cpython-X.Y-*` to the
   full version (a junction on Windows, a symlink elsewhere). FAT32 and exFAT (many USB sticks)
   have none, and `tow setup` cannot complete there (not verified on every uv version); use NTFS
@@ -561,8 +568,12 @@ same steps, with the code from the release instead of git.
   or `restored`) and no update holds `.update.lock`, `tow run`, `tow start` and the start
   files refuse to start TOW (`app/` may hold half of the new code) and say to run the update
   again; the start files read the record and the lock with PowerShell, or with grep and
-  `flock` (`perl` where there is none), since the code in `app/` may not run. Ctrl+C, Ctrl+Break or a closed terminal do not cut the
-  switch off: it finishes or rolls back first. The updater is copied to `<TOW>/runtime/update.py` before moving files so the
+  `flock` (`perl` where there is none), since the code in `app/` may not run. Ctrl+C and
+  Ctrl+Break do not cut the switch off: it finishes or rolls back first. Closing the console
+  window on Windows still ends the updater within seconds (Windows allows no longer), and a
+  killed process or a power cut ends it at once: the next run of the update reads the switch
+  record and tries to put the previous code back first. That needs the record and the moved
+  code (`app.prev/`) to be readable; when they are not, it says so and changes nothing. The updater is copied to `<TOW>/runtime/update.py` before moving files so the
   launchers can run it even if `app/scripts` is temporarily absent. A rollback moves back the
   entries recorded on disk (the failed code goes to `app.failed/` and is removed), so the old
   `.venv` is in its place again and its absolute paths are right. One `app.prev` is kept after

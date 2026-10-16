@@ -598,9 +598,11 @@ class System:
 
     @contextlib.contextmanager
     def shielded(self) -> Iterator[None]:
-        """Ctrl+C, Ctrl+Break and a closed terminal wait while the code is switched: the update
-        finishes or rolls back first. A handler, not SIG_IGN, so the programs started meanwhile
-        (uv, tow run) keep the default; a uv cut off by Ctrl+C fails, and that is rolled back."""
+        """Ctrl+C and Ctrl+Break wait while the code is switched: the update finishes or rolls back
+        first. A closed console on Windows still ends this process within seconds, and a kill or a
+        power cut at once: the switch record lets the next run try the recovery. A handler, not
+        SIG_IGN, so the programs started meanwhile (uv, tow run) keep the default; a uv cut off by
+        Ctrl+C fails, and that is rolled back."""
         saved = []
         for name in ("SIGINT", "SIGBREAK", "SIGHUP"):
             number = getattr(signal, name, None)
