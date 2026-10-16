@@ -1255,7 +1255,9 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 }
 .theme-field { display: grid; gap: .16rem; min-width: 0; margin: 0; padding: 0; border: 0; }
 .theme-field > legend { margin: 0 0 .16rem; padding: 0; color: var(--mut); font-size: 12px; }
-.theme-field .theme-choice { margin: 0; }
+/* As wide as its segments (it still wraps when the line is narrower): the language's track had
+   stretched to its note's width, ending in empty space (QA Q7). */
+.theme-field .theme-choice { justify-self: start; margin: 0; }
 .appearance .field-hint { max-width: 68ch; margin-top: .16rem; }
 /* The forms (.form-grid): a fieldset's fields 9 px apart like the form's own groups; the compact
    page's per-field margins do not add to that gap. */

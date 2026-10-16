@@ -325,6 +325,13 @@ def test_the_language_is_one_segmented_choice_like_the_theme():
         assert len(i18n.translate("settings.language.auto", lang, name="Русский")) <= 30  # about 33 fit at 390 px
 
 
+def test_the_language_segments_are_as_wide_as_their_buttons():
+    """QA Q7: in the language form the segmented track stretched to the form's width (438 px in ru,
+    set by the note under it), with an empty end after the last button; the theme's track is as
+    wide as its options. A grid item that keeps its own width: both are."""
+    assert "justify-self: start" in _first(".theme-field .theme-choice")
+
+
 def test_the_check_all_cards_title_is_a_card_title():
     """1.32 QA L8: "Results" used the browser's 1.5em (22 px); every card or dialog title is 1.05rem."""
     assert "font-size: 1.05rem" in _first(".check-results h2")
