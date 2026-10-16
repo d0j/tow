@@ -275,7 +275,7 @@ def test_the_updates_card_writes_its_times_by_the_one_rule():
 def test_page_scripts_write_times_by_the_servers_rule_in_tows_zone():
     verdict = _verdict("time_short.mjs")
     assert verdict == dict.fromkeys(verdict, True), verdict
-    assert len(verdict) == 9
+    assert len(verdict) == 10
 
 
 @pytest.mark.allow_system

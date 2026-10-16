@@ -26,7 +26,7 @@ const texts = (lang, zone) => ({
   ...(zone.name ? { _tz_name: zone.name } : {}),
 });
 
-const load = (lang, zone, extra = []) => {
+const load = (lang, zone, extra = [], health = {}) => {
   const document = fakeDocument();
   document.body.append(build(document, ["script", { id: "tow-i18n" }, JSON.stringify(texts(lang, zone))]), ...extra.map((spec) => build(document, spec)));
   const timers = [];
@@ -39,7 +39,7 @@ const load = (lang, zone, extra = []) => {
     sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     localStorage: { getItem: () => null, setItem() {} },
     performance: { now: () => 0 },
-    fetch: () => Promise.resolve({ ok: true, json: async () => ({}) }),
+    fetch: (url) => Promise.resolve({ ok: true, json: async () => (String(url) === "/health.json" ? { ok: true, ...health } : {}) }),
     setTimeout: (fn, ms) => { timers.push(ms); return timers.length; }, clearTimeout() {}, setInterval: () => 0, clearInterval() {},
   };
   context.window = { ...context, addEventListener() {}, confirm: () => true };
@@ -146,6 +146,19 @@ verdict.namedZoneHasEachMomentsOffset = true;
   assert.equal(page.time.element("15.10.2026 22:48 CET", "15.10.2026 22:48 CET").textContent, "15.10.2026 22:48 CET");
 }
 verdict.withoutTheNameEveryTimeIsWrittenAgainWithItsOwnOffset = true;
+
+// "Today" by TOW's offset now, which changes twice a year: when the tab is shown again the page asks
+// /health.json (its signed-in poll) for it. 18:45 UTC is 21:02 at +02:17, but already the 17th at
+// +06:00: a time of the 16th written "21:00" becomes dated.
+{
+  const page = load("en", odd, [["time", { datetime: "2026-10-16T21:00:00+02:17", "data-short": "", title: "x" }, "21:00"]], { tz_now: 360 });
+  const node = page.document.root.querySelector("time[data-short]");
+  page.document.dispatch(page.document.body, "visibilitychange");
+  for (let n = 0; n < 8; n++) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(node.textContent, "16 Oct, 21:00");
+  assert.equal(page.time.short(NOW - 1800000), "00:15"); // its own times now by the new offset
+}
+verdict.todayFollowsTowsOffsetFromTheServer = true;
 
 // With the name: the server's <time>s are written again when the tab is shown and at TOW's
 // midnight, and a script computes the server's words itself.
