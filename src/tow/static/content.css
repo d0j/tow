@@ -1,5 +1,9 @@
 .content-picker { grid-column: 1 / -1; min-width: 0; border: 1px solid var(--line); border-radius: .4rem; padding: .5rem; }
 .content-picker .actions { flex-wrap: wrap; }
+/* Its parts (the head, the help, other sources, the status line, the search) stand apart; an empty
+   status line (a live region, kept in place) takes no room. */
+.content-picker > :not(:first-child):not(:empty) { margin-top: .45rem; }
+.content-picker > :empty { margin-block: 0; }
 /* "Find a file" above its field, as every label is (the form grid drops the label's margins). */
 [data-content-results] > label { display: grid; gap: .1875rem; }
 .content-tree { max-height: 22rem; overflow: auto; margin-block: .4rem; }

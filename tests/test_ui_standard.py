@@ -235,3 +235,10 @@ def test_the_edit_panels_buttons_wrap_whole_on_a_small_phone():
     actions = _first(".edit-actions")
     assert "flex-wrap: wrap" in actions
     assert "white-space: nowrap" in _first(".edit-actions > button")
+
+
+def test_the_content_pickers_parts_stand_apart():
+    """1.32 QA L4: the help sat right under "Get contents", and the status lines stuck to "Other
+    sources" and to "Find a file"."""
+    content = (ROOT / "src" / "tow" / "static" / "content.css").read_text(encoding="utf-8")
+    assert "margin-top: .45rem" in _first(".content-picker > :not(:first-child):not(:empty)", content)
