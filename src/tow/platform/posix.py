@@ -255,10 +255,19 @@ def proc_listening_inodes(raw: str, port: int) -> set[str]:
     return inodes
 
 
-def proc_listener_pid(port: int) -> int | None:
-    """Without lsof and ss (a minimal Debian or Fedora): the process holding a listening socket
-    of ``port``, from /proc (only this user's processes can be read, which is what TOW needs)."""
-    inodes = proc_listening_inodes(_read("/proc/net/tcp"), port) | proc_listening_inodes(_read("/proc/net/tcp6"), port)
+def proc_listeners(port: int) -> set[str] | None:
+    """The socket inodes listening on ``port`` by /proc/net/tcp(6): an empty set when nothing
+    listens there, None when neither table can be read (no /proc)."""
+    tables = [_read("/proc/net/tcp"), _read("/proc/net/tcp6")]
+    if not any(tables):
+        return None
+    return set().union(*(proc_listening_inodes(table, port) for table in tables))
+
+
+def proc_listener_pid(port: int, inodes: set[str] | None = None) -> int | None:
+    """The process holding a listening socket of ``port`` (``inodes``: its sockets, when already
+    read), from /proc: only this user's processes can be read, which is what TOW needs."""
+    inodes = proc_listeners(port) if inodes is None else inodes
     if not inodes:
         return None
     wanted = {f"socket:[{inode}]" for inode in inodes}
@@ -429,14 +438,28 @@ class PosixBackend:
         return False
 
     def _listener(self, port: int) -> int | None:
-        """lsof (macOS, most Linux); without it ``ss`` (iproute2), then /proc (Linux)."""
-        if _which("lsof"):
-            return parse_lsof_pid(_run(["lsof", "-nP", f"-iTCP:{int(port)}", "-sTCP:LISTEN", "-Fp"], timeout=10))
+        """The process listening on ``port``. macOS: lsof. Linux: ``ss`` (iproute2) first - lsof
+        can hang on a stale NFS mount -, then /proc, then lsof, and only while the answer is
+        not known: a tool that is missing, fails or names no PID (another account's process)
+        passes the question on, and lsof is not asked when /proc shows nothing listens there.
+        Each tool is bounded by its timeout."""
+        port = int(port)
+
+        def lsof() -> int | None:
+            if not _which("lsof"):
+                return None
+            return parse_lsof_pid(_run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-Fp"], timeout=10))
+
         if self.name != "linux":
-            return None
-        if _which("ss"):
-            return parse_ss_pid(_run(["ss", "-Hltnp", "sport", "=", f":{int(port)}"], timeout=10), port)
-        return proc_listener_pid(port)
+            return lsof()
+        if _which("ss") and (pid := parse_ss_pid(_run(["ss", "-Hltnp", "sport", "=", f":{port}"], timeout=10), port)):
+            return pid
+        inodes = proc_listeners(port)
+        if inodes == set():
+            return None  # nothing listens there
+        if inodes and (pid := proc_listener_pid(port, inodes)) is not None:
+            return pid
+        return lsof()
 
     def _process(self, pid: int) -> tuple[int, str] | None:
         found = parse_ps(_run(["ps", "-ww", "-o", "ppid=,command=", "-p", str(pid)], timeout=5))
