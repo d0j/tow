@@ -1246,7 +1246,7 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 /* Check all's report: below the sticky header when its link lands on it; closed by its x. */
 .check-results { padding: .8rem; margin-bottom: .6rem; scroll-margin-top: var(--land-top); }
 .check-results-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .6rem; }
-.check-results h2 { margin-top: 0; }
+.check-results h2 { margin-top: 0; font-size: 1.05rem; } /* as every card and dialog title */
 .check-result-list { list-style: none; padding: 0; }
 .check-result-row { display: flex; flex-wrap: wrap; gap: .3rem .6rem; margin: .5rem 0; overflow-wrap: anywhere; }
 .check-result-row > :last-child { flex: 1 1 20rem; }

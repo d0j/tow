@@ -249,3 +249,9 @@ def test_the_language_select_takes_its_own_line_on_a_small_phone():
     small = CSS.partition("@media (max-width: 420px) {")[2]
     assert small
     assert "flex-basis: 100%" in _first(".inline-save > select", small)
+
+
+def test_the_check_all_cards_title_is_a_card_title():
+    """1.32 QA L8: "Results" used the browser's 1.5em (22 px); every card or dialog title is 1.05rem."""
+    assert "font-size: 1.05rem" in _first(".check-results h2")
+    assert "font-size: 1.05rem" in _first(".add-title")
