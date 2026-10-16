@@ -168,6 +168,8 @@ def import_text(result: dict[str, Any]) -> str:
     # "unmapped topic path: D:\TV" - the folder after the colon, said in the owner's words.
     lines += [t("cli.bundle.path_unmapped", path=str(w).split(": ", 1)[-1]) for w in result.get("path_warnings") or []]
     lines += _security_lines(result.get("security_settings") or [])
+    if result.get("local_secrets_unreadable"):
+        lines.append(t("cli.bundle.local_secrets_unreadable"))
     lines.append(t("cli.bundle.import_notes"))
     if result.get("log_error"):
         lines.append(t("cli.bundle.log_unrecorded"))

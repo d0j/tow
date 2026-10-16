@@ -687,6 +687,7 @@
       "security_unknown": "cannot be read",
       "security_kept": "This TOW keeps its own values of these. To take the file's instead (moving your own TOW), add --accept-security-settings.",
       "security_taken": "The file's values of these are taken (--accept-security-settings).",
+      "local_secrets_unreadable": "The passwords and tokens of this TOW cannot be opened, so it has no password for other devices to keep, and the file's is not taken. Set a new one on this computer: Settings → Network access.",
       "import_notes": "Not in the file: autostart (turn it on with tow autostart on) and the torrents themselves, which stay in the torrent client.",
       "log_unrecorded": "The import could not be written to the event log.",
       "rollback_preview": "A preview: nothing was changed. These would be put back: {files}. Add --apply to put them back.",

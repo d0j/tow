@@ -209,13 +209,18 @@ def _import_bundle(
     if not secret_keys.issubset({_ACCESS_SECRET}):
         raise ExportImportError("unsupported preserved secret key")
     destination_secrets: dict[str, Any] | None = None
+    unreadable = False
     if secret_keys:
         try:
             destination_secrets = load_secrets()
-        except SecretStoreError as exc:
-            raise ExportImportError("cannot read destination secrets to preserve access") from exc
+        except SecretStoreError:
+            # This install's passwords cannot be opened (a lost or replaced master key, a damaged
+            # store): it has no access password to keep. The file's is dropped all the same, never
+            # taken over the settings this install keeps; restoring a file is the way out of this.
+            destination_secrets = {}
+            unreadable = True
     # Said before this install's values replace the file's: what the file would have changed.
-    security = _security_settings(parsed, destination_secrets, set(overrides) | secret_keys)
+    security = _security_settings(parsed, None if unreadable else destination_secrets, set(overrides) | secret_keys)
     if overrides:
         _apply_config_overrides(parsed, overrides)
     if destination_secrets is not None:
@@ -241,6 +246,7 @@ def _import_bundle(
         "config_overrides": sorted(overrides),
         "security_settings": security,
         "preserved_secret_keys": sorted(secret_keys),
+        "local_secrets_unreadable": unreadable,
         "path_warnings": warnings,
         "scheduler": "not restored; turn autostart on separately with tow autostart on",
         "client_media": "not transferred; qBittorrent/client check is separate",
