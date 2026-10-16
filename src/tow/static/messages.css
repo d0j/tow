@@ -4,6 +4,8 @@
    caution), err red (an actionable failure). Their colours are app.css's, shared with the notes. */
 /* In sight under the sticky header while shown (messages.js measures the header). */
 .msg-host { position: sticky; top: var(--msg-top, 0px); z-index: 9; }
+/* ...but not on a screen this low (200 % zoom), where the header does not stick either (app.css). */
+@media (max-height: 520px) { .msg-host { position: static; } }
 .flash > .msg-ico { display: inline-flex; flex: 0 0 auto; color: var(--mut); }
 .flash.ok > .msg-ico { color: var(--ok); }
 .flash.warn > .msg-ico { color: var(--warn); }
