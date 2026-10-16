@@ -104,11 +104,13 @@ const towTime = (() => {
     node.setAttribute("data-short", "");
     if (given && !calendar) {
       node.setAttribute("datetime", String(given.iso));
+      node.setAttribute("tabindex", "0");
       node.title = String(given.full || "");
       node.textContent = String(given.short || fallback || when);
       return node;
     }
     node.setAttribute("datetime", when);
+    node.setAttribute("tabindex", "0"); // its full time on focus or a tap (timeTip below)
     node.title = full(source);
     node.textContent = short(source);
     // Written now by TOW's offset of now: right for today, so it follows midnight too.
@@ -140,6 +142,75 @@ const towTime = (() => {
   return { short, full, iso, element, untilMidnight };
 })();
 window.towTime = towTime;
+
+// The full time of a short one (time[data-short]: its seconds and UTC offset) for a keyboard and a
+// touch screen, not only a mouse's tooltip: such a time takes the focus, and its focus or a tap
+// shows the full time in one shared tip beside it (role="tooltip", the time described by it);
+// Escape, a tap elsewhere, leaving it or a scroll hides it. A time inside a control - a row's
+// summary, a link, a button, a label - is left as it is: the control has the focus there, and the
+// tooltip still has the full time. ``towTime.prepare(root)`` readies times a script put in later.
+const timeTip = (() => {
+  const TIMES = "time[data-short][title]";
+  const usable = (node) => Boolean(node?.matches?.(TIMES)) && !node.closest("summary, a, button, label");
+  const prepare = (root = document) => {
+    const nodes = [...(root.matches?.(TIMES) ? [root] : []), ...root.querySelectorAll(TIMES)];
+    nodes.forEach((node) => {
+      if (usable(node) && !node.hasAttribute("tabindex")) node.setAttribute("tabindex", "0");
+    });
+  };
+  let tip = null;
+  let owner = null;
+  const hide = () => {
+    if (!owner) return;
+    owner.removeAttribute("aria-describedby");
+    owner = null;
+    tip.hidden = true;
+  };
+  const show = (node) => {
+    if (!node.title) return;
+    if (!tip) {
+      tip = document.createElement("span");
+      tip.id = "time-tip";
+      tip.className = "time-tip";
+      tip.setAttribute("role", "tooltip");
+    }
+    // Inside an open dialog (the Log, a download list) the tip lives there: the dialog is above the page.
+    (node.closest("dialog") || document.body).append(tip);
+    if (owner && owner !== node) owner.removeAttribute("aria-describedby");
+    owner = node;
+    tip.textContent = node.title;
+    node.setAttribute("aria-describedby", tip.id);
+    tip.hidden = false;
+    // Under the time, kept on the screen (above it near the bottom).
+    const box = node.getBoundingClientRect();
+    const size = tip.getBoundingClientRect();
+    const wide = window.innerWidth || 0;
+    const high = window.innerHeight || 0;
+    const x = wide ? Math.max(8, Math.min(box.left, wide - size.width - 8)) : box.left;
+    const below = box.bottom + 4;
+    const y = high && below + size.height > high - 8 ? Math.max(8, box.top - size.height - 4) : below;
+    tip.style?.setProperty("--tip-x", `${Math.round(x)}px`);
+    tip.style?.setProperty("--tip-y", `${Math.round(y)}px`);
+  };
+  document.addEventListener("focusin", (event) => { if (usable(event.target)) show(event.target); });
+  document.addEventListener("focusout", (event) => { if (event.target === owner) hide(); });
+  document.addEventListener("click", (event) => {
+    const node = event.target.closest?.(TIMES);
+    if (usable(node)) show(node);
+    else if (owner && !tip.contains(event.target)) hide();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !owner) return;
+    hide(); // only the tip: the row or form around the time stays open
+    event.preventDefault();
+    event.stopImmediatePropagation?.();
+  });
+  window.addEventListener("scroll", hide, { passive: true, capture: true });
+  window.addEventListener("resize", hide);
+  prepare();
+  return { prepare };
+})();
+towTime.prepare = timeTip.prepare;
 
 const formActionUrl = (form, submitter = null) => new URL(
   submitter?.getAttribute("formaction") || form.getAttribute("action") || form.action || location.href,
@@ -1685,6 +1756,7 @@ const loadEditPanel = async (details) => {
     if (!panel) throw new Error(t("js.submit.unknown_error"));
     slot.replaceWith(panel);
     initSaveFolders(panel);
+    towTime.prepare(panel);
   } catch (error) {
     // Opening the row again tries again; the message offers the panel as a page of its own.
     delete slot.dataset.loading;
