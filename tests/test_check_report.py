@@ -88,7 +88,7 @@ def test_a_reason_that_repeats_its_pill_and_the_help_of_an_empty_list_are_left_o
     _job, card = _report_page(client, monkeypatch, {"t1": {"ok": True}})
     row = card.select_one(".check-result-row")
     assert row.get_text(" ", strip=True) == f"Unchanged {TITLE}"  # not "Unchanged … no changes"
-    assert "This is the result of that run" in card.get_text()
+    assert "Results from this check" in card.get_text()
     _job, empty = _report_page(client, monkeypatch, {})
     assert not empty.select(".check-result-row")
-    assert "This is the result of that run" not in empty.get_text()  # nothing to open
+    assert "Results from this check" not in empty.get_text()  # nothing to open
