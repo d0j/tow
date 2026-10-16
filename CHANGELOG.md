@@ -147,6 +147,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   start file, `tow.cmd setup` and the installer, also with long paths turned on: Windows cannot load programs from
   there. Before, setup failed deep inside, blamed "the packages" and went to the internet. A failed setup without
   the internet no longer blames the packages, and the installer no longer needs room for a staging folder.
+- Setting up or updating TOW no longer leaves uv's lock files in the system's temporary folder: uv keeps them in
+  the install's `runtime/uv-tmp`. Account-wide `UV_PYTHON`, `PYTHONHOME` and `PYTHONPATH` no longer reach an
+  install's Python or its setup (a development checkout keeps them).
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password

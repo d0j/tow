@@ -652,3 +652,74 @@ def test_the_windows_files_start_tow_from_a_folder_with_percent_caret_or_bang(tm
             for text in said:
                 assert text in output, (command, delayed, output)
             assert "cannot find the path" not in output, (command, delayed, output)
+
+
+_UV_PROBE = r"""import json, os, sys
+names = ("TMP", "TEMP", "TMPDIR", "UV_PYTHON", "PYTHONHOME", "PYTHONPATH", "UV_OFFLINE")
+seen = {name: os.environ.get(name) for name in names}
+temp = seen["TMPDIR"] if os.name != "nt" else seen["TEMP"]
+seen["temp_is_dir"] = bool(temp) and os.path.isdir(temp)
+with open(RECORD, "a", encoding="utf-8") as handle:
+    handle.write(json.dumps(seen) + "\n")
+"""
+
+
+@pytest.mark.allow_system  # setup of a temp install, uv replaced by a Python probe that records its env
+@pytest.mark.parametrize("layout", ["install", "checkout"])
+def test_setup_gives_uv_a_temp_folder_inside_and_none_of_the_accounts_python_settings(tmp_path, layout):
+    # QA 16.10.2026: every setup left a uv-<hash>.lock in the system TEMP, and account-wide
+    # UV_PYTHON, PYTHONHOME and PYTHONPATH reached uv and the install's Python. A development
+    # checkout keeps the developer's settings (and its temp).
+    import json
+    import shutil
+    import subprocess
+    import sys
+
+    root = tmp_path / "TOW"
+    app = root / "app" if layout == "install" else root
+    shutil.copytree(ROOT / "scripts", app / "scripts")
+    if layout == "install":
+        (root / "data").mkdir()
+    record = tmp_path / "uv-env.jsonl"
+    probe = _UV_PROBE.replace("RECORD", repr(str(record)))
+    env = {key: value for key, value in os.environ.items() if not key.upper().startswith(("TOW_", "UV_"))}
+    env.update(
+        UV_PYTHON="3.12", PYTHONPATH=str(tmp_path / "lib"), UV_OFFLINE="1", TMP=str(tmp_path), TEMP=str(tmp_path)
+    )
+    env["TMPDIR"] = str(tmp_path)
+    if layout == "install":
+        env["PYTHONHOME"] = str(tmp_path / "no-python")  # a Python that reads it does not start
+    bin_dir = app / "runtime" / "bin" if layout == "checkout" else root / "runtime" / "bin"
+    bin_dir.mkdir(parents=True)
+    if os.name == "nt":
+        # uv: a venv launcher of this Python; `uv python install` and `uv sync` run the files
+        # "python" and "sync" of app\ (setup's folder), tow.exe the file "keys".
+        shutil.copy2(Path(sys.prefix) / "Scripts" / "python.exe", bin_dir / "uv.exe")
+        (bin_dir.parent / "pyvenv.cfg").write_text(f"home = {sys.base_prefix}\n", encoding="utf-8")
+        for name in ("python", "sync", "keys"):
+            (app / name).write_text(probe, encoding="utf-8")
+        env["TOW_EXE"] = str(bin_dir / "uv.exe")
+        argv = ["cmd.exe", "/d", "/c", str(app / "scripts" / "tow.cmd"), "setup"]
+    else:
+        (bin_dir / "uv").write_text(f"#!{sys.executable}\n{probe}", encoding="utf-8")
+        (bin_dir / "uv").chmod(0o755)
+        tow = app / ".venv" / "bin" / "tow"
+        tow.parent.mkdir(parents=True)
+        tow.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        tow.chmod(0o755)
+        argv = ["/bin/sh", str(app / "scripts" / "tow"), "setup"]
+    done = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=120, check=False)
+    assert done.returncode == 0, done.stdout + done.stderr
+    runs = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
+    assert runs, done.stdout + done.stderr
+    temp = str(root / "runtime" / "uv-tmp")
+    for seen in runs:
+        if layout == "checkout":
+            assert (seen["UV_PYTHON"], seen["PYTHONPATH"]) == ("3.12", str(tmp_path / "lib"))
+            assert seen["TEMP" if os.name == "nt" else "TMPDIR"] == str(tmp_path)
+            continue
+        assert (seen["UV_PYTHON"], seen["PYTHONHOME"], seen["PYTHONPATH"]) == (None, None, None)
+        assert seen["UV_OFFLINE"] == "1"  # the owner's own choice stays
+        names = ("TMP", "TEMP") if os.name == "nt" else ("TMPDIR",)
+        assert {seen[name] for name in names} == {temp}
+        assert seen["temp_is_dir"] is True
