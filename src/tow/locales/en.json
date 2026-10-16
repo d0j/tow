@@ -1744,7 +1744,8 @@
       "restarted": "the computer was restarted {via} at {at}",
       "powered_off": "the computer was shut down {via} at {at}",
       "after_updates": "Windows Update installed updates and restarted the computer; then {text}",
-      "stopped": "the computer was shut down or restarted at {at}"
+      "stopped": "the computer was shut down or restarted at {at}",
+      "shut_down_or_restarted": "the computer was shut down or restarted {via} at {at}"
     },
     "via": {
       "start_menu": "from the Start menu",

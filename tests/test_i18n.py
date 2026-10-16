@@ -1056,7 +1056,7 @@ def _families() -> dict[str, set[str]]:
         "notify.action.{kind}": set(notify._ACTIONS),
         "notify.client_{state}": {"down", "up"},
         "notify.client_{state}_named": {"down", "up"},
-        "pulse.shutdown.{action}": {"restarted", "powered_off"},
+        "pulse.shutdown.{action}": {"restarted", "powered_off", "shut_down_or_restarted"},
         "settings.{section}.q": {"clients", "notify"},
         "notifier.{module.KIND}.title": set(),  # optional by design: the TITLE is used without it
         "time.month_short.{moment.month}": {str(month) for month in range(1, 13)},
