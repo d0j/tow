@@ -1042,25 +1042,55 @@ def test_destination_with_legacy_plaintext_secrets_blocks_import(tmp_path):
     secrets_path().write_text('{"qbittorrent": {}}', encoding="utf-8")
     bundle = _bundle(tmp_path / "in" / "tow.towx")
 
-    _rejects(tmp_path, bundle, "legacy plaintext secrets require explicit migration", preserve_secret_keys=["lan_auth"])
+    _rejects(tmp_path, bundle, "cannot read destination secrets to preserve access", preserve_secret_keys=["lan_auth"])
+    _rejects(
+        tmp_path,
+        bundle,
+        "legacy plaintext secrets require explicit migration",
+        preserve_secret_keys=["lan_auth"],
+        recover_unreadable_access=True,
+    )
     _rejects(tmp_path, bundle, "legacy plaintext secrets require explicit migration")
 
 
 @pytest.mark.parametrize("apply", [False, True])
-def test_unreadable_destination_secrets_drop_the_bundles_access_password(tmp_path, apply):
-    """No access password can be kept from a store that cannot be opened: the import goes on
-    without one (the file's is not taken instead) and says so."""
+def test_unreadable_destination_secrets_recover_with_network_access_off(tmp_path, apply):
+    """No access password can be kept from a store that cannot be opened. The recovery import
+    goes on without one (the file's is not taken instead), and with no password known network
+    access is turned off and TOW listens on loopback only, whatever this install's config says."""
     save_secrets({"lan_auth": "destination-hash"})
     encrypted_secrets_path().write_bytes(b"not an encrypted store")
-    bundle = _bundle(tmp_path / "in" / "tow.towx", _members(secrets_json={**BASE_SECRETS, "lan_auth": "bundle-hash"}))
+    opened = {**BASE_CONFIG, "bind": "0.0.0.0", "allow_lan": True}
+    members = _members(config_yaml=opened, secrets_json={**BASE_SECRETS, "lan_auth": "bundle-hash"})
+    bundle = _bundle(tmp_path / "in" / "tow.towx", members)
 
-    result = import_bundle(bundle, PASS, apply=apply, preserve_secret_keys=["lan_auth"])
+    result = import_bundle(
+        bundle,
+        PASS,
+        apply=apply,
+        config_overrides={"bind": "0.0.0.0", "allow_lan": True},
+        preserve_secret_keys=["lan_auth"],
+        recover_unreadable_access=True,
+    )
 
     assert result["local_secrets_unreadable"] is True
+    assert result["network_access"] == "off"
     access = [item for item in result["security_settings"] if item["setting"] == "lan_auth"]
-    assert access == [{"setting": "lan_auth", "file": "set", "this_computer": "unknown", "kept": True}]
+    assert access == [{"setting": "lan_auth", "file": "set", "this_computer": "unknown", "kept": False}]
     if apply:
         assert load_secrets() == BASE_SECRETS
+        written = yaml.safe_load(config_path().read_text(encoding="utf-8"))
+        assert (written["allow_lan"], written["bind"]) == (False, "127.0.0.1")
+
+
+def test_unreadable_destination_secrets_refuse_an_import_that_does_not_recover(tmp_path):
+    """A restore (from the browser too) keeps its strict refusal, with its own reason."""
+    save_secrets({"lan_auth": "destination-hash"})
+    encrypted_secrets_path().write_bytes(b"not an encrypted store")
+    bundle = _bundle(tmp_path / "in" / "tow.towx")
+    with pytest.raises(ExportImportError, match="cannot read destination secrets") as refused:
+        import_bundle(bundle, PASS, preserve_secret_keys=["lan_auth"])
+    assert refused.value.reason == "local_secrets"
 
 
 # --------------------------------------------------------------------------- apply, read-back and automatic rollback

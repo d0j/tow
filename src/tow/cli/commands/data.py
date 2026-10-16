@@ -136,6 +136,8 @@ def _import(args: argparse.Namespace) -> int:
             path_maps=args.path_map,
             config_overrides=this_install_settings(),
             preserve_secret_keys={"lan_auth"},
+            # On this computer, a file is the way out of passwords that cannot be opened.
+            recover_unreadable_access=True,
         )
 
     return _guarded(args, run, "cli.bundle.import_failed", importing=True, text=render.import_text)
