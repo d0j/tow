@@ -306,6 +306,17 @@
 
   const host = document.getElementById("msg-host");
   if (!host) return;
+  // The strip stays in sight under the sticky header while it is shown (a page opened further down,
+  // Settings at a card or a row, still shows its result), and a link's target lands below both:
+  // the header's height (--msg-top) and the strip's (--msg-h), on the page's root for app.css's
+  // --land-top. Measured again when the strip changes and when the window does.
+  const header = document.querySelector("header.app");
+  const place = () => {
+    const root = document.documentElement?.style;
+    if (!root?.setProperty) return;
+    if (header?.getBoundingClientRect) root.setProperty("--msg-top", `${Math.ceil(header.getBoundingClientRect().height)}px`);
+    root.setProperty("--msg-h", `${Math.ceil(host.getBoundingClientRect?.().height || 0)}px`);
+  };
   const I18N = (() => {
     try {
       return JSON.parse(document.getElementById("tow-i18n")?.textContent || "{}") || {};
@@ -477,6 +488,10 @@
     if (focused) box.querySelector(".flash-x").focus();
   };
   const drawStrip = () => {
+    drawStripNow();
+    place();
+  };
+  const drawStripNow = () => {
     const id = center.active();
     const current = strip();
     const item = id ? center.find(id) : null;
@@ -687,14 +702,9 @@
     });
   }, true);
 
-  // The strip stays in sight under the sticky header while it is shown: a page opened further down
-  // (Settings at a card, a row) still shows its result.
-  const header = document.querySelector("header.app");
-  const place = () => {
-    if (header?.getBoundingClientRect) host.style?.setProperty("--msg-top", `${Math.ceil(header.getBoundingClientRect().height)}px`);
-  };
   place();
   window.addEventListener?.("resize", place);
+  if (typeof ResizeObserver === "function") new ResizeObserver(place).observe(host);
 
   document.addEventListener("visibilitychange", () => (document.hidden ? center.hold("hidden") : center.release("hidden")));
   if (document.hidden) center.hold("hidden");

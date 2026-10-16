@@ -147,14 +147,14 @@ def test_site_access_fields_use_full_width_and_do_not_inherit_sibling_offsets():
 
 def test_help_anchor_desktop_clearance_does_not_add_settings_card_layout():
     body = dict(_rules(CSS)).get(".help-page h2[id]", "")
-    assert "scroll-margin-top: 3.3rem" in body
-    assert re.sub(r"\s+", "", body) == "scroll-margin-top:3.3rem;"
+    assert re.sub(r"\s+", "", body) == "scroll-margin-top:var(--land-top);"
 
 
 def test_help_anchor_mobile_clearance_matches_the_two_row_header():
+    """1.32: one landing offset - the measured header and message strip (messages.js), else the
+    header's usual height, two rows on a phone (tests/js/message_landing.mjs)."""
     mobile = CSS.partition("@media (max-width: 720px) {")[2]
-    body = dict(_rules(mobile)).get(".settings-section, .help-page h2[id]", "")
-    assert "scroll-margin-top: 5.5rem" in body
+    assert re.search(r"--land-top: calc\(var\(--msg-top, 4\.75rem\) \+ var\(--msg-h, 0px\) \+ \.75rem\)", mobile)
 
 
 def test_long_site_names_and_sign_in_pills_stay_in_their_columns():
