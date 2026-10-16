@@ -22,7 +22,7 @@ rem TOW: double-click to start it. Its page opens in your browser (http://127.0.
 rem The first start prepares TOW inside this folder, without the internet. Everything stays in
 rem this folder. Stop: "Stop TOW.cmd". Help: README.txt
 title TOW
-setlocal
+setlocal DisableDelayedExpansion
 for %%I in ("%~dp0.") do set "TOW_DIR=%%~fI"
 rem An update cut off while it replaced the code leaves its record, and app\ (app\scripts too) may
 rem hold half of either version: the rule of app\scripts\tow-start.cmd, checked here before anything
@@ -36,7 +36,7 @@ if not defined TOW_CUT if not exist "%~dp0app\scripts\tow-start.cmd" set "TOW_CU
 if "%TOW_CUT%"=="2" echo TOW was not started: its code is incomplete, "%~dp0app\scripts\tow-start.cmd" is missing. To put it back, run "Update TOW.cmd" there in a terminal with the version you had: "Update TOW.cmd" vX.Y.Z
 if defined TOW_CUT pause
 if defined TOW_CUT exit /b 3
-call "%~dp0app\scripts\tow-start.cmd" %*
+call "%%~dp0app\scripts\tow-start.cmd" %*
 set "TOW_CODE=%ERRORLEVEL%"
 if not "%TOW_CODE%"=="0" echo.
 if not "%TOW_CODE%"=="0" echo TOW did not start: the reason is above. The logs are in "%~dp0data\logs".
@@ -47,14 +47,14 @@ exit /b %TOW_CODE%
 STOP_CMD = r"""@echo off
 rem TOW: double-click to stop it (a check that is running finishes first).
 title TOW
-setlocal
+setlocal DisableDelayedExpansion
 for %%I in ("%~dp0.") do set "TOW_DIR=%%~fI"
 set "TOW_CODE=0"
 rem Without app\scripts (an update cut off while it replaced the code) there is nothing to call.
 if not exist "%~dp0app\scripts\tow.cmd" set "TOW_CODE=3"
 if "%TOW_CODE%"=="3" if exist "%~dp0.update-switch.json" echo TOW cannot run: an update was cut off while it replaced the code in "%TOW_DIR%". Run "Update TOW.cmd" there again: it puts the previous version back first.
 if "%TOW_CODE%"=="3" if not exist "%~dp0.update-switch.json" echo TOW cannot run: its code is incomplete, "%~dp0app\scripts\tow.cmd" is missing. To put it back, run "Update TOW.cmd" there in a terminal with the version you had: "Update TOW.cmd" vX.Y.Z
-if "%TOW_CODE%"=="0" call "%~dp0app\scripts\tow.cmd" stop
+if "%TOW_CODE%"=="0" call "%%~dp0app\scripts\tow.cmd" stop
 if "%TOW_CODE%"=="0" set "TOW_CODE=%ERRORLEVEL%"
 if not "%TOW_CODE%"=="0" pause
 timeout /t 3 /nobreak >nul 2>&1
@@ -64,7 +64,7 @@ exit /b %TOW_CODE%
 # The first lines of "Update TOW.cmd", before ``RESUME`` (``refresh``): they mark a run of this very
 # file with the offset of its ``RESUME`` line (0: the zip's file, which has none).
 UPDATE_HEAD = r"""@echo off
-setlocal
+setlocal DisableDelayedExpansion
 set "TOW_FILE_RUN={mark}"
 """
 

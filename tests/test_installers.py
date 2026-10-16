@@ -367,6 +367,36 @@ def test_install_ps1_refuses_foreign_data_folder_even_with_purge(tmp_path):
     assert sentinel.read_text(encoding="utf-8") == "keep"
 
 
+@pytest.mark.allow_system  # install.ps1 refusing a folder; a missing local zip stands for the download
+@pytest.mark.parametrize("shell", ["pwsh", "powershell"])
+@pytest.mark.parametrize(
+    ("name", "refused"),
+    [("x%PATH%y", True), ("x!a!y", True), ("a^b!c", True), ("x 50%", False), ("a^b", False), ("b!ang", False)],
+)
+def test_install_ps1_refuses_only_a_folder_cmd_cannot_start_from(tmp_path, shell, name, refused):
+    # QA 16.10.2026: cmd.exe reads the path of the start file it is given before the file runs, so
+    # %NAME% (and with delayed expansion !NAME!, or ^ next to !) in it changed the path: the install
+    # was written, then did not start. One % or ! alone, or ^ alone, start (test_launchers.py).
+    program = shutil.which(shell)
+    if program is None or (not refused and os.name != "nt"):
+        pytest.skip(f"no {shell} here" if program is None else "the accepted folder goes on to Windows-only steps")
+    folder = tmp_path / name / "TOW"
+    env = {**os.environ, "TOW_INSTALL_SOURCE": str(tmp_path / "no-such.zip"), "TOW_NO_BROWSER": "1"}
+    done = subprocess.run(
+        [program, "-NoProfile", "-NonInteractive", "-File", str(PS1), "-Dir", str(folder), "-Yes"],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=120,
+        check=False,
+    )
+    assert done.returncode != 0  # refused, or (accepted) no zip to unpack
+    assert ("TOW: Windows cannot start TOW from" in done.stderr) is refused, done.stdout + done.stderr
+    assert not folder.exists()  # refused before anything was written; an accepted one cleaned up
+    text = PS1.read_text(encoding="utf-8")
+    assert text.index("Windows cannot start TOW from") < text.index("New-Item -ItemType Directory -Force -Path $Dir")
+
+
 def test_install_ps1_prints_a_runnable_autostart_hint_and_the_real_port():
     text = PS1.read_text(encoding="utf-8")
     # A quoted path alone is only a string in PowerShell: `& ` runs it.

@@ -129,6 +129,12 @@ function Install-Tow {
     if (@($env:PROCESSOR_ARCHITECTURE, $env:PROCESSOR_ARCHITEW6432, $machine) -contains 'ARM64') {
         throw 'TOW: the Windows zip is for x64 PCs; Windows on ARM is not supported'
     }
+    # docs/PORTABLE.md 3: cmd.exe reads the path of a start file it is given (a double-click, and the
+    # start below) before the file runs: two % signs may name a variable, and with delayed expansion
+    # on two ! signs too, or a ! makes a ^ an escape. TOW could not be started from such a folder.
+    if ($Dir -match '%.*%|!.*!|\^.*!|!.*\^') {
+        throw "TOW: Windows cannot start TOW from $Dir`: a folder path with two % signs, two ! signs, or a ^ and a ! is read as a variable or an escape. Choose another folder with -Dir."
+    }
     # docs/PORTABLE.md 3: without Windows long paths, a folder path over 110 characters lets files
     # deep in app\.venv and runtime\ pass 260 characters, and the first start fails inside uv or Python.
     $longPaths = (Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled -ErrorAction SilentlyContinue).LongPathsEnabled

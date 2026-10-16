@@ -383,6 +383,13 @@ gone, so Diagnostics, Settings → TOW service, `tow status` and `tow doctor` sa
   110 characters lets paths deep in `app\.venv` pass the 260-character limit, and setup or a
   package import fails. Choose a shorter folder, or enable long paths. `install.ps1` refuses such
   a folder before it writes anything, and the Windows start file says so before it prepares TOW.
+- Windows reads the path of a start file it is given (a double-click, `install.ps1`'s start, a
+  full path typed in a terminal) before the file runs: two `%` signs may name a variable, and with
+  delayed expansion on (`DelayedExpansion` in the registry) two `!` signs too, or a `!` turns a `^`
+  into an escape; the path is then another one. TOW's own files read their folder once and turn
+  delayed expansion off (`setlocal DisableDelayedExpansion`, `call "%%~dp0..."`), so one `%`, `!`
+  or `^`, spaces, `&`, `( )` and non-Latin letters work. `install.ps1` refuses a folder with two
+  `%`, two `!`, or a `^` and a `!` before it writes anything; do not move an install into one.
 - The folder needs a file system with links: uv links `runtime/python/cpython-X.Y-*` to the
   full version (a junction on Windows, a symlink elsewhere). FAT32 and exFAT (many USB sticks)
   have none, and `tow setup` cannot complete there (not verified on every uv version); use NTFS

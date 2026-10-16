@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -56,11 +57,11 @@ def test_the_five_task_launchers_are_gone():
 
 def test_generic_cli_launcher_uses_runtime_env():
     text = (ROOT / "scripts" / "tow.cmd").read_text(encoding="utf-8")
-    assert 'call "%~dp0tow-env.cmd"' in text
+    assert 'call "%%~dp0tow-env.cmd"' in text
     last = text.strip().splitlines()[-1]
     # One last line decides, so TOW's exit code is the launcher's (`exit /b` in a block loses it):
     # setup, else the environment's tow.exe, else (not set up yet) uv from the locked environment.
-    assert last.startswith('if /i "%~1"=="setup" (call "%~dp0tow-setup.cmd" %*)')
+    assert last.startswith('if /i "%~1"=="setup" (call "%%~dp0tow-setup.cmd" %*)')
     assert last.index('if exist "%TOW_EXE%" ("%TOW_EXE%" %*)') < last.index('"%TOW_UV%" run --frozen --no-dev')
     exits = [line for line in text.splitlines() if "exit /b" in line and not line.startswith("rem ")]
     # The refusals, before TOW runs: a moved folder, an update cut off while it replaced the code.
@@ -398,7 +399,7 @@ def test_setup_takes_no_options_and_never_runs_under_a_running_tow():
     root = Path(__file__).resolve().parents[1] / "scripts"
     windows = (root / "tow-setup.cmd").read_text(encoding="utf-8")
     posix = (root / "tow").read_text(encoding="utf-8")
-    assert 'call "%~dp0tow-setup.cmd" %*' in (root / "tow.cmd").read_text(encoding="utf-8")
+    assert 'call "%%~dp0tow-setup.cmd" %*' in (root / "tow.cmd").read_text(encoding="utf-8")
     assert "shift /1" in windows  # a plain shift moves %0 too, and %~dp0 stops naming scripts\
     for text in (windows, posix):
         assert "Usage:" in text
@@ -571,3 +572,83 @@ def test_posix_launcher_and_hooks_are_executable_in_git():
     ).stdout.splitlines()
     modes = {line.split("\t", 1)[1]: line.split()[0] for line in listing}
     assert modes == dict.fromkeys(wanted, "100755")
+
+
+_WINDOWS_ENTRIES = ("tow.cmd", "tow-setup.cmd", "tow-start.cmd")
+
+
+def _root_files():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("tow_root_files_launchers", ROOT / "scripts" / "root_files.py")
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_every_windows_entry_reads_its_own_path_once_and_without_delayed_expansion():
+    # QA 16.10.2026: `call "%~dp0x.cmd"` expands the path a second time, so an install in "x 50%"
+    # or "a^b" could not start; with delayed expansion on (the registry's DelayedExpansion) a "!"
+    # in the path was lost. `call "%%~dp0..."` leaves the second expansion only %~dp0 itself.
+    texts = {name: (ROOT / "scripts" / name).read_text(encoding="utf-8") for name in _WINDOWS_ENTRIES}
+    texts.update(_root_files().ROOT_FILES)
+    for name, text in texts.items():
+        lines = [line for line in text.splitlines() if not line.startswith("rem ")]
+        assert not [line for line in lines if 'call "%~dp0' in line], name
+        assert "setlocal DisableDelayedExpansion" in lines, name
+        assert "setlocal" not in [line.strip() for line in lines], name  # not a plain one as well
+        # before anything reads a path: only @echo off, title and the update file's own mark above it
+        head = lines[: lines.index("setlocal DisableDelayedExpansion")]
+        assert all(line == "@echo off" or line.startswith("title ") for line in head), name
+
+
+@pytest.mark.allow_system  # cmd.exe on temp installs: the launchers' and the start files' own lines
+@pytest.mark.skipif(os.name != "nt", reason="cmd.exe")
+@pytest.mark.parametrize("name", ["x 50%", "a^b", "b!ang", "a&b (1) 50%!"])
+def test_the_windows_files_start_tow_from_a_folder_with_percent_caret_or_bang(tmp_path, name):
+    # Real cmd.exe, with delayed expansion off and on; each file is started from its own folder by
+    # a relative name (a double-click passes the full path through cmd's own command line, which
+    # docs/PORTABLE.md 3 and install.ps1 cover). TOW's tow.exe is cmd.exe here: it prints TOW_ROOT.
+    import shutil
+    import subprocess
+
+    root = tmp_path / name / "TOW"
+    scripts = root / "app" / "scripts"
+    shutil.copytree(ROOT / "scripts", scripts)
+    (root / "data").mkdir()
+    (root / "config.yaml").write_text("port: 18999\n", encoding="utf-8")
+    for file, data in _root_files().rendered().items():
+        (root / file).write_bytes(data)
+    system32 = os.path.join(os.environ.get("SYSTEMROOT", r"C:\Windows"), "System32")
+    plain = {
+        key: value
+        for key, value in os.environ.items()
+        # NoDefaultCurrentDirectoryInExePath: the file is run by its name in its own folder
+        if not key.upper().startswith(("TOW_", "UV_", "NODEFAULTCURRENTDIRECTORYINEXEPATH"))
+    }
+    plain["PATH"] = system32  # no uv, no Python: setup stops at once, naming the folder
+    shell = {**plain, "TOW_EXE": os.path.join(system32, "cmd.exe")}
+    for delayed in ("off", "on"):
+        cmd = f"cmd.exe /d /v:{delayed} /s /c "
+        cases = [
+            (f'{cmd}"tow.cmd /d /c "set TOW_ROOT & exit 7""', shell, scripts, b"", 7, [f"TOW_ROOT={root}\r\n"]),
+            (f'{cmd}"tow.cmd setup"', plain, scripts, b"", 3, [rf'"{root}\runtime\bin"']),
+            (
+                f'{cmd}""Start TOW.cmd""',
+                plain,
+                root,
+                b"",
+                3,
+                [f'Preparing TOW in "{root}"', rf'"{root}\runtime\bin"', "could not be prepared"],
+            ),
+            (f'{cmd}""Stop TOW.cmd""', shell, root, b"set TOW_ROOT\r\nexit 5\r\n", 5, [f"TOW_ROOT={root}\r\n"]),
+        ]
+        for command, env, cwd, given, code, said in cases:
+            done = subprocess.run(command, input=given, capture_output=True, env=env, cwd=cwd, timeout=120, check=False)
+            output = (done.stdout + done.stderr).decode("mbcs", "replace")
+            assert done.returncode == code, (command, delayed, output)
+            for text in said:
+                assert text in output, (command, delayed, output)
+            assert "cannot find the path" not in output, (command, delayed, output)

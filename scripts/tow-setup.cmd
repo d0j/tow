@@ -3,10 +3,10 @@ rem Python and TOW's environment inside the install (runtime\python, runtime\cac
 rem Run through `tow.cmd setup` with TOW stopped: after moving the install, a fresh clone or a new
 rem Python version. It needs uv (runtime\bin\uv.exe or on PATH) and, the first time, the network.
 rem In a development checkout it is `uv sync --frozen`, as before.
-setlocal
+setlocal DisableDelayedExpansion
 if /i "%~1"=="setup" shift /1
 if not "%~1"=="" (echo Usage: tow.cmd setup ^(no options^): Python and TOW's environment inside the install; run it with TOW stopped.& exit /b 2)
-call "%~dp0tow-env.cmd"
+call "%%~dp0tow-env.cmd"
 set "TOW_REBUILD="
 "%TOW_UV%" --version >nul 2>&1 || echo TOW setup: uv was not found. Put uv.exe into "%TOW_ROOT%\runtime\bin" or on PATH.
 "%TOW_UV%" --version >nul 2>&1 || exit /b 3
