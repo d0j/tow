@@ -589,6 +589,19 @@ def test_a_docs_only_pull_request_skips_the_heavy_work_but_reports_every_check()
     assert "ubuntu-latest" not in jobs["install"]["env"]["RUN"]
 
 
+def test_dependabot_waits_a_week_and_groups_the_actions():
+    """A freshly published (possibly compromised, then yanked) version was proposed the same
+    week, and every action came in a pull request of its own, each running the full matrix."""
+    import yaml
+
+    updates = yaml.safe_load((ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8"))["updates"]
+    by_kind = {entry["package-ecosystem"]: entry for entry in updates}
+    assert set(by_kind) == {"github-actions", "uv"}
+    for entry in updates:
+        assert entry["cooldown"]["default-days"] >= 7
+    assert by_kind["github-actions"]["groups"] == {"actions": {"patterns": ["*"]}}
+
+
 def test_ci_cancels_only_a_pull_requests_older_run():
     """Two merges close together cancelled the first one's run on main."""
     flow = _workflow("ci")[1]

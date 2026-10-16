@@ -1,15 +1,25 @@
 version: 2
 updates:
+  # A week before a new version is proposed: one published by mistake or by an attacker is
+  # usually yanked by then. The actions come in one pull request (one full matrix run).
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
     commit-message:
       prefix: ci
+    open-pull-requests-limit: 5
   - package-ecosystem: uv
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: deps
     open-pull-requests-limit: 5
