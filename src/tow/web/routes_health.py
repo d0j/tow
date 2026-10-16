@@ -13,21 +13,23 @@ from tow import __version__, access
 from tow.clock import format_ui_timestamp
 from tow.web import _context, services
 from tow.web.templating import header_health
-from tow.web.text import t
+from tow.web.text import t, time_parts
 from tow.web_update import WebUpdateError
 
 router = APIRouter()
 
 
 def _with_time_labels(result: dict[str, Any], *fields: str) -> dict[str, Any]:
-    """Each time (epoch seconds) also written as every other date of the page is - the page's
-    language, this computer's zone - so the update card does not mix two ways (``<field>_label``)."""
+    """Each time (epoch seconds) also as the page's one time rule writes it (``<field>_time``:
+    ``time_parts``, the Updates card's <time>), and written out in full for a page of an older
+    version (``<field>_label``)."""
     out = dict(result)
     for field in fields:
         value = out.get(field)
         if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
             with suppress(OSError, OverflowError, ValueError):
                 out[f"{field}_label"] = format_ui_timestamp(datetime.fromtimestamp(value, UTC))
+                out[f"{field}_time"] = time_parts(value)
     return out
 
 

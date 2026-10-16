@@ -251,6 +251,13 @@ def test_fields_a_box_turns_off_are_disabled_with_it():
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_the_updates_card_writes_its_times_by_the_one_rule():
+    verdict = _verdict("update_times.mjs")
+    assert verdict == {"timesByTheOneRule": True, "olderServerKeepsItsLabel": True}
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_page_scripts_write_times_by_the_servers_rule_in_tows_zone():
     verdict = _verdict("time_short.mjs")
     assert verdict == dict.fromkeys(verdict, True), verdict

@@ -101,6 +101,23 @@
     const when = String(pattern).replace(/%([YmdHMS%])/g, (whole, code) => (code === "%" ? "%" : parts[code]));
     return t(key, { when });
   };
+  // A text with a time in it ("checked {when}") as pieces: the time a <time> by the page's one rule
+  // (app.js towTime: "20:31", the full time on focus or a tap) from the server's words for it
+  // (<field>_time); a server without them still gets its own written label.
+  const stamp = (value, key, label, words) => {
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return [];
+    if (window.towTime && words && typeof words === "object") {
+      const [before, after = ""] = t(key, { when: "\u0000" }).split("\u0000");
+      return [before, window.towTime.element(words, typeof label === "string" ? label : ""), after].filter((piece) => piece !== "");
+    }
+    const said = dateLabel(value, key, label);
+    return said ? [said] : [];
+  };
+  const stamps = (pairs) => pairs.flatMap((pieces) => (pieces.length ? [" · ", ...pieces] : []));
+  const put = (target, pieces) => {
+    if (typeof target.replaceChildren === "function") target.replaceChildren(...pieces);
+    else target.textContent = pieces.map((piece) => (typeof piece === "string" ? piece : piece.textContent)).join("");
+  };
   const render = (data) => {
     const available = data.available === true && /^\d+\.\d+\.\d+$/.test(data.latest || "");
     latest = available ? data.latest : "";
@@ -117,13 +134,12 @@
       notes.href = data.url;
     }
     if (status) {
-      status.textContent = available ? t("js.releases.available", { version: data.latest }) :
+      let said = available ? t("js.releases.available", { version: data.latest }) :
         (data.ok ? t(data.comparable === false ? "js.releases.unknown_build" : "js.releases.current") : t("js.releases.unavailable"));
-      if (available && !data.ok) status.textContent += " · " + t("js.releases.stale");
-      const checked = dateLabel(data.checked_at, "js.releases.checked", data.checked_at_label);
-      if (checked) status.textContent += " · " + checked;
-      if (data.checks_enabled === false) status.textContent =
-        (data.latest ? status.textContent + " · " : "") + t("js.releases.disabled");
+      if (available && !data.ok) said += " · " + t("js.releases.stale");
+      let pieces = [said, ...stamps([stamp(data.checked_at, "js.releases.checked", data.checked_at_label, data.checked_at_time)])];
+      if (data.checks_enabled === false) pieces = [...(data.latest ? [...pieces, " · "] : []), t("js.releases.disabled")];
+      put(status, pieces);
     }
   };
   const refresh = async (manual = false) => {
@@ -222,14 +238,15 @@
         if (job.backup_cleanup_pending === true) {
           progress.textContent += " · " + t("js.releases.backup_cleanup_pending");
         }
-        for (const label of [
-          dateLabel(job.started_at, "js.releases.started", job.started_at_label),
-          dateLabel(job.finished_at, "js.releases.finished", job.finished_at_label),
-        ]) {
-          if (label) progress.textContent += " · " + label;
-        }
+        // Its times, drawn for each place they show (an element lives in one place only).
+        const said = progress.textContent;
+        const times = () => stamps([
+          stamp(job.started_at, "js.releases.started", job.started_at_label, job.started_at_time),
+          stamp(job.finished_at, "js.releases.finished", job.finished_at_label, job.finished_at_time),
+        ]);
+        put(progress, [said, ...times()]);
         if (history) {
-          history.textContent = progress.textContent;
+          put(history, [said, ...times()]);
           history.hidden = !job.id;
           if (job.status === "ok" && !updating && !needsReload && !replaced && !job.backup_cleanup_pending) progress.hidden = true;
         }
