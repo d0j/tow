@@ -297,6 +297,12 @@ def test_the_check_all_cards_title_is_a_card_title():
     assert _first(".check-results h2 .sub").strip() == "font-weight: 400;"
 
 
+def test_diagnostics_text_runs_no_wider_than_a_form():
+    """1.32.1 DG1: the torrent client's notes ran 1360 px wide; Diagnostics' paragraphs end where a
+    form ends (46 rem)."""
+    assert _first(".doctor-page p").strip() == "max-width: 46rem;"
+
+
 def test_a_low_screen_keeps_its_height_for_the_page():
     """1.32 QA L9: at 200 % zoom (450 CSS px high) the sticky header and message strip took about
     30 % of the screen. Below 520 px of height neither sticks, and a target clears nothing."""
