@@ -90,6 +90,22 @@ def add_draft(request: Request) -> dict[str, str] | None:
     return _ADD_DRAFTS.get(request.query_params.get("add") or "")
 
 
+# A refused save of a site's card (site_actions._edit_refused): what was typed, never the password,
+# kept as the add drafts are, for the card that opens again.
+_SITE_EDITS = _TokenStore(ttl=600, limit=64)
+
+
+def keep_site_edit(name: str, draft: dict[str, str]) -> str:
+    """The token of site ``name``'s refused card ``draft`` (``?edit=``); a password is dropped."""
+    return _SITE_EDITS.put({**{key: str(value) for key, value in draft.items() if key != "password"}, "site": name})
+
+
+def site_edit_draft(request: Request) -> dict[str, str] | None:
+    """What a refused save of the card ``?open=`` names had typed in it (None: nothing kept)."""
+    draft = _SITE_EDITS.get(request.query_params.get("edit") or "")
+    return draft if draft and draft.get("site") == request.query_params.get("open") else None
+
+
 def credential_prompt(request: Request) -> dict[str, Any] | None:
     topic_id = (request.query_params.get("credential_topic") or "").strip()
     if not topic_id or len(topic_id) > 64 or not re.fullmatch(r"[A-Za-z0-9_-]+", topic_id):

@@ -36,7 +36,7 @@ from tow.web.site_form import (
 )
 from tow.web.site_store import commit_site_stores, save_together, with_login
 from tow.web.text import t
-from tow.web.views import add_refused_redirect
+from tow.web.views import add_refused_redirect, keep_site_edit
 
 
 def save_site(config: dict[str, Any] | None = None, secrets: dict[str, Any] | None = None) -> RedirectResponse | None:
@@ -132,11 +132,13 @@ def _guessed(from_url: str) -> dict[str, Any]:
         raise FieldRefused(t(e.key), "from_url") from e
 
 
-def _edit_refused(name: str, reason: object, kind: str = "err", *, field: str = "") -> RedirectResponse:
+def _edit_refused(name: str, form: SiteEdit, reason: object, kind: str = "err", *, field: str = "") -> RedirectResponse:
     """A refused save of site ``name``'s card: its row opens again at the refused field
-    (``?open=&field=``; the page marks and focuses it, and opens Advanced when it is there)."""
+    (``?open=&field=``; the page marks and focuses it, and opens Advanced when it is there) with
+    what was typed in it (``&edit=``, never the password: ``site_edit_draft``)."""
     field = field or str(getattr(reason, "field", "") or "")
-    query = urlencode({"open": name, **({"field": field} if field else {})})
+    draft = {key: value for key, value in dataclasses.asdict(form).items() if value is not None and key != "password"}
+    query = urlencode({"open": name, **({"field": field} if field else {}), "edit": keep_site_edit(name, draft)})
     return flash_redirect(f"/sites?{query}", reason, kind)
 
 
@@ -148,6 +150,7 @@ def edit_site(name: str, form: SiteEdit) -> RedirectResponse:
     spec = trackers.get(name)
     if not isinstance(spec, dict):
         return flash_redirect("/sites", "web.sites.no_site", "err")
+    typed = form
     if form.browser_sign_in():
         # The fields browser sign-in hides are never a new login: a typed or autofilled password
         # sent with them must not replace the saved one, which stays for a return to passwords.
@@ -156,17 +159,17 @@ def edit_site(name: str, form: SiteEdit) -> RedirectResponse:
     try:
         key, added_login_hosts = edit_site_hosts(name, spec, form, trackers)
     except ValueError as exc:
-        return _edit_refused(name, exc)
+        return _edit_refused(name, typed, exc)
     except SiteNameTaken:
-        return _edit_refused(name, "web.sites.name_taken", field="new_name")
+        return _edit_refused(name, typed, "web.sites.name_taken", field="new_name")
     stored_password = ((services.load_secrets().get("trackers") or {}).get(name) or {}).get("password")
     if added_login_hosts and stored_password and not form.password.strip():
         # A stored tracker password must never be posted to a host it was not entered for.
-        return _edit_refused(name, "web.sites.password_again", "warn", field="password")
+        return _edit_refused(name, typed, "web.sites.password_again", "warn", field="password")
     try:
         edit_site_paths(spec, form)
     except ValueError as exc:
-        return _edit_refused(name, exc)
+        return _edit_refused(name, typed, exc)
     old_state = services.load_state()
     new_state = copy.deepcopy(old_state)
     old_mirrors = as_dict(old_state.get("mirrors"))
