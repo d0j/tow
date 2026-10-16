@@ -364,6 +364,14 @@ def test_the_sign_in_page_has_the_eye_and_still_posts_a_form():
     assert wrong.select_one("#lan-password")["aria-invalid"] == "true"
 
 
+def test_first_start_without_javascript_is_never_blocked_by_a_hidden_password(client):
+    """Without app.js nothing disables the hidden password group, and its minlength stopped Start
+    once a short password was typed and the box cleared; the server checks the choice itself."""
+    _first_start()
+    page = BeautifulSoup(client.get("/setup").text, "html.parser")
+    assert page.select_one("form.setup-form").has_attr("novalidate")
+
+
 def _page_texts(html: str) -> dict:
     import json
 

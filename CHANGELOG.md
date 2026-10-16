@@ -27,6 +27,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A page left open overnight no longer shows yesterday's times as if they were today ("20:31" without a date):
   every short time is written again at midnight and when the tab is shown again, with the summer or winter time
   of its own moment. Before, this worked only where TOW knew its zone's name, which is never the case on Windows.
+- First start in a browser without JavaScript is no longer stopped by a short password typed and then hidden by
+  clearing "Open TOW from other devices": Start goes on, for this computer only.
 
 ## [1.32.0] — 2026-10-16
 
