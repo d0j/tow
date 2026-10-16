@@ -133,6 +133,35 @@ def test_a_pass_looks_at_the_disk_only_for_files_it_must_confirm(tmp_path: Path,
     assert resolved == []  # confirmed within the day and still complete: no disk access at all
 
 
+@pytest.mark.parametrize("seen", [True, False])
+def test_a_pass_asks_once_whether_the_save_folder_is_seen_from_here(tmp_path: Path, monkeypatch, seen):
+    class ManyFiles(FakeClient):
+        def inspect_torrent(self, infohash):
+            info = super().inspect_torrent(infohash)
+            info["files"] = [{"name": f"Show/S01E0{n}.mkv", "size": 10, "progress": self.progress} for n in range(1, 7)]
+            return info
+
+    # A UNC share, a sleeping NAS or a lost mapped drive can take the SMB timeout for each look.
+    asked: list[str] = []
+    monkeypatch.setattr("tow.folders.seen_from_here", lambda path: asked.append(path) or seen)
+    (tmp_path / "Show").mkdir()
+    for n in range(1, 7):
+        (tmp_path / "Show" / f"S01E0{n}.mkv").write_bytes(b"0123456789")
+    client = ManyFiles()
+    client.progress = 1.0
+    topic = {"id": "many", "title": "Show [6 из 6]", "hash": "ABC", "save_path": str(tmp_path)}
+    history = {"topics": {"many": {"baseline_at": "2026-09-12T20:00:00+03:00", "items": {}}}}
+
+    reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
+    assert asked == [str(tmp_path)]
+    statuses = {item["status"] for item in history["topics"]["many"]["items"].values()}
+    assert statuses == ({"completed"} if seen else {"unverified"})  # an explicit "not seen" stays unknown
+
+    reconcile_topic(topic, client, history, "2026-09-12T21:30:00+03:00")
+    # Seen: all confirmed within the day, nothing to look at. Not seen: one more question for the new pass.
+    assert asked == ([str(tmp_path)] if seen else [str(tmp_path)] * 2)
+
+
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), "nan", "inf"])
 def test_non_finite_client_progress_cannot_confirm_a_file(value):
     assert _file_progress({"progress": value}, {}) == 0.0

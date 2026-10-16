@@ -154,6 +154,16 @@ class _ReconcilePass:
     completed_file_labels: list[str] = field(default_factory=list)
     seen_identities: set[str] = field(default_factory=set)
     _evidence_base: tuple[Path | None] | None = field(default=None, init=False)
+    _seen: bool | None = field(default=None, init=False)
+
+    def seen_from_here(self) -> bool:
+        """Whether this PC sees the save folder, asked once per pass and only when a file is
+        looked at on disk (a share or a sleeping NAS can take its timeout for each look)."""
+        if self._seen is None:
+            from tow import folders
+
+            self._seen = folders.seen_from_here(self.evidence_save_path)
+        return self._seen
 
     def evidence_base(self) -> Path | None:
         """The save folder resolved once per pass, and only when a file is looked at on disk."""
@@ -301,7 +311,11 @@ def _file_confirmed(
         and 0 <= time.time() - float(confirmed_ts) < CONFIRMATION_REUSE_SEC
     )
     confirmed = (
-        True if fresh else filesystem_confirmation(work.evidence_save_path, rel, size, base=work.evidence_base())
+        True
+        if fresh
+        else filesystem_confirmation(
+            work.evidence_save_path, rel, size, base=work.evidence_base(), seen=work.seen_from_here()
+        )
     )
     if confirmed is True and not fresh:
         item["confirmed_ts"] = int(time.time())
