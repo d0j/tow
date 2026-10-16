@@ -152,6 +152,22 @@ def test_a_restart_is_told_apart_from_a_power_off():
     assert text == t("pulse.shutdown.restarted", "ru", via=via, at=pulse.clock(T0)).replace("  ", " ")
 
 
+@pytest.mark.parametrize("action", ["перезапуск", "выключение питания", "Neustart", "", "power cycle"])
+def test_a_kind_of_shutdown_windows_words_in_another_language_is_not_guessed(action):
+    # Event 1074 names the kind in the language of Windows: what is not "restart", "power off"
+    # or "shutdown" says neither, instead of taking every restart for a power-off.
+    text = pulse.describe_shutdown([_shutdown(r"C:\X\explorer.exe (PC)", action=action)], "ru")
+    via = t("pulse.via.start_menu", "ru")
+    assert text == t("pulse.shutdown.shut_down_or_restarted", "ru", via=via, at=pulse.clock(T0)).replace("  ", " ")
+
+
+@pytest.mark.parametrize("action", ["power off", "Shutdown", "shutdown"])
+def test_an_english_power_off_is_still_said(action):
+    text = pulse.describe_shutdown([_shutdown(r"C:\X\explorer.exe (PC)", action=action)], "en")
+    via = t("pulse.via.start_menu", "en")
+    assert text == t("pulse.shutdown.powered_off", "en", via=via, at=pulse.clock(T0)).replace("  ", " ")
+
+
 # --- outage cause: remaining branches ----------------------------------------------------------
 
 

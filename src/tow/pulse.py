@@ -86,6 +86,18 @@ _VIA = {
 }
 
 
+def _shutdown_kind(action: str) -> str:
+    """Event 1074 names the kind in the language of Windows: English "restart", "power off" or
+    "shutdown" are told apart; any other word says neither (a restart is never taken for a
+    power-off on a Windows in another language)."""
+    words = action.casefold()
+    if "restart" in words:
+        return "restarted"
+    if "power off" in words or "shutdown" in words:
+        return "powered_off"
+    return "shut_down_or_restarted"
+
+
 def describe_shutdown(events: list[dict[str, Any]], lang: str | None = None) -> str:
     """The last shutdown in plain words, or "" when Windows recorded none."""
     if not events:
@@ -98,7 +110,7 @@ def describe_shutdown(events: list[dict[str, Any]], lang: str | None = None) -> 
         return t("pulse.shutdown.crash", lang, at=clock(last["ts"]))
     if _by_update(last):
         return t("pulse.shutdown.update", lang, at=clock(last["ts"]))
-    action = "restarted" if "restart" in str(last["action"]).lower() else "powered_off"
+    action = _shutdown_kind(str(last["action"]))
     process = str(last["process"]).split(" (")[0]
     name = Path(process.replace("\\", "/")).name if process else ""
     via_key = _VIA.get(name.lower())

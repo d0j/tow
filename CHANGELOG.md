@@ -135,6 +135,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   cleanup result of the nightly backups and of the restore points in their default folders inside it, instead of
   "Result unknown" and "Cleanup status is unknown" until the next copy. This works for results recorded from this
   version on; an older record stays unknown after a move until the next nightly backup or restore point.
+- On Windows in a language other than English, the watchdog no longer reports every restart as a shutdown: when
+  Windows names the kind in its own language, the message says the computer was shut down or restarted.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password
