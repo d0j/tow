@@ -58,6 +58,7 @@ _INVALID_REASONS = {
     "too_large": "backup.restore_point.reason_too_large",
     "empty": "backup.restore_point.reason_empty",
     "damaged": "backup.restore_point.reason_damaged",
+    "local_secrets": "backup.restore_point.reason_local_secrets",
 }
 
 

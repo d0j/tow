@@ -13,7 +13,7 @@
   "REQUIRED_MEMBERS": "value tuple",
   "TRANSACTION_FORMAT": "value str",
   "export_bundle": "def(output: 'Path', passphrase: 'str', *, include_log: 'bool' = False, overwrite: 'bool' = False) -> 'dict[str, Any]'",
-  "import_bundle": "def(input_path: 'Path', passphrase: 'str', *, apply: 'bool' = False, path_maps: 'Iterable[str] | None' = None, config_overrides: 'dict[str, Any] | None' = None, preserve_secret_keys: 'Iterable[str] | None' = None) -> 'dict[str, Any]'",
+  "import_bundle": "def(input_path: 'Path', passphrase: 'str', *, apply: 'bool' = False, path_maps: 'Iterable[str] | None' = None, config_overrides: 'dict[str, Any] | None' = None, preserve_secret_keys: 'Iterable[str] | None' = None, recover_unreadable_access: 'bool' = False) -> 'dict[str, Any]'",
   "load_json_for_export": "def(path: 'Path', default: 'dict[str, Any]') -> 'dict[str, Any]'",
   "parse_path_maps": "def(values: 'Iterable[str] | None') -> 'list[tuple[str, str]]'",
   "prune_import_checkpoints": "def(*, keep: 'int' = 5) -> 'int'",

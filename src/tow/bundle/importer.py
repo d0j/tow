@@ -56,6 +56,8 @@ _OVERRIDE_TYPES: dict[str, type] = {
 }
 # The password other devices sign in with (secrets.enc): kept with the settings above.
 _ACCESS_SECRET = "lan_auth"
+# What an import that cannot read this install's password writes instead: this computer only.
+_NO_NETWORK: dict[str, Any] = {"allow_lan": False, "bind": "127.0.0.1"}
 
 
 def this_install_settings() -> dict[str, Any]:
@@ -149,7 +151,13 @@ def import_bundle(
     path_maps: Iterable[str] | None = None,
     config_overrides: dict[str, Any] | None = None,
     preserve_secret_keys: Iterable[str] | None = None,
+    recover_unreadable_access: bool = False,
 ) -> dict[str, Any]:
+    """Check a TOW file and, with ``apply``, write it over this install (checkpoint, read-back,
+    rollback). ``preserve_secret_keys`` keeps this install's access password; when its store
+    cannot be opened that is refused (reason ``local_secrets``) unless ``recover_unreadable_access``
+    (``tow import`` on this computer): then no password is kept or taken and network access is
+    turned off (``network_access: "off"``)."""
     try:
         with persistence_lock():
             return _import_bundle(
@@ -159,6 +167,7 @@ def import_bundle(
                 path_maps=path_maps,
                 config_overrides=config_overrides,
                 preserve_secret_keys=preserve_secret_keys,
+                recover_unreadable_access=recover_unreadable_access,
             )
     except ExportImportError:
         raise
@@ -201,6 +210,7 @@ def _import_bundle(
     path_maps: Iterable[str] | None = None,
     config_overrides: dict[str, Any] | None = None,
     preserve_secret_keys: Iterable[str] | None = None,
+    recover_unreadable_access: bool = False,
 ) -> dict[str, Any]:
     recover_import_transactions()
     parsed = read_bundle(Path(input_path), passphrase)
@@ -213,14 +223,24 @@ def _import_bundle(
     if secret_keys:
         try:
             destination_secrets = load_secrets()
-        except SecretStoreError:
+        except SecretStoreError as exc:
+            if not recover_unreadable_access:
+                raise ExportImportError(
+                    "cannot read destination secrets to preserve access", reason="local_secrets"
+                ) from exc
             # This install's passwords cannot be opened (a lost or replaced master key, a damaged
-            # store): it has no access password to keep. The file's is dropped all the same, never
-            # taken over the settings this install keeps; restoring a file is the way out of this.
+            # store): its access password is unknown. The file's is not taken instead, and with no
+            # password known network access is off and TOW listens on loopback only, whatever the
+            # kept config says (no other device, no external access key reaches it). Restoring a
+            # file on this computer is the way out of this.
             destination_secrets = {}
             unreadable = True
+            overrides.update(_NO_NETWORK)
     # Said before this install's values replace the file's: what the file would have changed.
-    security = _security_settings(parsed, None if unreadable else destination_secrets, set(overrides) | secret_keys)
+    kept = (set(overrides) - set(_NO_NETWORK) if unreadable else set(overrides)) | (
+        set() if unreadable else secret_keys
+    )
+    security = _security_settings(parsed, None if unreadable else destination_secrets, kept)
     if overrides:
         _apply_config_overrides(parsed, overrides)
     if destination_secrets is not None:
@@ -247,6 +267,7 @@ def _import_bundle(
         "security_settings": security,
         "preserved_secret_keys": sorted(secret_keys),
         "local_secrets_unreadable": unreadable,
+        **({"network_access": "off"} if unreadable else {}),
         "path_warnings": warnings,
         "scheduler": "not restored; turn autostart on separately with tow autostart on",
         "client_media": "not transferred; qBittorrent/client check is separate",

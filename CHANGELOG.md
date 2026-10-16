@@ -18,9 +18,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   only when the whole range is there. When the files number each season from episode 1 again, TOW counts the
   episodes it finds instead of waiting for numbers the files never have.
 - `tow import` no longer refuses a good file as "damaged" when the passwords and tokens of this TOW cannot be
-  opened (a lost or replaced master key, a damaged store): it imports the file, without the file's password for
-  other devices, and says so. A restore in the browser then says the file is fine but the restore point could not
-  be made.
+  opened (a lost or replaced master key, a damaged store): it imports the file without any password for other
+  devices, turns network access off and says to set a new password in Settings → Network access. A restore in the
+  browser refuses such a file with that cause instead of calling it damaged.
 - When an update to a version before 1.32.0 is refused because a new topic still waits for its first add, the
   message no longer says to wait a minute: it says to wait until the Undo button of a removed or edited topic is
   gone, which can take up to the undo time set in Settings.

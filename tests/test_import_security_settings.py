@@ -143,26 +143,32 @@ def test_a_good_file_is_imported_when_this_computers_passwords_cannot_be_opened(
 
     bundle, dest = handed_file
     _damage_this_computers_secrets()
+    # This TOW was open to the network with the password nobody can read now.
+    opened = yaml.safe_load(dest.read_text(encoding="utf-8"))
+    dest.write_text(yaml.safe_dump({**opened, "bind": "0.0.0.0", "allow_lan": True}), encoding="utf-8")
 
     preview = _cli(capsys, "--input", str(bundle))
     assert preview["local_secrets_unreadable"] is True
+    assert preview["network_access"] == "off"
     changes = {item["setting"]: item for item in preview["security_settings"]}
-    assert changes["lan_auth"] == {"setting": "lan_auth", "file": "set", "this_computer": "unknown", "kept": True}
+    assert changes["lan_auth"] == {"setting": "lan_auth", "file": "set", "this_computer": "unknown", "kept": False}
     assert main(["import", "--input", str(bundle)]) == 0
     assert t("cli.bundle.local_secrets_unreadable") in capsys.readouterr().out
 
     applied = _cli(capsys, "--input", str(bundle), "--apply")
     assert applied["committed"] is True
     assert "lan_auth" not in load_secrets()
-    assert yaml.safe_load(dest.read_text(encoding="utf-8"))["allow_lan"] is False
+    config = yaml.safe_load(dest.read_text(encoding="utf-8"))
+    assert (config["allow_lan"], config["bind"]) == (False, "127.0.0.1")  # no password known: no network access
     assert [topic["id"] for topic in load_state()["topics"]] == ["theirs"]
 
 
-def test_a_restore_from_the_browser_with_unopenable_passwords_does_not_call_the_file_damaged(tmp_path, monkeypatch):
-    """The web restore first saves the current data as a restore point; with passwords that cannot
-    be opened it cannot, and says that (the file is fine), not that the file is damaged."""
+def test_a_restore_from_the_browser_with_unopenable_passwords_is_refused_with_its_cause(tmp_path, monkeypatch):
+    """The browser restore stays strict (no recovery from another device): it refuses before
+    anything is written, and says why - not that the file is damaged."""
+    from tow.i18n import t
     from tow.restore_points import (
-        CREATE_FAILED,
+        INVALID_FILE,
         RestorePointError,
         check_portable_bundle,
         export_portable_bundle,
@@ -181,7 +187,9 @@ def test_a_restore_from_the_browser_with_unopenable_passwords_does_not_call_the_
     check_portable_bundle(file)
     with pytest.raises(RestorePointError) as refused:
         restore_portable_bundle(file)
-    assert refused.value.kind == CREATE_FAILED
+    assert refused.value.kind == INVALID_FILE
+    assert refused.value.reason == t("backup.restore_point.reason_local_secrets", "en")
+    assert [topic["id"] for topic in load_state()["topics"]] == ["before"]
 
 
 def test_a_restore_keeps_this_computers_opt_ins_and_access_providers(tmp_path, monkeypatch):
