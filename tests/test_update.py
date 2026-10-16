@@ -823,6 +823,17 @@ def test_the_texts_match_the_english_catalog():
     assert catalog["update"] == updater.TEXTS
 
 
+@pytest.mark.parametrize("lang", ["en", "ru"])
+def test_the_content_ref_refusal_names_the_undo_not_a_minute(lang):
+    """A removed or edited topic's undo lives for flash_ttl_sec (up to an hour), not a minute."""
+    catalog = json.loads((SCRIPT.parents[1] / "src" / "tow" / "locales" / f"{lang}.json").read_text(encoding="utf-8"))
+    button = catalog["base"]["undo"]["button"]
+    for text in (catalog["update"]["content_ref_pending"], catalog["releases"]["content_ref_pending"]):
+        assert "minute" not in text
+        assert "минут" not in text
+        assert button in text
+
+
 def test_the_owners_language_is_used(install):
     (install["root"] / "config.yaml").write_text("port: 18999\nlanguage: ru\n", encoding="utf-8")
     locales = install["app"] / "src" / "tow" / "locales"

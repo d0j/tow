@@ -210,8 +210,8 @@ TEXTS = {
     ),
     "content_ref_pending": (
         "{ref} does not know the torrent prepared for {topics}, which wait for their first add: it would"
-        " fetch it again from the site. Let TOW add them first (or wait a minute after removing one) and"
-        " update then, or choose {since} or newer; nothing was updated"
+        " fetch it again from the site. Let TOW add them first (or wait until the Undo button for a removed or"
+        " edited one is gone) and update then, or choose {since} or newer; nothing was updated"
     ),
     "data_unverified": (
         "this install's data/state.json cannot be read ({error}), so it is not known whether {ref} can read it;"
