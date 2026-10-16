@@ -21,6 +21,7 @@ const form = build(document, ["form", { method: "post", action: "/settings/notif
   ["label", { for: "tok" }, "Bot token"], secret("tok", "Bot token")]);
 document.body.append(form, build(document, ["script", { id: "tow-i18n" }, JSON.stringify(TEXTS)]));
 const fetched = [];
+const frames = [];
 class FormData { constructor() { this.fields = {}; } set(name, value) { this.fields[name] = value; } }
 const context = {
   document, URL, URLSearchParams, JSON, Promise, Error, TypeError, Math, Number, String, Array, Object, Date, Map, Set, Boolean, RegExp,
@@ -35,6 +36,7 @@ const context = {
     return Promise.resolve({ ok: true, status: 200, headers: { get: () => "application/json" }, json: async () => ({ redirect: "/settings" }), text: async () => "" });
   },
   setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0, clearInterval() {},
+  requestAnimationFrame: (fn) => { frames.push(fn); return frames.length; },
 };
 context.window = { ...context, addEventListener() {}, confirm: () => true, location: { ...context.location, assign() {} } };
 vm.runInNewContext(source, context);
@@ -64,8 +66,13 @@ assert.equal(eye.title, "Hide “Bot token”");
 assert.equal(eye.querySelector("use").getAttribute("href"), "#i-eye-off");
 verdict.shows = true;
 
-// The focus and the caret stay in the field.
+// The focus and the caret stay in the field - also after the mouse click is done: Chromium puts
+// the caret at the start once the click ends, so it is put back again on the next frame.
 assert.equal(document.activeElement, field);
+assert.deepEqual(caret, [2, 5, "forward"]);
+caret = [0, 0, "none"]; // what the browser did after the click
+assert.equal(frames.length, 1);
+frames.splice(0).forEach((fn) => fn());
 assert.deepEqual(caret, [2, 5, "forward"]);
 verdict.keepsFocusAndCaret = true;
 

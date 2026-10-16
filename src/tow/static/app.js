@@ -1603,11 +1603,16 @@ document.addEventListener("click", (event) => {
   setRevealed(button, field, field.type === "password");
   if (!focused) return;
   field.focus();
-  try {
-    field.setSelectionRange(start, end, direction || "none");
-  } catch {
-    // a field without a caret: the focus is enough
-  }
+  const putBack = () => {
+    try {
+      field.setSelectionRange(start, end, direction || "none");
+    } catch {
+      // a field without a caret: the focus is enough
+    }
+  };
+  putBack();
+  // A mouse click puts the caret at the field's start once it has ended (Chromium): again then.
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(putBack);
 });
 // Sent or reset (Cancel), a shown secret is hidden again first: the next page, the emptied form
 // and a password manager see a password field.
